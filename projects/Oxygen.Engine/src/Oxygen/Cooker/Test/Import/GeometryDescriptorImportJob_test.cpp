@@ -7,32 +7,48 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <latch>
 #include <optional>
-#include <ranges>
 #include <span>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Finally.h>
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportJobId.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/BuiltinGeometry.h>
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MaterialSlotId.h>
+#include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Testing/GTest.h>
+
+using oxygen::base::CheckedAt;
 
 namespace oxygen::content::import::test {
 
@@ -107,7 +123,7 @@ namespace {
     const std::string_view code) -> bool
   {
     return std::ranges::any_of(
-      diagnostics, [code](const ImportDiagnostic& diagnostic) {
+      diagnostics, [code](const ImportDiagnostic& diagnostic) -> bool {
         return diagnostic.code == code;
       });
   }
@@ -134,7 +150,7 @@ namespace {
     const auto submitted = service.SubmitImport(
       std::move(request),
       [&report, &done](
-        const ImportJobId /*job_id*/, const ImportReport& completed) {
+        const ImportJobId /*job_id*/, const ImportReport& completed) -> void {
         report = completed;
         done.count_down();
       },
@@ -152,6 +168,19 @@ namespace {
     };
   }
 
+  constexpr std::string_view kAuthoredSlotId
+    = "018f8f8f-1111-7111-8111-111111111111";
+
+  auto BuiltinSurfaceSlot(const std::string_view generator) -> std::string
+  {
+    const auto geometry = data::ResolveBuiltinGeometry(
+      "asset:///Engine/Generated/BasicShapes/" + std::string(generator));
+    if (!geometry || geometry->MaterialSlots().slots.size() != 1U) {
+      throw std::runtime_error("Expected a single-surface builtin geometry");
+    }
+    return data::to_string(geometry->MaterialSlots().slots.front().slot_id);
+  }
+
   auto MakeCapsuleDescriptor(
     const json& params, const float height, const float radius) -> json
   {
@@ -162,23 +191,32 @@ namespace {
     auto procedural
       = json { { "generator", "Capsule" }, { "mesh_name", "Capsule" } };
     if (!params.is_null()) {
-      procedural["params"] = params;
+      procedural.update({ { "params", params } });
     }
     return json {
       { "name", "Capsule" },
       { "bounds", bounds },
-      { "lods",
-        json::array({ {
-          { "name", "LOD0" },
-          { "mesh_type", "procedural" },
-          { "bounds", bounds },
-          { "procedural", std::move(procedural) },
-          { "submeshes",
-            json::array({ {
-              { "material_ref", "/.cooked/Materials/default.omat" },
-              { "views", json::array({ { { "view_ref", "__all__" } } }) },
-            } }) },
-        } }) },
+      {
+        "lods",
+        json::array({
+          {
+            { "name", "LOD0" },
+            { "mesh_type", "procedural" },
+            { "bounds", bounds },
+            { "procedural", std::move(procedural) },
+            {
+              "submeshes",
+              json::array({
+                {
+                  { "slot_id", BuiltinSurfaceSlot("Capsule") },
+                  { "material_ref", "/.cooked/Materials/default.omat" },
+                  { "views", json::array({ { { "view_ref", "__all__" } } }) },
+                },
+              }),
+            },
+          },
+        }),
+      },
     };
   }
 
@@ -220,31 +258,40 @@ namespace {
     auto descriptor_doc = json {
       { "name", name },
       { "bounds", MakeBounds() },
-      { "lods",
+      {
+        "lods",
         json::array({
           json {
             { "name", "LOD0" },
             { "mesh_type", "standard" },
             { "bounds", MakeBounds() },
-            { "buffers",
+            {
+              "buffers",
               {
                 { "vb_ref", vb_ref },
                 { "ib_ref", ib_ref },
-              } },
-            { "submeshes",
+              },
+            },
+            {
+              "submeshes",
               json::array({
                 json {
+                  { "slot_id", kAuthoredSlotId },
                   { "material_ref", material_ref },
-                  { "views",
-                    json::array({ json { { "view_ref", view_ref } } }) },
+                  {
+                    "views",
+                    json::array({ json { { "view_ref", view_ref } } }),
+                  },
                 },
-              }) },
+              }),
+            },
           },
-        }) },
+        }),
+      },
     };
 
     if (local_buffers.has_value()) {
-      descriptor_doc["buffers"] = std::move(*local_buffers);
+      descriptor_doc.update({ { "buffers", std::move(*local_buffers) } });
     }
     return descriptor_doc;
   }
@@ -253,7 +300,7 @@ namespace {
     std::string_view extension) -> std::optional<std::string>
   {
     const auto it = std::ranges::find_if(
-      report.outputs, [extension](const ImportOutputRecord& output) {
+      report.outputs, [extension](const ImportOutputRecord& output) -> bool {
         return std::filesystem::path(output.path).extension().string()
           == extension;
       });
@@ -426,28 +473,32 @@ NOLINT_TEST(
           { "virtual_path", "/.cooked/Resources/Buffers/cube_vertices.obuf" },
           { "usage_flags", 1U },
           { "element_stride", 32U },
-          { "views",
+          {
+            "views",
             json::array({
               json {
                 { "name", "lod0" },
                 { "element_offset", 0U },
                 { "element_count", 3U },
               },
-            }) },
+            }),
+          },
         },
         json {
           { "uri", ib_source.generic_string() },
           { "virtual_path", "/.cooked/Resources/Buffers/cube_indices.obuf" },
           { "usage_flags", 2U },
           { "element_stride", 4U },
-          { "views",
+          {
+            "views",
             json::array({
               json {
                 { "name", "lod0" },
                 { "element_offset", 0U },
                 { "element_count", 3U },
               },
-            }) },
+            }),
+          },
         },
       }));
   WriteTextFile(descriptor_path, descriptor_doc.dump(2));
@@ -456,7 +507,7 @@ NOLINT_TEST(
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
@@ -467,13 +518,17 @@ NOLINT_TEST(
     HasDiagnosticCode(report.diagnostics, "geometry.material.missing"));
 
   const auto geometry_relpath = FindOutputByExtension(report, ".ogeo");
-  ASSERT_TRUE(geometry_relpath.has_value());
+  if (!geometry_relpath.has_value()) {
+    FAIL() << "Expected geometry_relpath to contain a value";
+  }
   ASSERT_TRUE(std::filesystem::exists(
     cooked_root / std::filesystem::path(*geometry_relpath)));
 
-  const auto has_output = [&](const std::string_view relpath) {
-    return std::ranges::any_of(report.outputs,
-      [&](const ImportOutputRecord& output) { return output.path == relpath; });
+  const auto has_output = [&](const std::string_view relpath) -> bool {
+    return std::ranges::any_of(
+      report.outputs, [&](const ImportOutputRecord& output) -> bool {
+        return output.path == relpath;
+      });
   };
   EXPECT_TRUE(has_output("Resources/Buffers/cube_vertices.obuf"));
   EXPECT_TRUE(has_output("Resources/Buffers/cube_indices.obuf"));
@@ -493,10 +548,8 @@ NOLINT_TEST(
     = ReadStructAt<data::pak::geometry::MeshDesc>(descriptor_bytes, offset);
   EXPECT_EQ(
     mesh_desc.mesh_type, static_cast<uint8_t>(data::MeshType::kStandard));
-  EXPECT_NE(
-    mesh_desc.info.standard.vertex_buffer, data::pak::core::kNoResourceIndex);
-  EXPECT_NE(
-    mesh_desc.info.standard.index_buffer, data::pak::core::kNoResourceIndex);
+  EXPECT_NE(mesh_desc.info.standard.vertex_buffer, data::kNoResourceReference);
+  EXPECT_NE(mesh_desc.info.standard.index_buffer, data::kNoResourceReference);
   EXPECT_EQ(mesh_desc.submesh_count, 1U);
   EXPECT_EQ(mesh_desc.mesh_view_count, 1U);
 
@@ -509,7 +562,7 @@ NOLINT_TEST(
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobTest,
-  ResolvesPreCookedBufferSidecarsFromMountedRoot)
+  ResolvesLocalBuffersAndRejectsForeignRootIndices)
 {
   const auto root = MakeTempCookedRoot("pre_cooked_buffer_sidecars");
   const auto source_dir = root / "Sources";
@@ -639,37 +692,43 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
 
   const auto buffer_descriptor = json {
     { "name", "SharedBuffers" },
-    { "buffers",
+    {
+      "buffers",
       json::array({
         json {
           { "source", vb_source.generic_string() },
           { "virtual_path", "/.cooked/Resources/Buffers/shared_vertices.obuf" },
           { "usage_flags", 1U },
           { "element_stride", 32U },
-          { "views",
+          {
+            "views",
             json::array({
               json {
                 { "name", "lod0" },
                 { "element_offset", 0U },
                 { "element_count", 3U },
               },
-            }) },
+            }),
+          },
         },
         json {
           { "source", ib_source.generic_string() },
           { "virtual_path", "/.cooked/Resources/Buffers/shared_indices.obuf" },
           { "usage_flags", 2U },
           { "element_stride", 4U },
-          { "views",
+          {
+            "views",
             json::array({
               json {
                 { "name", "lod0" },
                 { "element_offset", 0U },
                 { "element_count", 3U },
               },
-            }) },
+            }),
+          },
         },
-      }) },
+      }),
+    },
   };
   WriteTextFile(buffer_manifest_path, buffer_descriptor.dump(2));
 
@@ -683,7 +742,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
 
   const auto buffer_report = SubmitAndWait(service,
     MakeBufferContainerRequest(
@@ -698,9 +757,35 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     geometry_report.diagnostics, "geometry.buffer.sidecar_missing"));
 
   const auto geometry_relpath = FindOutputByExtension(geometry_report, ".ogeo");
-  ASSERT_TRUE(geometry_relpath.has_value());
+  if (!geometry_relpath.has_value()) {
+    FAIL() << "Expected geometry_relpath to contain a value";
+  }
   ASSERT_TRUE(std::filesystem::exists(
     cooked_root / std::filesystem::path(*geometry_relpath)));
+
+  const auto other_root = root / "other-cooked";
+  auto other_descriptor = buffer_descriptor;
+  other_descriptor.at("buffers").at(0).at("virtual_path")
+    = "/.cooked/Resources/Buffers/other_vertices.obuf";
+  other_descriptor.at("buffers").at(1).at("virtual_path")
+    = "/.cooked/Resources/Buffers/other_indices.obuf";
+  auto other_vertices = vb_bytes;
+  other_vertices.front() = std::byte { 0x7F };
+  WriteBytesFile(vb_source, std::span<const std::byte>(other_vertices));
+  const auto other_buffers = SubmitAndWait(service,
+    MakeBufferContainerRequest(
+      buffer_manifest_path, other_root, other_descriptor));
+  ASSERT_TRUE(other_buffers.success);
+
+  // Both roots have populated buffer tables, but only the foreign root owns
+  // the requested sidecars. Its numeric indices cannot identify local bytes.
+  const auto rejected = SubmitAndWait(service,
+    MakeGeometryRequest(
+      geometry_path, other_root, geometry_descriptor, { cooked_root }));
+  EXPECT_FALSE(rejected.success);
+  EXPECT_EQ(rejected.geometry_written, 0U);
+  EXPECT_TRUE(
+    HasDiagnosticCode(rejected.diagnostics, "geometry.buffer.foreign_root"));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobTest,
@@ -728,28 +813,32 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
         { "virtual_path", "/.cooked/Resources/Buffers/cube_vertices.obuf" },
         { "usage_flags", 1U },
         { "element_stride", 32U },
-        { "views",
+        {
+          "views",
           json::array({
             json {
               { "name", "lod0" },
               { "element_offset", 0U },
               { "element_count", 3U },
             },
-          }) },
+          }),
+        },
       },
       json {
         { "uri", ib_source.generic_string() },
         { "virtual_path", "/.cooked/Resources/Buffers/cube_indices.obuf" },
         { "usage_flags", 2U },
         { "element_stride", 4U },
-        { "views",
+        {
+          "views",
           json::array({
             json {
               { "name", "lod0" },
               { "element_offset", 0U },
               { "element_count", 3U },
             },
-          }) },
+          }),
+        },
       },
     }));
   WriteTextFile(descriptor_path, descriptor_doc.dump(2));
@@ -758,7 +847,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
@@ -792,28 +881,32 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
         { "virtual_path", "/.cooked/Resources/Buffers/cube_vertices.obuf" },
         { "usage_flags", 1U },
         { "element_stride", 32U },
-        { "views",
+        {
+          "views",
           json::array({
             json {
               { "name", "lod0" },
               { "element_offset", 0U },
               { "element_count", 3U },
             },
-          }) },
+          }),
+        },
       },
       json {
         { "uri", ib_source.generic_string() },
         { "virtual_path", "/.cooked/Resources/Buffers/cube_indices.obuf" },
         { "usage_flags", 2U },
         { "element_stride", 4U },
-        { "views",
+        {
+          "views",
           json::array({
             json {
               { "name", "lod0" },
               { "element_offset", 0U },
               { "element_count", 3U },
             },
-          }) },
+          }),
+        },
       },
     }));
   WriteTextFile(descriptor_path, descriptor_doc.dump(2));
@@ -822,14 +915,14 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
 
   const auto library = root / "Library";
   const auto library_key = data::AssetKey::FromVirtualPath("/Library/New.omat");
   auto writer = LooseCookedWriter(library);
   const auto bytes = std::array { std::byte { 1 } };
   writer.WriteAssetDescriptor(library_key, data::AssetType::kMaterial,
-    "/.cooked/Materials/new.omat", "Materials/new.omat", bytes);
+    "/.cooked/Materials/new.omat", "Materials/new.omat", bytes, {});
   static_cast<void>(writer.Finish());
   WriteTextFile(cooked_root / "Materials/new.omat", "new material");
   for (const auto own_wins : { true, false }) {
@@ -853,7 +946,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobTest,
-  ResolvesBufferSidecarsFromAdditionalCookedContextRoot)
+  RejectsBufferSidecarsFromAdditionalCookedContextRoot)
 {
   const auto main_root = MakeTempCookedRoot("resolve_from_context_root_main");
   const auto context_root = MakeTempCookedRoot("resolve_from_context_root_ctx");
@@ -875,38 +968,46 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
 
   const auto buffer_descriptor = json {
     { "name", "ContextSharedBuffers" },
-    { "buffers",
+    {
+      "buffers",
       json::array({
         json {
           { "source", vb_source.generic_string() },
-          { "virtual_path",
-            "/.cooked/Resources/Buffers/context_vertices.obuf" },
+          {
+            "virtual_path",
+            "/.cooked/Resources/Buffers/context_vertices.obuf",
+          },
           { "usage_flags", 1U },
           { "element_stride", 32U },
-          { "views",
+          {
+            "views",
             json::array({
               json {
                 { "name", "lod0" },
                 { "element_offset", 0U },
                 { "element_count", 3U },
               },
-            }) },
+            }),
+          },
         },
         json {
           { "source", ib_source.generic_string() },
           { "virtual_path", "/.cooked/Resources/Buffers/context_indices.obuf" },
           { "usage_flags", 2U },
           { "element_stride", 4U },
-          { "views",
+          {
+            "views",
             json::array({
               json {
                 { "name", "lod0" },
                 { "element_offset", 0U },
                 { "element_count", 3U },
               },
-            }) },
+            }),
+          },
         },
-      }) },
+      }),
+    },
   };
   WriteTextFile(buffer_manifest_path, buffer_descriptor.dump(2));
 
@@ -920,7 +1021,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
 
   const auto buffer_report = SubmitAndWait(service,
     MakeBufferContainerRequest(
@@ -930,10 +1031,10 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   const auto geometry_report = SubmitAndWait(service,
     MakeGeometryRequest(geometry_path, cooked_root, geometry_descriptor,
       { context_cooked_root }));
-  EXPECT_TRUE(geometry_report.success);
-  EXPECT_EQ(geometry_report.geometry_written, 1U);
-  EXPECT_FALSE(HasDiagnosticCode(
-    geometry_report.diagnostics, "geometry.buffer.sidecar_missing"));
+  EXPECT_FALSE(geometry_report.success);
+  EXPECT_EQ(geometry_report.geometry_written, 0U);
+  EXPECT_TRUE(HasDiagnosticCode(
+    geometry_report.diagnostics, "geometry.buffer.foreign_root"));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobTest,
@@ -959,39 +1060,49 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
 
   const auto buffer_descriptor = json {
     { "name", "AmbiguousBuffers" },
-    { "buffers",
+    {
+      "buffers",
       json::array({
         json {
           { "source", vb_source.generic_string() },
-          { "virtual_path",
-            "/.cooked/Resources/Buffers/ambiguous_vertices.obuf" },
+          {
+            "virtual_path",
+            "/.cooked/Resources/Buffers/ambiguous_vertices.obuf",
+          },
           { "usage_flags", 1U },
           { "element_stride", 32U },
-          { "views",
+          {
+            "views",
             json::array({
               json {
                 { "name", "lod0" },
                 { "element_offset", 0U },
                 { "element_count", 3U },
               },
-            }) },
+            }),
+          },
         },
         json {
           { "source", ib_source.generic_string() },
-          { "virtual_path",
-            "/.cooked/Resources/Buffers/ambiguous_indices.obuf" },
+          {
+            "virtual_path",
+            "/.cooked/Resources/Buffers/ambiguous_indices.obuf",
+          },
           { "usage_flags", 2U },
           { "element_stride", 4U },
-          { "views",
+          {
+            "views",
             json::array({
               json {
                 { "name", "lod0" },
                 { "element_offset", 0U },
                 { "element_count", 3U },
               },
-            }) },
+            }),
+          },
         },
-      }) },
+      }),
+    },
   };
   WriteTextFile(buffer_manifest_path, buffer_descriptor.dump(2));
 
@@ -1005,7 +1116,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
 
   const auto main_report = SubmitAndWait(service,
     MakeBufferContainerRequest(
@@ -1045,7 +1156,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
@@ -1082,28 +1193,32 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
         { "virtual_path", "/.cooked/Resources/Buffers/cube_vertices.obuf" },
         { "usage_flags", 1U },
         { "element_stride", 32U },
-        { "views",
+        {
+          "views",
           json::array({
             json {
               { "name", "lod0" },
               { "element_offset", 0U },
               { "element_count", 3U },
             },
-          }) },
+          }),
+        },
       },
       json {
         { "uri", ib_source.generic_string() },
         { "virtual_path", "/.cooked/Resources/Buffers/cube_indices.obuf" },
         { "usage_flags", 2U },
         { "element_stride", 4U },
-        { "views",
+        {
+          "views",
           json::array({
             json {
               { "name", "lod0" },
               { "element_offset", 0U },
               { "element_count", 3U },
             },
-          }) },
+          }),
+        },
       },
     }));
   WriteTextFile(descriptor_path, descriptor_doc.dump(2));
@@ -1112,7 +1227,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
@@ -1135,27 +1250,36 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   const auto descriptor_doc = json {
     { "name", "ProceduralCube" },
     { "bounds", MakeBounds() },
-    { "lods",
+    {
+      "lods",
       json::array({
         json {
           { "name", "LOD0" },
           { "mesh_type", "procedural" },
           { "bounds", MakeBounds() },
-          { "procedural",
+          {
+            "procedural",
             {
               { "generator", "Cube" },
               { "mesh_name", "UnitCube" },
-            } },
-          { "submeshes",
+            },
+          },
+          {
+            "submeshes",
             json::array({
               json {
+                { "slot_id", BuiltinSurfaceSlot("Cube") },
                 { "material_ref", "/.cooked/Materials/default.omat" },
-                { "views",
-                  json::array({ json { { "view_ref", "__all__" } } }) },
+                {
+                  "views",
+                  json::array({ json { { "view_ref", "__all__" } } }),
+                },
               },
-            }) },
+            }),
+          },
         },
-      }) },
+      }),
+    },
   };
   WriteTextFile(descriptor_path, descriptor_doc.dump(2));
 
@@ -1163,7 +1287,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
@@ -1172,7 +1296,9 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     << DiagnosticSummary(report.diagnostics);
 
   const auto geometry_relpath = FindOutputByExtension(report, ".ogeo");
-  ASSERT_TRUE(geometry_relpath.has_value());
+  if (!geometry_relpath.has_value()) {
+    FAIL() << "Expected geometry_relpath to contain a value";
+  }
 
   const auto descriptor_bytes
     = ReadBinaryFile(cooked_root / std::filesystem::path(*geometry_relpath));
@@ -1197,33 +1323,44 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   const auto descriptor_doc = json {
     { "name", "FloorPlane" },
     { "bounds", floor_bounds },
-    { "lods",
+    {
+      "lods",
       json::array({
         json {
           { "name", "LOD0" },
           { "mesh_type", "procedural" },
           { "bounds", floor_bounds },
-          { "procedural",
+          {
+            "procedural",
             {
               { "generator", "Plane" },
               { "mesh_name", "Floor" },
-              { "params",
+              {
+                "params",
                 {
                   { "x_segments", 10U },
                   { "z_segments", 10U },
                   { "size", 10.0F },
-                } },
-            } },
-          { "submeshes",
+                },
+              },
+            },
+          },
+          {
+            "submeshes",
             json::array({
               json {
+                { "slot_id", BuiltinSurfaceSlot("Plane") },
                 { "material_ref", "/.cooked/Materials/default.omat" },
-                { "views",
-                  json::array({ json { { "view_ref", "__all__" } } }) },
+                {
+                  "views",
+                  json::array({ json { { "view_ref", "__all__" } } }),
+                },
               },
-            }) },
+            }),
+          },
         },
-      }) },
+      }),
+    },
   };
   WriteTextFile(descriptor_path, descriptor_doc.dump(2));
 
@@ -1231,7 +1368,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
@@ -1240,7 +1377,9 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     << DiagnosticSummary(report.diagnostics);
 
   const auto geometry_relpath = FindOutputByExtension(report, ".ogeo");
-  ASSERT_TRUE(geometry_relpath.has_value());
+  if (!geometry_relpath.has_value()) {
+    FAIL() << "Expected geometry_relpath to contain a value";
+  }
 
   const auto descriptor_bytes
     = ReadBinaryFile(cooked_root / std::filesystem::path(*geometry_relpath));
@@ -1272,17 +1411,26 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   };
   const auto cases = std::vector<Case> {
     { "capsule_defaults", nullptr, 8U, 32U, 2.0F, 0.5F },
-    { "capsule_custom",
-      { { "hemisphere_segments", 4 }, { "radial_segments", 16 },
-        { "height", 3.0 }, { "radius", 0.75 } },
-      4U, 16U, 3.0F, 0.75F },
+    {
+      "capsule_custom",
+      {
+        { "hemisphere_segments", 4 },
+        { "radial_segments", 16 },
+        { "height", 3.0 },
+        { "radius", 0.75 },
+      },
+      4U,
+      16U,
+      3.0F,
+      0.75F,
+    },
     { "capsule_sphere", { { "height", 1.0 } }, 8U, 32U, 1.0F, 0.5F },
   };
   auto service = AsyncImportService(AsyncImportService::Config {
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
 
   for (const auto& test_case : cases) {
     SCOPED_TRACE(test_case.name);
@@ -1298,7 +1446,9 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     ASSERT_TRUE(report.success) << DiagnosticSummary(report.diagnostics);
     ASSERT_EQ(report.geometry_written, 1U);
     const auto output = FindOutputByExtension(report, ".ogeo");
-    ASSERT_TRUE(output.has_value());
+    if (!output.has_value()) {
+      FAIL() << "Expected output to contain a value";
+    }
     auto bytes = ReadBinaryFile(cooked_root / *output);
 
     constexpr auto mesh_offset = sizeof(data::pak::geometry::GeometryAssetDesc);
@@ -1335,13 +1485,15 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     const auto expected
       = data::MakeCapsuleMeshAsset(test_case.hemisphere_segments,
         test_case.radial_segments, test_case.height, test_case.radius);
-    ASSERT_TRUE(expected.has_value());
+    if (!expected.has_value()) {
+      FAIL() << "Expected expected to contain a value";
+    }
     const auto loaded_vertices = mesh->Vertices();
     ASSERT_EQ(loaded_vertices.size(), expected->first.size());
     for (size_t vertex_index = 0; vertex_index < loaded_vertices.size();
       ++vertex_index) {
-      const auto& actual_vertex = loaded_vertices[vertex_index];
-      const auto& expected_vertex = expected->first[vertex_index];
+      const auto& actual_vertex = CheckedAt(loaded_vertices, vertex_index);
+      const auto& expected_vertex = expected->first.at(vertex_index);
       EXPECT_EQ(actual_vertex.position, expected_vertex.position);
       EXPECT_EQ(actual_vertex.normal, expected_vertex.normal);
       EXPECT_EQ(actual_vertex.texcoord, expected_vertex.texcoord);
@@ -1352,7 +1504,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     const auto loaded_indices = mesh->IndexBuffer().AsU32();
     ASSERT_EQ(loaded_indices.size(), expected->second.size());
     for (size_t index = 0; index < expected->second.size(); ++index) {
-      EXPECT_EQ(loaded_indices[index], expected->second[index]);
+      EXPECT_EQ(CheckedAt(loaded_indices, index), expected->second.at(index));
     }
     const auto minimum = mesh->BoundingBoxMin();
     const auto maximum = mesh->BoundingBoxMax();
@@ -1382,15 +1534,15 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
   for (size_t index = 0; index < cases.size(); ++index) {
-    SCOPED_TRACE(cases[index].dump());
+    SCOPED_TRACE(cases.at(index).dump());
     const auto root
       = MakeTempCookedRoot("capsule_invalid_" + std::to_string(index));
     const auto cooked_root = root / ".cooked";
     const auto source_path = root / "Sources" / "capsule.geometry.json";
     WriteTextFile(cooked_root / "Materials" / "default.omat", "placeholder");
-    const auto doc = MakeCapsuleDescriptor(cases[index], 2.0F, 0.5F);
+    const auto doc = MakeCapsuleDescriptor(cases.at(index), 2.0F, 0.5F);
     WriteTextFile(source_path, doc.dump(2));
     const auto report = SubmitAndWait(
       service, MakeGeometryRequest(source_path, cooked_root, doc));
@@ -1419,28 +1571,37 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   const auto descriptor_doc = json {
     { "name", "ProceduralIcoSphere" },
     { "bounds", MakeBounds() },
-    { "lods",
+    {
+      "lods",
       json::array({
         json {
           { "name", "LOD0" },
           { "mesh_type", "procedural" },
           { "bounds", MakeBounds() },
-          { "procedural",
+          {
+            "procedural",
             {
               { "generator", "IcoSphere" },
               { "mesh_name", "SoftBall" },
               { "params", { { "subdivision_level", 2 } } },
-            } },
-          { "submeshes",
+            },
+          },
+          {
+            "submeshes",
             json::array({
               json {
+                { "slot_id", BuiltinSurfaceSlot("IcoSphere") },
                 { "material_ref", "/.cooked/Materials/default.omat" },
-                { "views",
-                  json::array({ json { { "view_ref", "__all__" } } }) },
+                {
+                  "views",
+                  json::array({ json { { "view_ref", "__all__" } } }),
+                },
               },
-            }) },
+            }),
+          },
         },
-      }) },
+      }),
+    },
   };
   WriteTextFile(descriptor_path, descriptor_doc.dump(2));
 
@@ -1448,7 +1609,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
@@ -1457,7 +1618,9 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     << DiagnosticSummary(report.diagnostics);
 
   const auto geometry_relpath = FindOutputByExtension(report, ".ogeo");
-  ASSERT_TRUE(geometry_relpath.has_value());
+  if (!geometry_relpath.has_value()) {
+    FAIL() << "Expected geometry_relpath to contain a value";
+  }
 
   auto descriptor_bytes
     = ReadBinaryFile(cooked_root / std::filesystem::path(*geometry_relpath));
@@ -1483,17 +1646,21 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   const auto& mesh = geometry->MeshAt(0);
   ASSERT_NE(mesh, nullptr);
   const auto expected = data::MakeIcoSphereMeshAsset(2);
-  ASSERT_TRUE(expected.has_value());
+  if (!expected.has_value()) {
+    FAIL() << "Expected expected to contain a value";
+  }
   const auto vertices = mesh->Vertices();
   ASSERT_EQ(vertices.size(), expected->first.size());
   for (size_t index = 0; index < vertices.size(); ++index) {
-    EXPECT_EQ(vertices[index].position, expected->first[index].position);
-    EXPECT_EQ(vertices[index].normal, expected->first[index].normal);
+    EXPECT_EQ(
+      CheckedAt(vertices, index).position, expected->first.at(index).position);
+    EXPECT_EQ(
+      CheckedAt(vertices, index).normal, expected->first.at(index).normal);
   }
   const auto indices = mesh->IndexBuffer().AsU32();
   ASSERT_EQ(indices.size(), expected->second.size());
   for (size_t index = 0; index < indices.size(); ++index) {
-    EXPECT_EQ(indices[index], expected->second[index]);
+    EXPECT_EQ(CheckedAt(indices, index), expected->second.at(index));
   }
 }
 
@@ -1512,28 +1679,37 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   const auto descriptor_doc = json {
     { "name", "ProceduralSubdividedCube" },
     { "bounds", MakeBounds() },
-    { "lods",
+    {
+      "lods",
       json::array({
         json {
           { "name", "LOD0" },
           { "mesh_type", "procedural" },
           { "bounds", MakeBounds() },
-          { "procedural",
+          {
+            "procedural",
             {
               { "generator", "SubdividedCube" },
               { "mesh_name", "JellyCube" },
               { "params", { { "segments", 8 } } },
-            } },
-          { "submeshes",
+            },
+          },
+          {
+            "submeshes",
             json::array({
               json {
+                { "slot_id", BuiltinSurfaceSlot("SubdividedCube") },
                 { "material_ref", "/.cooked/Materials/default.omat" },
-                { "views",
-                  json::array({ json { { "view_ref", "__all__" } } }) },
+                {
+                  "views",
+                  json::array({ json { { "view_ref", "__all__" } } }),
+                },
               },
-            }) },
+            }),
+          },
         },
-      }) },
+      }),
+    },
   };
   WriteTextFile(descriptor_path, descriptor_doc.dump(2));
 
@@ -1541,7 +1717,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
@@ -1550,7 +1726,9 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     << DiagnosticSummary(report.diagnostics);
 
   const auto geometry_relpath = FindOutputByExtension(report, ".ogeo");
-  ASSERT_TRUE(geometry_relpath.has_value());
+  if (!geometry_relpath.has_value()) {
+    FAIL() << "Expected geometry_relpath to contain a value";
+  }
 
   const auto descriptor_bytes
     = ReadBinaryFile(cooked_root / std::filesystem::path(*geometry_relpath));
@@ -1585,22 +1763,22 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   auto inverse_bind_bytes = std::array<std::byte, 192> {};
   auto joint_remap_bytes = std::array<std::byte, 12> {};
   for (size_t i = 0; i < vb_bytes.size(); ++i) {
-    vb_bytes[i] = static_cast<std::byte>((i + 1U) & 0xFFU);
+    vb_bytes.at(i) = static_cast<std::byte>((i + 1U) & 0xFFU);
   }
   for (size_t i = 0; i < ib_bytes.size(); ++i) {
-    ib_bytes[i] = static_cast<std::byte>((i * 3U + 7U) & 0xFFU);
+    ib_bytes.at(i) = static_cast<std::byte>(((i * 3U) + 7U) & 0xFFU);
   }
   for (size_t i = 0; i < joint_index_bytes.size(); ++i) {
-    joint_index_bytes[i] = static_cast<std::byte>((i * 5U + 11U) & 0xFFU);
+    joint_index_bytes.at(i) = static_cast<std::byte>(((i * 5U) + 11U) & 0xFFU);
   }
   for (size_t i = 0; i < joint_weight_bytes.size(); ++i) {
-    joint_weight_bytes[i] = static_cast<std::byte>((i * 7U + 13U) & 0xFFU);
+    joint_weight_bytes.at(i) = static_cast<std::byte>(((i * 7U) + 13U) & 0xFFU);
   }
   for (size_t i = 0; i < inverse_bind_bytes.size(); ++i) {
-    inverse_bind_bytes[i] = static_cast<std::byte>((i * 9U + 17U) & 0xFFU);
+    inverse_bind_bytes.at(i) = static_cast<std::byte>(((i * 9U) + 17U) & 0xFFU);
   }
   for (size_t i = 0; i < joint_remap_bytes.size(); ++i) {
-    joint_remap_bytes[i] = static_cast<std::byte>((i * 11U + 19U) & 0xFFU);
+    joint_remap_bytes.at(i) = static_cast<std::byte>(((i * 11U) + 19U) & 0xFFU);
   }
   WriteBytesFile(vb_source, std::span<const std::byte>(vb_bytes));
   WriteBytesFile(ib_source, std::span<const std::byte>(ib_bytes));
@@ -1616,98 +1794,129 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   const auto descriptor_doc = json {
     { "name", "SkinnedCube" },
     { "bounds", MakeBounds() },
-    { "buffers",
+    {
+      "buffers",
       json::array({
         json {
           { "uri", vb_source.generic_string() },
           { "virtual_path", "/.cooked/Resources/Buffers/skinned_vb.obuf" },
           { "usage_flags", 1U },
           { "element_stride", 32U },
-          { "views",
+          {
+            "views",
             json::array({
               json {
                 { "name", "lod0" },
                 { "element_offset", 0U },
                 { "element_count", 3U },
               },
-            }) },
+            }),
+          },
         },
         json {
           { "uri", ib_source.generic_string() },
           { "virtual_path", "/.cooked/Resources/Buffers/skinned_ib.obuf" },
           { "usage_flags", 2U },
           { "element_stride", 4U },
-          { "views",
+          {
+            "views",
             json::array({
               json {
                 { "name", "lod0" },
                 { "element_offset", 0U },
                 { "element_count", 3U },
               },
-            }) },
+            }),
+          },
         },
         json {
           { "uri", joint_index_source.generic_string() },
-          { "virtual_path",
-            "/.cooked/Resources/Buffers/skinned_joint_index.obuf" },
+          {
+            "virtual_path",
+            "/.cooked/Resources/Buffers/skinned_joint_index.obuf",
+          },
           { "usage_flags", 8U },
           { "element_stride", 16U },
         },
         json {
           { "uri", joint_weight_source.generic_string() },
-          { "virtual_path",
-            "/.cooked/Resources/Buffers/skinned_joint_weight.obuf" },
+          {
+            "virtual_path",
+            "/.cooked/Resources/Buffers/skinned_joint_weight.obuf",
+          },
           { "usage_flags", 8U },
           { "element_stride", 16U },
         },
         json {
           { "uri", inverse_bind_source.generic_string() },
-          { "virtual_path",
-            "/.cooked/Resources/Buffers/skinned_inverse_bind.obuf" },
+          {
+            "virtual_path",
+            "/.cooked/Resources/Buffers/skinned_inverse_bind.obuf",
+          },
           { "usage_flags", 8U },
           { "element_stride", 64U },
         },
         json {
           { "uri", joint_remap_source.generic_string() },
-          { "virtual_path",
-            "/.cooked/Resources/Buffers/skinned_joint_remap.obuf" },
+          {
+            "virtual_path",
+            "/.cooked/Resources/Buffers/skinned_joint_remap.obuf",
+          },
           { "usage_flags", 8U },
           { "element_stride", 4U },
         },
-      }) },
-    { "lods",
+      }),
+    },
+    {
+      "lods",
       json::array({
         json {
           { "name", "LOD0" },
           { "mesh_type", "skinned" },
           { "bounds", MakeBounds() },
-          { "buffers",
+          {
+            "buffers",
             {
               { "vb_ref", "/.cooked/Resources/Buffers/skinned_vb.obuf" },
               { "ib_ref", "/.cooked/Resources/Buffers/skinned_ib.obuf" },
-            } },
-          { "skinning",
+            },
+          },
+          {
+            "skinning",
             {
-              { "joint_index_ref",
-                "/.cooked/Resources/Buffers/skinned_joint_index.obuf" },
-              { "joint_weight_ref",
-                "/.cooked/Resources/Buffers/skinned_joint_weight.obuf" },
-              { "inverse_bind_ref",
-                "/.cooked/Resources/Buffers/skinned_inverse_bind.obuf" },
-              { "joint_remap_ref",
-                "/.cooked/Resources/Buffers/skinned_joint_remap.obuf" },
+              {
+                "joint_index_ref",
+                "/.cooked/Resources/Buffers/skinned_joint_index.obuf",
+              },
+              {
+                "joint_weight_ref",
+                "/.cooked/Resources/Buffers/skinned_joint_weight.obuf",
+              },
+              {
+                "inverse_bind_ref",
+                "/.cooked/Resources/Buffers/skinned_inverse_bind.obuf",
+              },
+              {
+                "joint_remap_ref",
+                "/.cooked/Resources/Buffers/skinned_joint_remap.obuf",
+              },
               { "joint_count", 3U },
               { "influences_per_vertex", 4U },
-            } },
-          { "submeshes",
+            },
+          },
+          {
+            "submeshes",
             json::array({
               json {
+                { "slot_id", kAuthoredSlotId },
                 { "material_ref", "/.cooked/Materials/default.omat" },
                 { "views", json::array({ json { { "view_ref", "lod0" } } }) },
               },
-            }) },
+            }),
+          },
         },
-      }) },
+      }),
+    },
   };
   WriteTextFile(descriptor_path, descriptor_doc.dump(2));
 
@@ -1715,7 +1924,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
@@ -1724,7 +1933,9 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     << DiagnosticSummary(report.diagnostics);
 
   const auto geometry_relpath = FindOutputByExtension(report, ".ogeo");
-  ASSERT_TRUE(geometry_relpath.has_value());
+  if (!geometry_relpath.has_value()) {
+    FAIL() << "Expected geometry_relpath to contain a value";
+  }
 
   const auto descriptor_bytes
     = ReadBinaryFile(cooked_root / std::filesystem::path(*geometry_relpath));
@@ -1773,28 +1984,32 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
           { "virtual_path", "/.cooked/Resources/Buffers/shared_vertices.obuf" },
           { "usage_flags", 1U },
           { "element_stride", 32U },
-          { "views",
+          {
+            "views",
             json::array({
               json {
                 { "name", "lod0" },
                 { "element_offset", 0U },
                 { "element_count", 3U },
               },
-            }) },
+            }),
+          },
         },
         json {
           { "uri", ib_source.generic_string() },
           { "virtual_path", "/.cooked/Resources/Buffers/shared_indices.obuf" },
           { "usage_flags", 2U },
           { "element_stride", 4U },
-          { "views",
+          {
+            "views",
             json::array({
               json {
                 { "name", "lod0" },
                 { "element_offset", 0U },
                 { "element_count", 3U },
               },
-            }) },
+            }),
+          },
         },
       }));
   WriteTextFile(descriptor_a_path, descriptor_a.dump(2));
@@ -1809,28 +2024,32 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
           { "virtual_path", "/.cooked/Resources/Buffers/alt_vertices.obuf" },
           { "usage_flags", 1U },
           { "element_stride", 32U },
-          { "views",
+          {
+            "views",
             json::array({
               json {
                 { "name", "lod0" },
                 { "element_offset", 0U },
                 { "element_count", 3U },
               },
-            }) },
+            }),
+          },
         },
         json {
           { "uri", ib_source.generic_string() },
           { "virtual_path", "/.cooked/Resources/Buffers/alt_indices.obuf" },
           { "usage_flags", 2U },
           { "element_stride", 4U },
-          { "views",
+          {
+            "views",
             json::array({
               json {
                 { "name", "lod0" },
                 { "element_offset", 0U },
                 { "element_count", 3U },
               },
-            }) },
+            }),
+          },
         },
       }));
   WriteTextFile(descriptor_b_path, descriptor_b.dump(2));
@@ -1839,7 +2058,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
 
   const auto report_a = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_a_path, cooked_root, descriptor_a));
@@ -1890,28 +2109,32 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
         { "virtual_path", "/.cooked/Resources/Buffers/conflict_vb.obuf" },
         { "usage_flags", 3U },
         { "element_stride", 4U },
-        { "views",
+        {
+          "views",
           json::array({
             json {
               { "name", "lod0" },
               { "element_offset", 0U },
               { "element_count", 3U },
             },
-          }) },
+          }),
+        },
       },
       json {
         { "uri", shared_source.generic_string() },
         { "virtual_path", "/.cooked/Resources/Buffers/conflict_ib.obuf" },
         { "usage_flags", 3U },
         { "element_stride", 4U },
-        { "views",
+        {
+          "views",
           json::array({
             json {
               { "name", "lod0" },
               { "element_offset", 0U },
               { "element_count", 3U },
             },
-          }) },
+          }),
+        },
       },
     }));
   WriteTextFile(descriptor_path, descriptor_doc.dump(2));
@@ -1920,7 +2143,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));

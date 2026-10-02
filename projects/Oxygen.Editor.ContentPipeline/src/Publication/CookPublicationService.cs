@@ -2,20 +2,19 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Text.Json;
+using System.Collections.Immutable;
 using DroidNet.Storage;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
-/// <summary>Connects journaled publication to the current workspace's preview ownership.</summary>
-/// <param name="coordinator">The shared cook writer and project lifetime.</param>
-/// <param name="projects">The active project registry.</param>
-/// <param name="files">The atomic metadata store.</param>
-public sealed partial class CookPublicationService(IContentCookCoordinator coordinator, IProjectContextService projects, IAtomicFileStore files)
+/// <summary>Owns immutable project publication, recovery and current-workspace preview admission.</summary>
+public sealed partial class CookPublicationService(IContentCookCoordinator coordinator, IProjectContextService projects,
+    IAtomicFileStore files, IProjectManagerService projectManager)
 {
     private readonly Lock sync = new();
     private PreviewRegistration? registration;
@@ -36,67 +35,72 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
         }
     }
 
-    /// <summary>Commits validated staging and returns the resulting published identities.</summary>
-    /// <param name="operation">The owning cook.</param>
-    /// <param name="staging">The private validated roots.</param>
-    /// <param name="result">The native cook result.</param>
-    /// <param name="provenance">The complete updated product evidence.</param>
-    /// <param name="cancellationToken">Cancels before replacement.</param>
-    /// <returns>The publication outcome with scoped diagnostics.</returns>
-    internal async Task<ContentCookResult> PublishAsync(ContentCookOperation operation, CookStagingArea staging, ContentCookResult result, CookProvenance provenance, CancellationToken cancellationToken)
+    internal Task<CookStagingArea> CreateStagingAsync(ContentCookOperation operation, CookPublicationReadLease baseline,
+        IEnumerable<string> mounts, IReadOnlySet<string> emptyRoots, CancellationToken cancellationToken)
+    {
+        coordinator.VerifyWriter(operation);
+        return CookStagingArea.CreateAsync(operation, baseline, mounts, files, projectManager, cancellationToken, emptyRoots);
+    }
+
+    internal async Task<ContentCookResult> PublishAsync(ContentCookOperation operation, CookStagingArea staging,
+        ContentCookResult result, CookProvenance provenance, CookedLibraryReadSet libraries, CancellationToken cancellationToken)
     {
         coordinator.VerifyWriter(operation);
         var preview = await this.CapturePreviewAsync(operation.Project).ConfigureAwait(false);
         try
         {
             var snapshot = result.InputSnapshot ?? throw new InvalidOperationException("Publication requires captured saved inputs.");
-            var receipt = new CookPublicationReceipt(
-                1,
-                operation.Project.ProjectId,
-                operation.OperationId,
-                DateTimeOffset.UtcNow,
-                snapshot.BuildFingerprint,
-                snapshot.InputIdentity,
-                snapshot.Inputs,
-                snapshot.Documents,
-                provenance.Roots,
-                preview?.IsRuntimeAvailable == true)
+            var sealedRoots = staging.SealRoots();
+            if (sealedRoots.Any(root => !provenance.Roots.Any(proof => proof.Mount == root.Name && proof.SourceKey == root.SourceKey
+                && string.Equals(proof.IndexSha256, root.IndexSha256, StringComparison.OrdinalIgnoreCase))))
             {
-                CookedDependencies = snapshot.CookedDependencies,
-            };
-            var metadata = new Dictionary<string, byte[]>(StringComparer.Ordinal)
-            {
-                [CookPublicationTransaction.PublicationMetadata] = JsonSerializer.SerializeToUtf8Bytes(receipt),
-                [CookPublicationTransaction.ProvenanceMetadata] = CookProvenanceStore.Serialize(operation.Project, provenance),
-            };
-            var transaction = await CookPublicationTransaction.PrepareAsync(operation, staging, metadata, files, cancellationToken, sourceReplacement: snapshot.SourceReplacement).ConfigureAwait(false);
-            CookRunContext.Report(new(Message: "Publishing cooked content.", State: CookRunState.Publishing));
-            await transaction.PublishAsync(preview, () => coordinator.VerifyWriter(operation), cancellationToken).ConfigureAwait(false);
-            if (transaction.CleanupFailure is { } cleanup)
-            {
-                result = WithCleanupWarning(operation.OperationId, result, cleanup);
+                throw new InvalidDataException("Product provenance does not describe the final validated candidate roots.");
             }
 
-            var roots = staging.Roots.ToDictionary(static root => Path.GetFullPath(root.StagingPath), static root => root.PublishedPath, StringComparer.OrdinalIgnoreCase);
-            string PublishedPaths(string paths) => string.Join(Path.PathSeparator, paths.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-                .Select(path => roots.GetValueOrDefault(Path.GetFullPath(path), path)));
-            return result with
+            var owned = provenance.Roots.Select(static root => new CookPublicationRoot(CookPublicationRootOwner.Project, root.Mount, root.SourceKey, root.IndexSha256, LibraryPath: null));
+            var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, operation.Project.ProjectId,
+                operation.OperationId, DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(operation.Project),
+                libraries.OrderBindings(owned), provenance.Products,
+                new(snapshot.BuildFingerprint, snapshot.InputIdentity, snapshot.Inputs, snapshot.Documents, snapshot.CookedDependencies,
+                    [.. result.ProducedSourceFiles.Select(static file => new CookPublicationSourceTransition(file.RelativePath, file.BeforeHash, file.AfterHash))]));
+            await staging.Transaction.PrepareAsync(operation, document, snapshot.SourceReplacement, result.ProducedSourceFiles,
+                projectChange: null, cancellationToken).ConfigureAwait(false);
+            staging.RetainForPublication();
+            CookRunContext.Report(new(Message: "Publishing cooked content.", State: CookRunState.Publishing));
+            using var accepted = await staging.Transaction.PublishAsync(preview, staging.Baseline, () => coordinator.VerifyWriter(operation), cancellationToken).ConfigureAwait(false);
+            var published = result with { IsPublished = true, IsMounted = preview?.IsRuntimeAvailable == true };
+            if (preview is not null)
             {
-                IsPublished = true, IsMounted = preview?.IsRuntimeAvailable == true,
-                Inspection = result.Inspection is { } inspection ? inspection with { CookedRoot = PublishedPaths(inspection.CookedRoot) } : null,
-                Validation = result.Validation is { } validation ? validation with { CookedRoot = PublishedPaths(validation.CookedRoot) } : null,
-            };
+                try
+                {
+                    await preview.CommittedAsync(accepted).ConfigureAwait(false);
+                }
+                catch (Exception refresh) when (refresh is IOException or InvalidDataException or InvalidOperationException or OperationCanceledException)
+                {
+                    published = WithWarning(operation.OperationId, published, "Cook.CatalogRefreshFailed",
+                        "Cooked content was published. The browser could not finish refreshing it.", refresh);
+                }
+            }
+
+            return published;
         }
         catch (Exception failure) when (failure is IOException or InvalidDataException or AggregateException or InvalidOperationException)
         {
-            var diagnostic = new DiagnosticRecord
+            return result with
             {
-                OperationId = operation.OperationId, Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error,
-                Code = failure is CookOutputBusyException ? "Cook.OutputBusy" : failure is AggregateException ? "Cook.RecoveryRequired" : "Cook.PublicationFailed",
-                Message = failure.Message, TechnicalMessage = failure.ToString(), ExceptionType = failure.GetType().FullName,
-                AffectedPath = Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")),
+                Status = OperationStatus.Failed,
+                Diagnostics =
+                [
+                    .. result.Diagnostics,
+                    new DiagnosticRecord
+                    {
+                        OperationId = operation.OperationId, Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error,
+                        Code = failure is CookOutputBusyException ? "Cook.OutputBusy" : failure is AggregateException ? "Cook.RecoveryRequired" : "Cook.PublicationFailed",
+                        Message = failure.Message, TechnicalMessage = failure.ToString(), ExceptionType = failure.GetType().FullName,
+                        AffectedPath = Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")),
+                    },
+                ],
             };
-            return result with { Status = OperationStatus.Failed, Diagnostics = [.. result.Diagnostics, diagnostic] };
         }
         finally
         {
@@ -107,20 +111,131 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
         }
     }
 
-    private static ContentCookResult WithCleanupWarning(Guid operationId, ContentCookResult result, Exception cleanup)
+    /// <summary>Observes configured libraries during owned project startup and returns one mount/catalog snapshot.</summary>
+    public async Task<CookPublicationReadLease> AcquireForMountAsync(ProjectContext project, CancellationToken cancellationToken)
+    {
+        CookPublicationReadLease? accepted = null;
+        try
+        {
+            await coordinator.RunAsync(async (operation, token) =>
+            {
+                if (!ReferenceEquals(operation.Project, project))
+                {
+                    throw new OperationCanceledException("The project changed before cooked-content startup.");
+                }
+
+                using var baseline = await this.AcquireForOperationAsync(operation, token).ConfigureAwait(false);
+                using var libraries = await CookedLibraryReadSet.AcquireAsync(project, token).ConfigureAwait(false);
+                var document = BuildMetadataDocument(operation, project, baseline, libraries);
+                if ((baseline.Document is { } current
+                        && string.Equals(current.MountConfigurationIdentity, document.MountConfigurationIdentity, StringComparison.Ordinal)
+                        && current.Roots.SequenceEqual(document.Roots))
+                    || (baseline.Document is null && document.Roots.IsEmpty))
+                {
+                    accepted = baseline.Retain();
+                    return true;
+                }
+
+                var transaction = await CookPublicationTransaction.ReserveAsync(operation, baseline, [], files, projectManager, token).ConfigureAwait(false);
+                await transaction.PrepareAsync(operation, document, sourceReplacement: null, [], projectChange: null, token).ConfigureAwait(false);
+                accepted = await transaction.PublishAsync(preview: null, baseline, () => coordinator.VerifyWriter(operation), token).ConfigureAwait(false);
+                return true;
+            }, cancellationToken).ConfigureAwait(false);
+            return accepted ?? throw new InvalidOperationException("Cooked-content startup did not capture a publication.");
+        }
+        catch
+        {
+            accepted?.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>Commits confirmed mount intent and one effective root order without recooking unchanged products.</summary>
+    public async Task<CookPublicationReadLease> ChangeMountsAsync(ContentCookOperation operation, ProjectContext next,
+        IProjectInfo expected, IProjectInfo desired, CancellationToken cancellationToken)
+    {
+        coordinator.VerifyWriter(operation);
+        using var baseline = await this.AcquireForOperationAsync(operation, cancellationToken).ConfigureAwait(false);
+        using var libraries = await CookedLibraryReadSet.AcquireAsync(next, cancellationToken).ConfigureAwait(false);
+        var document = BuildMetadataDocument(operation, next, baseline, libraries);
+        var transaction = await CookPublicationTransaction.ReserveAsync(operation, baseline, [], files, projectManager, cancellationToken).ConfigureAwait(false);
+        await transaction.PrepareAsync(operation, document, sourceReplacement: null, [],
+            new(ProjectInfo.ToJson(expected), ProjectInfo.ToJson(desired)), cancellationToken).ConfigureAwait(false);
+        var preview = await this.CapturePreviewAsync(operation.Project).ConfigureAwait(false);
+        try
+        {
+            return await transaction.PublishAsync(preview, baseline, () => coordinator.VerifyWriter(operation), cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (preview is not null)
+            {
+                await preview.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static CookPublicationDocument BuildMetadataDocument(ContentCookOperation operation, ProjectContext selected,
+        CookPublicationReadLease baseline, CookedLibraryReadSet libraries)
+    {
+        var names = selected.AuthoringMounts.Select(static mount => mount.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var owned = baseline.Roots.Where(root => root.Owner == CookPublicationRootOwner.Project && names.Contains(root.Name)).ToArray();
+        var products = baseline.ProductState.Products.Where(product => product.Outputs.All(output => owned.Any(root => root.Name == output.RootMount))).ToImmutableArray();
+        return new(CookPublicationDocument.CurrentVersion, selected.ProjectId, operation.OperationId, DateTimeOffset.UtcNow,
+            CookPublicationDocument.ConfigurationIdentity(selected), libraries.OrderBindings(owned), products, baseline.Document?.CookInputs);
+    }
+
+    internal async Task<ContentCookResult> PublishObservedBindingsAsync(ContentCookOperation operation, CookPublicationReadLease baseline,
+        CookedLibraryReadSet libraries, ContentCookResult result, CancellationToken cancellationToken)
+    {
+        coordinator.VerifyWriter(operation);
+        var document = BuildMetadataDocument(operation, operation.Project, baseline, libraries);
+        if ((baseline.Document is { } current && current.MountConfigurationIdentity == document.MountConfigurationIdentity
+                && current.Roots.SequenceEqual(document.Roots)) || (baseline.Document is null && document.Roots.IsEmpty))
+        {
+            return result;
+        }
+
+        var transaction = await CookPublicationTransaction.ReserveAsync(operation, baseline, [], files, projectManager, cancellationToken).ConfigureAwait(false);
+        await transaction.PrepareAsync(operation, document, sourceReplacement: null, [], projectChange: null, cancellationToken).ConfigureAwait(false);
+        var preview = await this.CapturePreviewAsync(operation.Project).ConfigureAwait(false);
+        try
+        {
+            using var accepted = await transaction.PublishAsync(preview, baseline, () => coordinator.VerifyWriter(operation), cancellationToken).ConfigureAwait(false);
+            result = result with { IsPublished = true, IsMounted = preview?.IsRuntimeAvailable == true };
+            if (preview is not null)
+            {
+                try
+                {
+                    await preview.CommittedAsync(accepted).ConfigureAwait(false);
+                }
+                catch (Exception failure) when (failure is IOException or InvalidDataException or InvalidOperationException or OperationCanceledException)
+                {
+                    result = WithWarning(operation.OperationId, result, "Cook.CatalogRefreshFailed",
+                        "Content bindings were published. The browser could not finish refreshing them.", failure);
+                }
+            }
+
+            return result;
+        }
+        finally
+        {
+            if (preview is not null)
+            {
+                await preview.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static ContentCookResult WithWarning(Guid operationId, ContentCookResult result, string code, string message, Exception failure)
         => result with
         {
             Status = OperationStatus.SucceededWithWarnings,
-            Diagnostics =
-            [
-                .. result.Diagnostics,
-                new DiagnosticRecord
-                {
-                    OperationId = operationId, Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Warning,
-                    Code = "Cook.CleanupDeferred", Message = "Cooked content was published. Some temporary files could not yet be removed.",
-                    TechnicalMessage = cleanup.ToString(),
-                },
-            ],
+            Diagnostics = [.. result.Diagnostics, new DiagnosticRecord
+            {
+                OperationId = operationId, Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Warning,
+                Code = code, Message = message, TechnicalMessage = failure.ToString(),
+            }],
         };
 
     private Task<ICookPublicationPreview?> CapturePreviewAsync(ProjectContext project)

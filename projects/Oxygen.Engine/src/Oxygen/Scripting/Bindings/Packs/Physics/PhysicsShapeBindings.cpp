@@ -4,14 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cmath>
-#include <string_view>
+#include <cstdint>
 #include <type_traits>
+#include <variant>
 
 #include <lua.h>
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Physics/Shape.h>
 #include <Oxygen/Physics/Shape/ShapeDesc.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
@@ -44,7 +45,6 @@ namespace {
     if (lua_isnil(state, -1) == 0) {
       if (!TryCheckVec3(state, -1, desc.local_position)) {
         luaL_error(state, "local_position must be a vector");
-        return {};
       }
     }
     lua_pop(state, 1);
@@ -54,7 +54,6 @@ namespace {
       const auto* q = TryCheckQuat(state, -1);
       if (q == nullptr) {
         luaL_error(state, "local_rotation must be a quaternion");
-        return {};
       }
       desc.local_rotation = Quat { q->w, q->x, q->y, q->z };
     }
@@ -64,7 +63,6 @@ namespace {
     if (lua_isnil(state, -1) == 0) {
       if (!TryCheckVec3(state, -1, desc.local_scale)) {
         luaL_error(state, "local_scale must be a vector");
-        return {};
       }
     }
     lua_pop(state, 1);

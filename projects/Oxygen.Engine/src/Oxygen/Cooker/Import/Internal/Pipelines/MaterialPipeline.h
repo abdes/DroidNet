@@ -23,93 +23,17 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/OxCo/Channel.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 
 namespace oxygen::content::import {
-
-//! UV transform for a material texture slot.
-struct MaterialUvTransform {
-  float scale[2] = { 1.0F, 1.0F };
-  float offset[2] = { 0.0F, 0.0F };
-  float rotation_radians = 0.0F;
-};
-
-//! Material alpha mode from authoring.
-enum class MaterialAlphaMode : uint8_t {
-  kOpaque,
-  kMasked,
-  kBlended,
-};
-
-//! Shader request for material pipelines.
-struct ShaderRequest {
-  uint8_t shader_type = 0; // ShaderType enum value
-  std::string source_path;
-  std::string entry_point;
-  std::string defines;
-  uint64_t shader_hash = 0;
-};
-
-//! Texture binding for a single material slot.
-struct MaterialTextureBinding {
-  uint32_t index = 0;
-  bool assigned = false;
-  std::string source_id;
-  uint8_t uv_set = 0;
-  MaterialUvTransform uv_transform;
-};
-
-//! Texture bindings for all material slots.
-struct MaterialTextureBindings {
-  MaterialTextureBinding base_color;
-  MaterialTextureBinding normal;
-  MaterialTextureBinding metallic;
-  MaterialTextureBinding roughness;
-  MaterialTextureBinding ambient_occlusion;
-  MaterialTextureBinding emissive;
-  MaterialTextureBinding specular;
-  MaterialTextureBinding sheen_color;
-  MaterialTextureBinding clearcoat;
-  MaterialTextureBinding clearcoat_normal;
-  MaterialTextureBinding transmission;
-  MaterialTextureBinding thickness;
-};
-
-//! Scalar material inputs.
-struct MaterialInputs {
-  float base_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-  float normal_scale = 1.0f;
-  float metalness = 0.0f;
-  float roughness = 1.0f;
-  float ambient_occlusion = 1.0f;
-  float emissive_factor[3] = { 0.0f, 0.0f, 0.0f };
-  float alpha_cutoff = 0.5f;
-  float ior = 1.5f;
-  float specular_factor = 1.0f;
-  float sheen_color_factor[3] = { 0.0f, 0.0f, 0.0f };
-  float clearcoat_factor = 0.0f;
-  float clearcoat_roughness = 0.0f;
-  float transmission_factor = 0.0f;
-  float thickness_factor = 0.0f;
-  float attenuation_color[3] = { 1.0f, 1.0f, 1.0f };
-  float attenuation_distance = 0.0f;
-  bool double_sided = false;
-  bool unlit = false;
-  bool roughness_as_glossiness = false;
-};
-
-//! ORM packing policy for metallic/roughness/AO.
-enum class OrmPolicy : uint8_t {
-  kAuto,
-  kForcePacked,
-  kForceSeparate,
-};
 
 //! Pipeline for CPU-bound material cooking.
 /*!
@@ -166,27 +90,20 @@ public:
     std::string virtual_path;
     std::string descriptor_relpath;
     std::vector<std::byte> descriptor_bytes;
+    data::AssetReferences references;
   };
 
   //! Work submission item.
   struct WorkItem {
     std::string source_id;
-    std::string material_name;
-    std::string storage_material_name;
     const void* source_key = nullptr;
-
-    data::MaterialDomain material_domain = data::MaterialDomain::kOpaque;
-    MaterialAlphaMode alpha_mode = MaterialAlphaMode::kOpaque;
-    MaterialInputs inputs;
-    MaterialTextureBindings textures;
-    OrmPolicy orm_policy = OrmPolicy::kAuto;
-    std::vector<ShaderRequest> shader_requests;
+    MaterialSource material;
 
     //! Callback fired when a worker starts processing this item.
-    std::function<void()> on_started;
+    std::function<void()> on_started {};
 
     //! Callback fired when a worker finishes processing this item.
-    std::function<void()> on_finished;
+    std::function<void()> on_finished {};
 
     ImportRequest request;
     observer_ptr<NamingService> naming_service;
@@ -198,7 +115,7 @@ public:
     std::string source_id;
     std::optional<CookedMaterialPayload> cooked;
     std::vector<ImportDiagnostic> diagnostics;
-    ImportWorkItemTelemetry telemetry;
+    ImportWorkItemTelemetry telemetry {};
     bool success = false;
   };
 

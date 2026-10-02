@@ -24,6 +24,7 @@
 #include <Oxygen/Cooker/Pak/Internal/PakCatalog_schema.h>
 #include <Oxygen/Cooker/Pak/PakCatalogIo.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakFormatVersions.h>
 
 namespace oxygen::content::pak {
 
@@ -34,7 +35,7 @@ namespace {
   using nlohmann::json_schema::error_handler;
   using nlohmann::json_schema::json_validator;
 
-  constexpr auto kSchemaVersion = 1;
+  constexpr auto kSchemaVersion = data::pak::version::kPakCatalogVersion;
   constexpr auto kHexDigits = std::string_view { "0123456789abcdef" };
 
   class CollectingErrorHandler final : public error_handler {
@@ -207,6 +208,20 @@ namespace {
       json_entries.push_back(std::move(json_entry));
     }
     root["entries"] = std::move(json_entries);
+    auto deleted = catalog.deleted;
+    std::ranges::sort(deleted);
+    root["deleted"] = ordered_json::array();
+    for (const auto& key : deleted) {
+      root["deleted"].push_back(data::to_string(key));
+    }
+    root["bases"] = ordered_json::array();
+    for (const auto& base : catalog.bases) {
+      auto item = ordered_json::object();
+      item["source_key"] = data::to_string(base.source_key);
+      item["content_version"] = base.content_version;
+      item["catalog_digest"] = ToHex(base.catalog_digest);
+      root["bases"].push_back(std::move(item));
+    }
 
     return root;
   }
@@ -278,12 +293,39 @@ namespace {
         return lhs.asset_key < rhs.asset_key;
       });
 
-    return Result<data::PakCatalog>::Ok(data::PakCatalog {
+    auto catalog = data::PakCatalog {
       .source_key = source_key.value(),
       .content_version = document.at("content_version").get<uint16_t>(),
       .catalog_digest = catalog_digest.value(),
       .entries = std::move(entries),
-    });
+      .deleted = {},
+      .bases = {},
+    };
+    for (const auto& item : document.at("deleted")) {
+      const auto key
+        = data::AssetKey::FromString(item.get_ref<const std::string&>());
+      if (!key) {
+        return Result<data::PakCatalog>::Err(std::errc::invalid_argument);
+      }
+      catalog.deleted.push_back(*key);
+    }
+    std::ranges::sort(catalog.deleted);
+    for (const auto& item : document.at("bases")) {
+      const auto key = data::SourceKey::FromString(
+        item.at("source_key").get_ref<const std::string&>());
+      const auto digest = ParseHexBytes<32>(
+        item.at("catalog_digest").get_ref<const std::string&>());
+      if (!key || !digest) {
+        return Result<data::PakCatalog>::Err(std::errc::invalid_argument);
+      }
+      catalog.bases.push_back({ .source_key = *key,
+        .content_version = item.at("content_version").get<uint16_t>(),
+        .catalog_digest = *digest });
+    }
+    if (!catalog.Validate()) {
+      return Result<data::PakCatalog>::Err(std::errc::invalid_argument);
+    }
+    return Result<data::PakCatalog>::Ok(std::move(catalog));
   }
 
 } // namespace
@@ -328,6 +370,9 @@ auto PakCatalogIo::Read(const std::filesystem::path& path)
 auto PakCatalogIo::Write(const std::filesystem::path& path,
   const data::PakCatalog& catalog) -> Result<void>
 {
+  if (!catalog.Validate()) {
+    return Result<void>::Err(std::errc::invalid_argument);
+  }
   auto output = std::ofstream(path, std::ios::out | std::ios::trunc);
   if (!output) {
     return Result<void>::Err(std::errc::io_error);

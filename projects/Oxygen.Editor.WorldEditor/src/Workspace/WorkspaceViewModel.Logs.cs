@@ -10,6 +10,12 @@ namespace Oxygen.Editor.World.Workspace;
 /// <summary>Source-generated diagnostics for workspace activation and cooked-root mounting.</summary>
 public partial class WorkspaceViewModel
 {
+    [LoggerMessage(Level = LogLevel.Error, Message = "Cooked-content refresh failed during {Stage} for project {ProjectRoot}. Preview state: {PreviewState}.")]
+    private partial void LogCookedRootRefreshFailed(Exception exception, string stage, string projectRoot, string previewState);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to suspend the preview after cooked-content refresh failed for project {ProjectRoot}.")]
+    private partial void LogCookedContentSuspensionFailed(Exception exception, string projectRoot);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Cannot refresh cooked roots: No active project context.")]
     private partial void LogRefreshWithoutProject();
 
@@ -30,9 +36,6 @@ public partial class WorkspaceViewModel
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to mount cooked root {CookedMountRoot}.")]
     private partial void LogMountPointFailed(Exception exception, string? cookedMountRoot);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "No cooked index files found under {CookedBaseRoot} (expected .cooked/<MountPoint>/{IndexFileName}). Assets will not be available in the engine.")]
-    private partial void LogCookedIndicesMissing(string? cookedBaseRoot, string? indexFileName);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Cannot mount validated cooked roots: No active project context.")]
     private partial void LogValidatedMountWithoutProject();
@@ -63,9 +66,6 @@ public partial class WorkspaceViewModel
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to start embedded engine for workspace activation.")]
     private partial void LogEngineStartFailed(Exception exception);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Skipping incompatible cooked index {IndexPath}. Re-cook the project to regenerate this mount point.")]
-    private partial void LogCookedIndexRejected(Exception exception, string? indexPath);
 
     private void LogMountedRoots(IReadOnlyList<string> roots, bool validated = false)
     {

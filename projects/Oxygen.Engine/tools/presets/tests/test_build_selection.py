@@ -113,6 +113,32 @@ $null = Invoke-BuildForTarget probe $selection
         calls = [json.loads(line) for line in (self.root / "calls.jsonl").read_text().splitlines()]
         self.assertEqual(calls, [["--build", "--preset", "conan-ninja-release", "--target", "probe"]] * 2)
 
+    def test_ambiguous_target_cancels_on_empty_input_or_eof(self):
+        root = self.tree("ninja")
+        reply = root / ".cmake/api/v1/reply"
+        reply.mkdir(parents=True)
+        targets = []
+        for name in ("Probe.One", "Probe.Two"):
+            filename = f"target-{name}.json"
+            (reply / filename).write_text(json.dumps({"name": name}), encoding="utf-8")
+            targets.append({"name": name, "jsonFile": filename})
+        (reply / "model.json").write_text(json.dumps({"configurations": [{"name": "Debug", "targets": targets}]}), encoding="utf-8")
+        (reply / "index-001.json").write_text(json.dumps({"objects": [{"kind": "codemodel", "version": {"major": 2}, "jsonFile": "model.json"}]}), encoding="utf-8")
+        for response in ("$null", "''"):
+            with self.subTest(response=response):
+                self.command("""
+. (Join-Path $PSScriptRoot 'tools/cli/oxy-targets.ps1')
+$script:prompts = 0
+function global:Read-Host {
+    $script:prompts++
+    if ($script:prompts -gt 1) { throw 'Repeated a target prompt after input ended' }
+    return RESPONSE
+}
+$result = Resolve-TargetName Probe (Join-Path $PSScriptRoot 'out/build-ninja')
+if ($null -ne $result) { throw 'Cancellation selected a build target' }
+if ($script:prompts -ne 1) { throw 'Did not exercise ambiguous selection' }
+""".replace("RESPONSE", response))
+
     def test_unconfigured_tree_requires_explicit_setup(self):
         self.tree("ninja")
         output = self.command("""
@@ -372,40 +398,108 @@ $tools.Paths.Values | Sort-Object
         self.assertIn("conan-ninja-debug", output)
         self.assertNotIn("bin\\Release", output)
 
-    def test_reimport_preflight_failure_preserves_existing_content(self):
+    def test_reimport_build_failure_preserves_existing_content(self):
         tree = self.tree("ninja")
-        self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.ImportTool", 17)
+        (tree / "CMakeCache.txt").write_text("CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8")
+        self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.ImportTool")
         self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.Inspector")
-        self.copy_workflow("Examples/RenderScene/reimport_scenes.ps1")
-        self.copy_workflow("Examples/RenderScene/reimport-sources.schema.json")
-        folder = self.root / "Examples/RenderScene"
-        cooked = folder / ".cooked"
-        cooked.mkdir()
+        self.copy_workflow("Examples/Content/import_models.ps1")
+        self.copy_workflow("Examples/Content/import-sources.schema.json")
+        folder = self.root / "Examples/Content"
+        cooked = self.root / "Examples/Content/.cooked"
+        cooked.mkdir(parents=True)
         (cooked / "keep.bin").write_bytes(b"previous generation")
         model = self.root / "original.gltf"
         model.write_text("{}", encoding="utf-8")
         (folder / "sources.json").write_text(json.dumps({"version": 1, "sources": [{"source": str(model), "name": "fixture"}]}), encoding="utf-8")
-        self.command("""
-function global:Get-Process { param($Name, $ErrorAction) }
-& (Join-Path $PSScriptRoot 'Examples/RenderScene/reimport_scenes.ps1') (Join-Path $PSScriptRoot 'Examples/RenderScene/sources.json')
-exit $LASTEXITCODE
+        output = self.command("""
+$global:realCmake = (Get-Command cmake -CommandType Application).Source
+function global:cmake {
+    if ($args[0] -eq '--build') { Write-Host 'BUILD_FAILED'; $global:LASTEXITCODE = 17; return }
+    & $global:realCmake @args
+}
+& (Join-Path $PSScriptRoot 'Examples/Content/import_models.ps1') (Join-Path $PSScriptRoot 'Examples/Content/sources.json')
 """, expect=1)
+        self.assertIn("BUILD_FAILED", output)
+        self.assertNotIn("ARG1=", output)
         self.assertEqual((cooked / "keep.bin").read_bytes(), b"previous generation")
-        reports = list((self.root / "out/renderscene-reimport").glob("*/result.json"))
-        self.assertEqual(len(reports), 1)
-        result = json.loads(reports[0].read_text(encoding="utf-8"))
-        self.assertEqual(result["status"], "failed")
-        self.assertIn("exited 17", result["error"])
-        self.assertFalse((reports[0].parent / "import.log").exists())
-        log = (reports[0].parent / "preflight.log").read_text(encoding="utf-8")
-        self.assertIn("RUNTIME=ninja-Release", log)
-        self.assertIn("ARG1=--no-tui", log)
+
+    def test_build_tools_creates_missing_release_executables_before_resolution(self):
+        tree = self.tree("ninja")
+        (tree / "CMakeCache.txt").write_text("CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8")
+        self.fake_tool(tree / "bin/Debug", "Oxygen.Cooker.ImportTool")
+        self.fake_tool(tree / "bin/Debug", "Oxygen.Cooker.Inspector")
+        output = self.command("""
+$global:realCmake = (Get-Command cmake -CommandType Application).Source
+function global:cmake {
+    if ($args[0] -eq '--build') {
+        if (($args -join ' ') -ne '--build --preset conan-ninja-release --target oxygen-cooker-importtool oxygen-cooker-inspector') { throw 'Wrong build/configuration' }
+        $directory = Join-Path $PSScriptRoot 'out/build-ninja/bin/Release'
+        [IO.Directory]::CreateDirectory($directory) | Out-Null
+        foreach ($name in @('ImportTool','Inspector')) {
+            [IO.File]::WriteAllText((Join-Path $directory "Oxygen.Cooker.$name.cmd"), "@echo off`r`necho FRESH_RELEASE`r`n")
+        }
+        $env:OXYGEN_TEST_BUILD_ENV = 'temporary'
+        $global:LASTEXITCODE = 0
+        return
+    }
+    & $global:realCmake @args
+}
+$tools = Build-OxygenExecutables -Targets oxygen-cooker-importtool,oxygen-cooker-inspector
+if ($tools.Selection.Config -ne 'Release') { throw 'Fell back to Debug' }
+if (Test-Path Env:OXYGEN_TEST_BUILD_ENV) { throw 'Leaked build environment' }
+Invoke-OxygenTool -Context $tools -Target oxygen-cooker-importtool
+""")
+        self.assertIn("FRESH_RELEASE", output)
+
+    def retained_record(self):
+        self.copy_workflow("Examples/Content/import_models.ps1")
+        self.copy_workflow("src/Oxygen/Cooker/Import/Schemas/oxygen.retained-model-import.schema.json")
+        record = self.root / "Examples/Content/imports/model.import.json"
+        record.parent.mkdir(parents=True)
+        record.write_text(json.dumps({
+            "schema_version": 1,
+            "content_root": "..",
+            "recipe": {"jobs": [{"type": "gltf", "source": "original.gltf"}]},
+            "material_slot_provenance": {},
+            "published_generation": None,
+        }), encoding="utf-8")
+        return record
+
+    def test_retained_record_preflight_needs_no_tools_and_preserves_record(self):
+        record = self.retained_record()
+        before = record.read_bytes()
+        output = self.command("""
+$script = Join-Path $PSScriptRoot 'Examples/Content/import_models.ps1'
+& $script -All -WhatIf
+& $script -All -Reclaim -WhatIf
+& $script -Record (Join-Path $PSScriptRoot 'Examples/Content/imports/model.import.json') -WhatIf
+""")
+        self.assertIn("Publish 1 retained model imports", output)
+        self.assertIn("Reclaim unused generations for 1 retained model imports", output)
+        self.assertEqual(record.read_bytes(), before)
+
+    def test_record_replay_with_explicit_tool_propagates_failure_without_build(self):
+        record = self.retained_record()
+        before = record.read_bytes()
+        directory = self.root / "bin/Release"
+        importer = self.fake_tool(directory, "Oxygen.Cooker.ImportTool", 23)
+        importer.write_bytes(b"@echo off\r\necho ARGS=%*\r\nexit /b 23\r\n")
+        self.fake_tool(directory, "Oxygen.Cooker.Inspector")
+        output = self.command("""
+function global:cmake { throw 'Unexpected build invocation' }
+& (Join-Path $PSScriptRoot 'Examples/Content/import_models.ps1') -Record (Join-Path $PSScriptRoot 'Examples/Content/imports/model.import.json') -ToolPath (Join-Path $PSScriptRoot 'bin/Release/Oxygen.Cooker.ImportTool.cmd')
+""", expect=1)
+        self.assertIn("--record", output)
+        self.assertNotIn("--recipe", output)
+        self.assertNotIn("Unexpected build invocation", output)
+        self.assertEqual(record.read_bytes(), before)
 
     def test_packaging_propagates_shared_tool_failure(self):
         tree = self.tree("ninja")
         self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.PakTool", 29)
         self.copy_workflow("Examples/Content/pak_content.ps1")
-        (self.root / "Examples/Content/.cooked").mkdir()
+        (self.root / "Examples/Content/.cooked/main").mkdir(parents=True)
         output = self.command("""
 & (Join-Path $PSScriptRoot 'Examples/Content/pak_content.ps1')
 exit $LASTEXITCODE
@@ -415,9 +509,9 @@ exit $LASTEXITCODE
         self.assertNotIn("Published artifacts:", output)
 
     def test_cooker_callers_have_no_private_launch_paths(self):
-        for relative in ("Examples/Content/cook_scenes.ps1", "Examples/Content/pak_content.ps1", "Examples/RenderScene/reimport_scenes.ps1"):
+        for relative in ("Examples/Content/cook_scenes.ps1", "Examples/Content/pak_content.ps1", "Examples/Content/import_models.ps1"):
             text = (ENGINE / relative).read_text(encoding="utf-8")
-            self.assertIn("Resolve-OxygenExecutables", text)
+            self.assertIn("Build-OxygenExecutables" if "import_models" in relative else "Resolve-OxygenExecutables", text)
             self.assertIn("Invoke-OxygenTool", text)
             self.assertNotIn("Resolve-OxygenBuildSelection", text)
             self.assertNotIn("Invoke-OxygenSelectedExecutable", text)
@@ -445,27 +539,12 @@ exit $LASTEXITCODE
             else:
                 for flag in ("--help", "-h"):
                     with self.subTest(script=source.name, flag=flag):
-                        # Isolated Python proves help does not require PakGen or
-                        # third-party modules to be installed/imported.
+                        # Help must work without importing optional third-party modules.
                         result = subprocess.run([sys.executable, "-I", str(source), flag], cwd=self.root, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15)
                         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                         self.assertIn("--help", result.stdout)
         self.assertFalse((self.root / "Examples/Content/pak").exists())
         self.assertFalse((self.root / "out").exists())
-
-    def test_make_pak_imports_current_cooker_api(self):
-        helper = ENGINE / "Examples/Content/make_pak.py"
-        expected = ENGINE / "src/Oxygen/Cooker/Tools/PakGen/src/pakgen/api.py"
-        command = (
-            "import importlib.util, inspect; from pathlib import Path; "
-            f"spec=importlib.util.spec_from_file_location('example_make_pak', {str(helper)!r}); "
-            "module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); "
-            "options, build=module._import_pakgen_api(module._workspace_root_from_here()); "
-            f"assert Path(inspect.getfile(options)).resolve() == Path({str(expected)!r}).resolve(); "
-            "print('Current Cooker PakGen API imported')"
-        )
-        result = subprocess.run([sys.executable, "-c", command], cwd=self.root, capture_output=True, text=True, encoding="utf-8", errors="replace")
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_relative_tool_paths_logs_and_packaging_whatif(self):
         caller = self.root / "caller"

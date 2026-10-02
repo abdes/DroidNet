@@ -307,29 +307,6 @@ auto BuildPatchedResourceTablePayload(const uint32_t entry_count,
   return resource_cursor == resource_indices.size();
 }
 
-auto FindScriptParamBaseOffset(
-  const std::span<const pak::PakResourcePlacementPlan> resources)
-  -> std::optional<uint64_t>
-{
-  std::optional<uint64_t> base_offset;
-  for (const auto& resource : resources) {
-    if (resource.resource_kind != "script_param") {
-      continue;
-    }
-    if (!base_offset.has_value() || resource.offset < *base_offset) {
-      base_offset = resource.offset;
-    }
-  }
-  return base_offset;
-}
-
-auto ScriptSlotsRequireParamRegion(
-  const std::span<const pak::PakScriptSlotPlan> slots) -> bool
-{
-  return std::ranges::any_of(slots,
-    [](const pak::PakScriptSlotPlan& slot) { return slot.params_count > 0U; });
-}
-
 auto BuildFooter(WriterState& state) -> std::optional<core::PakFooter>
 {
   auto footer = core::PakFooter {};
@@ -386,7 +363,6 @@ auto BuildFooter(WriterState& state) -> std::optional<core::PakFooter>
     || !assign_table("buffer_table", footer.buffer_table)
     || !assign_table("audio_table", footer.audio_table)
     || !assign_table("script_resource_table", footer.script_resource_table)
-    || !assign_table("script_slot_table", footer.script_slot_table)
     || !assign_table("physics_resource_table", footer.physics_resource_table)) {
     return std::nullopt;
   }
@@ -394,6 +370,8 @@ auto BuildFooter(WriterState& state) -> std::optional<core::PakFooter>
   const auto& browse = state.plan->BrowseIndex();
   footer.browse_index_offset = browse.enabled ? browse.offset : 0;
   footer.browse_index_size = browse.enabled ? browse.size_bytes : 0;
+  footer.catalog_offset = state.plan->Catalog().offset;
+  footer.catalog_size = state.plan->Catalog().bytes.size();
   footer.pak_crc32 = 0;
 
   return footer;
@@ -642,23 +620,6 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
             return true;
           },
           payload);
-      } else if (table.table_name == "script_slot_table") {
-        const auto script_param_base_offset
-          = FindScriptParamBaseOffset(resources);
-        if (ScriptSlotsRequireParamRegion(state.plan->ScriptSlots())
-          && !script_param_base_offset.has_value()) {
-          AddDiagnostic(state, PakDiagnosticSeverity::kError,
-            "pak.write.script_param_region_missing",
-            "script_slot_table requires script_param data in script_region.",
-            "script_param", table.table_name);
-          return false;
-        }
-        const auto input = pak::PakScriptSlotTableSerializationInput {
-          .entry_count = table.count,
-          .slots = state.plan->ScriptSlots(),
-          .params_base_offset = script_param_base_offset.value_or(0U),
-        };
-        store_ok = StoreScriptSlotTablePayload(input, payload);
       } else if (table.table_name == "physics_resource_table") {
         store_ok
           = BuildPatchedResourceTablePayload<physics::PhysicsResourceDesc>(
@@ -755,6 +716,21 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
 
   if (!HasWriterErrors(state)) {
     EmitPhaseMarker(state, "pak.write.phase_begin", "Write asset directory.");
+    for (const auto& entry : plan.Directory().entries) {
+      if (entry.reference_bytes.empty()) {
+        continue;
+      }
+      if (!MoveCursorToOffset(
+            state, entry.references.offset, "asset_references")
+        || !WriteRawBytes(state, entry.reference_bytes,
+          "pak.write.references_failed",
+          "Failed to write asset reference metadata.", {}, "asset_references",
+          entry.asset_key)) {
+        break;
+      }
+    }
+  }
+  if (!HasWriterErrors(state)) {
     const auto& directory = plan.Directory();
     if (MoveCursorToOffset(state, directory.offset, "asset_directory")) {
       auto payload = std::vector<std::byte> {};
@@ -816,6 +792,19 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
     }
     EmitPhaseMarker(
       state, "pak.write.phase_end", "Browse index payload write complete.");
+  }
+
+  if (!HasWriterErrors(state)) {
+    const auto& catalog = plan.Catalog();
+    if (catalog.bytes.empty()) {
+      AddDiagnostic(state, PakDiagnosticSeverity::kError,
+        "pak.write.catalog_missing", "Current PAK format requires a catalog.",
+        "catalog");
+    } else if (MoveCursorToOffset(state, catalog.offset, "catalog")) {
+      static_cast<void>(
+        WriteRawBytes(state, catalog.bytes, "pak.write.catalog_failed",
+          "Failed to write embedded PAK catalog.", "catalog", "catalog"));
+    }
   }
 
   if (!HasWriterErrors(state)) {

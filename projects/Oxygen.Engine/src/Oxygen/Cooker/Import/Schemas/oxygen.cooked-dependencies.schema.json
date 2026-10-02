@@ -5,7 +5,7 @@
   "required": ["schema", "source_key", "assets"],
   "additionalProperties": false,
   "properties": {
-    "schema": { "const": "oxygen.cooked-dependencies.v1" },
+    "schema": { "const": "oxygen.cooked-dependencies.v2" },
     "source_key": { "$ref": "#/definitions/key" },
     "assets": {
       "type": "array",
@@ -16,6 +16,8 @@
           "asset_type",
           "virtual_path",
           "dependencies",
+          "key_references",
+          "resource_bindings",
           "complete"
         ],
         "additionalProperties": false,
@@ -27,6 +29,44 @@
             "type": "array",
             "uniqueItems": true,
             "items": { "$ref": "#/definitions/key" }
+          },
+          "key_references": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "required": ["asset_key", "target_kind", "expected_asset_type"],
+              "additionalProperties": false,
+              "properties": {
+                "asset_key": { "$ref": "#/definitions/key" },
+                "target_kind": { "type": "integer", "enum": [1, 2, 3] },
+                "expected_asset_type": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255
+                }
+              }
+            }
+          },
+          "resource_bindings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["kind", "index", "state"],
+              "additionalProperties": false,
+              "properties": {
+                "kind": { "type": "integer", "enum": [1, 2, 3, 4] },
+                "index": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 4294967295
+                },
+                "state": {
+                  "type": "string",
+                  "enum": ["resource", "error", "fallback"]
+                }
+              }
+            }
           },
           "complete": { "type": "boolean" },
           "diagnostic": { "type": "string" }

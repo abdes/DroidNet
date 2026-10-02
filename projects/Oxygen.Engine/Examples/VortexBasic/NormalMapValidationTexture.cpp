@@ -4,21 +4,26 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "VortexBasic/NormalMapValidationTexture.h"
-
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <span>
 #include <utility>
 #include <vector>
 
+#include "VortexBasic/NormalMapValidationTexture.h"
+
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TextureImporter.h>
 #include <Oxygen/Cooker/Import/TexturePackingPolicy.h>
+#include <Oxygen/Core/Types/ColorSpace.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
 
@@ -88,12 +93,7 @@ NormalMapValidationTexture::NormalMapValidationTexture(
     });
 }
 
-NormalMapValidationTexture::~NormalMapValidationTexture()
-{
-  if (pinned_) {
-    static_cast<void>(loader_->UnpinResource(key_));
-  }
-}
+NormalMapValidationTexture::~NormalMapValidationTexture() = default;
 
 auto NormalMapValidationTexture::EnsureReady() -> bool
 {
@@ -101,13 +101,6 @@ auto NormalMapValidationTexture::EnsureReady() -> bool
     return false;
   }
   CHECK_F(load_state_->texture != nullptr, "Validation normal-map load failed");
-  if (!pinned_) {
-    pinned_ = loader_->PinResource(key_);
-    CHECK_F(pinned_, "Could not pin validation normal map");
-    LOG_F(INFO,
-      "Validation normal map ready: tangent normal approximately (0, 0.6, "
-      "0.8)");
-  }
   return true;
 }
 

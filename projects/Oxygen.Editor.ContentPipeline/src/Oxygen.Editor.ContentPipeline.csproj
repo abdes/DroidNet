@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
 
         <RootNamespace>Oxygen.Editor.ContentPipeline</RootNamespace>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -15,9 +15,24 @@
 
     <ItemGroup>
         <EmbeddedResource Include="Import\Schemas\*.schema.json" />
+        <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Tools\Inspector\Schemas\oxygen.cooked-geometries.schema.json"
+                          LogicalName="oxygen.cooked-geometries.schema.json" />
+        <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Import\Schemas\oxygen.material-slot-provenance.schema.json"
+                          LogicalName="oxygen.material-slot-provenance.schema.json" />
+        <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Tools\Inspector\Schemas\oxygen.cooked-inventory.schema.json"
+                          LogicalName="oxygen.cooked-inventory.schema.json" />
+        <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Import\Schemas\oxygen.cooked-dependencies.schema.json"
+                          LogicalName="oxygen.cooked-dependencies.schema.json" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-        <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.Tests" />
+        <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.Unit.Tests" />
+        <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.Integration.Tests" />
+        <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.Benchmarks.Tests" />
         <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.WorkerProbe" />
+        <InternalsVisibleTo Include="Oxygen.Editor.WorldEditor.Unit.UI.Tests" />
+        <InternalsVisibleTo Include="Oxygen.Editor.WorldEditor.Integration.UI.Tests" />
+        <InternalsVisibleTo Include="Oxygen.Editor.WorldEditor.Benchmarks.UI.Tests" />
+        <InternalsVisibleTo Include="Oxygen.Editor.ContentBrowser.UI.Tests" />
+        <InternalsVisibleTo Include="DroidNet.Oxygen.Editor.ContentBrowser.Tests" />
     </ItemGroup>
 
     <ItemGroup>

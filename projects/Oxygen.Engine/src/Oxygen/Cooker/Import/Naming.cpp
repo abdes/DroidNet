@@ -5,7 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
@@ -67,6 +69,18 @@ NamingService::NamingService(Config config)
   : config_(std::move(config))
 {
   CHECK_F(config_.strategy != nullptr, "Naming strategy must not be null");
+}
+
+NamingService::NamingService(std::shared_ptr<const NamingStrategy> strategy)
+  : config_ { .strategy = std::move(strategy),
+    .enable_namespacing = true,
+    .enforce_uniqueness = true }
+{
+  if (!config_.strategy) {
+    auto options = NormalizeNamingStrategy::Options {};
+    options.apply_prefixes = false;
+    config_.strategy = std::make_shared<NormalizeNamingStrategy>(options);
+  }
 }
 
 auto NamingService::MakeUniqueName(const std::string_view authored_name,

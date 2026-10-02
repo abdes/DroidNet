@@ -4,15 +4,25 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <fstream>
+#include <ios>
+#include <stdexcept>
 
 #include "./AssetLoader_test.h"
 #include "Fixtures/LooseCookedTestLayout.h"
+#include <gtest/gtest.h>
 
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_render.h>
 
 using oxygen::content::testing::AssetLoaderBasicTest;
 
@@ -33,12 +43,12 @@ protected:
 auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
 {
   for (uint8_t i = 0; i < 16; ++i) {
-    header.source_identity[i] = static_cast<uint8_t>(i + 1);
+    header.source_identity.at(i) = static_cast<uint8_t>(i + 1);
   }
-  header.source_identity[6]
-    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
-  header.source_identity[8]
-    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
+  header.source_identity.at(6)
+    = static_cast<uint8_t>((header.source_identity.at(6) & 0x0FU) | 0x70U);
+  header.source_identity.at(8)
+    = static_cast<uint8_t>((header.source_identity.at(8) & 0x3FU) | 0x80U);
 }
 
 //! Test: Descriptor SHA-256 verification uses the standard digest
@@ -74,7 +84,7 @@ NOLINT_TEST_F(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -164,7 +174,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootMinimalIndexSucceeds)
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -252,7 +262,7 @@ NOLINT_TEST_F(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -301,7 +311,7 @@ NOLINT_TEST_F(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -353,7 +363,7 @@ NOLINT_TEST_F(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -416,7 +426,7 @@ NOLINT_TEST_F(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -482,7 +492,7 @@ NOLINT_TEST_F(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -504,6 +514,7 @@ NOLINT_TEST_F(
   entry.virtual_path_offset = off_vpath;
   entry.asset_type = 0;
   entry.descriptor_size = 0;
+  std::ranges::copy(oxygen::base::ComputeSha256({}), entry.descriptor_sha256);
 
   {
     std::ofstream out(index_path, std::ios::binary);
@@ -544,7 +555,7 @@ NOLINT_TEST_F(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -604,7 +615,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootUnknownFileKindThrows)
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -660,7 +671,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootDuplicateFileKindThrows)
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -730,7 +741,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootDuplicateAssetKeyThrows)
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -809,7 +820,7 @@ NOLINT_TEST_F(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -922,7 +933,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootTableWithoutDataThrows)
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -989,7 +1000,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootDataWithoutTableThrows)
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -1054,7 +1065,7 @@ NOLINT_TEST_F(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -1072,11 +1083,13 @@ NOLINT_TEST_F(
   scripts_table_record.kind = FileKind::kScriptsTable;
   scripts_table_record.relpath_offset = off_scripts_table;
   scripts_table_record.size = 0;
+  scripts_table_record.sha256 = oxygen::base::ComputeSha256({});
 
   FileRecord scripts_data_record {};
   scripts_data_record.kind = FileKind::kScriptsData;
   scripts_data_record.relpath_offset = off_scripts_data;
   scripts_data_record.size = 0;
+  scripts_data_record.sha256 = oxygen::base::ComputeSha256({});
 
   {
     std::ofstream out(index_path, std::ios::binary);
@@ -1112,7 +1125,7 @@ NOLINT_TEST_F(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -1130,6 +1143,7 @@ NOLINT_TEST_F(
   scripts_data_record.kind = FileKind::kScriptsData;
   scripts_data_record.relpath_offset = off_scripts_data;
   scripts_data_record.size = 0;
+  scripts_data_record.sha256 = oxygen::base::ComputeSha256({});
 
   {
     std::ofstream out(index_path, std::ios::binary);
@@ -1176,7 +1190,7 @@ NOLINT_TEST_F(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -1194,11 +1208,13 @@ NOLINT_TEST_F(
   physics_table_record.kind = FileKind::kPhysicsTable;
   physics_table_record.relpath_offset = off_physics_table;
   physics_table_record.size = 0;
+  physics_table_record.sha256 = oxygen::base::ComputeSha256({});
 
   FileRecord physics_data_record {};
   physics_data_record.kind = FileKind::kPhysicsData;
   physics_data_record.relpath_offset = off_physics_data;
   physics_data_record.size = 0;
+  physics_data_record.sha256 = oxygen::base::ComputeSha256({});
 
   {
     std::ofstream out(index_path, std::ios::binary);
@@ -1234,7 +1250,7 @@ NOLINT_TEST_F(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -1252,6 +1268,7 @@ NOLINT_TEST_F(
   physics_data_record.kind = FileKind::kPhysicsData;
   physics_data_record.relpath_offset = off_physics_data;
   physics_data_record.size = 0;
+  physics_data_record.sha256 = oxygen::base::ComputeSha256({});
 
   {
     std::ofstream out(index_path, std::ios::binary);
@@ -1277,7 +1294,7 @@ NOLINT_TEST_F(
  Verifies that mounting succeeds.
 */
 NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRootFileRecordLegacyShaBytesIgnored)
+  LooseCookedIndexTest, AddLooseCookedRootMissingFileDigestsRejected)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileKind;
@@ -1321,7 +1338,7 @@ NOLINT_TEST_F(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -1355,7 +1372,8 @@ NOLINT_TEST_F(
   }
 
   // Act & Assert
-  EXPECT_NO_THROW({ asset_loader_->AddLooseCookedRoot(cooked_root); });
+  EXPECT_THROW(
+    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::runtime_error);
 }
 
 //! Test: Descriptor SHA-256 mismatch rejects the root
@@ -1404,7 +1422,7 @@ NOLINT_TEST_F(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -1458,7 +1476,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootUnknownFlagsThrows)
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = 0x80000000u;
   header.string_table_offset = sizeof(IndexHeader);
@@ -1502,7 +1520,7 @@ NOLINT_TEST_F(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasFileRecords;
   header.string_table_offset = sizeof(IndexHeader);
@@ -1553,7 +1571,7 @@ NOLINT_TEST_F(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths;
   header.string_table_offset = sizeof(IndexHeader);
@@ -1594,7 +1612,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootNoGuidThrows)
   const auto index_path = cooked_root / "container.index.bin";
 
   IndexHeader header {};
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = 0;
   header.string_table_offset = sizeof(IndexHeader);

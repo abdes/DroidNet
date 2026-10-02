@@ -12,9 +12,8 @@
 #include <variant>
 #include <vector>
 
-#include <Oxygen/Core/Constants.h>
-
 #include <Oxygen/Composition/Component.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Types/ActiveMesh.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 #include <Oxygen/Scene/Types/Strong.h>
@@ -23,6 +22,7 @@
 namespace oxygen::data {
 class GeometryAsset;
 class MaterialAsset;
+class MaterialSlotId;
 } // namespace oxygen::data
 
 namespace oxygen::scene::detail {
@@ -109,9 +109,17 @@ public:
 
   //! Sets a material override for a submesh (by LOD and index). Pass nullptr
   //! to clear the override and fall back to the submesh material.
+  //! This binding override is transient across geometry replacement; use a
+  //! SlotId assignment when authoring intent must survive replacement.
   OXGN_SCN_API void SetMaterialOverride(std::size_t lod,
     std::size_t submesh_index,
     std::shared_ptr<const data::MaterialAsset> material) noexcept;
+
+  //! Applies one authored assignment to every declared binding atomically.
+  OXGN_SCN_NDAPI auto SetMaterialOverride(data::MaterialSlotId slot,
+    std::shared_ptr<const data::MaterialAsset> material) noexcept -> bool;
+  OXGN_SCN_NDAPI auto ClearMaterialOverride(data::MaterialSlotId slot) noexcept
+    -> bool;
 
   //! Clears the material override for the given submesh.
   OXGN_SCN_API void ClearMaterialOverride(
@@ -146,7 +154,8 @@ private:
   void RebuildLocalBoundsCache() noexcept;
   void RecomputeWorldBoundingSphere() const noexcept;
   void InvalidateWorldAabbCache() const noexcept;
-  void RebuildSubmeshStateCache() noexcept;
+  void RebuildSubmeshStateCache(
+    const data::GeometryAsset* previous_geometry = nullptr) noexcept;
 
   // Preferred data
   std::shared_ptr<const data::GeometryAsset> geometry_asset_;
@@ -159,6 +168,10 @@ private:
 
   // Per-LOD and per-submesh local bounds cache (rebuilt on SetGeometry)
   std::vector<LodBounds> lod_bounds_;
+
+  // Authored assignments in the current inventory's declaration order.
+  // Resolved into submesh_state_ only on edits and geometry replacement.
+  std::vector<std::shared_ptr<const data::MaterialAsset>> slot_materials_;
 
   // World transform state and derived bounds
   Mat4 world_matrix_ { 1.0F };

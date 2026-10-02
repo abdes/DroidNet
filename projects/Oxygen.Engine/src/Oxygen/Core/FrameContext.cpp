@@ -6,13 +6,27 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <memory>
-#include <ranges>
+#include <mutex>
+#include <optional>
+#include <shared_mutex>
 #include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Composition/Typed.h>
+#include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Core/Time/Types.h>
+#include <Oxygen/Core/Types/View.h>
 
 using oxygen::engine::FrameContext;
 using PhaseId = oxygen::core::PhaseId;
@@ -58,7 +72,7 @@ auto FrameContext::PublishSnapshots(EngineTag) noexcept -> UnifiedSnapshot&
   // Decide next version and target buffer while holding the locks.
   const uint64_t version = snapshot_version_ + 1u;
   const uint32_t next = (visible_snapshot_index_ + 1u) & 1u;
-  auto& unified = snapshot_buffers_[static_cast<size_t>(next)];
+  auto& unified = snapshot_buffers_.at(static_cast<size_t>(next));
 
   // CreateUnifiedSnapshot expects the caller to hold the relevant mutexes
   // to snapshot coordinator-owned state (staged module data, surfaces, and
@@ -179,7 +193,7 @@ auto FrameContext::SetFrameTiming(const FrameTiming& t, EngineTag) noexcept
 auto FrameContext::SetPhaseDuration(core::PhaseId phase,
   std::chrono::microseconds duration, EngineTag) noexcept -> void
 {
-  metrics_.timing.stage_timings[phase] = duration;
+  metrics_.timing.stage_timings.at(phase) = duration;
 }
 
 auto FrameContext::SetFrameStartTime(
@@ -272,8 +286,7 @@ auto FrameContext::RemoveSurfaceAt(size_t index) noexcept -> bool
   if (index >= surfaces_.size()) {
     return false; // Index out of bounds
   }
-  // FIXME: Capture pointer of surface being removed for view cleanup
-  auto removed_surface_ptr = surfaces_[index].get();
+  // FIXME: Remove views associated with this surface.
   surfaces_.erase(surfaces_.begin() + static_cast<std::ptrdiff_t>(index));
   // Keep presentable flags in sync
   if (index < presentable_flags_.size()) {
@@ -312,7 +325,7 @@ auto FrameContext::SetSurfacePresentable(
   }
 
   // Use atomic store for thread-safe access during parallel phases
-  std::atomic_ref<uint8_t> flag_ref(presentable_flags_[index]);
+  std::atomic_ref<uint8_t> flag_ref(presentable_flags_.at(index));
   flag_ref.store(presentable ? 1u : 0u, std::memory_order_release);
 }
 
@@ -324,7 +337,7 @@ auto FrameContext::IsSurfacePresentable(size_t index) const noexcept -> bool
   }
 
   // Use atomic load for thread-safe access
-  std::atomic_ref<const uint8_t> flag_ref(presentable_flags_[index]);
+  std::atomic_ref<const uint8_t> flag_ref(presentable_flags_.at(index));
   return flag_ref.load(std::memory_order_acquire) != 0;
 }
 
@@ -341,9 +354,9 @@ auto FrameContext::GetPresentableSurfaces() const noexcept
 
   for (size_t i = 0; i < surface_count; ++i) {
     // Use atomic load for thread-safe access
-    std::atomic_ref<const uint8_t> flag_ref(presentable_flags_[i]);
+    std::atomic_ref<const uint8_t> flag_ref(presentable_flags_.at(i));
     if (flag_ref.load(std::memory_order_acquire) != 0) {
-      presentable_surfaces.push_back(surfaces_[i]);
+      presentable_surfaces.push_back(surfaces_.at(i));
     }
   }
 

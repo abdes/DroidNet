@@ -10,10 +10,13 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -59,6 +62,14 @@ namespace oxygen::interop::module {
 
   class InputAccumulatorAdapter;
   class RenderGraph;
+
+  //! One accepted physical source and its optional project-owned logical mount.
+  struct CookedRootBinding {
+    std::filesystem::path path {};
+    std::optional<std::wstring> project_mount {};
+  };
+
+  using CookedRootSet = std::shared_ptr<const std::vector<CookedRootBinding>>;
 
   //! An engine module, that connects the editor to the Oxygen engine.
   /*!
@@ -180,14 +191,8 @@ namespace oxygen::interop::module {
       float near_plane,
       float far_plane);
 
-    //! Adds a loose cooked root to the virtual path resolver.
-    void AddLooseCookedRoot(std::string_view path);
-
-    //! Clears all mounted roots in the virtual path resolver.
-    void ClearCookedRoots();
-
     //! Replace the complete loose-root set as one engine-thread refresh request.
-    void ReplaceCookedRoots(std::vector<std::string> roots,
+    void ReplaceCookedRoots(std::vector<CookedRootBinding> roots,
       std::function<void(bool, std::string)> complete);
 
     void SetCookedContentPaused(bool paused,
@@ -228,7 +233,8 @@ namespace oxygen::interop::module {
 
     // Roots management for thread-safe AssetLoader initialization
     std::mutex roots_mutex_;
-    std::vector<std::string> mounted_roots_;
+    CookedRootSet mounted_roots_;
+    CookedRootSet active_roots_;
     std::function<void(bool, std::string)> pending_roots_completion_;
     std::function<void(bool, std::string)> active_roots_completion_;
     std::uint64_t roots_revision_ = 0;

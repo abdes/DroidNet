@@ -1,0 +1,30 @@
+<Project Sdk="MSTest.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
+        <RootNamespace>Oxygen.Editor.WorldEditor.Unit.UI.Tests</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <DroidNetTestTier>Unit</DroidNetTestTier>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.WorldEditor/src/Oxygen.Editor.WorldEditor.csproj" />
+        <PackageReference Include="Moq" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentBrowser/testsupport/AssetStatusFixture.cs" Link="Fixtures/AssetStatusFixture.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/BuiltinCatalogDiscoveryFixture.cs" Link="Fixtures/BuiltinCatalogDiscoveryFixture.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testsupport/LooseCookedIndexFixture.cs" Link="Fixtures/LooseCookedIndexFixture.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Authoring/SceneAuthoringFixture.cs" Link="Support/SceneAuthoringFixture.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Authoring/SceneTestData.cs" Link="Support/SceneTestData.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentBrowser/testsupport/UI/BrowserControls.cs" Link="Support/BrowserControls.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentBrowser/testsupport/UI/BrowserQuerySupport.cs" Link="Support/BrowserQuerySupport.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentBrowser/testsupport/UI/BrowserTestData.cs" Link="Support/BrowserTestData.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/UI/DemandFixture.cs" Link="Support/DemandFixture.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/UI/InspectorControls.cs" Link="Support/InspectorControls.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/UI/InspectorModels.cs" Link="Support/InspectorModels.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/UI/SceneAuthoringFixture.Views.cs" Link="Support/SceneAuthoringFixture.Views.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/UITests.Shared/testsupport/UiTestHosting.cs" Link="Support/UiTestHosting.cs" />
+        <Compile Include="$(ProjectsRoot)/UITests.Shared/testsupport/ScaledXamlHost.cs" Link="Support/ScaledXamlHost.cs" />
+        <Compile Include="$(ProjectsRoot)/UITests.Shared/tests/TestHostLifecycleTests.cs" Link="TestHostLifecycleTests.cs" />
+        <None Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/tests/Fixtures/BuiltinGeometryCatalog.json" Link="Fixtures/BuiltinGeometryCatalog.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+    <Import Project="$(ProjectsRoot)/UITests.Shared/src/UITests.Shared.projitems" Label="Shared" />
+</Project>

@@ -5,31 +5,43 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <exception>
 #include <limits>
 #include <optional>
 #include <span>
+#include <stop_token>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptAssetImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptImportPipelineCommon.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 
 namespace oxygen::content::import {
 
@@ -57,6 +69,7 @@ namespace {
     std::string virtual_path;
     std::string descriptor_relpath;
     ScriptAssetDesc descriptor {};
+    AssetReferenceBuilder references;
   };
 
   [[nodiscard]] auto IsStopRequested(const std::stop_token& token) noexcept
@@ -117,8 +130,7 @@ namespace {
 
     auto descriptor = ScriptAssetDesc {};
     descriptor.header.asset_type = static_cast<uint8_t>(AssetType::kScript);
-    descriptor.bytecode_resource_index = kNoResourceIndex;
-    descriptor.source_resource_index = kNoResourceIndex;
+    descriptor.header.version = data::pak::scripting::kScriptAssetVersion;
     descriptor.flags = ScriptAssetFlags::kNone;
 
     const auto name_span
@@ -135,16 +147,17 @@ namespace {
       .virtual_path = virtual_path,
       .descriptor_relpath = descriptor_relpath,
       .descriptor = descriptor,
+      .references = {},
     };
   }
 
   auto AppendEmbeddedScriptResource(ImportSession& session,
     const ImportRequest& request, std::span<const std::byte> source_bytes,
     observer_ptr<LooseCookedIndexRegistry> index_registry,
-    ScriptAssetDesc& desc, const EmbeddedResourceKind resource_kind)
+    ScriptDescriptorContext& context, const EmbeddedResourceKind resource_kind)
     -> co::Co<bool>
   {
-    auto* const reader = session.FileReader().get();
+    auto* const reader = session.CookedReader().get();
     auto* const writer = session.FileWriter().get();
     auto* const registry = index_registry.get();
     if (reader == nullptr || writer == nullptr || registry == nullptr) {
@@ -308,9 +321,12 @@ namespace {
     }
 
     if (resource_kind == EmbeddedResourceKind::kBytecode) {
-      desc.bytecode_resource_index = resource_index;
+      context.descriptor.bytecode_resource_index
+        = context.references.AddResource(
+          data::ResourceKind::kScript, resource_index);
     } else {
-      desc.source_resource_index = resource_index;
+      context.descriptor.source_resource_index = context.references.AddResource(
+        data::ResourceKind::kScript, resource_index);
     }
     co_return true;
   }
@@ -348,11 +364,17 @@ namespace {
     desc.flags = ScriptAssetFlags::kAllowExternalSource;
     const auto external_source_path
       = script_import::BuildExternalSourcePath(request);
+    if (!external_source_path) {
+      script_import::AddDiagnostic(session, request, ImportSeverity::kError,
+        "script.asset.source_root_invalid",
+        "External scripts require a source_root containing the source file");
+      return false;
+    }
     const auto external_path_span
       = std::span<char, sizeof(desc.external_source_path)>(
         desc.external_source_path);
     if (!script_import::CopyNullTerminated(
-          external_source_path, external_path_span)) {
+          *external_source_path, external_path_span)) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
         "script.asset.external_path_too_long",
         "External script source path exceeds ScriptAssetDesc capacity");
@@ -362,12 +384,13 @@ namespace {
   }
 
   auto EmitScriptDescriptor(
-    ImportSession& session, const ScriptDescriptorContext& context) -> bool
+    ImportSession& session, ScriptDescriptorContext& context) -> bool
   {
     try {
       session.AssetEmitter().Emit(context.key, AssetType::kScript,
         context.virtual_path, context.descriptor_relpath,
-        std::as_bytes(std::span { &context.descriptor, 1 }));
+        std::as_bytes(std::span { &context.descriptor, 1 }),
+        std::move(context.references).Build());
     } catch (const std::exception& ex) {
       script_import::AddDiagnostic(session, session.Request(),
         ImportSeverity::kError, "script.asset.descriptor_emit_failed",
@@ -570,7 +593,7 @@ auto ScriptAssetImportPipeline::Process(WorkItem& item) -> co::Co<bool>
 
   if (req.options.scripting.script_storage == ScriptStorageMode::kEmbedded) {
     const auto appended = co_await AppendEmbeddedScriptResource(*session, req,
-      item.source_bytes, item.index_registry, descriptor_context->descriptor,
+      item.source_bytes, item.index_registry, *descriptor_context,
       EmbeddedResourceKind::kSource);
     if (!appended) {
       co_return false;
@@ -581,7 +604,7 @@ auto ScriptAssetImportPipeline::Process(WorkItem& item) -> co::Co<bool>
         = co_await AppendEmbeddedScriptResource(*session, req,
           std::span<const std::byte>(
             bytecode_bytes->data(), bytecode_bytes->size()),
-          item.index_registry, descriptor_context->descriptor,
+          item.index_registry, *descriptor_context,
           EmbeddedResourceKind::kBytecode);
       if (!appended_bytecode) {
         co_return false;

@@ -42,7 +42,7 @@ NOLINT_TEST_F(GeometryUploaderRetireTest, RetireKeepsTicketsWhileIncomplete)
 
   // Act
   // Call GeometryUploader.OnFrameStart without advancing UploadCoordinator.
-  // This exercises the `IsComplete() == false` path deterministically.
+  // The consumer observes pending results without advancing queue progress.
   geo_uploader.OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
 
   // Assert
@@ -72,8 +72,7 @@ NOLINT_TEST_F(GeometryUploaderRetireTest, RetireRemovesTicketsWhenComplete)
   ASSERT_GT(geo_uploader.GetPendingUploadTickets().size(), 0U);
 
   // Act
-  // Advance to the next slot to avoid UploadTracker slot-cleanup of our
-  // tickets, then retire.
+  // Observe completion before the geometry consumer polls its tickets.
   uploader.OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
   geo_uploader.OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
 
@@ -81,9 +80,9 @@ NOLINT_TEST_F(GeometryUploaderRetireTest, RetireRemovesTicketsWhenComplete)
   EXPECT_EQ(geo_uploader.GetPendingUploadTickets().size(), 0U);
 }
 
-//! TicketNotFound from UploadTracker is treated as terminal and tickets are
-//! dropped.
-NOLINT_TEST_F(GeometryUploaderRetireTest, RetireDropsTicketsOnTicketNotFound)
+//! A paused consumer can publish completed uploads after many frame cycles.
+NOLINT_TEST_F(
+  GeometryUploaderRetireTest, DelayedConsumerPublishesRetainedResults)
 {
   // Arrange
   auto& uploader = Uploader();
@@ -92,26 +91,109 @@ NOLINT_TEST_F(GeometryUploaderRetireTest, RetireDropsTicketsOnTicketNotFound)
   BeginFrame(Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const auto asset_key = MakeGeometryAssetKey("retire_drops_ticket_not_found");
+  const auto asset_key = MakeGeometryAssetKey("delayed_consumer");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
     .mesh = mesh,
   };
-  (void)geo_uploader.GetOrAllocate(geometry);
+  const auto handle = geo_uploader.GetOrAllocate(geometry);
 
   geo_uploader.EnsureFrameResources();
   ASSERT_GT(geo_uploader.GetPendingUploadTickets().size(), 0U);
 
-  // Act
-  // Re-enter the same frame slot: UploadTracker::OnFrameStart performs
-  // slot-based cleanup and erases entries created in this slot, making
-  // IsComplete() return TicketNotFound.
-  uploader.OnFrameStart(RendererTagFactory::Get(), Slot { 0 });
+  for (auto frame = 0U; frame < 20U; ++frame) {
+    uploader.OnFrameStart(RendererTagFactory::Get(), Slot { frame % 2U });
+  }
   geo_uploader.OnFrameStart(RendererTagFactory::Get(), Slot { 0 });
 
-  // Assert
+  const auto indices = geo_uploader.GetShaderVisibleIndices(handle);
+  EXPECT_TRUE(indices.vertex_srv_index.IsValid());
+  EXPECT_TRUE(indices.index_srv_index.IsValid());
   EXPECT_EQ(geo_uploader.GetPendingUploadTickets().size(), 0U);
+}
+
+//! Reusing the submission slot while first observing completion must publish
+//! the original buffers, without scheduling replacement uploads.
+NOLINT_TEST_F(GeometryUploaderRetireTest, RecycledSlotPublishesCompletedBuffers)
+{
+  BeginFrame(Slot { 0 });
+  auto& geometry_uploader = GeoUploader();
+  const oxygen::vortex::sceneprep::GeometryRef geometry {
+    .asset_key = MakeGeometryAssetKey("completion_at_slot_reuse"),
+    .lod_index = 0U,
+    .mesh = MakeValidTriangleMesh("Recycled slot", true),
+  };
+  const auto handle = geometry_uploader.GetOrAllocate(geometry);
+  geometry_uploader.EnsureFrameResources();
+  ASSERT_EQ(geometry_uploader.GetPendingUploadCount(), 2U);
+
+  Uploader().OnFrameStart(RendererTagFactory::Get(), Slot { 0 });
+  geometry_uploader.OnFrameStart(RendererTagFactory::Get(), Slot { 0 });
+  const auto indices = geometry_uploader.GetShaderVisibleIndices(handle);
+
+  EXPECT_TRUE(indices.vertex_srv_index.IsValid());
+  EXPECT_TRUE(indices.index_srv_index.IsValid());
+  EXPECT_EQ(geometry_uploader.GetPendingUploadCount(), 0U);
+}
+
+class GeometryUploaderBudgetTest : public GeometryUploaderTest {
+protected:
+  auto GeometryLimits() const
+    -> oxygen::vortex::resources::GeometryUploader::MaintenanceLimits override
+  {
+    return { .max_pending_upload_visits_per_frame = 1U,
+      .max_reclaimed_lods_per_frame = 1U };
+  }
+};
+
+NOLINT_TEST_F(GeometryUploaderBudgetTest, CompletionBudgetCountsUnreadyVisits)
+{
+  BeginFrame(Slot { 0 });
+  auto& geometry = GeoUploader();
+  for (const auto* name : { "waiting", "canceled" }) {
+    (void)geometry.GetOrAllocate({ .asset_key = MakeGeometryAssetKey(name),
+      .lod_index = 0U,
+      .mesh = MakeValidTriangleMesh(name, false) });
+  }
+  geometry.EnsureFrameResources();
+  const auto tickets = geometry.GetPendingUploadTickets();
+  ASSERT_EQ(tickets.size(), 2U);
+  ASSERT_TRUE(tickets.back().Cancel());
+  geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
+  EXPECT_EQ(geometry.GetPendingUploadCount(), 2U);
+  geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 0 });
+  EXPECT_EQ(geometry.GetPendingUploadCount(), 1U);
+  Uploader().OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
+  geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
+  EXPECT_EQ(geometry.GetPendingUploadCount(), 0U);
+  EXPECT_TRUE(tickets.front().Await().success);
+}
+
+NOLINT_TEST_F(GeometryUploaderBudgetTest, StaleWorkCannotClearReplacementTicket)
+{
+  BeginFrame(Slot { 0 });
+  auto& geometry = GeoUploader();
+  auto reference = oxygen::vortex::sceneprep::GeometryRef {
+    .asset_key = MakeGeometryAssetKey("budgeted replacement"),
+    .lod_index = 0U,
+    .mesh = MakeValidTriangleMesh("Old", false),
+  };
+  const auto handle = geometry.GetOrAllocate(reference);
+  geometry.EnsureFrameResources();
+  reference.mesh = MakeValidTriangleMesh("New", false);
+  geometry.Update(handle, reference);
+  geometry.EnsureFrameResources();
+  ASSERT_EQ(geometry.GetPendingUploadCount(), 1U);
+  Uploader().OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
+  geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
+  EXPECT_EQ(geometry.GetPendingUploadCount(), 1U);
+  EXPECT_FALSE(
+    geometry.GetShaderVisibleIndices(handle).vertex_srv_index.IsValid());
+  geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 0 });
+  EXPECT_EQ(geometry.GetPendingUploadCount(), 0U);
+  EXPECT_TRUE(
+    geometry.GetShaderVisibleIndices(handle).vertex_srv_index.IsValid());
 }
 
 } // namespace

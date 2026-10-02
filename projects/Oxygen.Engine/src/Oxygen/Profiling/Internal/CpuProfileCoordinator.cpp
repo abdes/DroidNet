@@ -4,15 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Profiling/Internal/CpuProfileCoordinator.h>
-
-#include <cstring>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
+#include <source_location>
 #include <stdexcept>
 
 #include <Oxygen/Profiling/CpuScopeObserver.h>
+#include <Oxygen/Profiling/Internal/CpuProfileCoordinator.h>
 #include <Oxygen/Profiling/ProfileScope.h>
-#include <Oxygen/Tracy/Cpu.h>
+#if defined(OXYGEN_WITH_TRACY)
+#  include <span>
+
+#  include <Oxygen/Tracy/Cpu.h>
+#endif
 
 #if defined(USE_PIX) && __has_include(<pix3.h>)
 #  include <pix3.h>
@@ -46,7 +51,7 @@ ScopedCpuScopeObserver::~ScopedCpuScopeObserver()
 
 namespace internal {
   auto BeginCpuScope(const CpuProfileScopeDesc& desc,
-    const std::source_location callsite) -> CpuScopeState
+    [[maybe_unused]] const std::source_location callsite) -> CpuScopeState
   {
     CpuScopeState state {};
     if (cpu_observer != nullptr && cpu_observer->OnScopeBegin(desc)) {

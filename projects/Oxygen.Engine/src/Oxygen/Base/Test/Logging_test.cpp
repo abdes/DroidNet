@@ -4,9 +4,30 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
+#include <algorithm>
+#include <cctype>
+#include <cstdint>
+#include <limits>
+#include <string>
+#include <string_view>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Testing/GTest.h>
+
+NOLINT_TEST(LoggingValues, FormatsSignedAndUnsignedIntegerLimits)
+{
+  const auto expect_formatted = [](const auto value) {
+    EXPECT_STREQ(
+      loguru::format_value(value).c_str(), std::to_string(value).c_str());
+  };
+  expect_formatted(std::numeric_limits<long>::min());
+  expect_formatted(std::numeric_limits<long>::max());
+  expect_formatted(std::numeric_limits<unsigned long>::max());
+  expect_formatted(std::numeric_limits<long long>::min());
+  expect_formatted(std::numeric_limits<long long>::max());
+  expect_formatted(std::numeric_limits<unsigned long long>::max());
+  expect_formatted(std::numeric_limits<std::uint64_t>::max());
+}
 
 #if LOGURU_USE_FMTLIB
 

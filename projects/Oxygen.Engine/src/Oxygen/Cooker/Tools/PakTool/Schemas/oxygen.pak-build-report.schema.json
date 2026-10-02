@@ -149,30 +149,6 @@
         "emit_manifest_in_full"
       ]
     },
-    "patch_compatibility": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "require_exact_base_set": {
-          "type": "boolean"
-        },
-        "require_content_version_match": {
-          "type": "boolean"
-        },
-        "require_base_source_key_match": {
-          "type": "boolean"
-        },
-        "require_catalog_digest_match": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "require_exact_base_set",
-        "require_content_version_match",
-        "require_base_source_key_match",
-        "require_catalog_digest_match"
-      ]
-    },
     "request": {
       "type": "object",
       "additionalProperties": false,
@@ -195,7 +171,7 @@
             "$ref": "#/definitions/request_source"
           }
         },
-        "base_catalogs": {
+        "base_paks": {
           "type": "array",
           "items": {
             "type": "string",
@@ -205,8 +181,12 @@
         "options": {
           "$ref": "#/definitions/request_options"
         },
-        "patch_compatibility": {
-          "$ref": "#/definitions/patch_compatibility"
+        "script_source_roots": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       },
       "required": [
@@ -214,9 +194,9 @@
         "source_key",
         "content_version",
         "sources",
-        "base_catalogs",
+        "base_paks",
         "options",
-        "patch_compatibility"
+        "script_source_roots"
       ]
     },
     "pak_artifact": {

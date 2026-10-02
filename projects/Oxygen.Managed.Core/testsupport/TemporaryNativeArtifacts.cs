@@ -35,6 +35,12 @@ internal sealed partial class TemporaryNativeArtifacts : INativeCompatibilitySer
             JsonOptions));
     }
 
+    /// <inheritdoc />
+    public event EventHandler? ObservationChanged;
+
+    /// <inheritdoc />
+    public NativeProducerObservation Observation { get; private set; } = NativeProducerObservation.Unknown;
+
     /// <summary>Creates a private test receipt for the installed native binaries and current Interop copy.</summary>
     /// <param name="additional">Optional fixture-owned producer inputs.</param>
     /// <returns>The fixture-owned compatibility service.</returns>
@@ -54,6 +60,11 @@ internal sealed partial class TemporaryNativeArtifacts : INativeCompatibilitySer
             nativeFiles.Add(new(NativeArtifactInventory.ImportToolId, tool));
         }
 
+        foreach (var id in new[] { NativeArtifactInventory.SourceAnalysisSchemaId, NativeArtifactInventory.CapturedInputsSchemaId })
+        {
+            nativeFiles.Add(new(id, Path.Combine(installation.SchemaDirectory, Path.GetFileName(id))));
+        }
+
         var interop = Path.Combine(AppContext.BaseDirectory, "DroidNet.Oxygen.Editor.Interop.dll");
         if (File.Exists(interop))
         {
@@ -69,8 +80,18 @@ internal sealed partial class TemporaryNativeArtifacts : INativeCompatibilitySer
     }
 
     /// <inheritdoc />
-    public Task<NativeCompatibilityResult> VerifyAsync(Guid operationId, CancellationToken cancellationToken)
-        => NativeCompatibilityVerifier.VerifyAsync(operationId, this.receiptPath, EditorNativeCompatibilityService.CurrentConfiguration, this.locations, cancellationToken);
+    public async Task<NativeCompatibilityResult> VerifyAsync(Guid operationId, CancellationToken cancellationToken)
+    {
+        var result = await NativeCompatibilityVerifier.VerifyAsync(operationId, this.receiptPath, EditorNativeCompatibilityService.CurrentConfiguration, this.locations, cancellationToken).ConfigureAwait(false);
+        var fingerprint = result.Succeeded ? result.Artifacts!.Fingerprint : null;
+        if (!string.Equals(this.Observation.Fingerprint, fingerprint, StringComparison.Ordinal))
+        {
+            this.Observation = new(this.Observation.Revision + 1, fingerprint, result.Diagnostics);
+            this.ObservationChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        return result;
+    }
 
     /// <inheritdoc />
     public void Dispose() => Directory.Delete(this.root, recursive: true);

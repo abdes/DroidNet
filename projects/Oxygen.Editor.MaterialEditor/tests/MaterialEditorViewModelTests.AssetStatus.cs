@@ -34,7 +34,7 @@ public sealed partial class MaterialEditorViewModelTests
         {
             updates.OnNext([item with { CookActivity = new(Guid.NewGuid(), state) }]);
             _ = editor.CookStatusText.Should().Be(text);
-            _ = editor.AssetStatus!.CookStatus!.HasVerifiedOutput.Should().BeTrue();
+            _ = editor.AssetStatus!.CookStatus!.HasAvailableOutput.Should().BeTrue();
         }
 
         editor.RoughnessFactor = 0.73f;
@@ -86,6 +86,6 @@ public sealed partial class MaterialEditorViewModelTests
     private static ContentBrowserAssetItem CreateStatusItem(Uri uri) => new(
         uri, "Test", AssetKind.Material, AssetState.Descriptor, AssetState.Cooked, AssetRuntimeAvailability.Unknown, uri.AbsolutePath, SourcePath: null, DescriptorPath: null, CookedUri: null, CookedPath: null, AssetGuid: null, DiagnosticCodes: [], IsSelectable: true)
     {
-        CookStatus = new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, HasVerifiedOutput: true, [], [], []),
+        CookStatus = new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []),
     };
 }

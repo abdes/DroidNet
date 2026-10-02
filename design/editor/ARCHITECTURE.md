@@ -1178,8 +1178,9 @@ document, content-pipeline, runtime, and standalone LLDs implement these rules:
 2. One cook writer per project snapshots saved inputs and hashes, writes private
    staging output, and validates before publication. Authoring may continue;
    later edits mark the successful captured cook stale.
-3. Publication briefly pauses preview, drains affected runtime reads, replaces
-   fixed cooked roots with rollback output retained, then mounts and resumes.
+3. Publication briefly pauses preview, admits the complete immutable root set,
+   atomically selects its publication document, then resumes. Existing readers
+   retain their generations until they finish.
    Failure restores the prior validated output or leaves preview explicitly
    unavailable with recoverable output retained. Partial publication is never
    reported current. See content-pipeline section 16 for the transaction.

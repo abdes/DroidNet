@@ -10,9 +10,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/PakFormatVersions.h>
+#include <Oxygen/Data/PakFormat_references.h>
 #include <Oxygen/Data/api_export.h>
 
 //! Oxygen loose cooked index binary format specification
@@ -41,6 +44,10 @@ using CountT = uint32_t;
 
 //=== Constants ===-----------------------------------------------------------//
 
+//! Cooperative reader/publisher lease marker for an immutable cooked
+//! generation.
+inline constexpr std::string_view kGenerationLeaseFileName = ".generation.lock";
+
 //! 8-byte header magic: {'O','X','L','C','I','D','X',0}
 constexpr std::array<char, 8> kHeaderMagic
   = { 'O', 'X', 'L', 'C', 'I', 'D', 'X', 0 };
@@ -48,16 +55,11 @@ constexpr std::array<char, 8> kHeaderMagic
 //! SHA-256 size in bytes.
 constexpr size_t kSha256Size = 32;
 
-//! Index header flags (v1).
-/**!
- The `IndexHeader::flags` field is used to declare which logical sections are
- present/required in the index.
+//! Current loose index version. Older layouts must be recooked.
+inline constexpr uint16_t kIndexVersion
+  = pak::version::kLooseCookedIndexVersion;
 
- Backward compatibility note:
- - `flags == 0` is treated as a legacy value. Loaders may accept older indexes
-   that do not populate flags.
- - When `flags != 0`, loaders should enforce these bits strictly.
-*/
+//! Required-section declarations in the current index.
 enum IndexFlags : uint32_t { // NOLINT(*-enum-size)
   //! Declares that asset entries contain valid virtual paths.
   kHasVirtualPaths = OXYGEN_FLAG(0),
@@ -70,7 +72,7 @@ OXYGEN_DEFINE_FLAGS_OPERATORS(IndexFlags)
 //! String representation of IndexFlags bitmask.
 OXGN_DATA_NDAPI auto to_string(IndexFlags value) -> std::string;
 
-//! Mask of all known v1 index flags.
+//! Mask of all known index flags.
 [[maybe_unused]] constexpr IndexFlags kKnownIndexFlags
   = kHasVirtualPaths | kHasFileRecords;
 
@@ -80,9 +82,9 @@ OXGN_DATA_NDAPI auto to_string(IndexFlags value) -> std::string;
 #pragma pack(push, 1)
 struct IndexHeader {
   std::array<char, 8> magic = kHeaderMagic; // NOLINT
-  uint16_t version = 1; // Schema version
+  uint16_t version = kIndexVersion; // Schema version
   uint16_t content_version = 0; // Content version (cook-defined)
-  uint32_t flags = 0; // IndexFlags bitset; 0 = legacy/unspecified
+  uint32_t flags = kKnownIndexFlags; // IndexFlags bitset
   std::array<uint8_t, 16> source_identity = {};
 
   // -- String table (null-terminated UTF-8 strings) --
@@ -116,12 +118,13 @@ struct AssetEntry {
   uint32_t descriptor_relpath_offset = 0; // e.g. "assets/Materials/Dark.mat"
   uint32_t virtual_path_offset = 0; // e.g. "/Content/Materials/Dark.mat"
 
-  // Descriptor integrity (metadata only; validation policy is runtime-defined)
+  // Mandatory descriptor integrity; runtime hash verification is opt-in.
   SizeT descriptor_size = 0;
   uint8_t descriptor_sha256[kSha256Size] = {};
+  pak::core::AssetReferenceTable references {};
 };
 #pragma pack(pop)
-static_assert(sizeof(AssetEntry) == 65);
+static_assert(sizeof(AssetEntry) == 81);
 
 //! Kind of a file record.
 enum class FileKind : uint16_t { // NOLINT(*-enum-size)
@@ -134,8 +137,8 @@ enum class FileKind : uint16_t { // NOLINT(*-enum-size)
   kScriptsData = 6,
   kPhysicsTable = 7,
   kPhysicsData = 8,
-  kScriptBindingsTable = 9,
-  kScriptBindingsData = 10,
+  //! Explicitly emitted resource descriptors or other non-role content files.
+  kAuxiliary = 11,
 };
 
 //! File record for resources and other cooked artifacts.
@@ -145,8 +148,9 @@ struct FileRecord {
   SizeT size = 0;
   //! Offset into string table for the relative path.
   uint32_t relpath_offset = 0; // e.g. "resources/buffers.table"
+  std::array<uint8_t, kSha256Size> sha256 {};
 };
 #pragma pack(pop)
-static_assert(sizeof(FileRecord) == 14);
+static_assert(sizeof(FileRecord) == 46);
 
 } // namespace oxygen::data::loose_cooked

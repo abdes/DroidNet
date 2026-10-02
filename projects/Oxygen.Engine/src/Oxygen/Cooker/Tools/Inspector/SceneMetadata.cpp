@@ -4,18 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "SceneMetadata.h"
-
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <utility>
 
+#include "SceneMetadata.h"
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
@@ -24,6 +27,9 @@
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
 
@@ -97,6 +103,7 @@ auto RunSceneMetadataReport(const SceneMetadataOptions& options) -> int
         { "virtual_path", entry.virtual_path },
         { "descriptor_version", nullptr },
         { "nodes", json::array() },
+        { "perspective_cameras", json::array() },
         { "complete", false },
       };
       try {
@@ -127,19 +134,43 @@ auto RunSceneMetadataReport(const SceneMetadataOptions& options) -> int
             { "node_id", nostd::to_string(node.node_id) },
             { "name", scene->GetNodeName(node) },
             { "parent_index", node.parent_index },
-            { "flags",
+            {
+              "flags",
               {
-                { "visible",
+                {
+                  "visible",
                   FlagSource(
-                    node, world::kSceneNodeFlag_Visible, "shown", "hidden") },
-                { "casts_shadows",
+                    node, world::kSceneNodeFlag_Visible, "shown", "hidden"),
+                },
+                {
+                  "casts_shadows",
                   FlagSource(
-                    node, world::kSceneNodeFlag_CastsShadows, "on", "off") },
-                { "receives_shadows",
+                    node, world::kSceneNodeFlag_CastsShadows, "on", "off"),
+                },
+                {
+                  "receives_shadows",
                   FlagSource(
-                    node, world::kSceneNodeFlag_ReceivesShadows, "on", "off") },
-              } },
+                    node, world::kSceneNodeFlag_ReceivesShadows, "on", "off"),
+                },
+              },
+            },
           });
+        }
+        for (const auto& camera :
+          scene->GetComponents<world::PerspectiveCameraRecord>()) {
+          row.at("perspective_cameras")
+            .push_back({
+              { "node_index", camera.node_index },
+              {
+                "aspect_mode",
+                camera.aspect_mode == CameraAspectMode::kAuto ? "auto"
+                                                              : "fixed",
+              },
+              { "aspect_ratio", camera.aspect_ratio },
+              { "fov_y", camera.fov_y },
+              { "near_plane", camera.near_plane },
+              { "far_plane", camera.far_plane },
+            });
         }
         row.at("complete") = true;
       } catch (const std::exception& error) {

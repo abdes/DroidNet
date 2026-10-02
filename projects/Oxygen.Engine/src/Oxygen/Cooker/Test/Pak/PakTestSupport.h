@@ -28,8 +28,11 @@
 #  include <unistd.h>
 #endif
 
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -49,7 +52,8 @@ struct AssetSpec final {
   std::string virtual_path;
   uint64_t descriptor_size = 0U;
   std::array<uint8_t, lc::kSha256Size> descriptor_sha {};
-  std::vector<std::byte> descriptor_payload;
+  std::vector<std::byte> descriptor_payload {};
+  data::AssetReferences references;
 };
 
 //! A minimal current-format scene for planner tests that do not need nodes.
@@ -188,10 +192,10 @@ private:
 {
   auto bytes = std::array<uint8_t, data::SourceKey::kSizeBytes> {};
   for (auto i = size_t { 0U }; i < bytes.size(); ++i) {
-    bytes[i] = static_cast<uint8_t>(seed + static_cast<uint8_t>(i));
+    bytes.at(i) = static_cast<uint8_t>(seed + static_cast<uint8_t>(i));
   }
-  bytes[6] = static_cast<uint8_t>((bytes[6] & 0x0FU) | 0x70U);
-  bytes[8] = static_cast<uint8_t>((bytes[8] & 0x3FU) | 0x80U);
+  bytes.at(6) = static_cast<uint8_t>((bytes.at(6) & 0x0FU) | 0x70U);
+  bytes.at(8) = static_cast<uint8_t>((bytes.at(8) & 0x3FU) | 0x80U);
   return data::SourceKey::FromBytes(bytes).value();
 }
 
@@ -279,8 +283,10 @@ private:
     entry.virtual_path_offset = virtual_path_offset;
     entry.asset_type = static_cast<uint8_t>(asset.asset_type);
     entry.descriptor_size = asset.descriptor_size;
-    std::ranges::copy(
-      asset.descriptor_sha, std::begin(entry.descriptor_sha256));
+    const auto digest = base::IsAllZero(asset.descriptor_sha)
+      ? base::ComputeSha256(descriptor_bytes)
+      : asset.descriptor_sha;
+    std::ranges::copy(digest, std::begin(entry.descriptor_sha256));
     asset_entries.push_back(entry);
   }
 
@@ -295,23 +301,24 @@ private:
     entry.kind = file.kind;
     entry.relpath_offset = relpath_offset;
     entry.size = static_cast<uint64_t>(file.payload.size());
+    entry.sha256 = base::ComputeSha256(file.payload);
     file_entries.push_back(entry);
   }
 
   auto header = lc::IndexHeader {};
-  header.version = 1U;
+  header.version = lc::kIndexVersion;
   header.flags = static_cast<uint32_t>(lc::kHasVirtualPaths);
   if (!file_entries.empty()) {
     header.flags |= static_cast<uint32_t>(lc::kHasFileRecords);
   }
   for (size_t i = 0; i < std::size(header.source_identity); ++i) {
-    header.source_identity[i]
+    header.source_identity.at(i)
       = static_cast<uint8_t>(guid_seed + static_cast<uint8_t>(i + 1U));
   }
-  header.source_identity[6]
-    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
-  header.source_identity[8]
-    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
+  header.source_identity.at(6)
+    = static_cast<uint8_t>((header.source_identity.at(6) & 0x0FU) | 0x70U);
+  header.source_identity.at(8)
+    = static_cast<uint8_t>((header.source_identity.at(8) & 0x3FU) | 0x80U);
   header.string_table_offset = sizeof(lc::IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset
@@ -322,6 +329,27 @@ private:
     + (static_cast<uint64_t>(asset_entries.size()) * sizeof(lc::AssetEntry));
   header.file_record_count = static_cast<uint32_t>(file_entries.size());
   header.file_record_size = file_entries.empty() ? 0U : sizeof(lc::FileRecord);
+
+  std::vector<std::byte> reference_bytes;
+  const auto references_offset
+    = header.file_records_offset + file_entries.size() * sizeof(lc::FileRecord);
+  for (size_t i = 0; i < assets.size(); ++i) {
+    const auto& references = oxygen::base::CheckedAt(assets, i).references;
+    const auto encoded = references.Encode();
+    if (!encoded) {
+      throw std::runtime_error(encoded.error());
+    }
+    if (encoded->empty()) {
+      continue;
+    }
+    asset_entries.at(i).references = {
+      .offset = references_offset + reference_bytes.size(),
+      .resource_count = static_cast<uint32_t>(references.Resources().size()),
+      .key_count = static_cast<uint32_t>(references.Keys().size()),
+    };
+    reference_bytes.insert(
+      reference_bytes.end(), encoded->begin(), encoded->end());
+  }
 
   auto index = std::ofstream(
     root / "container.index.bin", std::ios::binary | std::ios::trunc);
@@ -338,6 +366,10 @@ private:
   for (const auto& file : file_entries) {
     // NOLINTNEXTLINE(*-reinterpret-cast)
     index.write(reinterpret_cast<const char*>(&file), sizeof(file));
+  }
+  if (!reference_bytes.empty()) {
+    index.write(reinterpret_cast<const char*>(reference_bytes.data()),
+      static_cast<std::streamsize>(reference_bytes.size()));
   }
   return index.good();
 }

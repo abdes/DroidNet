@@ -119,7 +119,7 @@ class OxygenConan(ConanFile):
         "!Examples/RenderScene/pak/**",
         "!Examples/RenderScene/demo_settings.json",
         "!Examples/RenderScene/.reimport-runs/**",
-        "!Examples/RenderScene/reimport-sources.local.json",
+        "!Examples/Content/import-sources.local.json",
     )
 
     @staticmethod
@@ -232,7 +232,7 @@ class OxygenConan(ConanFile):
             common = ["uv", "export", "--project", str(workspace), "--locked",
                       "--no-python-downloads", "--no-default-groups", "--no-emit-workspace",
                       "--no-header", "--no-annotate"]
-            tools = ["--package", "bindless-codegen", "--package", "oxygen-pakgen", "--extra", "yaml"]
+            tools = ["--package", "bindless-codegen"]
             for name, selection in (
                 ("build-backends.txt", ["--only-group", "build-tools"]),
                 ("build-requirements.txt", tools),
@@ -287,13 +287,11 @@ class OxygenConan(ConanFile):
                             str(lockfile), str(backends)], check=True)
             subprocess.run([uv, "pip", "install", "--python", str(interpreter),
                             "--no-deps", "--no-build-isolation", "--editable",
-                            str(source / "src/Oxygen/Core/Tools/BindlessCodeGen"), "--editable",
-                            str(source / "src/Oxygen/Cooker/Tools/PakGen")], check=True)
+                            str(source / "src/Oxygen/Core/Tools/BindlessCodeGen")], check=True)
             save(self, str(environment / "oxygen-build-tools.json"), json.dumps({
                 "requirements_sha256": hashlib.sha256(lockfile.read_bytes() + backends.read_bytes()).hexdigest(),
                 "pyprojects": {str(p.relative_to(source)): hashlib.sha256(p.read_bytes()).hexdigest()
-                               for p in (source / "src/Oxygen/Core/Tools/BindlessCodeGen/pyproject.toml",
-                                         source / "src/Oxygen/Cooker/Tools/PakGen/pyproject.toml")},
+                               for p in (source / "src/Oxygen/Core/Tools/BindlessCodeGen/pyproject.toml",)},
             }, indent=2) + "\n")
         else:
             return None

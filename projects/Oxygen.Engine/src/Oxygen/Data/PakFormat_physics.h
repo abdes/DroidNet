@@ -101,9 +101,12 @@ enum class PhysicsBindingType : uint32_t {
 #undef OXPHYS_BINDING_TYPE
 // NOLINTEND(*-macro-usage,*-enum-size)
 
-[[maybe_unused]] constexpr uint8_t kPhysicsMaterialAssetVersion = 1;
-[[maybe_unused]] constexpr uint8_t kCollisionShapeAssetVersion = 1;
-[[maybe_unused]] constexpr uint8_t kPhysicsSceneAssetVersion = 1;
+[[maybe_unused]] constexpr uint8_t kPhysicsMaterialAssetVersion
+  = version::kPhysicsMaterialAssetVersion;
+[[maybe_unused]] constexpr uint8_t kCollisionShapeAssetVersion
+  = version::kCollisionShapeAssetVersion;
+[[maybe_unused]] constexpr uint8_t kPhysicsSceneAssetVersion
+  = version::kPhysicsSceneAssetVersion;
 [[maybe_unused]] constexpr ShapePayloadType kInvalidShapePayloadType
   = ShapePayloadType::kInvalid;
 [[maybe_unused]] constexpr AssetKey kInvalidPhysicsMaterialAssetKey = {};
@@ -113,8 +116,6 @@ enum class PhysicsBindingType : uint32_t {
 [[maybe_unused]] constexpr uint32_t kShapeIsSensorTrue = 1U;
 [[maybe_unused]] constexpr world::SceneNodeIndexT kWorldAttachmentNodeIndex
   = 0xFFFFFFFFU;
-
-static_assert(core::kCurrentPakFormatVersion == 7);
 
 //! Describes a cooked backend physics binary blob stored in the physics_region.
 #pragma pack(push, 1)
@@ -303,9 +304,10 @@ static_assert(
  * with a ".opscene" suffix in the asset directory.
  *
  *  @par Hydration contract
- *  `target_scene_key` must identify a Scene asset already loaded in the same
- *  mount. Loader hard-fails on identity mismatch, missing scene key, or
- *  node-count violations (see PakFormatVersion7_Physics.md §7.2). */
+ *  `target_scene_key` identifies the Scene asset loaded in the shared content
+ *  scope. Hydration rejects mismatched scene keys, content hashes and node
+ *  counts. A layer override may supply the matching sidecar from another
+ * source. */
 #pragma pack(push, 1)
 struct PhysicsSceneAssetDesc {
   core::AssetHeader header;

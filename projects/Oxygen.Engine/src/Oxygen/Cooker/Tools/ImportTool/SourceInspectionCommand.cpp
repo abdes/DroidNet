@@ -4,9 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <expected>
 #include <filesystem>
 #include <fstream>
+#include <ios>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <utility>
 
+#include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
@@ -36,7 +44,7 @@ auto SourceInspectionCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                   .StoreTo(&output_path_)
                   .Build();
   return clap::CommandBuilder("inspect-source")
-    .About("Inspect static/scalar source metadata and external dependencies")
+    .About("Inspect static model metadata and external dependencies")
     .WithPositionalArguments(source)
     .WithOption(std::move(output));
 }

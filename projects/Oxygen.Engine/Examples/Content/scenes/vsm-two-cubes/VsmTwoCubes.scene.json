@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 10,
   "name": "VsmTwoCubes",
   "nodes": [
     {
@@ -113,6 +113,7 @@
         "node": 5,
         "fov_y": 1.0,
         "aspect_ratio": 1.777778,
+        "aspect_mode": "fixed",
         "near_plane": 0.10000000149011612,
         "far_plane": 200.0
       }
@@ -203,7 +204,7 @@
       "directional_inscattering_exponent": 6.0,
       "directional_inscattering_start_distance": 120.0,
       "end_distance_m": 5600.0,
-      "fog_cutoff_distance_m": 5800.0,
+      "fog_cutoff_distance_m": 0.0,
       "volumetric_fog_scattering_distribution": 0.35,
       "volumetric_fog_albedo": [0.7, 0.8, 0.92],
       "volumetric_fog_emissive": [0.0, 0.0, 0.0],

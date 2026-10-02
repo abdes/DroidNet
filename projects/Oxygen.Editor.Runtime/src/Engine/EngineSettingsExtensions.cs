@@ -59,11 +59,6 @@ internal static class EngineSettingsExtensions
             config.ApplicationVersion = settings.ApplicationVersion.Value;
         }
 
-        if (settings.TargetFps.HasValue)
-        {
-            config.TargetFps = settings.TargetFps.Value;
-        }
-
         if (settings.FrameCount.HasValue)
         {
             config.FrameCount = settings.FrameCount.Value;

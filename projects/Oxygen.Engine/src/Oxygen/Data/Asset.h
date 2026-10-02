@@ -6,12 +6,20 @@
 
 #pragma once
 
+#include <memory>
+#include <stdexcept>
 #include <string_view>
+#include <utility>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/AssetRuntimeBindings.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::data {
 
@@ -28,18 +36,67 @@ namespace oxygen::data {
 class Asset : public Object {
 public:
   //! Constructs an asset with a stable asset key.
-  explicit Asset(AssetKey asset_key) noexcept
+  explicit Asset(AssetKey asset_key, SourceOrigin source_origin = {}) noexcept
     : asset_key_(asset_key)
+    , source_origin_(source_origin)
   {
   }
 
   //! Virtual destructor for interface.
-  virtual ~Asset() = default;
+  ~Asset() override = default;
+  OXYGEN_DEFAULT_COPYABLE(Asset)
+  OXYGEN_DEFAULT_MOVABLE(Asset)
 
   //! Returns the stable identity key for this asset.
   [[nodiscard]] auto GetAssetKey() const noexcept -> AssetKey
   {
     return asset_key_;
+  }
+
+  //! Identity of the immutable cooked source; nil for generated or detached
+  //! data.
+  [[nodiscard]] auto GetSourceKey() const noexcept -> SourceKey
+  {
+    return source_origin_.key;
+  }
+
+  //! Exact runtime opening that supplied this asset.
+  [[nodiscard]] auto GetSourceOrigin() const noexcept -> SourceOrigin
+  {
+    return source_origin_;
+  }
+
+  //! Install decoded metadata before dependency binding publishes this asset.
+  auto SetReferences(AssetReferences references) -> void
+  {
+    if (runtime_bindings_) {
+      throw std::logic_error("Published asset references are immutable");
+    }
+    references_ = std::move(references);
+  }
+
+  [[nodiscard]] auto GetReferences() const noexcept -> const AssetReferences&
+  {
+    return references_;
+  }
+
+  //! Bind once during loading, before the asset becomes visible to consumers.
+  auto SetRuntimeBindings(std::shared_ptr<const AssetRuntimeBindings> bindings)
+    -> void
+  {
+    if (!bindings) {
+      throw std::invalid_argument("Asset runtime bindings cannot be null");
+    }
+    if (runtime_bindings_) {
+      throw std::logic_error("Asset runtime bindings are already frozen");
+    }
+    runtime_bindings_ = std::move(bindings);
+  }
+
+  [[nodiscard]] auto GetRuntimeBindings() const noexcept
+    -> const std::shared_ptr<const AssetRuntimeBindings>&
+  {
+    return runtime_bindings_;
   }
 
   //! Returns the asset type field from the header (for debugging).
@@ -62,7 +119,7 @@ public:
     while (len < pak::core::kMaxNameSize && name[len] != '\0') {
       ++len;
     }
-    return std::string_view(name, len);
+    return { name, len };
   }
 
   //! Returns the asset format version.
@@ -91,7 +148,10 @@ protected:
   virtual auto GetHeader() const noexcept -> const pak::core::AssetHeader& = 0;
 
 private:
-  AssetKey asset_key_ {};
+  AssetKey asset_key_;
+  SourceOrigin source_origin_ {};
+  AssetReferences references_;
+  std::shared_ptr<const AssetRuntimeBindings> runtime_bindings_ {};
 };
 
 } // namespace oxygen::data

@@ -4,19 +4,31 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
+#include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Import/BufferImportTypes.h>
+#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/BufferEmitter.h>
-#include <Oxygen/Serio/MemoryStream.h>
-#include <Oxygen/Serio/Writer.h>
+#include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import {
 
@@ -163,12 +175,13 @@ auto BufferEmitter::Emit(
   // Use buffer's specified alignment (defaults to 16)
   const auto buffer_alignment = cooked.alignment > 0 ? cooked.alignment : 16ULL;
 
-  const auto acquire = table_aggregator_.AcquireOrInsert(signature, [&]() {
-    const auto reserved = table_aggregator_.ReserveDataRange(
-      buffer_alignment, cooked.data.size());
-    auto desc = MakeTableEntry(cooked, reserved.aligned_offset);
-    return std::make_pair(desc, reserved);
-  });
+  const auto acquire = table_aggregator_.AcquireOrInsert(signature,
+    [&] -> std::pair<data::pak::core::BufferResourceDesc, WriteReservation> {
+      const auto reserved = table_aggregator_.ReserveDataRange(
+        buffer_alignment, cooked.data.size());
+      auto desc = MakeTableEntry(cooked, reserved.aligned_offset);
+      return std::make_pair(desc, reserved);
+    });
 
   if (!acquire.is_new) {
     if (cooked.content_hash == 0ULL && !signature_salt.empty()) {
@@ -221,8 +234,8 @@ auto BufferEmitter::QueueDataWrite(const WriteKind kind,
   file_writer_.WriteAtAsync(data_path_, offset,
     std::span<const std::byte>(*data),
     WriteOptions { .create_directories = true, .share_write = true },
-    [this, kind, index, data](
-      const FileErrorInfo& error, [[maybe_unused]] uint64_t bytes_written) {
+    [this, kind, index, data](const FileErrorInfo& error,
+      [[maybe_unused]] uint64_t bytes_written) -> void {
       OnWriteComplete(kind, index, error);
     });
 }
@@ -237,6 +250,9 @@ auto BufferEmitter::OnWriteComplete(const WriteKind kind,
   }
 
   error_count_.fetch_add(1, std::memory_order_acq_rel);
+  if (!first_error_) {
+    first_error_ = error;
+  }
   if (kind == WriteKind::kPadding) {
     LOG_F(ERROR, "Failed to write padding: {}", error.ToString());
     return;
@@ -272,7 +288,7 @@ auto BufferEmitter::TryGetDescriptor(const uint32_t index) const
   return table_aggregator_.TryGetDescriptor(index);
 }
 
-auto BufferEmitter::Finalize() -> co::Co<bool>
+auto BufferEmitter::Finalize() -> co::Co<Result<void, FileErrorInfo>>
 {
   finalize_started_.store(true, std::memory_order_release);
 
@@ -280,24 +296,14 @@ auto BufferEmitter::Finalize() -> co::Co<bool>
     pending_count_.load(std::memory_order_acquire));
 
   // Wait for all pending writes via flush
-  auto flush_result = co_await file_writer_.Flush();
-
-  if (!flush_result.has_value()) {
-    LOG_F(ERROR, "Finalize: flush failed: {}", flush_result.error().ToString());
-    co_return false;
+  const auto flush_result = co_await file_writer_.Flush();
+  if (first_error_) {
+    co_return Result<void, FileErrorInfo>::Err(*first_error_);
   }
-
-  // Check for accumulated errors
-  const auto errors = error_count_.load(std::memory_order_acquire);
-  if (errors > 0) {
-    LOG_F(ERROR, "Finalize: {} I/O errors occurred", errors);
-    co_return false;
+  if (!flush_result) {
+    co_return Result<void, FileErrorInfo>::Err(flush_result.error());
   }
-
-  DLOG_F(INFO, "Finalize: complete, {} buffers emitted",
-    emitted_count_.load(std::memory_order_acquire));
-
-  co_return true;
+  co_return Result<void, FileErrorInfo>::Ok();
 }
 
 auto BufferEmitter::MakeTableEntry(

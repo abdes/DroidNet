@@ -98,19 +98,6 @@ public static class ContentPipelinePaths
     }
 
     /// <summary>
-    /// Creates the canonical physical cooked root for a project mount.
-    /// </summary>
-    /// <param name="projectRoot">The absolute project root.</param>
-    /// <param name="mountName">The mount name.</param>
-    /// <returns>The physical cooked root for the mount.</returns>
-    public static string GetCookedMountRoot(string projectRoot, string mountName)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(projectRoot);
-        ArgumentException.ThrowIfNullOrWhiteSpace(mountName);
-        return Path.Combine(projectRoot, ".cooked", mountName);
-    }
-
-    /// <summary>
     /// Creates the native virtual mount root for a project mount.
     /// </summary>
     /// <param name="mountName">The mount name.</param>

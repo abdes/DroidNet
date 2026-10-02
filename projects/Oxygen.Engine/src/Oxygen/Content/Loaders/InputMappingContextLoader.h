@@ -17,6 +17,7 @@
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -85,6 +86,12 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
   data::pak::input::InputMappingContextAssetDesc desc {};
   std::memcpy(&desc, desc_blob->data(), sizeof(desc));
 
+  if (desc.header.version
+    != data::pak::input::kInputMappingContextAssetVersion) {
+    throw std::runtime_error(
+      "Input descriptor version is not current; re-cook the asset");
+  }
+
   if (static_cast<data::AssetType>(desc.header.asset_type)
     != data::AssetType::kInputMappingContext) {
     throw std::runtime_error(
@@ -136,7 +143,7 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
   std::vector<data::pak::input::InputActionMappingRecord> mappings(
     desc.mappings.count);
   for (uint32_t i = 0; i < desc.mappings.count; ++i) {
-    std::memcpy(&mappings[i],
+    std::memcpy(&mappings.at(i),
       payload
         .subspan(desc.mappings.offset
             + (static_cast<size_t>(i)
@@ -149,7 +156,7 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
   std::vector<data::pak::input::InputTriggerRecord> triggers(
     desc.triggers.count);
   for (uint32_t i = 0; i < desc.triggers.count; ++i) {
-    std::memcpy(&triggers[i],
+    std::memcpy(&triggers.at(i),
       payload
         .subspan(desc.triggers.offset
             + (static_cast<size_t>(i)
@@ -157,13 +164,13 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
           sizeof(data::pak::input::InputTriggerRecord))
         .data(),
       sizeof(data::pak::input::InputTriggerRecord));
-    detail::ValidateTriggerType(triggers[i].type);
+    detail::ValidateTriggerType(triggers.at(i).type);
   }
 
   std::vector<data::pak::input::InputTriggerAuxRecord> trigger_aux(
     desc.trigger_aux.count);
   for (uint32_t i = 0; i < desc.trigger_aux.count; ++i) {
-    std::memcpy(&trigger_aux[i],
+    std::memcpy(&trigger_aux.at(i),
       payload
         .subspan(desc.trigger_aux.offset
             + (static_cast<size_t>(i)
@@ -201,6 +208,30 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
     }
   }
 
+  if (context.asset_references) {
+    std::vector<data::KeyReference> references;
+    references.reserve(mappings.size() + triggers.size() + trigger_aux.size());
+    const auto add_action = [&references](const data::AssetKey& key) -> void {
+      if (!key.IsNil()) {
+        references.push_back({
+          .key = key,
+          .kind = data::KeyReferenceKind::kAsset,
+          .expected_type = data::AssetType::kInputAction,
+        });
+      }
+    };
+    for (const auto& mapping : mappings) {
+      add_action(mapping.action_asset_key);
+    }
+    for (const auto& trigger : triggers) {
+      add_action(trigger.linked_action_asset_key);
+    }
+    for (const auto& auxiliary : trigger_aux) {
+      add_action(auxiliary.action_asset_key);
+    }
+    context.ValidateReferences({}, references);
+  }
+
   if (!context.parse_only) {
     if (!context.dependency_collector) {
       throw std::runtime_error(
@@ -229,7 +260,8 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
 
   return std::make_unique<data::InputMappingContextAsset>(
     context.current_asset_key, desc, std::move(mappings), std::move(triggers),
-    std::move(trigger_aux), std::move(strings));
+    std::move(trigger_aux), std::move(strings),
+    data::SourceOrigin { context.source_key, context.source_instance });
 }
 
 static_assert(

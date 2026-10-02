@@ -13,10 +13,9 @@
 #include <type_traits>
 #include <utility>
 
-#include <Oxygen/Core/Constants.h>
-
 #include <Oxygen/Base/Resource.h>
 #include <Oxygen/Composition/Object.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Resources.h>
 #include <Oxygen/Core/SafeCall.h>
 #include <Oxygen/Scene/Light/LightValidation.h>
@@ -31,6 +30,7 @@ namespace oxygen::data {
 class Mesh;
 class GeometryAsset;
 class MaterialAsset; // forward declaration for material override APIs
+class MaterialSlotId;
 } // namespace oxygen::data
 
 namespace oxygen::scene {
@@ -240,8 +240,7 @@ public:
   //! Attaches a light component to this SceneNode. If a light already exists,
   //! this will fail.
   OXGN_SCN_API auto AttachLight(std::unique_ptr<Component> light,
-    LightValidationError* error = nullptr) noexcept
-    -> bool;
+    LightValidationError* error = nullptr) noexcept -> bool;
 
   //! Detaches the light component from this SceneNode, if present.
   OXGN_SCN_API auto DetachLight() noexcept -> bool;
@@ -249,8 +248,7 @@ public:
   //! Replaces the current light component with a new one. If no light exists,
   //! this acts as attach.
   OXGN_SCN_API auto ReplaceLight(std::unique_ptr<Component> light,
-    LightValidationError* error = nullptr) noexcept
-    -> bool;
+    LightValidationError* error = nullptr) noexcept -> bool;
 
   //! Checks if this SceneNode has an attached light component.
   OXGN_SCN_NDAPI auto HasLight() noexcept -> bool;
@@ -288,21 +286,29 @@ public:
       : std::nullopt;
   }
 
-  //! Edit a detached copy and atomically replace the accepted light after validation.
-  //! Mutable references never escape from the attached scene component. Returning
-  //! false from the edit discards the candidate. Accepted value edits allocate no
-  //! component and preserve its composition dependencies.
+  //! Edit a detached copy and atomically replace the accepted light after
+  //! validation. Mutable references never escape from the attached scene
+  //! component. Returning false from the edit discards the candidate. Accepted
+  //! value edits allocate no component and preserve its composition
+  //! dependencies.
   template <typename T, typename Edit>
   auto EditLight(Edit&& edit, LightValidationError* error = nullptr) -> bool
   {
     const auto current = GetLightAs<T>();
     if (!current) {
-      if (error) *error = { .field = "type", .message = "The node has no light of this type" };
+      if (error) {
+        *error = {
+          .field = "type",
+          .message = "The node has no light of this type",
+        };
+      }
       return false;
     }
     T candidate(current->get());
     if constexpr (std::is_same_v<std::invoke_result_t<Edit, T&>, bool>) {
-      if (!std::invoke(std::forward<Edit>(edit), candidate)) return false;
+      if (!std::invoke(std::forward<Edit>(edit), candidate)) {
+        return false;
+      }
     } else {
       static_assert(std::is_void_v<std::invoke_result_t<Edit, T&>>);
       std::invoke(std::forward<Edit>(edit), candidate);
@@ -335,8 +341,8 @@ private:
   OXGN_SCN_NDAPI auto GetLight() noexcept
     -> std::optional<std::reference_wrapper<Component>>;
 
-  OXGN_SCN_API auto CommitLight(std::unique_ptr<Component> light,
-    bool replace, LightValidationError* error) noexcept -> bool;
+  OXGN_SCN_API auto CommitLight(std::unique_ptr<Component> light, bool replace,
+    LightValidationError* error) noexcept -> bool;
 
   OXGN_SCN_API auto CommitLightCandidate(const Component& candidate,
     std::unique_ptr<Component>* replacement, bool replace,
@@ -451,7 +457,7 @@ protected:
     State state {};
 
     (void)oxygen::SafeCall(
-      *(self->node_),
+      *self->node_,
       [&](auto&& /*self_ref*/) -> std::optional<std::string> {
         return validator(state);
       },
@@ -473,7 +479,7 @@ protected:
     State state {};
 
     auto result = oxygen::SafeCall(
-      *(self->node_),
+      *self->node_,
       [&](auto&& /*self_ref*/) -> std::optional<std::string> {
         return validator(state);
       },
@@ -754,6 +760,10 @@ public:
 
   OXGN_SCN_API void SetMaterialOverride(std::size_t lod,
     std::size_t submesh_index, MaterialAssetPtr material) noexcept;
+  OXGN_SCN_NDAPI auto SetMaterialOverride(
+    data::MaterialSlotId slot, MaterialAssetPtr material) noexcept -> bool;
+  OXGN_SCN_NDAPI auto ClearMaterialOverride(data::MaterialSlotId slot) noexcept
+    -> bool;
   OXGN_SCN_API void ClearMaterialOverride(
     std::size_t lod, std::size_t submesh_index) noexcept;
   OXGN_SCN_NDAPI auto ResolveSubmeshMaterial(std::size_t lod,

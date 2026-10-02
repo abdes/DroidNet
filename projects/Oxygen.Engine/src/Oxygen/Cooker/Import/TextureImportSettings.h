@@ -7,8 +7,13 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
+#include <ostream>
 #include <string>
 #include <vector>
+
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/api_export.h>
 
 namespace oxygen::content::import {
 
@@ -20,10 +25,16 @@ struct TextureSourceMapping {
 };
 
 struct TextureImportSettings {
+  //! Interpret source mappings and texture options without a cooked
+  //! destination.
+  OXGN_COOK_NDAPI auto Prepare(std::ostream& error_stream) const
+    -> std::optional<ImportRequest>;
+
   std::string source_path;
   std::vector<TextureSourceMapping> sources;
   std::string cooked_root;
   std::string job_name;
+  std::string virtual_path;
   std::string report_path;
   bool verbose = false;
   std::string intent;

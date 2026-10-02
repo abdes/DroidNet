@@ -223,13 +223,11 @@ NOLINT_TEST(GeometryUploaderFailuresStandaloneTest,
   EXPECT_EQ(geo_uploader->GetPendingUploadCount(), 0U);
 }
 
-//! TicketNotFound during completion is treated as terminal; indices stay
-//! invalid and next Ensure retries without crashing.
+//! Logical cancellation leaves indices invalid and permits retry.
 NOLINT_TEST_F(
   GeometryUploaderTest, UploadCompletionFailureIndicesRemainInvalidAndNoCrash)
 {
   // Arrange
-  auto& upload_coordinator = Uploader();
   auto& uploader = GeoUploader();
 
   BeginFrame(Slot {
@@ -250,11 +248,9 @@ NOLINT_TEST_F(
   uploader.EnsureFrameResources();
   ASSERT_GT(uploader.GetPendingUploadCount(), 0U);
 
-  // Act: re-enter the same slot so UploadTracker erases the tickets.
-  upload_coordinator.OnFrameStart(RendererTagFactory::Get(),
-    Slot {
-      0,
-    });
+  for (const auto& ticket : uploader.GetPendingUploadTickets()) {
+    ASSERT_TRUE(ticket.Cancel());
+  }
   uploader.OnFrameStart(RendererTagFactory::Get(),
     Slot {
       0,

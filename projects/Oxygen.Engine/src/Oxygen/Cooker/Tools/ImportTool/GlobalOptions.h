@@ -16,6 +16,10 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Clap/CliTheme.h>
 
+namespace oxygen::clap {
+class OptionValuesMap;
+}
+
 namespace oxygen::content::import::tool {
 
 class IMessageWriter; // forward-declared
@@ -42,6 +46,7 @@ struct GlobalOptions {
   // main and MUST NOT be recreated by clients.
   oxygen::observer_ptr<IMessageWriter> writer;
   oxygen::observer_ptr<AsyncImportService> import_service;
+  oxygen::observer_ptr<const clap::OptionValuesMap> parsed_options {};
 };
 
 } // namespace oxygen::content::import::tool

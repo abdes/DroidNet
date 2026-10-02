@@ -4,19 +4,32 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <filesystem>
+#include <memory>
+#include <mutex>
 #include <ranges>
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
+#include <utility>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
+#include <Oxygen/Cooker/Import/Internal/ImportSessionToken.h>
+#include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Event.h>
+#include <Oxygen/OxCo/Semaphore.h>
 
 namespace oxygen::content::import {
 
 namespace {
 
   constexpr auto kScriptsTableLockSuffix = std::string_view { "|scripts" };
-  constexpr auto kScriptBindingsTableLockSuffix
-    = std::string_view { "|script-bindings" };
 
 } // namespace
 
@@ -32,7 +45,7 @@ ResourceTableRegistry::ResourceTableRegistry(IAsyncFileWriter& file_writer)
 auto ResourceTableRegistry::NormalizeKey(
   const std::filesystem::path& cooked_root) const -> std::string
 {
-  return cooked_root.lexically_normal().string();
+  return base::PathIdentityKey(cooked_root);
 }
 
 auto ResourceTableRegistry::TextureAggregator(
@@ -91,22 +104,19 @@ auto ResourceTableRegistry::LockScriptsTable(
   co_return co_await AcquireSharedTableLock(std::move(key));
 }
 
-auto ResourceTableRegistry::LockScriptBindingsTable(
-  const std::filesystem::path& cooked_root) -> co::Co<SharedTableLockGuard>
-{
-  auto key = NormalizeKey(cooked_root);
-  key.append(kScriptBindingsTableLockSuffix);
-  co_return co_await AcquireSharedTableLock(std::move(key));
-}
-
 auto ResourceTableRegistry::BeginSession(
-  const std::filesystem::path& cooked_root) -> void
+  const std::filesystem::path& cooked_root) -> ImportSessionToken
 {
   const auto key = NormalizeKey(cooked_root);
   std::scoped_lock lock(mutex_);
-  auto& count = active_sessions_[key];
-  ++count;
-  DLOG_F(INFO, "Session started for '{}' (count={})", key, count);
+  if (finalizing_.contains(key)) {
+    throw std::logic_error(
+      "Wait for resource table finalization before BeginSession");
+  }
+  auto participation = ImportSessionToken(this, key);
+  auto& state = active_sessions_[key];
+  ++state.active;
+  return participation;
 }
 
 auto ResourceTableRegistry::AcquireSharedTableLock(std::string key)
@@ -126,69 +136,103 @@ auto ResourceTableRegistry::AcquireSharedTableLock(std::string key)
   co_return SharedTableLockGuard(std::move(state), std::move(lock));
 }
 
-auto ResourceTableRegistry::EndSession(const std::filesystem::path& cooked_root)
-  -> co::Co<bool>
+auto ResourceTableRegistry::WaitForFinalization(
+  const std::filesystem::path& cooked_root) -> co::Co<>
 {
   const auto key = NormalizeKey(cooked_root);
+  for (;;) {
+    std::shared_ptr<co::Event> completion;
+    {
+      std::scoped_lock lock(mutex_);
+      const auto found = finalizing_.find(key);
+      if (found == finalizing_.end()) {
+        co_return;
+      }
+      completion = found->second;
+    }
+    co_await *completion;
+  }
+}
+
+auto ResourceTableRegistry::AbortSession(ImportSessionToken& participation)
+  -> void
+{
+  participation.Validate(this);
+  const auto& key = participation.key_;
+  std::scoped_lock lock(mutex_);
+  const auto found = active_sessions_.find(key);
+  if (found == active_sessions_.end() || found->second.active == 0) {
+    throw std::logic_error(
+      "Abort resource session without matching BeginSession");
+  }
+  found->second.aborted = true;
+  participation.active_ = false;
+  if (--found->second.active == 0) {
+    active_sessions_.erase(found);
+    texture_tables_.erase(key);
+    buffer_tables_.erase(key);
+    physics_tables_.erase(key);
+  }
+}
+
+auto ResourceTableRegistry::EndSession(ImportSessionToken& participation)
+  -> co::Co<bool>
+{
+  participation.Validate(this);
+  const auto& key = participation.key_;
   std::unique_ptr<TextureTableAggregator> textures;
   std::unique_ptr<BufferTableAggregator> buffers;
   std::unique_ptr<PhysicsTableAggregator> physics;
-  uint32_t remaining = 0;
+  std::shared_ptr<co::Event> completion;
+  bool aborted = false;
   {
     std::scoped_lock lock(mutex_);
-    const auto it = active_sessions_.find(key);
-    if (it == active_sessions_.end()) {
-      LOG_F(WARNING, "End session without start for '{}'", key);
-    } else if (it->second == 0) {
-      LOG_F(WARNING, "Session count underflow for '{}'", key);
-    } else {
-      --it->second;
-      remaining = it->second;
-      if (remaining == 0) {
-        active_sessions_.erase(it);
-      }
+    const auto found = active_sessions_.find(key);
+    if (found == active_sessions_.end() || found->second.active == 0) {
+      throw std::logic_error(
+        "End resource session without matching BeginSession");
     }
-
-    if (remaining == 0) {
-      if (const auto table_it = texture_tables_.find(key);
-        table_it != texture_tables_.end()) {
-        textures = std::move(table_it->second);
-        texture_tables_.erase(table_it);
-      }
-      if (const auto table_it = buffer_tables_.find(key);
-        table_it != buffer_tables_.end()) {
-        buffers = std::move(table_it->second);
-        buffer_tables_.erase(table_it);
-      }
-      if (const auto table_it = physics_tables_.find(key);
-        table_it != physics_tables_.end()) {
-        physics = std::move(table_it->second);
-        physics_tables_.erase(table_it);
-      }
+    if (found->second.active > 1) {
+      --found->second.active;
+      participation.active_ = false;
+      co_return !found->second.aborted;
+    }
+    // Allocate the admission gate before consuming the final participation.
+    completion = std::make_shared<co::Event>();
+    finalizing_.emplace(key, completion);
+    aborted = found->second.aborted;
+    active_sessions_.erase(found);
+    participation.active_ = false;
+    if (auto node = texture_tables_.extract(key); !node.empty()) {
+      textures = std::move(node.mapped());
+    }
+    if (auto node = buffer_tables_.extract(key); !node.empty()) {
+      buffers = std::move(node.mapped());
+    }
+    if (auto node = physics_tables_.extract(key); !node.empty()) {
+      physics = std::move(node.mapped());
     }
   }
-
-  if (remaining != 0) {
-    co_return true;
+  const auto release_admission = ScopeGuard([&]() noexcept {
+    {
+      std::scoped_lock lock(mutex_);
+      finalizing_.erase(key);
+    }
+    completion->Trigger();
+  });
+  if (aborted) {
+    co_return false;
   }
-
   bool ok = true;
-  if (textures != nullptr) {
-    if (!co_await textures->Finalize()) {
-      ok = false;
-    }
+  if (textures && !co_await textures->Finalize()) {
+    ok = false;
   }
-  if (buffers != nullptr) {
-    if (!co_await buffers->Finalize()) {
-      ok = false;
-    }
+  if (buffers && !co_await buffers->Finalize()) {
+    ok = false;
   }
-  if (physics != nullptr) {
-    if (!co_await physics->Finalize()) {
-      ok = false;
-    }
+  if (physics && !co_await physics->Finalize()) {
+    ok = false;
   }
-
   co_return ok;
 }
 

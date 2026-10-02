@@ -93,7 +93,7 @@ NOLINT_TEST_F(TextureBinderFailureTest, ErrorTexture_IsSharedAndObservable)
   const auto idx_b = TexBinder().GetOrAllocate(key_b);
 
   // Drain queued load failures.
-  TexBinder().OnFrameStart();
+  BeginVisibleFrame();
 
   // Assert
   EXPECT_NE(idx_a, idx_b);
@@ -128,7 +128,7 @@ NOLINT_TEST_F(TextureBinderFailureTest, LoadFailure_RepointsToError)
   const auto index_1 = TexBinder().GetOrAllocate(key);
 
   // Drain queued load failure.
-  TexBinder().OnFrameStart();
+  BeginVisibleFrame();
 
   // Assert
   EXPECT_EQ(index_0, index_1);
@@ -158,7 +158,7 @@ NOLINT_TEST_F(TextureBinderFailureTest, ForcedError_IsDeterministic)
   const auto u_index = index_0.get();
 
   // Drain queued load failure and observe the stable error binding.
-  TexBinder().OnFrameStart();
+  BeginVisibleFrame();
 
   const auto creations_after_first
     = CountSrvViewCreationsForIndex(Gfx(), u_index);
@@ -166,7 +166,7 @@ NOLINT_TEST_F(TextureBinderFailureTest, ForcedError_IsDeterministic)
   const auto index_1 = TexBinder().GetOrAllocate(key);
 
   // No further updates expected.
-  TexBinder().OnFrameStart();
+  BeginVisibleFrame();
 
   // Assert
   EXPECT_EQ(index_0, index_1);
@@ -201,7 +201,7 @@ NOLINT_TEST_F(TextureBinderFailureTest, InvalidCookedLayout_Rejected)
   const auto index_1 = TexBinder().GetOrAllocate(key);
 
   // Process queued upload attempt and observe rejection.
-  TexBinder().OnFrameStart();
+  BeginVisibleFrame();
 
   // Assert
   EXPECT_EQ(index_0, index_1);
@@ -232,7 +232,7 @@ NOLINT_TEST_F(TextureBinderFailureTest, UnsupportedFormat_Rejected)
   const auto index_1 = TexBinder().GetOrAllocate(key);
 
   // Process queued upload attempt and observe rejection.
-  TexBinder().OnFrameStart();
+  BeginVisibleFrame();
 
   // Assert
   EXPECT_EQ(index_0, index_1);
@@ -270,7 +270,7 @@ NOLINT_TEST_F(
   const auto index_1 = TexBinder().GetOrAllocate(key);
 
   // Process queued upload submission; staging map is configured to fail.
-  TexBinder().OnFrameStart();
+  BeginVisibleFrame();
 
   // Assert
   EXPECT_EQ(index_0, index_1);
@@ -299,7 +299,7 @@ NOLINT_TEST_F(
   EXPECT_EQ(TexBinder().AcquireReadyTexture(key), nullptr);
   const auto slot = TexBinder().GetOrAllocate(key);
   EXPECT_TRUE(slot.IsValid());
-  TexBinder().OnFrameStart();
+  BeginVisibleFrame();
   EXPECT_TRUE(TexBinder().HasResourceFailed(key));
   EXPECT_EQ(TexBinder().AcquireReadyTexture(key), nullptr);
 }

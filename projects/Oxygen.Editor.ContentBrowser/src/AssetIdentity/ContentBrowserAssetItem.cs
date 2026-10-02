@@ -73,7 +73,7 @@ public sealed record ContentBrowserAssetItem(
     public bool IsBuiltin => this.Generated is not null || this.PrimaryState == AssetState.Generated;
 
     /// <summary>Gets a value indicating whether this selection owns an authored cook input.</summary>
-    public bool CanCook => !this.IsBuiltin && (this.DescriptorPath is not null || this.ImportSourceUri is not null) && this.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene;
+    public bool CanCook => !this.IsBuiltin && (this.DescriptorPath is not null || this.ImportSourceUri is not null) && this.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene or AssetKind.Texture;
 
     /// <summary>Gets the shared saved-input and publication facts, independently of runtime availability.</summary>
     public AssetCookStatus? CookStatus { get; init; }

@@ -7,6 +7,7 @@
     "metalness": 0.0,
     "roughness": 0.9,
     "ambient_occlusion": 1.0,
-    "emissive_factor": [120.0, 120.0, 120.0]
+    "emissive_color": [1, 1, 1],
+    "emissive_intensity": 120
   }
 }

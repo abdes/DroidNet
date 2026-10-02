@@ -7,14 +7,14 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
-/// Bounded ImportTool fallback for ED-M07 engine content-pipeline operations.
+/// Runs native content tools under owned process and artifact lifetimes.
 /// </summary>
 /// <param name="toolLocator">The native tool locator.</param>
 /// <param name="processRunner">The contained worker runner.</param>
@@ -24,14 +24,15 @@ public sealed partial class ImportToolContentPipelineApi(
     IEngineContentPipelineToolLocator toolLocator,
     IContentPipelineProcessRunner processRunner,
     ILogger<ImportToolContentPipelineApi> logger,
-    INativeCompatibilityService? nativeCompatibility = null) : IEngineContentPipelineApi
+    INativeCompatibilityService nativeCompatibility) : IEngineContentPipelineApi
 {
     private static readonly JsonSerializerOptions ManifestJsonOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions CaptureJsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 
     private readonly IEngineContentPipelineToolLocator toolLocator = toolLocator ?? throw new ArgumentNullException(nameof(toolLocator));
     private readonly IContentPipelineProcessRunner processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
     private readonly ILogger<ImportToolContentPipelineApi> logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private readonly INativeCompatibilityService nativeCompatibility = nativeCompatibility ?? EditorNativeCompatibilityService.ForCooking();
+    private readonly INativeCompatibilityService nativeCompatibility = nativeCompatibility;
 
     /// <inheritdoc />
     public async Task<NativeImportResult> ImportAsync(
@@ -52,19 +53,20 @@ public sealed partial class ImportToolContentPipelineApi(
         }
 
         var artifacts = compatibility.Artifacts!;
-        var manifest = execution.Manifest;
         var manifestPath = Path.Combine(execution.OperationRoot, "manifests", $"import-{Guid.NewGuid():N}.json");
-        var reportPath = manifest.Jobs.Any(static job => job.Type is "gltf" or "fbx") ? manifestPath + ".report.json" : null;
+        var reportPath = manifestPath + ".report.json";
+        var capturePath = execution.CapturedInputs is null ? null : manifestPath + ".captures.json";
+        string[] ownedPaths = capturePath is null ? [manifestPath, reportPath] : [manifestPath, reportPath, capturePath];
         Task? retainedWorkerDrain = null;
 
         try
         {
-            return await this.RunImportWorkerAsync(execution, artifacts, manifestPath, reportPath, cancellationToken).ConfigureAwait(false);
+            return await this.RunImportWorkerAsync(execution, artifacts, manifestPath, reportPath, capturePath, cancellationToken).ConfigureAwait(false);
         }
         catch (ContentPipelineTerminationException ex)
         {
-            retainedWorkerDrain = ex.DrainCompletion;
-            throw;
+            retainedWorkerDrain = ReleaseAfterWorkerDrainAsync(ex.DrainCompletion, ownedPaths, execution.Artifacts is null ? artifacts : null);
+            throw new ContentPipelineTerminationException(ex.InnerException ?? ex, retainedWorkerDrain);
         }
         finally
         {
@@ -75,130 +77,53 @@ public sealed partial class ImportToolContentPipelineApi(
                     await artifacts.DisposeAsync().ConfigureAwait(false);
                 }
 
-                TryDeleteFile(manifestPath);
-                if (reportPath is not null)
+                foreach (var path in ownedPaths)
                 {
-                    TryDeleteFile(reportPath);
+                    TryDeleteFile(path);
                 }
             }
-            else
-            {
-                _ = ReleaseAfterWorkerDrainAsync(retainedWorkerDrain, manifestPath, execution.Artifacts is null ? artifacts : null, reportPath);
-            }
         }
     }
 
     /// <inheritdoc />
-    public Task<CookInspectionResult> InspectLooseCookedRootAsync(
-        string cookedRoot,
-        CancellationToken cancellationToken)
+    public async Task<CookInspectionResult> InspectLooseCookedRootAsync(string cookedRoot, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(cookedRoot);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var operationId = Guid.NewGuid();
         try
         {
-            var document = ReadLooseCookedIndex(cookedRoot);
-            return Task.FromResult(InspectDocument(operationId, cookedRoot, document));
+            var lease = await CookOutputReadLease.AcquireAsync(cookedRoot, cancellationToken).ConfigureAwait(false);
+            await using var lifetime = lease.ConfigureAwait(false);
+            var inventory = await lease.ReadInventoryAsync(this, cancellationToken).ConfigureAwait(false);
+            return inventory.ToInspection(cookedRoot);
         }
-        catch (Exception ex) when (IsLooseCookedReadFailure(ex))
+        catch (Exception error) when (IsLooseCookedReadFailure(error))
         {
-            return Task.FromResult(new CookInspectionResult(
-                cookedRoot,
-                Succeeded: false,
-                SourceIdentity: null,
-                Assets: [],
-                Files: [],
-                Diagnostics:
-                [
-                    new DiagnosticRecord
-                    {
-                        OperationId = operationId,
-                        Domain = FailureDomain.ContentPipeline,
-                        Severity = DiagnosticSeverity.Error,
-                        Code = ContentPipelineDiagnosticCodes.InspectFailed,
-                        Message = "Cooked output inspection failed.",
-                        TechnicalMessage = ex.Message,
-                        ExceptionType = ex.GetType().FullName,
-                        AffectedPath = cookedRoot,
-                    },
-                ]));
+            return new(cookedRoot, false, null, [], [], [InventoryFailure(cookedRoot, error, ContentPipelineDiagnosticCodes.InspectFailed)]);
         }
     }
 
     /// <inheritdoc />
-    public Task<CookValidationResult> ValidateLooseCookedRootAsync(
-        string cookedRoot,
-        CancellationToken cancellationToken)
+    public async Task<CookValidationResult> ValidateLooseCookedRootAsync(string cookedRoot, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(cookedRoot);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var operationId = Guid.NewGuid();
         try
         {
-            var document = ReadLooseCookedIndex(cookedRoot);
-            var validationDiagnostics = ValidateLooseCookedDocument(
-                operationId,
-                cookedRoot,
-                document,
-                ContentPipelineDiagnosticCodes.ValidateFailed);
-            return Task.FromResult(new CookValidationResult(cookedRoot, validationDiagnostics.Count == 0, validationDiagnostics));
+            var lease = await CookOutputReadLease.AcquireAsync(cookedRoot, cancellationToken).ConfigureAwait(false);
+            await using var lifetime = lease.ConfigureAwait(false);
+            var inventory = await lease.ReadInventoryAsync(this, cancellationToken).ConfigureAwait(false);
+            return inventory.ToValidation(cookedRoot);
         }
-        catch (Exception ex) when (IsLooseCookedReadFailure(ex))
+        catch (Exception error) when (IsLooseCookedReadFailure(error))
         {
-            return Task.FromResult(new CookValidationResult(
-                cookedRoot,
-                Succeeded: false,
-                Diagnostics:
-                [
-                    new DiagnosticRecord
-                    {
-                        OperationId = operationId,
-                        Domain = FailureDomain.ContentPipeline,
-                        Severity = DiagnosticSeverity.Error,
-                        Code = ContentPipelineDiagnosticCodes.ValidateFailed,
-                        Message = "Cooked output validation failed.",
-                        TechnicalMessage = ex.Message,
-                        ExceptionType = ex.GetType().FullName,
-                        AffectedPath = cookedRoot,
-                    },
-                ]));
+            return new(cookedRoot, false, [InventoryFailure(cookedRoot, error, ContentPipelineDiagnosticCodes.ValidateFailed)]);
         }
     }
 
-    private static CookInspectionResult InspectDocument(Guid operationId, string cookedRoot, Document document)
+    private static DiagnosticRecord InventoryFailure(string root, Exception error, string code) => new()
     {
-        var validationDiagnostics = ValidateLooseCookedDocument(
-            operationId,
-            cookedRoot,
-            document,
-            ContentPipelineDiagnosticCodes.InspectFailed);
-        return validationDiagnostics.Count > 0
-            ? new CookInspectionResult(
-                cookedRoot,
-                Succeeded: false,
-                SourceIdentity: document.SourceGuid,
-                Assets: [],
-                Files: [],
-                validationDiagnostics)
-            : new CookInspectionResult(
-            cookedRoot,
-            Succeeded: true,
-            document.SourceGuid,
-            document.Assets
-                .OrderBy(static asset => asset.VirtualPath, StringComparer.Ordinal)
-                .Select(static asset => new CookedAssetEntry(
-                    asset.VirtualPath ?? asset.DescriptorRelativePath,
-                    MapAssetKind(asset.AssetType)) { DescriptorRelativePath = asset.DescriptorRelativePath, AssetKey = asset.AssetKey.ToString() })
-                .ToList(),
-            document.Files
-                .OrderBy(static file => file.RelativePath, StringComparer.Ordinal)
-                .Select(static file => new CookedFileEntry(file.RelativePath, file.Size))
-                .ToList(),
-            Diagnostics: []);
-    }
+        OperationId = Guid.NewGuid(),
+        Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error,
+        Code = code, Message = "Cooked inventory verification failed.",
+        TechnicalMessage = error.Message, ExceptionType = error.GetType().FullName, AffectedPath = root,
+    };
 
     private static async Task WriteManifestAsync(ContentImportManifest manifest, string path, CancellationToken cancellationToken)
     {
@@ -214,6 +139,15 @@ public sealed partial class ImportToolContentPipelineApi(
             toolPath,
             ["--no-tui", "--no-color", "--cooked-root", output, "batch", "--manifest", manifestPath, "--root", inputRoot],
             inputRoot);
+
+    private static async Task WriteCapturedInputsAsync(Import.NativeCapturedInputSet inputs, string path, CancellationToken cancellationToken)
+    {
+        var capture = File.Create(path);
+        await using (capture.ConfigureAwait(false))
+        {
+            await JsonSerializer.SerializeAsync(capture, inputs, CaptureJsonOptions, cancellationToken).ConfigureAwait(false);
+        }
+    }
 
     [SuppressMessage(
         "Design",
@@ -237,125 +171,6 @@ public sealed partial class ImportToolContentPipelineApi(
             // Best effort only.
         }
     }
-
-    private static Document ReadLooseCookedIndex(string cookedRoot)
-    {
-        var indexPath = Path.Combine(cookedRoot, "container.index.bin");
-        using var stream = File.OpenRead(indexPath);
-        return LooseCookedIndex.Read(stream);
-    }
-
-    private static List<DiagnosticRecord> ValidateLooseCookedDocument(
-        Guid operationId,
-        string cookedRoot,
-        Document document,
-        string diagnosticCode)
-    {
-        var diagnostics = new List<DiagnosticRecord>();
-        foreach (var asset in document.Assets)
-        {
-            if (string.IsNullOrWhiteSpace(asset.DescriptorRelativePath))
-            {
-                diagnostics.Add(CreateCookedValidationDiagnostic(
-                    operationId,
-                    diagnosticCode,
-                    "Cooked asset descriptor path is missing.",
-                    cookedRoot,
-                    asset.VirtualPath));
-                continue;
-            }
-
-            ValidateCookedFile(
-                diagnostics,
-                operationId,
-                diagnosticCode,
-                cookedRoot,
-                asset.DescriptorRelativePath,
-                asset.DescriptorSize,
-                asset.VirtualPath,
-                "asset descriptor");
-        }
-
-        foreach (var file in document.Files)
-        {
-            if (string.IsNullOrWhiteSpace(file.RelativePath))
-            {
-                diagnostics.Add(CreateCookedValidationDiagnostic(
-                    operationId,
-                    diagnosticCode,
-                    "Cooked file record path is missing.",
-                    cookedRoot,
-                    affectedVirtualPath: null));
-                continue;
-            }
-
-            ValidateCookedFile(
-                diagnostics,
-                operationId,
-                diagnosticCode,
-                cookedRoot,
-                file.RelativePath,
-                file.Size,
-                affectedVirtualPath: null,
-                "file record");
-        }
-
-        return diagnostics;
-    }
-
-    private static void ValidateCookedFile(
-        List<DiagnosticRecord> diagnostics,
-        Guid operationId,
-        string diagnosticCode,
-        string cookedRoot,
-        string relativePath,
-        ulong expectedSize,
-        string? affectedVirtualPath,
-        string kind)
-    {
-        var path = Path.Combine(cookedRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
-        if (!File.Exists(path))
-        {
-            diagnostics.Add(CreateCookedValidationDiagnostic(
-                operationId,
-                diagnosticCode,
-                $"Cooked {kind} is missing: {relativePath}.",
-                path,
-                affectedVirtualPath));
-            return;
-        }
-
-        var actualSize = new FileInfo(path).Length;
-        if (actualSize != (long)expectedSize)
-        {
-            diagnostics.Add(CreateCookedValidationDiagnostic(
-                operationId,
-                diagnosticCode,
-                $"Cooked {kind} size mismatch for {relativePath}.",
-                path,
-                affectedVirtualPath,
-                string.Create(CultureInfo.InvariantCulture, $"Expected {expectedSize} bytes, found {actualSize} bytes.")));
-        }
-    }
-
-    private static DiagnosticRecord CreateCookedValidationDiagnostic(
-        Guid operationId,
-        string code,
-        string message,
-        string affectedPath,
-        string? affectedVirtualPath,
-        string? technicalMessage = null)
-        => new()
-        {
-            OperationId = operationId,
-            Domain = FailureDomain.ContentPipeline,
-            Severity = DiagnosticSeverity.Error,
-            Code = code,
-            Message = message,
-            TechnicalMessage = technicalMessage,
-            AffectedPath = affectedPath,
-            AffectedVirtualPath = affectedVirtualPath,
-        };
 
     private static DiagnosticRecord CreateImportFailureDiagnostic(
         Guid operationId,
@@ -387,19 +202,12 @@ public sealed partial class ImportToolContentPipelineApi(
         }
     }
 
-    private static ContentCookAssetKind MapAssetKind(byte assetType)
-        => assetType switch
-        {
-            1 => ContentCookAssetKind.Material,
-            2 => ContentCookAssetKind.Geometry,
-            3 => ContentCookAssetKind.Scene,
-            _ => ContentCookAssetKind.Unknown,
-        };
-
     private static bool IsLooseCookedReadFailure(Exception ex)
         => ex is IOException
             or UnauthorizedAccessException
             or InvalidDataException
+            or JsonException
+            or System.ComponentModel.Win32Exception
             or NotSupportedException
             or InvalidOperationException
             or ArgumentException;
@@ -410,7 +218,7 @@ public sealed partial class ImportToolContentPipelineApi(
         Message = "Invoking ImportTool '{ToolPath}' with manifest '{ManifestPath}' in '{WorkingDirectory}'.")]
     private partial void LogImportToolInvoked(string toolPath, string manifestPath, string workingDirectory);
 
-    private async Task<NativeImportResult> RunImportWorkerAsync(ContentImportExecution execution, NativeArtifactLease artifacts, string manifestPath, string? reportPath, CancellationToken cancellationToken)
+    private async Task<NativeImportResult> RunImportWorkerAsync(ContentImportExecution execution, NativeArtifactLease artifacts, string manifestPath, string reportPath, string? capturePath, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var toolPath = this.GetCompatibleToolPath(artifacts);
@@ -421,19 +229,19 @@ public sealed partial class ImportToolContentPipelineApi(
             Output = CookRunContext.Current is { } progress ? new CookOutput(progress) : null,
         };
 
-        if (reportPath is not null)
+        request = request with { Arguments = [.. request.Arguments, "--report", reportPath] };
+        if (capturePath is not null)
         {
-            request = request with { Arguments = [.. request.Arguments, "--report", reportPath] };
+            await WriteCapturedInputsAsync(execution.CapturedInputs!, capturePath, cancellationToken).ConfigureAwait(false);
+            request = request with { Arguments = [.. request.Arguments, "--captured-inputs", capturePath] };
         }
 
         this.LogImportToolInvoked(toolPath, manifestPath, execution.InputRoot);
         var result = await this.processRunner.RunAsync(request, cancellationToken).ConfigureAwait(false);
-        return reportPath is not null && File.Exists(reportPath)
+        return File.Exists(reportPath)
             ? Import.NativeImportReportReader.Read(await File.ReadAllTextAsync(reportPath, cancellationToken).ConfigureAwait(false), execution, result.ExitCode)
-            : reportPath is not null && result.ExitCode == 0
-            ? throw new InvalidDataException("Native source import did not produce its required output report.")
             : result.ExitCode == 0
-            ? new NativeImportResult(Succeeded: true, Diagnostics: [])
+            ? throw new InvalidDataException("Native source import did not produce its required output report.")
             : new NativeImportResult(Succeeded: false, Diagnostics: [CreateImportFailureDiagnostic(execution.OperationId, result)]);
     }
 

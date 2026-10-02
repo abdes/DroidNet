@@ -4,17 +4,72 @@
 
 #include <atomic>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Testing/GTest.h>
+#if defined(_MSC_VER) && defined(_DEBUG)
+#  include <Oxygen/Graphics/Common/Test/HeapAllocationFailure.h>
+#endif
 
 using namespace oxygen::graphics::detail;
 using testing::Test;
 namespace frame = oxygen::frame;
+
+#if defined(_MSC_VER) && defined(_DEBUG)
+NOLINT_TEST(
+  PreparedDeferredReclaimerTest, EmptyAndPreparedOnlyDrainDoNotAllocate)
+{
+  DeferredReclaimer reclaimer;
+  unsigned calls = 0U;
+  auto first = reclaimer.PrepareDeferredAction([&calls]() { ++calls; });
+  auto second = reclaimer.PrepareDeferredAction([&calls]() { ++calls; });
+  const auto rejected
+    = oxygen::graphics::testing::HeapAllocationFailure::RejectedCount();
+  {
+    const oxygen::graphics::testing::HeapAllocationFailure deny_allocations;
+    reclaimer.OnBeginFrame(frame::Slot { 0 });
+    reclaimer.CommitDeferredAction(std::move(first));
+    reclaimer.CommitDeferredAction(std::move(second));
+    reclaimer.OnBeginFrame(frame::Slot { 0 });
+  }
+  EXPECT_EQ(calls, 2U);
+  EXPECT_EQ(oxygen::graphics::testing::HeapAllocationFailure::RejectedCount(),
+    rejected);
+}
+NOLINT_TEST(PreparedDeferredReclaimerTest,
+  ReentrantPreparedEnqueueNeedsNoAllocationAndWaitsForNextDrain)
+{
+  DeferredReclaimer reclaimer;
+  unsigned calls = 0U;
+  unsigned after_first = 0U;
+  auto later = reclaimer.PrepareDeferredAction([&calls]() { ++calls; });
+  auto first = reclaimer.PrepareDeferredAction([&]() {
+    ++calls;
+    reclaimer.CommitDeferredAction(std::move(later));
+  });
+  const auto rejected
+    = oxygen::graphics::testing::HeapAllocationFailure::RejectedCount();
+  {
+    const oxygen::graphics::testing::HeapAllocationFailure deny_allocations;
+    reclaimer.CommitDeferredAction(std::move(first));
+    reclaimer.OnBeginFrame(frame::Slot { 0 });
+    after_first = calls;
+    reclaimer.OnBeginFrame(frame::Slot { 0 });
+  }
+  EXPECT_EQ(after_first, 1U);
+  EXPECT_EQ(calls, 2U);
+  EXPECT_EQ(oxygen::graphics::testing::HeapAllocationFailure::RejectedCount(),
+    rejected);
+}
+#endif
 
 NOLINT_TEST(PreparedDeferredReclaimerTest, PreservesMixedEnqueueOrder)
 {
@@ -420,9 +475,9 @@ NOLINT_TEST_F(DeferredReclaimerTest,
 
   // Assert
   ASSERT_EQ(order.size(), 3u);
-  EXPECT_EQ(order[0], 1);
-  EXPECT_EQ(order[1], 2);
-  EXPECT_EQ(order[2], 3);
+  EXPECT_EQ(order.at(0), 1);
+  EXPECT_EQ(order.at(1), 2);
+  EXPECT_EQ(order.at(2), 3);
 }
 
 //===----------------------------------------------------------------------===//

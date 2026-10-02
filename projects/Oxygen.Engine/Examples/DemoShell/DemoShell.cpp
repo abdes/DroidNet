@@ -6,16 +6,24 @@
 
 #include <algorithm>
 #include <chrono>
+#include <exception>
+#include <memory>
 #include <mutex>
 #include <optional>
+#include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
+#include "DemoShell/ActiveScene.h"
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Internal/DemoShellConsoleDefaults.h"
 #include "DemoShell/Internal/PostProcessConsoleBindings.h"
 #include "DemoShell/Internal/SceneControlBlock.h"
 #include "DemoShell/PanelRegistry.h"
+#include "DemoShell/Runtime/MainViewContract.h"
+#include "DemoShell/Runtime/RendererUiTypes.h"
+#include "DemoShell/Runtime/SceneActivationPolicy.h"
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/EnvironmentSettingsService.h"
@@ -34,11 +42,13 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
-#include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Core/Time/Types.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Input/InputSystem.h>
+#include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/Renderer.h>
 
 namespace oxygen::examples {
@@ -79,7 +89,7 @@ struct DemoShell::Impl {
 
   auto GetInputSystem() const -> observer_ptr<engine::InputSystem>
   {
-    std::call_once(input_system_flag, [this] {
+    std::call_once(input_system_flag, [this] -> void {
       if (config.engine) {
         if (auto it = config.engine->GetModule<engine::InputSystem>()) {
           input_system = observer_ptr { &it->get() };
@@ -244,6 +254,8 @@ auto DemoShell::CompleteInitialization() -> bool
     if (impl_->config.on_loose_index_loaded) {
       impl_->content_vm->SetOnIndexLoaded(impl_->config.on_loose_index_loaded);
     }
+    impl_->content_vm->SetOnGenerationPublished(
+      impl_->config.on_generation_published);
     impl_->content_vm->RestorePersistedLibraryState();
   }
 
@@ -256,7 +268,7 @@ auto DemoShell::CompleteInitialization() -> bool
   impl_->post_process_console
     = std::make_unique<internal::PostProcessConsoleBindings>(
       impl_->config.engine->GetConsole(), impl_->post_process_settings_service,
-      [engine = impl_->config.engine]() -> observer_ptr<vortex::Renderer> {
+      [engine = impl_->config.engine] -> observer_ptr<vortex::Renderer> {
         const auto renderer = engine->GetModule<vortex::Renderer>();
         return renderer ? observer_ptr { &renderer->get() }
                         : observer_ptr<vortex::Renderer> {};
@@ -361,8 +373,8 @@ auto DemoShell::RegisterPanel(std::shared_ptr<DemoPanel> panel) -> bool
       LOG_F(WARNING, "Cannot register panel with empty name");
       return false;
     }
-    const auto duplicate = std::ranges::any_of(
-      impl_->pending_panels, [&](const std::shared_ptr<DemoPanel>& existing) {
+    const auto duplicate = std::ranges::any_of(impl_->pending_panels,
+      [&](const std::shared_ptr<DemoPanel>& existing) -> bool {
         return existing && existing->GetName() == name;
       });
     if (duplicate) {
@@ -598,7 +610,7 @@ auto DemoShell::SyncRuntimeState() -> void
   }
   runtime_config.on_atmosphere_params_changed = nullptr;
   runtime_config.on_exposure_changed
-    = [] { LOG_F(INFO, "Exposure settings changed"); };
+    = [] -> void { LOG_F(INFO, "Exposure settings changed"); };
   if (impl_->demo_shell_ui) {
     if (const auto env_vm = impl_->demo_shell_ui->GetEnvironmentVm()) {
       env_vm->SetRuntimeConfig(runtime_config);

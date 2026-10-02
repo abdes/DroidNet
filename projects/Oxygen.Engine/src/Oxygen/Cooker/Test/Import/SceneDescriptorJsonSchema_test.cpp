@@ -13,8 +13,10 @@
 #include <string_view>
 #include <vector>
 
+#include "SceneDescriptorTestData.h"
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -23,6 +25,7 @@ namespace {
 using nlohmann::json;
 using nlohmann::json_schema::error_handler;
 using nlohmann::json_schema::json_validator;
+using oxygen::content::import::test::MakeCurrentSceneDescriptor;
 
 class CollectingErrorHandler final : public error_handler {
 public:
@@ -112,28 +115,38 @@ auto ValidateSchema(
 NOLINT_TEST(SceneDescriptorJsonSchemaTest, NodeFlagSourceModesAreCanonical)
 {
   const auto schema = LoadJsonFile(SchemaFile(FindRepoRoot()));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
   auto document
-    = json::parse(R"({"version":8,"name":"Flags","nodes":[{"flags":{}}]})");
+    = MakeCurrentSceneDescriptor(R"({"name":"Flags","nodes":[{"flags":{}}]})");
   for (const auto& visibility : { "inherit", "shown", "hidden" }) {
     for (const auto& shadow : { "inherit", "on", "off" }) {
-      document["nodes"][0]["flags"]
-        = { { "visible", visibility }, { "casts_shadows", shadow },
-            { "receives_shadows", shadow }, { "static", false } };
+      document.at("nodes").at(0).update({ { "flags",
+        {
+          { "visible", visibility },
+          { "casts_shadows", shadow },
+          { "receives_shadows", shadow },
+          { "static", false },
+        } } });
       auto errors = std::string {};
       EXPECT_TRUE(ValidateSchema(*schema, document, errors)) << errors;
     }
   }
-  for (const auto& invalid :
-    std::vector<json> { { { "visible", true } }, { { "casts_shadows", false } },
-      { { "receives_shadows", true } }, { { "visible", "on" } },
-      { { "casts_shadows", "shown" } }, { { "visible", "local" } } }) {
-    document["nodes"][0]["flags"] = invalid;
+  for (const auto& invalid : std::vector<json> {
+         { { "visible", true } },
+         { { "casts_shadows", false } },
+         { { "receives_shadows", true } },
+         { { "visible", "on" } },
+         { { "casts_shadows", "shown" } },
+         { { "visible", "local" } },
+       }) {
+    document.at("nodes").at(0).update({ { "flags", invalid } });
     auto errors = std::string {};
     EXPECT_FALSE(ValidateSchema(*schema, document, errors)) << invalid.dump();
   }
-  document["nodes"][0]["flags"] = json::object();
-  document["version"] = 4;
+  document.at("nodes").at(0).update({ { "flags", json::object() } });
+  document.update({ { "version", 4 } });
   auto errors = std::string {};
   EXPECT_FALSE(ValidateSchema(*schema, document, errors));
 }
@@ -143,22 +156,29 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
   const auto schema = LoadJsonFile(SchemaFile(repo_root));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
 
-  const auto doc = json::parse(R"({
+  const auto doc = MakeCurrentSceneDescriptor(R"({
     "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
-    "version": 8,
     "name": "DemoScene",
     "nodes": [
       { "name": "Root", "transform": { "translation": [0, 0, 0] } },
       { "name": "MeshNode", "parent": 0, "transform": { "translation": [1, 0, 0] } }
     ],
     "renderables": [
-      { "node": 1, "geometry_ref": "/.cooked/Geometry/cube.ogeo", "material_ref": "/.cooked/Materials/cube.omat" }
+      { "node": 1, "geometry_ref": "/.cooked/Geometry/cube.ogeo",
+        "material_overrides": [{
+          "slot_id": "00000000-0000-0000-0000-000000000001",
+          "material_ref": "/.cooked/Materials/cube.omat",
+          "layout_revision": "0000000000000000000000000000000000000000000000000000000000000001"
+        }]
+      }
     ],
     "cameras": {
       "perspective": [
-        { "node": 0, "fov_y": 1.2, "near_plane": 0.1, "far_plane": 500.0 }
+        { "node": 0, "aspect_mode": "auto", "fov_y": 1.2, "near_plane": 0.1, "far_plane": 500.0 }
       ]
     },
     "lights": {
@@ -178,15 +198,38 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
   EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
 }
 
+NOLINT_TEST(SceneDescriptorJsonSchemaTest, RequiresExplicitCameraAspectPolicy)
+{
+  const auto repo_root = FindRepoRoot();
+  const auto schema = LoadJsonFile(SchemaFile(repo_root));
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
+  auto doc = MakeCurrentSceneDescriptor(R"({
+    "name": "CameraPolicy", "nodes": [{}],
+    "cameras": { "perspective": [{ "node": 0, "aspect_mode": "auto" }] }
+  })");
+  std::string errors;
+  EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
+  auto& camera = doc.at("cameras").at("perspective").at(0);
+  camera.update({ { "aspect_mode", "fixed" }, { "aspect_ratio", 1.5 } });
+  EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
+  camera.update({ { "aspect_mode", "stretch" } });
+  EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
+  camera.erase("aspect_mode");
+  EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
+}
+
 NOLINT_TEST(SceneDescriptorJsonSchemaTest, RejectsUnknownNestedFields)
 {
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
   const auto schema = LoadJsonFile(SchemaFile(repo_root));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
 
-  const auto doc = json::parse(R"({
-    "version": 8,
+  const auto doc = MakeCurrentSceneDescriptor(R"({
     "name": "BadScene",
     "nodes": [ { "name": "Root", "unknown_field": true } ]
   })");
@@ -200,10 +243,11 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsDirectionalShadowTuningFields)
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
   const auto schema = LoadJsonFile(SchemaFile(repo_root));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
 
-  const auto doc = json::parse(R"({
-    "version": 8,
+  const auto doc = MakeCurrentSceneDescriptor(R"({
     "name": "TunedScene",
     "nodes": [
       { "name": "Root" }
@@ -229,15 +273,17 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsDirectionalShadowTuningFields)
   EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
 }
 
-NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsV3EnvironmentAndLocalFogShape)
+NOLINT_TEST(
+  SceneDescriptorJsonSchemaTest, AcceptsCurrentEnvironmentAndLocalFogShape)
 {
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
   const auto schema = LoadJsonFile(SchemaFile(repo_root));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
 
-  const auto doc = json::parse(R"({
-    "version": 8,
+  const auto doc = MakeCurrentSceneDescriptor(R"({
     "name": "FogScene",
     "nodes": [
       { "name": "Root" },
@@ -347,12 +393,14 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsV3EnvironmentAndLocalFogShape)
   EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
 }
 
-NOLINT_TEST(SceneDescriptorJsonSchemaTest, RejectsMissingV3Version)
+NOLINT_TEST(SceneDescriptorJsonSchemaTest, RejectsMissingVersion)
 {
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
   const auto schema = LoadJsonFile(SchemaFile(repo_root));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
 
   const auto doc = json::parse(R"({
     "name": "LegacyScene",
@@ -367,11 +415,11 @@ NOLINT_TEST(
   SceneDescriptorJsonSchemaTest, PostProcessAndBackgroundRejectInvalidEncodings)
 {
   const auto schema = LoadJsonFile(SchemaFile(FindRepoRoot()));
-  ASSERT_TRUE(schema.has_value());
-  const auto base = json::parse(
-    R"JSON(
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
+  const auto base = MakeCurrentSceneDescriptor(R"JSON(
 {
-  "version": 8,
   "name": "Environment",
   "nodes": [
     {
@@ -418,35 +466,41 @@ NOLINT_TEST(
 )JSON");
   auto errors = std::string {};
   EXPECT_TRUE(ValidateSchema(*schema, base, errors)) << errors;
-  for (const auto& pointer : { "/environment/post_process_volume/tone_mapper",
+  for (const auto& pointer : {
+         "/environment/post_process_volume/tone_mapper",
          "/environment/post_process_volume/exposure_mode",
-         "/environment/post_process_volume/auto_exposure_metering_mode" }) {
+         "/environment/post_process_volume/auto_exposure_metering_mode",
+       }) {
     auto invalid = base;
-    invalid[json::json_pointer(pointer)] = 99;
+    invalid.at(json::json_pointer(pointer)) = 99;
     EXPECT_FALSE(ValidateSchema(*schema, invalid, errors)) << pointer;
   }
   for (const float channel : { -0.1F, 1.1F }) {
     auto invalid = base;
-    invalid["environment"]["background"]["color_rgb"][0] = channel;
+    invalid.at("environment").at("background").at("color_rgb").at(0) = channel;
     EXPECT_FALSE(ValidateSchema(*schema, invalid, errors));
   }
   auto overflow = base;
-  overflow["environment"]["post_process_volume"]["manual_exposure_ev"] = 1e100;
+  overflow.at("environment")
+    .at("post_process_volume")
+    .update({ { "manual_exposure_ev", 1e100 } });
   EXPECT_FALSE(ValidateSchema(*schema, overflow, errors));
   auto old = base;
-  old["version"] = 3;
+  old.update({ { "version", 3 } });
   EXPECT_FALSE(ValidateSchema(*schema, old, errors));
 }
 
 } // namespace
 
 NOLINT_TEST(
-  SceneDescriptorJsonSchemaTest, SceneV8RejectsRetiredCaptureModeAndOldVersion)
+  SceneDescriptorJsonSchemaTest, RejectsRetiredCaptureModeAndOldVersion)
 {
   const auto schema = LoadJsonFile(SchemaFile(FindRepoRoot()));
-  ASSERT_TRUE(schema.has_value());
-  const auto canonical = json::parse(R"({
-    "version": 8, "name": "AutomaticSky", "nodes": [{}],
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
+  const auto canonical = MakeCurrentSceneDescriptor(R"({
+    "name": "AutomaticSky", "nodes": [{}],
     "environment": { "sky_light": {
       "enabled": true, "source": 0, "intensity": 2.5,
       "tint_rgb": [0.2, 0.4, 0.8], "diffuse_intensity": 0.5,
@@ -458,10 +512,12 @@ NOLINT_TEST(
   EXPECT_TRUE(ValidateSchema(*schema, canonical, errors)) << errors;
   for (const bool value : { false, true }) {
     auto retired = canonical;
-    retired["environment"]["sky_light"]["real_time_capture_enabled"] = value;
+    retired.at("environment")
+      .at("sky_light")
+      .update({ { "real_time_capture_enabled", value } });
     EXPECT_FALSE(ValidateSchema(*schema, retired, errors));
   }
   auto previous = canonical;
-  previous["version"] = 7;
+  previous.update({ { "version", 7 } });
   EXPECT_FALSE(ValidateSchema(*schema, previous, errors));
 }

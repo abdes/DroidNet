@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 10,
   "name": "physics_domains_vsm_benchmark",
   "nodes": [
     {
@@ -371,6 +371,7 @@
         "node": 21,
         "fov_y": 0.7854,
         "aspect_ratio": 1.7778,
+        "aspect_mode": "fixed",
         "near_plane": 0.1,
         "far_plane": 200.0
       }

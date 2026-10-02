@@ -5,13 +5,22 @@
 //===----------------------------------------------------------------------===//
 
 #include <filesystem>
-#include <nlohmann/json-schema.hpp>
-#include <nlohmann/json.hpp>
+#include <memory>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <string_view>
+#include <utility>
+
+#include <nlohmann/json-schema.hpp>
+#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportSettings.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
@@ -66,7 +75,9 @@ namespace {
 
 auto BuildCollisionShapeDescriptorRequest(
   const CollisionShapeDescriptorImportSettings& settings,
-  std::ostream& error_stream) -> std::optional<ImportRequest>
+  std::ostream& error_stream,
+  std::shared_ptr<const CapturedInputSet> captured_inputs)
+  -> std::optional<ImportRequest>
 {
   if (settings.descriptor_path.empty()) {
     error_stream << "ERROR: descriptor_path is required\n";
@@ -75,8 +86,13 @@ auto BuildCollisionShapeDescriptorRequest(
 
   const auto descriptor_path
     = std::filesystem::path(settings.descriptor_path).lexically_normal();
-  const auto descriptor_doc = LoadDescriptorJsonObject(
-    descriptor_path, "collision shape descriptor", error_stream);
+  auto document = ImportSourceDocument::Load(descriptor_path,
+    "collision shape descriptor", error_stream, captured_inputs.get());
+  if (!document.has_value()) {
+    return std::nullopt;
+  }
+  const auto descriptor_doc = ParseDescriptorJsonObject(
+    document->text, "collision shape descriptor", error_stream);
   if (!descriptor_doc.has_value()) {
     return std::nullopt;
   }
@@ -87,6 +103,8 @@ auto BuildCollisionShapeDescriptorRequest(
 
   auto request = ImportRequest {};
   request.source_path = descriptor_path;
+  request.captured_inputs = std::move(captured_inputs);
+  request.preparation_inputs.push_back(document->Observation());
 
   if (settings.cooked_root.empty()) {
     error_stream << "ERROR: --output or --cooked-root is required\n";
@@ -120,7 +138,7 @@ auto BuildCollisionShapeDescriptorRequest(
 
   request.collision_shape_descriptor
     = ImportRequest::CollisionShapeDescriptorPayload {
-        .normalized_descriptor_json = descriptor_doc->dump(),
+        .normalized_descriptor_json = std::move(document->text),
       };
 
   return request;

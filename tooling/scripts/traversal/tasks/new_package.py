@@ -5,13 +5,14 @@ import shlex
 import subprocess
 from pathlib import Path
 
+from ...msbuild import visual_studio_tool
 from ..task_registry import TraversalContext, task
 
 
 @task(
     "New-Package",
     aliases=["new-package", "package"],
-    description="Create an AppX package using dotnet msbuild for projects with Package.appxmanifest.",
+    description="Create an AppX package using Visual Studio MSBuild for projects with Package.appxmanifest.",
 )
 def new_package(project: Path, context: TraversalContext) -> None:
     manifest = project.parent / "Package.appxmanifest"
@@ -54,12 +55,11 @@ def new_package(project: Path, context: TraversalContext) -> None:
         "UapAppxPackageBuildMode": "SideloadOnly",
         "AppxBundle": "Never",
         "GenerateAppxPackageOnBuild": "true",
-        "BuildProjectReferences": "false",
         "PackageCertificateKeyFile": str(certificate_path),
         "AppxPackageDir": package_dir_with_sep,
     }
 
-    cmd = ["dotnet", "msbuild", str(project), "-nologo", f"-verbosity:{verbosity}"]
+    cmd = [str(visual_studio_tool("msbuild")), str(project), "/nologo", "/m", "/restore", f"/v:{verbosity}"]
     for key, value in properties.items():
         cmd.append(f"-property:{key}={value}")
 
@@ -74,4 +74,4 @@ def new_package(project: Path, context: TraversalContext) -> None:
 
     result = subprocess.run(cmd, check=False)
     if result.returncode != 0:
-        raise RuntimeError(f"dotnet msbuild failed with exit code {result.returncode} for {project}")
+        raise RuntimeError(f"MSBuild failed with exit code {result.returncode} for {project}")

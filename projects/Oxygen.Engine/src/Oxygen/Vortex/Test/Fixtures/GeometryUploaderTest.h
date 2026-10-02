@@ -49,6 +49,11 @@ protected:
   [[nodiscard]] auto Loader() const -> FakeAssetLoader&;
 
   auto BeginFrame(frame::Slot slot) -> void;
+  [[nodiscard]] virtual auto GeometryLimits() const
+    -> resources::GeometryUploader::MaintenanceLimits
+  {
+    return {};
+  }
 
   [[nodiscard]] auto MakeValidTriangleMesh(std::string_view name,
     bool indexed = true) const -> std::shared_ptr<const data::Mesh>;

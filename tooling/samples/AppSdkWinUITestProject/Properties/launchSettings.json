@@ -1,10 +1,7 @@
 {
-    "profiles": {
-        "Converters.UI.Tests (Package)": {
-            "commandName": "MsixPackage"
-        },
-        "Converters.UI.Tests (Unpackaged)": {
-            "commandName": "Project"
-        }
+  "profiles": {
+    "UI Tests": {
+      "commandName": "Project"
     }
+  }
 }

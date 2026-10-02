@@ -9,11 +9,13 @@
 #include <filesystem>
 #include <memory>
 #include <span>
+#include <string_view>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/TextureResourceDescriptor.h>
 
 namespace oxygen::content::lc {
 
@@ -54,6 +56,11 @@ public:
   OXGN_COOK_NDAPI auto Assets() const noexcept -> std::span<const AssetEntry>;
   OXGN_COOK_NDAPI auto Files() const noexcept -> std::span<const FileEntry>;
   OXGN_COOK_NDAPI auto Guid() const noexcept -> data::SourceKey;
+
+  //! Read an indexed texture sidecar and verify agreement with its resource
+  //! table.
+  OXGN_COOK_NDAPI auto ReadTextureDescriptor(
+    std::string_view relative_path) const -> data::TextureResourceDescriptor;
 
 private:
   struct Impl;

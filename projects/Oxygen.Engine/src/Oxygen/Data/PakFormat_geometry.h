@@ -7,6 +7,8 @@
 #pragma once
 
 #include <Oxygen/Base/Compilers.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_core.h>
 
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
@@ -21,7 +23,8 @@ OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
 namespace oxygen::data::pak::geometry {
 
 //! Geometry asset descriptor version for current PAK schema.
-[[maybe_unused]] constexpr uint8_t kGeometryAssetVersion = 1;
+[[maybe_unused]] constexpr uint8_t kGeometryAssetVersion
+  = version::kGeometryAssetVersion;
 
 //! Geometry asset descriptor
 /*!
@@ -65,9 +68,9 @@ static_assert(sizeof(GeometryAssetDesc) == 131);
 #pragma pack(push, 1)
 struct StandardMeshInfo {
   //!< Reference to vertex buffer
-  core::ResourceIndexT vertex_buffer = core::kNoResourceIndex;
+  ResourceReferenceIndex vertex_buffer = kNoResourceReference;
   //!< Reference to index buffer
-  core::ResourceIndexT index_buffer = core::kNoResourceIndex;
+  ResourceReferenceIndex index_buffer = kNoResourceReference;
   float bounding_box_min[3] = {}; //!< AABB min coordinates
   float bounding_box_max[3] = {}; //!< AABB max coordinates
   uint8_t _reserved[40] = {}; //!< Union arm tail padding to 72 bytes
@@ -82,19 +85,19 @@ static_assert(sizeof(StandardMeshInfo) == 72);
 #pragma pack(push, 1)
 struct SkinnedMeshInfo {
   //!< Reference to vertex buffer
-  core::ResourceIndexT vertex_buffer = core::kNoResourceIndex;
+  ResourceReferenceIndex vertex_buffer = kNoResourceReference;
   //!< Reference to index buffer
-  core::ResourceIndexT index_buffer = core::kNoResourceIndex;
+  ResourceReferenceIndex index_buffer = kNoResourceReference;
   //!< Joint indices buffer
-  core::ResourceIndexT joint_index_buffer = core::kNoResourceIndex;
+  ResourceReferenceIndex joint_index_buffer = kNoResourceReference;
   //!< Joint weights buffer
-  core::ResourceIndexT joint_weight_buffer = core::kNoResourceIndex;
+  ResourceReferenceIndex joint_weight_buffer = kNoResourceReference;
   //!< Inverse bind matrices buffer
-  core::ResourceIndexT inverse_bind_buffer = core::kNoResourceIndex;
+  ResourceReferenceIndex inverse_bind_buffer = kNoResourceReference;
   //!< Mesh-to-skeleton remap buffer
-  core::ResourceIndexT joint_remap_buffer = core::kNoResourceIndex;
+  ResourceReferenceIndex joint_remap_buffer = kNoResourceReference;
   //!< Skeleton asset reference - TODO: future
-  AssetKey skeleton_asset_key = {};
+  AssetKey skeleton_asset_key;
   //!< Number of joints referenced by this mesh
   uint16_t joint_count = 0;
   //!< Influences per vertex (1..8)
@@ -205,13 +208,14 @@ static_assert(sizeof(MeshDesc) == 145);
 struct SubMeshDesc {
   char name[core::kMaxNameSize] = {};
   AssetKey material_asset_key; // AssetKey reference to MaterialAsset
+  MaterialSlotId slot_id; // Semantic declaration, shared only explicitly
   uint32_t mesh_view_count = 0; // Number of MeshViews in this SubMesh
   float bounding_box_min[3] = {}; // AABB min coordinates
   float bounding_box_max[3] = {}; // AABB max coordinates
 };
 // Followed by: MeshViewDesc mesh_views[mesh_view_count]
 #pragma pack(pop)
-static_assert(sizeof(SubMeshDesc) == 108);
+static_assert(sizeof(SubMeshDesc) == 124);
 
 //! Mesh view descriptor
 /*!

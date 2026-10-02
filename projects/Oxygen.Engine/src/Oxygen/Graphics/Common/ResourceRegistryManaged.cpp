@@ -343,11 +343,9 @@ auto ResourceRegistry::AcquireManagedView(
     auto& allocator = backend->GetDescriptorAllocator();
     if (const auto* cached
       = FindViewNoLock(core->key, request.description_hash, request.query)) {
-      const auto descriptor = core->descriptors.find(cached->descriptor_index);
-      assert(descriptor != core->descriptors.end());
       const auto index
         = request.visibility == DescriptorVisibility::kShaderVisible
-        ? allocator.GetShaderVisibleIndex(descriptor->second.descriptor)
+        ? allocator.GetShaderVisibleIndex(cached->descriptor)
         : kInvalidShaderVisibleIndex;
       return ManagedView {
         .view = cached->view_object,
@@ -376,29 +374,19 @@ auto ResourceRegistry::AcquireManagedView(
       ? allocator.GetShaderVisibleIndex(descriptor)
       : kInvalidShaderVisibleIndex;
     const auto index = descriptor.GetBindlessHandle();
-    const auto [inserted, unique] = core->descriptors.emplace(index,
-      ResourceEntry::ViewEntry {
-        .view_object = view,
-        .descriptor = std::move(descriptor),
-      });
-    assert(unique);
+    const auto [inserted, unique]
+      = core->descriptors.try_emplace(index, view, std::move(descriptor),
+        std::move(description), request.description_hash, request.query.domain);
+    if (!unique) {
+      throw std::logic_error("View descriptor is already registered");
+    }
     bool mapped = false;
     try {
       mapped = descriptor_to_resource_.emplace(index, core->key).second;
       if (!mapped) {
         throw std::logic_error("Descriptor identity already registered");
       }
-      view_cache_.emplace(
-        CacheKey {
-          .resource = core->key,
-          .view_desc_hash = request.description_hash,
-        },
-        ViewCacheEntry {
-          .view_object = view,
-          .view_description = std::move(description),
-          .descriptor_index = index,
-          .domain = request.query.domain,
-        });
+      LinkViewNoLock(core->key, inserted->second);
     } catch (...) {
       if (mapped) {
         descriptor_to_resource_.erase(index);

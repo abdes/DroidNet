@@ -8,12 +8,7 @@
       "parameters": {
         "alpha_cutoff": 0.5000076293945313,
         "ambient_occlusion": 1.0,
-        "base_color": [
-          1.0,
-          1.0,
-          1.0,
-          1.0
-        ],
+        "base_color": [1.0, 1.0, 1.0, 1.0],
         "double_sided": false,
         "metalness": 0.0,
         "normal_scale": 1.0,
@@ -30,30 +25,14 @@
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
         "bounds": {
-          "max": [
-            0.5,
-            0.5,
-            0.5
-          ],
-          "min": [
-            -0.5,
-            -0.5,
-            -0.5
-          ]
+          "max": [0.5, 0.5, 0.5],
+          "min": [-0.5, -0.5, -0.5]
         },
         "lods": [
           {
             "bounds": {
-              "max": [
-                0.5,
-                0.5,
-                0.5
-              ],
-              "min": [
-                -0.5,
-                -0.5,
-                -0.5
-              ]
+              "max": [0.5, 0.5, 0.5],
+              "min": [-0.5, -0.5, -0.5]
             },
             "mesh_type": "procedural",
             "name": "LOD0",
@@ -66,6 +45,7 @@
               {
                 "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
                 "name": "Main",
+                "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
                 "views": [
                   {
                     "view_ref": "__all__"
@@ -77,6 +57,23 @@
         ],
         "name": "Engine_Generated_BasicShapes_Cube"
       },
+      "material_slot_inventory": {
+        "geometry_asset_key": "249f2a0b-5fa5-eddd-7eaf-419065286118",
+        "layout_revision": "56a6870abbd33d68763c60ea0158f23ef9a4cb6be3f3af9b26812fd70a24da82",
+        "slots": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "4d41545f-4445-4641-554c-545f5f5f5f5f",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "default",
+            "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086"
+          }
+        ]
+      },
       "name": "Cube",
       "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_Cube.ogeo"
     },
@@ -87,30 +84,14 @@
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
         "bounds": {
-          "max": [
-            0.5,
-            0.5,
-            0.5
-          ],
-          "min": [
-            -0.5,
-            -0.5,
-            -0.5
-          ]
+          "max": [0.5, 0.5, 0.5],
+          "min": [-0.5, -0.5, -0.5]
         },
         "lods": [
           {
             "bounds": {
-              "max": [
-                0.5,
-                0.5,
-                0.5
-              ],
-              "min": [
-                -0.5,
-                -0.5,
-                -0.5
-              ]
+              "max": [0.5, 0.5, 0.5],
+              "min": [-0.5, -0.5, -0.5]
             },
             "mesh_type": "procedural",
             "name": "LOD0",
@@ -123,6 +104,7 @@
               {
                 "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
                 "name": "Main",
+                "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
                 "views": [
                   {
                     "view_ref": "__all__"
@@ -134,6 +116,23 @@
         ],
         "name": "Engine_Generated_BasicShapes_SubdividedCube"
       },
+      "material_slot_inventory": {
+        "geometry_asset_key": "0b18fb90-606e-56db-3a56-85ef382ff0f2",
+        "layout_revision": "56a6870abbd33d68763c60ea0158f23ef9a4cb6be3f3af9b26812fd70a24da82",
+        "slots": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "4d41545f-4445-4641-554c-545f5f5f5f5f",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "default",
+            "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086"
+          }
+        ]
+      },
       "name": "SubdividedCube",
       "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_SubdividedCube.ogeo"
     },
@@ -144,30 +143,14 @@
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
         "bounds": {
-          "max": [
-            0.5,
-            0.5,
-            0.5
-          ],
-          "min": [
-            -0.5,
-            -0.5,
-            -0.5
-          ]
+          "max": [0.5, 0.5, 0.5],
+          "min": [-0.5, -0.5, -0.5]
         },
         "lods": [
           {
             "bounds": {
-              "max": [
-                0.5,
-                0.5,
-                0.5
-              ],
-              "min": [
-                -0.5,
-                -0.5,
-                -0.5
-              ]
+              "max": [0.5, 0.5, 0.5],
+              "min": [-0.5, -0.5, -0.5]
             },
             "mesh_type": "procedural",
             "name": "LOD0",
@@ -180,6 +163,7 @@
               {
                 "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
                 "name": "Main",
+                "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
                 "views": [
                   {
                     "view_ref": "__all__"
@@ -191,6 +175,23 @@
         ],
         "name": "Engine_Generated_BasicShapes_Sphere"
       },
+      "material_slot_inventory": {
+        "geometry_asset_key": "e930259c-cba7-c5d2-1329-772d93c17ab8",
+        "layout_revision": "56a6870abbd33d68763c60ea0158f23ef9a4cb6be3f3af9b26812fd70a24da82",
+        "slots": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "4d41545f-4445-4641-554c-545f5f5f5f5f",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "default",
+            "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086"
+          }
+        ]
+      },
       "name": "Sphere",
       "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_Sphere.ogeo"
     },
@@ -201,30 +202,14 @@
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
         "bounds": {
-          "max": [
-            0.5,
-            0.5,
-            1.0
-          ],
-          "min": [
-            -0.5,
-            -0.5,
-            -1.0
-          ]
+          "max": [0.5, 0.5, 1.0],
+          "min": [-0.5, -0.5, -1.0]
         },
         "lods": [
           {
             "bounds": {
-              "max": [
-                0.5,
-                0.5,
-                1.0
-              ],
-              "min": [
-                -0.5,
-                -0.5,
-                -1.0
-              ]
+              "max": [0.5, 0.5, 1.0],
+              "min": [-0.5, -0.5, -1.0]
             },
             "mesh_type": "procedural",
             "name": "LOD0",
@@ -237,6 +222,7 @@
               {
                 "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
                 "name": "Main",
+                "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
                 "views": [
                   {
                     "view_ref": "__all__"
@@ -248,6 +234,23 @@
         ],
         "name": "Engine_Generated_BasicShapes_Capsule"
       },
+      "material_slot_inventory": {
+        "geometry_asset_key": "b1687967-806e-e2fd-e191-2fb43bcbd13b",
+        "layout_revision": "56a6870abbd33d68763c60ea0158f23ef9a4cb6be3f3af9b26812fd70a24da82",
+        "slots": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "4d41545f-4445-4641-554c-545f5f5f5f5f",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "default",
+            "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086"
+          }
+        ]
+      },
       "name": "Capsule",
       "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_Capsule.ogeo"
     },
@@ -258,30 +261,14 @@
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
         "bounds": {
-          "max": [
-            0.5,
-            0.5,
-            0.5
-          ],
-          "min": [
-            -0.5,
-            -0.5,
-            -0.5
-          ]
+          "max": [0.5, 0.5, 0.5],
+          "min": [-0.5, -0.5, -0.5]
         },
         "lods": [
           {
             "bounds": {
-              "max": [
-                0.5,
-                0.5,
-                0.5
-              ],
-              "min": [
-                -0.5,
-                -0.5,
-                -0.5
-              ]
+              "max": [0.5, 0.5, 0.5],
+              "min": [-0.5, -0.5, -0.5]
             },
             "mesh_type": "procedural",
             "name": "LOD0",
@@ -294,6 +281,7 @@
               {
                 "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
                 "name": "Main",
+                "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
                 "views": [
                   {
                     "view_ref": "__all__"
@@ -305,6 +293,23 @@
         ],
         "name": "Engine_Generated_BasicShapes_IcoSphere"
       },
+      "material_slot_inventory": {
+        "geometry_asset_key": "0376ad45-bf58-f245-7288-d71de50856ec",
+        "layout_revision": "56a6870abbd33d68763c60ea0158f23ef9a4cb6be3f3af9b26812fd70a24da82",
+        "slots": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "4d41545f-4445-4641-554c-545f5f5f5f5f",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "default",
+            "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086"
+          }
+        ]
+      },
       "name": "IcoSphere",
       "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_IcoSphere.ogeo"
     },
@@ -315,30 +320,14 @@
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
         "bounds": {
-          "max": [
-            0.5,
-            0.5,
-            0.0
-          ],
-          "min": [
-            -0.5,
-            -0.5,
-            0.0
-          ]
+          "max": [0.5, 0.5, 0.0],
+          "min": [-0.5, -0.5, 0.0]
         },
         "lods": [
           {
             "bounds": {
-              "max": [
-                0.5,
-                0.5,
-                0.0
-              ],
-              "min": [
-                -0.5,
-                -0.5,
-                0.0
-              ]
+              "max": [0.5, 0.5, 0.0],
+              "min": [-0.5, -0.5, 0.0]
             },
             "mesh_type": "procedural",
             "name": "LOD0",
@@ -351,6 +340,7 @@
               {
                 "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
                 "name": "Main",
+                "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
                 "views": [
                   {
                     "view_ref": "__all__"
@@ -362,6 +352,23 @@
         ],
         "name": "Engine_Generated_BasicShapes_Plane"
       },
+      "material_slot_inventory": {
+        "geometry_asset_key": "d461b541-f139-c0ca-217e-05b237082f6e",
+        "layout_revision": "56a6870abbd33d68763c60ea0158f23ef9a4cb6be3f3af9b26812fd70a24da82",
+        "slots": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "4d41545f-4445-4641-554c-545f5f5f5f5f",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "default",
+            "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086"
+          }
+        ]
+      },
       "name": "Plane",
       "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_Plane.ogeo"
     },
@@ -372,30 +379,14 @@
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
         "bounds": {
-          "max": [
-            0.5,
-            0.5,
-            0.5
-          ],
-          "min": [
-            -0.5,
-            -0.5,
-            -0.5
-          ]
+          "max": [0.5, 0.5, 0.5],
+          "min": [-0.5, -0.5, -0.5]
         },
         "lods": [
           {
             "bounds": {
-              "max": [
-                0.5,
-                0.5,
-                0.5
-              ],
-              "min": [
-                -0.5,
-                -0.5,
-                -0.5
-              ]
+              "max": [0.5, 0.5, 0.5],
+              "min": [-0.5, -0.5, -0.5]
             },
             "mesh_type": "procedural",
             "name": "LOD0",
@@ -408,6 +399,7 @@
               {
                 "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
                 "name": "Main",
+                "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
                 "views": [
                   {
                     "view_ref": "__all__"
@@ -419,6 +411,23 @@
         ],
         "name": "Engine_Generated_BasicShapes_Cylinder"
       },
+      "material_slot_inventory": {
+        "geometry_asset_key": "5506b7c6-cfe8-e631-6cf5-a89c2f434015",
+        "layout_revision": "56a6870abbd33d68763c60ea0158f23ef9a4cb6be3f3af9b26812fd70a24da82",
+        "slots": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "4d41545f-4445-4641-554c-545f5f5f5f5f",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "default",
+            "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086"
+          }
+        ]
+      },
       "name": "Cylinder",
       "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_Cylinder.ogeo"
     },
@@ -429,30 +438,14 @@
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
         "bounds": {
-          "max": [
-            0.5,
-            0.5,
-            0.5
-          ],
-          "min": [
-            -0.5,
-            -0.5,
-            -0.5
-          ]
+          "max": [0.5, 0.5, 0.5],
+          "min": [-0.5, -0.5, -0.5]
         },
         "lods": [
           {
             "bounds": {
-              "max": [
-                0.5,
-                0.5,
-                0.5
-              ],
-              "min": [
-                -0.5,
-                -0.5,
-                -0.5
-              ]
+              "max": [0.5, 0.5, 0.5],
+              "min": [-0.5, -0.5, -0.5]
             },
             "mesh_type": "procedural",
             "name": "LOD0",
@@ -465,6 +458,7 @@
               {
                 "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
                 "name": "Main",
+                "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
                 "views": [
                   {
                     "view_ref": "__all__"
@@ -476,6 +470,23 @@
         ],
         "name": "Engine_Generated_BasicShapes_Cone"
       },
+      "material_slot_inventory": {
+        "geometry_asset_key": "2783c0fe-eef5-015a-dac5-a4794a2d1cc6",
+        "layout_revision": "56a6870abbd33d68763c60ea0158f23ef9a4cb6be3f3af9b26812fd70a24da82",
+        "slots": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "4d41545f-4445-4641-554c-545f5f5f5f5f",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "default",
+            "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086"
+          }
+        ]
+      },
       "name": "Cone",
       "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_Cone.ogeo"
     },
@@ -486,30 +497,14 @@
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
         "bounds": {
-          "max": [
-            0.5,
-            0.5,
-            0.10000000149011612
-          ],
-          "min": [
-            -0.5,
-            -0.5,
-            -0.10000000149011612
-          ]
+          "max": [0.5, 0.5, 0.10000000149011612],
+          "min": [-0.5, -0.5, -0.10000000149011612]
         },
         "lods": [
           {
             "bounds": {
-              "max": [
-                0.5,
-                0.5,
-                0.10000000149011612
-              ],
-              "min": [
-                -0.5,
-                -0.5,
-                -0.10000000149011612
-              ]
+              "max": [0.5, 0.5, 0.10000000149011612],
+              "min": [-0.5, -0.5, -0.10000000149011612]
             },
             "mesh_type": "procedural",
             "name": "LOD0",
@@ -522,6 +517,7 @@
               {
                 "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
                 "name": "Main",
+                "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
                 "views": [
                   {
                     "view_ref": "__all__"
@@ -533,6 +529,23 @@
         ],
         "name": "Engine_Generated_BasicShapes_Torus"
       },
+      "material_slot_inventory": {
+        "geometry_asset_key": "9ab51593-6533-53d4-ff97-48e3bac1e482",
+        "layout_revision": "56a6870abbd33d68763c60ea0158f23ef9a4cb6be3f3af9b26812fd70a24da82",
+        "slots": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "4d41545f-4445-4641-554c-545f5f5f5f5f",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "default",
+            "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086"
+          }
+        ]
+      },
       "name": "Torus",
       "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_Torus.ogeo"
     },
@@ -543,30 +556,14 @@
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
         "bounds": {
-          "max": [
-            0.5,
-            0.0,
-            0.5
-          ],
-          "min": [
-            -0.5,
-            0.0,
-            -0.5
-          ]
+          "max": [0.5, 0.0, 0.5],
+          "min": [-0.5, 0.0, -0.5]
         },
         "lods": [
           {
             "bounds": {
-              "max": [
-                0.5,
-                0.0,
-                0.5
-              ],
-              "min": [
-                -0.5,
-                0.0,
-                -0.5
-              ]
+              "max": [0.5, 0.0, 0.5],
+              "min": [-0.5, 0.0, -0.5]
             },
             "mesh_type": "procedural",
             "name": "LOD0",
@@ -579,6 +576,7 @@
               {
                 "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
                 "name": "Main",
+                "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
                 "views": [
                   {
                     "view_ref": "__all__"
@@ -590,6 +588,23 @@
         ],
         "name": "Engine_Generated_BasicShapes_Quad"
       },
+      "material_slot_inventory": {
+        "geometry_asset_key": "4788c5dc-742c-0c00-4670-b0a7e82ecbe8",
+        "layout_revision": "56a6870abbd33d68763c60ea0158f23ef9a4cb6be3f3af9b26812fd70a24da82",
+        "slots": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "4d41545f-4445-4641-554c-545f5f5f5f5f",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "default",
+            "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086"
+          }
+        ]
+      },
       "name": "Quad",
       "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_Quad.ogeo"
     },
@@ -600,29 +615,19 @@
       "descriptor": {
         "$schema": "oxygen.geometry-descriptor.v1",
         "bounds": {
-          "max": [
-            0.05999999865889549,
-            0.05999999865889549,
-            0.7799999713897705
-          ],
+          "max": [0.05999999865889549, 0.05999999865889549, 0.7799999713897705],
           "min": [
-            -0.05999999865889549,
-            -0.05999999865889549,
-            -0.10000000149011612
+            -0.05999999865889549, -0.05999999865889549, -0.10000000149011612
           ]
         },
         "lods": [
           {
             "bounds": {
               "max": [
-                0.05999999865889549,
-                0.05999999865889549,
-                0.7799999713897705
+                0.05999999865889549, 0.05999999865889549, 0.7799999713897705
               ],
               "min": [
-                -0.05999999865889549,
-                -0.05999999865889549,
-                -0.10000000149011612
+                -0.05999999865889549, -0.05999999865889549, -0.10000000149011612
               ]
             },
             "mesh_type": "procedural",
@@ -636,6 +641,7 @@
               {
                 "material_ref": "/Content/Materials/OxygenEditor_Default.omat",
                 "name": "Main",
+                "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
                 "views": [
                   {
                     "view_ref": "__all__"
@@ -647,10 +653,27 @@
         ],
         "name": "Engine_Generated_BasicShapes_ArrowGizmo"
       },
+      "material_slot_inventory": {
+        "geometry_asset_key": "d8b618c1-4dc5-1c51-29a3-410b55e8f5db",
+        "layout_revision": "56a6870abbd33d68763c60ea0158f23ef9a4cb6be3f3af9b26812fd70a24da82",
+        "slots": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "4d41545f-4445-4641-554c-545f5f5f5f5f",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "default",
+            "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086"
+          }
+        ]
+      },
       "name": "ArrowGizmo",
       "virtual_path": "/Content/Geometry/Engine_Generated_BasicShapes_ArrowGizmo.ogeo"
     }
   ],
   "mount": "Content",
-  "schema": "oxygen.builtin-geometry-catalog.v2"
+  "schema": "oxygen.builtin-geometry-catalog.v3"
 }

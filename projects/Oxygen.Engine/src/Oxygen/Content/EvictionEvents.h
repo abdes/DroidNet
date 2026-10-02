@@ -48,7 +48,7 @@ struct EvictionEvent final {
   EvictionReason reason { EvictionReason::kRefCountZero };
 
 #if !defined(NDEBUG)
-  uint64_t cache_key_hash { 0 };
+  uint64_t cache_key { 0 };
 #endif
 };
 

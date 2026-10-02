@@ -11,24 +11,35 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <latch>
 #include <optional>
-#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportJobId.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
+#include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/MaterialSlotId.h>
+#include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -189,8 +200,8 @@ namespace {
     const std::vector<phys::PhysicsResourceDesc>& table,
     const data::AssetKey& asset_key) -> const phys::PhysicsResourceDesc*
   {
-    const auto it = std::find_if(
-      table.begin(), table.end(), [&](const phys::PhysicsResourceDesc& desc) {
+    const auto it = std::find_if(table.begin(), table.end(),
+      [&](const phys::PhysicsResourceDesc& desc) -> bool {
         return desc.resource_asset_key == asset_key;
       });
     return it != table.end() ? &(*it) : nullptr;
@@ -222,7 +233,7 @@ namespace {
     -> bool
   {
     return std::ranges::any_of(report.outputs,
-      [&](const ImportOutputRecord& o) { return o.path == relpath; });
+      [&](const ImportOutputRecord& o) -> bool { return o.path == relpath; });
   }
 
   auto SubmitAndWait(AsyncImportService& service, ImportRequest request)
@@ -233,7 +244,7 @@ namespace {
     const auto submitted = service.SubmitImport(
       std::move(request),
       [&report, &done](
-        const ImportJobId /*job_id*/, const ImportReport& completed) {
+        const ImportJobId /*job_id*/, const ImportReport& completed) -> void {
         report = completed;
         done.count_down();
       },
@@ -256,7 +267,7 @@ namespace {
       });
     }
     const auto descriptor = json {
-      { "version", 8 },
+      { "version", 9 },
       { "name", scene_name },
       { "nodes", std::move(nodes) },
     };
@@ -304,7 +315,8 @@ namespace {
       { "shape_type", "compound" },
       { "material_ref", kMaterialVirtualPath },
       { "virtual_path", kShapeVirtualPath },
-      { "children",
+      {
+        "children",
         json::array({
           json {
             { "shape_type", "box" },
@@ -320,7 +332,8 @@ namespace {
             { "local_rotation", json::array({ 0.0F, 0.0F, 0.0F, 1.0F }) },
             { "local_scale", json::array({ 1.0F, 1.0F, 1.0F }) },
           },
-        }) },
+        }),
+      },
     };
 
     auto request = ImportRequest {};
@@ -355,9 +368,11 @@ namespace {
     const std::vector<uint32_t>& kinematic_vertices) -> json
   {
     return json {
-      { "bindings",
+      {
+        "bindings",
         {
-          { "rigid_bodies",
+          {
+            "rigid_bodies",
             json::array({
               json {
                 { "node_index", 1U },
@@ -366,15 +381,19 @@ namespace {
                 { "body_type", "dynamic" },
                 { "motion_quality", "linear_cast" },
                 { "mass", 1350.0F },
-                { "backend",
+                {
+                  "backend",
                   {
                     { "target", "jolt" },
                     { "num_velocity_steps_override", 2U },
                     { "num_position_steps_override", 3U },
-                  } },
+                  },
+                },
               },
-            }) },
-          { "soft_bodies",
+            }),
+          },
+          {
+            "soft_bodies",
             json::array({
               json {
                 { "node_index", 2U },
@@ -396,16 +415,20 @@ namespace {
                 { "self_collision", true },
                 { "pinned_vertices", pinned_vertices },
                 { "kinematic_vertices", kinematic_vertices },
-                { "backend",
+                {
+                  "backend",
                   {
                     { "target", "jolt" },
                     { "velocity_iteration_count", 8U },
                     { "lra_stiffness_fraction", 0.9F },
                     { "skinned_constraint_enable", true },
-                  } },
+                  },
+                },
               },
-            }) },
-          { "joints",
+            }),
+          },
+          {
+            "joints",
             json::array({
               json {
                 { "node_index_a", 1U },
@@ -413,96 +436,138 @@ namespace {
                 { "constraint_type", "hinge" },
                 { "constraint_space", "local" },
                 { "local_frame_a_position", json::array({ 0.0F, 0.0F, 0.0F }) },
-                { "local_frame_a_rotation",
-                  json::array({ 0.0F, 0.0F, 0.0F, 1.0F }) },
+                {
+                  "local_frame_a_rotation",
+                  json::array({ 0.0F, 0.0F, 0.0F, 1.0F }),
+                },
                 { "local_frame_b_position", json::array({ 0.0F, 0.0F, 0.0F }) },
-                { "local_frame_b_rotation",
-                  json::array({ 0.0F, 0.0F, 0.0F, 1.0F }) },
-                { "limits_lower",
-                  json::array({ -0.1F, -0.1F, -0.1F, -0.1F, -0.1F, -0.1F }) },
-                { "limits_upper",
-                  json::array({ 0.1F, 0.1F, 0.1F, 0.1F, 0.1F, 0.1F }) },
-                { "spring_stiffnesses",
-                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }) },
-                { "spring_damping_ratios",
-                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }) },
-                { "motor_modes",
-                  json::array({ "off", "off", "off", "off", "off", "off" }) },
-                { "motor_target_velocities",
-                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }) },
-                { "motor_target_positions",
-                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }) },
-                { "motor_max_forces",
-                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }) },
-                { "motor_max_torques",
-                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }) },
-                { "motor_drive_frequencies",
-                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }) },
-                { "motor_damping_ratios",
-                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }) },
+                {
+                  "local_frame_b_rotation",
+                  json::array({ 0.0F, 0.0F, 0.0F, 1.0F }),
+                },
+                {
+                  "limits_lower",
+                  json::array({ -0.1F, -0.1F, -0.1F, -0.1F, -0.1F, -0.1F }),
+                },
+                {
+                  "limits_upper",
+                  json::array({ 0.1F, 0.1F, 0.1F, 0.1F, 0.1F, 0.1F }),
+                },
+                {
+                  "spring_stiffnesses",
+                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
+                },
+                {
+                  "spring_damping_ratios",
+                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
+                },
+                {
+                  "motor_modes",
+                  json::array({ "off", "off", "off", "off", "off", "off" }),
+                },
+                {
+                  "motor_target_velocities",
+                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
+                },
+                {
+                  "motor_target_positions",
+                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
+                },
+                {
+                  "motor_max_forces",
+                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
+                },
+                {
+                  "motor_max_torques",
+                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
+                },
+                {
+                  "motor_drive_frequencies",
+                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
+                },
+                {
+                  "motor_damping_ratios",
+                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
+                },
                 { "break_force", 1250.0F },
                 { "break_torque", 2500.0F },
                 { "collide_connected", false },
                 { "priority", 7U },
-                { "backend",
+                {
+                  "backend",
                   {
                     { "target", "jolt" },
                     { "num_velocity_steps_override", 1U },
                     { "num_position_steps_override", 2U },
-                  } },
+                  },
+                },
               },
-            }) },
-          { "vehicles",
+            }),
+          },
+          {
+            "vehicles",
             json::array({
               json {
                 { "node_index", 3U },
                 { "controller_type", "wheeled" },
-                { "wheels",
+                {
+                  "wheels",
                   json::array({
                     json {
                       { "node_index", 8U },
                       { "axle_index", 1U },
                       { "side", "right" },
-                      { "backend",
+                      {
+                        "backend",
                         {
                           { "target", "jolt" },
                           { "wheel_castor", 0.80F },
-                        } },
+                        },
+                      },
                     },
                     json {
                       { "node_index", 6U },
                       { "axle_index", 0U },
                       { "side", "right" },
-                      { "backend",
+                      {
+                        "backend",
                         {
                           { "target", "jolt" },
                           { "wheel_castor", 0.60F },
-                        } },
+                        },
+                      },
                     },
                     json {
                       { "node_index", 7U },
                       { "axle_index", 1U },
                       { "side", "left" },
-                      { "backend",
+                      {
+                        "backend",
                         {
                           { "target", "jolt" },
                           { "wheel_castor", 0.70F },
-                        } },
+                        },
+                      },
                     },
                     json {
                       { "node_index", 5U },
                       { "axle_index", 0U },
                       { "side", "left" },
-                      { "backend",
+                      {
+                        "backend",
                         {
                           { "target", "jolt" },
                           { "wheel_castor", 0.50F },
-                        } },
+                        },
+                      },
                     },
-                  }) },
+                  }),
+                },
               },
-            }) },
-        } },
+            }),
+          },
+        },
+      },
     };
   }
 
@@ -562,8 +627,8 @@ namespace {
     mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kStandard);
     mesh.submesh_count = 1U;
     mesh.mesh_view_count = 1U;
-    mesh.info.standard.vertex_buffer = core::ResourceIndexT { 1U };
-    mesh.info.standard.index_buffer = core::ResourceIndexT { 2U };
+    mesh.info.standard.vertex_buffer = data::ResourceReferenceIndex { 0U };
+    mesh.info.standard.index_buffer = data::ResourceReferenceIndex { 1U };
     mesh.info.standard.bounding_box_min[0] = descriptor.bounding_box_min[0];
     mesh.info.standard.bounding_box_min[1] = descriptor.bounding_box_min[1];
     mesh.info.standard.bounding_box_min[2] = descriptor.bounding_box_min[2];
@@ -572,6 +637,8 @@ namespace {
     mesh.info.standard.bounding_box_max[2] = descriptor.bounding_box_max[2];
 
     auto submesh = geometry::SubMeshDesc {};
+    submesh.slot_id
+      = data::MaterialSlotId::FromStableIdentity("PhysicsPhase3/cloth");
     std::memcpy(submesh.name, "cloth_submesh", 13U);
     submesh.mesh_view_count = 1U;
     submesh.bounding_box_min[0] = descriptor.bounding_box_min[0];
@@ -590,7 +657,8 @@ namespace {
     auto descriptor_bytes = std::vector<std::byte> {};
     descriptor_bytes.reserve(
       sizeof(descriptor) + sizeof(mesh) + sizeof(submesh) + sizeof(view));
-    const auto append_pod = [&descriptor_bytes]<typename T>(const T& pod) {
+    const auto append_pod
+      = [&descriptor_bytes]<typename T>(const T& pod) -> auto {
       static_assert(std::is_trivially_copyable_v<T>);
       const auto* bytes = reinterpret_cast<const std::byte*>(&pod);
       descriptor_bytes.insert(descriptor_bytes.end(), bytes, bytes + sizeof(T));
@@ -601,31 +669,31 @@ namespace {
     append_pod(view);
 
     auto table_entries = std::array<core::BufferResourceDesc, 3> {};
-    table_entries[1].data_offset = 0U;
-    table_entries[1].size_bytes
+    table_entries.at(1).data_offset = 0U;
+    table_entries.at(1).size_bytes
       = static_cast<uint32_t>(vertices.size() * sizeof(VertexPosition));
-    table_entries[1].usage_flags = 0x01U;
-    table_entries[1].element_stride = sizeof(VertexPosition);
-    table_entries[1].element_format = static_cast<uint8_t>(Format::kUnknown);
+    table_entries.at(1).usage_flags = 0x01U;
+    table_entries.at(1).element_stride = sizeof(VertexPosition);
+    table_entries.at(1).element_format = static_cast<uint8_t>(Format::kUnknown);
 
-    table_entries[2].data_offset = table_entries[1].size_bytes;
-    table_entries[2].size_bytes
+    table_entries.at(2).data_offset = table_entries.at(1).size_bytes;
+    table_entries.at(2).size_bytes
       = static_cast<uint32_t>(indices.size() * sizeof(uint32_t));
-    table_entries[2].usage_flags = 0x02U;
-    table_entries[2].element_stride = 0U;
-    table_entries[2].element_format = static_cast<uint8_t>(Format::kR32UInt);
+    table_entries.at(2).usage_flags = 0x02U;
+    table_entries.at(2).element_stride = 0U;
+    table_entries.at(2).element_format = static_cast<uint8_t>(Format::kR32UInt);
 
     auto buffer_data = std::vector<std::byte> {};
-    buffer_data.reserve(static_cast<size_t>(table_entries[1].size_bytes)
-      + static_cast<size_t>(table_entries[2].size_bytes));
+    buffer_data.reserve(static_cast<size_t>(table_entries.at(1).size_bytes)
+      + static_cast<size_t>(table_entries.at(2).size_bytes));
     const auto* vertex_bytes
       = reinterpret_cast<const std::byte*>(vertices.data());
     buffer_data.insert(buffer_data.end(), vertex_bytes,
-      vertex_bytes + table_entries[1].size_bytes);
+      vertex_bytes + table_entries.at(1).size_bytes);
     const auto* index_bytes
       = reinterpret_cast<const std::byte*>(indices.data());
     buffer_data.insert(buffer_data.end(), index_bytes,
-      index_bytes + table_entries[2].size_bytes);
+      index_bytes + table_entries.at(2).size_bytes);
 
     auto table_bytes = std::vector<std::byte> {};
     table_bytes.reserve(sizeof(table_entries));
@@ -636,7 +704,16 @@ namespace {
 
     auto writer = LooseCookedWriter(cooked_root);
     writer.WriteAssetDescriptor(key, data::AssetType::kGeometry, virtual_path,
-      relpath, std::span<const std::byte>(descriptor_bytes));
+      relpath, std::span<const std::byte>(descriptor_bytes),
+      data::AssetReferences::Create(
+        {
+          { .kind = data::ResourceKind::kBuffer,
+            .index = oxygen::ResourceIndexT { 1U } },
+          { .kind = data::ResourceKind::kBuffer,
+            .index = oxygen::ResourceIndexT { 2U } },
+        },
+        {})
+        .value());
     (void)writer.Finish();
 
     const auto layout = LooseCookedLayout {};
@@ -666,7 +743,7 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
   const auto cooked_root = MakeTempCookedRoot("complex_fixture");
 
   RegisterStubGeometryAsset(
@@ -692,7 +769,9 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     / std::filesystem::path("Physics/Shapes/chassis_compound.ocshape"));
   const auto shape_desc
     = ReadStructAt<phys::CollisionShapeAssetDesc>(shape_bytes, 0);
-  ASSERT_TRUE(shape_desc.has_value());
+  if (!shape_desc.has_value()) {
+    FAIL() << "Expected shape_desc to contain a value";
+  }
   EXPECT_EQ(shape_desc->shape_type, phys::ShapeType::kCompound);
   EXPECT_EQ(shape_desc->shape_params.compound.child_count, 2U);
 
@@ -701,8 +780,12 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   const auto child1 = ReadStructAt<phys::CompoundShapeChildDesc>(shape_bytes,
     static_cast<size_t>(shape_desc->shape_params.compound.child_byte_offset)
       + sizeof(phys::CompoundShapeChildDesc));
-  ASSERT_TRUE(child0.has_value());
-  ASSERT_TRUE(child1.has_value());
+  if (!child0.has_value()) {
+    FAIL() << "Expected child0 to contain a value";
+  }
+  if (!child1.has_value()) {
+    FAIL() << "Expected child1 to contain a value";
+  }
   EXPECT_EQ(
     static_cast<phys::ShapeType>(child0->shape_type), phys::ShapeType::kBox);
   EXPECT_EQ(
@@ -717,7 +800,9 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   const auto sidecar_bytes = ReadBinaryFile(
     cooked_root / std::filesystem::path("Scenes/ComplexScene.opscene"));
   const auto parsed_sidecar = ParsePhysicsSidecarFile(sidecar_bytes);
-  ASSERT_TRUE(parsed_sidecar.has_value());
+  if (!parsed_sidecar.has_value()) {
+    FAIL() << "Expected parsed_sidecar to contain a value";
+  }
   EXPECT_EQ(parsed_sidecar->descriptor.target_scene_key,
     data::AssetKey::FromVirtualPath(kSceneVirtualPath));
   EXPECT_EQ(parsed_sidecar->descriptor.target_node_count, 10U);
@@ -728,8 +813,8 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
 
   for (size_t i = 1; i < parsed_sidecar->directory.size(); ++i) {
     EXPECT_LT(
-      static_cast<uint32_t>(parsed_sidecar->directory[i - 1].binding_type),
-      static_cast<uint32_t>(parsed_sidecar->directory[i].binding_type));
+      static_cast<uint32_t>(parsed_sidecar->directory.at(i - 1).binding_type),
+      static_cast<uint32_t>(parsed_sidecar->directory.at(i).binding_type));
   }
 
   const auto rigid_table
@@ -742,15 +827,27 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     = FindTable(*parsed_sidecar, phys::PhysicsBindingType::kVehicle);
   const auto wheel_table
     = FindTable(*parsed_sidecar, phys::PhysicsBindingType::kVehicleWheel);
-  ASSERT_TRUE(rigid_table.has_value());
-  ASSERT_TRUE(soft_table.has_value());
-  ASSERT_TRUE(joint_table.has_value());
-  ASSERT_TRUE(vehicle_table.has_value());
-  ASSERT_TRUE(wheel_table.has_value());
+  if (!rigid_table.has_value()) {
+    FAIL() << "Expected rigid_table to contain a value";
+  }
+  if (!soft_table.has_value()) {
+    FAIL() << "Expected soft_table to contain a value";
+  }
+  if (!joint_table.has_value()) {
+    FAIL() << "Expected joint_table to contain a value";
+  }
+  if (!vehicle_table.has_value()) {
+    FAIL() << "Expected vehicle_table to contain a value";
+  }
+  if (!wheel_table.has_value()) {
+    FAIL() << "Expected wheel_table to contain a value";
+  }
 
   const auto rigid_record = ReadStructAt<phys::RigidBodyBindingRecord>(
     sidecar_bytes, static_cast<size_t>(rigid_table->table.offset));
-  ASSERT_TRUE(rigid_record.has_value());
+  if (!rigid_record.has_value()) {
+    FAIL() << "Expected rigid_record to contain a value";
+  }
   EXPECT_EQ(rigid_record->shape_asset_key,
     data::AssetKey::FromVirtualPath(kShapeVirtualPath));
   EXPECT_EQ(rigid_record->material_asset_key,
@@ -759,7 +856,9 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   const auto soft_record_offset = static_cast<size_t>(soft_table->table.offset);
   const auto soft_record = ReadStructAt<phys::SoftBodyBindingRecord>(
     sidecar_bytes, soft_record_offset);
-  ASSERT_TRUE(soft_record.has_value());
+  if (!soft_record.has_value()) {
+    FAIL() << "Expected soft_record to contain a value";
+  }
   EXPECT_EQ(soft_record->collision_layer, 2U);
   EXPECT_EQ(soft_record->collision_mask, 0xFFFFFFFFU);
   EXPECT_EQ(soft_record->pinned_vertex_count, 3U);
@@ -782,12 +881,16 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
 
   const auto joint_record = ReadStructAt<phys::JointBindingRecord>(
     sidecar_bytes, static_cast<size_t>(joint_table->table.offset));
-  ASSERT_TRUE(joint_record.has_value());
+  if (!joint_record.has_value()) {
+    FAIL() << "Expected joint_record to contain a value";
+  }
   EXPECT_FALSE(joint_record->constraint_asset_key.IsNil());
 
   const auto vehicle_record = ReadStructAt<phys::VehicleBindingRecord>(
     sidecar_bytes, static_cast<size_t>(vehicle_table->table.offset));
-  ASSERT_TRUE(vehicle_record.has_value());
+  if (!vehicle_record.has_value()) {
+    FAIL() << "Expected vehicle_record to contain a value";
+  }
   EXPECT_EQ(vehicle_record->wheel_slice_offset, 0U);
   EXPECT_EQ(vehicle_record->wheel_slice_count, 4U);
   EXPECT_FALSE(vehicle_record->constraint_asset_key.IsNil());
@@ -796,22 +899,22 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     sidecar_bytes, static_cast<size_t>(wheel_table->table.offset),
     wheel_table->table.count, wheel_table->table.entry_size);
   ASSERT_EQ(wheel_records.size(), 4U);
-  EXPECT_EQ(wheel_records[0].wheel_node_index, 5U);
-  EXPECT_EQ(wheel_records[0].axle_index, 0U);
-  EXPECT_EQ(wheel_records[0].side, phys::VehicleWheelSide::kLeft);
-  EXPECT_FLOAT_EQ(wheel_records[0].backend_scalars.jolt.wheel_castor, 0.50F);
-  EXPECT_EQ(wheel_records[1].wheel_node_index, 6U);
-  EXPECT_EQ(wheel_records[1].axle_index, 0U);
-  EXPECT_EQ(wheel_records[1].side, phys::VehicleWheelSide::kRight);
-  EXPECT_FLOAT_EQ(wheel_records[1].backend_scalars.jolt.wheel_castor, 0.60F);
-  EXPECT_EQ(wheel_records[2].wheel_node_index, 7U);
-  EXPECT_EQ(wheel_records[2].axle_index, 1U);
-  EXPECT_EQ(wheel_records[2].side, phys::VehicleWheelSide::kLeft);
-  EXPECT_FLOAT_EQ(wheel_records[2].backend_scalars.jolt.wheel_castor, 0.70F);
-  EXPECT_EQ(wheel_records[3].wheel_node_index, 8U);
-  EXPECT_EQ(wheel_records[3].axle_index, 1U);
-  EXPECT_EQ(wheel_records[3].side, phys::VehicleWheelSide::kRight);
-  EXPECT_FLOAT_EQ(wheel_records[3].backend_scalars.jolt.wheel_castor, 0.80F);
+  EXPECT_EQ(wheel_records.at(0).wheel_node_index, 5U);
+  EXPECT_EQ(wheel_records.at(0).axle_index, 0U);
+  EXPECT_EQ(wheel_records.at(0).side, phys::VehicleWheelSide::kLeft);
+  EXPECT_FLOAT_EQ(wheel_records.at(0).backend_scalars.jolt.wheel_castor, 0.50F);
+  EXPECT_EQ(wheel_records.at(1).wheel_node_index, 6U);
+  EXPECT_EQ(wheel_records.at(1).axle_index, 0U);
+  EXPECT_EQ(wheel_records.at(1).side, phys::VehicleWheelSide::kRight);
+  EXPECT_FLOAT_EQ(wheel_records.at(1).backend_scalars.jolt.wheel_castor, 0.60F);
+  EXPECT_EQ(wheel_records.at(2).wheel_node_index, 7U);
+  EXPECT_EQ(wheel_records.at(2).axle_index, 1U);
+  EXPECT_EQ(wheel_records.at(2).side, phys::VehicleWheelSide::kLeft);
+  EXPECT_FLOAT_EQ(wheel_records.at(2).backend_scalars.jolt.wheel_castor, 0.70F);
+  EXPECT_EQ(wheel_records.at(3).wheel_node_index, 8U);
+  EXPECT_EQ(wheel_records.at(3).axle_index, 1U);
+  EXPECT_EQ(wheel_records.at(3).side, phys::VehicleWheelSide::kRight);
+  EXPECT_FLOAT_EQ(wheel_records.at(3).backend_scalars.jolt.wheel_castor, 0.80F);
 
   const auto physics_table = ParsePhysicsResourceTable(
     cooked_root / std::filesystem::path("Physics/Resources/physics.table"));
@@ -845,10 +948,10 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     if (offset > physics_data.size() || physics_data.size() - offset < size) {
       return false;
     }
-    return physics_data[offset + 0U] == std::byte { 'O' }
-    && physics_data[offset + 1U] == std::byte { 'P' }
-    && physics_data[offset + 2U] == std::byte { 'H' }
-    && physics_data[offset + 3U] == std::byte { 'B' };
+    return physics_data.at(offset + 0U) == std::byte { 'O' }
+    && physics_data.at(offset + 1U) == std::byte { 'P' }
+    && physics_data.at(offset + 2U) == std::byte { 'H' }
+    && physics_data.at(offset + 3U) == std::byte { 'B' };
   };
   EXPECT_FALSE(is_legacy_authored_magic(*soft_resource));
   EXPECT_FALSE(is_legacy_authored_magic(*joint_resource));
@@ -864,7 +967,7 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
   const auto cooked_root = MakeTempCookedRoot("incremental_recook_stability");
 
   RegisterStubGeometryAsset(
@@ -911,10 +1014,18 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     before_inspection, data::AssetKey::FromVirtualPath(kShapeVirtualPath));
   const auto geometry_asset_before = FindInspectionAsset(
     before_inspection, data::AssetKey::FromVirtualPath(kGeometryVirtualPath));
-  ASSERT_TRUE(scene_asset_before.has_value());
-  ASSERT_TRUE(material_asset_before.has_value());
-  ASSERT_TRUE(shape_asset_before.has_value());
-  ASSERT_TRUE(geometry_asset_before.has_value());
+  if (!scene_asset_before.has_value()) {
+    FAIL() << "Expected scene_asset_before to contain a value";
+  }
+  if (!material_asset_before.has_value()) {
+    FAIL() << "Expected material_asset_before to contain a value";
+  }
+  if (!shape_asset_before.has_value()) {
+    FAIL() << "Expected shape_asset_before to contain a value";
+  }
+  if (!geometry_asset_before.has_value()) {
+    FAIL() << "Expected geometry_asset_before to contain a value";
+  }
 
   const auto second_bindings
     = BuildComplexSidecarBindings({ 1U, 4U, 6U }, { 2U, 3U });
@@ -944,10 +1055,18 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     after_inspection, data::AssetKey::FromVirtualPath(kShapeVirtualPath));
   const auto geometry_asset_after = FindInspectionAsset(
     after_inspection, data::AssetKey::FromVirtualPath(kGeometryVirtualPath));
-  ASSERT_TRUE(scene_asset_after.has_value());
-  ASSERT_TRUE(material_asset_after.has_value());
-  ASSERT_TRUE(shape_asset_after.has_value());
-  ASSERT_TRUE(geometry_asset_after.has_value());
+  if (!scene_asset_after.has_value()) {
+    FAIL() << "Expected scene_asset_after to contain a value";
+  }
+  if (!material_asset_after.has_value()) {
+    FAIL() << "Expected material_asset_after to contain a value";
+  }
+  if (!shape_asset_after.has_value()) {
+    FAIL() << "Expected shape_asset_after to contain a value";
+  }
+  if (!geometry_asset_after.has_value()) {
+    FAIL() << "Expected geometry_asset_after to contain a value";
+  }
 
   EXPECT_EQ(scene_asset_before->descriptor_sha256,
     scene_asset_after->descriptor_sha256);
@@ -960,10 +1079,12 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
 
   const auto sidecar_key = data::AssetKey::FromVirtualPath(kSidecarVirtualPath);
   const auto sidecar_entry = FindInspectionAsset(after_inspection, sidecar_key);
-  ASSERT_TRUE(sidecar_entry.has_value());
+  if (!sidecar_entry.has_value()) {
+    FAIL() << "Expected sidecar_entry to contain a value";
+  }
   const auto sidecar_entry_count
     = std::ranges::count_if(after_inspection.Assets(),
-      [&](const auto& asset) { return asset.key == sidecar_key; });
+      [&](const auto& asset) -> auto { return asset.key == sidecar_key; });
   EXPECT_EQ(sidecar_entry_count, 1);
 
   service.Stop();
@@ -976,7 +1097,7 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
   const auto cooked_root = MakeTempCookedRoot("repeat_recook_hash_stability");
 
   RegisterStubGeometryAsset(
@@ -1034,11 +1155,21 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     before_inspection, data::AssetKey::FromVirtualPath(kShapeVirtualPath));
   const auto geometry_asset_before = FindInspectionAsset(
     before_inspection, data::AssetKey::FromVirtualPath(kGeometryVirtualPath));
-  ASSERT_TRUE(scene_asset_before.has_value());
-  ASSERT_TRUE(sidecar_asset_before.has_value());
-  ASSERT_TRUE(material_asset_before.has_value());
-  ASSERT_TRUE(shape_asset_before.has_value());
-  ASSERT_TRUE(geometry_asset_before.has_value());
+  if (!scene_asset_before.has_value()) {
+    FAIL() << "Expected scene_asset_before to contain a value";
+  }
+  if (!sidecar_asset_before.has_value()) {
+    FAIL() << "Expected sidecar_asset_before to contain a value";
+  }
+  if (!material_asset_before.has_value()) {
+    FAIL() << "Expected material_asset_before to contain a value";
+  }
+  if (!shape_asset_before.has_value()) {
+    FAIL() << "Expected shape_asset_before to contain a value";
+  }
+  if (!geometry_asset_before.has_value()) {
+    FAIL() << "Expected geometry_asset_before to contain a value";
+  }
 
   ASSERT_TRUE(SubmitAndWait(service,
     MakePhysicsSidecarRequest(cooked_root, kSceneVirtualPath, bindings))
@@ -1064,8 +1195,8 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   EXPECT_EQ(physics_data_digest_before, physics_data_digest_after);
 
   for (size_t i = 0; i < physics_table_before.size(); ++i) {
-    const auto& before = physics_table_before[i];
-    const auto& after = physics_table_after[i];
+    const auto& before = physics_table_before.at(i);
+    const auto& after = physics_table_after.at(i);
     EXPECT_EQ(before.resource_asset_key, after.resource_asset_key);
     EXPECT_EQ(before.format, after.format);
     EXPECT_EQ(before.size_bytes, after.size_bytes);
@@ -1085,11 +1216,21 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     after_inspection, data::AssetKey::FromVirtualPath(kShapeVirtualPath));
   const auto geometry_asset_after = FindInspectionAsset(
     after_inspection, data::AssetKey::FromVirtualPath(kGeometryVirtualPath));
-  ASSERT_TRUE(scene_asset_after.has_value());
-  ASSERT_TRUE(sidecar_asset_after.has_value());
-  ASSERT_TRUE(material_asset_after.has_value());
-  ASSERT_TRUE(shape_asset_after.has_value());
-  ASSERT_TRUE(geometry_asset_after.has_value());
+  if (!scene_asset_after.has_value()) {
+    FAIL() << "Expected scene_asset_after to contain a value";
+  }
+  if (!sidecar_asset_after.has_value()) {
+    FAIL() << "Expected sidecar_asset_after to contain a value";
+  }
+  if (!material_asset_after.has_value()) {
+    FAIL() << "Expected material_asset_after to contain a value";
+  }
+  if (!shape_asset_after.has_value()) {
+    FAIL() << "Expected shape_asset_after to contain a value";
+  }
+  if (!geometry_asset_after.has_value()) {
+    FAIL() << "Expected geometry_asset_after to contain a value";
+  }
 
   EXPECT_EQ(scene_asset_before->descriptor_sha256,
     scene_asset_after->descriptor_sha256);
@@ -1112,7 +1253,7 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
-    = oxygen::Finally([&service]() { service.Stop(); });
+    = oxygen::Finally([&service] -> void { service.Stop(); });
   const auto cooked_root = MakeTempCookedRoot("backend_mismatch_hard_fail");
 
   RegisterStubGeometryAsset(
@@ -1132,10 +1273,10 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   const auto report = SubmitAndWait(service, std::move(request));
   EXPECT_FALSE(report.success);
 
-  const auto has_backend_mismatch
-    = std::ranges::any_of(report.diagnostics, [](const auto& diagnostic) {
-        return diagnostic.code == "physics.sidecar.backend_mismatch";
-      });
+  const auto has_backend_mismatch = std::ranges::any_of(
+    report.diagnostics, [](const auto& diagnostic) -> auto {
+      return diagnostic.code == "physics.sidecar.backend_mismatch";
+    });
   EXPECT_TRUE(has_backend_mismatch);
 
   service.Stop();

@@ -4,17 +4,34 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <ios>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <system_error>
+#include <utility>
+#include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Cooker/Import/BufferImportTypes.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/BufferEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/WindowsFileWriter.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen::co;
@@ -28,8 +45,9 @@ namespace {
 //! Aligns a value up to the alignment boundary.
 constexpr auto AlignUp(uint64_t value, uint64_t alignment) -> uint64_t
 {
-  if (alignment <= 1)
+  if (alignment <= 1) {
     return value;
+  }
   const auto remainder = value % alignment;
   return (remainder == 0) ? value : (value + (alignment - remainder));
 }
@@ -66,7 +84,7 @@ auto MakeTestBuffer(size_t size_bytes, uint32_t usage_flags = 0x01,
   payload.data.resize(size_bytes);
   for (size_t i = 0; i < size_bytes; ++i) {
     // Mix fill_byte with position for unique content
-    payload.data[i]
+    payload.data.at(i)
       = static_cast<std::byte>(static_cast<uint8_t>(fill_byte) ^ (i & 0xFF));
   }
 
@@ -150,7 +168,7 @@ protected:
   auto FinalizeTables() -> bool
   {
     bool ok = false;
-    co::Run(*loop_, [&]() -> Co<> {
+    co::Run(*loop_, [&] -> Co<> {
       ok = co_await table_registry_->FinalizeAll();
       co_return;
     });
@@ -177,10 +195,10 @@ NOLINT_TEST_F(BufferEmitterTest, EmitSingleBufferReturnsIndexOne)
   // Act
   uint32_t index = 0;
   bool success = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     index = emitter.Emit(std::move(payload), "buf0");
 
-    success = co_await emitter.Finalize();
+    success = (co_await emitter.Finalize()).has_value();
   });
 
   // Assert
@@ -198,20 +216,20 @@ NOLINT_TEST_F(BufferEmitterTest, EmitMultipleBuffersReturnsSequentialIndices)
   // Act
   std::vector<uint32_t> indices;
   bool success = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     for (int i = 0; i < 5; ++i) {
-      auto payload = MakeTestBuffer(512 + i * 100, 0x01, 16, 32);
+      auto payload = MakeTestBuffer(512 + (i * 100), 0x01, 16, 32);
       indices.push_back(
         emitter.Emit(std::move(payload), "buf" + std::to_string(i)));
     }
 
-    success = co_await emitter.Finalize();
+    success = (co_await emitter.Finalize()).has_value();
   });
 
   // Assert
   EXPECT_EQ(indices.size(), 5);
   for (uint32_t i = 0; i < 5; ++i) {
-    EXPECT_EQ(indices[i], i + 1);
+    EXPECT_EQ(indices.at(i), i + 1);
   }
   EXPECT_EQ(emitter.Count(), 5);
   EXPECT_TRUE(success);
@@ -227,7 +245,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitDuplicateBufferReturnsSameIndex)
   uint32_t idx0 = 0;
   uint32_t idx1 = 0;
   bool tables_ok = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto buf0 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0xAB });
     auto buf1 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0xAB });
 
@@ -237,7 +255,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitDuplicateBufferReturnsSameIndex)
 
     idx0 = emitter.Emit(std::move(buf0), "dupe");
     idx1 = emitter.Emit(std::move(buf1), "dupe");
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
     tables_ok = co_await table_registry_->FinalizeAll();
     co_return;
   });
@@ -262,7 +280,7 @@ NOLINT_TEST_F(BufferEmitterTest, DedupNoHashIdenticalPayloadAcrossSalts)
   uint32_t idx0 = 0;
   uint32_t idx1 = 0;
   bool tables_ok = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto buf0 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0xCD });
     auto buf1 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0xCD });
     buf0.content_hash = 0;
@@ -271,7 +289,7 @@ NOLINT_TEST_F(BufferEmitterTest, DedupNoHashIdenticalPayloadAcrossSalts)
     idx0 = emitter.Emit(std::move(buf0), "salt_a");
     idx1 = emitter.Emit(std::move(buf1), "salt_b");
 
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
     tables_ok = co_await table_registry_->FinalizeAll();
     co_return;
   });
@@ -293,7 +311,7 @@ NOLINT_TEST_F(
   std::vector<ImportDiagnostic> diagnostics;
   BufferEmitter::Config config {};
   config.collision_policy = DedupCollisionPolicy::kWarnKeepFirst;
-  config.on_dedup_diagnostic = [&](ImportDiagnostic diagnostic) {
+  config.on_dedup_diagnostic = [&](ImportDiagnostic diagnostic) -> void {
     diagnostics.push_back(std::move(diagnostic));
   };
   BufferEmitter emitter(
@@ -302,7 +320,7 @@ NOLINT_TEST_F(
   uint32_t idx0 = 0;
   uint32_t idx1 = 0;
   bool tables_ok = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto buf0 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0xEF });
     auto buf1 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0xE0 });
     buf0.content_hash = 0;
@@ -311,7 +329,7 @@ NOLINT_TEST_F(
     idx0 = emitter.Emit(std::move(buf0), "same_salt");
     idx1 = emitter.Emit(std::move(buf1), "same_salt");
 
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
     tables_ok = co_await table_registry_->FinalizeAll();
     co_return;
   });
@@ -335,7 +353,7 @@ NOLINT_TEST_F(BufferEmitterTest, CollisionPolicyWarnReplaceExpectedToEmitNew)
   std::vector<ImportDiagnostic> diagnostics;
   BufferEmitter::Config config {};
   config.collision_policy = DedupCollisionPolicy::kWarnReplace;
-  config.on_dedup_diagnostic = [&](ImportDiagnostic diagnostic) {
+  config.on_dedup_diagnostic = [&](ImportDiagnostic diagnostic) -> void {
     diagnostics.push_back(std::move(diagnostic));
   };
   BufferEmitter emitter(
@@ -344,14 +362,14 @@ NOLINT_TEST_F(BufferEmitterTest, CollisionPolicyWarnReplaceExpectedToEmitNew)
   uint32_t idx0 = 0;
   uint32_t idx1 = 0;
   bool tables_ok = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto buf0 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0x11 });
     auto buf1 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0x22 });
     buf0.content_hash = 0;
     buf1.content_hash = 0;
     idx0 = emitter.Emit(std::move(buf0), "same_salt");
     idx1 = emitter.Emit(std::move(buf1), "same_salt");
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
     tables_ok = co_await table_registry_->FinalizeAll();
     co_return;
   });
@@ -373,7 +391,7 @@ NOLINT_TEST_F(BufferEmitterTest, CollisionPolicyErrorExpectedToThrow)
   BufferEmitter emitter(
     *writer_, BufferAggregator(), Layout(), test_dir_, std::move(config));
 
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto buf0 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0x44 });
     auto buf1 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0x55 });
     buf0.content_hash = 0;
@@ -393,7 +411,7 @@ NOLINT_TEST_F(
   std::vector<ImportDiagnostic> diagnostics;
   BufferEmitter::Config config {};
   config.collision_policy = DedupCollisionPolicy::kWarnKeepFirst;
-  config.on_dedup_diagnostic = [&](ImportDiagnostic diagnostic) {
+  config.on_dedup_diagnostic = [&](ImportDiagnostic diagnostic) -> void {
     diagnostics.push_back(std::move(diagnostic));
   };
   BufferEmitter emitter(
@@ -402,7 +420,7 @@ NOLINT_TEST_F(
   uint32_t idx0 = 0;
   uint32_t idx1 = 0;
   bool tables_ok = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto buf0 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0x31 });
     auto buf1 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0x32 });
     buf0.content_hash = 0x1111222233334444ULL;
@@ -411,7 +429,7 @@ NOLINT_TEST_F(
     idx0 = emitter.Emit(std::move(buf0), "same_salt");
     idx1 = emitter.Emit(std::move(buf1), "same_salt");
 
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
     tables_ok = co_await table_registry_->FinalizeAll();
     co_return;
   });
@@ -429,7 +447,7 @@ NOLINT_TEST_F(BufferEmitterTest, HashedSameSaltIdenticalContentExpectedToDedup)
   std::vector<ImportDiagnostic> diagnostics;
   BufferEmitter::Config config {};
   config.collision_policy = DedupCollisionPolicy::kWarnReplace;
-  config.on_dedup_diagnostic = [&](ImportDiagnostic diagnostic) {
+  config.on_dedup_diagnostic = [&](ImportDiagnostic diagnostic) -> void {
     diagnostics.push_back(std::move(diagnostic));
   };
   BufferEmitter emitter(
@@ -438,7 +456,7 @@ NOLINT_TEST_F(BufferEmitterTest, HashedSameSaltIdenticalContentExpectedToDedup)
   uint32_t idx0 = 0;
   uint32_t idx1 = 0;
   bool tables_ok = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto buf0 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0x7A });
     auto buf1 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0x7A });
     buf0.content_hash = 0xDEADBEEFCAFEBABEULL;
@@ -447,7 +465,7 @@ NOLINT_TEST_F(BufferEmitterTest, HashedSameSaltIdenticalContentExpectedToDedup)
     idx0 = emitter.Emit(std::move(buf0), "same_salt");
     idx1 = emitter.Emit(std::move(buf1), "same_salt");
 
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
     tables_ok = co_await table_registry_->FinalizeAll();
     co_return;
   });
@@ -467,14 +485,14 @@ NOLINT_TEST_F(
   constexpr int kEmitRequests = 5;
 
   bool tables_ok = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     for (int i = 0; i < kEmitRequests; ++i) {
       auto buf = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0xA5 });
       buf.content_hash = 0;
       (void)emitter.Emit(std::move(buf), "same_salt");
     }
 
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
     tables_ok = co_await table_registry_->FinalizeAll();
     co_return;
   });
@@ -498,11 +516,11 @@ NOLINT_TEST_F(BufferEmitterTest, EmitReturnsImmediatelyBeforeIOCompletes)
   uint32_t index = 0;
   bool had_pending = false;
   bool success = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     index = emitter.Emit(std::move(payload), "buf0");
     had_pending = emitter.PendingCount() > 0;
 
-    success = co_await emitter.Finalize();
+    success = (co_await emitter.Finalize()).has_value();
   });
 
   // Assert
@@ -518,7 +536,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitAfterFinalizeThrows)
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
 
   // Act & Assert
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     const auto success = co_await emitter.Finalize();
     EXPECT_TRUE(success);
 
@@ -537,14 +555,14 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeTableFileHasCorrectPackedSize)
   constexpr int kBufferCount = 3;
 
   bool tables_ok = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     for (int i = 0; i < kBufferCount; ++i) {
       auto idx = emitter.Emit(
         MakeTestBuffer(256, 0x01, 16, 32, static_cast<std::byte>(0xA0 + i)),
         "buf" + std::to_string(i));
       EXPECT_EQ(idx, static_cast<uint32_t>(i + 1));
     }
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
     tables_ok = co_await table_registry_->FinalizeAll();
     co_return;
   });
@@ -579,14 +597,14 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeTableEntriesHaveCorrectAlignedOffsets)
   constexpr uint64_t kAlign2 = 4;
 
   bool tables_ok = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto idx0 = emitter.Emit(MakeTestBuffer(kSize0, 0x01, kAlign0, 32), "buf0");
     auto idx1 = emitter.Emit(MakeTestBuffer(kSize1, 0x01, kAlign1, 32), "buf1");
     auto idx2 = emitter.Emit(MakeTestBuffer(kSize2, 0x02, kAlign2, 0), "buf2");
     EXPECT_EQ(idx0, 1);
     EXPECT_EQ(idx1, 2);
     EXPECT_EQ(idx2, 3);
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
     tables_ok = co_await table_registry_->FinalizeAll();
     co_return;
   });
@@ -604,19 +622,19 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeTableEntriesHaveCorrectAlignedOffsets)
   const auto expected_offset1 = AlignUp(expected_offset0 + kSize0, kAlign1);
   const auto expected_offset2 = AlignUp(expected_offset1 + kSize1, kAlign2);
 
-  EXPECT_EQ(table[1].data_offset, expected_offset0);
-  EXPECT_EQ(table[1].size_bytes, kSize0);
+  EXPECT_EQ(table.at(1).data_offset, expected_offset0);
+  EXPECT_EQ(table.at(1).size_bytes, kSize0);
 
-  EXPECT_EQ(table[2].data_offset, expected_offset1);
-  EXPECT_EQ(table[2].size_bytes, kSize1);
+  EXPECT_EQ(table.at(2).data_offset, expected_offset1);
+  EXPECT_EQ(table.at(2).size_bytes, kSize1);
 
-  EXPECT_EQ(table[3].data_offset, expected_offset2);
-  EXPECT_EQ(table[3].size_bytes, kSize2);
+  EXPECT_EQ(table.at(3).data_offset, expected_offset2);
+  EXPECT_EQ(table.at(3).size_bytes, kSize2);
 
   // Verify all offsets are properly aligned
-  EXPECT_EQ(table[1].data_offset % kAlign0, 0);
-  EXPECT_EQ(table[2].data_offset % kAlign1, 0);
-  EXPECT_EQ(table[3].data_offset % kAlign2, 0);
+  EXPECT_EQ(table.at(1).data_offset % kAlign0, 0);
+  EXPECT_EQ(table.at(2).data_offset % kAlign1, 0);
+  EXPECT_EQ(table.at(3).data_offset % kAlign2, 0);
 }
 
 //! Verify table entries preserve buffer metadata (usage, stride, format, hash).
@@ -642,12 +660,12 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeTableEntriesPreserveMetadata)
   index_payload.content_hash = 0x1234567890ABCDEF;
 
   bool tables_ok = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto idx0 = emitter.Emit(std::move(vertex_payload), "vb");
     auto idx1 = emitter.Emit(std::move(index_payload), "ib");
     EXPECT_EQ(idx0, 1);
     EXPECT_EQ(idx1, 2);
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
     tables_ok = co_await table_registry_->FinalizeAll();
     co_return;
   });
@@ -661,18 +679,18 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeTableEntriesPreserveMetadata)
   ASSERT_EQ(table.size(), 3);
 
   // Vertex buffer entry
-  EXPECT_EQ(table[1].size_bytes, 512);
-  EXPECT_EQ(table[1].usage_flags, 0x01);
-  EXPECT_EQ(table[1].element_stride, 32);
-  EXPECT_EQ(table[1].element_format, 0);
-  EXPECT_EQ(table[1].content_hash, 0xDEADBEEFCAFEBABE);
+  EXPECT_EQ(table.at(1).size_bytes, 512);
+  EXPECT_EQ(table.at(1).usage_flags, 0x01);
+  EXPECT_EQ(table.at(1).element_stride, 32);
+  EXPECT_EQ(table.at(1).element_format, 0);
+  EXPECT_EQ(table.at(1).content_hash, 0xDEADBEEFCAFEBABE);
 
   // Index buffer entry
-  EXPECT_EQ(table[2].size_bytes, 256);
-  EXPECT_EQ(table[2].usage_flags, 0x02);
-  EXPECT_EQ(table[2].element_stride, 0);
-  EXPECT_EQ(table[2].element_format, 0);
-  EXPECT_EQ(table[2].content_hash, 0x1234567890ABCDEF);
+  EXPECT_EQ(table.at(2).size_bytes, 256);
+  EXPECT_EQ(table.at(2).usage_flags, 0x02);
+  EXPECT_EQ(table.at(2).element_stride, 0);
+  EXPECT_EQ(table.at(2).element_format, 0);
+  EXPECT_EQ(table.at(2).content_hash, 0x1234567890ABCDEF);
 }
 
 //! Verify data file contains correct content at aligned offsets.
@@ -694,12 +712,12 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeDataFileContainsCorrectContent)
   buf1.alignment = 16;
   buf1.usage_flags = 0x01;
 
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto idx0 = emitter.Emit(std::move(buf0), "buf0");
     auto idx1 = emitter.Emit(std::move(buf1), "buf1");
     EXPECT_EQ(idx0, 1);
     EXPECT_EQ(idx1, 2);
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 
   // Assert: Read data file and verify content
@@ -709,7 +727,7 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeDataFileContainsCorrectContent)
   // Buffer 0 at offset 0
   ASSERT_GE(data_file.size(), 100);
   for (size_t i = 0; i < 100; ++i) {
-    EXPECT_EQ(data_file[i], std::byte { 0xAA })
+    EXPECT_EQ(data_file.at(i), std::byte { 0xAA })
       << "Buffer 0 content mismatch at byte " << i;
   }
 
@@ -717,13 +735,13 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeDataFileContainsCorrectContent)
   constexpr auto kOffset1 = AlignUp(100, 16);
   ASSERT_GE(data_file.size(), kOffset1 + 200);
   for (size_t i = 0; i < 200; ++i) {
-    EXPECT_EQ(data_file[kOffset1 + i], std::byte { 0xBB })
+    EXPECT_EQ(data_file.at(kOffset1 + i), std::byte { 0xBB })
       << "Buffer 1 content mismatch at byte " << i;
   }
 
   // Verify padding between buffers is zeros
   for (size_t i = 100; i < kOffset1; ++i) {
-    EXPECT_EQ(data_file[i], std::byte { 0x00 })
+    EXPECT_EQ(data_file.at(i), std::byte { 0x00 })
       << "Padding should be zeros at byte " << i;
   }
 }
@@ -738,12 +756,12 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeDataFileSizeIncludesPadding)
   constexpr size_t kSize1 = 200;
   constexpr uint64_t kAlign = 16;
 
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto idx0 = emitter.Emit(MakeTestBuffer(kSize0, 0x01, kAlign, 32), "buf0");
     auto idx1 = emitter.Emit(MakeTestBuffer(kSize1, 0x01, kAlign, 32), "buf1");
     EXPECT_EQ(idx0, 1);
     EXPECT_EQ(idx1, 2);
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 
   // Assert: Data file size = padding + data
@@ -771,7 +789,8 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeWaitsForPendingIO)
 
   // Act
   bool success = false;
-  co::Run(*loop_, [&]() -> Co<> { success = co_await emitter.Finalize(); });
+  co::Run(*loop_,
+    [&] -> Co<> { success = (co_await emitter.Finalize()).has_value(); });
 
   // Assert
   EXPECT_TRUE(success);
@@ -787,7 +806,8 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeNoBuffersSucceedsWithoutWritingFiles)
 
   // Act
   bool success = false;
-  co::Run(*loop_, [&]() -> Co<> { success = co_await emitter.Finalize(); });
+  co::Run(*loop_,
+    [&] -> Co<> { success = (co_await emitter.Finalize()).has_value(); });
 
   // Assert
   EXPECT_TRUE(success);
@@ -810,7 +830,7 @@ NOLINT_TEST_F(BufferEmitterTest, DataFileSizeTracksAccumulatedSize)
 
   // Act
   bool success = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     // Assert initial state
     EXPECT_EQ(emitter.DataFileSize(), 0);
 
@@ -824,7 +844,7 @@ NOLINT_TEST_F(BufferEmitterTest, DataFileSizeTracksAccumulatedSize)
     // Second buffer: offset = AlignUp(100, 16) = 112, size 200 -> file size 312
     EXPECT_EQ(emitter.DataFileSize(), AlignUp(kSize0, kAlign) + kSize1);
 
-    success = co_await emitter.Finalize();
+    success = (co_await emitter.Finalize()).has_value();
   });
 
   // Assert
@@ -842,7 +862,7 @@ NOLINT_TEST_F(BufferEmitterTest, CountTracksEmittedBuffers)
 
   // Act & Assert
   bool success = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     for (uint32_t i = 0; i < 10; ++i) {
       auto idx = emitter.Emit(
         MakeTestBuffer(64, 0x01, 16, 32, static_cast<std::byte>(0xC0 + i)),
@@ -851,7 +871,7 @@ NOLINT_TEST_F(BufferEmitterTest, CountTracksEmittedBuffers)
       EXPECT_EQ(emitter.Count(), i + 1);
     }
 
-    success = co_await emitter.Finalize();
+    success = (co_await emitter.Finalize()).has_value();
   });
 
   EXPECT_EQ(emitter.Count(), 10);
@@ -870,10 +890,10 @@ NOLINT_TEST_F(BufferEmitterTest, EmitZeroAlignmentUsesDefaultAlignment)
   auto payload = MakeTestBuffer(100, 0x01, 0, 32);
 
   bool tables_ok = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto idx = emitter.Emit(std::move(payload), "buf0");
     EXPECT_EQ(idx, 1);
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
     tables_ok = co_await table_registry_->FinalizeAll();
     co_return;
   });
@@ -885,7 +905,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitZeroAlignmentUsesDefaultAlignment)
   const auto table = ParseBufferTable(ReadBinaryFile(table_path));
 
   ASSERT_EQ(table.size(), 2);
-  EXPECT_EQ(table[1].size_bytes, 100);
+  EXPECT_EQ(table.at(1).size_bytes, 100);
 }
 
 //! Verify large buffer emission.
@@ -899,10 +919,10 @@ NOLINT_TEST_F(BufferEmitterTest, EmitLargeBufferSucceedsWithCorrectSize)
   auto payload = MakeTestBuffer(kLargeSize, 0x01, 16, 32);
 
   bool tables_ok = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto idx = emitter.Emit(std::move(payload), "buf0");
     EXPECT_EQ(idx, 1);
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
     tables_ok = co_await table_registry_->FinalizeAll();
     co_return;
   });
@@ -918,7 +938,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitLargeBufferSucceedsWithCorrectSize)
   const auto table = ParseBufferTable(ReadBinaryFile(table_path));
 
   ASSERT_EQ(table.size(), 2);
-  EXPECT_EQ(table[1].size_bytes, kLargeSize);
+  EXPECT_EQ(table.at(1).size_bytes, kLargeSize);
 }
 
 //! Verify many small buffers with alignment padding.
@@ -932,14 +952,14 @@ NOLINT_TEST_F(BufferEmitterTest, EmitManySmallBuffersAllAlignedCorrectly)
   constexpr uint64_t kAlignment = 16;
 
   bool tables_ok = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     for (int i = 0; i < kBufferCount; ++i) {
       auto idx = emitter.Emit(MakeTestBuffer(kBufferSize, 0x01, kAlignment, 32,
                                 static_cast<std::byte>(0x10 + (i & 0x7F))),
         "buf" + std::to_string(i));
       EXPECT_EQ(idx, static_cast<uint32_t>(i + 1));
     }
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
     tables_ok = co_await table_registry_->FinalizeAll();
     co_return;
   });
@@ -954,11 +974,11 @@ NOLINT_TEST_F(BufferEmitterTest, EmitManySmallBuffersAllAlignedCorrectly)
 
   uint64_t expected_offset = 0;
   for (int i = 0; i < kBufferCount; ++i) {
-    EXPECT_EQ(table[i + 1].data_offset, expected_offset)
+    EXPECT_EQ(table.at(i + 1).data_offset, expected_offset)
       << "Buffer " << i << " has wrong offset";
-    EXPECT_EQ(table[i + 1].data_offset % kAlignment, 0)
+    EXPECT_EQ(table.at(i + 1).data_offset % kAlignment, 0)
       << "Buffer " << i << " offset not aligned";
-    EXPECT_EQ(table[i + 1].size_bytes, kBufferSize)
+    EXPECT_EQ(table.at(i + 1).size_bytes, kBufferSize)
       << "Buffer " << i << " has wrong size";
 
     // Calculate next expected offset

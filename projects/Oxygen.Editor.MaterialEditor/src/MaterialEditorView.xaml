@@ -175,6 +175,73 @@
                             </Button>
                         </Grid>
                     </editorcontrols:PropertyCard>
+
+                    <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Texture Parameters">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <controls:NumberBox
+                                MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
+                                EditSessionCompleted="NumberEditCompleted"
+                                EditSessionStarted="NumberEditStarted"
+                                Label="Normal Scale"
+                                LabelPosition="Left"
+                                Mask="~.###"
+                                NumberValue="{x:Bind ViewModel.NormalScale, Mode=TwoWay}"
+                                Tag="NormalScale" />
+                            <controls:NumberBox
+                                Grid.Column="1"
+                                MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
+                                EditSessionCompleted="NumberEditCompleted"
+                                EditSessionStarted="NumberEditStarted"
+                                Label="Occlusion Strength"
+                                LabelPosition="Left"
+                                Mask="~.###"
+                                NumberValue="{x:Bind ViewModel.OcclusionStrength, Mode=TwoWay}"
+                                Tag="OcclusionStrength" />
+                        </Grid>
+                    </editorcontrols:PropertyCard>
+                </editorcontrols:PropertiesExpander.Items>
+            </editorcontrols:PropertiesExpander>
+
+            <editorcontrols:PropertiesExpander
+                Padding="2"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                Description="Named texture assets assigned to native material channels."
+                Header="Textures"
+                HeaderIcon="{ui:FontIcon Glyph='&#xE91B;'}"
+                IsExpanded="True">
+                <editorcontrols:PropertiesExpander.Items>
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.TextureChannels, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="local:MaterialTextureChannel">
+                                <StackPanel Spacing="4">
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="180" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center" Text="{x:Bind DisplayName}" />
+                                        <ComboBox
+                                            Grid.Column="1"
+                                            DisplayMemberPath="DisplayName"
+                                            ItemsSource="{x:Bind Choices, Mode=OneWay}"
+                                            SelectedValue="{x:Bind SelectedVirtualPath, Mode=TwoWay}"
+                                            SelectedValuePath="VirtualPath" />
+                                    </Grid>
+                                    <TextBlock
+                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                        Text="{x:Bind WarningText, Mode=OneWay}"
+                                        TextWrapping="Wrap"
+                                        Visibility="{x:Bind WarningVisibility, Mode=OneWay}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </editorcontrols:PropertiesExpander.Items>
             </editorcontrols:PropertiesExpander>
 

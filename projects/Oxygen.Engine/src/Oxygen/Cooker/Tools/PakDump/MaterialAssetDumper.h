@@ -14,12 +14,11 @@
 #include <string>
 #include <vector>
 
+#include "AssetDumpHelpers.h"
+#include "AssetDumper.h"
 #include <fmt/format.h>
 
 #include <Oxygen/Data/PakFormat.h>
-
-#include "AssetDumpHelpers.h"
-#include "AssetDumper.h"
 
 namespace oxygen::content::pakdump {
 
@@ -47,6 +46,13 @@ public:
     }
 
     asset_dump_helpers::PrintAssetDescriptorHexPreview(*data, ctx);
+    const auto header = asset_dump_helpers::TryReadAssetHeader(*data);
+    if (!header
+      || header->version != oxygen::data::pak::render::kMaterialAssetVersion) {
+      std::cout
+        << "    Unsupported material descriptor version; re-cook the asset\n\n";
+      co_return;
+    }
     if (data->size() < sizeof(MaterialAssetDesc)) {
       std::cout << "    MaterialAssetDesc: (insufficient data)\n\n";
       co_return;
@@ -89,8 +95,8 @@ public:
     PrintUtils::Field("Thickness Texture", mat.thickness_texture, 8);
 
     PrintUtils::Field("Emissive Factor",
-      fmt::format("[{:.3f}, {:.3f}, {:.3f}]", mat.emissive_factor[0].ToFloat(),
-        mat.emissive_factor[1].ToFloat(), mat.emissive_factor[2].ToFloat()),
+      fmt::format("[{:.3f}, {:.3f}, {:.3f}]", mat.emissive_factor[0],
+        mat.emissive_factor[1], mat.emissive_factor[2]),
       8);
     PrintUtils::Field("Alpha Cutoff", mat.alpha_cutoff.ToFloat(), 8);
     PrintUtils::Field("IOR", mat.ior, 8);
@@ -163,7 +169,7 @@ public:
     }
 
     const size_t required_bytes
-      = sizeof(MaterialAssetDesc) + num_refs * sizeof(ShaderReferenceDesc);
+      = sizeof(MaterialAssetDesc) + (num_refs * sizeof(ShaderReferenceDesc));
     if (data->size() < required_bytes) {
       std::cout << "    Shader References (" << num_refs
                 << "): (not present in descriptor: need " << required_bytes

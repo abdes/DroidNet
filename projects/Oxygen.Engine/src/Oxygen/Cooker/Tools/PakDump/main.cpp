@@ -11,6 +11,9 @@
 #include <string>
 #include <string_view>
 
+#include "DumpContext.h"
+#include "PakFileDumper.h"
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Clap/Cli.h>
@@ -31,9 +34,6 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/OxCo/asio.h>
-
-#include "DumpContext.h"
-#include "PakFileDumper.h"
 
 namespace oxygen::engine::internal {
 struct EngineTagFactory {
@@ -192,6 +192,7 @@ auto main(int argc, char** argv) -> int
 
     PakFile pak(ctx.pak_path);
 
+    bool succeeded = false;
     asio::io_context io;
     (oxygen::co::Run)(io, [&]() -> oxygen::co::Co<> {
       oxygen::co::ThreadPool pool(io, 2);
@@ -215,14 +216,14 @@ auto main(int argc, char** argv) -> int
 
         asset_loader.AddPakFile(ctx.pak_path);
         PakFileDumper dumper(ctx);
-        co_await dumper.DumpAsync(pak, asset_loader);
+        succeeded = co_await dumper.DumpAsync(pak, asset_loader);
 
         asset_loader.Stop();
         co_return oxygen::co::kJoin;
       };
     });
 
-    return 0;
+    return succeeded ? 0 : 2;
   } catch (const std::exception& ex) {
     std::cerr << "ERROR: " << ex.what() << "\n";
     return 2;

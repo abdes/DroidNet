@@ -51,7 +51,8 @@ public:
   //! metadata.
   OXGN_DATA_API ScriptAsset(AssetKey asset_key,
     pak::scripting::ScriptAssetDesc desc,
-    const std::vector<pak::scripting::ScriptParamRecord>& default_params = {});
+    const std::vector<pak::scripting::ScriptParamRecord>& default_params = {},
+    SourceOrigin source_origin = {});
 
   ~ScriptAsset() override = default;
 
@@ -72,13 +73,13 @@ public:
     return desc_.flags;
   }
 
-  //! Returns the bytecode ScriptResource index (0 means not assigned).
+  //! Returns the bytecode descriptor-local ScriptResource reference.
   [[nodiscard]] auto GetBytecodeResourceIndex() const noexcept
   {
     return desc_.bytecode_resource_index;
   }
 
-  //! Returns the source ScriptResource index (0 means not assigned).
+  //! Returns the source descriptor-local ScriptResource reference.
   [[nodiscard]] auto GetSourceResourceIndex() const noexcept
   {
     return desc_.source_resource_index;
@@ -90,7 +91,7 @@ public:
     return (static_cast<uint32_t>(desc_.flags)
              & static_cast<uint32_t>(
                pak::scripting::ScriptAssetFlags::kAllowExternalSource))
-      != 0u;
+      != 0U;
   }
 
   //! Returns external source path when present and valid.
@@ -104,8 +105,8 @@ public:
   //! Returns true if any embedded script payload is assigned.
   [[nodiscard]] auto HasEmbeddedResource() const noexcept -> bool
   {
-    return GetBytecodeResourceIndex() != pak::core::kNoResourceIndex
-      || GetSourceResourceIndex() != pak::core::kNoResourceIndex;
+    return GetBytecodeResourceIndex() != kNoResourceReference
+      || GetSourceResourceIndex() != kNoResourceReference;
   }
 
   //! Returns the number of default parameters defined for this script.
@@ -134,8 +135,10 @@ public:
   [[nodiscard]] auto Parameters() const
   {
     return params_ | std::views::transform([](const auto& kv) -> auto {
-      return DefaultParameterEntry { .key = kv.first,
-        .value = std::cref(kv.second) };
+      return DefaultParameterEntry {
+        .key = kv.first,
+        .value = std::cref(kv.second),
+      };
     });
   }
 

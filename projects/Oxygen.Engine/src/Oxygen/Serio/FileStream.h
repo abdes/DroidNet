@@ -19,6 +19,7 @@
 #include <system_error>
 #include <utility>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Serio/Stream.h>
@@ -66,7 +67,7 @@ public:
   auto open(const std::filesystem::path& path, const std::ios::openmode mode)
     -> void
   {
-    file_.open(path, mode | std::ios::binary);
+    file_.open(base::ToNativePath(path), mode | std::ios::binary);
   }
 
   auto close() -> void { file_.close(); }
@@ -335,8 +336,7 @@ auto FileStream<StreamType>::Write(
   if (data == nullptr && size > 0) {
     return ::oxygen::Err(std::errc::invalid_argument);
   }
-  if (size
-    > static_cast<size_t>((std::numeric_limits<std::streamsize>::max)())) {
+  if (size > static_cast<size_t>(std::numeric_limits<std::streamsize>::max())) {
     return ::oxygen::Err(std::errc::invalid_argument);
   }
   try {
@@ -361,8 +361,7 @@ auto FileStream<StreamType>::Read(std::byte* data, const size_t size) noexcept
   if (data == nullptr && size > 0) {
     return ::oxygen::Err(std::errc::invalid_argument);
   }
-  if (size
-    > static_cast<size_t>((std::numeric_limits<std::streamsize>::max)())) {
+  if (size > static_cast<size_t>(std::numeric_limits<std::streamsize>::max())) {
     return ::oxygen::Err(std::errc::invalid_argument);
   }
   try {
@@ -415,8 +414,7 @@ template <BackingStream StreamType>
 auto FileStream<StreamType>::Seek(const size_t pos) noexcept -> Result<void>
 {
   try {
-    if (pos
-      > static_cast<size_t>((std::numeric_limits<std::streamoff>::max)())) {
+    if (pos > static_cast<size_t>(std::numeric_limits<std::streamoff>::max())) {
       return ::oxygen::Err(std::errc::invalid_argument);
     }
 

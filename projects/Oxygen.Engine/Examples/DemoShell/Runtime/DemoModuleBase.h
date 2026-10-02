@@ -23,7 +23,7 @@
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Renderer.h>
 
-#if defined(OXYGEN_BUILD_UI_TESTS)
+#ifdef OXYGEN_BUILD_UI_TESTS
 struct ImGuiTestEngine;
 #endif
 
@@ -43,7 +43,7 @@ namespace vortex {
 namespace oxygen::examples {
 
 class DemoAppContext;
-#if defined(OXYGEN_BUILD_UI_TESTS)
+#ifdef OXYGEN_BUILD_UI_TESTS
 namespace testing {
   class UiTestSession;
 }
@@ -79,9 +79,9 @@ public:
     -> co::Co<> override;
 
 protected:
-#if defined(OXYGEN_BUILD_UI_TESTS)
+#ifdef OXYGEN_BUILD_UI_TESTS
   auto UiTestOutputDirectory() const -> std::filesystem::path;
-  virtual auto RegisterUiTests(ImGuiTestEngine*) -> void { }
+  virtual auto RegisterUiTests(ImGuiTestEngine*) -> void;
   auto StopUiTests() -> void;
   auto OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void override;
 #endif
@@ -149,7 +149,7 @@ private:
   };
 
   std::unique_ptr<DemoShell> shell_;
-#if defined(OXYGEN_BUILD_UI_TESTS)
+#ifdef OXYGEN_BUILD_UI_TESTS
   std::unique_ptr<testing::UiTestSession> ui_tests_;
 #endif
 

@@ -69,6 +69,13 @@ dispatches frame-start and scene-mutation work in the appropriate engine
 callbacks. This keeps ordinary scene/view commands out of arbitrary UI-thread
 mutation paths.
 
+Cooked-root refresh prepares source metadata and a candidate path resolver on
+workers. Scene mutation rejects superseded requests, switches both owners, then
+delivers retirement callbacks outside the request mutex. Failed preparation leaves
+the previous mounts selected; replaced completion owners cancel managed waiters.
+The [Content mount contract](../Oxygen.Engine/src/Oxygen/Content/Docs/loose_cooked_content.md)
+owns generation lifetime and stale-candidate rules.
+
 ### Ownership and short queue locks
 
 Commands enter the queue as `std::unique_ptr<EditorCommand>`, making queued

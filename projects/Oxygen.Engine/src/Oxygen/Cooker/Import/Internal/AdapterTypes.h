@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <span>
 #include <stop_token>
@@ -23,7 +24,17 @@
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Data/AssetKey.h>
 
+namespace oxygen::content::import::detail {
+class ImportSourceSnapshot;
+}
+
 namespace oxygen::content::import::adapters {
+
+//! Metadata analysis omits external geometry payloads and raw-layout witnesses.
+enum class ModelParseMode : uint8_t {
+  kMetadata,
+  kGeometry,
+};
 
 //! Inputs shared by format adapters.
 struct AdapterInput final {
@@ -42,6 +53,7 @@ struct AdapterInput final {
   observer_ptr<NamingService> naming_service;
   std::stop_token stop_token;
   std::span<const ExternalTextureBytes> external_texture_bytes;
+  std::shared_ptr<detail::ImportSourceSnapshot> source_snapshot {};
 };
 
 //! Tag selecting geometry work item production.

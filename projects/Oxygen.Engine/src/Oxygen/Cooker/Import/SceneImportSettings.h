@@ -7,17 +7,44 @@
 #pragma once
 
 #include <map>
+#include <optional>
+#include <ostream>
 #include <string>
+#include <string_view>
 
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
+#include <Oxygen/Cooker/api_export.h>
 
 namespace oxygen::content::import {
 
+struct ImportOptions;
+
 struct SceneImportSettings {
+  //! Converts persisted native options to the canonical model-recipe
+  //! vocabulary. Naming policy is explicit because arbitrary strategy objects
+  //! are not recipes.
+  OXGN_COOK_NDAPI static auto FromOptions(const ImportOptions& options,
+    std::string naming_policy) -> SceneImportSettings;
+  //! Interpret a model recipe and supplied provenance bytes without file I/O.
+  //! The resulting request has no cooked destination; execution attaches it.
+  OXGN_COOK_NDAPI auto Prepare(ImportFormat expected_format,
+    std::string_view external_provenance, std::ostream& error_stream) const
+    -> std::optional<ImportRequest>;
+
   std::string source_path;
   std::string cooked_root;
   std::string job_name;
   std::string report_path;
+  std::string retained_record_path;
+  std::string recipe_path;
+  std::string content_root;
+  //! Retained UUIDv7 namespace for native material-slot allocation.
+  std::string material_slot_source_identity;
+  //! Retained provenance supplied by a manifest or an API caller.
+  std::string material_slot_provenance_json;
+  //! Optional CLI input file, mutually exclusive with inline provenance.
+  std::string material_slot_provenance_path;
   bool verbose = false;
 
   bool import_textures = true;
@@ -27,7 +54,7 @@ struct SceneImportSettings {
 
   bool with_content_hashing = true;
 
-  //! Optional source validation policy: default or static-scalar.
+  //! Optional source validation policy: default or static.
   std::string content_policy;
 
   std::string unit_policy;

@@ -22,7 +22,9 @@
 #include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Serio/Reader.h>
@@ -62,7 +64,7 @@ namespace detail {
       std::shared_ptr<data::BufferResource>>
   {
     using data::BufferResource;
-    using oxygen::data::pak::core::ResourceIndexT;
+    using data::ResourceReferenceIndex;
 
     DCHECK_NOTNULL_F(
       context.desc_reader, "expecting desc_reader not to be null");
@@ -72,12 +74,13 @@ namespace detail {
     auto& info = desc.info.standard;
 
     // Read vertex_buffer first (according to StandardMeshInfo layout)
-    auto vb_result = reader.ReadInto<ResourceIndexT>(info.vertex_buffer);
+    auto vb_result
+      = reader.ReadInto<ResourceReferenceIndex>(info.vertex_buffer);
     CheckResult(vb_result, "m.vertex_buffer");
     LOG_F(2, "vertex buffer   : {}", info.vertex_buffer);
 
     // Read index_buffer second
-    auto ib_result = reader.ReadInto<ResourceIndexT>(info.index_buffer);
+    auto ib_result = reader.ReadInto<ResourceReferenceIndex>(info.index_buffer);
     CheckResult(ib_result, "m.index_buffer");
     LOG_F(2, "index buffer    : {}", info.index_buffer);
 
@@ -94,7 +97,7 @@ namespace detail {
     // MeshInfo arms are fixed-width on disk. Consume the reserved tail bytes so
     // subsequent SubMeshDesc reads start at the correct offset.
     constexpr size_t kStandardConsumed
-      = sizeof(ResourceIndexT) * 2 + sizeof(float) * 3 * 2;
+      = (sizeof(ResourceReferenceIndex) * 2) + (sizeof(float) * 3 * 2);
     constexpr size_t kStandardTail
       = sizeof(data::pak::geometry::StandardMeshInfo) - kStandardConsumed;
     static_assert(kStandardTail == 40);
@@ -114,14 +117,17 @@ namespace detail {
         "GeometryLoader requires a DependencyCollector for async decode");
     }
 
-    auto collect_buffer_ref = [&](const ResourceIndexT resource_index) {
-      if (resource_index == data::pak::core::kNoResourceIndex) {
-        return; // sentinel / absent – nothing to collect
+    auto collect_buffer_ref
+      = [&](const ResourceReferenceIndex reference) -> void {
+      const auto resource_index
+        = context.ResolveResource(reference, data::ResourceKind::kBuffer);
+      if (!resource_index) {
+        return;
       }
       internal::ResourceRef ref {
-        .source = context.source_token,
+        .source = context.source_instance,
         .resource_type_id = BufferResource::ClassTypeId(),
-        .resource_index = resource_index,
+        .resource_index = *resource_index,
       };
       context.dependency_collector->AddResourceDependency(ref);
     };
@@ -178,7 +184,7 @@ namespace detail {
       std::shared_ptr<data::BufferResource>>
   {
     using data::BufferResource;
-    using oxygen::data::pak::core::ResourceIndexT;
+    using data::ResourceReferenceIndex;
 
     DCHECK_NOTNULL_F(
       context.desc_reader, "expecting desc_reader not to be null");
@@ -186,31 +192,32 @@ namespace detail {
 
     auto& info = desc.info.skinned;
 
-    auto vb_result = reader.ReadInto<ResourceIndexT>(info.vertex_buffer);
+    auto vb_result
+      = reader.ReadInto<ResourceReferenceIndex>(info.vertex_buffer);
     CheckResult(vb_result, "m.vertex_buffer");
     LOG_F(2, "vertex buffer   : {}", info.vertex_buffer);
 
-    auto ib_result = reader.ReadInto<ResourceIndexT>(info.index_buffer);
+    auto ib_result = reader.ReadInto<ResourceReferenceIndex>(info.index_buffer);
     CheckResult(ib_result, "m.index_buffer");
     LOG_F(2, "index buffer    : {}", info.index_buffer);
 
     auto joint_index_result
-      = reader.ReadInto<ResourceIndexT>(info.joint_index_buffer);
+      = reader.ReadInto<ResourceReferenceIndex>(info.joint_index_buffer);
     CheckResult(joint_index_result, "m.joint_index_buffer");
     LOG_F(2, "joint index buf : {}", info.joint_index_buffer);
 
     auto joint_weight_result
-      = reader.ReadInto<ResourceIndexT>(info.joint_weight_buffer);
+      = reader.ReadInto<ResourceReferenceIndex>(info.joint_weight_buffer);
     CheckResult(joint_weight_result, "m.joint_weight_buffer");
     LOG_F(2, "joint weight buf: {}", info.joint_weight_buffer);
 
     auto inverse_bind_result
-      = reader.ReadInto<ResourceIndexT>(info.inverse_bind_buffer);
+      = reader.ReadInto<ResourceReferenceIndex>(info.inverse_bind_buffer);
     CheckResult(inverse_bind_result, "m.inverse_bind_buffer");
     LOG_F(2, "inverse bind buf: {}", info.inverse_bind_buffer);
 
     auto joint_remap_result
-      = reader.ReadInto<ResourceIndexT>(info.joint_remap_buffer);
+      = reader.ReadInto<ResourceReferenceIndex>(info.joint_remap_buffer);
     CheckResult(joint_remap_result, "m.joint_remap_buffer");
     LOG_F(2, "joint remap buf : {}", info.joint_remap_buffer);
 
@@ -253,14 +260,17 @@ namespace detail {
         "GeometryLoader requires a DependencyCollector for async decode");
     }
 
-    auto collect_buffer_ref = [&](const ResourceIndexT resource_index) {
-      if (resource_index == data::pak::core::kNoResourceIndex) {
-        return; // sentinel / absent – nothing to collect
+    auto collect_buffer_ref
+      = [&](const ResourceReferenceIndex reference) -> void {
+      const auto resource_index
+        = context.ResolveResource(reference, data::ResourceKind::kBuffer);
+      if (!resource_index) {
+        return;
       }
       internal::ResourceRef ref {
-        .source = context.source_token,
+        .source = context.source_instance,
         .resource_type_id = BufferResource::ClassTypeId(),
-        .resource_index = resource_index,
+        .resource_index = *resource_index,
       };
       context.dependency_collector->AddResourceDependency(ref);
     };
@@ -271,10 +281,6 @@ namespace detail {
     collect_buffer_ref(info.joint_weight_buffer);
     collect_buffer_ref(info.inverse_bind_buffer);
     collect_buffer_ref(info.joint_remap_buffer);
-
-    if (info.skeleton_asset_key != data::AssetKey {}) {
-      context.dependency_collector->AddAssetDependency(info.skeleton_asset_key);
-    }
 
     return { nullptr, nullptr };
   }
@@ -322,6 +328,15 @@ namespace detail {
       = desc_reader.ReadInto<AssetKey>(desc.material_asset_key);
     CheckResult(mat_key_result, "sm.material_asset_key");
     LOG_F(2, "material asset : {}", desc.material_asset_key);
+
+    data::MaterialSlotId::ByteArray slot_bytes {};
+    CheckResult(
+      desc_reader.ReadBlobInto(std::as_writable_bytes(std::span(slot_bytes))),
+      "sm.slot_id");
+    desc.slot_id = data::MaterialSlotId::FromBytes(slot_bytes);
+    if (desc.slot_id.IsNil()) {
+      throw std::runtime_error("Geometry material slot identity is nil");
+    }
 
     // mesh_view_count
     auto mesh_view_count_result
@@ -422,23 +437,10 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
   MeshBuilder builder(/*lod=*/0, name);
   builder.WithDescriptor(desc);
 
-  const bool should_build_mesh = !(context.parse_only && desc.IsStandard());
-
-  // Configure builder based on mesh type
-  if (desc.IsStandard()) {
-    if (should_build_mesh) {
-      // Reference external buffer resources (zero-copy)
-      builder.WithBufferResources(
-        vertex_buffer_resource, index_buffer_resource);
-    }
-  } else if (desc.IsSkinned()) {
-    if (should_build_mesh) {
-      builder.WithBufferResources(
-        vertex_buffer_resource, index_buffer_resource);
-    }
-  } else if (desc.IsProcedural()) {
-    // Use owned vertex/index data (data is moved into builder)
-    builder.WithVertices(vertices).WithIndices(indices);
+  if (desc.IsProcedural()) {
+    builder.WithVertices(std::move(vertices)).WithIndices(std::move(indices));
+  } else {
+    builder.WithBufferResources(vertex_buffer_resource, index_buffer_resource);
   }
 
   uint32_t total_read_views { 0 };
@@ -480,24 +482,18 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
         "GeometryLoader requires a DependencyCollector for async decode");
     }
 
-    if (should_build_mesh) {
-      auto sm_builder
-        = builder.BeginSubMesh(sm_name, material).WithDescriptor(sm_desc);
-      for (const auto& mv_desc : mesh_views) {
-        sm_builder.WithMeshView(mv_desc);
-      }
-      builder.EndSubMesh(std::move(sm_builder));
+    auto sm_builder
+      = builder.BeginSubMesh(sm_name, material).WithDescriptor(sm_desc);
+    for (const auto& mv_desc : mesh_views) {
+      sm_builder.WithMeshView(mv_desc);
     }
+    builder.EndSubMesh(std::move(sm_builder));
   }
 
   if (total_read_views != desc.mesh_view_count) {
     throw std::runtime_error(
       fmt::format("total read mesh views ({}) != expected ({})",
         total_read_views, desc.mesh_view_count));
-  }
-
-  if (!should_build_mesh) {
-    return nullptr;
   }
 
   return builder.Build();
@@ -522,6 +518,11 @@ inline auto LoadGeometryAsset(LoaderContext context)
   // header (use header loader from Helpers.h)
   LoadAssetHeader(reader, desc.header);
 
+  if (desc.header.asset_type != static_cast<uint8_t>(data::AssetType::kGeometry)
+    || desc.header.version != data::pak::geometry::kGeometryAssetVersion) {
+    throw std::runtime_error("Geometry version requires recooking");
+  }
+
   // lod_count
   auto lod_count_result = reader.ReadInto<uint32_t>(desc.lod_count);
   detail::CheckResult(lod_count_result, "g.lod_count");
@@ -541,9 +542,73 @@ inline auto LoadGeometryAsset(LoaderContext context)
     lod_meshes.push_back(std::move(mesh));
   }
 
+  if (context.asset_references) {
+    std::vector<data::ResourceReferenceUse> resources;
+    std::vector<data::KeyReference> keys;
+    const auto buffer
+      = [&resources](const data::ResourceReferenceIndex index) -> void {
+      resources.push_back({
+        .reference = index,
+        .kind = data::ResourceKind::kBuffer,
+      });
+    };
+    for (const auto& mesh : lod_meshes) {
+      bool needs_vertices = false;
+      bool needs_indices = false;
+      for (const auto& submesh : mesh->SubMeshes()) {
+        for (const auto& view : submesh.MeshViews()) {
+          needs_indices = needs_indices || view.IndexCount() != 0U;
+          needs_vertices
+            = needs_vertices || view.VertexCount() != 0U || needs_indices;
+        }
+      }
+      const auto require_buffers
+        = [needs_vertices, needs_indices](
+            const data::ResourceReferenceIndex vertex,
+            const data::ResourceReferenceIndex index) -> void {
+        if ((needs_vertices && vertex == data::kNoResourceReference)
+          || (needs_indices && index == data::kNoResourceReference)) {
+          throw std::runtime_error(
+            "Geometry draw requires an absent buffer binding");
+        }
+      };
+      const auto& descriptor = mesh->Descriptor();
+      if (descriptor.has_value() && descriptor->IsStandard()) {
+        require_buffers(descriptor->info.standard.vertex_buffer,
+          descriptor->info.standard.index_buffer);
+        buffer(descriptor->info.standard.vertex_buffer);
+        buffer(descriptor->info.standard.index_buffer);
+      } else if (const auto* skin = mesh->SkinnedDescriptor()) {
+        require_buffers(skin->vertex_buffer, skin->index_buffer);
+        buffer(skin->vertex_buffer);
+        buffer(skin->index_buffer);
+        buffer(skin->joint_index_buffer);
+        buffer(skin->joint_weight_buffer);
+        buffer(skin->inverse_bind_buffer);
+        buffer(skin->joint_remap_buffer);
+        keys.push_back({
+          .key = skin->skeleton_asset_key,
+          .kind = data::KeyReferenceKind::kLogical,
+          .expected_type = data::AssetType::kUnknown,
+        });
+      }
+      for (const auto& submesh : mesh->SubMeshes()) {
+        if (const auto& sub = submesh.Descriptor(); sub.has_value()) {
+          keys.push_back({
+            .key = sub->material_asset_key,
+            .kind = data::KeyReferenceKind::kAsset,
+            .expected_type = data::AssetType::kMaterial,
+          });
+        }
+      }
+    }
+    context.ValidateReferences(resources, keys);
+  }
+
   // Construct and return GeometryAsset with LOD meshes
-  return std::make_unique<data::GeometryAsset>(
-    context.current_asset_key, std::move(desc), std::move(lod_meshes));
+  return std::make_unique<data::GeometryAsset>(context.current_asset_key,
+    std::move(desc), std::move(lod_meshes),
+    data::SourceOrigin { context.source_key, context.source_instance });
 }
 
 static_assert(oxygen::content::LoadFunction<decltype(LoadGeometryAsset)>);

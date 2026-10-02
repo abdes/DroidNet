@@ -18,14 +18,17 @@ namespace Oxygen.Editor.ContentPipeline.Status;
 /// <param name="documents">Document owners protecting acknowledged saved bytes.</param>
 /// <param name="publication">The committed metadata verifier.</param>
 /// <param name="nativeCompatibility">The current cooking producer identity.</param>
-/// <param name="files">The atomic provenance reader.</param>
 public sealed partial class AssetCookStatusReader(
     ICookDocumentRegistry documents,
     CookPublicationService publication,
-    INativeCompatibilityService nativeCompatibility,
-    IAtomicFileStore files) : IAssetCookStatusReader
+    INativeCompatibilityService nativeCompatibility) : IAssetCookStatusReader
 {
-    private readonly CookProvenanceStore provenance = new(files);
+    /// <inheritdoc />
+    public event EventHandler? Changed
+    {
+        add => nativeCompatibility.ObservationChanged += value;
+        remove => nativeCompatibility.ObservationChanged -= value;
+    }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default)
@@ -38,14 +41,26 @@ public sealed partial class AssetCookStatusReader(
             return [];
         }
 
-        using var output = await CookOutputLease.AcquireInspectionAsync(project.ProjectRoot, cancellationToken).ConfigureAwait(false);
-        var (prior, version) = await this.provenance.ReadAsync(project, cancellationToken).ConfigureAwait(false);
-        var trusted = await publication.HasCommittedMetadataUnderLeaseAsync(project, cancellationToken).ConfigureAwait(false);
-        var metadataUnavailable = version.Exists && !trusted;
-        if (!trusted)
+        using var output = await publication.AcquireReadAsync(project, cancellationToken).ConfigureAwait(false);
+        return await this.ReadAsync(project, output, assetUris, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Reads status while the caller retains the project's finite inspection lease.</summary>
+    /// <param name="project">The protected project.</param>
+    /// <param name="snapshot">The retained publication selection.</param>
+    /// <param name="assetUris">The requested authored identities.</param>
+    /// <param name="cancellationToken">Cancels status reads.</param>
+    /// <returns>The current source and output facts.</returns>
+    public async Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, CookPublicationReadLease snapshot, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default)
+    {
+        using var retained = snapshot.Retain();
+        if (snapshot.ProjectId != project.ProjectId || !string.Equals(snapshot.ProjectRoot, Path.GetFullPath(project.ProjectRoot), StringComparison.OrdinalIgnoreCase))
         {
-            prior = new(1, project.ProjectId, [], []);
+            throw new ArgumentException("The status publication belongs to another project.", nameof(snapshot));
         }
+
+        var prior = snapshot.ProductState;
+        const bool metadataUnavailable = false;
 
         var requested = assetUris.Distinct().ToArray();
         var builtinOrigins = ResolveBuiltinOutputOrigins(project, prior);
@@ -59,34 +74,27 @@ public sealed partial class AssetCookStatusReader(
         graph = graph with { Builtins = [.. graph.Builtins.Union(builtins)] };
         graph = libraries.Apply(graph);
         var validGraph = WithCompleteAssets(graph);
-        var native = prior.Products.IsEmpty ? null : await nativeCompatibility.VerifyAsync(Guid.NewGuid(), cancellationToken).ConfigureAwait(false);
-        try
-        {
-            var plan = await CookIncrementalPlanner.PlanAsync(project, native?.Artifacts?.Fingerprint ?? string.Empty, graph.Files, validGraph, prior, cancellationToken).ConfigureAwait(false);
-            var changed = await this.FindChangedInputsAsync(graph.Files, cancellationToken).ConfigureAwait(false);
-            using var owners = await documents.AcquireAsync(graph.Assets.Select(static asset => asset.SourceAbsolutePath), cancellationToken).ConfigureAwait(false);
-            var products = prior.Products.ToDictionary(static product => product.SourceUri);
-            var sourceStatuses = inputs.DistinctBy(static input => input.AssetUri).ToDictionary(static input => input.AssetUri, input => CreateStatus(
-                input,
-                graph,
-                plan,
-                products,
-                owners.Documents,
-                native?.Succeeded != false,
-                native?.Diagnostics ?? [],
-                metadataUnavailable,
-                changed));
-            return inputs.Select((input, index) => MapImportedStatus(mapped[index].Requested, mapped[index].Resolution, sourceStatuses[input.AssetUri]))
-                .Concat(requests.Where(item => IsBuiltinIdentity(item.Source)).Select(item =>
-                    CreateBuiltinStatus(item.Source, products, plan, native?.Succeeded != false, metadataUnavailable) with { AssetUri = item.Requested })).ToArray();
-        }
-        finally
-        {
-            if (native?.Artifacts is { } artifacts)
-            {
-                await artifacts.DisposeAsync().ConfigureAwait(false);
-            }
-        }
+        var producer = prior.Products.IsEmpty ? NativeProducerObservation.Unknown : nativeCompatibility.Observation;
+        var plan = await ReadFreshnessAsync(snapshot, producer.Fingerprint ?? string.Empty, validGraph, prior, cancellationToken).ConfigureAwait(false);
+        var changed = await this.FindChangedInputsAsync(graph.Files, cancellationToken).ConfigureAwait(false);
+        using var owners = await documents.AcquireAsync(graph.Assets.Select(static asset => asset.SourceAbsolutePath), cancellationToken).ConfigureAwait(false);
+        var products = prior.Products.ToDictionary(static product => product.SourceUri);
+        var sourceStatuses = inputs.DistinctBy(static input => input.AssetUri).ToDictionary(static input => input.AssetUri, input => CreateStatus(
+            input,
+            graph,
+            plan,
+            products,
+            owners.Documents,
+            prior.Products.IsEmpty || producer.Fingerprint is not null,
+            producer.Diagnostics,
+            metadataUnavailable,
+            changed));
+        var states = inputs.Select((input, index) => MapImportedStatus(mapped[index].Requested, mapped[index].Resolution, sourceStatuses[input.AssetUri]))
+            .Concat(requests.Where(item => IsBuiltinIdentity(item.Source)).Select(item =>
+                CreateBuiltinStatus(item.Source, products, plan, prior.Products.IsEmpty || producer.Fingerprint is not null, metadataUnavailable) with { AssetUri = item.Requested }))
+            .Select(state => state with { OutputRoots = snapshot.ProjectRoots }).ToArray();
+        return prior.Products.IsEmpty || producer.Revision == nativeCompatibility.Observation.Revision ? states
+            : states.Select(static state => state with { Freshness = AssetCookFreshness.Unknown }).ToArray();
     }
 
     private static CookDependencyGraph WithCompleteAssets(CookDependencyGraph graph)
@@ -96,7 +104,7 @@ public sealed partial class AssetCookStatusReader(
         {
             Assets =
             [
-                .. graph.Assets.Where(input => !graph.ImportsNeedingDiscovery.Contains(input.AssetUri) && graph.Dependencies.ContainsKey(input.AssetUri)
+                .. graph.Assets.Where(input => !graph.SourcesNeedingAnalysis.Contains(input.AssetUri) && graph.Dependencies.ContainsKey(input.AssetUri)
                     && graph.FileDependencies.TryGetValue(input.AssetUri, out var paths) && paths.All(availableFiles.Contains)),
             ],
         };
@@ -105,7 +113,7 @@ public sealed partial class AssetCookStatusReader(
     private static AssetCookStatus CreateStatus(
         ContentCookInput input,
         CookDependencyGraph graph,
-        CookIncrementalPlan plan,
+        FreshnessSnapshot plan,
         Dictionary<Uri, CookProvenance.Product> products,
         ImmutableArray<CookDocumentState> documents,
         bool nativeAvailable,
@@ -123,15 +131,17 @@ public sealed partial class AssetCookStatusReader(
         var libraries = closure.SelectMany(uri => graph.CookedDependencies.GetValueOrDefault(uri, [])).Distinct().ToArray();
         var changedLibrary = prior?.CookedDependencies.Any(dependency => LibraryChanged(dependency, libraries)) == true;
         var published = prior?.Outputs.Select(static output => output.Asset).ToImmutableArray() ?? [];
-        var verified = prior is not null && VerifyPriorClosure(prior.SourceUri, products, plan.VerifiedOutputs, graph.CookedDependencies, []);
-        var needsDiscovery = closure.Overlaps(graph.ImportsNeedingDiscovery);
+        var availability = metadataUnavailable ? CookedOutputAvailability.Unknown
+            : prior is null ? CookedOutputAvailability.Missing : ReadOutputAvailability(prior.SourceUri, products, plan, []);
+        var needsDiscovery = closure.Overlaps(graph.SourcesNeedingAnalysis);
         var freshness = issues.Any(static issue => string.Equals(issue.Code, AssetImportDiagnosticCodes.SourceMissing, StringComparison.Ordinal)) ? AssetCookFreshness.MissingSource
             : issues.Any(static issue => issue.Severity == DiagnosticSeverity.Error) ? AssetCookFreshness.InvalidSource
             : metadataUnavailable || !nativeAvailable || inputChanged ? AssetCookFreshness.Unknown
             : inspectionPending ? changedLibrary ? AssetCookFreshness.OutOfDate : AssetCookFreshness.Unknown
             : prior is null ? AssetCookFreshness.NeedsCooking
+            : prior.SourceInput is null || prior.SourceFiles.IsEmpty ? AssetCookFreshness.Unknown
             : needsDiscovery ? AssetCookFreshness.OutOfDate
-            : closure.All(uri => plan.Reusable.ContainsKey(uri) || libraries.Any(dependency => dependency.AssetUri == uri)) && verified ? AssetCookFreshness.Current
+            : closure.All(uri => plan.CurrentProducts.Contains(uri) || libraries.Any(dependency => dependency.AssetUri == uri)) && availability == CookedOutputAvailability.Present ? AssetCookFreshness.Current
             : AssetCookFreshness.OutOfDate;
         if (metadataUnavailable)
         {
@@ -143,7 +153,7 @@ public sealed partial class AssetCookStatusReader(
             issues = issues.Add(StatusIssue(input, "asset_status.input_changed", "Saved inputs changed while checking this asset. Refresh its status."));
         }
 
-        if (needsDiscovery)
+        if (needsDiscovery && prior is not null && input.Kind == ContentCookAssetKind.ForeignSource)
         {
             issues = issues.Add(StatusIssue(input, "asset_status.import_source_changed", "The model source changed. Reimport to update its outputs and dependencies."));
         }
@@ -152,7 +162,7 @@ public sealed partial class AssetCookStatusReader(
             input.AssetUri,
             freshness,
             prior is not null,
-            verified,
+            availability,
             published,
             [.. documents.Where(document => document.IsDirty && paths.Contains(document.SourcePath))],
             [.. issues, .. nativeDiagnostics])
@@ -181,7 +191,7 @@ public sealed partial class AssetCookStatusReader(
             {
                 AssetUri = requested,
                 Freshness = AssetCookFreshness.InvalidSource,
-                HasVerifiedOutput = false,
+                OutputAvailability = CookedOutputAvailability.Unknown,
                 Diagnostics = [new DiagnosticRecord { OperationId = Guid.Empty, Domain = FailureDomain.AssetImport, Severity = DiagnosticSeverity.Error, Code = "asset_status.import_conflict", Message = error, AffectedVirtualPath = requested.AbsolutePath }],
             };
         }
@@ -196,7 +206,7 @@ public sealed partial class AssetCookStatusReader(
         {
             AssetUri = requested,
             HasPublishedOutput = available,
-            HasVerifiedOutput = available && status.HasVerifiedOutput,
+            OutputAvailability = available ? status.OutputAvailability : CookedOutputAvailability.Missing,
             Freshness = !available && status.Freshness == AssetCookFreshness.Current ? AssetCookFreshness.NeedsCooking : status.Freshness,
         };
     }
@@ -227,18 +237,6 @@ public sealed partial class AssetCookStatusReader(
         return current is not null && current != prior;
     }
 
-    private static bool VerifyPriorClosure(
-        Uri source,
-        Dictionary<Uri, CookProvenance.Product> products,
-        ImmutableHashSet<(string rootMount, string virtualPath)> verified,
-        ImmutableDictionary<Uri, ImmutableArray<CookedDependencySnapshot>> cookedDependencies,
-        HashSet<Uri> visited)
-        => !visited.Add(source) || (products.TryGetValue(source, out var product)
-            && product.Outputs.All(output => verified.Contains((output.RootMount, output.Asset.VirtualPath)))
-            && product.CookedDependencies.All(dependency => cookedDependencies.GetValueOrDefault(source, []).Contains(dependency))
-            && product.Dependencies.All(dependency => product.CookedDependencies.Any(input => input.AssetUri == dependency)
-                || VerifyPriorClosure(dependency, products, verified, cookedDependencies, visited)));
-
     private async Task<HashSet<string>> FindChangedInputsAsync(ImmutableArray<CookSnapshotInput> inputs, CancellationToken cancellationToken)
     {
         var changed = new HashSet<string>(StringComparer.Ordinal);
@@ -246,9 +244,9 @@ public sealed partial class AssetCookStatusReader(
         {
             try
             {
-                if (input.IsAbsent)
+                if (input.Kind != CookSnapshotInputKind.File)
                 {
-                    if (CookSavedSourceReader.Exists(input.SourcePath))
+                    if (!CookSavedSourceReader.MatchesProbe(input))
                     {
                         _ = changed.Add(input.RelativePath);
                     }
@@ -273,10 +271,9 @@ public sealed partial class AssetCookStatusReader(
 
     private CookDependencyDiscovery CreateDependencyDiscovery(ProjectContext project, CookProvenance prior, ImportedSourceIndex imports, CookedLibraryReadSet libraries)
         => new(
-            documents,
-            allowUnsavedDocuments: true,
-            importedSources: prior.Products.Where(static product => product.ImportedSource is not null).ToDictionary(static product => product.SourceUri, static product => product.ImportedSource!),
+            new AcceptedCookSourceFacts(project, prior, documents),
             resolveImported: uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency),
+            resolveBufferOwner: path => prior.FindBufferOwner(project, path),
             preferCookedReference: libraries.IsLibraryPreferred,
             expandCookedReferences: (input, references, token) => libraries.ExpandReferencesAsync(input, references, inspector: null, operationRoot: string.Empty, artifacts: null, token));
 }

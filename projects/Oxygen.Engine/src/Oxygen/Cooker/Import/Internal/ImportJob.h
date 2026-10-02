@@ -6,11 +6,13 @@
 
 #pragma once
 
+#include <filesystem>
 #include <memory>
 #include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -33,6 +35,7 @@ class ThreadPool;
 } // namespace oxygen::co
 
 namespace oxygen::content::import {
+class ImportSession;
 class IAsyncFileReader;
 class IAsyncFileWriter;
 class ResourceTableRegistry;
@@ -40,6 +43,8 @@ class LooseCookedIndexRegistry;
 } // namespace oxygen::content::import
 
 namespace oxygen::content::import::detail {
+
+class ImportSourceSnapshot;
 
 //! Base class for one import job executing on the import thread.
 /*!
@@ -59,6 +64,7 @@ public:
    @param params Parameters for creating the job.
   */
   OXGN_COOK_API explicit ImportJob(ImportJobParams params);
+  OXGN_COOK_API ~ImportJob() override;
 
   OXYGEN_MAKE_NON_COPYABLE(ImportJob)
   OXYGEN_MAKE_NON_MOVABLE(ImportJob)
@@ -89,6 +95,9 @@ public:
   OXGN_COOK_API void SetName(std::string_view name) noexcept override;
 
 protected:
+  //! One session owned through producer shutdown and callback-write drain.
+  OXGN_COOK_NDAPI auto Session() -> ImportSession&;
+
   //! Execute the job-specific import work.
   /*!
    Concrete jobs must implement this method and return a complete report.
@@ -105,9 +114,23 @@ protected:
   //! Ensure the request has a concrete cooked root on disk.
   OXGN_COOK_API auto EnsureCookedRoot() -> void;
 
-  //! Access the async file writer.
+  //! Read authored inputs, enforcing captured inputs when supplied.
   OXGN_COOK_NDAPI auto FileReader() const noexcept
     -> observer_ptr<IAsyncFileReader>;
+
+  //! Read derived assets resolved through the cooked-root/mount contract.
+  [[nodiscard]] auto CookedReader() const noexcept
+    -> observer_ptr<IAsyncFileReader>
+  {
+    return cooked_reader_;
+  }
+
+  //! Retain the input observer while parser workers consume external data.
+  [[nodiscard]] auto SourceSnapshot() const noexcept
+    -> std::shared_ptr<ImportSourceSnapshot>
+  {
+    return source_snapshot_;
+  }
 
   //! Access the async file writer.
   OXGN_COOK_NDAPI auto FileWriter() const noexcept
@@ -156,8 +179,9 @@ protected:
   template <typename TaskFactory>
   auto StartTask(TaskFactory&& task_factory) -> void
   {
-    DCHECK_F(nursery_ != nullptr, "ImportJob nursery is not open");
-    nursery_->Start(std::forward<TaskFactory>(task_factory));
+    DCHECK_F(
+      producer_nursery_ != nullptr, "ImportJob producer nursery is not open");
+    producer_nursery_->Start(std::forward<TaskFactory>(task_factory));
   }
 
   //! Start pipeline workers in the job nursery.
@@ -167,8 +191,20 @@ protected:
   */
   template <typename Pipeline> auto StartPipeline(Pipeline& pipeline) -> void
   {
-    DCHECK_F(nursery_ != nullptr, "ImportJob nursery is not open");
-    pipeline.Start(*nursery_);
+    DCHECK_F(
+      producer_nursery_ != nullptr, "ImportJob producer nursery is not open");
+    pipeline.Start(*producer_nursery_);
+  }
+
+  //! Own a standalone pipeline until its producer tasks have joined.
+  template <typename Pipeline, typename... Args>
+  auto CreatePipeline(Args&&... args) -> Pipeline&
+  {
+    auto pipeline = std::make_unique<Pipeline>(std::forward<Args>(args)...);
+    auto& result = *pipeline;
+    pipelines_.push_back(std::move(pipeline));
+    StartPipeline(result);
+    return result;
   }
 
   //! Access the progress callback (may be empty).
@@ -186,6 +222,10 @@ protected:
     std::string item_kind, std::string item_name) -> void;
 
 private:
+  [[nodiscard]] auto WritableCookedRoot() const -> std::filesystem::path;
+  auto RequestProducerStop() -> void;
+  [[nodiscard]] auto RunOwnedSessionToCompletion() -> co::Co<>;
+  [[nodiscard]] auto ExecuteAndPublishAsync() -> co::Co<ImportReport>;
   [[nodiscard]] auto MainAsync() -> co::Co<>;
 
   [[nodiscard]] auto MakeCancelledReport(const ImportRequest& request) const
@@ -199,14 +239,20 @@ private:
   ImportCompletionCallback on_complete_;
   ProgressEventCallback on_progress_;
   std::shared_ptr<co::Event> cancel_event_;
-  observer_ptr<IAsyncFileReader> file_reader_ {};
-  observer_ptr<IAsyncFileWriter> file_writer_ {};
-  observer_ptr<co::ThreadPool> thread_pool_ {};
-  observer_ptr<ResourceTableRegistry> table_registry_ {};
-  observer_ptr<LooseCookedIndexRegistry> index_registry_ {};
+  observer_ptr<IAsyncFileReader> file_reader_;
+  observer_ptr<IAsyncFileReader> cooked_reader_;
+  observer_ptr<IAsyncFileWriter> file_writer_;
+  observer_ptr<co::ThreadPool> thread_pool_;
+  observer_ptr<ResourceTableRegistry> table_registry_;
+  observer_ptr<LooseCookedIndexRegistry> index_registry_;
   ImportConcurrency concurrency_ {};
-  AsyncImportService::ScriptCompileCallback script_compile_callback_ {};
+  AsyncImportService::ScriptCompileCallback script_compile_callback_;
   std::stop_token stop_token_;
+  std::shared_ptr<RetainedModelImport> retained_import_;
+  std::shared_ptr<ImportSourceSnapshot> source_snapshot_;
+  std::unique_ptr<IAsyncFileWriter> generation_writer_;
+  std::unique_ptr<ResourceTableRegistry> generation_tables_;
+  std::unique_ptr<LooseCookedIndexRegistry> generation_index_;
 
   std::string name_;
 
@@ -214,6 +260,9 @@ private:
 
   std::unique_ptr<NamingService> naming_service_;
 
+  std::unique_ptr<ImportSession> session_;
+  std::vector<std::unique_ptr<Object>> pipelines_;
+  co::Nursery* producer_nursery_ = nullptr;
   co::Nursery* nursery_ = nullptr;
   co::Event completed_;
   bool started_ = false;

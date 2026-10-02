@@ -7,6 +7,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -16,8 +17,10 @@
 #include <unordered_map>
 #include <vector>
 
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Content/api_export.h> // For tests only
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
 
@@ -32,6 +35,7 @@ public:
     uint64_t descriptor_size = 0;
     uint8_t asset_type = 0;
     std::array<uint8_t, data::loose_cooked::kSha256Size> descriptor_sha256 = {};
+    data::pak::core::AssetReferenceTable references {};
   };
 
   //! Load and validate an index file.
@@ -62,6 +66,10 @@ public:
 
   OXGN_CNTT_NDAPI auto FindAssetType(const data::AssetKey& key) const noexcept
     -> std::optional<uint8_t>;
+  OXGN_CNTT_NDAPI auto HasKeyReferences(
+    const data::AssetKey& key) const noexcept -> bool;
+  OXGN_CNTT_NDAPI auto FindAssetReferences(const data::AssetKey& key) const
+    -> std::optional<data::AssetReferences>;
 
   OXGN_CNTT_NDAPI auto FindAssetKeyByVirtualPath(
     std::string_view virtual_path) const noexcept
@@ -84,12 +92,23 @@ public:
     data::loose_cooked::FileKind kind) const noexcept
     -> std::optional<uint64_t>;
 
+  OXGN_CNTT_NDAPI auto GetFileInventory() const
+    -> std::vector<lc::FileIntegrity>;
+  OXGN_CNTT_NDAPI auto CheckContent(const std::filesystem::path& cooked_root,
+    lc::IntegrityCheck check) const -> std::vector<lc::FileIntegrityIssue>;
+  OXGN_CNTT_API auto ValidateContent(const std::filesystem::path& cooked_root,
+    lc::IntegrityCheck check) const -> void;
+  OXGN_CNTT_NDAPI auto FindFileSha256(
+    data::loose_cooked::FileKind kind) const noexcept
+    -> std::optional<std::span<const uint8_t, data::loose_cooked::kSha256Size>>;
+
 private:
   struct IndexLoadContext;
 
   struct FileInfo {
     uint32_t relpath_offset = 0;
     uint64_t size = 0;
+    base::Sha256Digest sha256 {};
   };
 
   struct FileKindHash {
@@ -100,12 +119,15 @@ private:
   };
 
   std::string string_storage_;
+  uint64_t reference_storage_offset_ = 0;
+  std::vector<std::byte> reference_storage_;
   std::vector<data::AssetKey> asset_keys_;
   std::unordered_map<data::AssetKey, AssetInfo> key_to_asset_info_;
   std::unordered_map<uint32_t, data::AssetKey> virtual_path_offset_to_key_;
   std::vector<data::loose_cooked::FileKind> file_kinds_;
   std::unordered_map<data::loose_cooked::FileKind, FileInfo, FileKindHash>
     kind_to_file_;
+  std::vector<FileInfo> auxiliary_files_;
   data::SourceKey guid_;
 
   static auto LoadAndValidateHeader(IndexLoadContext& context) -> void;

@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -16,6 +17,7 @@
 
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -115,7 +117,9 @@ NOLINT_TEST(GeometryDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
   const auto schema = LoadJsonFile(SchemaFile(repo_root));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
 
   const auto doc = json::parse(R"({
     "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json",
@@ -133,6 +137,7 @@ NOLINT_TEST(GeometryDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
         },
         "submeshes": [
           {
+            "slot_id": "018f8f8f-1111-7111-8111-111111111111",
             "material_ref": "/.cooked/Materials/default.omat",
             "views": [ { "view_ref": "__all__" } ]
           }
@@ -150,7 +155,9 @@ NOLINT_TEST(GeometryDescriptorJsonSchemaTest, ValidatesIcoSphereParameters)
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
   const auto schema = LoadJsonFile(SchemaFile(repo_root));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
 
   const auto doc = json::parse(R"({
     "name": "ProcIcoSphere",
@@ -169,6 +176,7 @@ NOLINT_TEST(GeometryDescriptorJsonSchemaTest, ValidatesIcoSphereParameters)
         },
         "submeshes": [
           {
+            "slot_id": "018f8f8f-1111-7111-8111-111111111111",
             "material_ref": "/.cooked/Materials/default.omat",
             "views": [ { "view_ref": "__all__" } ]
           }
@@ -181,14 +189,20 @@ NOLINT_TEST(GeometryDescriptorJsonSchemaTest, ValidatesIcoSphereParameters)
   EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
   for (const auto subdivisions : { 0, 8 }) {
     auto candidate = doc;
-    candidate["lods"][0]["procedural"]["params"]["subdivision_level"]
-      = subdivisions;
+    candidate.at("lods")
+      .at(0)
+      .at("procedural")
+      .at("params")
+      .update({ { "subdivision_level", subdivisions } });
     EXPECT_TRUE(ValidateSchema(*schema, candidate, errors)) << errors;
   }
   for (const auto& subdivisions : { json(-1), json(9), json(2.5), json("2") }) {
     auto candidate = doc;
-    candidate["lods"][0]["procedural"]["params"]["subdivision_level"]
-      = subdivisions;
+    candidate.at("lods")
+      .at(0)
+      .at("procedural")
+      .at("params")
+      .update({ { "subdivision_level", subdivisions } });
     EXPECT_FALSE(ValidateSchema(*schema, candidate, errors));
   }
 }
@@ -198,7 +212,9 @@ NOLINT_TEST(GeometryDescriptorJsonSchemaTest, AcceptsSubdividedCubeProcedural)
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
   const auto schema = LoadJsonFile(SchemaFile(repo_root));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
 
   const auto doc = json::parse(R"({
     "name": "ProcJellyCube",
@@ -217,6 +233,7 @@ NOLINT_TEST(GeometryDescriptorJsonSchemaTest, AcceptsSubdividedCubeProcedural)
         },
         "submeshes": [
           {
+            "slot_id": "018f8f8f-1111-7111-8111-111111111111",
             "material_ref": "/.cooked/Materials/default.omat",
             "views": [ { "view_ref": "__all__" } ]
           }
@@ -240,13 +257,14 @@ auto CapsuleDescriptor(const json& params) -> json
       "bounds": { "min": [-0.5, -0.5, -1], "max": [0.5, 0.5, 1] },
       "procedural": { "generator": "Capsule", "mesh_name": "Capsule" },
       "submeshes": [{
+        "slot_id": "018f8f8f-1111-7111-8111-111111111111",
         "material_ref": "/.cooked/Materials/default.omat",
         "views": [{ "view_ref": "__all__" }]
       }]
     }]
   })");
   if (!params.is_null()) {
-    doc["lods"][0]["procedural"]["params"] = params;
+    doc.at("lods").at(0).at("procedural").update({ { "params", params } });
   }
   return doc;
 }
@@ -254,14 +272,24 @@ auto CapsuleDescriptor(const json& params) -> json
 NOLINT_TEST(GeometryDescriptorJsonSchemaTest, AcceptsCapsuleParameterBounds)
 {
   const auto schema = LoadJsonFile(SchemaFile(FindRepoRoot()));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
   const auto cases = std::vector<json> {
     nullptr,
     json::object(),
-    { { "hemisphere_segments", 1 }, { "radial_segments", 3 }, { "height", 1.0 },
-      { "radius", 0.5 } },
-    { { "hemisphere_segments", 64 }, { "radial_segments", 256 },
-      { "height", 3.0 }, { "radius", 0.75 } },
+    {
+      { "hemisphere_segments", 1 },
+      { "radial_segments", 3 },
+      { "height", 1.0 },
+      { "radius", 0.5 },
+    },
+    {
+      { "hemisphere_segments", 64 },
+      { "radial_segments", 256 },
+      { "height", 3.0 },
+      { "radius", 0.75 },
+    },
   };
   for (const auto& params : cases) {
     SCOPED_TRACE(params.dump());
@@ -275,7 +303,9 @@ NOLINT_TEST(
   GeometryDescriptorJsonSchemaTest, RejectsUnrepresentablePrimitiveParameters)
 {
   const auto schema = LoadJsonFile(SchemaFile(FindRepoRoot()));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
   constexpr auto kTooManySegments = uint64_t { 1 } << 32U;
   constexpr auto kTooLargeDimension
     = static_cast<double>(std::numeric_limits<float>::max()) * 2.0;
@@ -298,7 +328,10 @@ NOLINT_TEST(
   for (const auto& test_case : cases) {
     SCOPED_TRACE(test_case.generator);
     auto doc = CapsuleDescriptor(test_case.parameters);
-    doc["lods"][0]["procedural"]["generator"] = test_case.generator;
+    doc.at("lods")
+      .at(0)
+      .at("procedural")
+      .update({ { "generator", test_case.generator } });
     auto errors = std::string {};
     EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
   }
@@ -307,7 +340,9 @@ NOLINT_TEST(
 NOLINT_TEST(GeometryDescriptorJsonSchemaTest, RejectsInvalidCapsuleParameters)
 {
   const auto schema = LoadJsonFile(SchemaFile(FindRepoRoot()));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
   const auto cases = std::vector<json> {
     { { "hemisphere_segments", 0 } },
     { { "hemisphere_segments", 65 } },
@@ -333,7 +368,9 @@ NOLINT_TEST(GeometryDescriptorJsonSchemaTest, RejectsUnknownNestedFields)
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
   const auto schema = LoadJsonFile(SchemaFile(repo_root));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
 
   const auto doc = json::parse(R"({
     "name": "ProcCube",
@@ -350,6 +387,7 @@ NOLINT_TEST(GeometryDescriptorJsonSchemaTest, RejectsUnknownNestedFields)
         },
         "submeshes": [
           {
+            "slot_id": "018f8f8f-1111-7111-8111-111111111111",
             "material_ref": "/.cooked/Materials/default.omat",
             "views": [ { "view_ref": "__all__" } ]
           }

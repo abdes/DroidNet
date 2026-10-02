@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Cooker/Import/Internal/Pipelines/InputImportPipeline.h>
-
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -32,9 +30,11 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/InputImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
@@ -1160,7 +1160,7 @@ namespace {
       }
       try {
         session.AssetEmitter().Emit(action.key, AssetType::kInputAction,
-          action.virtual_path, action.descriptor_relpath, *bytes);
+          action.virtual_path, action.descriptor_relpath, *bytes, {});
       } catch (const std::exception& ex) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "input.asset.descriptor_emit_failed", ex.what(),
@@ -1184,9 +1184,22 @@ namespace {
         return false;
       }
       try {
+        AssetReferenceBuilder references;
+        for (const auto& mapping : context.mappings) {
+          references.AddAsset(
+            mapping.action_asset_key, AssetType::kInputAction);
+        }
+        for (const auto& trigger : context.triggers) {
+          references.AddAsset(
+            trigger.linked_action_asset_key, AssetType::kInputAction);
+        }
+        for (const auto& auxiliary : context.trigger_aux) {
+          references.AddAsset(
+            auxiliary.action_asset_key, AssetType::kInputAction);
+        }
         session.AssetEmitter().Emit(context.key,
           AssetType::kInputMappingContext, context.virtual_path,
-          context.descriptor_relpath, *bytes);
+          context.descriptor_relpath, *bytes, std::move(references).Build());
       } catch (const std::exception& ex) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "input.context.descriptor_emit_failed", ex.what(),

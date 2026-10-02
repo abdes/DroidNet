@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <optional>
 #include <string_view>
@@ -14,8 +15,10 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Physics/Aggregate/AggregateAuthority.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/SoftBody/SoftBodyDesc.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsBindingsCommon.h>
@@ -89,7 +92,6 @@ namespace {
     lua_pop(state, 1);
     if (!std::isfinite(value)) {
       luaL_error(state, "soft_body field '%s' must be finite", field_name);
-      return fallback;
     }
     return value;
   }
@@ -117,7 +119,6 @@ namespace {
     luaL_error(state,
       "soft_body.material_params.tether_mode must be "
       "'none'|'euclidean'|'geodesic'");
-    return physics::softbody::SoftBodyTetherMode::kNone;
   }
 
   auto ParseMaterialParams(lua_State* state, const int table_index)
@@ -157,7 +158,6 @@ namespace {
     lua_pop(state, 1);
     if (desc.cluster_count == 0U) {
       luaL_error(state, "soft_body.cluster_count must be > 0");
-      return {};
     }
 
     lua_getfield(state, desc_index, "material_params");

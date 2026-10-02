@@ -12,6 +12,29 @@ find_package(GTest REQUIRED CONFIG)
 find_package(nlohmann_json_schema_validator REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(ftxui REQUIRED)
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+add_test(
+  NAME "Oxygen.Cooker.SourceAnalysis.Cli"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/source_analysis_cli_test.py"
+    "$<TARGET_FILE:oxygen-cooker-importtool>"
+)
+set_tests_properties(
+  "Oxygen.Cooker.SourceAnalysis.Cli"
+  PROPERTIES
+    TIMEOUT
+      120
+)
+
+add_test(
+  NAME "Oxygen.Cooker.RetainedImport.Cli"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/retained_import_cli_test.py"
+    "$<TARGET_FILE:oxygen-cooker-importtool>"
+)
 
 # ==============================================================================
 # Build instructions
@@ -38,9 +61,10 @@ gtest_program(
   SOURCES
     "Import/InspectorAssetKeyMap_test.cpp"
     "Import/InspectorRootValidation_test.cpp"
+    "Import/InspectorGeometryMetadata_test.cpp"
     "../Tools/Inspector/AssetKeyMap.cpp"
-    "../Tools/Inspector/RootValidation.cpp"
     "../Tools/Inspector/SceneMetadata.cpp"
+    "../Tools/Inspector/GeometryMetadata.cpp"
   DEPS
     oxygen::cooker
     oxygen::content
@@ -69,6 +93,7 @@ m_gtest_program(
   AsyncImportCore
   SOURCES
     "Import/AssetEmitter_test.cpp"
+    "Fixtures/DescriptorFixtures.h"
     "Import/AsyncImporter_test.cpp"
     "Import/AsyncImportService_test.cpp"
     "Import/Bc7Encoder_test.cpp"
@@ -76,6 +101,7 @@ m_gtest_program(
     "Import/ImageProcessing_test.cpp"
     "Import/ImportEventLoop_test.cpp"
     "Import/ImportJob_test.cpp"
+    "Import/ImportJobLifetime_test.cpp"
     "Import/ImportSession_test.cpp"
     "Import/Naming_test.cpp"
     "Import/PipelineConformance_test.cpp"
@@ -201,6 +227,7 @@ m_gtest_program(
   AsyncImportGeometryDescriptor
   SOURCES
     "Import/BuiltinGeometryCatalog_test.cpp"
+    "Import/GeometrySource_test.cpp"
     "Import/GeometryDescriptorImportJob_test.cpp"
     "Import/ImportManifest_geometry_descriptor_test.cpp"
     "Import/GeometryDescriptorImportRequestBuilder_test.cpp"
@@ -216,10 +243,13 @@ target_link_libraries(
 m_gtest_program(
   AsyncImportSceneDescriptor
   SOURCES
+    "Import/SceneImportRequestBuilder_test.cpp"
+    "Import/SceneSource_test.cpp"
     "Import/SceneDescriptorImportJob_test.cpp"
     "Import/ImportManifest_scene_descriptor_test.cpp"
     "Import/SceneDescriptorImportRequestBuilder_test.cpp"
     "Import/SceneDescriptorJsonSchema_test.cpp"
+    "Import/SceneDescriptorTestData.h"
 )
 target_link_libraries(
   Oxygen.Cooker.AsyncImportSceneDescriptor.Tests
@@ -251,6 +281,31 @@ m_gtest_program(
     $<$<BOOL:${WIN32}>:Import/WindowsFileReader_test.cpp>
     $<$<BOOL:${WIN32}>:Import/WindowsFileWriter_test.cpp>
 )
+target_link_libraries(Oxygen.Cooker.AsyncImportIO.Tests PRIVATE oxygen::serio)
+
+m_gtest_program(
+  ImportSourceAnalysis
+  SOURCES
+    "Import/ImportSourceAnalysis_test.cpp"
+)
+target_link_libraries(
+  Oxygen.Cooker.ImportSourceAnalysis.Tests
+  PRIVATE
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
+)
+
+m_gtest_program(
+  ImportSourceSnapshot
+  SOURCES
+    "Import/CapturedInputSet_test.cpp"
+    "Import/ImportSourceSnapshot_test.cpp"
+)
+target_sources(
+  Oxygen.Cooker.ImportSourceSnapshot.Tests
+  PRIVATE
+    "../Import/Internal/ImportSourceSnapshot.cpp"
+)
 
 m_gtest_program(
   AsyncImportBuffer
@@ -262,6 +317,7 @@ m_gtest_program(
 m_gtest_program(
   AsyncImportBufferContainer
   SOURCES
+    "Import/BufferSource_test.cpp"
     "Import/BufferContainerImportJob_test.cpp"
     "Import/BufferContainerImportRequestBuilder_test.cpp"
     "Import/ImportManifest_buffer_container_test.cpp"
@@ -274,6 +330,27 @@ target_link_libraries(
 )
 
 m_gtest_program(AsyncImportGeometry SOURCES "Import/GeometryPipeline_test.cpp")
+m_gtest_program(
+  RetainedModelImport
+  SOURCES
+    "Import/RetainedModelImport_test.cpp"
+)
+
+m_gtest_program(
+  MaterialSlotProvenance
+  SOURCES
+    "Import/MaterialSlotProvenance_test.cpp"
+)
+target_sources(
+  Oxygen.Cooker.MaterialSlotProvenance.Tests
+  PRIVATE
+    "../Import/Internal/MaterialSlotAllocation.cpp"
+)
+target_link_libraries(
+  Oxygen.Cooker.MaterialSlotProvenance.Tests
+  PRIVATE
+    nlohmann_json::nlohmann_json
+)
 
 m_gtest_program(
   AsyncImportScene
@@ -283,7 +360,12 @@ m_gtest_program(
     "Import/SceneNodeImportDefaults_test.cpp"
 )
 
-m_gtest_program(AsyncImportMaterials SOURCES "Import/MaterialPipeline_test.cpp")
+m_gtest_program(
+  AsyncImportMaterials
+  SOURCES
+    "Import/MaterialPipeline_test.cpp"
+    "Import/MaterialSource_test.cpp"
+)
 
 m_gtest_program(
   AsyncImportTexture
@@ -314,10 +396,14 @@ m_gtest_program(
     "Import/AsyncImporterFullTestBase.cpp"
     "Import/AsyncImporterFullTestBase.h"
     "Import/AsyncGltfImporter_test.cpp"
-    "Import/StaticScalarImport_test.cpp"
-    "Import/StaticScalarLoadedValues_test.cpp"
+    "Import/StaticImport_test.cpp"
+    "Import/StaticLoadedValues_test.cpp"
     "Import/MeshTransformBake_test.cpp"
+    "Import/SourceLayoutWitness_test.cpp"
     "Import/SceneSourceInspection_test.cpp"
+    "Import/ModelGeometrySource_test.cpp"
+    "Import/ModelMaterialSource_test.cpp"
+    "Import/ModelTextureSource_test.cpp"
 )
 
 target_link_libraries(
@@ -326,6 +412,14 @@ target_link_libraries(
     oxygen::content
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
+)
+
+# The source-validation fixtures construct ufbx values passed into Cooker.
+# Match Cooker's private vendor ABI without exposing it to engine consumers.
+target_compile_definitions(
+  Oxygen.Cooker.AsyncImportGltf.Tests
+  PRIVATE
+    UFBX_REAL_IS_FLOAT
 )
 
 m_gtest_program(AsyncImportPlan SOURCES "Plan/ImportPlanner_test.cpp")
@@ -338,6 +432,7 @@ m_gtest_program(
     "Loose/DummyIndex.h"
     "Loose/Inspection_test.cpp"
     "Loose/LooseCookedWriter_test.cpp"
+    "Fixtures/DescriptorFixtures.h"
     "Loose/LooseCookedLayout_test.cpp"
     "Loose/Validation_test.cpp"
 )

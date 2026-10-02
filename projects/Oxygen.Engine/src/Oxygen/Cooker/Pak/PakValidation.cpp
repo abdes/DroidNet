@@ -22,6 +22,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Pak/PakValidation.h>
+#include <Oxygen/Data/PakCatalog.h>
 
 namespace {
 namespace pak = oxygen::content::pak;
@@ -516,6 +517,37 @@ auto CollectFooterRangeAndValidateCrcOffset(ValidationState& state) -> void
   using Severity = pak::PakDiagnosticSeverity;
   using Phase = pak::PakBuildPhase;
 
+  const auto& catalog = state.plan->Catalog();
+  uint64_t catalog_end = 0;
+  const auto decoded = data::PakCatalog::Decode(catalog.bytes);
+  if (!decoded || !SafeAdd(catalog.offset, catalog.bytes.size(), catalog_end)) {
+    AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
+      "pak.plan.catalog_invalid", "Embedded catalog is missing or invalid.");
+  } else {
+    state.ranges.push_back(
+      { .start = catalog.offset, .end = catalog_end, .label = "catalog" });
+    if (decoded->source_key != state.plan->Header().source_key
+      || decoded->content_version != state.plan->Header().content_version
+      || decoded->entries.size() != state.plan->Directory().entries.size()) {
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.catalog_identity_mismatch",
+        "Embedded catalog identity or entry count disagrees with the plan.");
+    }
+    std::unordered_map<data::AssetKey, data::AssetType> directory_types;
+    directory_types.reserve(state.plan->Directory().entries.size());
+    for (const auto& entry : state.plan->Directory().entries) {
+      directory_types.emplace(entry.asset_key, entry.asset_type);
+    }
+    for (const auto& entry : decoded->entries) {
+      const auto found = directory_types.find(entry.asset_key);
+      if (found == directory_types.end() || found->second != entry.asset_type) {
+        AddDiagnostic(state.output.diagnostics, Severity::kError,
+          Phase::kPlanning, "pak.plan.catalog_directory_mismatch",
+          "Embedded catalog entry disagrees with the directory.");
+      }
+    }
+  }
+
   const auto& footer = state.plan->Footer();
   uint64_t end = 0;
   if (!SafeAdd(footer.offset, footer.size_bytes, end)) {
@@ -679,54 +711,6 @@ auto ValidateDirectoryEntriesAgainstAssets(ValidationState& state) -> void
   }
 }
 
-auto ValidateScriptParamRanges(ValidationState& state) -> void
-{
-  using Severity = pak::PakDiagnosticSeverity;
-  using Phase = pak::PakBuildPhase;
-
-  std::vector<RangeRecord> script_ranges;
-  script_ranges.reserve(state.plan->ScriptSlots().size());
-  for (const auto& slot : state.plan->ScriptSlots()) {
-    uint64_t end = 0;
-    if (!SafeAdd(slot.params_array_index, slot.params_count, end)) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError,
-        Phase::kPlanning, "pak.plan.script_param_overflow",
-        "Script param range overflow.", std::nullopt, {}, "script_slot_table");
-      continue;
-    }
-
-    if (end > state.plan->ScriptParamRecordCount()) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError,
-        Phase::kPlanning, "pak.plan.script_param_out_of_bounds",
-        "Script param range exceeds script param record array.", std::nullopt,
-        {}, "script_slot_table");
-    }
-
-    script_ranges.push_back(RangeRecord {
-      .start = slot.params_array_index,
-      .end = end,
-      .label = std::to_string(slot.slot_index),
-    });
-  }
-
-  std::ranges::sort(
-    script_ranges, [](const RangeRecord& lhs, const RangeRecord& rhs) {
-      if (lhs.start != rhs.start) {
-        return lhs.start < rhs.start;
-      }
-      return lhs.end < rhs.end;
-    });
-
-  for (size_t i = 1; i < script_ranges.size(); ++i) {
-    if (script_ranges[i].start < script_ranges[i - 1U].end) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError,
-        Phase::kPlanning, "pak.plan.script_param_overlap",
-        "Script param ranges must not overlap.", std::nullopt, {},
-        "script_slot_table", script_ranges[i].start);
-    }
-  }
-}
-
 auto ValidatePatchActionsAgainstBaseCatalogs(ValidationState& state) -> void
 {
   using Severity = pak::PakDiagnosticSeverity;
@@ -876,7 +860,6 @@ auto PakValidation::Validate(const PakPlan& plan, const PakPlanPolicy& policy,
   ValidatePlannedAssetKeysUnique(state);
   ValidateDirectoryKeysAndAssetTypes(state);
   ValidateDirectoryEntriesAgainstAssets(state);
-  ValidateScriptParamRanges(state);
   ValidatePatchActionsAgainstBaseCatalogs(state);
   ValidatePatchClosureConsistency(state);
 

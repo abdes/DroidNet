@@ -4,24 +4,39 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <filesystem>
-#include <nlohmann/json-schema.hpp>
-#include <nlohmann/json.hpp>
+#include <memory>
 #include <optional>
+#include <ostream>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
+#include <nlohmann/json-schema.hpp>
+#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
+
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/TextureDescriptorImportSettings.h>
+#include <Oxygen/Cooker/Import/TextureImportSettings.h>
 
-namespace oxygen::content::import::internal {
+namespace oxygen::content::import {
 
 namespace {
 
+  using internal::JsonSchemaValidationDiagnosticConfig;
+  using internal::ValidateJsonSchemaWithDiagnostics;
   using nlohmann::json;
   using nlohmann::json_schema::json_validator;
 
@@ -45,8 +60,9 @@ namespace {
     return validator;
   }
 
-  auto ValidateDescriptorSchema(
-    const json& descriptor_doc, std::ostream& error_stream) -> bool
+  auto ValidateDescriptorSchema(const json& descriptor_doc,
+    const std::filesystem::path& source_path,
+    std::vector<ImportDiagnostic>& diagnostics) -> bool
   {
     const auto config = JsonSchemaValidationDiagnosticConfig {
       .validation_failed_code = "texture.descriptor.schema_validation_failed",
@@ -62,11 +78,13 @@ namespace {
       descriptor_doc, config,
       [&](const std::string_view code, const std::string& message,
         const std::string& object_path) {
-        error_stream << "ERROR [" << code << "]: " << message;
-        if (!object_path.empty()) {
-          error_stream << " (" << object_path << ")";
-        }
-        error_stream << "\n";
+        diagnostics.push_back(ImportDiagnostic {
+          .severity = ImportSeverity::kError,
+          .code = std::string(code),
+          .message = message,
+          .source_path = source_path.string(),
+          .object_path = object_path,
+        });
       });
   }
 
@@ -100,6 +118,10 @@ namespace {
 
     if (descriptor_doc.contains("name")) {
       settings.job_name = descriptor_doc.at("name").get<std::string>();
+    }
+    if (descriptor_doc.contains("virtual_path")) {
+      settings.virtual_path
+        = descriptor_doc.at("virtual_path").get<std::string>();
     }
     if (descriptor_doc.contains("content_hashing")) {
       settings.with_content_hashing
@@ -193,33 +215,96 @@ namespace {
 
 } // namespace
 
-auto BuildTextureDescriptorRequest(
-  const TextureDescriptorImportSettings& settings, std::ostream& error_stream)
-  -> std::optional<ImportRequest>
+auto TextureDescriptorImportSettings::Prepare(const std::string_view bytes,
+  std::vector<ImportDiagnostic>& diagnostics) const
+  -> std::optional<TextureImportSettings>
 {
-  if (settings.descriptor_path.empty()) {
-    error_stream << "ERROR: descriptor_path is required\n";
+  const auto path = std::filesystem::path(descriptor_path).lexically_normal();
+  json document;
+  try {
+    document = json::parse(bytes);
+  } catch (const json::exception& failure) {
+    diagnostics.push_back(ImportDiagnostic {
+      .severity = ImportSeverity::kError,
+      .code = "texture.descriptor.invalid_json",
+      .message = failure.what(),
+      .source_path = path.string(),
+      .object_path = {},
+    });
     return std::nullopt;
   }
-
-  const auto descriptor_path
-    = std::filesystem::path(settings.descriptor_path).lexically_normal();
-
-  const auto descriptor_doc
-    = LoadDescriptorJsonObject(descriptor_path, "texture", error_stream);
-  if (!descriptor_doc.has_value()) {
+  if (!ValidateDescriptorSchema(document, path, diagnostics)) {
     return std::nullopt;
   }
-
-  if (!ValidateDescriptorSchema(*descriptor_doc, error_stream)) {
+  if (!texture.virtual_path.empty() && document.contains("virtual_path")
+    && document.at("virtual_path").get<std::string>() != texture.virtual_path) {
+    diagnostics.push_back(ImportDiagnostic {
+      .severity = ImportSeverity::kError,
+      .code = "texture.descriptor.identity_conflict",
+      .message = "Texture descriptor virtual_path conflicts with the import "
+                 "job identity",
+      .source_path = path.string(),
+      .object_path = "virtual_path",
+    });
     return std::nullopt;
   }
-
-  auto effective_texture_settings = settings.texture;
-  ApplyDescriptorSettings(
-    *descriptor_doc, descriptor_path, effective_texture_settings);
-
-  return BuildTextureRequest(effective_texture_settings, error_stream);
+  auto effective = texture;
+  ApplyDescriptorSettings(document, path, effective);
+  // The same destination-free option interpretation used by request
+  // construction.
+  auto tuning = ImportOptions::TextureTuning {};
+  auto errors = std::ostringstream {};
+  if (!internal::MapSettingsToTuning(effective, tuning, errors)) {
+    diagnostics.push_back(ImportDiagnostic {
+      .severity = ImportSeverity::kError,
+      .code = "texture.descriptor.recipe_invalid",
+      .message = errors.str(),
+      .source_path = path.string(),
+      .object_path = {},
+    });
+    return std::nullopt;
+  }
+  return effective;
 }
 
-} // namespace oxygen::content::import::internal
+namespace internal {
+
+  auto BuildTextureDescriptorRequest(
+    const TextureDescriptorImportSettings& settings, std::ostream& error_stream,
+    std::shared_ptr<const CapturedInputSet> captured_inputs)
+    -> std::optional<ImportRequest>
+  {
+    if (settings.descriptor_path.empty()) {
+      error_stream << "ERROR: descriptor_path is required\n";
+      return std::nullopt;
+    }
+    const auto path
+      = std::filesystem::path(settings.descriptor_path).lexically_normal();
+    auto document = ImportSourceDocument::Load(
+      path, "texture", error_stream, captured_inputs.get());
+    if (!document.has_value()) {
+      return std::nullopt;
+    }
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    const auto effective = settings.Prepare(document->text, diagnostics);
+    for (const auto& diagnostic : diagnostics) {
+      error_stream << "ERROR [" << diagnostic.code
+                   << "]: " << diagnostic.message;
+      if (!diagnostic.object_path.empty()) {
+        error_stream << " (" << diagnostic.object_path << ")";
+      }
+      error_stream << '\n';
+    }
+    if (!effective.has_value()) {
+      return std::nullopt;
+    }
+    auto request = BuildTextureRequest(*effective, error_stream);
+    if (request.has_value()) {
+      request->captured_inputs = std::move(captured_inputs);
+      request->preparation_inputs.push_back(document->Observation());
+    }
+    return request;
+  }
+
+} // namespace internal
+} // namespace oxygen::content::import

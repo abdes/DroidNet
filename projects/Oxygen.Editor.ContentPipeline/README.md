@@ -2,6 +2,11 @@
 
 Editor-side orchestration for producing runtime content from authoring data.
 
+Read [workflow stages](#explicit-workflow-stages),
+[worker ownership](#tool-process-boundary) and
+[freshness and validation](#freshness-and-validation), and
+[test organization](tests/README.md).
+
 ## Ownership
 
 The editor chooses the authoring workflow and requested cook scope. Project
@@ -15,8 +20,8 @@ successful cook does not itself prove mounting, presentation, or standalone
 runtime parity.
 
 The ownership contracts are defined in the
-[content pipeline LLD](../../design/editor/lld/content-pipeline.md) and
-[editor architecture](../../design/editor/ARCHITECTURE.md).
+[content pipeline LLD](../../../design/editor/lld/content-pipeline.md) and
+[editor architecture](../../../design/editor/ARCHITECTURE.md).
 
 ## Explicit workflow stages
 
@@ -24,13 +29,13 @@ The ownership contracts are defined in the
 asset, folder, and project cook operations. The stages keep failures attributable
 to the operation that produced them.
 
-| Stage | Implementation | Purpose |
-| --- | --- | --- |
-| Scope | Project context and cook-scope provider | Identify authored inputs and destination roots. |
-| Descriptors | [SceneDescriptorGenerator](src/SceneDescriptorGenerator.cs), [ProceduralGeometryDescriptorService](src/ProceduralGeometryDescriptorService.cs) | Translate authoring data and referenced generated assets into native descriptors. |
-| Manifest | [ContentImportManifestBuilder](src/ContentImportManifestBuilder.cs), [ContentImportManifestValidator](src/ContentImportManifestValidator.cs) | Build and validate the bounded import request. |
-| Execution | [IEngineContentPipelineApi](src/IEngineContentPipelineApi.cs) | Isolate orchestration from the native execution adapter. |
-| Inspection and validation | `InspectLooseCookedRootAsync`, `ValidateLooseCookedRootAsync` | Check generated output and return structured results. |
+| Stage                     | Implementation                                                                                                                                 | Purpose                                                                                 |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Scope                     | Project context and cook-scope provider                                                                                                        | Identify authored inputs and destination roots.                                         |
+| Descriptors               | [SceneDescriptorGenerator](src/SceneDescriptorGenerator.cs), [ProceduralGeometryDescriptorService](src/ProceduralGeometryDescriptorService.cs) | Translate authoring data and referenced generated assets into native descriptors.       |
+| Manifest                  | [ContentImportManifestBuilder](src/ContentImportManifestBuilder.cs), [ContentImportManifestValidator](src/ContentImportManifestValidator.cs)   | Build and validate the bounded import request.                                          |
+| Execution                 | [IEngineContentPipelineApi](src/IEngineContentPipelineApi.cs)                                                                                  | Isolate orchestration from the native execution adapter.                                |
+| Inspection and validation | Native Inspector inventory under `CookOutputReadLease`                                                                                         | Verify files once per protected opening and derive structured results from that report. |
 
 The manifest execution path stops on manifest, import, or inspection failure,
 accumulates stage diagnostics, and includes output validation in the final
@@ -43,27 +48,52 @@ alone is insufficient evidence of valid output.
 manifest and invokes the installed native ImportTool through
 [IContentPipelineProcessRunner](src/IContentPipelineProcessRunner.cs).
 
-[ContentPipelineProcessRunner](src/ContentPipelineProcessRunner.cs) uses
-`ProcessStartInfo.ArgumentList`, disables shell execution, and reads standard
-output and standard error concurrently. Structured arguments preserve paths
-and values as arguments; concurrent draining avoids serial pipe-read stalls.
+[ContentPipelineProcessRunner](src/ContentPipelineProcessRunner.cs) passes
+structured arguments to the Windows worker, which starts `CreateProcessW` under
+an owned Job Object without shell execution. It drains standard output and error
+concurrently, preserving argument boundaries and avoiding serial pipe-read stalls.
 
-Cancellation currently does not guarantee native process termination; that
-lifetime correction is tracked in
-[issue #8](https://github.com/abdes/DroidNet/issues/8).
-Consolidating procedural semantics between live preview and cooking is tracked
-in [issue #11](https://github.com/abdes/DroidNet/issues/11).
+Cancellation stops the owned worker tree and drains both output readers before
+releasing its input and tool leases. Failed termination retains ownership until
+the worker drains. Progress and structured warnings/errors flow into the shared
+Cooking panel throughout import, validation and publication.
+
+Every import retains the native report's per-source output paths. Those
+associations identify source-owned auxiliary files; the native index owns their
+sizes and digests. Named texture outputs use the descriptor's `virtual_path` and
+participate in the same cooking, reuse and reference-resolution workflow.
+
+## Freshness and validation
+
+Browser badges compare saved inputs and observed producer identity against the
+last successful publication. They consume event-driven snapshots, launch no
+native processes and hash no cooked payloads. Unknown output availability is
+neutral; an observed missing output offers cooking. Filtering and resolving
+unchanged rows reuse the snapshot.
+
+Native Content owns complete file-integrity validation. Cooking verifies reused
+content and newly produced output before publication. Dependency metadata is
+cached only after full verification of the protected library opening. Normal
+mount preparation checks index metadata, membership and sizes, and does not
+populate dependency caches from unverified payloads.
+
+Damage to shared data triggers **Rebuilding affected content**. The service
+captures all affected sources and rebuilds an empty candidate root. Missing
+sources or unowned auxiliary files produce specific diagnostics; failed repair
+preserves the current publication. Replacement imports share that capture and
+cannot remove a source file still needed by another asset.
 
 ## Verification boundaries
 
-[ContentPipelineServiceTests](tests/ContentPipelineServiceTests.cs),
-[SceneDescriptorGeneratorTests](tests/SceneDescriptorGeneratorTests.cs), and
-[ImportToolContentPipelineApiTests](tests/ImportToolContentPipelineApiTests.cs)
-provide focused orchestration, descriptor, and adapter coverage. The adapter
-tests substitute the process runner, so they do not establish the lifetime
-behavior of a real cancelled tool.
+[Unit tests](tests/Unit) cover orchestration, descriptors, source snapshots and
+status using controlled dependencies. [Integration tests](tests/Integration)
+exercise the installed native tools, real worker processes and filesystem
+publication/recovery. [Benchmarks](tests/Benchmarks) retain large-workload
+measurements separately from routine correctness checks.
+
+See the [test guide](tests/README.md) for project selection and fixture ownership.
 
 Keep source-level tests, real tool execution, cooked-root validation, and
 standalone/visual validation distinct. Current workflow evidence belongs in
-[IMPLEMENTATION_STATUS.md](../../design/editor/IMPLEMENTATION_STATUS.md);
+[IMPLEMENTATION_STATUS.md](../../../design/editor/IMPLEMENTATION_STATUS.md);
 test files alone do not close those gates.

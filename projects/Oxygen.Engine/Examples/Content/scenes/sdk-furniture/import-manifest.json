@@ -2,12 +2,13 @@
   "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json",
   "version": 1,
   "max_in_flight_jobs": 1,
-  "output": "../../.cooked",
+  "output": "../../.cooked/main",
   "jobs": [
     {
       "id": "tableRound",
       "type": "fbx",
       "source": "../../fbx/showcase/tableRound.fbx",
+      "material_slot_source_identity": "01a0e7c7-f432-7586-8f04-212e9ac8d964",
       "name": "tableRound",
       "content_hashing": true
     },
@@ -15,6 +16,7 @@
       "id": "chair",
       "type": "fbx",
       "source": "../../fbx/showcase/chair.fbx",
+      "material_slot_source_identity": "01a0e7c7-f432-7586-8f04-212fc6337efe",
       "name": "chair",
       "content_hashing": true
     },
@@ -22,6 +24,7 @@
       "id": "lampRoundTable",
       "type": "fbx",
       "source": "../../fbx/showcase/lampRoundTable.fbx",
+      "material_slot_source_identity": "01a0e7c7-f432-7586-8f04-2130dca8d325",
       "name": "lampRoundTable",
       "content_hashing": true
     },
@@ -29,6 +32,7 @@
       "id": "pottedPlant",
       "type": "fbx",
       "source": "../../fbx/showcase/pottedPlant.fbx",
+      "material_slot_source_identity": "01a0e7c7-f432-7586-8f04-21318d102e68",
       "name": "pottedPlant",
       "content_hashing": true
     }

@@ -22,6 +22,10 @@ Read: [ownership](#ownership), [C++](#c), [editor](#editor),
 - Research non-obvious decisions, present concise alternatives and tradeoffs, and
   obtain approval before changing an accepted contract. Correct affected designs
   and plans before implementing changed scope.
+- Before public release, tools and runtime readers accept only the current cooked
+  formats defined by `Oxygen.Data`. Share those definitions; do not add private
+  version pins, compatibility readers or legacy-format fallback paths. Recook
+  maintained content when formats change.
 - Validate data with schemas first; use manual checks only for constraints the
   schema cannot express.
 
@@ -87,11 +91,12 @@ Read: [ownership](#ownership), [C++](#c), [editor](#editor),
 
 ## Validation and delivery
 
-- Before building or testing, clear all `oxytidy` warnings in modified C++ files,
-  including pre-existing warnings and IDE diagnostics, then run `oxyformat` on
-  the task's uncommitted C++. Preserve unrelated user edits/settings. Do not
-  suppress checks without an explicitly approved exception. Batch cleanup;
-  repeated lint runs are not a substitute for careful coding.
+- Write clean C++ from the first edit and run `oxyformat` before building.
+  Build and test during implementation; reserve `oxytidy` for the pre-commit
+  check. Before requesting a commit, clear all warnings in modified C++ files,
+  including pre-existing warnings and IDE diagnostics. Preserve unrelated user
+  edits/settings. Do not suppress checks without an explicitly approved exception.
+  Batch cleanup; repeated lint runs are not a substitute for careful coding.
 - Use parallel `MSBuild.exe /m` for editor verification, not `dotnet`. For example:
   `MSBuild.exe projects/Oxygen.Editor/src/Oxygen.Editor.App.csproj /nologo /m /p:Configuration=Debug /v:minimal`.
   Editor-only work does not authorize an engine build; obtain explicit authorization.

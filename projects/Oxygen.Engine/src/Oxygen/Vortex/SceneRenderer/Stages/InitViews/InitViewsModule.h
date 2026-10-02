@@ -7,11 +7,15 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
 #include <glm/vec4.hpp>
 
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
@@ -69,17 +73,20 @@ public:
     Renderer& renderer, observer_ptr<PostProcessService> post_process = {});
   OXGN_VRTX_API ~InitViewsModule();
 
-  InitViewsModule(const InitViewsModule&) = delete;
-  auto operator=(const InitViewsModule&) -> InitViewsModule& = delete;
-  InitViewsModule(InitViewsModule&&) = delete;
-  auto operator=(InitViewsModule&&) -> InitViewsModule& = delete;
+  OXYGEN_MAKE_NON_COPYABLE(InitViewsModule)
+  OXYGEN_MAKE_NON_MOVABLE(InitViewsModule)
+
+  OXGN_VRTX_API auto OnFrameStart(
+    frame::SequenceNumber sequence, frame::Slot slot) -> void;
 
   OXGN_VRTX_API void Execute(RenderContext& ctx, SceneTextures& scene_textures);
 
-  [[nodiscard]] OXGN_VRTX_API auto GetPreparedSceneFrame(ViewId view_id) const
+  OXGN_VRTX_NDAPI auto GetPreparedSceneFrame(ViewId view_id) const
     -> const PreparedSceneFrame*;
 
 private:
+  std::optional<frame::SequenceNumber> maintenance_sequence_;
+  frame::Slot maintenance_slot_ { frame::kInvalidSlot };
   std::uint64_t next_preparation_revision_ { 1 };
   Renderer& renderer_;
   observer_ptr<PostProcessService> post_process_;

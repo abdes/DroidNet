@@ -6,14 +6,19 @@
 
 #include <chrono>
 #include <string>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/InputImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/InputImportPipeline.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import::detail {
 
@@ -66,8 +71,7 @@ auto InputImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   EnsureCookedRoot();
 
-  auto session = ImportSession(Request(), FileReader(), FileWriter(),
-    ThreadPool(), TableRegistry(), IndexRegistry());
+  auto& session = Session();
 
   if (!Request().input.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
@@ -90,11 +94,11 @@ auto InputImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   ReportPhaseProgress(ImportPhase::kWorking, 0.5F, "Importing input assets...");
 
-  auto pipeline = InputImportPipeline(InputImportPipeline::Config {
-    .queue_capacity = Concurrency().scene.queue_capacity,
-    .worker_count = Concurrency().scene.workers,
-  });
-  StartPipeline(pipeline);
+  auto& pipeline
+    = CreatePipeline<InputImportPipeline>(InputImportPipeline::Config {
+      .queue_capacity = Concurrency().scene.queue_capacity,
+      .worker_count = Concurrency().scene.workers,
+    });
 
   co_await pipeline.Submit(InputImportPipeline::WorkItem {
     .source_id = Request().source_path.string(),
@@ -130,6 +134,7 @@ auto InputImportJob::LoadSource(ImportSession& session) -> co::Co<LoadedSource>
       "input.import.reader_unavailable", "Async file reader is not available");
     co_return LoadedSource {
       .success = false,
+      .bytes = {},
     };
   }
 
@@ -140,6 +145,7 @@ auto InputImportJob::LoadSource(ImportSession& session) -> co::Co<LoadedSource>
       "Failed to read source file: " + read.error().ToString());
     co_return LoadedSource {
       .success = false,
+      .bytes = {},
     };
   }
 

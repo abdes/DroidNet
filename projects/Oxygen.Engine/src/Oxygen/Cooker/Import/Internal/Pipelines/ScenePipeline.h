@@ -26,35 +26,17 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Channel.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 
 namespace oxygen::content::import {
-
-//! One environment system record for the trailing scene block.
-struct SceneEnvironmentSystem {
-  uint32_t system_type = 0;
-  std::vector<std::byte> record_bytes;
-};
-
-//! Intermediate scene build data produced by adapters.
-struct SceneBuild final {
-  std::vector<data::pak::world::NodeRecord> nodes;
-  std::vector<std::byte> strings;
-
-  std::vector<data::pak::world::RenderableRecord> renderables;
-  std::vector<data::pak::world::LocalFogVolumeRecord> local_fog_volumes;
-  std::vector<data::pak::world::PerspectiveCameraRecord> perspective_cameras;
-  std::vector<data::pak::world::OrthographicCameraRecord> orthographic_cameras;
-  std::vector<data::pak::world::DirectionalLightRecord> directional_lights;
-  std::vector<data::pak::world::PointLightRecord> point_lights;
-  std::vector<data::pak::world::SpotLightRecord> spot_lights;
-};
 
 //! Input provided to adapter scene stage processing.
 struct SceneStageInput final {
@@ -103,6 +85,7 @@ public:
     std::string virtual_path;
     std::string descriptor_relpath;
     std::vector<std::byte> descriptor_bytes;
+    data::AssetReferences references;
   };
 
   //! Work submission item.
@@ -114,6 +97,7 @@ public:
     BuildStageFn build_stage = nullptr;
     std::vector<data::AssetKey> geometry_keys;
     std::vector<SceneEnvironmentSystem> environment_systems;
+    data::AssetReferences environment_references;
 
     //! Callback fired when a worker starts processing this item.
     std::function<void()> on_started;
@@ -158,7 +142,7 @@ public:
     std::string source_id;
     std::optional<CookedScenePayload> cooked;
     std::vector<ImportDiagnostic> diagnostics;
-    ImportWorkItemTelemetry telemetry;
+    ImportWorkItemTelemetry telemetry {};
     bool success = false;
   };
 

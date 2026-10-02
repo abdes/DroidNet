@@ -4,8 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cstring>
 #include <optional>
+#include <span>
 #include <string>
 
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
@@ -42,17 +44,17 @@ auto SceneCatalogQueryService::EnumerateMountedScenes(
   -> std::vector<IAssetLoader::MountedSceneEntry>
 {
   std::vector<IAssetLoader::MountedSceneEntry> scenes;
-  const auto& sources = source_registry.Sources();
-  const auto& source_ids = source_registry.SourceIds();
-  scenes.reserve(sources.size() * 4U);
-
-  for (size_t source_index = 0; source_index < sources.size(); ++source_index) {
-    const auto& source = sources[source_index];
+  const auto view = source_registry.CaptureView();
+  if (!view) {
+    return scenes;
+  }
+  scenes.reserve(view->Layers().size());
+  for (const auto& layer : view->Layers()) {
+    const auto source = source_registry.AcquireSource(layer.id);
     if (!source) {
       continue;
     }
-
-    const auto source_id = source_ids[source_index];
+    const auto source_id = layer.id;
     const auto source_key = source->GetSourceKey();
     const auto source_path = source->SourcePath();
     const auto source_kind
@@ -68,7 +70,8 @@ auto SceneCatalogQueryService::EnumerateMountedScenes(
         continue;
       }
 
-      if (!source->HasAsset(*scene_key_opt)) {
+      if (source->GetAssetType(*scene_key_opt) != data::AssetType::kScene
+        || view->ResolveAsset(*scene_key_opt) != source_id) {
         continue;
       }
 
@@ -88,9 +91,9 @@ auto SceneCatalogQueryService::EnumerateMountedScenes(
       scene_entry.source_id = source_id;
       scene_entry.source_kind = source_kind;
       scene_entry.source_path = source_path;
-      scene_entry.display_name = header_opt->name[0] == '\0'
-        ? std::string {}
-        : std::string(header_opt->name);
+      const auto name = std::span(header_opt->name);
+      scene_entry.display_name.assign(
+        name.begin(), std::ranges::find(name, '\0'));
 
       if (const auto vpath = source->ResolveVirtualPath(*scene_key_opt);
         vpath.has_value()) {

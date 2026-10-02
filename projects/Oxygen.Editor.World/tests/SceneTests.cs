@@ -191,7 +191,7 @@ public class SceneTests
     }
 
     [TestMethod]
-    public async Task GeometryMaterialSlot_SerializesOnlyMaterialUri()
+    public async Task GeometryMaterialSlot_SerializesStableTargetAndMaterialIdentityOnly()
     {
         var scene = new Scene(this.ExampleProject) { Name = "Material Slot Scene" };
         var node = new SceneNode(scene) { Name = "Cube" };
@@ -201,7 +201,8 @@ public class SceneTests
             Node = node,
             Geometry = new("asset:///Engine/Generated/BasicShapes/Cube"),
         };
-        var materialSlot = new Slots.MaterialsSlot();
+        var target = new Slots.MaterialSlotTarget(geometry.Geometry!.Uri, Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
+        var materialSlot = new Slots.MaterialsSlot { Target = target };
         materialSlot.Material.Uri = new("asset:///Content/Materials/Red.omat.json");
         geometry.OverrideSlots.Add(materialSlot);
         node.Components.Add(geometry);
@@ -220,6 +221,9 @@ public class SceneTests
         _ = json.Should().NotContain("RuntimeAvailability");
         _ = json.Should().NotContain("ThumbnailKey");
         _ = json.Should().NotContain("Diagnostic");
+        stream.Position = 0;
+        var restored = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
+        _ = restored.RootNodes.Single().Components.OfType<GeometryComponent>().Single().OverrideSlots.OfType<Slots.MaterialsSlot>().Single().Target.Should().Be(target);
     }
 
     [TestMethod]

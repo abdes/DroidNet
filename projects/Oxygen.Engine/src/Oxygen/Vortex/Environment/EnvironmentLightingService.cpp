@@ -5,16 +5,17 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <tuple>
 
 #include <glm/ext/vector_float3.hpp>
-#include <glm/ext/vector_float4.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
@@ -24,6 +25,7 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
@@ -52,6 +54,7 @@
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeBindings.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h>
+#include <Oxygen/Vortex/Environment/Types/IblCaptureLease.h>
 #include <Oxygen/Vortex/Environment/Types/StaticSkyLightProducts.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -60,6 +63,7 @@
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
 #include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
+#include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 
 namespace oxygen::vortex {
 
@@ -302,6 +306,7 @@ auto EnvironmentLightingService::AcquireIblCapture(const ViewId view)
 auto EnvironmentLightingService::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
+  const auto new_frame = sequence != current_sequence_ || slot != current_slot_;
   current_sequence_ = sequence;
   current_slot_ = slot;
   published_views_.clear();
@@ -359,7 +364,7 @@ auto EnvironmentLightingService::OnFrameStart(
   if (volumetric_fog_pass_ != nullptr) {
     volumetric_fog_pass_->OnFrameStart(sequence, slot);
   }
-  if (sky_texture_binder_ != nullptr) {
+  if (new_frame && sky_texture_binder_ != nullptr) {
     sky_texture_binder_->OnFrameStart();
   }
   pending_volumetric_fog_state_ = {};
@@ -419,10 +424,10 @@ auto EnvironmentLightingService::BuildBindings(
       : kInvalidShaderVisibleIndex,
   };
 
-  if (stable_state.view_products.atmosphere_lights[0].enabled) {
+  if (stable_state.view_products.atmosphere_lights.at(0).enabled) {
     bindings.contract_flags |= kEnvironmentContractFlagAtmosphereLight0Enabled;
   }
-  if (stable_state.view_products.atmosphere_lights[1].enabled) {
+  if (stable_state.view_products.atmosphere_lights.at(1).enabled) {
     bindings.contract_flags |= kEnvironmentContractFlagAtmosphereLight1Enabled;
   }
   const auto sky_light_authored_enabled = view_products.sky_light.enabled;
@@ -643,13 +648,15 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
 
   const auto& atmo = view_products.atmosphere;
   const auto primary_sun_disk_enabled
-    = atmo.sun_disk_enabled && view_products.atmosphere_lights[0].enabled;
+    = atmo.sun_disk_enabled && view_products.atmosphere_lights.at(0).enabled;
   const auto primary_sun_disk_angular_radius_radians = primary_sun_disk_enabled
     ? 0.5F
-      * std::max(0.0F, view_products.atmosphere_lights[0].angular_size_radians)
+      * std::max(
+        0.0F, view_products.atmosphere_lights.at(0).angular_size_radians)
     : 0.0F;
   const auto primary_sun_disk_luminance_scale_rgb = primary_sun_disk_enabled
-    ? glm::vec3 { view_products.atmosphere_lights[0].disk_luminance_scale_rgb }
+    ? glm::vec3 { view_products.atmosphere_lights.at(0)
+          .disk_luminance_scale_rgb }
     : glm::vec3 { 1.0F, 1.0F, 1.0F };
   data.atmosphere.planet_radius_km
     = engine::atmos::MetersToSkyUnit(atmo.planet_radius_m);
@@ -705,16 +712,16 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   };
   for (std::size_t i = 0; i < data.atmosphere.absorption_density.layers.size();
     ++i) {
-    data.atmosphere.absorption_density.layers[i].width_km
+    data.atmosphere.absorption_density.layers.at(i).width_km
       = engine::atmos::MetersToSkyUnit(
-        atmo.ozone_density_profile.layers[i].width_m);
-    data.atmosphere.absorption_density.layers[i].exp_term
-      = atmo.ozone_density_profile.layers[i].exp_term;
-    data.atmosphere.absorption_density.layers[i].linear_term
-      = atmo.ozone_density_profile.layers[i].linear_term
+        atmo.ozone_density_profile.layers.at(i).width_m);
+    data.atmosphere.absorption_density.layers.at(i).exp_term
+      = atmo.ozone_density_profile.layers.at(i).exp_term;
+    data.atmosphere.absorption_density.layers.at(i).linear_term
+      = atmo.ozone_density_profile.layers.at(i).linear_term
       * engine::atmos::kSkyUnitToM;
-    data.atmosphere.absorption_density.layers[i].constant_term
-      = atmo.ozone_density_profile.layers[i].constant_term;
+    data.atmosphere.absorption_density.layers.at(i).constant_term
+      = atmo.ozone_density_profile.layers.at(i).constant_term;
   }
   data.atmosphere.sun_disk_enabled = primary_sun_disk_enabled ? 1U : 0U;
   data.atmosphere.enabled = atmo.enabled ? 1U : 0U;
@@ -774,7 +781,7 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
         data.sky_sphere.enabled = data.sky_sphere.intensity > 0.0F ? 1U : 0U;
         if (const auto asset_loader = renderer_.GetAssetLoader();
           asset_loader != nullptr) {
-          const auto texture = asset_loader->GetTexture(cubemap);
+          const auto texture = asset_loader->PeekTexture(cubemap);
           const auto source_is_valid_cubemap = texture != nullptr
             && texture->GetTextureType() == oxygen::TextureType::kTextureCube
             && texture->GetArrayLayers() == 6U;
@@ -876,6 +883,9 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
   std::ignore = EnsureSkyTextureBinder();
   const auto refreshed_probe_state = ibl_->RefreshSkyLightProducts(
     probe_state_, ctx, stable_state, source_data.fog, sky_texture_binder_);
+  if (sky_texture_binder_) {
+    sky_texture_binder_->EnsureFrameResources();
+  }
   probe_state_ = refreshed_probe_state.probe_state;
   const auto ibl_products = ibl_->GetPublishedProducts();
   if (probe_state_.valid

@@ -31,12 +31,12 @@ unsaved revisions require the normal explicit Save/discard flow.
 
 ## 2. PRD Traceability
 
-| IDs | Required result |
-| --- | --- |
-| GOAL-004/005/006 | Material authoring, published state and failures are usable and visible. |
-| REQ-010/011/012/013/014 | Create/open/edit/save/cook/assign supported material values by asset identity. |
-| REQ-021/022/037 | Shared catalog state, actionable failures and source round trips. |
-| SUCCESS-002/004/007 | Saved material integrity, independent native verification and complete editor workflows. |
+| IDs                     | Required result                                                                          |
+| ----------------------- | ---------------------------------------------------------------------------------------- |
+| GOAL-004/005/006        | Material authoring, published state and failures are usable and visible.                 |
+| REQ-010/011/012/013/014 | Create/open/edit/save/cook/assign supported material values by asset identity.           |
+| REQ-021/022/037         | Shared catalog state, actionable failures and source round trips.                        |
+| SUCCESS-002/004/007     | Saved material integrity, independent native verification and complete editor workflows. |
 
 ## 3. Architecture Links
 
@@ -80,15 +80,15 @@ light on nearby geometry.
 
 ## 6. Ownership
 
-| Owner | Responsibility |
-| --- | --- |
-| MaterialEditor | Material documents, property commands, history and swatch UI. |
-| Managed.Assets | Typed immutable material data and canonical source reader/writer. |
-| ContentBrowser | Create/open entry points, asset identity and material picker. |
-| ContentPipeline | Saved-input capture, native cook, provenance and publication. |
-| WorldEditor | Per-instance geometry-slot assignments and explicit repair commands. |
+| Owner                             | Responsibility                                                         |
+| --------------------------------- | ---------------------------------------------------------------------- |
+| MaterialEditor                    | Material documents, property commands, history and swatch UI.          |
+| Managed.Assets                    | Typed immutable material data and canonical source reader/writer.      |
+| ContentBrowser                    | Create/open entry points, asset identity and material picker.          |
+| ContentPipeline                   | Saved-input capture, native cook, provenance and publication.          |
+| WorldEditor                       | Per-instance geometry-slot assignments and explicit repair commands.   |
 | Native Data/Cooker/Content/Vortex | Slot inventory, binary formats, loaded materials and actual rendering. |
-| Runtime / Interop | Supported capability transport and lifetime-safe native application. |
+| Runtime / Interop                 | Supported capability transport and lifetime-safe native application.   |
 
 No editor feature writes native material/geometry structs or owns another cook
 path. Development qualification depends on these production capabilities; the
@@ -123,6 +123,21 @@ authoring/saved revisions, document-owned history and shared published cook stat
 An asset wrapper supplies identity; any attached source snapshot is not the
 editable authority. Every edit/copy/history path preserves every canonical field.
 
+`MaterialSource` retains the complete canonical descriptor alongside its typed
+editable values. The native JSON schema validates reads and writes; scalar edits
+preserve texture bindings, UV transforms and other unedited native fields. The
+managed source writer owns this mapping once, and cooking consumes the same
+descriptor. Do not rebuild a smaller descriptor in ContentPipeline or maintain
+managed cooked-material offsets. Immutable record updates preserve emission and
+read-only fields through copy/history operations.
+
+The scalar projection resolves surface mode using the native domain/alpha rules.
+Unrelated edits preserve the original domain and alpha declarations; an explicit
+surface-mode edit updates an authored surface domain consistently. Decal, UI and
+post-process domains remain unchanged. Texture virtual paths use the native
+`/Mount/path` form. Dependency discovery enumerates every canonical binding and
+uses the existing texture capture/cook path, including independent ORM channels.
+
 The asset name is the source file stem: `Content/Materials/Gold.omat.json` is
 shown and saved as `Gold`. URI and derived editor GUID are read-only identity
 information. Do not introduce an independently editable descriptor name. Asset
@@ -133,20 +148,20 @@ file rename/reference repair remains the Content Browser's responsibility.
 Paths below belong to the canonical engine-owned authoring schema. Internal
 managed member names may differ; one tested adapter owns the mapping.
 
-| UI field | Canonical source path | Validation and behavior |
-| --- | --- | --- |
-| Base colour / opacity | `parameters.base_color[0..3]` | Finite linear RGB and alpha in [0,1]. Colour picker converts display sRGB at its boundary; alpha is linear coverage. |
-| Metallic | `parameters.metalness` | Finite [0,1]. |
-| Roughness | `parameters.roughness` | Finite [0,1]. |
-| Surface mode | `alpha_mode` | Opaque, Mask or Blend; explicit enum mapping. |
-| Alpha cutoff | `parameters.alpha_cutoff` | Finite [0,1]; shown only for Mask. |
-| Double Sided | `parameters.double_sided` | Boolean; normal PBR and alpha-mode rules remain active. |
-| Emission colour | `parameters.emissive_color[0..2]` | Finite linear RGB in [0,1]; retained when intensity is zero. |
-| Emission intensity | `parameters.emissive_intensity` | Finite float32 relative multiplier in [0,65504]; default 0. No physical luminance unit is asserted. |
-| Normal scale | `parameters.normal_scale` | Finite >=0, only when the preserved normal input exists and is effective. |
-| Occlusion strength | `parameters.ambient_occlusion` | Finite [0,1], only when the preserved occlusion input exists and is effective. |
-| Texture identities | Canonical texture-reference fields | Read-only; preserve on all unrelated edits, Save and migration. |
-| Name, URI, GUID, schema | Identity/schema metadata | Read-only with appropriate copy affordances. |
+| UI field                | Canonical source path              | Validation and behavior                                                                                              |
+| ----------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Base colour / opacity   | `parameters.base_color[0..3]`      | Finite linear RGB and alpha in [0,1]. Colour picker converts display sRGB at its boundary; alpha is linear coverage. |
+| Metallic                | `parameters.metalness`             | Finite [0,1].                                                                                                        |
+| Roughness               | `parameters.roughness`             | Finite [0,1].                                                                                                        |
+| Surface mode            | `alpha_mode`                       | Opaque, Mask or Blend; explicit enum mapping.                                                                        |
+| Alpha cutoff            | `parameters.alpha_cutoff`          | Finite [0,1]; shown only for Mask.                                                                                   |
+| Double Sided            | `parameters.double_sided`          | Boolean; normal PBR and alpha-mode rules remain active.                                                              |
+| Emission colour         | `parameters.emissive_color[0..2]`  | Finite linear RGB in [0,1]; retained when intensity is zero.                                                         |
+| Emission intensity      | `parameters.emissive_intensity`    | Finite float32 relative multiplier in [0,65504]; default 0. No physical luminance unit is asserted.                  |
+| Normal scale            | `parameters.normal_scale`          | Finite >=0, only when the preserved normal input exists and is effective.                                            |
+| Occlusion strength      | `parameters.ambient_occlusion`     | Finite [0,1], only when the preserved occlusion input exists and is effective.                                       |
+| Texture identities      | Canonical texture-reference fields | Read-only; preserve on all unrelated edits, Save and migration.                                                      |
+| Name, URI, GUID, schema | Identity/schema metadata           | Read-only with appropriate copy affordances.                                                                         |
 
 New materials retain the existing editor creation defaults: white base colour
 with opacity 1, metallic 0, roughness 0.5, Opaque, alpha cutoff 0.5, single-sided
@@ -289,12 +304,12 @@ independently of cooking.
 `MaterialCookService.CookMaterialAsync` routes to
 `IContentPipelineService.CookAssetAsync`. Native material-descriptor cooking owns
 the binary output. Dirty participating documents require explicit Save; automatic
-work shows Needs save. The fixed layout remains:
+work shows Needs save. The selected publication supplies the physical generation:
 
 ```text
 source: <ProjectRoot>/Content/Materials/Gold.omat.json
-cooked: <ProjectRoot>/.cooked/Content/Materials/Gold.omat
-index:  <ProjectRoot>/.cooked/Content/container.index.bin
+cooked: <ProjectRoot>/.cooked/generations/<SourceKey>/Materials/Gold.omat
+index:  <ProjectRoot>/.cooked/generations/<SourceKey>/container.index.bin
 ```
 
 Only validated, journaled publication makes a material current. MaterialEditor

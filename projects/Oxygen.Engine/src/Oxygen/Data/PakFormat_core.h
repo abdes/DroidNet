@@ -22,6 +22,8 @@
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/MeshType.h>
+#include <Oxygen/Data/PakFormatVersions.h>
+#include <Oxygen/Data/PakFormat_references.h>
 #include <Oxygen/Data/Unorm16.h>
 #include <Oxygen/Data/api_export.h>
 
@@ -78,8 +80,9 @@ inline constexpr std::array<char, 8> kPakHeaderMagic
 inline constexpr std::array<char, 8> kPakFooterMagic
   = { 'O', 'X', 'P', 'A', 'K', 'E', 'N', 'D' };
 
-//! Current PAK binary format version (v7 only).
-constexpr uint16_t kPakVersion = 7;
+//! Current PAK binary format version (v8 only).
+constexpr uint16_t kPakVersion = version::kPakVersion;
+inline constexpr uint32_t kBrowseIndexVersion = version::kBrowseIndexVersion;
 [[maybe_unused]] constexpr uint16_t kCurrentPakFormatVersion = kPakVersion;
 
 //=== PAK File Format Structures ===------------------------------------------//
@@ -93,7 +96,7 @@ constexpr uint16_t kPakVersion = 7;
 #pragma pack(push, 1)
 struct PakHeader {
   char magic[8] = { 'O', 'X', 'P', 'A', 'K', 0, 0, 0 };
-  uint16_t version = kPakVersion; // Format version (must be v7)
+  uint16_t version = kPakVersion; // Current container format version
   uint16_t content_version = 0;
   //! Unique identifier for this PAK
   std::array<uint8_t, 16> source_identity = {};
@@ -174,7 +177,6 @@ struct PakFooter {
   ResourceTable buffer_table = {};
   ResourceTable audio_table = {};
   ResourceTable script_resource_table = {}; // ScriptResourceDesc entries
-  ResourceTable script_slot_table = {}; // ScriptSlotRecord entries
   ResourceTable physics_resource_table = {}; // PhysicsResourceDesc entries
 
   // -- Embedded Browse Index (Optional) --
@@ -184,6 +186,10 @@ struct PakFooter {
   // Runtime loading does not require this index.
   OffsetT browse_index_offset = 0;
   uint64_t browse_index_size = 0;
+
+  //! Mandatory canonical catalog: physical entries, deletions and base layers.
+  OffsetT catalog_offset = 0;
+  uint64_t catalog_size = 0;
 
   // Tail reserve to keep fixed 256-byte footer contract.
   uint8_t _reserved[28] = {}; // Tail reserve to keep fixed 256-byte footer size
@@ -219,9 +225,10 @@ struct AssetDirectoryEntry {
   OffsetT entry_offset = 0; // Absolute offset of *this* directory entry
   OffsetT desc_offset = 0; // Absolute offset of the asset descriptor
   uint32_t desc_size = 0; // Size of asset descriptor (for sanity check)
+  AssetReferenceTable references {};
 
   // Tail reserve to keep fixed 64-byte directory record size.
-  uint8_t _reserved[27] = {}; // Tail reserve to keep fixed 64-byte entry size
+  uint8_t _reserved[11] = {}; // Tail reserve to keep fixed 64-byte entry size
 };
 #pragma pack(pop)
 static_assert(sizeof(AssetDirectoryEntry) == 64);
@@ -242,7 +249,7 @@ static_assert(sizeof(AssetDirectoryEntry) == 64);
 #pragma pack(push, 1)
 struct PakBrowseIndexHeader {
   char magic[8] = { 'O', 'X', 'P', 'A', 'K', 'B', 'I', 'X' };
-  uint32_t version = 1;
+  uint32_t version = kBrowseIndexVersion;
   uint32_t entry_count = 0;
   StringTableSizeT string_table_size = 0;
 };

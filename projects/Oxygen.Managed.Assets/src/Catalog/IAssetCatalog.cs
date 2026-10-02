@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Managed.Assets.Model;
-
 namespace Oxygen.Managed.Assets.Catalog;
 
 /// <summary>
@@ -11,8 +9,8 @@ namespace Oxygen.Managed.Assets.Catalog;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This interface is intentionally separate from <see cref="IAssetService"/>, which loads a specific
-/// asset by URI. A catalog answers "given a scope and criteria, enumerate assets".
+/// Enumerates asset metadata for a selected scope and criteria.
+/// Native Content owns runtime loading and residency.
 /// </para>
 /// <para>
 /// The scope is always client-controlled via <see cref="AssetQuery"/>. This allows different

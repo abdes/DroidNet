@@ -5,7 +5,7 @@
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
 
 namespace Oxygen.Managed.Assets.Tests;
 
@@ -21,7 +21,7 @@ public sealed class LooseCookedIndexTests
         var doc = CreateSampleDocument();
 
         using var ms = new MemoryStream();
-        LooseCookedIndex.Write(ms, doc);
+        Oxygen.Testing.LooseCookedIndexFixture.Write(ms, doc);
         ms.Position = 0;
 
         var read = LooseCookedIndex.Read(ms);
@@ -35,11 +35,19 @@ public sealed class LooseCookedIndexTests
         _ = read.Assets[0].VirtualPath.Should().Be(doc.Assets[0].VirtualPath);
         _ = read.Assets[0].AssetKey.Should().Be(doc.Assets[0].AssetKey);
         _ = read.Assets[0].DescriptorSha256.Span.ToArray().Should().Equal(doc.Assets[0].DescriptorSha256.Span.ToArray());
+        _ = read.Assets[0].References.ResourceCount.Should().Be(1);
+        _ = read.Assets[0].References.KeyCount.Should().Be(1);
+        var encoded = ms.ToArray();
+        var stringTableSize = BinaryPrimitives.ReadUInt64LittleEndian(encoded.AsSpan(40, 8));
+        var expectedReferenceOffset = checked((ulong)LooseCookedIndex.HeaderSize + stringTableSize
+            + ((ulong)doc.Assets.Count * LooseCookedIndex.AssetEntrySize)
+            + ((ulong)doc.Files.Count * LooseCookedIndex.FileRecordSize));
+        _ = read.Assets[0].References.Offset.Should().Be(expectedReferenceOffset);
 
         _ = read.Files[0].Kind.Should().Be(doc.Files[0].Kind);
         _ = read.Files[0].RelativePath.Should().Be(doc.Files[0].RelativePath);
         _ = read.Files[0].Size.Should().Be(doc.Files[0].Size);
-        _ = read.Files[0].Sha256.IsEmpty.Should().BeTrue();
+        _ = read.Files[0].Sha256.Span.ToArray().Should().Equal(doc.Files[0].Sha256.Span.ToArray());
     }
 
     [TestMethod]
@@ -52,13 +60,13 @@ public sealed class LooseCookedIndexTests
 
         using (var ms = new MemoryStream())
         {
-            LooseCookedIndex.Write(ms, doc);
+            Oxygen.Testing.LooseCookedIndexFixture.Write(ms, doc);
             a = ms.ToArray();
         }
 
         using (var ms = new MemoryStream())
         {
-            LooseCookedIndex.Write(ms, doc);
+            Oxygen.Testing.LooseCookedIndexFixture.Write(ms, doc);
             b = ms.ToArray();
         }
 
@@ -74,6 +82,33 @@ public sealed class LooseCookedIndexTests
     }
 
     [TestMethod]
+    [DataRow(1)]
+    [DataRow(2)]
+    [DataRow(65535)]
+    public void Read_WithUnsupportedVersion_ShouldThrow(int version)
+    {
+        using var stream = new MemoryStream();
+        Oxygen.Testing.LooseCookedIndexFixture.Write(stream, CreateSampleDocument());
+        BinaryPrimitives.WriteUInt16LittleEndian(stream.GetBuffer().AsSpan(8, 2), checked((ushort)version));
+        stream.Position = 0;
+        Action read = () => _ = LooseCookedIndex.Read(stream);
+        _ = read.Should().Throw<NotSupportedException>();
+    }
+
+    [TestMethod]
+    [DataRow(6, 0x40)]
+    [DataRow(8, 0x00)]
+    public void Read_WithInvalidSourceIdentity_ShouldThrow(int byteOffset, int value)
+    {
+        using var stream = new MemoryStream();
+        Oxygen.Testing.LooseCookedIndexFixture.Write(stream, CreateSampleDocument());
+        stream.GetBuffer()[16 + byteOffset] = checked((byte)value);
+        stream.Position = 0;
+        Action read = () => _ = LooseCookedIndex.Read(stream);
+        _ = read.Should().Throw<InvalidDataException>().WithMessage("*UUIDv7*");
+    }
+
+    [TestMethod]
     public void Read_WithUnknownFlagsBits_ShouldThrow()
     {
         var doc = CreateSampleDocument();
@@ -81,7 +116,7 @@ public sealed class LooseCookedIndexTests
         byte[] bytes;
         using (var ms = new MemoryStream())
         {
-            LooseCookedIndex.Write(ms, doc);
+            Oxygen.Testing.LooseCookedIndexFixture.Write(ms, doc);
             bytes = ms.ToArray();
         }
 
@@ -97,6 +132,18 @@ public sealed class LooseCookedIndexTests
     }
 
     [TestMethod]
+    public void Read_WithObsoleteAssetEntrySize_ShouldThrow()
+    {
+        using var stream = new MemoryStream();
+        Oxygen.Testing.LooseCookedIndexFixture.Write(stream, CreateSampleDocument());
+        BinaryPrimitives.WriteUInt32LittleEndian(stream.GetBuffer().AsSpan(60, 4), 65);
+        stream.Position = 0;
+
+        Action read = () => _ = LooseCookedIndex.Read(stream);
+        _ = read.Should().Throw<InvalidDataException>().WithMessage("*does not match v3 size*");
+    }
+
+    [TestMethod]
     public void Read_WithStringOffsetOutsideTable_ShouldThrow()
     {
         var doc = CreateSampleDocument();
@@ -104,7 +151,7 @@ public sealed class LooseCookedIndexTests
         byte[] bytes;
         using (var ms = new MemoryStream())
         {
-            LooseCookedIndex.Write(ms, doc);
+            Oxygen.Testing.LooseCookedIndexFixture.Write(ms, doc);
             bytes = ms.ToArray();
         }
 
@@ -114,7 +161,7 @@ public sealed class LooseCookedIndexTests
         var stringTableSize = BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(40, 8));
         var assetEntriesOffset = BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(48, 8));
 
-        // Asset entry layout (v1 minimum):
+        // Asset entry layout:
         // - desc_rel_offset at +17 (u32)
         // Set it to an offset beyond the string table.
         var firstAssetDescOffsetField = checked((int)assetEntriesOffset) + 17;
@@ -133,7 +180,7 @@ public sealed class LooseCookedIndexTests
         var doc = CreateSampleDocument() with { Files = [] };
 
         using var ms = new MemoryStream();
-        LooseCookedIndex.Write(ms, doc);
+        Oxygen.Testing.LooseCookedIndexFixture.Write(ms, doc);
         var bytes = ms.ToArray();
 
         var assetEntriesOffset = BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(48, 8));
@@ -157,7 +204,7 @@ public sealed class LooseCookedIndexTests
         byte[] bytes;
         using (var ms = new MemoryStream())
         {
-            LooseCookedIndex.Write(ms, doc);
+            Oxygen.Testing.LooseCookedIndexFixture.Write(ms, doc);
             bytes = ms.ToArray();
         }
 
@@ -171,10 +218,10 @@ public sealed class LooseCookedIndexTests
 
     private static Document CreateSampleDocument()
     {
-        var shaA = LooseCookedIndex.ComputeSha256("descriptor-a"u8);
-        var shaB = LooseCookedIndex.ComputeSha256("descriptor-b"u8);
-        var shaF1 = LooseCookedIndex.ComputeSha256("file-1"u8);
-        var shaF2 = LooseCookedIndex.ComputeSha256("file-2"u8);
+        var shaA = System.Security.Cryptography.SHA256.HashData("descriptor-a"u8);
+        var shaB = System.Security.Cryptography.SHA256.HashData("descriptor-b"u8);
+        var shaF1 = System.Security.Cryptography.SHA256.HashData("file-1"u8);
+        var shaF2 = System.Security.Cryptography.SHA256.HashData("file-2"u8);
 
         return new Document(
             ContentVersion: 7,
@@ -188,7 +235,10 @@ public sealed class LooseCookedIndexTests
                     VirtualPath: "/Content/Materials/Wood.mat",
                     AssetType: 2,
                     DescriptorSize: 123,
-                    DescriptorSha256: shaA),
+                    DescriptorSha256: shaA)
+                {
+                    References = new(0, ResourceCount: 1, KeyCount: 1),
+                },
                 new AssetEntry(
                     AssetKey: new AssetKey(0x2122232425262728UL, 0x3132333435363738UL),
                     DescriptorRelativePath: "assets/Geometry/Cube.geo",
@@ -205,8 +255,8 @@ public sealed class LooseCookedIndexTests
                     Size: 1000,
                     Sha256: shaF1),
                 new FileRecord(
-                    Kind: FileKind.TexturesData,
-                    RelativePath: "resources/textures.data",
+                    Kind: FileKind.BuffersData,
+                    RelativePath: "resources/buffers.data",
                     Size: 2000,
                     Sha256: shaF2),
             ]);

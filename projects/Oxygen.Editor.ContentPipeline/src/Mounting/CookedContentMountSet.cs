@@ -13,14 +13,17 @@ public sealed partial class CookedContentMountSet : IDisposable
     /// <summary>Initializes a new instance of the <see cref="CookedContentMountSet"/> class.</summary>
     /// <param name="roots">The accepted native mount order.</param>
     /// <param name="readers">Readers transferred from successful preparation.</param>
-    internal CookedContentMountSet(IReadOnlyList<string> roots, IReadOnlyList<IDisposable> readers)
+    internal CookedContentMountSet(Publication.CookPublicationReadLease publication, IReadOnlyList<string> roots, IReadOnlyList<IDisposable> readers)
     {
+        this.Publication = publication;
         this.Roots = roots;
         this.readers = readers;
     }
 
     /// <summary>Gets native mount order, with the highest-priority source last.</summary>
     public IReadOnlyList<string> Roots { get; }
+
+    public Publication.CookPublicationReadLease Publication { get; }
 
     /// <inheritdoc />
     public void Dispose()

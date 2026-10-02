@@ -5,12 +5,34 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <memory>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
-#include <glm/glm.hpp>
+#include <fmt/format.h>
+#include <glm/common.hpp>
+#include <glm/geometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Span.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/Asset.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/MeshType.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialSlotId.h>
+#include <Oxygen/Data/MaterialSlotInventory.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/SourceOrigin.h>
+#include <Oxygen/Data/Vertex.h>
 
 using oxygen::data::Mesh;
 using oxygen::data::MeshView;
@@ -39,8 +61,9 @@ namespace oxygen::data::detail {
 
 void ReferencedBufferStorage::InitializeIndexInfo() const noexcept
 {
-  if (initialized)
+  if (initialized) {
     return;
+  }
   initialized = true;
   if (!index_buffer_resource) {
     cached_index_type = IndexType::kNone;
@@ -54,11 +77,11 @@ void ReferencedBufferStorage::InitializeIndexInfo() const noexcept
   } else if (fmt == Format::kUnknown) {
     // Fall back to element stride
     auto stride = index_buffer_resource->GetElementStride();
-    if (stride == 2)
+    if (stride == 2) {
       cached_index_type = IndexType::kUInt16;
-    else if (stride == 4)
+    } else if (stride == 4) {
       cached_index_type = IndexType::kUInt32;
-    else {
+    } else {
       LOG_F(ERROR, "Unsupported raw index stride (must be 2 or 4)");
       cached_index_type = IndexType::kNone;
     }
@@ -111,8 +134,9 @@ auto MeshView::Vertices() const noexcept -> std::span<const Vertex>
 auto MeshView::IndexBuffer() const noexcept -> detail::IndexBufferView
 {
   auto full = mesh_.get().IndexBuffer();
-  if (full.Empty())
+  if (full.Empty()) {
     return {};
+  }
   return full.SliceElements(desc_.first_index, desc_.index_count);
 }
 
@@ -131,7 +155,9 @@ Mesh::Mesh(uint32_t lod, std::vector<Vertex> vertices,
   std::vector<std::uint32_t> indices)
   : name_(fmt::format("LOD_{}", lod))
   , buffer_storage_(detail::OwnedBufferStorage {
-      .vertices = std::move(vertices), .indices = std::move(indices) })
+      .vertices = std::move(vertices),
+      .indices = std::move(indices),
+    })
 {
   auto& owned_storage = std::get<detail::OwnedBufferStorage>(buffer_storage_);
   CHECK_F(
@@ -144,7 +170,8 @@ Mesh::Mesh(uint32_t lod, std::shared_ptr<BufferResource> vertex_buffer,
   : name_(fmt::format("LOD_{}", lod))
   , buffer_storage_(detail::ReferencedBufferStorage {
       .vertex_buffer_resource = std::move(vertex_buffer),
-      .index_buffer_resource = std::move(index_buffer) })
+      .index_buffer_resource = std::move(index_buffer),
+    })
 {
   auto& referenced_storage
     = std::get<detail::ReferencedBufferStorage>(buffer_storage_);
@@ -185,12 +212,12 @@ auto Mesh::ComputeBounds() -> void
       bbox_max_ = glm::vec3(skinned.bounding_box_max[0],
         skinned.bounding_box_max[1], skinned.bounding_box_max[2]);
     } else {
-      bbox_min_ = bbox_max_ = glm::vec3(0.0f);
+      bbox_min_ = bbox_max_ = glm::vec3(0.0F);
     }
   } else {
     const auto vertices = Vertices();
     if (vertices.empty()) {
-      bbox_min_ = bbox_max_ = glm::vec3(0.0f);
+      bbox_min_ = bbox_max_ = glm::vec3(0.0F);
     } else {
       bbox_min_ = bbox_max_ = vertices.front().position;
       for (const auto& vertex : vertices.subspan(1)) {
@@ -201,7 +228,7 @@ auto Mesh::ComputeBounds() -> void
   }
 
   // Step 2: Always compute bounding sphere from bounding box
-  const glm::vec3 center = (bbox_min_ + bbox_max_) * 0.5f;
+  const glm::vec3 center = (bbox_min_ + bbox_max_) * 0.5F;
   const float radius = glm::length(bbox_max_ - center);
   bounding_sphere_ = glm::vec4(center, radius);
 }
@@ -238,17 +265,82 @@ auto SubMesh::ComputeBounds() -> void
     }
 
     if (!has_vertices) {
-      bbox_min_ = bbox_max_ = glm::vec3(0.0f);
+      bbox_min_ = bbox_max_ = glm::vec3(0.0F);
     }
   }
 
   // Step 2: Always compute bounding sphere from bounding box
-  const glm::vec3 center = (bbox_min_ + bbox_max_) * 0.5f;
+  const glm::vec3 center = (bbox_min_ + bbox_max_) * 0.5F;
   const float radius = glm::length(bbox_max_ - center);
   bounding_sphere_ = glm::vec4(center, radius);
 }
 
+using oxygen::data::MaterialSlotId;
 using oxygen::data::MeshBuilder;
+
+oxygen::data::GeometryAsset::GeometryAsset(AssetKey asset_key,
+  pak::geometry::GeometryAssetDesc desc,
+  std::vector<std::shared_ptr<Mesh>> lod_meshes, SourceOrigin source_origin)
+  : Asset(asset_key, source_origin)
+  , desc_(std::move(desc))
+  , lod_meshes_(std::move(lod_meshes))
+{
+  material_slots_.geometry_asset_key = asset_key;
+  if (lod_meshes_.size() > std::numeric_limits<uint32_t>::max()) {
+    throw std::invalid_argument("Geometry has too many LODs");
+  }
+  std::unordered_map<MaterialSlotId, size_t> slot_indices;
+  for (size_t lod = 0; lod < lod_meshes_.size(); ++lod) {
+    const auto& mesh = lod_meshes_.at(lod);
+    if (!mesh) {
+      throw std::invalid_argument("Geometry LOD must not be null");
+    }
+    const auto submeshes = mesh->SubMeshes();
+    if (submeshes.size() > std::numeric_limits<uint32_t>::max()) {
+      throw std::invalid_argument("Geometry has too many submeshes");
+    }
+    for (size_t index = 0; index < submeshes.size(); ++index) {
+      const auto& submesh = oxygen::base::CheckedAt(submeshes, index);
+      const auto id = submesh.SlotId();
+      if (id.IsNil()) {
+        throw std::invalid_argument("Geometry material slot must not be nil");
+      }
+      const auto [location, inserted]
+        = slot_indices.try_emplace(id, material_slots_.slots.size());
+      if (inserted) {
+        material_slots_.slots.push_back(MaterialSlot {
+          .slot_id = id,
+          .display_name = std::string(submesh.GetName()),
+          .bindings = {},
+        });
+      }
+      const auto key = submesh.Descriptor()
+        ? submesh.Descriptor()->material_asset_key
+        : (submesh.Material() ? submesh.Material()->GetAssetKey()
+                              : AssetKey {});
+      material_slots_.slots.at(location->second)
+        .bindings.push_back(MaterialSlotBinding {
+          .lod_index = static_cast<uint32_t>(lod),
+          .submesh_index = static_cast<uint32_t>(index),
+          .default_material_key = key,
+        });
+    }
+  }
+  const auto revision
+    = ComputeMaterialSlotLayoutRevision(material_slots_.slots);
+  if (!revision) {
+    throw std::invalid_argument("Geometry material slot layout is invalid");
+  }
+  material_slots_.layout_revision = revision.value();
+}
+
+auto oxygen::data::GeometryAsset::FindMaterialSlot(
+  const MaterialSlotId id) const noexcept -> const MaterialSlot*
+{
+  const auto found
+    = std::ranges::find(material_slots_.slots, id, &MaterialSlot::slot_id);
+  return found == material_slots_.slots.end() ? nullptr : &*found;
+}
 
 //! Builds and returns the immutable Mesh.
 auto MeshBuilder::Build() -> std::unique_ptr<Mesh>
@@ -310,6 +402,9 @@ auto MeshBuilder::Build() -> std::unique_ptr<Mesh>
     // Set submesh descriptor if provided
     if (spec.desc.has_value()) {
       submesh.SetDescriptor(spec.desc.value());
+    } else {
+      submesh.slot_id_
+        = spec.slot_id.IsNil() ? MaterialSlotId::Generate() : spec.slot_id;
     }
 
     for (const auto& view_desc : spec.mesh_views) {

@@ -30,4 +30,7 @@ public enum PerspectiveCameraField
 
     /// <summary>ISO sensor sensitivity.</summary>
     Iso = 6,
+
+    /// <summary>Auto or Fixed authored aspect policy.</summary>
+    AspectMode = 7,
 }

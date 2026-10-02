@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World;
 
@@ -24,6 +25,7 @@ public partial class PerspectiveCamera : CameraComponent
 
     private float fieldOfView = DefaultFieldOfViewDegrees;
     private float aspectRatio = DefaultAspectRatio;
+    private CameraAspectMode aspectMode;
 
     static PerspectiveCamera()
     {
@@ -53,6 +55,21 @@ public partial class PerspectiveCamera : CameraComponent
         set => _ = this.SetProperty(ref this.aspectRatio, value);
     }
 
+    /// <summary>Gets or sets framing policy without changing the retained ratio.</summary>
+    public CameraAspectMode AspectMode
+    {
+        get => this.aspectMode;
+        set
+        {
+            if (!Enum.IsDefined(value))
+            {
+                throw new ArgumentOutOfRangeException(nameof(value));
+            }
+
+            _ = this.SetProperty(ref this.aspectMode, value);
+        }
+    }
+
     /// <inheritdoc/>
     public override void Hydrate(ComponentData data)
     {
@@ -67,10 +84,11 @@ public partial class PerspectiveCamera : CameraComponent
         {
             this.FieldOfView = pd.FieldOfView;
             this.AspectRatio = pd.AspectRatio;
+            this.AspectMode = pd.AspectMode;
         }
     }
 
     /// <inheritdoc/>
     public override ComponentData Dehydrate()
-        => new PerspectiveCameraData { Id = this.Id, Name = this.Name, NearPlane = this.NearPlane, FarPlane = this.FarPlane, ApertureF = this.ApertureF, ShutterRate = this.ShutterRate, Iso = this.Iso, FieldOfView = this.FieldOfView, AspectRatio = this.AspectRatio };
+        => new PerspectiveCameraData { Id = this.Id, Name = this.Name, NearPlane = this.NearPlane, FarPlane = this.FarPlane, ApertureF = this.ApertureF, ShutterRate = this.ShutterRate, Iso = this.Iso, FieldOfView = this.FieldOfView, AspectRatio = this.AspectRatio, AspectMode = this.AspectMode };
 }

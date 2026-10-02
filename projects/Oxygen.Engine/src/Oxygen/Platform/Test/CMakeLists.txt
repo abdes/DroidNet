@@ -35,4 +35,5 @@ m_gtest_program(
   SOURCES
     "Input_test.cpp"
     "InputEvents_test.cpp"
+    "Window_test.cpp"
 )

@@ -4,28 +4,61 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <memory>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <tuple>
+#include <utility>
+#include <variant>
 #include <vector>
 
+#include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Composition/Typed.h>
+#include <Oxygen/Content/Internal/ContentIdentity.h>
+#include <Oxygen/Content/Internal/ContentIdentityRegistry.h>
+#include <Oxygen/Content/Internal/ContentPublication.h>
+#include <Oxygen/Content/Internal/ContentReleaseQueue.h>
+#include <Oxygen/Content/Internal/ContentSourceRegistry.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
-#include <Oxygen/Content/Internal/InternalResourceKey.h>
-#include <Oxygen/Content/Internal/PakFileSource.h>
+#include <Oxygen/Content/Internal/InFlightOperationTable.h>
+#include <Oxygen/Content/Internal/ResourceLoadPipeline.h>
+#include <Oxygen/Content/LoaderContext.h>
+#include <Oxygen/Content/ResidencyPolicy.h>
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/AnyCache.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptResource.h>
+#include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Shared.h>
+#include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Serio/AlignmentGuard.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 
-#include <Oxygen/Content/Internal/ResourceLoadPipeline.h>
-
 namespace oxygen::content::internal {
 namespace {
+
+  struct SourceReadAccess final {
+    observer_ptr<const ContentSourceRegistry> registry {};
+    data::SourceInstanceId instance {};
+
+    [[nodiscard]] auto IsReadable() const -> bool
+    {
+      return instance == data::SourceInstanceId {}
+      || (registry && registry->AcquireSource(instance));
+    }
+  };
 
   class MemoryAnyReader final : public oxygen::serio::AnyReader {
   public:
@@ -84,10 +117,9 @@ namespace {
     }
 
   private:
-    std::vector<std::byte> data_ {};
-    std::unique_ptr<oxygen::serio::MemoryStream> stream_ {};
-    std::unique_ptr<oxygen::serio::Reader<oxygen::serio::MemoryStream>>
-      reader_ {};
+    std::vector<std::byte> data_;
+    std::unique_ptr<oxygen::serio::MemoryStream> stream_;
+    std::unique_ptr<oxygen::serio::Reader<oxygen::serio::MemoryStream>> reader_;
   };
 
   auto ValidateTypeFromDecoded(
@@ -122,89 +154,63 @@ namespace {
     return false;
   }
 
-  auto StoreDecodedByType(const TypeId resource_type,
-    ResourceLoadPipeline::ContentCache& cache, const uint64_t key_hash,
-    const std::shared_ptr<void>& decoded) -> bool
+  template <typename Fn> auto WithResourceType(const TypeId type, Fn&& fn)
   {
-    if (resource_type == data::TextureResource::ClassTypeId()) {
-      return cache.Store(
-        key_hash, std::static_pointer_cast<data::TextureResource>(decoded));
+    if (type == data::TextureResource::ClassTypeId()) {
+      return fn.template operator()<data::TextureResource>();
     }
-    if (resource_type == data::BufferResource::ClassTypeId()) {
-      return cache.Store(
-        key_hash, std::static_pointer_cast<data::BufferResource>(decoded));
+    if (type == data::BufferResource::ClassTypeId()) {
+      return fn.template operator()<data::BufferResource>();
     }
-    if (resource_type == data::ScriptResource::ClassTypeId()) {
-      return cache.Store(
-        key_hash, std::static_pointer_cast<data::ScriptResource>(decoded));
+    if (type == data::ScriptResource::ClassTypeId()) {
+      return fn.template operator()<data::ScriptResource>();
     }
-    if (resource_type == data::PhysicsResource::ClassTypeId()) {
-      return cache.Store(
-        key_hash, std::static_pointer_cast<data::PhysicsResource>(decoded));
+    if (type == data::PhysicsResource::ClassTypeId()) {
+      return fn.template operator()<data::PhysicsResource>();
     }
-    throw std::runtime_error(
-      "Unsupported resource type for ResourceLoadPipeline");
+    throw std::invalid_argument("Unsupported resource type for loading");
   }
 
-  template <typename ResourceT>
-  auto CheckOutCached(ResourceLoadPipeline::ContentCache& cache,
-    const uint64_t key_hash) -> std::shared_ptr<void>
+  auto AcquirePublication(const ContentPublication& publication,
+    ResourceLoadPipeline::ContentCache& cache, ContentReleaseQueue& releases,
+    const CheckoutOwner owner) -> ContentAcquisition
   {
-    if (auto cached
-      = cache.CheckOut<ResourceT>(key_hash, oxygen::CheckoutOwner::kInternal)) {
-      return std::static_pointer_cast<void>(std::move(cached));
+    if (!publication.value) {
+      return {};
     }
-    return nullptr;
-  }
-
-  auto CheckOutCachedByType(const TypeId resource_type,
-    ResourceLoadPipeline::ContentCache& cache, const uint64_t key_hash)
-    -> std::shared_ptr<void>
-  {
-    if (resource_type == data::TextureResource::ClassTypeId()) {
-      return CheckOutCached<data::TextureResource>(cache, key_hash);
-    }
-    if (resource_type == data::BufferResource::ClassTypeId()) {
-      return CheckOutCached<data::BufferResource>(cache, key_hash);
-    }
-    if (resource_type == data::ScriptResource::ClassTypeId()) {
-      return CheckOutCached<data::ScriptResource>(cache, key_hash);
-    }
-    if (resource_type == data::PhysicsResource::ClassTypeId()) {
-      return CheckOutCached<data::PhysicsResource>(cache, key_hash);
-    }
-    throw std::runtime_error(
-      "Unsupported resource type for ResourceLoadPipeline");
+    return WithResourceType(publication.type, [&]<typename T>() {
+      return ContentAcquisition { .publication = publication,
+        .owner = publication.Acquire<T>(cache, releases, owner) };
+    });
   }
 
   struct PreparedResourceDecode final {
     ResourceLoadPipeline::ResourceLoadFn loader;
-    SourceToken source_token {};
+    data::SourceInstanceId source_instance {};
     std::unique_ptr<serio::AnyReader> desc_reader;
     std::unique_ptr<serio::AnyReader> buf_reader;
     std::unique_ptr<serio::AnyReader> tex_reader;
     std::unique_ptr<serio::AnyReader> script_reader;
     std::unique_ptr<serio::AnyReader> phys_reader;
-    const PakFile* source_pak = nullptr;
-    const IContentSource* source_content = nullptr;
+    std::shared_ptr<const IContentSource> source_content;
   };
 
   struct ResolvedSourceForDecode final {
-    const IContentSource* source = nullptr;
-    SourceToken source_token {};
+    std::shared_ptr<const IContentSource> source;
+    data::SourceInstanceId source_instance {};
   };
 
   auto ResolveSourceById(const ContentSourceRegistry& source_registry,
-    const uint16_t source_id) -> std::optional<ResolvedSourceForDecode>
+    const data::SourceInstanceId source_id)
+    -> std::optional<ResolvedSourceForDecode>
   {
-    const auto source_it = source_registry.SourceIdToIndex().find(source_id);
-    if (source_it == source_registry.SourceIdToIndex().end()) {
+    auto source = source_registry.AcquireSource(source_id);
+    if (!source) {
       return std::nullopt;
     }
-    const auto source_index = source_it->second;
     return ResolvedSourceForDecode {
-      .source = source_registry.Sources().at(source_index).get(),
-      .source_token = source_registry.SourceTokens().at(source_index),
+      .source = std::move(source),
+      .source_instance = source_id,
     };
   }
 
@@ -220,15 +226,6 @@ namespace {
       return std::nullopt;
     }
     return loader_it->second;
-  }
-
-  auto TryResolvePakSource(const IContentSource& source) -> const PakFile*
-  {
-    if (source.GetTypeId() != PakFileSource::ClassTypeId()) {
-      return nullptr;
-    }
-    const auto* pak_source = static_cast<const PakFileSource*>(&source);
-    return &pak_source->Pak();
   }
 
   auto ResolveDescriptorOffsetAndReader(const IContentSource& source,
@@ -286,7 +283,7 @@ namespace {
 
   auto PrepareResourceDecode(const ContentSourceRegistry& source_registry,
     const ResourceLoadPipeline::ResourceLoaderMap& resource_loaders,
-    const TypeId resource_type, const uint16_t source_id,
+    const TypeId resource_type, const data::SourceInstanceId source_id,
     const data::pak::core::ResourceIndexT resource_index)
     -> std::optional<PreparedResourceDecode>
   {
@@ -294,7 +291,7 @@ namespace {
     if (!resolved_source.has_value()) {
       return std::nullopt;
     }
-    const auto* source = resolved_source->source;
+    const auto& source = resolved_source->source;
 
     auto loader_opt = ResolveLoaderForType(resource_loaders, resource_type);
     if (!loader_opt.has_value()) {
@@ -309,9 +306,8 @@ namespace {
 
     PreparedResourceDecode prepared {};
     prepared.loader = std::move(*loader_opt);
-    prepared.source_token = resolved_source->source_token;
+    prepared.source_instance = resolved_source->source_instance;
     prepared.desc_reader = std::move(descriptor_opt->first);
-    prepared.source_pak = TryResolvePakSource(*source);
     prepared.source_content = source;
     prepared.buf_reader = source->CreateBufferDataReader();
     prepared.tex_reader = source->CreateTextureDataReader();
@@ -327,7 +323,7 @@ namespace {
   {
     return LoaderContext {
       .current_asset_key = {},
-      .source_token = prepared.source_token,
+      .source_instance = prepared.source_instance,
       .desc_reader = prepared.desc_reader.get(),
       .data_readers
       = std::make_tuple(prepared.buf_reader.get(), prepared.tex_reader.get(),
@@ -336,8 +332,8 @@ namespace {
       .default_priority_class = default_priority_class,
       .request_priority = request.priority,
       .request_intent = request.intent,
-      .source_pak = prepared.source_pak,
       .source_content = prepared.source_content,
+      .source_key = prepared.source_content->GetSourceKey(),
     };
   }
 
@@ -347,7 +343,7 @@ namespace {
   {
     return LoaderContext {
       .current_asset_key = {},
-      .source_token = {},
+      .source_instance = {},
       .desc_reader = cooked_reader,
       .data_readers = std::make_tuple(
         cooked_reader, cooked_reader, cooked_reader, cooked_reader),
@@ -355,142 +351,157 @@ namespace {
       .default_priority_class = default_priority_class,
       .request_priority = request.priority,
       .request_intent = request.intent,
-      .source_pak = nullptr,
       .source_content = nullptr,
     };
   }
 
   template <typename DecodeFn>
+  auto DecodeAndPublishResource(const TypeId resource_type,
+    const ResourceKey key, SourceReadAccess access,
+    observer_ptr<ResourceLoadPipeline::ContentCache> cache,
+    observer_ptr<InFlightOperationTable> in_flight_ops,
+    observer_ptr<const ResourceLoadPipeline::Callbacks> callbacks,
+    std::shared_ptr<ContentReleaseQueue> releases,
+    InFlightOperationTable::OperationId operation_id, DecodeFn decode_fn)
+    -> co::Co<SharedContentResult>
+  {
+    const auto erase = Finally([&]() noexcept {
+      in_flight_ops->Erase(resource_type, key.get(), operation_id);
+    });
+    if (!access.IsReadable()) {
+      co_return SharedContentResult {};
+    }
+    auto cached = WithResourceType(resource_type, [&]<typename T>() {
+      return SharedContentResult::FromCache<T>(*cache, *releases, key.get());
+    });
+    if (cached) {
+      co_return cached;
+    }
+    releases->RequireOpen();
+    auto decoded = co_await decode_fn();
+    releases->RequireOpen();
+    callbacks->assert_owning_thread();
+    if (!decoded) {
+      if (callbacks->on_resource_decode_failure) {
+        callbacks->on_resource_decode_failure(resource_type);
+      }
+      co_return SharedContentResult {};
+    }
+    if (!ValidateTypeFromDecoded(resource_type, decoded)) {
+      if (callbacks->on_resource_type_mismatch) {
+        callbacks->on_resource_type_mismatch(resource_type);
+      }
+      co_return SharedContentResult {};
+    }
+    if (!access.IsReadable()) {
+      co_return SharedContentResult {};
+    }
+    const auto publish = [&]() {
+      return WithResourceType(resource_type, [&]<typename T>() {
+        return SharedContentResult::Publish(
+          *cache, *releases, key.get(), std::static_pointer_cast<T>(decoded));
+      });
+    };
+    auto result = publish();
+    if (!result.publication.entry && callbacks->on_store_pressure) {
+      if (callbacks->on_resource_store_retry) {
+        callbacks->on_resource_store_retry(resource_type);
+      }
+      callbacks->on_store_pressure("resource_store_failed", true);
+      if (!access.IsReadable()) {
+        co_return SharedContentResult {};
+      }
+      result = publish();
+      if (!result.publication.entry
+        && callbacks->on_resource_store_retry_failed) {
+        callbacks->on_resource_store_retry_failed(resource_type);
+      }
+    }
+    if (result.publication.entry
+      && cache->Contains(*result.publication.entry)) {
+      callbacks->on_resource_published(key);
+      if (callbacks->on_store_pressure && cache->IsOverBudget()) {
+        callbacks->on_store_pressure("resource_store_over_budget", false);
+      }
+    }
+    co_return access.IsReadable() ? std::move(result) : SharedContentResult {};
+  }
+
+  template <typename DecodeFn>
   auto RunResourceLoadSharedStages(const TypeId resource_type,
-    const ResourceKey key, ResourceLoadPipeline::ContentCache& content_cache,
+    const ResourceKey key, SourceReadAccess access,
+    ResourceLoadPipeline::ContentCache& cache,
     InFlightOperationTable& in_flight_ops,
     const ResourceLoadPipeline::Callbacks& callbacks,
-    const LoadRequest& request, const uint64_t request_sequence,
-    DecodeFn&& decode_fn) -> co::Co<std::shared_ptr<void>>
+    std::shared_ptr<ContentReleaseQueue> releases, const LoadRequest request,
+    const CheckoutOwner owner, const uint64_t request_sequence,
+    DecodeFn decode_fn) -> co::Co<ContentAcquisition>
   {
     callbacks.assert_owning_thread();
+    if (!access.IsReadable()) {
+      co_return ContentAcquisition {};
+    }
     if (callbacks.on_resource_request) {
       callbacks.on_resource_request(resource_type);
     }
-
-    const auto key_hash = callbacks.hash_resource_key(key);
-    if (auto cached
-      = CheckOutCachedByType(resource_type, content_cache, key_hash)) {
+    auto cached = WithResourceType(resource_type, [&]<typename T>() {
+      return ContentAcquisition::FromCache<T>(
+        cache, *releases, key.get(), owner);
+    });
+    if (cached) {
       if (callbacks.on_resource_cache_hit) {
         callbacks.on_resource_cache_hit(resource_type);
       }
-      callbacks.map_resource_key(key_hash, key);
       co_return cached;
     }
     if (callbacks.on_resource_cache_miss) {
       callbacks.on_resource_cache_miss(resource_type);
     }
-
-    if (auto shared_join = in_flight_ops.Find(resource_type, key_hash,
-          InFlightOperationTable::RequestMeta {
-            .priority = request.priority,
-            .intent = request.intent,
-            .sequence = request_sequence,
-          });
-      shared_join.has_value()) {
+    const InFlightOperationTable::RequestMeta meta { .priority
+      = request.priority,
+      .intent = request.intent,
+      .sequence = request_sequence };
+    if (auto joined = in_flight_ops.Find(resource_type, key.get(), meta)) {
       if (callbacks.on_resource_joined_inflight) {
         callbacks.on_resource_joined_inflight(resource_type);
       }
-      co_return co_await *shared_join;
+      const auto result = co_await *joined;
+      co_return access.IsReadable()
+        ? AcquirePublication(result.publication, cache, *releases, owner)
+        : ContentAcquisition {};
     }
     if (callbacks.on_resource_started_inflight) {
       callbacks.on_resource_started_inflight(resource_type);
     }
-
-    auto op = [resource_type, key, key_hash, &content_cache, &in_flight_ops,
-                &callbacks,
-                decode_fn = std::forward<DecodeFn>(
-                  decode_fn)]() mutable -> co::Co<std::shared_ptr<void>> {
-      oxygen::ScopeGuard erase_guard(
-        [&in_flight_ops, resource_type, key_hash]() noexcept {
-          in_flight_ops.Erase(resource_type, key_hash);
-        });
-
-      if (auto cached
-        = CheckOutCachedByType(resource_type, content_cache, key_hash)) {
-        callbacks.map_resource_key(key_hash, key);
-        co_return cached;
-      }
-
-      auto decoded = co_await decode_fn();
-      if (!decoded) {
-        if (callbacks.on_resource_decode_failure) {
-          callbacks.on_resource_decode_failure(resource_type);
-        }
-        co_return nullptr;
-      }
-
-      callbacks.assert_owning_thread();
-      if (!ValidateTypeFromDecoded(resource_type, decoded)) {
-        if (callbacks.on_resource_type_mismatch) {
-          callbacks.on_resource_type_mismatch(resource_type);
-        }
-        LOG_F(ERROR, "Loaded resource type mismatch: expected type_id={}",
-          resource_type);
-        co_return nullptr;
-      }
-
-      auto stored
-        = StoreDecodedByType(resource_type, content_cache, key_hash, decoded);
-      if (!stored && callbacks.on_store_pressure) {
-        if (callbacks.on_resource_store_retry) {
-          callbacks.on_resource_store_retry(resource_type);
-        }
-        callbacks.on_store_pressure("resource_store_failed", true);
-        stored
-          = StoreDecodedByType(resource_type, content_cache, key_hash, decoded);
-        if (!stored && callbacks.on_resource_store_retry_failed) {
-          callbacks.on_resource_store_retry_failed(resource_type);
-        }
-      }
-      if (stored) {
-        callbacks.map_resource_key(key_hash, key);
-        content_cache.Touch(key_hash, oxygen::CheckoutOwner::kInternal);
-        if (callbacks.on_store_pressure && content_cache.IsOverBudget()) {
-          callbacks.on_store_pressure("resource_store_over_budget", false);
-        }
-      }
-
-      if (resource_type == data::TextureResource::ClassTypeId()) {
-        const auto typed
-          = std::static_pointer_cast<data::TextureResource>(decoded);
-        LOG_F(INFO,
-          "AssetLoader: Decoded TextureResource {} ({}x{}, format={}, "
-          "bytes={})",
-          to_string(key), typed->GetWidth(), typed->GetHeight(),
-          oxygen::to_string(typed->GetFormat()), typed->GetDataSize());
-      }
-
-      co_return decoded;
-    }();
-
+    const auto operation_id = in_flight_ops.NewOperationId();
+    auto op = DecodeAndPublishResource(resource_type, key, access,
+      observer_ptr { &cache }, observer_ptr { &in_flight_ops },
+      observer_ptr { &callbacks }, releases, operation_id,
+      std::move(decode_fn));
     co::Shared shared(std::move(op));
-    in_flight_ops.InsertOrAssign(resource_type, key_hash, shared,
-      InFlightOperationTable::RequestMeta {
-        .priority = request.priority,
-        .intent = request.intent,
-        .sequence = request_sequence,
-      });
-    co_return co_await shared;
+    in_flight_ops.Insert(resource_type, key.get(), operation_id, shared, meta);
+    const auto result = co_await shared;
+    co_return access.IsReadable()
+      ? AcquirePublication(result.publication, cache, *releases, owner)
+      : ContentAcquisition {};
   }
 
 } // namespace
 
 ResourceLoadPipeline::ResourceLoadPipeline(
   const ContentSourceRegistry& source_registry,
+  const ContentIdentityRegistry& identities,
   const ResourceLoaderMap& resource_loaders, ContentCache& content_cache,
   InFlightOperationTable& in_flight_ops,
+  const std::shared_ptr<ContentReleaseQueue>& releases,
   const observer_ptr<co::ThreadPool> thread_pool, const bool work_offline,
   Callbacks callbacks)
   : source_registry_(source_registry)
+  , identities_(identities)
   , resource_loaders_(resource_loaders)
   , content_cache_(content_cache)
   , in_flight_ops_(in_flight_ops)
+  , releases_(releases)
   , thread_pool_(thread_pool)
   , work_offline_(work_offline)
   , callbacks_(std::move(callbacks))
@@ -498,62 +509,64 @@ ResourceLoadPipeline::ResourceLoadPipeline(
 }
 
 auto ResourceLoadPipeline::LoadErased(const TypeId resource_type,
-  const ResourceKey key) -> co::Co<std::shared_ptr<void>>
-{
-  co_return co_await LoadErased(resource_type, key, LoadRequest {});
-}
-
-auto ResourceLoadPipeline::LoadErased(
-  const TypeId resource_type, const ResourceKey key, const LoadRequest& request)
-  -> co::Co<std::shared_ptr<void>>
+  const ResourceKey key, LoadRequest request, const CheckoutOwner owner)
+  -> co::Co<ContentAcquisition>
 {
   if (!thread_pool_) {
     throw std::runtime_error(
       "AssetLoader requires a thread pool for async loads (LoadResourceAsync)");
   }
 
-  auto decode_fn
-    = [this, resource_type, key, request]() -> co::Co<std::shared_ptr<void>> {
-    const InternalResourceKey internal_key(key);
-    const uint16_t source_id = internal_key.GetPakIndex();
-    const auto resource_index = internal_key.GetResourceIndex();
+  const auto identity = ContentId { key.get() };
+  const auto kind = identities_.FindResourceKind(identity);
+  if (!kind || ResourceTypeId(*kind) != resource_type) {
+    co_return ContentAcquisition {};
+  }
+  const auto* locator = identities_.FindCookedResource(identity);
+  const auto source_id = locator ? locator->source : data::SourceInstanceId {};
+  const auto resource_index
+    = data::pak::core::ResourceIndexT { locator ? locator->index : 0U };
+  const auto source_owner
+    = locator ? source_registry_.AcquireSource(source_id) : nullptr;
 
+  auto decode_fn = [this, resource_type, request, source_id, resource_index,
+                     source_owner] -> co::Co<std::shared_ptr<void>> {
+    if (!source_owner) {
+      co_return nullptr;
+    }
     auto prepared_opt = PrepareResourceDecode(source_registry_,
       resource_loaders_, resource_type, source_id, resource_index);
     if (!prepared_opt.has_value()) {
       co_return nullptr;
     }
 
-    co_return co_await thread_pool_->Run(
-      [this, prepared = std::move(*prepared_opt), request]() mutable {
-        auto context = BuildLoaderContextFromPrepared(prepared, work_offline_,
-          callbacks_.default_priority_class
-            ? callbacks_.default_priority_class()
-            : LoadPriorityClass::kDefault,
-          request);
+    const auto default_priority = callbacks_.default_priority_class
+      ? callbacks_.default_priority_class()
+      : LoadPriorityClass::kDefault;
+    auto decoded = co_await thread_pool_->Run(
+      [offline = work_offline_, prepared = std::move(*prepared_opt), request,
+        default_priority] mutable -> std::shared_ptr<void> {
+        auto context = BuildLoaderContextFromPrepared(
+          prepared, offline, default_priority, request);
         return prepared.loader(context);
       });
+    co_return source_registry_.AcquireSource(source_id) ? std::move(decoded)
+                                                        : nullptr;
   };
 
   const auto request_sequence = callbacks_.next_request_sequence
     ? callbacks_.next_request_sequence()
     : 0U;
   co_return co_await RunResourceLoadSharedStages(resource_type, key,
-    content_cache_, in_flight_ops_, callbacks_, request, request_sequence,
-    std::move(decode_fn));
+    SourceReadAccess {
+      .registry = observer_ptr { &source_registry_ }, .instance = source_id },
+    content_cache_, in_flight_ops_, callbacks_, releases_, request, owner,
+    request_sequence, std::move(decode_fn));
 }
 
 auto ResourceLoadPipeline::LoadErasedFromCooked(const TypeId resource_type,
-  const ResourceKey key, std::span<const uint8_t> bytes)
-  -> co::Co<std::shared_ptr<void>>
-{
-  co_return co_await LoadErasedFromCooked(
-    resource_type, key, bytes, LoadRequest {});
-}
-
-auto ResourceLoadPipeline::LoadErasedFromCooked(const TypeId resource_type,
-  const ResourceKey key, std::span<const uint8_t> bytes,
-  const LoadRequest& request) -> co::Co<std::shared_ptr<void>>
+  const ResourceKey key, std::span<const uint8_t> bytes, LoadRequest request,
+  const CheckoutOwner owner) -> co::Co<ContentAcquisition>
 {
   if (!thread_pool_) {
     throw std::runtime_error("AssetLoader requires a thread pool for async "
@@ -567,27 +580,34 @@ auto ResourceLoadPipeline::LoadErasedFromCooked(const TypeId resource_type,
       "LoadResourceAsync(cooked) is not implemented for this resource type");
   }
 
+  const auto kind = identities_.FindResourceKind(ContentId { key.get() });
+  const auto* identity = identities_.Resolve(ContentId { key.get() });
+  if (!kind || ResourceTypeId(*kind) != resource_type || identity == nullptr
+    || !std::holds_alternative<SyntheticResourceIdentity>(*identity)) {
+    co_return ContentAcquisition {};
+  }
+
   // Copy bytes eagerly to ensure the payload outlives thread-pool execution.
   auto owned_bytes
     = std::make_shared<std::vector<uint8_t>>(bytes.begin(), bytes.end());
 
   auto decode_fn = [this, resource_type, owned_bytes,
-                     request]() -> co::Co<std::shared_ptr<void>> {
+                     request] -> co::Co<std::shared_ptr<void>> {
     auto loader_opt = ResolveLoaderForType(resource_loaders_, resource_type);
     if (!loader_opt.has_value()) {
       co_return nullptr;
     }
 
+    const auto default_priority = callbacks_.default_priority_class
+      ? callbacks_.default_priority_class()
+      : LoadPriorityClass::kDefault;
     co_return co_await thread_pool_->Run(
-      [this, owned_bytes, loader = std::move(*loader_opt),
-        request]() mutable -> std::shared_ptr<void> {
+      [offline = work_offline_, owned_bytes, loader = std::move(*loader_opt),
+        request, default_priority] mutable -> std::shared_ptr<void> {
         std::span<const uint8_t> span(owned_bytes->data(), owned_bytes->size());
         auto reader = std::make_unique<MemoryAnyReader>(span);
-        auto context = BuildCookedLoaderContext(reader.get(), work_offline_,
-          callbacks_.default_priority_class
-            ? callbacks_.default_priority_class()
-            : LoadPriorityClass::kDefault,
-          request);
+        auto context = BuildCookedLoaderContext(
+          reader.get(), offline, default_priority, request);
 
         return loader(context);
       });
@@ -597,8 +617,8 @@ auto ResourceLoadPipeline::LoadErasedFromCooked(const TypeId resource_type,
     ? callbacks_.next_request_sequence()
     : 0U;
   co_return co_await RunResourceLoadSharedStages(resource_type, key,
-    content_cache_, in_flight_ops_, callbacks_, request, request_sequence,
-    std::move(decode_fn));
+    SourceReadAccess {}, content_cache_, in_flight_ops_, callbacks_, releases_,
+    request, owner, request_sequence, std::move(decode_fn));
 }
 
 } // namespace oxygen::content::internal

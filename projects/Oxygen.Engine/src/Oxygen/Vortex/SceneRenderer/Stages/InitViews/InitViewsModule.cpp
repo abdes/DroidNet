@@ -4,11 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <span>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -104,11 +108,7 @@ namespace {
   {
     const auto tag = internal::RendererTagFactory::Get();
     if (texture_binder != nullptr) {
-      texture_binder->OnFrameStart();
-    }
-    if (const auto geometry_uploader = state.GetGeometryUploader();
-      geometry_uploader != nullptr) {
-      geometry_uploader->OnFrameStart(tag, ctx.frame_slot);
+      texture_binder->EnsureFrameResources();
     }
     if (const auto transform_uploader = state.GetTransformUploader();
       transform_uploader != nullptr) {
@@ -304,9 +304,9 @@ namespace {
     storage.velocity_draw_metadata.assign(draw_count, {});
 
     auto& deformation_history = renderer.GetDeformationHistoryCache();
-    for (std::size_t draw_index = 0U; draw_index < draw_count; ++draw_index) {
-      const auto& source = sources[draw_index];
-      auto& velocity_metadata = storage.velocity_draw_metadata[draw_index];
+    for (const auto& [draw_index, source] : std::views::enumerate(sources)) {
+      auto& velocity_metadata = storage.velocity_draw_metadata.at(
+        static_cast<std::size_t>(draw_index));
       velocity_metadata = VelocityDrawMetadata {};
 
       if (snapshot == nullptr) {
@@ -352,13 +352,15 @@ namespace {
           },
           current_motion_vector_status);
 
-      storage.current_material_wpo_publications[draw_index]
-        = material_wpo_history.current;
-      storage.previous_material_wpo_publications[draw_index]
-        = material_wpo_history.previous;
-      storage.current_motion_vector_status_publications[draw_index]
+      storage.current_material_wpo_publications.at(
+        static_cast<std::size_t>(draw_index)) = material_wpo_history.current;
+      storage.previous_material_wpo_publications.at(
+        static_cast<std::size_t>(draw_index)) = material_wpo_history.previous;
+      storage.current_motion_vector_status_publications.at(
+        static_cast<std::size_t>(draw_index))
         = motion_vector_status_history.current;
-      storage.previous_motion_vector_status_publications[draw_index]
+      storage.previous_motion_vector_status_publications.at(
+        static_cast<std::size_t>(draw_index))
         = motion_vector_status_history.previous;
 
       velocity_metadata.current_material_wpo_index
@@ -627,8 +629,27 @@ InitViewsModule::InitViewsModule(
 
 InitViewsModule::~InitViewsModule() = default;
 
+auto InitViewsModule::OnFrameStart(
+  const frame::SequenceNumber sequence, const frame::Slot slot) -> void
+{
+  if (maintenance_sequence_ == sequence) {
+    CHECK_EQ_F(
+      maintenance_slot_, slot, "A frame sequence must use one resource slot");
+    return;
+  }
+  maintenance_sequence_ = sequence;
+  maintenance_slot_ = slot;
+  if (const auto geometry = scene_prep_state_.GetGeometryUploader()) {
+    geometry->OnFrameStart(internal::RendererTagFactory::Get(), slot);
+  }
+  if (texture_binder_) {
+    texture_binder_->OnFrameStart();
+  }
+}
+
 void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
 {
+  OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
   (void)scene_textures;
   (void)renderer_;
 
@@ -646,6 +667,11 @@ void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
 
   const auto scene = ctx.GetScene();
   if (scene == nullptr || scene_prep_ == nullptr) {
+    return;
+  }
+  if (std::ranges::none_of(ctx.frame_views, [](const auto& view) {
+        return view.is_scene_view && view.resolved_view != nullptr;
+      })) {
     return;
   }
 

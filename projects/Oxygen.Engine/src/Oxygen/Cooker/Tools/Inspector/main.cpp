@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <exception>
@@ -15,10 +16,17 @@
 #include <optional>
 #include <span>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
+#include "AssetKeyMap.h"
+#include "DependencyReport.h"
+#include "GeometryMetadata.h"
+#include "InventoryReport.h"
+#include "SceneMetadata.h"
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
@@ -30,8 +38,8 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
-#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Loose/Validation.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -40,13 +48,9 @@
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
-
-#include "AssetKeyMap.h"
-#include "DependencyReport.h"
-#include "RootValidation.h"
-#include "SceneMetadata.h"
 
 namespace oxygen::engine::internal {
 struct EngineTagFactory {
@@ -124,10 +128,6 @@ auto FileKindToString(const FileKind kind) -> std::string_view
     return "scripts.table";
   case FileKind::kScriptsData:
     return "scripts.data";
-  case FileKind::kScriptBindingsTable:
-    return "script-bindings.table";
-  case FileKind::kScriptBindingsData:
-    return "script-bindings.data";
   case FileKind::kPhysicsTable:
     return "physics.table";
   case FileKind::kPhysicsData:
@@ -159,7 +159,7 @@ auto ToHexBytes(const std::span<const uint8_t> bytes) -> std::string
 {
   static constexpr char kHex[] = "0123456789abcdef";
   auto out = std::string {};
-  out.reserve(2 + bytes.size() * 2);
+  out.reserve(2 + (bytes.size() * 2));
   out.append("0x");
   for (const auto byte : bytes) {
     out.push_back(kHex[(byte >> 4U) & 0x0FU]);
@@ -290,7 +290,7 @@ auto RunValidate(const ValidateOptions& opts) -> int
   const std::filesystem::path cooked_root(opts.cooked_root);
 
   try {
-    oxygen::content::inspection::ValidateRootOrThrow(cooked_root);
+    oxygen::content::lc::ValidateRoot(cooked_root);
     if (!opts.quiet) {
       std::cout << "OK: valid loose cooked root: " << cooked_root.string()
                 << "\n";
@@ -367,7 +367,7 @@ auto RunDumpBuffers(const DumpResourceOptions& opts) -> int
     // clang-format on
 
     for (size_t i = 0; i < entries.size(); ++i) {
-      const auto& e = entries[i];
+      const auto& e = entries.at(i);
       const auto format_name
         = nostd::to_string(static_cast<oxygen::Format>(e.element_format));
       const auto usage_name = nostd::to_string(
@@ -426,7 +426,7 @@ auto RunDumpTextures(const DumpResourceOptions& opts) -> int
     // clang-format on
 
     for (size_t i = 0; i < entries.size(); ++i) {
-      const auto& e = entries[i];
+      const auto& e = entries.at(i);
       const auto type_name
         = nostd::to_string(static_cast<oxygen::TextureType>(e.texture_type));
       const auto format_name
@@ -490,7 +490,7 @@ auto RunDumpPhysics(const DumpResourceOptions& opts) -> int
                  "----------------\n";
 
     for (size_t i = 0; i < entries.size(); ++i) {
-      const auto& e = entries[i];
+      const auto& e = entries.at(i);
       std::string_view format_name = "Unknown";
       switch (static_cast<oxygen::data::pak::physics::PhysicsResourceFormat>(
         e.format)) {
@@ -563,7 +563,7 @@ auto ReadFixedString(const char* bytes, size_t max_len) -> std::string
       break;
     }
   }
-  return std::string(bytes, len);
+  return { bytes, len };
 }
 
 auto FormatScriptParamValue(
@@ -646,7 +646,7 @@ auto ParseStringFromTable(
       break;
     }
   }
-  return std::string(base, len);
+  return { base, len };
 }
 
 auto RunDumpInputActions(const DumpInputOptions& opts) -> int
@@ -760,7 +760,7 @@ auto RunDumpInputMappings(const DumpInputOptions& opts) -> int
       const auto mapping_size = sizeof(InputActionMappingRecord);
       for (size_t i = 0; i < mapping_count; ++i) {
         const auto rec = ReadStructAt<InputActionMappingRecord>(
-          descriptor, mapping_start + i * mapping_size);
+          descriptor, mapping_start + (i * mapping_size));
         if (!rec) {
           std::cout << "    ! mapping[" << i << "] decode failed\n";
           continue;
@@ -779,7 +779,7 @@ auto RunDumpInputMappings(const DumpInputOptions& opts) -> int
       const auto trigger_size = sizeof(InputTriggerRecord);
       for (size_t i = 0; i < trigger_count; ++i) {
         const auto rec = ReadStructAt<InputTriggerRecord>(
-          descriptor, trigger_start + i * trigger_size);
+          descriptor, trigger_start + (i * trigger_size));
         if (!rec) {
           std::cout << "    ! trigger[" << i << "] decode failed\n";
           continue;
@@ -797,7 +797,7 @@ auto RunDumpInputMappings(const DumpInputOptions& opts) -> int
       const auto aux_size = sizeof(InputTriggerAuxRecord);
       for (size_t i = 0; i < aux_count; ++i) {
         const auto rec = ReadStructAt<InputTriggerAuxRecord>(
-          descriptor, aux_start + i * aux_size);
+          descriptor, aux_start + (i * aux_size));
         if (!rec) {
           std::cout << "    ! trigger_aux[" << i << "] decode failed\n";
           continue;
@@ -937,7 +937,7 @@ auto RunDumpPhysicsAssets(const DumpPhysicsAssetsOptions& opts) -> int
       uint64_t total_bindings = 0;
       for (size_t i = 0; i < dir_count; ++i) {
         const auto entry = ReadStructAt<PhysicsComponentTableDesc>(
-          descriptor, dir_offset + i * sizeof(PhysicsComponentTableDesc));
+          descriptor, dir_offset + (i * sizeof(PhysicsComponentTableDesc)));
         if (!entry) {
           std::cout << "    ! table[" << i << "] decode failed\n";
           continue;
@@ -962,130 +962,49 @@ auto RunDumpPhysicsAssets(const DumpPhysicsAssetsOptions& opts) -> int
   }
 }
 
-auto RunDumpScriptSlots(const DumpScriptOptions& opts) -> int
+enum class ScriptDumpMode : uint8_t { kSlots, kParameters };
+
+auto RunDumpSceneScripts(
+  const DumpScriptOptions& opts, const ScriptDumpMode mode) -> int
 {
   const std::filesystem::path cooked_root(opts.cooked_root);
   try {
     oxygen::content::lc::Inspection inspection;
     inspection.LoadFromRoot(cooked_root);
-
-    auto relpath = FindFileRelPathBySuffix(inspection, "script-bindings.table");
-    if (!relpath) {
-      std::cerr << "ERROR: script-bindings.table not found in index\n";
-      return 2;
-    }
-
-    const auto table_path = cooked_root / *relpath;
-    auto entries
-      = LoadPackedTable<oxygen::data::pak::scripting::ScriptSlotRecord>(
-        table_path);
-    if (entries.empty()) {
-      std::cout << "No script slots found in: '" << table_path.string()
-                << "'\n";
-      return 0;
-    }
-
-    std::cout << "Dumping " << entries.size() << " script slots in: '"
-              << table_path.string() << "'\n\n";
-    std::cout << "Idx  Script Asset Key                        ParamOffset     "
-                 "     Count  ExecOrder  Flags\n";
-    std::cout << "---- -------------------------------------- "
-                 "------------------- ------ ---------- ----------\n";
-    for (size_t i = 0; i < entries.size(); ++i) {
-      const auto& e = entries[i];
-      std::cout << std::right << std::setw(3) << i << "  " << std::left
-                << std::setw(38) << oxygen::data::to_string(e.script_asset_key)
-                << " " << std::left << std::setw(19)
-                << ToHex64(e.params_array_offset) << " " << std::right
-                << std::setw(6) << e.params_count << " " << std::right
-                << std::setw(10) << e.execution_order << " " << std::left
-                << std::setw(10) << static_cast<uint32_t>(e.flags) << "\n";
-    }
-    return 0;
-  } catch (const std::exception& ex) {
-    std::cerr << "ERROR: " << ex.what() << "\n";
-    return 2;
-  }
-}
-
-auto RunDumpScriptParams(const DumpScriptOptions& opts) -> int
-{
-  using oxygen::serio::FileStream;
-  using oxygen::serio::Reader;
-
-  const std::filesystem::path cooked_root(opts.cooked_root);
-  try {
-    oxygen::content::lc::Inspection inspection;
-    inspection.LoadFromRoot(cooked_root);
-
-    auto slots_relpath
-      = FindFileRelPathBySuffix(inspection, "script-bindings.table");
-    auto data_relpath
-      = FindFileRelPathBySuffix(inspection, "script-bindings.data");
-    if (!slots_relpath) {
-      std::cerr << "ERROR: script-bindings.table not found in index\n";
-      return 2;
-    }
-    if (!data_relpath) {
-      std::cerr << "ERROR: script-bindings.data not found in index\n";
-      return 2;
-    }
-
-    const auto slots_path = cooked_root / *slots_relpath;
-    const auto data_path = cooked_root / *data_relpath;
-    auto slots
-      = LoadPackedTable<oxygen::data::pak::scripting::ScriptSlotRecord>(
-        slots_path);
-    if (slots.empty()) {
-      std::cout << "(no script slots)\n";
-      return 0;
-    }
-
-    FileStream<> data_stream(data_path, std::ios::in);
-    Reader<FileStream<>> reader(data_stream);
-    auto pack = reader.ScopedAlignment(1);
-
-    for (size_t i = 0; i < slots.size(); ++i) {
-      const auto& slot = slots[i];
-      std::cout << "Slot[" << i
-                << "] key=" << oxygen::data::to_string(slot.script_asset_key)
-                << " params_count=" << slot.params_count
-                << " params_offset=" << ToHex64(slot.params_array_offset)
-                << "\n";
-      if (slot.params_count == 0) {
+    for (const auto& asset : inspection.Assets()) {
+      if (asset.asset_type
+        != static_cast<uint8_t>(oxygen::data::AssetType::kScene)) {
         continue;
       }
-
-      auto seek_result
-        = reader.Seek(static_cast<size_t>(slot.params_array_offset));
-      if (!seek_result) {
-        std::cout << "  ! cannot seek to params offset (skipping)\n";
-        continue;
-      }
-
-      const size_t bytes_to_read = static_cast<size_t>(slot.params_count)
-        * sizeof(oxygen::data::pak::scripting::ScriptParamRecord);
-      auto blob = reader.ReadBlob(bytes_to_read);
-      if (!blob) {
-        std::cout << "  ! failed to read params blob (skipping)\n";
-        continue;
-      }
-
-      for (uint32_t pi = 0; pi < slot.params_count; ++pi) {
-        oxygen::data::pak::scripting::ScriptParamRecord record {};
-        std::memcpy(&record,
-          blob->data() + static_cast<size_t>(pi) * sizeof(record),
-          sizeof(record));
-        const auto key = ReadFixedString(record.key, 64);
-        std::cout << "    [" << pi << "] "
-                  << "key='" << key << "' "
-                  << "type=" << static_cast<uint32_t>(record.type)
-                  << " value=" << FormatScriptParamValue(record) << "\n";
+      const auto bytes
+        = ReadDescriptorBytes(cooked_root / asset.descriptor_relpath);
+      const auto scene = oxygen::data::SceneAsset(asset.key, bytes);
+      std::cout << "Scene: " << asset.virtual_path << "\n";
+      for (const auto& component : scene.GetComponents<
+             oxygen::data::pak::scripting::ScriptingComponentRecord>()) {
+        const auto slots = scene.ReadScriptSlots(
+          component.slot_start_index, component.slot_count);
+        for (size_t i = 0; i < slots.size(); ++i) {
+          const auto& slot = slots.at(i);
+          std::cout << "  Node[" << component.node_index << "] Slot["
+                    << component.slot_start_index + i << "] key="
+                    << oxygen::data::to_string(slot.script_asset_key)
+                    << " parameters=" << slot.params_count
+                    << " execution_order=" << slot.execution_order
+                    << " flags=" << static_cast<uint32_t>(slot.flags) << "\n";
+          if (mode == ScriptDumpMode::kParameters) {
+            for (const auto& parameter : scene.ReadScriptParameters(slot)) {
+              std::cout << "    "
+                        << ReadFixedString(parameter.key, sizeof(parameter.key))
+                        << " = " << FormatScriptParamValue(parameter) << "\n";
+            }
+          }
+        }
       }
     }
     return 0;
-  } catch (const std::exception& ex) {
-    std::cerr << "ERROR: " << ex.what() << "\n";
+  } catch (const std::exception& error) {
+    std::cerr << "ERROR: " << error.what() << "\n";
     return 2;
   }
 }
@@ -1098,7 +1017,9 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
   DumpPhysicsAssetsOptions& physics_assets_opts,
   oxygen::content::inspection::DependencyReportOptions& dependency_opts,
   oxygen::content::inspection::AssetKeyMapOptions& key_map_opts,
-  oxygen::content::inspection::SceneMetadataOptions& scene_metadata_opts)
+  oxygen::content::inspection::SceneMetadataOptions& scene_metadata_opts,
+  oxygen::content::inspection::GeometryMetadataOptions& geometry_metadata_opts,
+  oxygen::content::inspection::InventoryReportOptions& inventory_opts)
   -> std::unique_ptr<Cli>
 {
   auto validate_root = Option::Positional("cooked_root")
@@ -1203,7 +1124,7 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
 
   const std::shared_ptr<Command> script_slots_cmd
     = CommandBuilder("script-slots")
-        .About("Dump script-bindings.table slot entries.")
+        .About("Dump scene-local script slots, grouped by scene and node.")
         .WithPositionalArguments(script_slots_root);
 
   auto script_params_root = Option::Positional("cooked_root")
@@ -1215,8 +1136,7 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
 
   const std::shared_ptr<Command> script_params_cmd
     = CommandBuilder("script-params")
-        .About(
-          "Dump script param arrays referenced by script-bindings.table slots.")
+        .About("Dump scene-local script slots and their parameter values.")
         .WithPositionalArguments(script_params_root);
 
   auto input_actions_root = Option::Positional("cooked_root")
@@ -1278,6 +1198,10 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
       oxygen::content::inspection::BuildAssetKeyMapCommand(key_map_opts))
     .WithCommand(oxygen::content::inspection::BuildSceneMetadataCommand(
       scene_metadata_opts))
+    .WithCommand(oxygen::content::inspection::BuildGeometryMetadataCommand(
+      geometry_metadata_opts))
+    .WithCommand(
+      oxygen::content::inspection::BuildInventoryReportCommand(inventory_opts))
     .Build();
 }
 
@@ -1312,11 +1236,14 @@ auto main(int argc, char** argv) -> int
     oxygen::content::inspection::DependencyReportOptions dependency_opts;
     oxygen::content::inspection::AssetKeyMapOptions key_map_opts;
     oxygen::content::inspection::SceneMetadataOptions scene_metadata_opts;
+    oxygen::content::inspection::GeometryMetadataOptions geometry_metadata_opts;
+    oxygen::content::inspection::InventoryReportOptions inventory_opts;
 
-    const auto cli = BuildCli(validate_opts, dump_opts, buffers_opts,
-      textures_opts, physics_opts, script_slots_opts, script_params_opts,
-      input_actions_opts, input_mappings_opts, physics_assets_opts,
-      dependency_opts, key_map_opts, scene_metadata_opts);
+    const auto cli
+      = BuildCli(validate_opts, dump_opts, buffers_opts, textures_opts,
+        physics_opts, script_slots_opts, script_params_opts, input_actions_opts,
+        input_mappings_opts, physics_assets_opts, dependency_opts, key_map_opts,
+        scene_metadata_opts, geometry_metadata_opts, inventory_opts);
     const auto context = cli->Parse(argc, const_cast<const char**>(argv));
 
     const auto command_path = context.active_command->PathAsString();
@@ -1336,9 +1263,11 @@ auto main(int argc, char** argv) -> int
     } else if (command_path == "physics-table") {
       exit_code = RunDumpPhysics(physics_opts);
     } else if (command_path == "script-slots") {
-      exit_code = RunDumpScriptSlots(script_slots_opts);
+      exit_code
+        = RunDumpSceneScripts(script_slots_opts, ScriptDumpMode::kSlots);
     } else if (command_path == "script-params") {
-      exit_code = RunDumpScriptParams(script_params_opts);
+      exit_code
+        = RunDumpSceneScripts(script_params_opts, ScriptDumpMode::kParameters);
     } else if (command_path == "input-actions") {
       exit_code = RunDumpInputActions(input_actions_opts);
     } else if (command_path == "input-mappings") {
@@ -1350,6 +1279,12 @@ auto main(int argc, char** argv) -> int
     } else if (command_path == "dependencies") {
       exit_code
         = oxygen::content::inspection::RunDependencyReport(dependency_opts);
+    } else if (command_path == "geometries") {
+      exit_code = oxygen::content::inspection::RunGeometryMetadataReport(
+        geometry_metadata_opts);
+    } else if (command_path == "inventory") {
+      exit_code
+        = oxygen::content::inspection::RunInventoryReport(inventory_opts);
     } else if (command_path == "scenes") {
       exit_code = oxygen::content::inspection::RunSceneMetadataReport(
         scene_metadata_opts);

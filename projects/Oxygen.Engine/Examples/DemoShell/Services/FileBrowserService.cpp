@@ -6,20 +6,25 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <source_location>
 #include <string>
+#include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
+#include "DemoShell/FileBrowser/imfilebrowser.h"
+#include "DemoShell/Services/FileBrowserService.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
-
-#include "DemoShell/FileBrowser/imfilebrowser.h"
-#include "DemoShell/Services/FileBrowserService.h"
+#include <Oxygen/Base/ObserverPtr.h>
 
 namespace oxygen::examples {
 
@@ -38,7 +43,7 @@ namespace {
       ? ResolveDefaultContentRoot()
       : config.content_root;
     const auto cooked_root = config.cooked_root.empty()
-      ? content_root / ".cooked"
+      ? content_root / ".cooked" / "main"
       : config.cooked_root;
 
     return ContentRootPaths {
@@ -107,15 +112,16 @@ auto FileBrowserService::Open(const FileBrowserConfig& config) -> RequestId
     flags |= ImGuiFileBrowserFlags_MultipleSelection;
   }
 
-  const auto base_directory
-    = config.initial_directory.empty() ? std::filesystem::current_path() : [&] {
-        std::error_code ec;
-        if (std::filesystem::exists(config.initial_directory, ec)
-          && std::filesystem::is_directory(config.initial_directory, ec)) {
-          return config.initial_directory;
-        }
-        return std::filesystem::current_path();
-      }();
+  const auto base_directory = config.initial_directory.empty()
+    ? std::filesystem::current_path()
+    : [&] -> std::filesystem::path {
+    std::error_code ec;
+    if (std::filesystem::is_directory(
+          base::ToNativePath(config.initial_directory), ec)) {
+      return config.initial_directory;
+    }
+    return std::filesystem::current_path();
+  }();
   const std::string title
     = config.title.empty() ? "file browser" : config.title;
 
@@ -179,16 +185,18 @@ void FileBrowserService::UpdateAndDraw()
     LOG_F(INFO, "FileBrowserService: Selection confirmed");
     result_ = Result {
       .kind = ResultKind::kSelected,
-      .path = browser_->GetSelected(),
+      .path = base::ToLogicalPath(browser_->GetSelected()),
       .request_id = active_request_id_,
     };
     browser_->ClearSelected();
     browser_->Close();
   } else if (was_open_ && !is_open && !result_) {
     LOG_F(INFO, "FileBrowserService: Closed without selection");
-    result_ = Result { .kind = ResultKind::kCanceled,
+    result_ = Result {
+      .kind = ResultKind::kCanceled,
       .path = {},
-      .request_id = active_request_id_ };
+      .request_id = active_request_id_,
+    };
   }
 
   was_open_ = is_open;
@@ -294,13 +302,13 @@ auto MakeModelDirectoryBrowserConfig(const ContentRootPaths& roots)
   };
 }
 
-auto MakeLooseCookedIndexBrowserConfig(const ContentRootPaths& roots)
+auto MakeLibraryBrowserConfig(const ContentRootPaths& roots)
   -> FileBrowserConfig
 {
   return FileBrowserConfig {
-    .title = "Select Loose Cooked Index",
-    .initial_directory = roots.cooked_root,
-    .filters = { MakeFilter("Index", { ".bin" }) },
+    .title = "Select Content Library",
+    .initial_directory = roots.content_root,
+    .filters = { MakeFilter("Import record or index", { ".json", ".bin" }) },
   };
 }
 
@@ -311,7 +319,7 @@ auto MakeSkyboxFileBrowserConfig(const ContentRootPaths& roots)
     .title = "Select Skybox Image",
     .initial_directory = roots.images_directory,
     .filters = { MakeFilter(
-      "Skybox", { ".hdr", ".exr", ".png", ".jpg", ".jpeg", ".tga", ".bmp" }) },
+      "Skybox", { ".hdr", ".exr", ".png", ".jpg", ".jpeg", ".tga", ".bmp" }), },
   };
 }
 

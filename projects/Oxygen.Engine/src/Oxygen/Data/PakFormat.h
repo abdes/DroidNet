@@ -57,12 +57,12 @@
  - `core` must not depend on non-core domains.
 */
 
-#include <Oxygen/Data/PakFormat_animation.h>
-#include <Oxygen/Data/PakFormat_audio.h>
-#include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Data/PakFormat_geometry.h>
-#include <Oxygen/Data/PakFormat_input.h>
-#include <Oxygen/Data/PakFormat_physics.h>
-#include <Oxygen/Data/PakFormat_render.h>
-#include <Oxygen/Data/PakFormat_scripting.h>
-#include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/PakFormat_animation.h> // IWYU pragma: export
+#include <Oxygen/Data/PakFormat_audio.h> // IWYU pragma: export
+#include <Oxygen/Data/PakFormat_core.h> // IWYU pragma: export
+#include <Oxygen/Data/PakFormat_geometry.h> // IWYU pragma: export
+#include <Oxygen/Data/PakFormat_input.h> // IWYU pragma: export
+#include <Oxygen/Data/PakFormat_physics.h> // IWYU pragma: export
+#include <Oxygen/Data/PakFormat_render.h> // IWYU pragma: export
+#include <Oxygen/Data/PakFormat_scripting.h> // IWYU pragma: export
+#include <Oxygen/Data/PakFormat_world.h> // IWYU pragma: export

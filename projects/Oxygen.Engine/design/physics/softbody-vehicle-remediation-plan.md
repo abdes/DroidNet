@@ -560,6 +560,12 @@ Done when:
 Problem:
 
 - Existing tests are mostly API/contract-level and do not catch current scene-hydration failures.
+- `CollisionShapeDescriptorImportJob` emits an OPSB header plus JSON for authored
+  convex hull, triangle mesh and height field recipes, but labels it as Jolt binary.
+  The emitter/loader preserve those bytes; the Jolt converter expects native shape
+  serialization. Compound children and cone geometry also lack a complete path
+  from authored descriptors to the payload consumed by DemoShell. The maintained
+  box/sphere/cylinder/capsule examples do not exercise these gaps.
 
 Files:
 
@@ -568,13 +574,21 @@ Files:
 
 Steps:
 
-1. Add sidecar-driven integration tests:
+1. Complete native cooking/hydration for the existing shape contracts before
+   claiming nonanalytic shape acceptance. Produce actual backend payloads for
+   convex/mesh/height-field recipes; connect compound children and cone geometry
+   to their documented runtime representation. Do not reinterpret recipe JSON as
+   backend bytes or add a second runtime encoding. Assert successful backend shape
+   creation from each cooked recipe and reject malformed payloads with a specific
+   diagnostic. See [shape contracts](../../src/Oxygen/Physics/Shape/design.md) and
+   [physics descriptor layout](../../src/Oxygen/Data/Docs/physics.md).
+2. Add sidecar-driven integration tests:
    - nested rigid body world-pose correctness;
    - vehicle control input leads to measurable chassis movement;
    - vehicle control written in `kGameplay` affects next fixed step (not current);
    - vehicle aggregate lookup by chassis node;
    - soft-body sidecar binding creates valid aggregate.
-2. Add a “contract drift” test for docs/schema/runtime field compatibility.
+3. Add a “contract drift” test for docs/schema/runtime field compatibility.
 
 Done when:
 

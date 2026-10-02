@@ -35,9 +35,18 @@ installed tools; the workspace does not install competing copies of them.
 
 ## Everyday workflow
 
-Automatic environment activation is a personal shell-profile preference. The
-repository does not install or maintain shell-profile helpers. To activate
-manually:
+`./init.ps1` prepares this same editable workspace and exposes its commands in
+the current PowerShell process. CMD users run `init.cmd`. No global Python
+installation, permanent PATH change or shell-profile edit is required.
+
+```powershell
+./init.ps1
+get-artifacts -p Oxygen.Editor -c Release
+traverse Invoke-Tests --start projects/Storage/tests
+```
+
+Use `-NoPythonRestore` to reuse an already-provisioned environment. In a fresh
+terminal, run initialization again or activate the environment directly:
 
 ```powershell
 . .venv/Scripts/Activate.ps1

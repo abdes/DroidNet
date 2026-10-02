@@ -386,6 +386,8 @@ public sealed partial class ContentCookCoordinator
         internal CancellationTokenSource Cancellation { get; } = cancellation;
 
         internal TaskCompletionSource? Resume { get; set; }
+
+        internal FileStream? RetryOwnership { get; set; }
     }
 
     private sealed class RunProgress(ContentCookCoordinator owner, Guid operationId) : IProgress<CookRunProgress>

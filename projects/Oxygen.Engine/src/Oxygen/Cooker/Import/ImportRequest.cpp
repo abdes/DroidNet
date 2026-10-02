@@ -4,20 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#pragma once
-
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
-#include <ranges>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 
 namespace oxygen::content::import {
 
-//! Upper-case style ToString for compatibility with project naming.
+//! Stable command-line spelling of the import format.
 [[nodiscard]] inline auto to_string(ImportFormat format) -> std::string_view
 {
   switch (format) {
@@ -37,6 +37,61 @@ auto ImportRequest::GetSceneName() const -> std::string
 {
   const auto stem = source_path.stem().string();
   return stem.empty() ? "Scene" : stem;
+}
+
+auto ImportRequest::GetTextureDescriptorRelPath() const -> std::string
+{
+  if (!texture_virtual_path.empty()) {
+    auto relative = std::string {};
+    if (!internal::IsCanonicalVirtualPath(texture_virtual_path)
+      || !internal::TryVirtualPathToRelPath(
+        *this, texture_virtual_path, relative)
+      || std::filesystem::path(relative).extension() != ".otex") {
+      throw std::invalid_argument(
+        "Texture virtual_path must name an .otex descriptor within its mount: "
+        + texture_virtual_path);
+    }
+    return relative;
+  }
+  if (job_name.has_value() && !job_name->empty()) {
+    return loose_cooked_layout.TextureDescriptorRelPath(*job_name, *job_name);
+  }
+  auto normalized = source_path.lexically_normal();
+  normalized.make_preferred();
+  auto identity = normalized.generic_string();
+  auto name = source_path.stem().string();
+  if (name.empty()) {
+    name = identity;
+  }
+  if (identity.empty()) {
+    identity = name;
+  }
+  return loose_cooked_layout.TextureDescriptorRelPath(name, identity);
+}
+
+auto ImportRequest::ResolveCookedRoot() const -> std::filesystem::path
+{
+  if (cooked_root.has_value()) {
+    return cooked_root->lexically_normal();
+  }
+  auto leaf = std::filesystem::path(loose_cooked_layout.virtual_mount_root)
+                .lexically_normal()
+                .filename();
+  if (leaf.empty()) {
+    leaf = ".cooked";
+  }
+  std::filesystem::path base;
+  if (!source_path.empty()) {
+    std::error_code error;
+    const auto absolute = std::filesystem::absolute(source_path, error);
+    if (!error) {
+      base = absolute.parent_path();
+    }
+  }
+  if (base.empty()) {
+    base = std::filesystem::temp_directory_path();
+  }
+  return base.filename() == leaf ? base : base / leaf;
 }
 
 namespace {

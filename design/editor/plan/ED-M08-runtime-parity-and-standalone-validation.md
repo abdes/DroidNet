@@ -1,6 +1,12 @@
 # ED-M08 — Runtime parity and standalone qualification
 
-Status: **in progress — M08.1**
+Status: **in progress — M08.1 validated**
+
+Current: **[M08.F1 descriptor-local references](ED-M08.F1-descriptor-local-references.md)**, before M08.2. M08.1's native analysis, editor cutover and maintained-project migration are validated.
+See [owners](#2-implementation-document-map), [remaining increments](#m081-remaining-increments)
+and [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
+[VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
+its rendering, precision and publication contracts remain unchanged.
 
 ## 1. Outcome
 
@@ -121,6 +127,295 @@ an entry dependency.
 
 ### M08.1 — Native canonical data, producers and primitives
 
+Completed foundations: canonical primitives and axial Physics mapping;
+Local/Inherit native records; atmospheric role records, import and conflict
+validation; captured-sky toggle removal; native slot IDs, inventory validation
+and revision hashing. Their remaining rendered/editor qualification stays in
+the owning later slices.
+
+#### M08.1 remaining increments
+
+| Increment                        | State     | Deliverable and acceptance                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M08.1.1 Slots                    | validated | Preserve source declarations through mesh optimization; native provenance, cooked inventories/assignments, Inspector metadata and identity-based instance APIs. Reimport/cache deletion preserve proven IDs; replacement never transfers overrides by ordinal. Test nonzero slots, distinct equal-material declarations, all LOD bindings and clear-to-default. |
+| M08.1.2 Cameras                  | validated | Auto/Fixed source, native/managed records and command transport; hydrate every camera. Resolve projection per target without rewriting authored ratio. Test imports, round trips, invalid inputs and target resize. Fixed bars/metering remain M08.2.                                                                                                           |
+| M08.1.3 Emission                 | validated | Float32 cooked RGB and canonical colour/intensity sources; native version rejection, editor templates/adapters and fixture producers. Retire the affected managed binary writer route. Test finite HDR, 9.7 precision and source colour preservation at zero intensity.                                                                                         |
+| M08.1.4 Cutover                  | validated | Publish standalone retained imports as immutable generations through Cooker/Content; upgrade maintained editor projects and retained settings, recook demo/source imports and PAKs, refresh SDK/Interop, and verify normal editor loading. Reject retired formats; retain no compatibility reader or dual source representation.                                |
+| M08.1.5 Runtime identities       | validated | Intern full typed identities with mounted-source instance identity; reuse opaque IDs in cache, dependencies and in-flight work. Remove hash-as-identity, duplicate reverse registries and packed runtime source IDs. Prove forced-collision separation, same-SourceKey refresh isolation, lazy reload after eviction and bounded locator metadata.              |
+| M08.1.6 Automatic load ownership | validated | Content-owned automatic checkout controls, explicit borrowing and residency pins; remove manual release balancing. Prove per-request ownership across coalesced loads, dependency transfers, cancellation, off-thread destruction and shutdown; preserve allocation-free IBL inspection.                                                                        |
+| M08.1.7 Integrity inventory      | validated | Native loose index owns complete file sizes/digests and membership; protected readers reuse verification. Remove duplicate managed output proofs. Reject tampering, missing/extra members and stale verification; bump the index format and recook.                                                                                                             |
+| M08.1.8 Project publication      | validated | Select one immutable ordered root set through an atomic project head; retain authored-source CAS and preview rollback. Remove cooked-directory swap/recovery phases. Keep existing incremental staging seed copies initially. Qualify multi-root crash recovery, conflicts and old readers.                                                                     |
+| M08.1.9 Native analysis          | validated | Batch native source dependency/output analysis against captured input proofs. Managed orchestration keeps project resolution, dirty state and snapshot ownership. Remove parallel descriptor dependency parsers; prove analyzed/cooked closure equality and bounded process launches.                                                                           |
+
+M08.1.7 also separates event-driven cooking freshness from integrity validation.
+Badge refreshes reuse status snapshots; they neither launch tools nor hash cooked
+payloads. Full native verification remains at cook reuse/publication and explicit
+validation; normal mounts retain metadata admission. Unknown availability is
+neutral, and observed missing output offers cooking.
+
+Damaged shared roots rebuild automatically from known sources into empty staging;
+unknown auxiliary ownership or missing sources fail without changing publication.
+Native per-source reports retain auxiliary-file ownership, without duplicating
+inventory hashes. Named texture descriptors participate in output association,
+freshness, repair and exact material/scene reference resolution. Native job order
+uses the captured dependency graph, including generated-shape default materials.
+
+M08.1.8 closes in two implementation checkpoints, keeping engine and editor
+commits separate:
+
+1. **M08.1.8.1 native admission — validated:** prepare the complete source set off the engine
+   thread; preserve generation leases and old source-qualified objects. Validate
+   lifetime/restart epoch and mount revision before callback-free loader/resolver
+   swaps. Deliver prepared retirements after both owners switch. Native imports
+   accept a fresh root identity through the existing request contract.
+2. **M08.1.8.2 publication cutover — validated:** one leased immutable document owns root order,
+   input identities and provenance; one atomic head selects it. Migrate catalogs,
+   inspection, cooking, mount changes and texture references to that snapshot.
+   Replace root-directory swap recovery with head/source recovery. Reclaim
+   superseded generations automatically during owned maintenance, excluding
+   selected, recovering or leased generations. Keep ordinary staging copies and
+   exclude generation markers until sealing. Rebuild maintained project outputs.
+
+The gates are failed/stale multi-root preparation, reentrant eviction reloads,
+old-reader retention, source/head crash boundaries, source CAS conflicts, catalog
+head refresh, texture references after consecutive publications and safe automatic
+reclamation. Native source analysis is delivered by M08.1.9.
+
+M08.1.9's three delivery stages are validated:
+
+1. **M08.1.9.1 native input observations — validated:** extend the existing source snapshot
+   to retain successful reads and presence/absence/metadata probes. Preserve
+   original I/O errors, reject contradictory observations and verify the same
+   facts before publication. Test missing-file appearance, metadata changes,
+   cancellation and ranged reads. Keep this mechanism in Cooker.
+2. **M08.1.9.2 shared preparation and batch analysis — validated:** extract preparation from
+   native descriptor builders/jobs and model adapters. Analysis and cooking use
+   the same validation, references, naming and recipe interpretation for
+   materials, textures, geometry, projected scenes and glTF/FBX. Expose declared
+   outputs and attributed input observations through one batch tool contract;
+   analysis writes no cooked output. Enforce captured input membership during
+   cooking and test analysis/cook dependency equality.
+   Commit checkpoints:
+   - **M08.1.9.2.1 native preparation and analysis — validated:** shared source preparation,
+     batch analysis, captured-reader ownership and model-read enforcement.
+     Debug: 667 owning-suite tests; Release: 106 contract/model tests; each
+     configuration passes four CLI tests. Scoped tidy, MSVC warning checks and
+     extra-high review are clear.
+   - **M08.1.9.2.2 captured batch execution — validated:** capture-map ingestion,
+     observed descriptor/provenance ingress and all-family dependency enforcement.
+     Full engine/examples Debug/Release builds and the installed-SDK C++20
+     consumer pass; 602 owning tests and 11 CLI tests pass per configuration.
+     All 16 Content scenes recook, and packaging reports no warnings/errors.
+     RenderScene validates loose and PAK scene replacement, IBL and matching
+     appearance. Scoped tidy, compiler warnings and extra-high review are clear.
+3. **M08.1.9.3 editor cutover — validated:** batch each unresolved dependency frontier,
+   capture and compare the reported input proofs, then cook through the native
+   contract. Remove duplicate managed cook-dependency parsers. Retain project
+   resolution, source editing, dirty-document policy and progress/diagnostics;
+   badge refresh uses accepted dependency facts without launching native tools.
+   Qualify bounded process launches and real import/cook/reimport workflows.
+   Commit checkpoints:
+   - **M08.1.9.3.1 native client and capture transport — validated:** typed reports,
+     leased schemas, correlated batch queries and capture-map transport. Replacement
+     analysis preserves logical identity without installing incoming sources. The
+     exposed worker drain includes file/artifact cleanup. Debug/Release each pass
+     73 client/compatibility tests and the installed-tool analysis/capture/cook
+     roundtrip; native analysis/snapshot suites, 14 CLI cases per configuration,
+     the C++20 SDK consumer, scoped tidy and extra-high review also pass.
+   - **M08.1.9.3.2 discovery and status cutover — validated:** replace managed cook parsers,
+     batch frontiers, verify captured observations and publish accepted facts;
+     keep badge reads passive and close real editor workflows. Workspace acceptance
+     includes visible content-refresh failures and project-scoped preview
+     preferences (60 FPS / Error defaults), as specified in the settings LLD.
+     Static textured glTF/FBX imports use the shared native policy and retain
+     external images; unsupported animation/skinning and unmapped texture
+     channels remain explicit errors. Validate import/reimport from retained
+     sources and verify non-placeholder cooked texture bindings.
+
+     Debug/Release pipeline suites pass 514 tests each, with affected-scope
+     followups after the tangent-policy and cleanup changes. Eighteen rendered
+     editor checks cover import, replacement, source-independent retry,
+     picking/history/reopen, cooking feedback and runtime preferences. Four
+     maintained projects recook and render in the normal Release editor; a
+     rejected publication produces a persistent error banner and Retry restores
+     rendering. Native texture/AO/tangent checks, RenderScene loose/PAK captures,
+     the refreshed 16-scene library and four retained models pass. No-op cooks
+     and passive badge reads launch no native workers. Extra-high correctness
+     and complexity review is clear.
+
+M08.1.7's whole-slice review is complete: unnecessary complexity, duplicate state,
+owner/API integration and C++20/23 use were reviewed, with affected checks rerun
+after corrections. The validation ledger records the accepted scope.
+
+Execute M08.1.5 → .6 → .7 → .8 → .9 after the current-format M08.1.4
+checkpoint. These are the approved simplification order; all are validated.
+The separately planned [M08.F1 format milestone](ED-M08.F1-descriptor-local-references.md)
+then precedes M08.2. Each format change owns its own migration and recook;
+M08.1.4 verification is not deferred until F1.
+
+M08.1.4 closes in small reviewed checkpoints:
+
+| Checkpoint                   | Status    | Exit check                                                                                                                                                                            |
+| ---------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Retained upload results      | validated | Debug/Release full engine builds; 103/102 upload, geometry and texture tests; delayed consumers, reentrant close/progress, cancellation, device loss and Debug allocation failure.    |
+| Bounded resource maintenance | validated | Full Debug/Release/Tracy builds; 193 Debug and 184 Release resource/lifecycle tests; scoped tidy clean; native scene replacement with debug-layer and IBL checks. CPU baseline below. |
+| SDK/editor workflows         | validated | Release SDK/Interop/app build; 13 native UI cases; all four normal projects open/render/Save; automatic publication and zero-node Save/reopen pass.                                   |
+
+The [upload owner](../../../projects/Oxygen.Engine/design/vortex/lld/upload.md#result-ownership)
+defines lifetime and maintenance contracts. Each checkpoint keeps its tests and
+owner documentation with the code; no expiry workaround or GPU wait is introduced.
+
+**Maintenance baseline — 2026-09-29.** Ryzen 9 9950X, RTX 3080 (610.62),
+MSVC 14.51, Release; source is the bounded-maintenance checkpoint containing
+this table. CPU tests use FakeGraphics, five runs with default 64-LOD reclamation.
+Registry rows report the median across runs; geometry reports the observed range.
+
+| Measurement                                                    | Result                                                           |
+| -------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Remove one resource with 0 / 1,024 / 8,192 unrelated resources | 0.2 / 0.2 / 0.2 µs median                                        |
+| Repoint one equivalent view with 64 / 1,024 / 8,192 aliases    | 0.1 / 0.2 / 0.2 µs median                                        |
+| Reclaim 4,096 geometry assets, 64 LODs/frame                   | First frame 0.131–0.192 ms; p95 0.127–0.143 ms; maximum 0.251 ms |
+| Native geometry completion publication                         | 444 Tracy samples; p95 0.120 µs; maximum 63.881 µs               |
+| Native texture completion publication                          | 888 Tracy samples; p95 0.401 µs; maximum 77.798 µs               |
+
+Reproduce CPU measurements from `projects/Oxygen.Engine` with Release binaries
+`Oxygen.Graphics.Common.ResourceRegistry.Tests.exe` and
+`Oxygen.Vortex.GeometryUploader.Tests.exe` under `out/build-ninja/bin/Release`,
+using `--gtest_also_run_disabled_tests --gtest_filter=*Benchmark.* --gtest_repeat=5`.
+
+The native baseline uses RenderScene's `ibl_persist_and_replace` UI test at
+1920×1080, 60-FPS cap, Sponza → Lantern → Sponza, with isolated settings and
+`OXYGEN_UI_TEST_FILTER=ibl_persist_and_replace`. Run the Tracy preset and export
+`Vortex.Geometry` / `Vortex.Texture` zones with `tracy-csvexport -u -f`.
+This replacement retains cached assets; the native timings measure publication,
+not large-unload driver cost. Large-unload bounds and viewless cleanup are covered
+by the CPU baseline and lifecycle regression. The separate debug-layer run passed
+in 11.69 s with no D3D12 errors. Traces, screenshots and logs stay outside Git.
+
+#### M08.1.5 qualification and locator baseline
+
+Full Debug/Release engine and example builds pass without MSVC warnings.
+Content plus renderer resource suites pass **310 Debug / 304 Release** cases.
+The selected four tidy checks pass across modified files. Source review is clear.
+Both SDK configurations, Interop and normal editor builds pass; existing managed
+analyzer warnings remain in unchanged editor code. RenderScene passes
+`ibl_persist_and_replace` and `ibl_reopen` with isolated settings, Sponza/Lantern,
+1920×1080 at 60 FPS, and the D3D12 debug layer, with no debug-layer errors.
+
+Regressions cover exact hash collisions, same-key refresh with changed payloads,
+revocation during dependencies, independent generation reopen, lazy reload after
+eviction, supplied-byte provenance, synthetic script reload, allocation failure
+rollback and bounded locator retirement. Existing-ID inspection allocates nothing.
+
+Release baseline (2026-09-29, MSVC x64; 65,536 locators; median of three runs):
+
+| Measurement                                             | Result   |
+| ------------------------------------------------------- | -------- |
+| Intern a new cooked locator                             | 115.9 ns |
+| Find an existing full identity                          | 15.4 ns  |
+| Cooked locator allocator bytes                          | 7.50 MiB |
+| Synthetic allocator bytes after retiring the cooked set | 9.50 MiB |
+| Empty registry bucket capacity after the mixed-set peak | 4.00 MiB |
+
+The memory figures measure interner allocator requests. The second phase briefly
+holds both sets; buckets retain that peak capacity for reuse. Synthetic identities
+remain valid for the loader's producer lifetime, independently of payload eviction.
+
+Reproduce from the engine root:
+
+```powershell
+./out/build-ninja/bin/Release/Oxygen.Content.ContentIdentity.Tests.exe `
+  --gtest_also_run_disabled_tests `
+  --gtest_filter=ContentIdentityBenchmark.DISABLED_LocatorCost --gtest_repeat=3
+```
+
+#### M08.1.6 qualification and ownership baseline
+
+Automatic request controls and immutable parent bindings replace manual release
+balancing and the duplicate dependency graph. Exact cache-incarnation tickets
+isolate replacements; frame-start processing handles 128 returned controls,
+including frames without views. Explicit trim, pressure recovery and shutdown
+drain fully. The [Content contract](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/deps_and_cache.md)
+owns lifetime and failure semantics.
+
+Full Debug/Release engine and example builds pass without MSVC warnings;
+**422 Debug / 419 Release** focused tests pass. Both SDK installs, Interop and
+normal editor builds pass; existing managed analyzer warnings remain in unchanged
+editor code. The selected four tidy checks are clean. Source review and regressions
+cover callback-driven destruction/restart, allocation failure, off-thread returns,
+coalesced delivery, retained children and generation-isolated script reload.
+RenderScene passes `ibl_persist_and_replace` and `ibl_reopen` with isolated
+Sponza/Lantern settings, 1920×1080 at 60 FPS and the D3D12 debug layer.
+
+Release CPU baseline (2026-09-29, Ryzen 9 9950X, MSVC 14.51 x64):
+
+| Measurement                                              | Result   |
+| -------------------------------------------------------- | -------- |
+| Warm acquisition and enqueue, median across three runs   | 85.9 ns  |
+| Drain 128 records, median                                | 2.8 µs   |
+| Drain 128 records, P95                                   | 2.9 µs   |
+| Destroy a 64 MiB BufferResource, median across runs      | 1.589 ms |
+| Destroy a 64 MiB BufferResource, largest observed sample | 3.254 ms |
+
+Each run measures 512 batches of 128 acquisitions and 32 large-payload releases.
+The batch limit bounds bookkeeping; individual CPU payload destruction remains
+synchronous. Existing entry-unit budget accounting is unchanged; byte weighting
+is tracked as [CNTT-BUDGET-01](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/implementation_plan.md#cpu-budget-accounting).
+
+Reproduce from the engine root:
+
+```powershell
+./out/build-ninja/bin/Release/Oxygen.Content.ContentOwnership.Tests.exe `
+  --gtest_also_run_disabled_tests `
+  --gtest_filter=ContentOwnershipBenchmark.DISABLED_AcquisitionAndReleaseCost `
+  --gtest_repeat=3
+```
+
+Qualify the engine and all maintained examples before editor validation: finish
+native content migration, retained reimport, loose/PAK loading and bounded runtime
+checks first. Keep the existing IBL rendering and performance contracts intact.
+
+Cutover includes shared [Base filesystem support](../../../projects/Oxygen.Engine/src/Oxygen/Base/Docs/Filesystem.md)
+at native I/O boundaries. Qualify retained imports beyond Windows' legacy path
+limit, logical record paths, and DemoShell library restoration by authored record.
+
+M08.1.4 includes genuine zero-node cooked scenes. Preserve scene-level environment
+and authored identity without placeholder nodes or omitted outputs. Qualify
+descriptor generation, native cooking/loading and both formerly blocked
+`NewScene2` project scenes; keep invalid component references rejected.
+
+Owner contracts: [Content identities/ownership](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/deps_and_cache.md#identities),
+[native integrity inventory](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/loose_cooked_content.md#complete-integrity-inventory),
+and [project publication/analysis](../lld/content-pipeline.md#23-native-source-analysis).
+Fix the wrong-type cache-checkout retain and qualify physics-sidecar hashes after
+PAK relocation as focused correctness work, separately from the ownership and
+format redesigns.
+
+M08.1.1 also delivers the approved native retained-model publication contract:
+immutable per-source generations under existing Content, selected atomically
+with native provenance in the authored import record. DemoShell and CLI use the
+same Cooker API; no writes beside external inputs or whole-root copies. Validate
+interruption, concurrent publication, settings changes and old-reader lifetime.
+The [Cooker owner design](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/Docs/Import/async_import_pipeline_v2.md#retained-model-publication)
+owns storage and lifecycle details.
+
+Editor persistence, descriptor export and existing command transports move with
+these contracts so upgraded projects remain usable. New inspector/repair UX and
+the general migration/recovery workflow retain M08.4/M08.5 ownership. One-time
+cutover scripts and recoverable backups stay in ignored local output.
+
+Resolve slot identity at import, load, edit and geometry replacement, then use
+the existing indexed render cache. Do not add UUID lookup, provenance hashing
+or extra allocations to draw submission. Separate source declarations retain
+independent bindings even when their default material matches.
+
+The implementation review uses UE5.7.4 at `F:/Epic Games/UE_5.7`:
+`StaticMesh.h`/`StaticMeshComponent.cpp` for slot/default ownership,
+`CameraComponent.h`/`CameraStackTypes.cpp` for authored versus target aspect,
+and `Math/Color.h` for linear float32 colour. Importer-specific continuity and
+Oxygen's established vertical-FOV convention remain authoritative. Detailed
+contracts and reference rationale belong in the owner documents below.
+
 Implement engine-owned schemas/versioned records for flag source modes, slot
 identity/overrides, camera aspect policy, atmospheric slots and float32 emission.
 Schema validation covers shape/range/count limits; semantic validation covers
@@ -172,6 +467,13 @@ slot overrides; Local/Inherit; hidden/off role conflicts; Auto/Fixed records;
 finite HDR precision; primitive bounds/attributes/sidedness; obsolete format
 rejection. Cook and inspect through native tools, never managed binary decoding.
 
+### M08.F1 — Descriptor-local reference format
+
+Status: **planned**. Depends on M08.1.9; prerequisite for M08.2 and subsequent
+qualification. The [permanent format plan](ED-M08.F1-descriptor-local-references.md)
+owns execution, version changes and recooking. Data and Cooker own the wire
+contract and packaging behavior; this milestone introduces no compatibility reader.
+
 ### M08.2 — Native rendering and view behavior
 
 Implement effective visibility for geometry/light eligibility and invalidation
@@ -182,12 +484,15 @@ controls with their defined field semantics.
 
 Replace single-directional surface/shadow selection with independent participating
 sources. Primary and Secondary both illuminate and cast requested shadows;
-None remains an ordinary directional source. Complete captured-sky diffuse
-irradiance, roughness-dependent specular products, readiness and invalidation.
-Activate Stage 13 indirect evaluation and retire the Stage 12 ambient bridge.
-Use the scene-global capture anchor and shared producer/consumer filtering rules
-in the IBL contract; camera navigation does not change authored sky lighting.
-The native [VX-IBL-01 plan](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md) delivers height-fog capture, immediate authoring, budgeted runtime updates and DemoShell UI within this rendering work.
+None remains an ordinary directional source.
+
+[VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md)
+already delivers captured diffuse/specular sky lighting, readiness/invalidation,
+Stage 13 evaluation, height-fog capture, both update schedules and DemoShell UI;
+the Stage 12 ambient bridge is removed. M08.2 preserves and qualifies that
+implementation against the canonical light/view behavior. Keep its scene-global
+capture anchor and shared filtering rules: camera navigation does not change
+authored sky lighting.
 
 Resolve the exact camera and parented pose. Auto derives target aspect with
 unchanged vertical FOV; Fixed preserves ratio/composition with a centred content
@@ -249,6 +554,22 @@ Checks: actual packaged controls/commands, nonzero slot assignment/clearing and
 repair, published material changes, role conflicts, flag defaults/overrides,
 Auto resize without dirtying, workspace Hide restoration/lifetime/accessibility.
 Verify engine fixes again through normal editor workflows.
+
+**Inspector completeness and usability gate:** audit the real scene/environment
+and node/component property editors before implementation, then repeat the review
+on the completed packaged UI.
+
+- Map every required field in the owning LLD tables to its actual control,
+  applicable selection/mode and non-default workflow. Identify missing, hidden,
+  ineffective or incorrectly bound controls; verify edit, Undo/Redo, Save/reopen
+  and live effects. Include empty/scene selection and mixed selection.
+- Review grouping, discoverability, progressive disclosure, labels/units, control
+  choices, alignment, keyboard/focus behavior and loading/error/repair feedback.
+  Exercise narrow docks and 100%/150%/200% scaling. Remove redundant information
+  and unnecessary interaction steps while preserving the V0.1 field contract.
+- Fix the findings and walk through the resulting UI with the user before closing
+  M08.4. Record one compact coverage/findings table and acceptance outcome in the
+  existing M08 validation summary; keep temporary screenshots out of Git.
 
 ### M08.5 — Migration and verified saved-input preparation
 
@@ -384,6 +705,7 @@ each run. Native example use/content refresh follows the maintained
 - [ ] Canonical formats/migration and every required producer/loader mapping pass.
 - [ ] Engine fixes have native tests and rendered evidence outside the editor.
 - [ ] Editor authoring/history/Save/cook/live delivery and workspace Hide pass.
+- [ ] M08.4 inspector field coverage and usability audit pass, with user walkthrough acceptance.
 - [ ] Saved-input proof/ownership survive partial/no-op publication and contention.
 - [ ] Saved-revision capture isolates edits and converges correctly after release.
 - [ ] Full semantic/image/GPU-exposure comparisons pass the fixed thresholds.

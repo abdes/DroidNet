@@ -32,12 +32,12 @@ public sealed partial class EngineServiceShutdownTests
             }
         };
         var transport = Mock.Get(native.Commands);
-        _ = transport.Setup(value => value.ReplaceCookedRootsAsync(It.IsAny<IReadOnlyList<string>>())).Returns(acknowledgement.Task);
-        var roots = new[] { "published" };
+        _ = transport.Setup(value => value.ReplaceCookedRootsAsync(It.IsAny<IReadOnlyList<RuntimeCookedRoot>>())).Returns(acknowledgement.Task);
+        var roots = new[] { new RuntimeCookedRoot("published", "Content") };
         var refresh = service.RefreshProjectCookedRootsAsync(roots, keepPaused: true);
         try
         {
-            roots[0] = "later mutation";
+            roots[0] = new("later mutation", "Content");
             await updating.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = refresh.IsCompleted.Should().BeFalse();
             _ = service.ContentStatus.State.Should().Be(RuntimeContentState.Updating);
@@ -49,12 +49,13 @@ public sealed partial class EngineServiceShutdownTests
         }
 
         await refresh.ConfigureAwait(false);
+        _ = service.ContentStatus.Bindings.Single().ProjectMount.Should().Be("Content");
         _ = service.ContentStatus.Roots.Should().Equal("published");
         _ = service.ContentStatus.State.Should().Be(RuntimeContentState.Updating);
         await service.ResumeCookedContentAsync().ConfigureAwait(false);
         _ = service.ContentStatus.State.Should().Be(RuntimeContentState.Mounted);
         _ = service.ContentStatus.RunId.Should().Be(run);
-        transport.Verify(value => value.ReplaceCookedRootsAsync(It.Is<IReadOnlyList<string>>(paths => paths.Count == 1 && string.Equals(paths[0], "published", StringComparison.Ordinal))), Times.Once());
+        transport.Verify(value => value.ReplaceCookedRootsAsync(It.Is<IReadOnlyList<RuntimeCookedRoot>>(paths => paths.Count == 1 && string.Equals(paths[0].Path, "published", StringComparison.Ordinal))), Times.Once());
     }
 
     /// <summary>A failed replacement invalidates native availability until a real restoration succeeds.</summary>
@@ -65,16 +66,16 @@ public sealed partial class EngineServiceShutdownTests
         var native = new FakeEngineSession();
         var service = await this.StartAsync(native).ConfigureAwait(false);
         await using var lifetime = service.ConfigureAwait(false);
-        await service.RefreshProjectCookedRootsAsync(["previous"]).ConfigureAwait(false);
+        await service.RefreshProjectCookedRootsAsync([new("previous", "Content")]).ConfigureAwait(false);
         var transport = Mock.Get(native.Commands);
-        _ = transport.Setup(value => value.ReplaceCookedRootsAsync(It.IsAny<IReadOnlyList<string>>())).Returns(Task.FromException(new InvalidOperationException("Native mount rejected")));
-        _ = await ThrowsAsync<InvalidOperationException>(() => service.RefreshProjectCookedRootsAsync(["replacement"])).ConfigureAwait(false);
+        _ = transport.Setup(value => value.ReplaceCookedRootsAsync(It.IsAny<IReadOnlyList<RuntimeCookedRoot>>())).Returns(Task.FromException(new InvalidOperationException("Native mount rejected")));
+        _ = await ThrowsAsync<InvalidOperationException>(() => service.RefreshProjectCookedRootsAsync([new("replacement", "Content")])).ConfigureAwait(false);
         var failed = service.ContentStatus;
         _ = failed.State.Should().Be(RuntimeContentState.Failed);
-        _ = failed.Roots.Should().BeEmpty();
+        _ = failed.Roots.Should().Equal("previous");
         _ = failed.Reason.Should().Be("Native mount rejected");
-        _ = transport.Setup(value => value.ReplaceCookedRootsAsync(It.IsAny<IReadOnlyList<string>>())).Returns(Task.CompletedTask);
-        await service.RefreshProjectCookedRootsAsync(["previous"]).ConfigureAwait(false);
+        _ = transport.Setup(value => value.ReplaceCookedRootsAsync(It.IsAny<IReadOnlyList<RuntimeCookedRoot>>())).Returns(Task.CompletedTask);
+        await service.RefreshProjectCookedRootsAsync([new("previous", "Content")]).ConfigureAwait(false);
         _ = service.ContentStatus.State.Should().Be(RuntimeContentState.Mounted);
         _ = service.ContentStatus.Roots.Should().Equal("previous");
         _ = service.ContentStatus.Revision.Should().BeGreaterThan(failed.Revision);
@@ -89,24 +90,10 @@ public sealed partial class EngineServiceShutdownTests
         var native = new FakeEngineSession();
         var service = await this.StartAsync(native).ConfigureAwait(false);
         await using var lifetime = service.ConfigureAwait(false);
-        await service.RefreshProjectCookedRootsAsync(["published"]).ConfigureAwait(false);
+        await service.RefreshProjectCookedRootsAsync([new("published", "Content")]).ConfigureAwait(false);
         native.Loop.SetResult();
         _ = service.ContentStatus.State.Should().Be(RuntimeContentState.Unavailable);
         _ = service.ContentStatus.Roots.Should().BeEmpty();
-    }
-
-    /// <summary>Legacy queued mounts never become evidence of a mounted native root.</summary>
-    /// <returns>The asynchronous queued-command regression.</returns>
-    [TestMethod]
-    public async Task LegacyMountDispatchDoesNotClaimNativeReadiness()
-    {
-        var service = await this.StartAsync(new FakeEngineSession()).ConfigureAwait(false);
-        await using var lifetime = service.ConfigureAwait(false);
-        service.MountProjectCookedRoot("queued");
-        _ = service.ContentStatus.State.Should().Be(RuntimeContentState.Updating);
-        _ = service.ContentStatus.Roots.Should().BeEmpty();
-        service.UnmountProjectCookedRoot();
-        _ = service.ContentStatus.State.Should().Be(RuntimeContentState.Unmounted);
     }
 
     /// <summary>Throwing subscribers cannot stop native content operations or suppress other subscribers.</summary>
@@ -127,7 +114,7 @@ public sealed partial class EngineServiceShutdownTests
                 _ = mounted.TrySetResult();
             }
         };
-        await service.RefreshProjectCookedRootsAsync(["published"]).ConfigureAwait(false);
+        await service.RefreshProjectCookedRootsAsync([new("published", "Content")]).ConfigureAwait(false);
         await mounted.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = revisions.Should().BeInAscendingOrder().And.OnlyHaveUniqueItems();
         _ = service.ContentStatus.State.Should().Be(RuntimeContentState.Mounted);

@@ -14,6 +14,7 @@
 - [Testing & validation](#testing--validation)
 - [Next steps / further reading](#next-steps--further-reading)
 - [Managed resources and views](#managed-resources-and-views)
+- [View indexing and removal](#view-indexing-and-removal)
 
 ## Purpose
 
@@ -368,3 +369,26 @@ S7.1 uses these registry methods for LUT destinations and staging resources.
 SRV/UAV mip ranges, typeless-depth SRV and lazy DSVs, backend close and resource
 retention after the family owner disappears. Registration populations and
 Lighting budget fallback match the existing native tests.
+
+## View indexing and removal
+
+Each registry `ViewEntry` owns its descriptor, native view and immutable typed
+description/hash/allocation-domain metadata. The existing global hash index maps
+`(resource, description hash)` to a chain of those entries. Lookups compare full
+descriptions and domains; hashes alone never establish identity. Newest matching
+entries are found first, including equivalent views repointed onto a shared
+placeholder resource.
+
+Entries remain at stable descriptor-map addresses. Link only after ownership is
+established, and unlink before moving or erasing an entry. Direct previous/next
+links make removal independent of unrelated resources and identical-view fanout;
+no second registry or per-resource hash table is needed. Full resource retirement
+walks only its owned views. Managed descriptor/resource lifetime remains governed
+by `RegistrationCore` and recorded uses.
+
+Validate collisions, allocation domains, equivalent and aliased views, rehash,
+transactional update failures/retries, replace failures, allocation rollback and
+late managed retirement. `UpdateView` prepares CPU bookkeeping before native
+mutation and preserves the original binding on failure. Backends resolve all
+fallible handles/validation before writing a descriptor slot. Measure
+removal with increasing unrelated resource count and shared-placeholder fanout.

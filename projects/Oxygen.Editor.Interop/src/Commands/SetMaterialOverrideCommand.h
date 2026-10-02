@@ -8,6 +8,7 @@
 #pragma managed(push, off)
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -19,14 +20,16 @@
 
 namespace oxygen::interop::module {
 
-  class SetMaterialOverrideCommand : public EditorCommand {
+  class SetMaterialOverrideCommand final : public EditorCommand {
   public:
     SetMaterialOverrideCommand(oxygen::scene::NodeHandle node,
-      std::size_t slot_index, std::string material_uri)
+      MaterialSlotTarget target, std::optional<std::string> material_uri,
+      MaterialSlotAssignmentIntent intent)
       : EditorCommand(oxygen::core::PhaseId::kSceneMutation)
       , node_(node)
-      , slot_index_(slot_index)
+      , target_(std::move(target))
       , material_uri_(std::move(material_uri))
+      , intent_(intent)
     {
     }
 
@@ -44,8 +47,9 @@ namespace oxygen::interop::module {
 
   private:
     oxygen::scene::NodeHandle node_;
-    std::size_t slot_index_ { 0 };
-    std::string material_uri_;
+    MaterialSlotTarget target_;
+    std::optional<std::string> material_uri_;
+    MaterialSlotAssignmentIntent intent_ = MaterialSlotAssignmentIntent::kObservedEdit;
     SceneAssetRequests::FailureCallback failure_callback_;
     SceneAssetRequests::SuccessCallback success_callback_;
   };

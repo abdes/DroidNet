@@ -39,6 +39,9 @@ public sealed partial class GeometryViewModel
             return;
         }
 
+        _ = Uri.TryCreate(this.SelectedAssetUriString, UriKind.Absolute, out var selectedGeometry);
+        var previousGeometry = this.latestAssets.FirstOrDefault(asset => selectedGeometry is not null && (asset.IdentityUri == selectedGeometry || asset.CookedUri == selectedGeometry));
+        var currentGeometry = assets.FirstOrDefault(asset => selectedGeometry is not null && (asset.IdentityUri == selectedGeometry || asset.CookedUri == selectedGeometry));
         this.latestAssets = assets;
         var geometries = assets.Where(static asset => asset.Kind == AssetKind.Geometry && !asset.IsBuiltin)
             .OrderBy(static asset => asset.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -77,6 +80,13 @@ public sealed partial class GeometryViewModel
         }
 
         this.ApplyBuiltinCatalog();
+        if (previousGeometry?.CookedMetadata != currentGeometry?.CookedMetadata
+            || previousGeometry?.EffectiveCookedSource != currentGeometry?.EffectiveCookedSource
+            || previousGeometry?.CookStatus?.Freshness != currentGeometry?.CookStatus?.Freshness
+            || previousGeometry?.CookStatus?.HasAvailableOutput != currentGeometry?.CookStatus?.HasAvailableOutput)
+        {
+            _ = this.RefreshMaterialSlotsAsync();
+        }
         if (!this.IsMixed && Uri.TryCreate(this.SelectedAssetUriString, UriKind.Absolute, out var selected)
             && assets.FirstOrDefault(asset => asset.IdentityUri == selected || asset.CookedUri == selected) is { } current)
         {

@@ -526,8 +526,8 @@ namespace detail {
 
       OXYGEN_NOINLINE auto await_suspend(Handle /*unused*/)
       {
-        // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
         promise_->ProgramCounter(
+          // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
           reinterpret_cast<uintptr_t>(oxygen::ReturnAddress<>()));
         return promise_->HookAwaitSuspend(awaiter_);
       }
@@ -536,7 +536,8 @@ namespace detail {
 
     private:
       // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
-      [[no_unique_address]] SanitizedAwaiter<Awaitable, AwaiterType> awaiter_;
+      OXYGEN_NO_UNIQUE_ADDRESS SanitizedAwaiter<Awaitable, AwaiterType>
+        awaiter_;
       BasePromise* promise_;
     };
 

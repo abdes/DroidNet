@@ -85,7 +85,12 @@ m_gtest_program(RenderContext SOURCES "RenderContext_test.cpp")
 
 m_gtest_program(AcceptedDrawView SOURCES "Types/AcceptedDrawView_test.cpp")
 
-m_gtest_program(SceneRendererShell SOURCES "SceneRendererShell_test.cpp")
+m_gtest_program(
+  SceneRendererShell
+  SOURCES
+    "SceneRendererShell_test.cpp"
+    "Exposure/Fixtures/ExposureTestTags.cpp"
+)
 
 m_gtest_program(SceneTextures SOURCES "SceneTextures_test.cpp")
 
@@ -441,6 +446,7 @@ m_gtest_program(
     "Resources/GeometryUploader_eviction_test.cpp"
     "Resources/GeometryUploader_failures_test.cpp"
     "Resources/GeometryUploader_edge_test.cpp"
+    "Resources/GeometryMaintenance_bench.cpp"
 )
 
 m_gtest_program(

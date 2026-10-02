@@ -13,12 +13,12 @@
 #include <iostream>
 #include <string>
 
-#include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Data/ScriptResource.h>
-
 #include "AssetDumpHelpers.h"
 #include "AssetDumper.h"
 #include "PrintUtils.h"
+
+#include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/ScriptResource.h>
 
 namespace oxygen::content::pakdump {
 
@@ -54,8 +54,8 @@ public:
     asset_dump_helpers::PrintAssetHeaderFields(desc.header, 4);
     std::cout << "    --- Script Descriptor Fields ---\n";
     PrintUtils::Field(
-      "Bytecode Resource Index", desc.bytecode_resource_index, 8);
-    PrintUtils::Field("Source Resource Index", desc.source_resource_index, 8);
+      "Bytecode Reference", desc.bytecode_resource_index.get(), 8);
+    PrintUtils::Field("Source Reference", desc.source_resource_index.get(), 8);
     PrintUtils::Field("Flags",
       asset_dump_helpers::ToHexString(static_cast<uint32_t>(desc.flags)), 8);
     {
@@ -72,10 +72,11 @@ public:
       co_return;
     }
 
-    const auto selected_index = desc.bytecode_resource_index != 0
+    const auto selected_index
+      = desc.bytecode_resource_index != data::kNoResourceReference
       ? desc.bytecode_resource_index
       : desc.source_resource_index;
-    if (selected_index == 0) {
+    if (selected_index == data::kNoResourceReference) {
       PrintUtils::Field(
         "Resource Entry", "none (embedded payload not assigned)", 8);
       std::cout << "\n";
@@ -89,8 +90,14 @@ public:
     }
 
     auto& scripts_table = pak.ScriptsTable();
-    const auto selected_resource_index
-      = data::pak::core::ResourceIndexT { selected_index };
+    const auto references = pak.ReadAssetReferences(entry.asset_key);
+    const auto resolved
+      = references.ResolveResource(selected_index, data::ResourceKind::kScript);
+    if (!resolved || !resolved->has_value()) {
+      PrintUtils::Field("Resource Entry", "Invalid script reference", 8);
+      co_return;
+    }
+    const auto selected_resource_index = **resolved;
     if (!scripts_table.IsValidKey(selected_resource_index)) {
       PrintUtils::Field(
         "Resource Entry", "Index out of script table bounds", 8);
@@ -110,7 +117,7 @@ public:
         co_return;
       }
 
-      PrintUtils::Field("Resource Entry", selected_index, 8);
+      PrintUtils::Field("Resource Entry", selected_resource_index.get(), 8);
       PrintUtils::Field("Data Offset",
         asset_dump_helpers::ToHexString(script_resource->GetDataOffset()), 8);
       PrintUtils::Field("Data Size",

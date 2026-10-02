@@ -18,14 +18,17 @@
 
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
+#include <Oxygen/Cooker/Loose/Validation.h>
 #include <Oxygen/Cooker/Test/Pak/PakTestSupport.h>
-#include <Oxygen/Cooker/Tools/Inspector/RootValidation.h>
 #include <Oxygen/Cooker/Tools/Inspector/SceneMetadata.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -33,7 +36,7 @@ namespace {
 
 namespace world = oxygen::data::pak::world;
 using oxygen::content::inspection::RunSceneMetadataReport;
-using oxygen::content::inspection::ValidateRootOrThrow;
+using oxygen::content::lc::ValidateRoot;
 
 struct SceneFixture {
   uint8_t version = world::kSceneAssetVersion;
@@ -81,7 +84,23 @@ auto WriteSceneRoot(
   writer.WriteAssetDescriptor(
     oxygen::data::AssetKey::FromVirtualPath(virtual_path),
     oxygen::data::AssetType::kScene, virtual_path, "Scenes/Inspection.oscene",
-    bytes);
+    bytes, {});
+  [[maybe_unused]] const auto result = writer.Finish();
+}
+
+auto WriteMaterialRoot(const std::filesystem::path& root, const uint8_t version)
+  -> void
+{
+  auto descriptor = oxygen::data::pak::render::MaterialAssetDesc {};
+  descriptor.header.asset_type
+    = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
+  descriptor.header.version = version;
+  constexpr auto virtual_path = "/Content/Materials/Inspection.omat";
+  oxygen::content::import::LooseCookedWriter writer(root);
+  writer.WriteAssetDescriptor(
+    oxygen::data::AssetKey::FromVirtualPath(virtual_path),
+    oxygen::data::AssetType::kMaterial, virtual_path,
+    "Materials/Inspection.omat", std::as_bytes(std::span(&descriptor, 1)), {});
   [[maybe_unused]] const auto result = writer.Finish();
 }
 
@@ -108,20 +127,34 @@ protected:
   }
 };
 
+NOLINT_TEST_F(InspectorRootValidationTest, AcceptsCurrentMaterialVersion)
+{
+  WriteMaterialRoot(Root(), oxygen::data::pak::render::kMaterialAssetVersion);
+  EXPECT_NO_THROW(ValidateRoot(Root()));
+}
+
+NOLINT_TEST_F(InspectorRootValidationTest, RejectsRetiredMaterialVersion)
+{
+  WriteMaterialRoot(Root(), 2);
+  EXPECT_THROW(ValidateRoot(Root()), std::runtime_error);
+}
+
 NOLINT_TEST_F(InspectorRootValidationTest, AcceptsCurrentSceneWithSourceModes)
 {
   WriteSceneRoot(Root(),
-    { .values = world::kSceneNodeFlag_Visible,
+    {
+      .values = world::kSceneNodeFlag_Visible,
       .inherited = world::kSceneNodeFlag_CastsShadows
-        | world::kSceneNodeFlag_ReceivesShadows });
-  EXPECT_NO_THROW(ValidateRootOrThrow(Root()));
+        | world::kSceneNodeFlag_ReceivesShadows,
+    });
+  EXPECT_NO_THROW(ValidateRoot(Root()));
 }
 
 NOLINT_TEST_F(InspectorRootValidationTest, RejectsRetiredSceneVersion)
 {
   constexpr uint8_t kRetiredSceneVersion = 4U;
   WriteSceneRoot(Root(), { .version = kRetiredSceneVersion });
-  EXPECT_THROW(ValidateRootOrThrow(Root()), std::runtime_error);
+  EXPECT_THROW(ValidateRoot(Root()), std::runtime_error);
   EXPECT_EQ(Report(Root()), 2);
   const auto report = ReadReport();
   EXPECT_EQ(report.at("complete"), false);
@@ -137,14 +170,15 @@ NOLINT_TEST_F(InspectorRootValidationTest, RejectsMalformedSceneFlagSources)
 {
   constexpr uint32_t kUnknownFlag = 1U << 31U;
   auto index = size_t { 0 };
-  for (const auto [values, inherited] :
-    std::array { std::pair { kUnknownFlag, uint32_t { 0 } },
-      std::pair { uint32_t { 0 }, world::kSceneNodeFlag_Static },
-      std::pair {
-        world::kSceneNodeFlag_Visible, world::kSceneNodeFlag_Visible } }) {
+  for (const auto [values, inherited] : std::array {
+         std::pair { kUnknownFlag, uint32_t { 0 } },
+         std::pair { uint32_t { 0 }, world::kSceneNodeFlag_Static },
+         std::pair {
+           world::kSceneNodeFlag_Visible, world::kSceneNodeFlag_Visible },
+       }) {
     const auto root = Path(std::to_string(index++));
     WriteSceneRoot(root, { .values = values, .inherited = inherited });
-    EXPECT_THROW(ValidateRootOrThrow(root), std::runtime_error);
+    EXPECT_THROW(ValidateRoot(root), std::runtime_error);
     EXPECT_EQ(Report(root), 2);
     const auto report = ReadReport();
     EXPECT_EQ(report.at("complete"), false);
@@ -165,15 +199,23 @@ NOLINT_TEST_F(
   };
   constexpr auto cases = std::array {
     FlagsCase {
-      .values = 0U, .inherited = 0U, .visible = "hidden", .shadows = "off" },
-    FlagsCase { .values = world::kSceneNodeFlags_Inheritable,
+      .values = 0U,
+      .inherited = 0U,
+      .visible = "hidden",
+      .shadows = "off",
+    },
+    FlagsCase {
+      .values = world::kSceneNodeFlags_Inheritable,
       .inherited = 0U,
       .visible = "shown",
-      .shadows = "on" },
-    FlagsCase { .values = 0U,
+      .shadows = "on",
+    },
+    FlagsCase {
+      .values = 0U,
       .inherited = world::kSceneNodeFlags_Inheritable,
       .visible = "inherit",
-      .shadows = "inherit" },
+      .shadows = "inherit",
+    },
   };
   for (const auto& test : cases) {
     SCOPED_TRACE(test.visible);
@@ -210,7 +252,7 @@ NOLINT_TEST_F(
   const auto descriptor = Path("Scenes/Inspection.oscene");
   std::filesystem::resize_file(
     descriptor, std::filesystem::file_size(descriptor) - 1U);
-  EXPECT_THROW(ValidateRootOrThrow(Root()), std::runtime_error);
+  EXPECT_THROW(ValidateRoot(Root()), std::runtime_error);
   EXPECT_EQ(Report(Root()), 2);
   const auto report = ReadReport();
   const auto& scene = report.at("scenes").front();

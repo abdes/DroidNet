@@ -240,15 +240,10 @@ public:
         return false;
       }
     }
-    [[nodiscard]] auto await_must_resume() const noexcept
+    [[nodiscard]] auto await_must_resume() const noexcept -> bool
+      requires(!Cancellable)
     {
-      // shouldn't actually be called unless await_cancel() returns false
-      CHECK_F(!Cancellable);
-      if constexpr (Cancellable) {
-        return std::false_type {};
-      } else {
-        return true;
-      }
+      return true;
     }
     void await_resume() { suspended_ = false; }
     // ReSharper restore CppMemberFunctionMayBeStatic

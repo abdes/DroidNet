@@ -11,6 +11,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -25,6 +26,7 @@ class IAsyncFileReader;
 class IAsyncFileWriter;
 class ResourceTableRegistry;
 class LooseCookedIndexRegistry;
+class RetainedModelImport;
 
 namespace detail {
 
@@ -43,6 +45,8 @@ namespace detail {
     ImportConcurrency concurrency;
     AsyncImportService::ScriptCompileCallback script_compile_callback;
     std::stop_token stop_token;
+    std::shared_ptr<RetainedModelImport> retained_import {};
+    std::unique_ptr<IAsyncFileWriter> generation_writer {};
   };
 
 } // namespace detail

@@ -71,10 +71,10 @@ repos:
         files: '(?i)^projects/Oxygen\.Engine/(src/Oxygen|Examples)/.*\.(c|cc|cpp|cxx|h|hh|hpp|hxx|inc|inl|ipp|tpp|ixx|cppm)$'
         stages: [pre-commit]
         require_serial: true
-      # Use XamlStyler already installed locally as a dotnet tool
+      # Format through stdout: XamlStyler otherwise forces CRLF on Windows.
       - id: xaml-styler
         name: XAML styler
         language: system
-        entry: dotnet xstyler -f
+        entry: python tooling/format_xaml.py
         types: [file]
         files: \.xaml$

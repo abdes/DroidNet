@@ -46,7 +46,7 @@ internal sealed partial class NativeEngineSession
             ?? throw new ArgumentException("The runtime library must be inside the SDK bin directory.", nameof(runtimeLibrary));
         var installation = new EditorNativeInstallation(AppContext.BaseDirectory, sdkRoot, EditorNativeCompatibilityService.CurrentConfiguration);
         var config = ConfigFactory.CreateDefaultEditorEngineConfig();
-        config.Engine.TargetFps = 1;
+        config.Engine.TargetFps = EngineConstants.DefaultTargetFps;
         settings.ApplyTo(config);
         config.Engine.PathFinder ??= new PathFinderConfigManaged();
         if (string.IsNullOrWhiteSpace(settings.Engine.PathFinder.ShaderLibraryPath))

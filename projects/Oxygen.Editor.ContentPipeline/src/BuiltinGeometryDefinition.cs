@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -12,4 +13,5 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="CanonicalName">The native generator name.</param>
 /// <param name="Contribution">The native descriptor and output mapping.</param>
 /// <param name="AuthoringCategory">The engine-owned authoring availability.</param>
-public sealed record BuiltinGeometryDefinition(Uri AssetUri, string Name, string CanonicalName, BuiltinDescriptorContribution Contribution, GeneratedAssetCategory AuthoringCategory);
+/// <param name="MaterialSlots">The native slot inventory for the authored builtin identity.</param>
+public sealed record BuiltinGeometryDefinition(Uri AssetUri, string Name, string CanonicalName, BuiltinDescriptorContribution Contribution, GeneratedAssetCategory AuthoringCategory, GeometryMaterialSlotMetadata MaterialSlots);

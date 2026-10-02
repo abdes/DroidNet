@@ -6,15 +6,16 @@
 
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
-
-#include <Oxygen/Testing/GTest.h>
+#include <system_error>
 
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -74,18 +75,63 @@ NOLINT_TEST(ImportManifestScriptSidecarTest, AcceptsInlineBindingsForSidecarJob)
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  if (!manifest.has_value()) {
+    FAIL() << errors.str();
+  }
   ASSERT_EQ(manifest->jobs.size(), 1U);
-  EXPECT_TRUE(manifest->jobs[0].scripting_sidecar.source_path.empty());
+  EXPECT_TRUE(manifest->jobs.at(0).scripting_sidecar.source_path.empty());
   EXPECT_FALSE(
-    manifest->jobs[0].scripting_sidecar.inline_bindings_json.empty());
+    manifest->jobs.at(0).scripting_sidecar.inline_bindings_json.empty());
 
   std::ostringstream request_errors;
-  const auto request = manifest->jobs[0].BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
+  const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
+  if (!request.has_value()) {
+    FAIL() << request_errors.str();
+  }
   EXPECT_EQ(request->options.scripting.import_kind,
     ScriptingImportKind::kScriptingSidecar);
   EXPECT_FALSE(request->options.scripting.inline_bindings_json.empty());
+}
+
+NOLINT_TEST(ImportManifestScriptSidecarTest,
+  ScriptAuthoringRootsResolveDefaultsAndOverridesFromManifestDirectory)
+{
+  const auto manifest_path = MakeManifestPath("explicit_script_roots");
+  const auto output = manifest_path.parent_path() / "generated" / "cooked";
+  WriteManifestFile(manifest_path,
+    R"({
+      "version": 1,
+      "output": ")"
+      + JsonPath(output) + R"(",
+      "defaults": {
+        "script": {
+          "script_storage": "external",
+          "compile": false,
+          "source_root": "Authoring"
+        }
+      },
+      "jobs": [
+        { "type": "script", "source": "Authoring/main.lua" },
+        { "type": "script", "source": "Other/main.lua", "source_root": "Other" }
+      ]
+    })");
+  std::ostringstream errors;
+  const auto manifest
+    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  if (!manifest.has_value()) {
+    FAIL() << errors.str();
+  }
+  ASSERT_EQ(manifest->jobs.size(), 2U);
+  for (const auto& job : manifest->jobs) {
+    std::ostringstream request_errors;
+    const auto request = job.BuildRequest(request_errors);
+    if (!request.has_value()) {
+      FAIL() << request_errors.str();
+    }
+    EXPECT_EQ(request->options.scripting.source_root,
+      request->source_path.parent_path());
+    EXPECT_NE(request->options.scripting.source_root, output.parent_path());
+  }
 }
 
 NOLINT_TEST(ImportManifestScriptSidecarTest,
@@ -196,20 +242,30 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  if (!manifest.has_value()) {
+    FAIL() << errors.str();
+  }
   ASSERT_EQ(manifest->jobs.size(), 2U);
 
   std::ostringstream request_errors_0;
-  const auto request_0 = manifest->jobs[0].BuildRequest(request_errors_0);
-  ASSERT_TRUE(request_0.has_value()) << request_errors_0.str();
-  ASSERT_TRUE(request_0->cooked_root.has_value());
+  const auto request_0 = manifest->jobs.at(0).BuildRequest(request_errors_0);
+  if (!request_0.has_value()) {
+    FAIL() << request_errors_0.str();
+  }
+  if (!request_0->cooked_root.has_value()) {
+    FAIL();
+  }
   EXPECT_EQ(
     request_0->cooked_root->lexically_normal(), cooked_root.lexically_normal());
 
   std::ostringstream request_errors_1;
-  const auto request_1 = manifest->jobs[1].BuildRequest(request_errors_1);
-  ASSERT_TRUE(request_1.has_value()) << request_errors_1.str();
-  ASSERT_TRUE(request_1->cooked_root.has_value());
+  const auto request_1 = manifest->jobs.at(1).BuildRequest(request_errors_1);
+  if (!request_1.has_value()) {
+    FAIL() << request_errors_1.str();
+  }
+  if (!request_1->cooked_root.has_value()) {
+    FAIL();
+  }
   EXPECT_EQ(
     request_1->cooked_root->lexically_normal(), cooked_root.lexically_normal());
 }
@@ -252,13 +308,19 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  if (!manifest.has_value()) {
+    FAIL() << errors.str();
+  }
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   std::ostringstream request_errors;
-  const auto request = manifest->jobs[0].BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
-  ASSERT_TRUE(request->cooked_root.has_value());
+  const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
+  if (!request.has_value()) {
+    FAIL() << request_errors.str();
+  }
+  if (!request->cooked_root.has_value()) {
+    FAIL();
+  }
   EXPECT_EQ(request->cooked_root->lexically_normal(),
     defaults_output.lexically_normal());
 }
@@ -305,13 +367,19 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  if (!manifest.has_value()) {
+    FAIL() << errors.str();
+  }
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   std::ostringstream request_errors;
-  const auto request = manifest->jobs[0].BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
-  ASSERT_TRUE(request->cooked_root.has_value());
+  const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
+  if (!request.has_value()) {
+    FAIL() << request_errors.str();
+  }
+  if (!request->cooked_root.has_value()) {
+    FAIL();
+  }
   EXPECT_EQ(
     request->cooked_root->lexically_normal(), job_output.lexically_normal());
 }

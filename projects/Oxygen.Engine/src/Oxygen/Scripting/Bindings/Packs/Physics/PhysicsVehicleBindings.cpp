@@ -6,9 +6,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -17,8 +19,10 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Physics/Aggregate/AggregateAuthority.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Vehicle/VehicleDesc.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsBindingsCommon.h>
@@ -91,7 +95,6 @@ namespace {
     lua_pop(state, 1);
     if (!std::isfinite(value)) {
       luaL_error(state, "vehicle input field '%s' must be finite", field_name);
-      return fallback;
     }
     return std::clamp(value, min_value, max_value);
   }
@@ -140,7 +143,6 @@ namespace {
     }
     luaL_error(
       state, "vehicle.wheels[%d].side must be 'left'|'right'", wheel_index + 1);
-    return physics::vehicle::VehicleWheelSide::kLeft;
   }
 
   auto ParseVehicleDesc(lua_State* state, const int arg_index,
@@ -162,7 +164,6 @@ namespace {
       = static_cast<size_t>(lua_objlen(state, wheels_index));
     if (wheel_count < 2U) {
       luaL_error(state, "vehicle.wheels must contain at least two wheels");
-      return {};
     }
 
     wheel_descs_storage.clear();
@@ -184,7 +185,6 @@ namespace {
           > static_cast<lua_Integer>(std::numeric_limits<uint16_t>::max())) {
         luaL_error(
           state, "vehicle.wheels[%d].axle_index must be in [0, 65535]", i + 1);
-        return {};
       }
 
       lua_getfield(state, wheel_index, "side");
@@ -210,7 +210,6 @@ namespace {
     lua_pop(state, 1);
     if (constraint_blob_storage.empty()) {
       luaL_error(state, "vehicle.constraint_settings_blob must not be empty");
-      return {};
     }
 
     return physics::vehicle::VehicleDesc {

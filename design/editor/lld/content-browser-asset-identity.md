@@ -16,22 +16,29 @@ filters/details, and authored/built-in/cooked picking. Its
 [running-editor review](../validation/ED-M07B-ux-review.md) identifies concrete
 gaps without changing ED-M06's historical validation scope.
 
+The catalog captures records and cooking status from one retained publication.
+The Cooked tree shows logical mount/folder paths; physical generation directories
+remain storage details. If publication metadata cannot be admitted, authored
+assets remain browsable with **Status unavailable** and the admission diagnostic.
+Existing source errors remain visible and invalid sources remain unselectable.
+Cooking and runtime mounting still reject invalid publication metadata.
+
 ## 2. PRD Traceability
 
-| ID | Coverage |
-| --- | --- |
-| `GOAL-004` | Material and future asset references are discoverable and assignable by identity. |
-| `GOAL-005` | Source, generated, descriptor, cooked, missing, broken, and runtime-availability overlay states are visible in the browser; authoritative mounted state is deferred to `ED-M07`. |
-| `GOAL-006` | Asset browsing, picking, and resolve failures produce visible diagnostics. |
-| `REQ-013` | Users select material assets from a browser/picker using stable identity. |
-| `REQ-020` | Content browser shows scoped asset state. |
-| `REQ-021` | Authoring stores asset identity, not raw cooked paths. |
-| `REQ-022` | Catalog/picker failures are visible. |
-| `REQ-024` | Diagnostics identify asset identity, content-root, cook, mount, and missing-reference causes. |
-| `REQ-036` | Project content browsing supports the V0.1 authoring workflow without manual filesystem repair. |
-| `REQ-037` | Save/reopen preserves asset identities, including unresolved identities. |
-| `SUCCESS-006` | Import/cook/mount state is understandable and actionable. |
-| `SUCCESS-007` | Material authoring and assignment uses content browser identity. |
+| ID            | Coverage                                                                                                                                                                         |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GOAL-004`    | Material and future asset references are discoverable and assignable by identity.                                                                                                |
+| `GOAL-005`    | Source, generated, descriptor, cooked, missing, broken, and runtime-availability overlay states are visible in the browser; authoritative mounted state is deferred to `ED-M07`. |
+| `GOAL-006`    | Asset browsing, picking, and resolve failures produce visible diagnostics.                                                                                                       |
+| `REQ-013`     | Users select material assets from a browser/picker using stable identity.                                                                                                        |
+| `REQ-020`     | Content browser shows scoped asset state.                                                                                                                                        |
+| `REQ-021`     | Authoring stores asset identity, not raw cooked paths.                                                                                                                           |
+| `REQ-022`     | Catalog/picker failures are visible.                                                                                                                                             |
+| `REQ-024`     | Diagnostics identify asset identity, content-root, cook, mount, and missing-reference causes.                                                                                    |
+| `REQ-036`     | Project content browsing supports the V0.1 authoring workflow without manual filesystem repair.                                                                                  |
+| `REQ-037`     | Save/reopen preserves asset identities, including unresolved identities.                                                                                                         |
+| `SUCCESS-006` | Import/cook/mount state is understandable and actionable.                                                                                                                        |
+| `SUCCESS-007` | Material authoring and assignment uses content browser identity.                                                                                                                 |
 
 ## 3. Architecture Links
 
@@ -58,7 +65,8 @@ The repository already has these useful pieces:
   filesystem, and loose-cooked catalog providers from the active
   `IProjectContextService`.
 - `FileSystemAssetCatalog` for source files and `LooseCookedIndexAssetCatalog`
-  for `.cooked/<Mount>/container.index.bin`.
+  for the exact generation bindings captured from the project publication. Cooked
+  catalog snapshots verify their index identity and do not reload in place.
 - `GameAsset` and `AssetsLayoutViewModel`, which already show list/tile rows
   and merge `*.omat.json` / `*.omat` by a local logical key.
 - `ProjectLayoutViewModel`, which owns the left project tree and mounted folder
@@ -114,7 +122,7 @@ separately for diagnostics and actions.
 
 ```text
 Content/Materials/Red.omat.json       asset:///Content/Materials/Red.omat.json
-.cooked/Content/Materials/Red.omat via index
+.cooked/generations/<SourceKey>/Materials/Red.omat via index
                                       asset:///Content/Materials/Red.omat
                  \                    /
                   v                  v
@@ -134,14 +142,14 @@ availability input.
 
 ## 6. Ownership
 
-| Owner | Responsibility |
-| --- | --- |
-| `Oxygen.Editor.ContentBrowser` | browser row model, state reducer, list/tile UX, typed picker UX, content-root display policy. |
-| `Oxygen.Managed.Assets` | asset URI, references, catalog query/change primitives, generated/filesystem/cooked index providers. |
-| `Oxygen.Editor.Projects` | active project context, authoring roots, local roots, cooked-root policy. |
-| `Oxygen.Editor.ContentPipeline` | import/cook/index operations and later full state production. |
-| `Oxygen.Editor.MaterialEditor` | material create/open/edit/cook UI. |
-| `Oxygen.Editor.WorldEditor` | consumes typed picker result and persists asset reference URI in scene components. |
+| Owner                           | Responsibility                                                                                       |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `Oxygen.Editor.ContentBrowser`  | browser row model, state reducer, list/tile UX, typed picker UX, content-root display policy.        |
+| `Oxygen.Managed.Assets`         | asset URI, references, catalog query/change primitives, generated/filesystem/cooked index providers. |
+| `Oxygen.Editor.Projects`        | active project context, authoring roots, local roots, cooked-root policy.                            |
+| `Oxygen.Editor.ContentPipeline` | import/cook/index operations and later full state production.                                        |
+| `Oxygen.Editor.MaterialEditor`  | material create/open/edit/cook UI.                                                                   |
+| `Oxygen.Editor.WorldEditor`     | consumes typed picker result and persists asset reference URI in scene components.                   |
 
 ## 7. Data Contracts
 
@@ -476,16 +484,16 @@ Rules:
 
 ### 9.2 State Badges
 
-| State / Overlay | Badge | User behavior |
-| --- | --- | --- |
-| `Generated` | `GEN` | selectable; details show generated source. |
-| `Source` | `SRC` | selectable when the consumer supports source identity. |
-| `Descriptor` | `DESC` | selectable; primary authoring record. |
-| `Cooked` | `COOK` | selectable; cooked artifact is current. |
-| `Stale` | `STALE` | selectable; warning says cook is needed. |
-| `Missing` | `MISS` | not a normal browse row; visible for unresolved references. |
-| `Broken` | `ERR` | not selectable for new assignment; details show diagnostics. |
-| `Mounted` | `MNT` | overlay badge when runtime availability is known. |
+| State / Overlay | Badge   | User behavior                                                |
+| --------------- | ------- | ------------------------------------------------------------ |
+| `Generated`     | `GEN`   | selectable; details show generated source.                   |
+| `Source`        | `SRC`   | selectable when the consumer supports source identity.       |
+| `Descriptor`    | `DESC`  | selectable; primary authoring record.                        |
+| `Cooked`        | `COOK`  | selectable; cooked artifact is current.                      |
+| `Stale`         | `STALE` | selectable; warning says cook is needed.                     |
+| `Missing`       | `MISS`  | not a normal browse row; visible for unresolved references.  |
+| `Broken`        | `ERR`   | not selectable for new assignment; details show diagnostics. |
+| `Mounted`       | `MNT`   | overlay badge when runtime availability is known.            |
 
 ### 9.3 Picker UX
 
@@ -554,15 +562,15 @@ Full cook/inspect/mount refresh closes in ED-M07.
 
 Operation kinds:
 
-| Operation Kind | Producer | Domain |
-| --- | --- | --- |
-| `Asset.Browse` | Content Browser asset provider | `AssetIdentity` |
-| `Asset.Query` | catalog-backed provider/picker | `AssetIdentity` |
-| `Asset.Resolve` | picker/slot/browser details | `AssetIdentity` |
-| `Asset.CopyIdentity` | Content Browser row/details | `AssetIdentity` |
-| `ContentBrowser.Navigate` | Content Browser shell | `AssetIdentity` / `ProjectContentRoots` |
-| `ContentBrowser.Refresh` | Content Browser shell/provider | `AssetIdentity` |
-| `Material.Pick` | material picker | `AssetIdentity` |
+| Operation Kind            | Producer                       | Domain                                  |
+| ------------------------- | ------------------------------ | --------------------------------------- |
+| `Asset.Browse`            | Content Browser asset provider | `AssetIdentity`                         |
+| `Asset.Query`             | catalog-backed provider/picker | `AssetIdentity`                         |
+| `Asset.Resolve`           | picker/slot/browser details    | `AssetIdentity`                         |
+| `Asset.CopyIdentity`      | Content Browser row/details    | `AssetIdentity`                         |
+| `ContentBrowser.Navigate` | Content Browser shell          | `AssetIdentity` / `ProjectContentRoots` |
+| `ContentBrowser.Refresh`  | Content Browser shell/provider | `AssetIdentity`                         |
+| `Material.Pick`           | material picker                | `AssetIdentity`                         |
 
 Reducer failures are child diagnostics on the triggering `Asset.Browse`,
 `Asset.Query`, or `Asset.Resolve` operation. ED-M06 does not publish a separate
@@ -570,15 +578,15 @@ top-level `Asset.ReduceState` result.
 
 Diagnostic codes:
 
-| Failure | Domain | Code |
-| --- | --- | --- |
-| Catalog query exception | `AssetIdentity` | `OXE.ASSETID.QueryFailed` |
-| Browser row reduction failed | `AssetIdentity` | `OXE.ASSETID.ReduceFailed` |
-| Resolve URI missing | `AssetIdentity` | `OXE.ASSETID.Resolve.Missing` |
-| Descriptor cannot be parsed | `AssetIdentity` | `OXE.ASSETID.Descriptor.Broken` |
-| Cooked index entry missing target | `AssetIdentity` | `OXE.ASSETID.Cooked.Missing` |
-| Selected content root is invalid | `ProjectContentRoots` | `OXE.PROJECT.CONTENT_ROOT.InvalidSelection` |
-| Cooked output older than source | `ContentPipeline` warning | `OXE.CONTENTPIPELINE.Asset.Stale` |
+| Failure                           | Domain                    | Code                                        |
+| --------------------------------- | ------------------------- | ------------------------------------------- |
+| Catalog query exception           | `AssetIdentity`           | `OXE.ASSETID.QueryFailed`                   |
+| Browser row reduction failed      | `AssetIdentity`           | `OXE.ASSETID.ReduceFailed`                  |
+| Resolve URI missing               | `AssetIdentity`           | `OXE.ASSETID.Resolve.Missing`               |
+| Descriptor cannot be parsed       | `AssetIdentity`           | `OXE.ASSETID.Descriptor.Broken`             |
+| Cooked index entry missing target | `AssetIdentity`           | `OXE.ASSETID.Cooked.Missing`                |
+| Selected content root is invalid  | `ProjectContentRoots`     | `OXE.PROJECT.CONTENT_ROOT.InvalidSelection` |
+| Cooked output older than source   | `ContentPipeline` warning | `OXE.CONTENTPIPELINE.Asset.Stale`           |
 
 `AffectedScope.AssetVirtualPath` carries the asset URI string. Diagnostics may
 also carry `AffectedPath` for source/cooked filesystem paths.

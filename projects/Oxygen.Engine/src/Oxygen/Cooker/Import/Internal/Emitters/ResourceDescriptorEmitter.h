@@ -18,6 +18,8 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
@@ -28,7 +30,6 @@
 namespace oxygen::content::import {
 
 class IAsyncFileWriter;
-struct FileErrorInfo;
 
 //! Emits sidecar descriptors for resource-table entries (`.otex`, `.obuf`).
 /*!
@@ -55,6 +56,11 @@ public:
     std::string_view stable_id, data::pak::core::ResourceIndexT resource_index,
     const data::pak::core::TextureResourceDesc& descriptor) -> std::string;
 
+  //! Emit a texture descriptor at an explicit root-relative path.
+  OXGN_COOK_NDAPI auto EmitTextureAtRelPath(std::string_view relpath,
+    data::pak::core::ResourceIndexT resource_index,
+    const data::pak::core::TextureResourceDesc& descriptor) -> std::string;
+
   //! Emit a buffer resource descriptor file and return its relative path.
   OXGN_COOK_NDAPI auto EmitBuffer(std::string_view name_hint,
     std::string_view stable_id, data::pak::core::ResourceIndexT resource_index,
@@ -71,7 +77,7 @@ public:
   OXGN_COOK_NDAPI auto Records() const -> std::vector<Record>;
 
   //! Wait for pending descriptor writes and report success.
-  OXGN_COOK_NDAPI auto Finalize() -> co::Co<bool>;
+  OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, FileErrorInfo>>;
 
 private:
   auto QueueWrite(
@@ -85,6 +91,7 @@ private:
   std::unordered_map<std::string, uint64_t> record_sizes_;
   std::atomic<size_t> pending_count_ { 0 };
   std::atomic<size_t> error_count_ { 0 };
+  std::optional<FileErrorInfo> first_error_ {}; // Import-thread callbacks.
 };
 
 } // namespace oxygen::content::import

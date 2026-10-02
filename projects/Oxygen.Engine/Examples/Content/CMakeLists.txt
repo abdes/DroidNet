@@ -20,8 +20,9 @@ endif()
 foreach(_config IN LISTS OXYGEN_SHOWCASE_CONFIGS)
   execute_process(
     COMMAND
-      "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/prepare_showcase.py"
-      --source "${CMAKE_CURRENT_SOURCE_DIR}" --output
+      "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/internal/prepare_showcase.py" --source
+      "${CMAKE_CURRENT_SOURCE_DIR}" --output
       "${OXYGEN_SHOWCASE_ROOT}/${_config}/Content" --scenes
       ${OXYGEN_SHOWCASE_SCENES}
     COMMAND_ERROR_IS_FATAL ANY
@@ -39,7 +40,7 @@ set_property(
   PROPERTY
     CMAKE_CONFIGURE_DEPENDS
       ${OXYGEN_SHOWCASE_INPUTS}
-      "${CMAKE_CURRENT_SOURCE_DIR}/prepare_showcase.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/internal/prepare_showcase.py"
 )
 include(RuntimeEnvironment)
 oxygen_get_runtime_launcher(oxygen-cooker-importtool OXYGEN_SHOWCASE_LAUNCHER)
@@ -48,10 +49,17 @@ add_custom_command(
   OUTPUT
     "${OXYGEN_SHOWCASE_STAMP}"
   BYPRODUCTS
-    "${OXYGEN_SHOWCASE_CONTENT}/.cooked/container.index.bin"
+    "${OXYGEN_SHOWCASE_CONTENT}/.cooked/main/container.index.bin"
     "${OXYGEN_SHOWCASE_CONTENT}/pak/all.pak"
     "${OXYGEN_SHOWCASE_CONTENT}/pak/all.catalog.json"
     "${OXYGEN_SHOWCASE_CONTENT}/pak/all.manifest.json"
+  # This tree is a generated SDK build product. A tool/format change must
+  # rebuild it from authoring inputs, never append to an older cooked index.
+  COMMAND
+    "${CMAKE_COMMAND}" -E rm -f "${OXYGEN_SHOWCASE_STAMP}"
+  COMMAND
+    "${CMAKE_COMMAND}" -E rm -rf "${OXYGEN_SHOWCASE_CONTENT}/.cooked"
+    "${OXYGEN_SHOWCASE_CONTENT}/pak"
   COMMAND
     "${OXYGEN_SHOWCASE_LAUNCHER}" powershell.exe -NoLogo -NoProfile
     -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/cook_scenes.ps1"
@@ -60,17 +68,19 @@ add_custom_command(
   COMMAND
     "${OXYGEN_SHOWCASE_LAUNCHER}" powershell.exe -NoLogo -NoProfile
     -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/pak_content.ps1"
-    -CookedRoot "${OXYGEN_SHOWCASE_CONTENT}/.cooked" -OutputDir
-    "${OXYGEN_SHOWCASE_CONTENT}/pak" -ToolPath
-    "$<TARGET_FILE:oxygen-cooker-paktool>"
+    -CookedRoot "${OXYGEN_SHOWCASE_CONTENT}/.cooked/main" -ContentRoot
+    "${OXYGEN_SHOWCASE_CONTENT}" -OutputDir "${OXYGEN_SHOWCASE_CONTENT}/pak"
+    -ToolPath "$<TARGET_FILE:oxygen-cooker-paktool>"
   COMMAND
     "${OXYGEN_SHOWCASE_LAUNCHER}" "$<TARGET_FILE:oxygen-cooker-inspector>"
-    validate "${OXYGEN_SHOWCASE_CONTENT}/.cooked"
+    validate "${OXYGEN_SHOWCASE_CONTENT}/.cooked/main"
   COMMAND
     "${CMAKE_COMMAND}" -E touch "${OXYGEN_SHOWCASE_STAMP}"
   DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/prepare_showcase.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/internal/prepare_showcase.py"
     ${OXYGEN_SHOWCASE_INPUTS}
+    oxygen-cooker
+    oxygen-data
     oxygen-cooker-importtool
     oxygen-cooker-paktool
     oxygen-cooker-inspector
@@ -88,7 +98,7 @@ if(OXYGEN_INSTALL)
   install(
     CODE
       "
-    if(NOT EXISTS \"${OXYGEN_SHOWCASE_CONTENT}/.cooked/container.index.bin\"
+    if(NOT EXISTS \"${OXYGEN_SHOWCASE_CONTENT}/.cooked/main/container.index.bin\"
        OR NOT EXISTS \"${OXYGEN_SHOWCASE_CONTENT}/pak/all.pak\")
       message(FATAL_ERROR \"Build the selected configuration before installing the SDK: showcase content is missing.\")
     endif()
@@ -98,6 +108,7 @@ if(OXYGEN_INSTALL)
   install(
     FILES
       "${CMAKE_CURRENT_SOURCE_DIR}/showcase-assets.schema.json"
+      "${CMAKE_CURRENT_SOURCE_DIR}/import-sources.schema.json"
     DESTINATION "${OXYGEN_INSTALL_SCHEMAS}"
     COMPONENT Oxygen_data
   )

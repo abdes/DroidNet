@@ -5,15 +5,27 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <fstream>
+#include <ios>
+#include <optional>
+#include <ratio>
 #include <span>
-#include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
 
-#include <Oxygen/Data/AssetKey.h>
-#include <Oxygen/Data/CookedSource.h>
-#include <Oxygen/Data/SourceKey.h>
-
+#include <Oxygen/Cooker/Pak/PakBuildPhase.h>
+#include <Oxygen/Cooker/Pak/PakBuildReport.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Tools/PakTool/BuildReportJson.h>
+#include <Oxygen/Cooker/Tools/PakTool/RequestSnapshot.h>
+#include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/PakCatalog.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::pak::tool {
 
@@ -39,12 +51,11 @@ namespace {
   {
     constexpr auto kHex = std::string_view { "0123456789abcdef" };
     auto out = std::string {};
-    out.resize(bytes.size() * 2U);
+    out.reserve(bytes.size() * 2U);
 
-    for (size_t index = 0; index < bytes.size(); ++index) {
-      const auto value = bytes[index];
-      out[index * 2U] = kHex[(value >> 4U) & 0x0FU];
-      out[index * 2U + 1U] = kHex[value & 0x0FU];
+    for (const auto value : bytes) {
+      out.push_back(kHex.at((value >> 4U) & 0x0FU));
+      out.push_back(kHex.at(value & 0x0FU));
     }
 
     return out;
@@ -139,16 +150,21 @@ namespace {
     }
 
     auto base_catalogs = ordered_json::array();
-    for (const auto& path : snapshot.base_catalog_paths) {
+    for (const auto& path : snapshot.base_pak_paths) {
       base_catalogs.push_back(path.string());
     }
 
+    auto script_roots = ordered_json::array();
+    for (const auto& root : snapshot.script_source_roots) {
+      script_roots.push_back(root.string());
+    }
     return ordered_json {
+      { "script_source_roots", std::move(script_roots) },
       { "mode", std::string(ModeToString(snapshot.request.mode)) },
       { "source_key", data::to_string(snapshot.request.source_key) },
       { "content_version", snapshot.request.content_version },
       { "sources", std::move(sources) },
-      { "base_catalogs", std::move(base_catalogs) },
+      { "base_paks", std::move(base_catalogs) },
       { "options",
         ordered_json {
           { "deterministic", snapshot.request.options.deterministic },
@@ -158,17 +174,7 @@ namespace {
           { "emit_manifest_in_full",
             snapshot.request.options.emit_manifest_in_full },
         } },
-      { "patch_compatibility",
-        ordered_json {
-          { "require_exact_base_set",
-            snapshot.request.patch_compat.require_exact_base_set },
-          { "require_content_version_match",
-            snapshot.request.patch_compat.require_content_version_match },
-          { "require_base_source_key_match",
-            snapshot.request.patch_compat.require_base_source_key_match },
-          { "require_catalog_digest_match",
-            snapshot.request.patch_compat.require_catalog_digest_match },
-        } },
+
     };
   }
 
@@ -290,19 +296,19 @@ namespace {
         { "message", diagnostic.message },
       };
       if (!diagnostic.asset_key.empty()) {
-        entry["asset_key"] = diagnostic.asset_key;
+        entry.emplace("asset_key", diagnostic.asset_key);
       }
       if (!diagnostic.resource_kind.empty()) {
-        entry["resource_kind"] = diagnostic.resource_kind;
+        entry.emplace("resource_kind", diagnostic.resource_kind);
       }
       if (!diagnostic.table_name.empty()) {
-        entry["table_name"] = diagnostic.table_name;
+        entry.emplace("table_name", diagnostic.table_name);
       }
       if (!diagnostic.path.empty()) {
-        entry["path"] = diagnostic.path.string();
+        entry.emplace("path", diagnostic.path.string());
       }
       if (diagnostic.offset.has_value()) {
-        entry["offset"] = *diagnostic.offset;
+        entry.emplace("offset", *diagnostic.offset);
       }
       json.push_back(std::move(entry));
     }
@@ -382,7 +388,9 @@ auto WriteReportFile(const std::filesystem::path& output_path,
     };
   }
 
-  return ReportWriteResult { .success = true };
+  return ReportWriteResult {
+    .success = true, .error_code = {}, .error_message = {}
+  };
 }
 
 } // namespace oxygen::content::pak::tool

@@ -15,11 +15,11 @@
 
 namespace oxygen::content {
 
-//! Unique identifier for a cached resource.
+//! Opaque loader-lifetime identifier for a resource.
 /*!
- Uniquely identifies a resource in the content cache. Used to retrieve or
- release resources, and can be easily constructed from a PAKFile, the resource
- type, and its index in the corresponding resource table within the PAK file.
+ Minted by AssetLoader from a full cooked or synthetic identity. The value is
+ neither a hash nor an encoded source/index. Payload eviction preserves the
+ locator while its source remains readable. Do not serialize runtime keys.
 
  @see AssetLoader::MakeResourceKey
 */
@@ -39,6 +39,8 @@ public:
   //! Reserved placeholder resource key.
   OXGN_CNTT_API static const ResourceKey kFallback;
   OXGN_CNTT_API static const ResourceKey kPlaceholder;
+  //! Renderer-owned error texture; never a cooked resource lookup.
+  OXGN_CNTT_API static const ResourceKey kError;
 
   // Inherit base constructors
   using Base::Base;
@@ -51,6 +53,11 @@ public:
   [[nodiscard]] constexpr auto IsFallback() const noexcept
   {
     return *this == kFallback;
+  }
+
+  [[nodiscard]] constexpr auto IsError() const noexcept
+  {
+    return *this == kError;
   }
 };
 

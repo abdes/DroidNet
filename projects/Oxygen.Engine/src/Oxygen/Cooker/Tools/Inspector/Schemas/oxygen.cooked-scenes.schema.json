@@ -19,7 +19,8 @@
           "virtual_path",
           "descriptor_version",
           "complete",
-          "nodes"
+          "nodes",
+          "perspective_cameras"
         ],
         "properties": {
           "asset_key": { "$ref": "#/definitions/key" },
@@ -31,6 +32,29 @@
           },
           "complete": { "type": "boolean" },
           "diagnostic": { "type": "string", "minLength": 1 },
+          "perspective_cameras": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "node_index",
+                "aspect_mode",
+                "aspect_ratio",
+                "fov_y",
+                "near_plane",
+                "far_plane"
+              ],
+              "properties": {
+                "node_index": { "type": "integer", "minimum": 0 },
+                "aspect_mode": { "enum": ["auto", "fixed"] },
+                "aspect_ratio": { "type": "number", "exclusiveMinimum": 0 },
+                "fov_y": { "type": "number", "exclusiveMinimum": 0 },
+                "near_plane": { "type": "number", "exclusiveMinimum": 0 },
+                "far_plane": { "type": "number", "exclusiveMinimum": 0 }
+              }
+            }
+          },
           "nodes": {
             "type": "array",
             "items": {

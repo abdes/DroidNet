@@ -28,6 +28,7 @@ namespace oxygen::interop::module {
     kApertureF = 4,
     kShutterRate = 5,
     kIso = 6,
+    kAspectMode = 7,
     kCount,
   };
 
@@ -42,6 +43,7 @@ namespace oxygen::interop::module {
     case PerspectiveCameraField::kApertureF: return "ApertureF";
     case PerspectiveCameraField::kShutterRate: return "ShutterRate";
     case PerspectiveCameraField::kIso: return "Iso";
+    case PerspectiveCameraField::kAspectMode: return "AspectMode";
     case PerspectiveCameraField::kCount: break;
     }
     return "__NotSupported__";
@@ -86,6 +88,12 @@ namespace oxygen::interop::module {
         case PerspectiveCameraField::kAspectRatio:
           if (entry.value > 0.0F) {
             camera.SetAspectRatio(entry.value);
+          }
+          break;
+        case PerspectiveCameraField::kAspectMode:
+          if (entry.value == 0.0F || entry.value == 1.0F) {
+            camera.SetAspectMode(entry.value == 0.0F
+              ? oxygen::CameraAspectMode::kAuto : oxygen::CameraAspectMode::kFixed);
           }
           break;
         case PerspectiveCameraField::kNearPlane:

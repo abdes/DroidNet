@@ -6,16 +6,19 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <sstream>
 #include <stop_token>
+#include <string>
+#include <vector>
 
+#include "AsyncImporterFullTestBase.h"
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/SceneSourceInspection.h>
 #include <Oxygen/Testing/GTest.h>
-
-#include "AsyncImporterFullTestBase.h"
 
 namespace {
 
@@ -58,6 +61,20 @@ protected:
     return contents.str();
   }
 };
+
+NOLINT_TEST_F(SceneSourceInspectionTest, StaticTexturesReportExternalImages)
+{
+  for (const auto* extension : { "gltf", "fbx" }) {
+    SCOPED_TRACE(extension);
+    const auto report = InspectSceneSource(TestModelsDirFromFile()
+      / (std::string("static_textured_triangle.") + extension));
+    EXPECT_TRUE(report.parsed);
+    EXPECT_TRUE(report.supported) << ExportSceneSourceInspection(report);
+    ASSERT_EQ(report.external_files.size(), 1U);
+    EXPECT_EQ(report.external_files.front(), "static_textured_checker.png");
+    ValidateReport(report);
+  }
+}
 
 NOLINT_TEST_F(
   SceneSourceInspectionTest, DiscoversMissingExternalBufferWithoutCooking)

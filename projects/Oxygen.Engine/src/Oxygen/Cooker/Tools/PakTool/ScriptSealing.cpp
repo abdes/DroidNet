@@ -8,28 +8,43 @@
 #include <array>
 #include <atomic>
 #include <cctype>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <limits>
 #include <optional>
-#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Cooker/Loose/Types.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Tools/PakTool/ScriptSealing.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::pak::tool {
 
@@ -88,7 +103,7 @@ namespace {
   [[nodiscard]] auto ReadFileBytes(const std::filesystem::path& path)
     -> std::optional<std::vector<std::byte>>
   {
-    auto in = std::ifstream(path, std::ios::binary);
+    auto in = std::ifstream(base::ToNativePath(path), std::ios::binary);
     if (!in.is_open()) {
       return std::nullopt;
     }
@@ -115,12 +130,14 @@ namespace {
     const std::filesystem::path& path, std::span<const std::byte> bytes) -> bool
   {
     std::error_code ec {};
-    std::filesystem::create_directories(path.parent_path(), ec);
+    std::filesystem::create_directories(
+      base::ToNativePath(path.parent_path()), ec);
     if (ec) {
       return false;
     }
 
-    auto out = std::ofstream(path, std::ios::binary | std::ios::trunc);
+    auto out = std::ofstream(
+      base::ToNativePath(path), std::ios::binary | std::ios::trunc);
     if (!out.is_open()) {
       return false;
     }
@@ -153,7 +170,7 @@ namespace {
     const std::filesystem::path& index_path)
     -> std::optional<data::loose_cooked::IndexHeader>
   {
-    auto in = std::ifstream(index_path, std::ios::binary);
+    auto in = std::ifstream(base::ToNativePath(index_path), std::ios::binary);
     if (!in.is_open()) {
       return std::nullopt;
     }
@@ -196,42 +213,28 @@ namespace {
   }
 
   [[nodiscard]] auto ResolveExternalSourcePath(
-    const std::filesystem::path& cooked_root,
+    const std::span<const std::filesystem::path> source_roots,
     const std::string_view external_source_path)
     -> std::optional<std::filesystem::path>
   {
-    if (external_source_path.empty()) {
+    const auto stored
+      = std::filesystem::path(external_source_path).lexically_normal();
+    if (stored.empty() || stored.has_root_path()
+      || HasParentTraversal(stored)) {
       return std::nullopt;
     }
-
-    std::error_code ec;
-    const auto normalized_root = cooked_root.is_absolute()
-      ? cooked_root.lexically_normal()
-      : std::filesystem::absolute(cooked_root, ec).lexically_normal();
-    if (ec) {
-      return std::nullopt;
+    for (const auto& root : source_roots) {
+      const auto candidate = (root / stored).lexically_normal();
+      const auto relative = candidate.lexically_relative(root);
+      if (relative.empty() || relative.has_root_path()
+        || HasParentTraversal(relative)) {
+        continue;
+      }
+      if (std::filesystem::is_regular_file(base::ToNativePath(candidate))) {
+        return candidate;
+      }
     }
-
-    const auto root_parent = normalized_root.parent_path().lexically_normal();
-    if (root_parent.empty()) {
-      return std::nullopt;
-    }
-
-    const auto stored_path
-      = std::filesystem::path(std::string(external_source_path))
-          .lexically_normal();
-    if (stored_path.empty() || stored_path.is_absolute()
-      || HasParentTraversal(stored_path)) {
-      return std::nullopt;
-    }
-
-    const auto resolved = (root_parent / stored_path).lexically_normal();
-    const auto relative = resolved.lexically_relative(root_parent);
-    if (relative.empty() || relative.is_absolute()
-      || HasParentTraversal(relative)) {
-      return std::nullopt;
-    }
-    return resolved;
+    return std::nullopt;
   }
 
   [[nodiscard]] auto NormalizeLooseCookedRoot(const std::filesystem::path& root)
@@ -280,15 +283,23 @@ namespace {
   auto CopyCookedRoot(const std::filesystem::path& from,
     const std::filesystem::path& to) -> std::error_code
   {
+    const auto native_from = base::ToNativePath(from);
+    const auto native_to = base::ToNativePath(to);
     auto ec = std::error_code {};
-    std::filesystem::remove_all(to, ec);
-    ec.clear();
-    std::filesystem::create_directories(to.parent_path(), ec);
+    std::filesystem::remove_all(native_to, ec);
+    if (ec) {
+      return ec;
+    }
+    std::filesystem::create_directories(native_to.parent_path(), ec);
     if (ec) {
       return ec;
     }
     std::filesystem::copy(
-      from, to, std::filesystem::copy_options::recursive, ec);
+      native_from, native_to, std::filesystem::copy_options::recursive, ec);
+    if (ec) {
+      auto cleanup_error = std::error_code {};
+      std::filesystem::remove_all(native_to, cleanup_error);
+    }
     return ec;
   }
 
@@ -301,8 +312,10 @@ namespace {
     const auto data_path
       = cooked_root / std::filesystem::path(layout.ScriptsDataRelPath());
 
-    const auto table_exists = std::filesystem::exists(table_path);
-    const auto data_exists = std::filesystem::exists(data_path);
+    const auto table_exists
+      = std::filesystem::exists(base::ToNativePath(table_path));
+    const auto data_exists
+      = std::filesystem::exists(base::ToNativePath(data_path));
     if (table_exists != data_exists) {
       return std::nullopt;
     }
@@ -372,7 +385,9 @@ namespace {
     auto descriptor = ScriptAssetDesc {};
     std::memcpy(&descriptor, descriptor_bytes->data(), sizeof(ScriptAssetDesc));
     if (static_cast<AssetType>(descriptor.header.asset_type)
-      != AssetType::kScript) {
+        != AssetType::kScript
+      || descriptor.header.version
+        != data::pak::scripting::kScriptAssetVersion) {
       return std::nullopt;
     }
 
@@ -432,11 +447,13 @@ namespace {
   [[nodiscard]] auto RewriteStagedScriptDescriptor(
     const std::filesystem::path& original_root,
     const std::filesystem::path& staged_root, const lc::AssetEntry& asset_entry,
-    ScriptTables& tables) -> Result<bool, ScriptSealingError>
+    ScriptTables& tables, std::span<const std::filesystem::path> source_roots)
+    -> Result<std::optional<data::AssetReferences>, ScriptSealingError>
   {
     const auto context = ReadScriptAssetContext(staged_root, asset_entry);
     if (!context.has_value()) {
-      return Result<bool, ScriptSealingError>::Err(ScriptSealingError {
+      return Result<std::optional<data::AssetReferences>,
+        ScriptSealingError>::Err(ScriptSealingError {
         .error_code = "paktool.script_seal.script_descriptor_invalid",
         .error_message = "Failed to parse staged script descriptor.",
         .source_path = original_root,
@@ -446,18 +463,21 @@ namespace {
     }
 
     auto descriptor = context->descriptor;
+    import::AssetReferenceBuilder references(asset_entry.references);
     const auto allows_external
       = (static_cast<uint32_t>(descriptor.flags)
           & static_cast<uint32_t>(ScriptAssetFlags::kAllowExternalSource))
       != 0U;
     if (!allows_external) {
-      return Result<bool, ScriptSealingError>::Ok(false);
+      return Result<std::optional<data::AssetReferences>,
+        ScriptSealingError>::Ok(std::nullopt);
     }
 
-    if (descriptor.source_resource_index == data::pak::core::kNoResourceIndex) {
+    if (descriptor.source_resource_index == data::kNoResourceReference) {
       const auto external_source = TryGetExternalSourcePath(descriptor);
       if (!external_source.has_value()) {
-        return Result<bool, ScriptSealingError>::Err(ScriptSealingError {
+        return Result<std::optional<data::AssetReferences>,
+          ScriptSealingError>::Err(ScriptSealingError {
           .error_code = "paktool.script_seal.external_source_missing",
           .error_message
           = "Script descriptor requires external source sealing but does not "
@@ -468,13 +488,13 @@ namespace {
       }
 
       const auto resolved_path
-        = ResolveExternalSourcePath(original_root, *external_source);
+        = ResolveExternalSourcePath(source_roots, *external_source);
       if (!resolved_path.has_value()) {
-        return Result<bool, ScriptSealingError>::Err(ScriptSealingError {
+        return Result<std::optional<data::AssetReferences>,
+          ScriptSealingError>::Err(ScriptSealingError {
           .error_code = "paktool.script_seal.external_source_unresolvable",
-          .error_message
-          = "External script source path could not be resolved relative to "
-            "the loose-cooked root parent.",
+          .error_message = "External script source was not found under the "
+                           "declared script source roots.",
           .source_path = original_root,
           .descriptor_path = context->descriptor_path,
           .external_source_path = std::string(*external_source),
@@ -483,7 +503,8 @@ namespace {
 
       const auto source_bytes = ReadFileBytes(*resolved_path);
       if (!source_bytes.has_value()) {
-        return Result<bool, ScriptSealingError>::Err(ScriptSealingError {
+        return Result<std::optional<data::AssetReferences>,
+          ScriptSealingError>::Err(ScriptSealingError {
           .error_code = "paktool.script_seal.external_source_read_failed",
           .error_message = "Failed to read external script source bytes.",
           .source_path = original_root,
@@ -496,7 +517,8 @@ namespace {
       const auto source_index = AppendEmbeddedSourceResource(tables,
         std::span<const std::byte>(source_bytes->data(), source_bytes->size()));
       if (!source_index.has_value()) {
-        return Result<bool, ScriptSealingError>::Err(ScriptSealingError {
+        return Result<std::optional<data::AssetReferences>,
+          ScriptSealingError>::Err(ScriptSealingError {
           .error_code = "paktool.script_seal.script_table_append_failed",
           .error_message
           = "Failed to append sealed script source to staged scripts.table.",
@@ -506,13 +528,15 @@ namespace {
           .external_source_path = std::string(*external_source),
         });
       }
-      descriptor.source_resource_index = *source_index;
+      descriptor.source_resource_index
+        = references.AddResource(data::ResourceKind::kScript, *source_index);
     }
 
     ClearExternalSourceContract(descriptor);
     if (!WriteFileBytes(context->descriptor_path,
           std::as_bytes(std::span { &descriptor, 1 }))) {
-      return Result<bool, ScriptSealingError>::Err(ScriptSealingError {
+      return Result<std::optional<data::AssetReferences>,
+        ScriptSealingError>::Err(ScriptSealingError {
         .error_code = "paktool.script_seal.script_descriptor_write_failed",
         .error_message = "Failed to persist sealed script descriptor bytes.",
         .source_path = original_root,
@@ -520,11 +544,14 @@ namespace {
       });
     }
 
-    return Result<bool, ScriptSealingError>::Ok(true);
+    return Result<std::optional<data::AssetReferences>, ScriptSealingError>::Ok(
+      std::optional { std::move(references).Build() });
   }
 
   auto RefreshStagedLooseCookedIndex(const std::filesystem::path& staged_root,
-    const lc::Inspection& inspection) -> Result<void, ScriptSealingError>
+    const lc::Inspection& inspection,
+    const std::unordered_map<data::AssetKey, data::AssetReferences>&
+      sealed_references) -> Result<void, ScriptSealingError>
   {
     const auto index_path = staged_root / "container.index.bin";
     const auto index_header = ReadLooseCookedIndexHeader(index_path);
@@ -556,7 +583,7 @@ namespace {
     }
 
     auto remove_ec = std::error_code {};
-    std::filesystem::remove(index_path, remove_ec);
+    std::filesystem::remove(base::ToNativePath(index_path), remove_ec);
     if (remove_ec) {
       return Result<void, ScriptSealingError>::Err(ScriptSealingError {
         .error_code = "paktool.script_seal.index_remove_failed",
@@ -586,14 +613,17 @@ namespace {
         });
       }
 
+      const auto sealed = sealed_references.find(asset.key);
+      const auto& references
+        = sealed == sealed_references.end() ? asset.references : sealed->second;
       writer.RegisterExternalAssetDescriptor(asset.key,
         static_cast<AssetType>(asset.asset_type), asset.virtual_path,
-        asset.descriptor_relpath, 0, *digest);
+        asset.descriptor_relpath, 0, references, *digest);
     }
 
     for (const auto& file : inspection.Files()) {
       const auto file_path = staged_root / std::filesystem::path(file.relpath);
-      if (!std::filesystem::exists(file_path)) {
+      if (!std::filesystem::exists(base::ToNativePath(file_path))) {
         continue;
       }
       writer.RegisterExternalFile(file.kind, file.relpath);
@@ -604,14 +634,14 @@ namespace {
     const auto scripts_table_relpath = layout.ScriptsTableRelPath();
     const auto scripts_data_relpath = layout.ScriptsDataRelPath();
     if (!seen_file_kinds.contains(data::loose_cooked::FileKind::kScriptsTable)
-      && std::filesystem::exists(
-        staged_root / std::filesystem::path(scripts_table_relpath))) {
+      && std::filesystem::exists(base::ToNativePath(
+        staged_root / std::filesystem::path(scripts_table_relpath)))) {
       writer.RegisterExternalFile(
         data::loose_cooked::FileKind::kScriptsTable, scripts_table_relpath);
     }
     if (!seen_file_kinds.contains(data::loose_cooked::FileKind::kScriptsData)
-      && std::filesystem::exists(
-        staged_root / std::filesystem::path(scripts_data_relpath))) {
+      && std::filesystem::exists(base::ToNativePath(
+        staged_root / std::filesystem::path(scripts_data_relpath)))) {
       writer.RegisterExternalFile(
         data::loose_cooked::FileKind::kScriptsData, scripts_data_relpath);
     }
@@ -630,7 +660,8 @@ namespace {
   }
 
   [[nodiscard]] auto SealLooseCookedSource(const data::CookedSource& source,
-    const std::filesystem::path& staging_parent, const size_t source_index)
+    const std::filesystem::path& staging_parent, const size_t source_index,
+    const std::span<const std::filesystem::path> source_roots)
     -> Result<SealedLooseSourceResult, ScriptSealingError>
   {
     const auto normalized_root = NormalizeLooseCookedRoot(source.path);
@@ -721,18 +752,21 @@ namespace {
     }
 
     auto sealed_count = uint32_t { 0 };
+    std::unordered_map<data::AssetKey, data::AssetReferences> sealed_references;
     for (const auto& asset : inspection.Assets()) {
       if (static_cast<AssetType>(asset.asset_type) != AssetType::kScript) {
         continue;
       }
-      const auto sealed = RewriteStagedScriptDescriptor(
-        *normalized_root, staged_root, asset, *tables);
+      auto sealed = RewriteStagedScriptDescriptor(
+        *normalized_root, staged_root, asset, *tables, source_roots);
       if (!sealed.has_value()) {
         cleanup_staged_root();
         return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
           sealed.error());
       }
-      if (*sealed) {
+      auto& references = *sealed;
+      if (references) {
+        sealed_references.emplace(asset.key, std::move(*references));
         ++sealed_count;
       }
     }
@@ -755,8 +789,8 @@ namespace {
         });
     }
 
-    if (const auto refreshed
-      = RefreshStagedLooseCookedIndex(staged_root, inspection);
+    if (const auto refreshed = RefreshStagedLooseCookedIndex(
+          staged_root, inspection, sealed_references);
       !refreshed) {
       cleanup_staged_root();
       return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
@@ -777,7 +811,8 @@ namespace {
 
 auto SealLooseCookedSourcesForPakBuild(
   const pak::PakBuildRequest& build_request,
-  const std::filesystem::path& staging_parent)
+  const std::filesystem::path& staging_parent,
+  const std::span<const std::filesystem::path> source_roots)
   -> Result<ScriptSealingResult, ScriptSealingError>
 {
   auto sealed_request = build_request;
@@ -785,12 +820,13 @@ auto SealLooseCookedSourcesForPakBuild(
   auto sealed_script_assets = uint32_t { 0 };
 
   for (size_t i = 0; i < sealed_request.sources.size(); ++i) {
-    const auto& source = sealed_request.sources[i];
+    const auto& source = sealed_request.sources.at(i);
     if (source.kind != data::CookedSourceKind::kLooseCooked) {
       continue;
     }
 
-    const auto sealed_root = SealLooseCookedSource(source, staging_parent, i);
+    const auto sealed_root
+      = SealLooseCookedSource(source, staging_parent, i, source_roots);
     if (!sealed_root.has_value()) {
       CleanupStagedLooseRoots(
         std::span<const std::filesystem::path>(staged_loose_roots));
@@ -801,7 +837,7 @@ auto SealLooseCookedSourcesForPakBuild(
     }
 
     if (sealed_root->staged_root.has_value()) {
-      sealed_request.sources[i].path = *sealed_root->staged_root;
+      sealed_request.sources.at(i).path = *sealed_root->staged_root;
       staged_loose_roots.push_back(*sealed_root->staged_root);
       sealed_script_assets += sealed_root->sealed_asset_count;
     }
@@ -832,7 +868,7 @@ auto CleanupStagedLooseRoots(
     }
 
     auto ec = std::error_code {};
-    std::filesystem::remove_all(staged_root, ec);
+    std::filesystem::remove_all(base::ToNativePath(staged_root), ec);
     if (ec) {
       LOG_F(WARNING, "PakTool failed to clean staged loose root '{}' [{}]",
         staged_root.string(), ec.message());
@@ -849,7 +885,8 @@ auto CleanupStagedLooseRoots(
 
   for (const auto& parent : staging_parents) {
     auto ec = std::error_code {};
-    const auto removed = std::filesystem::remove(parent, ec);
+    const auto removed
+      = std::filesystem::remove(base::ToNativePath(parent), ec);
     if (ec) {
       LOG_F(WARNING,
         "PakTool failed to remove sealed-sources staging directory '{}' [{}]",

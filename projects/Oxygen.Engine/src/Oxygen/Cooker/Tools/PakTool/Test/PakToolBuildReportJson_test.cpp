@@ -11,13 +11,13 @@
 #include <fstream>
 #include <iterator>
 #include <optional>
-#include <process.h>
 #include <sstream>
 #include <string>
 #include <vector>
 
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
+#include <process.h>
 
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
@@ -305,7 +305,7 @@ protected:
       = "Oxygen.Cooker.PakTool patch --out game.pak --catalog-out game.catalog.json --manifest-out game.manifest.json --diagnostics-file game.report.json",
       .request_snapshot = PakToolRequestSnapshot {
         .request = request,
-        .base_catalog_paths = { Root() / "cook" / "base.catalog.json" },
+        .base_pak_paths = { Root() / "cook" / "base.catalog.json" },
       },
       .publication_plan = plan,
       .publication_result = publication_result,

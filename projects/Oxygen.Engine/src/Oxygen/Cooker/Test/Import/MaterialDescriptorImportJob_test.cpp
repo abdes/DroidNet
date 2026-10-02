@@ -5,25 +5,32 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <iterator>
+#include <ios>
 #include <latch>
 #include <optional>
-#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Base/Finally.h>
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportJobId.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
 
@@ -110,7 +117,7 @@ namespace {
     const std::string_view code) -> bool
   {
     return std::ranges::any_of(diagnostics,
-      [code](const ImportDiagnostic& d) { return d.code == code; });
+      [code](const ImportDiagnostic& d) -> bool { return d.code == code; });
   }
 
   auto SubmitAndWait(AsyncImportService& service, ImportRequest request)
@@ -121,12 +128,15 @@ namespace {
     const auto submitted = service.SubmitImport(
       std::move(request),
       [&report, &done](
-        const ImportJobId /*job_id*/, const ImportReport& completed) {
+        const ImportJobId /*job_id*/, const ImportReport& completed) -> void {
         report = completed;
         done.count_down();
       },
       nullptr);
-    EXPECT_TRUE(submitted.has_value());
+    if (!submitted.has_value()) {
+      ADD_FAILURE() << "Material import submission failed";
+      return report;
+    }
     done.wait();
     return report;
   }
@@ -150,6 +160,35 @@ namespace {
   };
 
   NOLINT_TEST_F(MaterialDescriptorImportJobTest,
+    CompilesEmissionColorAndIntensityWithoutBinary16Rounding)
+  {
+    const auto cooked_root = MakeTempCookedRoot("float32_emission");
+    auto service = AsyncImportService(AsyncImportService::Config {
+      .thread_pool_size = 2U,
+    });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+    const auto report = SubmitAndWait(service,
+      MakeRequest(cooked_root, R"({
+      "name": "HdrEmission",
+      "parameters": {
+        "emissive_color": [1.0, 0.25, 0.0],
+        "emissive_intensity": 9.7
+      }
+    })",
+        "HdrEmission"));
+    ASSERT_TRUE(report.success);
+    const auto bytes
+      = ReadBinaryFile(cooked_root / "Materials" / "HdrEmission.omat");
+    ASSERT_GE(bytes.size(), sizeof(data::pak::render::MaterialAssetDesc));
+    const auto desc = ReadMaterialDesc(bytes);
+    EXPECT_EQ(desc.header.version, data::pak::render::kMaterialAssetVersion);
+    EXPECT_EQ(desc.emissive_factor[0], 9.7F);
+    EXPECT_EQ(desc.emissive_factor[1], 9.7F * 0.25F);
+    EXPECT_EQ(desc.emissive_factor[2], 0.0F);
+  }
+
+  NOLINT_TEST_F(MaterialDescriptorImportJobTest,
     ResolvesHashedTextureDescriptorVirtualPathAndEmitsMaterial)
   {
     const auto cooked_root
@@ -161,6 +200,8 @@ namespace {
     auto service = AsyncImportService(AsyncImportService::Config {
       .thread_pool_size = 2U,
     });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
       "name": "woodfloor007",
@@ -182,9 +223,18 @@ namespace {
     const auto bytes = ReadBinaryFile(material_path);
     ASSERT_GE(bytes.size(), sizeof(data::pak::render::MaterialAssetDesc));
     const auto desc = ReadMaterialDesc(bytes);
-    EXPECT_EQ(desc.base_color_texture.get(), 7U);
-
-    service.Stop();
+    EXPECT_EQ(desc.base_color_texture.get(), 0U);
+    const auto index = lc::LooseCookedIndex::LoadFromRoot(cooked_root);
+    const auto key
+      = index.FindAssetKeyByVirtualPath("/.cooked/Materials/woodfloor007.omat");
+    ASSERT_TRUE(key.has_value());
+    const auto references = index.FindAssetReferences(key.value());
+    ASSERT_TRUE(references.has_value());
+    EXPECT_THAT(references.value().Resources(),
+      ::testing::ElementsAre(data::ResourceBinding {
+        .kind = data::ResourceKind::kTexture,
+        .index = ResourceIndexT { 7U },
+      }));
   }
 
   NOLINT_TEST_F(MaterialDescriptorImportJobTest,
@@ -194,6 +244,8 @@ namespace {
     auto service = AsyncImportService(AsyncImportService::Config {
       .thread_pool_size = 2U,
     });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
       "name": "woodfloor007",
@@ -208,8 +260,6 @@ namespace {
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
       report.diagnostics, "material.descriptor.texture_descriptor_missing"));
-
-    service.Stop();
   }
 
 } // namespace

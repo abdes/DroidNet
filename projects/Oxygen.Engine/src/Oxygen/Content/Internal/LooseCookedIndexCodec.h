@@ -6,11 +6,11 @@
 
 #pragma once
 
+#include <span>
+
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Serio/Reader.h>
-
-#include <span>
 
 namespace oxygen::serio {
 
@@ -54,6 +54,7 @@ inline auto Load(AnyReader& reader, data::loose_cooked::AssetEntry& entry)
   CHECK_RESULT(reader.ReadInto(entry.descriptor_size));
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span { entry.descriptor_sha256 })));
+  CHECK_RESULT(reader.ReadInto(entry.references));
   return {};
 }
 
@@ -75,8 +76,7 @@ inline auto Load(AnyReader& reader, data::loose_cooked::FileRecord& record)
   case FileKind::kScriptsData:
   case FileKind::kPhysicsTable:
   case FileKind::kPhysicsData:
-  case FileKind::kScriptBindingsTable:
-  case FileKind::kScriptBindingsData:
+  case FileKind::kAuxiliary:
     record.kind = static_cast<FileKind>(kind_u);
     break;
   default:
@@ -84,6 +84,8 @@ inline auto Load(AnyReader& reader, data::loose_cooked::FileRecord& record)
   }
   CHECK_RESULT(reader.ReadInto(record.size));
   CHECK_RESULT(reader.ReadInto(record.relpath_offset));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { record.sha256 })));
   return {};
 }
 

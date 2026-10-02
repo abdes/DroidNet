@@ -10,6 +10,7 @@
 #include <string_view>
 
 #include <Oxygen/Content/Layout.h>
+#include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/AssetType.h>
 
 namespace oxygen::content::import {
@@ -291,6 +292,15 @@ struct LooseCookedLayout final : Layout {
     return BufferVirtualLeaf(name);
   }
 
+  //! Source-derived sidecar path, including the stable-identity suffix.
+  //! Empty stable_id uses name_hint as identity; no files are accessed.
+  OXGN_COOK_NDAPI auto TextureDescriptorRelPath(std::string_view name_hint,
+    std::string_view stable_id) const -> std::string;
+
+  //! Source-derived buffer sidecar path using the same identity naming rule.
+  OXGN_COOK_NDAPI auto BufferDescriptorRelPath(std::string_view name_hint,
+    std::string_view stable_id) const -> std::string;
+
   [[nodiscard]] auto PhysicsMaterialDescriptorRelPath(
     std::string_view name) const -> std::string
   {
@@ -307,6 +317,13 @@ struct LooseCookedLayout final : Layout {
     std::string_view name) const -> std::string
   {
     return PhysicsResourceVirtualLeaf(name);
+  }
+
+  //! Place a descriptor-relative path in this container's virtual namespace.
+  [[nodiscard]] auto DescriptorVirtualPath(std::string_view relative_path) const
+    -> std::string
+  {
+    return JoinVirtualPath(virtual_mount_root, relative_path);
   }
 
   [[nodiscard]] auto MaterialVirtualPath(std::string_view material_name) const
@@ -430,12 +447,6 @@ struct LooseCookedLayout final : Layout {
   //! File name for the scripts resource data.
   std::string scripts_data_file_name = "scripts.data";
 
-  //! File name for the script-bindings table.
-  std::string script_bindings_table_file_name = "script-bindings.table";
-
-  //! File name for the script-bindings data.
-  std::string script_bindings_data_file_name = "script-bindings.data";
-
   //! Optional base folder (relative to cooked root) for asset descriptors.
   /*!
    If empty, descriptors are written directly under the cooked root.
@@ -538,18 +549,6 @@ struct LooseCookedLayout final : Layout {
   [[nodiscard]] auto ScriptsDataRelPath() const -> std::string
   {
     return JoinRelPath(resources_dir, scripts_data_file_name);
-  }
-
-  //! Resolve the container-relative path for the script-bindings table.
-  [[nodiscard]] auto ScriptBindingsTableRelPath() const -> std::string
-  {
-    return JoinRelPath(resources_dir, script_bindings_table_file_name);
-  }
-
-  //! Resolve the container-relative path for the script-bindings data.
-  [[nodiscard]] auto ScriptBindingsDataRelPath() const -> std::string
-  {
-    return JoinRelPath(resources_dir, script_bindings_data_file_name);
   }
 
   //! Resolve the container-relative directory for texture resource descriptors.

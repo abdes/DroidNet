@@ -2,8 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Immutable;
 using System.Security.Cryptography;
+using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
 
@@ -12,7 +14,13 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
 {
     private readonly string root;
     private readonly Dictionary<string, FileStream> files = [with(StringComparer.Ordinal)];
-    private Dictionary<string, CookProvenance.FileProof>? hashes;
+    private readonly Lock verificationGate = new();
+    private FileStream? generation;
+    private Task<CookedInventoryReport>? inventory;
+    private Task? nativeDrain;
+    private Task? closing;
+    private bool cleanupTransferred;
+    private volatile bool disposed;
 
     private CookOutputReadLease(string root) => this.root = root;
 
@@ -34,7 +42,12 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
         var lease = new CookOutputReadLease(root);
         try
         {
-            foreach (var path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            if (File.Exists(Path.Combine(root, CookedGeneration.MarkerFileName)))
+            {
+                lease.RetainGeneration();
+            }
+
+            foreach (var path in lease.ContentPaths())
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 lease.files.Add(Path.GetRelativePath(root, path).Replace('\\', '/'), new(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan));
@@ -50,6 +63,69 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
         }
     }
 
+    /// <summary>Retains the sealed generation without reopening its verified index or payloads.</summary>
+    internal void RetainGeneration()
+    {
+        lock (this.verificationGate)
+        {
+            ObjectDisposedException.ThrowIf(this.disposed, this);
+            this.generation ??= WindowsCookFile.OpenGenerationReader(Path.Combine(this.root, CookedGeneration.MarkerFileName));
+        }
+    }
+
+    /// <summary>Verifies this protected opening once through the native inventory authority.</summary>
+    /// <param name="native">The existing native content API.</param>
+    /// <param name="cancellationToken">Cancels native work.</param>
+    /// <param name="artifacts">Optional artifacts already retained by the operation.</param>
+    /// <returns>The lease-scoped inventory and any damaged members.</returns>
+    public Task<CookedInventoryReport> ReadInventoryAsync(IEngineContentPipelineApi native, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
+    {
+        lock (this.verificationGate)
+        {
+            ObjectDisposedException.ThrowIf(this.disposed, this);
+            this.CheckMembership();
+            return this.inventory ??= this.VerifyInventoryAsync(native, artifacts, cancellationToken);
+        }
+    }
+
+    private async Task<CookedInventoryReport> VerifyInventoryAsync(IEngineContentPipelineApi native, NativeArtifactLease? artifacts, CancellationToken cancellationToken)
+    {
+        CookedInventoryReport report;
+        try
+        {
+            report = await native.ReadInventoryAsync(this.root, artifacts, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ContentPipelineTerminationException failure)
+        {
+            Task cleanup;
+            lock (this.verificationGate)
+            {
+                this.nativeDrain = failure.DrainCompletion;
+                this.disposed = true;
+                this.cleanupTransferred = true;
+                cleanup = this.closing ??= this.CloseAfterInspectionAsync(verification: null);
+            }
+
+            throw new ContentPipelineTerminationException(failure.InnerException ?? failure, cleanup);
+        }
+
+        ObjectDisposedException.ThrowIf(this.disposed, this);
+        if (!this.files.TryGetValue("container.index.bin", out var index))
+        {
+            throw new InvalidDataException("The protected cooked root has no index.");
+        }
+
+        index.Position = 0;
+        var digest = Convert.ToHexString(await SHA256.HashDataAsync(index, cancellationToken).ConfigureAwait(false));
+        if (index.Length != report.IndexSize || !string.Equals(digest, report.IndexSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new IOException("The native inventory does not describe this protected index.");
+        }
+
+        this.CheckMembership();
+        return report;
+    }
+
     /// <summary>Returns the actual protected file set, including files not represented by index file records.</summary>
     /// <returns>Root-relative paths and sizes without reading file contents.</returns>
     public IReadOnlyList<CookedFileEntry> GetFiles()
@@ -59,93 +135,67 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
             .Select(static pair => new CookedFileEntry(pair.Key, checked((ulong)pair.Value.Length))).ToArray();
     }
 
-    /// <summary>Captures output identities after successful validation of the protected bytes.</summary>
-    /// <param name="mount">The physical mount name.</param>
-    /// <param name="inspection">The native index entries.</param>
-    /// <param name="cancellationToken">Cancels hashing.</param>
-    /// <returns>The complete root proof.</returns>
-    public async Task<CookProvenance.Root> CaptureAsync(string mount, CookInspectionResult inspection, CancellationToken cancellationToken)
-    {
-        var proofs = await this.ReadHashesAsync(cancellationToken).ConfigureAwait(false);
-        var assets = inspection.Assets.Select(asset => new CookProvenance.IndexedAsset(asset, proofs[asset.DescriptorRelativePath ?? throw new InvalidDataException("The native index omitted a descriptor path.")])).ToImmutableArray();
-        var descriptors = assets.Select(static asset => asset.File.RelativePath).ToHashSet(StringComparer.Ordinal);
-        this.CheckMembership();
-        return new(mount, [.. proofs.Values.Where(file => !descriptors.Contains(file.RelativePath)).OrderBy(static file => file.RelativePath, StringComparer.Ordinal)], assets);
-    }
-
-    /// <summary>Hashes one protected set of files for validation or reuse without mixing root generations.</summary>
-    /// <param name="cancellationToken">Cancels hashing.</param>
-    /// <returns>The root-relative file identities.</returns>
-    public async Task<IReadOnlyDictionary<string, CookProvenance.FileProof>> ReadHashesAsync(CancellationToken cancellationToken)
-    {
-        if (this.hashes is not null)
-        {
-            return this.hashes;
-        }
-
-        var proofs = new Dictionary<string, CookProvenance.FileProof>(StringComparer.Ordinal);
-        foreach (var (relative, stream) in this.files)
-        {
-            stream.Position = 0;
-            var hash = Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false));
-            proofs.Add(relative, new(relative, stream.Length, hash));
-        }
-
-        this.CheckMembership();
-        this.hashes = proofs;
-        return proofs;
-    }
-
-    /// <summary>Verifies indexed descriptors against the bytes protected by this reader.</summary>
-    /// <param name="records">Indexed asset identities and descriptor hashes.</param>
-    /// <param name="cancellationToken">Cancels verification.</param>
-    /// <returns>Completion after each recorded descriptor matches its digest and length.</returns>
-    public async Task VerifyDescriptorsAsync(IReadOnlyList<Oxygen.Managed.Assets.Catalog.AssetRecord> records, CancellationToken cancellationToken)
-    {
-        foreach (var record in records)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var metadata = record.Cooked ?? throw new InvalidDataException("The cooked index omitted asset metadata.");
-            if (!this.files.TryGetValue(metadata.DescriptorRelativePath, out var stream) || (ulong)stream.Length != metadata.DescriptorSize)
-            {
-                throw new InvalidDataException($"Cooked descriptor is missing or has changed: {metadata.DescriptorRelativePath}.");
-            }
-
-            stream.Position = 0;
-            var hash = Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false));
-            if (!string.Equals(hash, metadata.DescriptorSha256, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidDataException($"Cooked descriptor failed its integrity check: {metadata.DescriptorRelativePath}.");
-            }
-        }
-
-        this.CheckMembership();
-    }
+    /// <inheritdoc />
+    public void Dispose() => _ = this.BeginDisposal();
 
     /// <inheritdoc />
-    public void Dispose()
+    public ValueTask DisposeAsync() => new(this.BeginDisposal());
+
+    private Task BeginDisposal()
     {
-        foreach (var stream in this.files.Values)
+        lock (this.verificationGate)
         {
-            stream.Dispose();
+            this.disposed = true;
+            if (this.cleanupTransferred)
+            {
+                return Task.CompletedTask;
+            }
+
+            return this.closing ??= this.CloseAfterInspectionAsync(this.inventory);
         }
     }
 
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
+    private async Task CloseAfterInspectionAsync(Task<CookedInventoryReport>? verification)
     {
-        foreach (var stream in this.files.Values)
+        if (verification is not null)
         {
-            await stream.DisposeAsync().ConfigureAwait(false);
+            // Observe completion without replacing the operation's original failure.
+            await verification.ContinueWith(static completed => { _ = completed.Exception; }, CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default).ConfigureAwait(false);
+        }
+
+        try
+        {
+            if (this.nativeDrain is not null)
+            {
+                await this.nativeDrain.ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            try
+            {
+                foreach (var stream in this.files.Values)
+                {
+                    await stream.DisposeAsync().ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                this.generation?.Dispose();
+            }
         }
     }
 
     private void CheckMembership()
     {
-        var current = Directory.EnumerateFiles(this.root, "*", SearchOption.AllDirectories).Select(path => Path.GetRelativePath(this.root, path).Replace('\\', '/')).ToHashSet(StringComparer.Ordinal);
+        var current = this.ContentPaths().Select(path => Path.GetRelativePath(this.root, path).Replace('\\', '/')).ToHashSet(StringComparer.Ordinal);
         if (!current.SetEquals(this.files.Keys))
         {
             throw new IOException("Cooked output changed while its files were being validated.");
         }
     }
+
+    private IEnumerable<string> ContentPaths() => Directory.EnumerateFiles(this.root, "*", SearchOption.AllDirectories)
+        .Where(path => !string.Equals(Path.GetRelativePath(this.root, path), CookedGeneration.MarkerFileName, StringComparison.Ordinal));
 }

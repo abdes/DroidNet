@@ -8,7 +8,6 @@
 #include <cstddef>
 #include <cstdlib>
 #include <filesystem>
-#include <string>
 
 #include "Async/AsyncDemoVm.h"
 #include "Async/AsyncShowcase.h"
@@ -106,9 +105,11 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     save_capture("daylight");
 
     // Exercise the actual sun control, including captured-sky invalidation.
-    ctx->SetRef("//DemoPanelSideBar");
-    const auto environment_icon = std::string(imgui::icons::kIconEnvironment);
-    ctx->ItemClick(environment_icon.c_str());
+    const auto active_panel = app.GetShell().GetActivePanelName();
+    if (!active_panel || *active_panel != "Environment") {
+      ctx->SetRef("//DemoPanelSideBar");
+      ctx->ItemClick(imgui::icons::kIconEnvironment.data());
+    }
     ctx->Yield(3);
     ctx->SetRef("//Environment");
     ctx->ItemOpen("**/Sun");
@@ -167,6 +168,12 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       = scene->GetEnvironment()->TryGetSystem<scene::environment::SkyLight>();
     IM_CHECK(sky);
     const bool original_sky = sky->IsEnabled();
+    const auto active_panel = app.GetShell().GetActivePanelName();
+    if (!active_panel || *active_panel != "Async Demo") {
+      ctx->SetRef("//DemoPanelSideBar");
+      ctx->ItemClick(imgui::icons::kIconDemoPanel.data());
+      ctx->Yield(3);
+    }
     ctx->SetRef("//Async Demo");
     ctx->ItemClick("Play tour");
     ctx->Yield(kControlSettleFrames);

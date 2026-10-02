@@ -1,6 +1,9 @@
 # Asset Primitives LLD
 
-Status: `ED-M07 review-ready`
+Status: current contract.
+
+Read [ownership](#6-ownership), [identities and catalogs](#7-data-contracts),
+[native production](#76-importcook-contracts) and [validation](#14-validation-gates).
 
 ## 1. Purpose
 
@@ -13,21 +16,21 @@ defines the reusable data/model/tooling layer those editor features consume.
 
 ## 2. PRD Traceability
 
-| ID | Coverage |
-| --- | --- |
-| `GOAL-004` | Material authoring uses real material assets and descriptors. |
+| ID         | Coverage                                                                                |
+| ---------- | --------------------------------------------------------------------------------------- |
+| `GOAL-004` | Material authoring uses real material assets and descriptors.                           |
 | `GOAL-005` | Asset identity, descriptor, cooked, stale, and missing states have reusable primitives. |
-| `GOAL-006` | Primitive failures can be classified by consuming workflows. |
-| `REQ-013` | Material picker can query material assets by stable identity. |
-| `REQ-014` | Material values save/reopen/cook through existing material descriptor primitives. |
-| `REQ-015` | Descriptor generation uses engine/tooling schemas where they already exist. |
-| `REQ-016` | Import/cook operations have reusable primitives. |
-| `REQ-017` | Cooked outputs can be indexed and queried. |
-| `REQ-018` | Cook output can be validated before mount by later pipeline work. |
-| `REQ-020` | Content browser can build state views from catalog primitives. |
-| `REQ-021` | Authoring stores asset identity, not raw cooked path text. |
-| `REQ-024` | Asset failures can be routed to narrow domains. |
-| `REQ-037` | Persisted authoring data survives save/reopen without manual repair. |
+| `GOAL-006` | Primitive failures can be classified by consuming workflows.                            |
+| `REQ-013`  | Material picker can query material assets by stable identity.                           |
+| `REQ-014`  | Material values save/reopen/cook through existing material descriptor primitives.       |
+| `REQ-015`  | Descriptor generation uses engine/tooling schemas where they already exist.             |
+| `REQ-016`  | Import/cook operations have reusable primitives.                                        |
+| `REQ-017`  | Cooked outputs can be indexed and queried.                                              |
+| `REQ-018`  | Cook output can be validated before mount by later pipeline work.                       |
+| `REQ-020`  | Content browser can build state views from catalog primitives.                          |
+| `REQ-021`  | Authoring stores asset identity, not raw cooked path text.                              |
+| `REQ-024`  | Asset failures can be routed to narrow domains.                                         |
+| `REQ-037`  | Persisted authoring data survives save/reopen without manual repair.                    |
 
 ## 3. Architecture Links
 
@@ -43,91 +46,40 @@ defines the reusable data/model/tooling layer those editor features consume.
 
 ## 4. Current Baseline
 
-The repo already contains the ED-M05 material slice primitives:
+`Oxygen.Managed.Assets` supplies typed references, source and cooked catalogs,
+material authoring records/readers/writers, and a current-format loose-index
+metadata reader. Material authoring lives in `Authoring/Materials`; native
+`Oxygen.Cooker` owns import, resource conversion, binary descriptors, indexes and
+PAKs. The editor invokes native producers through ContentPipeline.
 
-- `Asset`, `GeometryAsset`, `MaterialAsset`, and
-  `AssetReference<TAsset>` in `Oxygen.Managed.Assets.Model`.
-- canonical asset URI helpers in `Oxygen.Managed.Core.AssetUris` and
-  `Oxygen.Managed.Assets.Catalog.AssetUriHelper`.
-- `IAssetCatalog`, `AssetRecord`, `AssetQuery`, `AssetQueryScope`,
-  `AssetQueryTraversal`, `AssetChange`, and `AssetChangeKind`.
-- `GeneratedAssetCatalog` and `BuiltInAssets`, including the generated default
-  material `asset:///Engine/Generated/Materials/Default`.
-- `FileSystemAssetCatalog`, `LooseCookedIndexAssetCatalog`, and
-  `CompositeAssetCatalog` style composition through the content-browser
-  project catalog.
-- `MaterialSource`, `MaterialPbrMetallicRoughness`,
-  `MaterialAlphaMode`, texture-ref records, `MaterialSourceReader`, and
-  `MaterialSourceWriter`.
-- `MaterialSourceImporter` for `*.omat.json`.
-- `CookedMaterialWriter` and `LooseCookedBuildService` for cooked `.omat`
-  descriptors and loose cooked indexes.
-- `ImportService.ImportAsync` executes importer dispatch and build; callers
-  must not call `LooseCookedBuildService` a second time for the same import
-  result.
-- Managed scene source data remains reusable; scene-containing managed cook
-  batches are rejected before output mutation. Runtime scenes use the native
-  descriptor/import producers, including unchanged-input import requests.
-- engine-side `Oxygen.Cooker` provides native schemas, manifest batch import,
-  scene descriptor import, loose cooked inspection, and loose cooked validation
-  APIs. Editor workflow code may reach these only through ContentPipeline or a
-  narrow Interop adapter.
-- tests covering `AssetReference<TAsset>`, generated catalog queries, material
-  source read/write, cooked material writer, loose cooked index behavior, and
-  import/cook helpers.
-
-Brownfield gaps:
-
-- `AssetRecord` is intentionally minimal and does not carry asset type or
-  state. Editor adapters must enrich records without mutating the primitive.
-- source, generated, descriptor, cooked, stale, mounted, missing, and broken
-  states are not primitive enums in `Oxygen.Managed.Assets`; the content-browser LLD
-  owns UI state and runtime-availability overlays.
-- full descriptor/manifest orchestration is not a primitive; it belongs to
-  `Oxygen.Editor.ContentPipeline`.
+The managed layer does not decode textures or models, write cooked binaries, or
+provide a second runtime loader. Native Content owns loading and residency.
 
 ## 5. Target Design
 
-`Oxygen.Managed.Assets` is the reusable layer:
-
 ```text
--------------------------------------------------------------+
-| Editor workflows                                            |
-| MaterialEditor | ContentBrowser | ContentPipeline | World   |
-+-------------------------- consume --------------------------+
-| Oxygen.Managed.Assets primitives                                    |
-| Asset identity | references | catalogs | material source     |
-| import outputs | cooked writers | loose cooked index         |
-+-------------------------------------------------------------+
+Editor documents and commands
+  -> Managed.Assets authoring records, references and catalogs
+  -> Editor.ContentPipeline snapshot, native invocation and publication
+  -> Oxygen.Cooker import, validation and packing
+  -> Oxygen.Content runtime loading and residency
 ```
 
-ED-M05 uses the existing Oxygen material schema directly:
-
-```text
-Content/Materials/Gold.omat.json
-  -> MaterialSourceReader / MaterialSourceWriter
-  -> MaterialSourceImporter
-  -> CookedMaterialWriter
-  -> .cooked/Content/Materials/Gold.omat
-  -> LooseCookedBuildService updates container.index.bin
-  -> ProjectAssetCatalog exposes asset:///Content/Materials/Gold.omat
-```
-
-No ED-M05 editor-side material JSON schema is introduced. If later material
-authoring needs fields missing from `oxygen.material.v1`, the content-pipeline
-and material-editor LLDs must decide whether to augment the engine/tooling
-schema or introduce a separate editor schema before implementation.
+A material document saves `Content/Materials/Gold.omat.json` through
+`MaterialSourceWriter`. ContentPipeline captures that saved descriptor and calls
+the native material importer; native cooking writes `.omat` and its index.
+Catalogs expose the resulting identity without interpreting material binaries.
 
 ## 6. Ownership
 
-| Owner | Responsibility |
-| --- | --- |
-| `Oxygen.Managed.Assets` | reusable asset identity, references, catalog primitives, material source model, import/cook writers, loose index utilities. |
-| `Oxygen.Managed.Core` | shared URI and diagnostics constants used by asset workflows. |
-| `Oxygen.Editor.ContentBrowser` | asset state enrichment, browsing, picker UX, thumbnails/swatches. |
-| `Oxygen.Editor.MaterialEditor` | material document UI and user commands over material descriptors. |
-| `Oxygen.Editor.ContentPipeline` | editor orchestration over import/cook/index primitives. |
-| `Oxygen.Editor.WorldEditor` | scene commands that persist asset references in components. |
+| Owner                           | Responsibility                                                                                                                 |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `Oxygen.Managed.Assets`         | reusable asset identity, references, catalog primitives, material authoring model, and read-only current loose-index metadata. |
+| `Oxygen.Managed.Core`           | shared URI and diagnostics constants used by asset workflows.                                                                  |
+| `Oxygen.Editor.ContentBrowser`  | asset state enrichment, browsing, picker UX, thumbnails/swatches.                                                              |
+| `Oxygen.Editor.MaterialEditor`  | material document UI and user commands over material descriptors.                                                              |
+| `Oxygen.Editor.ContentPipeline` | saved input capture, native tools, diagnostics/progress, provenance and publication.                                           |
+| `Oxygen.Editor.WorldEditor`     | scene commands that persist asset references in components.                                                                    |
 
 ## 7. Data Contracts
 
@@ -161,7 +113,7 @@ Rules:
 objects:
 
 - `Uri` is serialized and is the source of truth.
-- `Asset` is runtime-only and rehydrated from catalogs/resolvers.
+- `Asset` is runtime-only and rehydrated by the consuming service.
 - changing `Uri` invalidates the cached `Asset` unless it still matches.
 - clearing `Asset` must preserve `Uri` so missing references survive
   save/reopen.
@@ -189,12 +141,12 @@ public sealed record AssetQueryScope(
 
 `AssetQueryTraversal` controls how the catalog walks from the roots:
 
-| Query intent | Contract shape |
-| --- | --- |
-| picker/global search | `new AssetQuery(AssetQueryScope.All)` |
-| resolve exact assignment | `Roots = [assetUri]`, `Traversal = AssetQueryTraversal.Self` |
-| current folder view | `Roots = [folderUri]`, `Traversal = AssetQueryTraversal.Children` |
-| recursive folder search | `Roots = [folderUri]`, `Traversal = AssetQueryTraversal.Descendants` |
+| Query intent             | Contract shape                                                       |
+| ------------------------ | -------------------------------------------------------------------- |
+| picker/global search     | `new AssetQuery(AssetQueryScope.All)`                                |
+| resolve exact assignment | `Roots = [assetUri]`, `Traversal = AssetQueryTraversal.Self`         |
+| current folder view      | `Roots = [folderUri]`, `Traversal = AssetQueryTraversal.Children`    |
+| recursive folder search  | `Roots = [folderUri]`, `Traversal = AssetQueryTraversal.Descendants` |
 
 `AssetChange` is a record carrying an `AssetChangeKind`:
 
@@ -205,12 +157,12 @@ public sealed record AssetChange(
     Uri? PreviousUri = null);
 ```
 
-| `AssetChangeKind` | Meaning |
-| --- | --- |
-| `Added` | asset became visible. |
-| `Removed` | asset disappeared. |
-| `Updated` | same identity, changed metadata/content. |
-| `Relocated` | identity changed; `PreviousUri` carries the old value. |
+| `AssetChangeKind` | Meaning                                                |
+| ----------------- | ------------------------------------------------------ |
+| `Added`           | asset became visible.                                  |
+| `Removed`         | asset disappeared.                                     |
+| `Updated`         | same identity, changed metadata/content.               |
+| `Relocated`       | identity changed; `PreviousUri` carries the old value. |
 
 Catalogs do not compute user-facing `AssetState`, `AssetKind`, or runtime
 mount availability; they provide records and changes.
@@ -218,32 +170,21 @@ mount availability; they provide records and changes.
 
 ### 7.4 Catalog Identity Limits
 
-`AssetRecord` remains intentionally minimal in ED-M06:
+`AssetRecord.Uri` selects a source descriptor, cooked asset, engine recipe or
+mounted source file. Optional `Generated`, `Cooked` and `OverriddenCookedSources`
+metadata describe the producer or indexed representation. Cooked metadata comes
+from native index records, not filename guesses.
 
-```csharp
-public sealed record AssetRecord(Uri Uri)
-{
-    public string Name { get; }
-}
-```
-
-ED-M06 must not add browser state fields directly to `AssetRecord`. The same
-record may represent:
-
-- source descriptor: `asset:///Content/Materials/Red.omat.json`.
-- cooked index entry: `asset:///Content/Materials/Red.omat`.
-- generated asset: `asset:///Engine/Generated/Materials/Default`.
-- local/foreign source file under a mounted folder.
-
-Consumers that need file paths, timestamps, asset type, diagnostics, or mount
-availability resolve those facts in editor-owned adapters using
-`ProjectContext`, catalog provider type, and storage services. This keeps
-`Oxygen.Managed.Assets` usable by tools and tests without pulling in editor UI policy.
+Catalog records do not carry browser badges, dirty state, operation progress or
+runtime mount state. Editor adapters combine those facts with `ProjectContext`
+and immutable cooking-status snapshots. Catalog refresh does not launch native
+verification or hash cooked payloads.
 
 ### 7.5 Material Source Contract
 
-ED-M05 material authoring uses `MaterialSource` with schema
-`oxygen.material.v1` and type `PBR`.
+`MaterialSourceReader` and `MaterialSourceWriter` preserve the canonical native
+material descriptor. The [material editor](material-editor.md) owns its editable
+fields, colour conversions and HDR emission contract.
 
 Supported scalar fields:
 
@@ -260,8 +201,8 @@ Supported scalar fields:
 - `NormalTexture.Scale` when a normal texture ref exists
 - `OcclusionTexture.Strength` when an occlusion texture ref exists
 
-Texture references may be preserved and displayed read-only in ED-M05. Texture
-authoring/editing is not part of this primitive LLD or ED-M05.
+Texture references remain authored virtual identities. Native cooking resolves
+them to resource-table entries; managed authoring does not allocate those entries.
 
 Material round-trip preserves every `MaterialSource` field not edited by
 ED-M05, including texture-reference payloads. Scalar editing must replace only
@@ -269,40 +210,35 @@ the edited immutable record branch and leave unedited descriptor data intact.
 
 ### 7.6 Import/Cook Contracts
 
-`MaterialSourceImporter`:
+ContentPipeline sends canonical descriptors/manifests and captured inputs to
+native ImportTool, Inspector and PakTool. Native schemas, codecs and validators
+are authoritative. Tools return structured diagnostics, progress and inventory;
+the editor presents those facts and owns publication and source provenance.
 
-- accepts `*.omat.json`.
-- parses through `MaterialSourceReader`.
-- emits an imported `Material` asset with virtual path derived from the source
-  path, for example `/Content/Materials/Gold.omat`.
-- reports invalid material JSON through import diagnostics.
+The managed V2 index reader exposes catalog metadata and rejects obsolete formats.
+Mandatory native file/asset digests support full validation at cook boundaries;
+ordinary catalog reads and mounts use metadata admission. The [content pipeline
+contract](content-pipeline.md) owns freshness, verification and repair policy.
 
-`CookedMaterialWriter`:
-
-- writes the runtime `.omat` descriptor from `MaterialSource`.
-- emits scalar material values and V0.1 texture indices according to the
-  current `Oxygen.Managed.Assets` writer behavior.
-
-`LooseCookedBuildService`:
-
-- writes or updates `container.index.bin` for mount points represented by
-  imported assets.
-- runs material cooking as one step inside the loose cooked build service.
-- is a primitive invoked by the content-pipeline orchestrator, not directly by
-  MaterialEditor UI.
+Texture descriptors are resource sidecars, not keyed Script assets. A named
+texture's native `virtual_path` fixes its descriptor location under the mount.
+ContentPipeline records the native physical descriptor path alongside the source
+association; resource-table indices remain generation-local. Native inventory
+keeps resource descriptors separate from keyed asset entries. Textures use the
+same capture, cooking, error/progress and publication workflow as other inputs.
 
 ## 8. Commands, Services, Or Adapters
 
 `Oxygen.Managed.Assets` primitives are not user commands. They are called by editor
 services:
 
-| Consumer | Primitive used |
-| --- | --- |
-| Material document service | `MaterialSourceReader`, `MaterialSourceWriter`, `MaterialSource`. |
-| Material picker | `IAssetCatalog`, `AssetQuery`, `AssetRecord`, `AssetChange`, `AssetChangeKind`. |
-| Content browser identity reducer | `IAssetCatalog`, `AssetRecord`, `AssetUriHelper`, `AssetChange`, `AssetQueryScope`. |
-| Content pipeline material slice | `MaterialSourceImporter`, `CookedMaterialWriter`, `LooseCookedBuildService`. |
-| Geometry material slot command | `AssetReference<MaterialAsset>` and `IAssetCatalog` resolution. |
+| Consumer                         | Primitive used                                                                                   |
+| -------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Material document service        | `MaterialSourceReader`, `MaterialSourceWriter`, `MaterialSource`.                                |
+| Material picker                  | `IAssetCatalog`, `AssetQuery`, `AssetRecord`, `AssetChange`, `AssetChangeKind`.                  |
+| Content browser identity reducer | `IAssetCatalog`, `AssetRecord`, `AssetUriHelper`, `AssetChange`, `AssetQueryScope`.              |
+| Content pipeline                 | Material source records, asset URIs and current index metadata; native APIs produce cooked data. |
+| Geometry material slot command   | `AssetReference<MaterialAsset>` and `IAssetCatalog` resolution.                                  |
 
 Adapters may be introduced in editor projects, but the underlying primitive
 contracts stay in `Oxygen.Managed.Assets`.
@@ -360,13 +296,13 @@ development-only targets.
 Primitive APIs may throw or return primitive diagnostics. User-facing operation
 results are emitted by consuming editor workflows:
 
-| Primitive failure | Consuming domain |
-| --- | --- |
-| invalid material JSON | `MaterialAuthoring` or `ContentPipeline`, depending on whether user is editing or cooking. |
-| importer failure | `ContentPipeline` / `AssetImport`. |
-| cooked writer failure | `ContentPipeline`. |
-| missing catalog record | `AssetIdentity`. |
-| loose cooked index invalid | `AssetMount` in ED-M02/ED-M07 mount flows, `ContentPipeline` in cook validation flows. |
+| Primitive failure          | Consuming domain                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------ |
+| invalid material JSON      | `MaterialAuthoring` or `ContentPipeline`, depending on whether user is editing or cooking. |
+| importer failure           | `ContentPipeline` / `AssetImport`.                                                         |
+| cooked writer failure      | `ContentPipeline`.                                                                         |
+| missing catalog record     | `AssetIdentity`.                                                                           |
+| loose cooked index invalid | `AssetMount` in ED-M02/ED-M07 mount flows, `ContentPipeline` in cook validation flows.     |
 
 Concrete ED-M05 diagnostic codes are allocated in
 `diagnostics-operation-results.md` and implemented in `Oxygen.Managed.Core`.
@@ -375,7 +311,7 @@ Concrete ED-M05 diagnostic codes are allocated in
 
 Allowed:
 
-- `Oxygen.Managed.Assets` may depend on `Oxygen.Managed.Core` and storage/import/cook support.
+- `Oxygen.Managed.Assets` may depend on `Oxygen.Managed.Core` and shared storage/schema support.
 - editor projects may depend on `Oxygen.Managed.Assets` primitives.
 
 Forbidden:
@@ -389,47 +325,25 @@ Forbidden:
 
 ## 14. Validation Gates
 
-ED-M05 gates:
-
-1. `MaterialSourceWriter` writes a descriptor that `MaterialSourceReader` reads
-   with all V0.1 scalar fields preserved.
-2. `MaterialSourceImporter.CanImport` accepts `*.omat.json` and rejects other
-   source files.
-3. `CookedMaterialWriter` produces deterministic `.omat` output for a fixed
-   scalar material.
-4. `GeneratedAssetCatalog` exposes
-   `asset:///Engine/Generated/Materials/Default` to material picker queries.
-5. `AssetReference<MaterialAsset>` persists URI while treating `Asset` as
-   runtime-only.
-6. `LooseCookedIndexAssetCatalog` can expose a cooked material entry from a
-   valid loose cooked index.
-7. `AssetReference<MaterialAsset>.Asset = null` preserves `Uri`; missing
-   material identities survive save/reopen unchanged.
-
-ED-M06/ED-M07 gates:
-
-- ED-M06: Content Browser state reducer merges source descriptor and cooked
-  index records by logical identity without changing `AssetRecord`.
-- ED-M06: `AssetChangeKind.Relocated` is consumed using `PreviousUri` so cached
-  browser rows do not keep stale identities.
-- ED-M06: generated, source, descriptor, cooked, stale, missing, and broken
-  browser states are derived outside `Oxygen.Managed.Assets`.
-- ED-M06: runtime mounted availability is represented as an editor overlay, not
-  as a primitive catalog fact.
-- ED-M07: full scene cook uses engine-compatible descriptor schemas and does
-  not persist generated descriptor/cooked paths as authored asset identity.
-- ED-M07: scene cook dependencies resolve material and geometry virtual paths
-  before cook; unresolved references fail visibly.
-- ED-M07: inspect/validation can read `container.index.bin` asset/file entries
-  through managed or native APIs without Content Browser parsing binary index
-  details itself.
-- ED-M07: runtime mount refresh consumes validated cooked roots; mount state is
-  still an editor/runtime overlay, not an `Oxygen.Managed.Assets` primitive fact.
+- Material source round-trip preserves edited scalars and untouched texture,
+  extension and HDR emission data.
+- Typed references persist URI only; clearing a cached asset preserves missing
+  reference identity across save/reopen.
+- Source, generated and cooked catalog queries obey exact/children/descendant
+  scope and preserve precedence and relocation information.
+- The current index reader rejects wrong versions, malformed ranges, ambiguous
+  identities and missing required digests.
+- Native cooking produces material, geometry, scene and texture outputs consumed
+  through their real native readers. Named textures resolve from both materials
+  and exposure-mask references and participate in incremental reuse.
+- Browser state remains an editor projection; refresh/filter operations neither
+  invoke native producers nor verify cooked payloads.
 
 ## 15. Closed V0.1 Decisions
 
-AssetRecord remains minimal; ContentBrowser owns state enrichment. No type/state
-fields or runtime mount policy move into primitive catalog records. URI identity
+AssetRecord carries identity and producer/index metadata; ContentBrowser owns
+user-facing state enrichment and runtime availability overlays. URI identity
 and missing-reference preservation remain the contract; file rename/move repair
-UI is outside V0.1. Import/source regeneration and fixed-root publication are
-qualified by ED-M07B without introducing another identity model.
+UI is outside V0.1. ContentPipeline owns native import/source regeneration and publication;
+[ED-M08](../plan/ED-M08-runtime-parity-and-standalone-validation.md) owns current
+workflow qualification.

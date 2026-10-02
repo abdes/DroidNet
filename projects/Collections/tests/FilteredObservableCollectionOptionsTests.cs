@@ -112,8 +112,20 @@ public class FilteredObservableCollectionOptionsTests
         item.Value = 3;
         item.Value = 4;
 
-        // Assert - an update should have been observed (a Reset is acceptable)
-        _ = events.Should().ContainSingle(e => e.Action == NotifyCollectionChangedAction.Reset);
+        // Enabling observation reconciles the missed change; later edits stay incremental.
+        _ = events.Select(e => e.Action).Should().Equal(
+            NotifyCollectionChangedAction.Add,
+            NotifyCollectionChangedAction.Remove,
+            NotifyCollectionChangedAction.Add);
+        _ = events[0].NewStartingIndex.Should().Be(0);
+        _ = events[0].NewItems.Should().BeAssignableTo<System.Collections.IEnumerable>()
+            .Which.Cast<object>().Should().ContainSingle().Which.Should().BeSameAs(item);
+        _ = events[1].OldStartingIndex.Should().Be(0);
+        _ = events[1].OldItems.Should().BeAssignableTo<System.Collections.IEnumerable>()
+            .Which.Cast<object>().Should().ContainSingle().Which.Should().BeSameAs(item);
+        _ = events[2].NewStartingIndex.Should().Be(0);
+        _ = events[2].NewItems.Should().BeAssignableTo<System.Collections.IEnumerable>()
+            .Which.Cast<object>().Should().ContainSingle().Which.Should().BeSameAs(item);
         _ = view.Should().ContainSingle().Which.Should().BeSameAs(item);
     }
 
@@ -164,15 +176,15 @@ public class FilteredObservableCollectionOptionsTests
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);
 
-        // Add observation for Value - this causes an immediate Reset but does not add the item yet
+        // Changing subscriptions emits nothing when the filtered contents stay unchanged.
         opts.ObservedProperties!.Add(nameof(NotifyingItem.Value));
-        _ = events.Should().NotBeEmpty();
+        _ = events.Should().BeEmpty();
         _ = view.Should().BeEmpty();
 
         // Now changes are observed
         events.Clear();
         item.Value = 2;
-        _ = events.Should().NotBeEmpty();
+        _ = events.Should().ContainSingle().Which.Action.Should().Be(NotifyCollectionChangedAction.Add);
         _ = view.Should().ContainSingle().Which.Should().BeSameAs(item);
 
         // Removing property should stop observation
@@ -180,6 +192,7 @@ public class FilteredObservableCollectionOptionsTests
         _ = opts.ObservedProperties.Remove(nameof(NotifyingItem.Value));
         item.Value = 3;
         _ = events.Should().BeEmpty();
+        _ = view.Should().ContainSingle().Which.Should().BeSameAs(item);
     }
 
     [TestMethod]

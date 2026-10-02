@@ -4,12 +4,24 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <vector>
+
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
+#if defined(_MSC_VER) && defined(_DEBUG)
+#  include <new>
+
+#  include <Oxygen/Graphics/Common/Test/HeapAllocationFailure.h>
+#endif
+#include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/RendererTag.h>
+#include <Oxygen/Vortex/Resources/GeometryUploader.h>
 #include <Oxygen/Vortex/ScenePrep/GeometryRef.h>
+#include <Oxygen/Vortex/ScenePrep/Handles.h>
 #include <Oxygen/Vortex/Test/Fixtures/GeometryUploaderTest.h>
 
 namespace {
@@ -171,5 +183,106 @@ NOLINT_TEST_F(GeometryUploaderEvictionTest, EvictionThenReloadPublishes)
   EXPECT_NE(indices.vertex_srv_index, oxygen::kInvalidShaderVisibleIndex);
   EXPECT_NE(indices.index_srv_index, oxygen::kInvalidShaderVisibleIndex);
 }
+
+class GeometryUploaderReclaimTest : public GeometryUploaderTest {
+protected:
+  auto GeometryLimits() const
+    -> oxygen::vortex::resources::GeometryUploader::MaintenanceLimits override
+  {
+    return { .max_pending_upload_visits_per_frame = 128U,
+      .max_reclaimed_lods_per_frame = 1U };
+  }
+};
+
+NOLINT_TEST_F(
+  GeometryUploaderReclaimTest, DetachesAllLodsBeforeBudgetedReleaseAndReload)
+{
+  BeginFrame(Slot { 0 });
+  auto& geometry = GeoUploader();
+  const auto key = MakeGeometryAssetKey("budgeted multi-lod eviction");
+  const auto mesh = MakeValidTriangleMesh("Resident", false);
+  constexpr std::uint32_t kLodCount = 6U;
+  std::vector<oxygen::vortex::sceneprep::GeometryHandle> old_handles;
+  for (std::uint32_t lod = 0; lod < kLodCount; ++lod) {
+    old_handles.push_back(geometry.GetOrAllocate(
+      { .asset_key = key, .lod_index = lod, .mesh = mesh }));
+  }
+  geometry.EnsureFrameResources();
+  auto& registry = GfxPtr()->GetResourceRegistry();
+  const auto before = registry.GetRegisteredResourceCount();
+  Loader().EmitGeometryAssetEviction(key, EvictionReason::kRefCountZero);
+  geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
+  for (const auto handle : old_handles) {
+    EXPECT_FALSE(geometry.IsHandleValid(handle));
+  }
+  EXPECT_EQ(registry.GetRegisteredResourceCount(), before - 1U);
+  EXPECT_EQ(geometry.GetPendingUploadCount(), 0U);
+
+  const auto replacement = geometry.GetOrAllocate({ .asset_key = key,
+    .lod_index = 0U,
+    .mesh = MakeValidTriangleMesh("Reloaded", false) });
+  geometry.EnsureFrameResources();
+  EXPECT_EQ(registry.GetRegisteredResourceCount(), before);
+  for (std::uint32_t frame = 0U; frame < kLodCount - 1U; ++frame) {
+    BeginFrame(Slot { frame % 2U });
+    EXPECT_EQ(registry.GetRegisteredResourceCount(), before - frame - 1U);
+    EXPECT_TRUE(geometry.IsHandleValid(replacement));
+  }
+  EXPECT_TRUE(
+    geometry.GetShaderVisibleIndices(replacement).vertex_srv_index.IsValid());
+  EXPECT_EQ(registry.GetRegisteredResourceCount(), before - kLodCount + 1U);
+}
+
+NOLINT_TEST_F(
+  GeometryUploaderReclaimTest, AdmissionAcceptsQueuedEvictionBeforeReload)
+{
+  BeginFrame(Slot { 0 });
+  auto& geometry = GeoUploader();
+  const auto key = MakeGeometryAssetKey("eviction before admission");
+  const auto mesh = MakeValidTriangleMesh("Resident", false);
+  const auto original = geometry.GetOrAllocate(
+    { .asset_key = key, .lod_index = 0U, .mesh = mesh });
+  geometry.EnsureFrameResources();
+  Loader().EmitGeometryAssetEviction(key, EvictionReason::kRefCountZero);
+  const auto replacement = geometry.GetOrAllocate(
+    { .asset_key = key, .lod_index = 0U, .mesh = mesh });
+  EXPECT_NE(original, replacement);
+  EXPECT_FALSE(geometry.IsHandleValid(original));
+  geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
+  EXPECT_TRUE(geometry.IsHandleValid(replacement));
+}
+
+#if defined(_MSC_VER) && defined(_DEBUG)
+NOLINT_TEST_F(GeometryUploaderReclaimTest,
+  AllocationFailureKeepsDetachedBuffersOwnedForRetry)
+{
+  BeginFrame(Slot { 0 });
+  auto& geometry = GeoUploader();
+  const auto key = MakeGeometryAssetKey("failed retirement admission");
+  const auto handle = geometry.GetOrAllocate({ .asset_key = key,
+    .lod_index = 0U,
+    .mesh = MakeValidTriangleMesh("Resident", false) });
+  geometry.EnsureFrameResources();
+  const auto before
+    = GfxPtr()->GetResourceRegistry().GetRegisteredResourceCount();
+  Loader().EmitGeometryAssetEviction(key, EvictionReason::kRefCountZero);
+  bool failed = false;
+  {
+    const oxygen::graphics::testing::HeapAllocationFailure deny_allocations;
+    try {
+      geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
+    } catch (const std::bad_alloc&) {
+      failed = true;
+    }
+  }
+  EXPECT_TRUE(failed);
+  EXPECT_FALSE(geometry.IsHandleValid(handle));
+  EXPECT_EQ(
+    GfxPtr()->GetResourceRegistry().GetRegisteredResourceCount(), before);
+  geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 0 });
+  EXPECT_EQ(
+    GfxPtr()->GetResourceRegistry().GetRegisteredResourceCount(), before - 1U);
+}
+#endif
 
 } // namespace

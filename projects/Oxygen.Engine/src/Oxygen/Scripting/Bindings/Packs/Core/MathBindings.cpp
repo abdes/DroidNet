@@ -5,17 +5,22 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <span>
 #include <string>
+#include <string_view>
 
-#include <glm/gtc/matrix_transform.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/quaternion_geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <lua.h>
 #include <lualib.h>
 
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/MathBindings.h>
@@ -226,14 +231,14 @@ namespace {
     if (lua_isvector(state, 2)) {
       const float* v = lua_tovector(state, 2);
       std::span<const float> span(v, 3);
-      Vec3 vec(span[kVecIndexX], span[kVecIndexY], span[kVecIndexZ]);
+      Vec3 vec(base::CheckedAt(span, kVecIndexX),
+        base::CheckedAt(span, kVecIndexY), base::CheckedAt(span, kVecIndexZ));
       Vec3 res = ToGlmQuat(q) * vec;
       return PushVec3(state, res);
     }
 
     (void)luaL_error(
       state, "oxygen.math.quat_mul expects quaternion or vector as arg #2");
-    return 0;
   }
 
   auto Mat4ToString(lua_State* state) -> int
@@ -347,12 +352,12 @@ namespace {
     if (!lua_isvector(state, 2)) {
       (void)luaL_error(
         state, "oxygen.math.rotate_vec3 expects vector as arg #2");
-      return 0;
     }
     const float* v = lua_tovector(state, 2);
     std::span<const float> span(v, 3);
     Vec3 res = ToGlmQuat(q)
-      * Vec3(span[kVecIndexX], span[kVecIndexY], span[kVecIndexZ]);
+      * Vec3(base::CheckedAt(span, kVecIndexX),
+        base::CheckedAt(span, kVecIndexY), base::CheckedAt(span, kVecIndexZ));
     return PushVec3(state, res);
   }
 
@@ -370,11 +375,11 @@ namespace {
       if (!lua_isvector(state, 1)) {
         (void)luaL_error(
           state, "oxygen.math.mat4_trs expects vector as arg #1");
-        return 0;
       }
       const float* v = lua_tovector(state, 1);
       std::span<const float> span(v, 3);
-      t = Vec3(span[kVecIndexX], span[kVecIndexY], span[kVecIndexZ]);
+      t = Vec3(base::CheckedAt(span, kVecIndexX),
+        base::CheckedAt(span, kVecIndexY), base::CheckedAt(span, kVecIndexZ));
     }
     if (lua_gettop(state) >= 2) {
       auto* q = CheckQuat(state, 2);
@@ -384,11 +389,11 @@ namespace {
       if (!lua_isvector(state, 3)) {
         (void)luaL_error(
           state, "oxygen.math.mat4_trs expects vector as arg #3");
-        return 0;
       }
       const float* v = lua_tovector(state, 3);
       std::span<const float> span(v, 3);
-      s = Vec3(span[kVecIndexX], span[kVecIndexY], span[kVecIndexZ]);
+      s = Vec3(base::CheckedAt(span, kVecIndexX),
+        base::CheckedAt(span, kVecIndexY), base::CheckedAt(span, kVecIndexZ));
     }
 
     const Mat4 transform = glm::translate(Mat4(1.0F), t) * glm::mat4_cast(r)
@@ -409,12 +414,13 @@ namespace {
     if (!lua_isvector(state, 2)) {
       (void)luaL_error(
         state, "oxygen.math.mat4_transform_point expects vector as arg #2");
-      return 0;
     }
     const float* v = lua_tovector(state, 2);
     std::span<const float> span(v, 3);
     Vec4 res = ToGlmMat4(m)
-      * Vec4(span[kVecIndexX], span[kVecIndexY], span[kVecIndexZ], 1.0F);
+      * Vec4(base::CheckedAt(span, kVecIndexX),
+        base::CheckedAt(span, kVecIndexY), base::CheckedAt(span, kVecIndexZ),
+        1.0F);
     return PushVec3(state, Vec3(res));
   }
 
@@ -424,12 +430,13 @@ namespace {
     if (!lua_isvector(state, 2)) {
       (void)luaL_error(
         state, "oxygen.math.mat4_transform_direction expects vector as arg #2");
-      return 0;
     }
     const float* v = lua_tovector(state, 2);
     std::span<const float> span(v, 3);
     Vec4 res = ToGlmMat4(m)
-      * Vec4(span[kVecIndexX], span[kVecIndexY], span[kVecIndexZ], 0.0F);
+      * Vec4(base::CheckedAt(span, kVecIndexX),
+        base::CheckedAt(span, kVecIndexY), base::CheckedAt(span, kVecIndexZ),
+        0.0F);
     return PushVec3(state, Vec3(res));
   }
 
@@ -438,30 +445,31 @@ namespace {
     if (!lua_isvector(state, 1)) {
       (void)luaL_error(
         state, "oxygen.math.mat4_look_at_rh expects vector as arg #1");
-      return 0;
     }
     if (!lua_isvector(state, 2)) {
       (void)luaL_error(
         state, "oxygen.math.mat4_look_at_rh expects vector as arg #2");
-      return 0;
     }
     const float* ve = lua_tovector(state, 1);
     std::span<const float> span_e(ve, 3);
     const float* vt = lua_tovector(state, 2);
     std::span<const float> span_t(vt, 3);
 
-    Vec3 eye(span_e[kVecIndexX], span_e[kVecIndexY], span_e[kVecIndexZ]);
-    Vec3 target(span_t[kVecIndexX], span_t[kVecIndexY], span_t[kVecIndexZ]);
+    Vec3 eye(base::CheckedAt(span_e, kVecIndexX),
+      base::CheckedAt(span_e, kVecIndexY), base::CheckedAt(span_e, kVecIndexZ));
+    Vec3 target(base::CheckedAt(span_t, kVecIndexX),
+      base::CheckedAt(span_t, kVecIndexY), base::CheckedAt(span_t, kVecIndexZ));
 
     Vec3 up = space::move::Up;
     if (lua_gettop(state) >= 3 && lua_isvector(state, 3)) {
       const float* vu = lua_tovector(state, 3);
       std::span<const float> span_u(vu, 3);
-      up = Vec3(span_u[kVecIndexX], span_u[kVecIndexY], span_u[kVecIndexZ]);
+      up = Vec3(base::CheckedAt(span_u, kVecIndexX),
+        base::CheckedAt(span_u, kVecIndexY),
+        base::CheckedAt(span_u, kVecIndexZ));
     } else if (lua_gettop(state) >= 3) {
       (void)luaL_error(
         state, "oxygen.math.mat4_look_at_rh expects vector as arg #3");
-      return 0;
     }
     return PushMat4(state, glm::lookAtRH(eye, target, up));
   }
@@ -479,8 +487,8 @@ namespace {
     if (lua_isvector(state, 1)) {
       const float* v = lua_tovector(state, 1);
       std::span<const float> span(v, 3);
-      bool finite = std::isfinite(span[0]) && std::isfinite(span[1])
-        && std::isfinite(span[2]);
+      const bool finite = std::ranges::all_of(
+        span, [](const float component) { return std::isfinite(component); });
       lua_pushboolean(state, finite ? 1 : 0);
       return 1;
     }
@@ -515,7 +523,6 @@ namespace {
 
     (void)luaL_error(state,
       "oxygen.math.is_finite expects number, vector, vec4, quat, or mat4");
-    return 0;
   }
 
   auto LuaMathNearEqual(lua_State* state) -> int
@@ -539,8 +546,10 @@ namespace {
       std::span<const float> s1(v1, 3);
       std::span<const float> s2(v2, 3);
       // Check 3 components
-      bool eq = std::fabs(s1[0] - s2[0]) <= eps
-        && std::fabs(s1[1] - s2[1]) <= eps && std::fabs(s1[2] - s2[2]) <= eps;
+      const bool eq = std::ranges::equal(
+        s1, s2, [eps](const float first, const float second) {
+          return std::fabs(first - second) <= eps;
+        });
       lua_pushboolean(state, eq ? 1 : 0);
       return 1;
     }
@@ -587,7 +596,6 @@ namespace {
 
     (void)luaL_error(
       state, "oxygen.math.near_equal expects comparable numeric/math types");
-    return 0;
   }
 
 } // namespace

@@ -11,6 +11,11 @@
 #include <string_view>
 #include <vector>
 
+#include "DemoShell/ActiveScene.h"
+#include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/DemoModuleBase.h"
+#include "Physics/PhysicsDemoPanel.h"
 #include <glm/glm.hpp>
 
 #include <Oxygen/Base/Macros.h>
@@ -26,12 +31,6 @@
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
-
-#include "DemoShell/ActiveScene.h"
-#include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Runtime/DemoModuleBase.h"
-#include "Physics/PhysicsDemoPanel.h"
 
 namespace oxygen::physics {
 class PhysicsModule;
@@ -102,7 +101,6 @@ protected:
     -> co::Co<> override;
   auto OnPreRender(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
-  auto OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void override;
 
 private:
   struct DynamicObstacleState final {

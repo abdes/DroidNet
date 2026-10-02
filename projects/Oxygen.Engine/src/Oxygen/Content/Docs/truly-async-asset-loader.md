@@ -32,7 +32,7 @@ Internal decode/publish bridge types:
 - `oxygen::content::LoaderContext` (value-type decode context).
 - `oxygen::content::internal::DependencyCollector` (identity-only dependency
   handoff).
-- `oxygen::content::internal::SourceToken` (opaque handle for a mounted source).
+- `oxygen::data::SourceInstanceId` (opaque identity of one source opening).
 - `oxygen::content::internal::ResourceRef` (container-relative resource
   reference bound to `ResourceKey` during publish).
 
@@ -65,7 +65,8 @@ in-flight dedup safe.
 
 ### Identity is stable; access is ephemeral
 
-- `AssetKey` and `ResourceKey` are stable identities.
+- AssetKey names an authored asset; its decoded identity includes the source.
+- ResourceKey is stable within one loader lifetime and is never persisted.
 - Locators/readers/paths are transient access state and must not be stored in
   caches or dependency graphs.
 
@@ -76,35 +77,19 @@ portable.
 
 ## Identity Model
 
-### `ResourceKey` source-id segregation
+### Runtime identities and decode handoff
 
-`ResourceKey` embeds a 16-bit source id. The runtime uses a codified segregation
-contract to keep namespaces disjoint:
+The [identity contract](deps_and_cache.md#identities)
+defines exact asset, cooked-resource and synthetic identities. The loader interns
+those values using equality and issues opaque IDs shared by the cache, dependency
+graph and in-flight operations. IDs are not hashes or packed source indices.
 
-- Mounted PAK sources use dense ids starting at `0`.
-- Mounted loose cooked roots use a reserved high range starting at `0x8000`.
-- Synthetic/buffer-provided resources use the reserved sentinel `0xFFFF`.
-
-These constants live in `Oxygen/Content/Constants.h` and must remain consistent
-with `ResourceKey` packing.
-
-Rationale: synthetic keys cannot collide with mounted sources, and loose cooked
-ids remain disjoint from PAK ids without requiring filesystem-derived identity.
-
-### `SourceToken` and `ResourceRef`
-
-Decode code uses `SourceToken` (minted at mount time) as an identity-safe handle
-for “the source being decoded from”. Resource dependencies are recorded as
-either:
-
-- `ResourceKey` (already bound identity), or
-- `internal::ResourceRef { SourceToken, TypeId, resource_index }`.
-
-Binding rule (owning thread): resolve `SourceToken` to the loader-owned source
-id, map `TypeId` to a `ResourceTypeList` index, then pack into `ResourceKey`.
-
-Rationale: decode stays free of loader internals while publish remains the only
-place aware of key encoding.
+Workers record `ResourceRef { SourceInstanceId, TypeId, resource_index }` or an
+already-bound ResourceKey. The owning thread validates the opening and interns
+the reference. A mutable refresh revokes old read capability; publication and
+completion recheck it after suspension. An immutable retired opening remains
+readable while loaded owners retain its lease. Reopening creates an independent
+source lifetime; mounting an already-active immutable generation is idempotent.
 
 ---
 
@@ -117,7 +102,7 @@ Responsibilities:
 - Own the mount registry and source-id/token maps.
 - Orchestrate async load pipelines (resolve/read/decode/publish).
 - Maintain caches and the dependency graph.
-- Provide in-flight request deduplication keyed by `AssetKey` / `ResourceKey`.
+- Deduplicate in-flight requests by source-qualified cache identity.
 
 ### `internal::IContentSource`
 
@@ -139,7 +124,7 @@ provides:
 - `desc_reader` and `data_readers` (decode inputs).
 - `work_offline` (policy signal: no GPU side effects).
 - `current_asset_key` (for identity-only dependency recording).
-- `source_token` and optional `dependency_collector`.
+- `source_instance` and optional `dependency_collector`.
 - `parse_only` for tooling/unit tests.
 
 Rationale: explicit and minimal decode contract that works in both runtime and
@@ -186,10 +171,9 @@ by invoking callbacks with `nullptr`.
 3. **Decode** (thread pool): run the registered loader function; record
    dependencies via `DependencyCollector`.
 4. **Publish** (owning thread):
-   - Store the decoded object in the cache.
-   - Bind `ResourceRef` dependencies to `ResourceKey`.
-   - Mutate the dependency graph.
-   - Fulfill awaiters / invoke `StartLoad*` callbacks.
+   - Bind dependency identities and acquire their internal owning controls.
+   - Freeze the Data-owned binding bundle, then publish the decoded object.
+   - Give each waiter/callback its own request control.
 
 ### Resource load (`LoadResourceAsync<T>(ResourceKey)`)
 
@@ -202,7 +186,10 @@ The caller provides cooked bytes and an explicit cache identity. The loader:
 - Decodes on the thread pool.
 - Publishes to the cache under the provided key.
 
-Synthetic keys for this path must use the synthetic source id (`0xFFFF`).
+Use `MintSyntheticBufferKey`, `MintSyntheticTextureKey` or
+`MintSyntheticScriptKey` for this path. Provided bytes cannot populate a cooked
+source locator. The loader retains synthetic identities for its producer lifetime,
+so the same product can be reloaded after decoded-payload eviction.
 
 ---
 
@@ -210,8 +197,8 @@ Synthetic keys for this path must use the synthetic source id (`0xFFFF`).
 
 The runtime dependency graph is identity-only:
 
-- Asset → Asset: `AssetKey` depends on `AssetKey`.
-- Asset → Resource: `AssetKey` depends on `ResourceKey`.
+- Asset → Asset: a source-qualified asset cache identity depends on another.
+- Asset → Resource: a source-qualified asset cache identity depends on ResourceKey.
 
 Resources are treated as leaf nodes.
 
@@ -249,11 +236,13 @@ Decode-time dependency recording uses `DependencyCollector`:
 
 ## Caching and Concurrency
 
-- Assets and resources are cached by identity (`AssetKey` / `ResourceKey`).
+- Assets and resources are cached by their source-qualified identities.
 - In-flight request deduplication ensures concurrent loads of the same identity
   join a single underlying task.
-- Cache publication and dependency-graph mutation occur during the owning-thread
-  publish step, providing a single point of serialization for state.
+- Binding and cache publication run on the owner thread. Published bindings are
+  immutable and own their child lifetimes; cached reads do not rebuild them.
+- Final pointer destruction queues an allocation-free return. See
+  [ownership and release processing](deps_and_cache.md#release-processing).
 
 ---
 

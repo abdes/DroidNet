@@ -5,20 +5,23 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <stdexcept>
+#include <string>
+#include <system_error>
 #include <vector>
 
+#include "Fixtures/LooseCookedTestWriter.h"
 #include <gtest/gtest.h>
 
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
-
-#include "Fixtures/LooseCookedTestWriter.h"
 
 using oxygen::content::internal::LooseCookedSource;
 using oxygen::content::testing::LooseCookedTestWriter;
@@ -31,7 +34,7 @@ namespace {
 auto MakeAssetKey(const std::uint8_t seed) -> AssetKey
 {
   auto bytes = std::array<std::uint8_t, AssetKey::kSizeBytes> {};
-  bytes[0] = seed;
+  bytes.at(0) = seed;
   return AssetKey::FromBytes(bytes);
 }
 
@@ -73,13 +76,20 @@ private:
 TEST_F(LooseCookedSourceTest, ConstructorMissingIndexFileThrows)
 {
   EXPECT_THROW(
-    { LooseCookedSource source(CookedRoot(), false); }, std::runtime_error);
+    {
+      LooseCookedSource source(
+        CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+    },
+    std::runtime_error);
 }
 
 TEST_F(LooseCookedSourceTest, ConstructorValidEmptyIndexInitializes)
 {
   WriteValidEmptyIndex();
-  EXPECT_NO_THROW({ LooseCookedSource source(CookedRoot(), false); });
+  EXPECT_NO_THROW({
+    LooseCookedSource source(
+      CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+  });
 }
 
 TEST_F(LooseCookedSourceTest, ConstructorFileMissingThrows)
@@ -98,7 +108,11 @@ TEST_F(LooseCookedSourceTest, ConstructorFileMissingThrows)
   std::filesystem::remove(CookedRoot() / "buffers.data");
 
   EXPECT_THROW(
-    { LooseCookedSource source(CookedRoot(), false); }, std::runtime_error);
+    {
+      LooseCookedSource source(
+        CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+    },
+    std::runtime_error);
 }
 
 TEST_F(LooseCookedSourceTest, ConstructorFileSizeMismatchThrows)
@@ -116,7 +130,11 @@ TEST_F(LooseCookedSourceTest, ConstructorFileSizeMismatchThrows)
   std::filesystem::resize_file(table_path, 2);
 
   EXPECT_THROW(
-    { LooseCookedSource source(CookedRoot(), false); }, std::runtime_error);
+    {
+      LooseCookedSource source(
+        CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+    },
+    std::runtime_error);
 }
 
 TEST_F(LooseCookedSourceTest, ConstructorDescriptorMissingThrows)
@@ -132,14 +150,17 @@ TEST_F(LooseCookedSourceTest, ConstructorDescriptorMissingThrows)
   std::filesystem::remove(CookedRoot() / "test.omat");
 
   EXPECT_THROW(
-    { LooseCookedSource source(CookedRoot(), false); }, std::runtime_error);
+    {
+      LooseCookedSource source(
+        CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+    },
+    std::runtime_error);
 }
 
 TEST_F(LooseCookedSourceTest, ConstructorDescriptorSha256MismatchThrows)
 {
   {
     LooseCookedTestWriter writer(CookedRoot());
-    writer.SetComputeSha256(true); // Tell writer to generate a real hash
     const std::vector<std::byte> data { std::byte { 0 } };
     writer.WriteAssetDescriptor(MakeAssetKey(1U), AssetType::kMaterial,
       "/Content/test.omat", "test.omat", data);
@@ -155,18 +176,26 @@ TEST_F(LooseCookedSourceTest, ConstructorDescriptorSha256MismatchThrows)
   }
 
   // Without verification, loads fine despite invalid hash mismatch
-  EXPECT_NO_THROW({ LooseCookedSource source(CookedRoot(), false); });
+  EXPECT_NO_THROW({
+    LooseCookedSource source(
+      CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+  });
 
   // With verification enabled, throws
   EXPECT_THROW(
-    { LooseCookedSource source(CookedRoot(), true); }, std::runtime_error);
+    {
+      LooseCookedSource source(
+        CookedRoot(), LooseCookedSource::OpenMode::kVerifyContent);
+    },
+    std::runtime_error);
 }
 
 TEST_F(LooseCookedSourceTest, ReadersReturnNullWhenFilesOmitted)
 {
   WriteValidEmptyIndex();
   {
-    LooseCookedSource source(CookedRoot(), false);
+    LooseCookedSource source(
+      CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
 
     EXPECT_EQ(source.CreateBufferTableReader(), nullptr);
     EXPECT_EQ(source.CreateBufferDataReader(), nullptr);
@@ -181,21 +210,100 @@ TEST_F(LooseCookedSourceTest, ReadersReturnNullWhenFilesOmitted)
   }
 }
 
-TEST_F(LooseCookedSourceTest, ReadScriptSlotRecordsEmptyReturnsEmpty)
+TEST_F(LooseCookedSourceTest, FullIntegrityChecksEveryAuxiliaryFile)
 {
-  {
-    LooseCookedTestWriter writer(CookedRoot());
-    std::vector<std::byte> data; // 0 entries
-    writer.WriteFile(FileKind::kScriptsTable, "scripts.table", data);
-    writer.WriteFile(FileKind::kScriptsData, "scripts.data", data);
-    (void)writer.Finish();
-  }
+  const std::array bytes { std::byte { 42 } };
+  LooseCookedTestWriter writer(CookedRoot());
+  writer.WriteFile(FileKind::kAuxiliary, "Resources/first.obuf", bytes);
+  writer.WriteFile(FileKind::kAuxiliary, "Resources/second.obuf", bytes);
+  static_cast<void>(writer.Finish());
+  EXPECT_NO_THROW({
+    LooseCookedSource source(
+      CookedRoot(), LooseCookedSource::OpenMode::kVerifyContent);
+  });
 
   {
-    LooseCookedSource source(CookedRoot(), false);
-    const auto records = source.ReadScriptSlotRecords(0, 0);
-    EXPECT_TRUE(records.empty());
+    std::ofstream changed(
+      CookedRoot() / "Resources/second.obuf", std::ios::binary);
+    changed.put('!');
   }
+  EXPECT_NO_THROW({
+    LooseCookedSource source(
+      CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+  });
+  EXPECT_THROW(
+    {
+      LooseCookedSource source(
+        CookedRoot(), LooseCookedSource::OpenMode::kVerifyContent);
+    },
+    std::runtime_error);
+}
+
+TEST_F(LooseCookedSourceTest, MetadataAdmissionRejectsExtraAndMissingMembers)
+{
+  const std::array bytes { std::byte { 42 } };
+  LooseCookedTestWriter writer(CookedRoot());
+  writer.WriteFile(FileKind::kAuxiliary, "Resources/first.obuf", bytes);
+  static_cast<void>(writer.Finish());
+  const auto extra = CookedRoot() / "stray.bin";
+  {
+    std::ofstream output(extra);
+    output.put('!');
+  }
+  EXPECT_THROW(
+    {
+      LooseCookedSource source(
+        CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+    },
+    std::runtime_error);
+  std::filesystem::remove(extra);
+  std::filesystem::remove(CookedRoot() / "Resources/first.obuf");
+  EXPECT_THROW(
+    {
+      LooseCookedSource source(
+        CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+    },
+    std::runtime_error);
+}
+
+TEST_F(LooseCookedSourceTest, NestedContainersAreNotMembershipExceptions)
+{
+  WriteValidEmptyIndex();
+  LooseCookedTestWriter nested(CookedRoot() / "nested");
+  static_cast<void>(nested.Finish());
+  EXPECT_THROW(
+    {
+      LooseCookedSource source(
+        CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+    },
+    std::runtime_error);
+}
+
+TEST_F(LooseCookedSourceTest, GenerationMarkerIsTheOnlyNonContentMember)
+{
+  WriteValidEmptyIndex();
+  {
+    std::ofstream marker(CookedRoot() / ".generation.lock");
+  }
+  EXPECT_NO_THROW({
+    LooseCookedSource source(
+      CookedRoot(), LooseCookedSource::OpenMode::kVerifyContent);
+  });
+}
+
+TEST_F(LooseCookedSourceTest, FullIntegritySupportsLongMemberPaths)
+{
+  LooseCookedTestWriter writer(CookedRoot());
+  const auto relative
+    = std::string(120, 'a') + "/" + std::string(120, 'b') + ".obuf";
+  const std::array bytes { std::byte { 42 } };
+  writer.WriteFile(FileKind::kAuxiliary, relative, bytes);
+  static_cast<void>(writer.Finish());
+  EXPECT_GT((CookedRoot() / relative).native().size(), 260U);
+  EXPECT_NO_THROW({
+    LooseCookedSource source(
+      CookedRoot(), LooseCookedSource::OpenMode::kVerifyContent);
+  });
 }
 
 } // namespace

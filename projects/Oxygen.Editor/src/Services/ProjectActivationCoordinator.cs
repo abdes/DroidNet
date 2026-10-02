@@ -21,6 +21,7 @@ internal sealed partial class ProjectActivationCoordinator(
     IProjectValidationService validation,
     IProjectCreationService creation,
     IProjectManagerService projectManager,
+    Oxygen.Editor.ContentPipeline.Publication.CookPublicationService publication,
     IProjectContextService projectContextService,
     IRecentProjectAdapter recentProjects,
     ITemplateUsageService templateUsage,
@@ -264,6 +265,22 @@ internal sealed partial class ProjectActivationCoordinator(
             return null;
         }
 
+        var saved = await projectManager.LoadProjectInfoAsync(request.ProjectLocation).ConfigureAwait(true);
+        if (saved is not null)
+        {
+            try
+            {
+                await publication.RecoverAsync(ProjectContext.FromProjectInfo(saved, []), cancellationToken).ConfigureAwait(true);
+            }
+            catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException or System.Text.Json.JsonException)
+            {
+                diagnostics.Add(this.CreateDiagnostic(operationId, FailureDomain.ContentPipeline,
+                    "Cook.RecoveryRequired", DiagnosticSeverity.Warning,
+                    "Cooked content needs recovery. Authoring remains available: " + failure.Message, request.ProjectLocation));
+            }
+        }
+
+        // Recovery can restore Project.oxy. Validate and load only the fresh manifest.
         var validationResult = await validation.ValidateAsync(request.ProjectLocation, cancellationToken)
             .ConfigureAwait(true);
         if (!validationResult.IsValid || validationResult.ProjectInfo is null)

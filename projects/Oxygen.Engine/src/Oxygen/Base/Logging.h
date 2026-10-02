@@ -791,7 +791,7 @@ template <> inline Text format_value(const long long& v)
 {
   return textprintf(LOGURU_FMT(d), v);
 }
-template <> inline Text format_value(const uint64_t& v)
+template <> inline Text format_value(const unsigned long long& v)
 {
   return textprintf(LOGURU_FMT(d), v);
 }
@@ -802,19 +802,19 @@ template <> inline Text format_value(const unsigned int& v)
 }
 template <> inline Text format_value(const long& v)
 {
-  return textprintf(LOGURU_FMT(lu), v);
+  return textprintf(LOGURU_FMT(ld), v);
 }
 template <> inline Text format_value(const unsigned long& v)
 {
-  return textprintf(LOGURU_FMT(ld), v);
+  return textprintf(LOGURU_FMT(lu), v);
 }
 template <> inline Text format_value(const long long& v)
 {
-  return textprintf(LOGURU_FMT(llu), v);
-}
-template <> inline Text format_value(const uint64_t& v)
-{
   return textprintf(LOGURU_FMT(lld), v);
+}
+template <> inline Text format_value(const unsigned long long& v)
+{
+  return textprintf(LOGURU_FMT(llu), v);
 }
 #  endif
 

@@ -1,0 +1,236 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Oxygen native source analysis",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "producer_version", "complete", "jobs"],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "producer_version": {
+      "type": "string"
+    },
+    "complete": {
+      "type": "boolean"
+    },
+    "jobs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/job"
+      }
+    }
+  },
+  "definitions": {
+    "logical": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["virtual_path", "kind", "object_path", "required"],
+      "properties": {
+        "virtual_path": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "asset",
+            "material",
+            "geometry",
+            "scene",
+            "texture",
+            "buffer",
+            "script",
+            "input-action",
+            "input-mapping-context",
+            "physics-scene"
+          ]
+        },
+        "object_path": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "required"],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "read": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["offset", "max_bytes", "sha256"],
+      "properties": {
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "size",
+        "is_directory",
+        "is_symlink",
+        "last_modified_seconds",
+        "last_modified_nanoseconds"
+      ],
+      "properties": {
+        "size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "is_directory": {
+          "type": "boolean"
+        },
+        "is_symlink": {
+          "type": "boolean"
+        },
+        "last_modified_seconds": {
+          "type": "integer"
+        },
+        "last_modified_nanoseconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999999999
+        }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "exists", "metadata", "reads"],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/metadata"
+            }
+          ]
+        },
+        "reads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/read"
+          }
+        }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "code", "message", "source_path", "object_path"],
+      "properties": {
+        "severity": {
+          "enum": ["Info", "Warning", "Error", "Unknown"]
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "source_path": {
+          "type": "string"
+        },
+        "object_path": {
+          "type": "string"
+        }
+      }
+    },
+    "job": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "job_type",
+        "source_path",
+        "complete",
+        "outputs",
+        "references",
+        "files",
+        "observations",
+        "diagnostics",
+        "accessed_paths"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "job_type": {
+          "type": "string"
+        },
+        "source_path": {
+          "type": "string"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/logical"
+          }
+        },
+        "references": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/logical"
+          }
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/file"
+          }
+        },
+        "observations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/observation"
+          }
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/diagnostic"
+          }
+        },
+        "accessed_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

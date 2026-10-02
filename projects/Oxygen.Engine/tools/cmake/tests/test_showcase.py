@@ -25,7 +25,7 @@ class ShowcaseTests(unittest.TestCase):
                 self.assertEqual(hashlib.sha256(data).hexdigest(), asset["sha256"])
 
     def test_staging_resolves_schemas_and_excludes_benchmark_jobs(self):
-        spec = importlib.util.spec_from_file_location("showcase", CONTENT / "prepare_showcase.py")
+        spec = importlib.util.spec_from_file_location("showcase", CONTENT / "internal/prepare_showcase.py")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         scenes = ["sdk-lantern", "sdk-furniture", "sdk-materials", "city-environment-validation",
@@ -37,13 +37,17 @@ class ShowcaseTests(unittest.TestCase):
             module.prepare(CONTENT.resolve(), output, scenes)
             schema_sources = list((ENGINE / "src/Oxygen/Cooker").rglob("*.schema.json"))
             schema_sources.append(CONTENT / "showcase-assets.schema.json")
+            schema_sources.append(CONTENT / "import-sources.schema.json")
             (root / "schemas").mkdir()
             for schema in schema_sources:
                 (root / "schemas" / schema.name).write_bytes(schema.read_bytes())
             for path in output.rglob("*.json"):
                 data = json.loads(path.read_text())
-                if "$schema" in data:
+                if "$schema" in data and not data["$schema"].startswith(("http:", "https:")):
                     self.assertTrue((path.parent / data["$schema"]).is_file(), str(path))
+            self.assertTrue((output / "import_models.ps1").is_file())
+            self.assertTrue((output / "import_models.cmd").is_file())
+            self.assertFalse((output / "internal").exists())
             manifests = list(output.glob("scenes/*/import-manifest.json"))
             self.assertEqual(len(manifests), len(scenes))
             self.assertFalse(any("benchmark" in job.get("id", "")

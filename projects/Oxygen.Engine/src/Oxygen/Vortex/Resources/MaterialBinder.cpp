@@ -326,10 +326,8 @@ auto SerializeMaterialShadingConstants(
   //   (use scalar fallback only).
   // - Valid indices (including 0) are sampled from the bindless heap.
   //
-  // Contract with PAK format:
-  // - Texture author indices are `0` for the fallback texture.
-  // - "No texture (skip sampling)" is encoded via the material flag
-  //   `kMaterialFlag_NoTextureSampling`.
+  // Content resolves descriptor references before publication. The renderer
+  // consumes runtime keys, including the existing neutral fallback sentinel.
   const auto no_texture_sampling
     = (material.resolved_asset->GetFlags()
         & oxygen::data::pak::render::kMaterialFlag_NoTextureSampling)
@@ -339,26 +337,12 @@ auto SerializeMaterialShadingConstants(
 
   const auto ResolveTextureIndex
     = [&texture_binder, no_texture_sampling](
-        const oxygen::content::ResourceKey key,
-        const std::uint32_t authored_index) -> oxygen::ShaderVisibleIndex {
+        const oxygen::content::ResourceKey key) -> oxygen::ShaderVisibleIndex {
     if (no_texture_sampling) {
       return oxygen::kInvalidShaderVisibleIndex;
     }
 
-    if (key.get() != 0U) {
-      return texture_binder.GetOrAllocate(key);
-    }
-
-    // No runtime key:
-    // - If author index is 0, the material requests the fallback texture.
-    // - If author index is non-zero, a texture was authored but not resolved
-    //   yet, so bind a shared placeholder to keep sampling stable.
-    if (authored_index == oxygen::data::pak::core::kFallbackResourceIndex) {
-      return texture_binder.GetOrAllocate(
-        oxygen::content::ResourceKey::kFallback);
-    }
-    return texture_binder.GetOrAllocate(
-      oxygen::content::ResourceKey::kPlaceholder);
+    return texture_binder.GetOrAllocate(key);
   };
 
   // For normal/ORM slots there is no "fallback texture". If the texture is
@@ -377,8 +361,7 @@ auto SerializeMaterialShadingConstants(
   };
 
   constants.base_color_texture_index
-    = ResolveTextureIndex(material.resolved_asset->GetBaseColorTextureKey(),
-      material.resolved_asset->GetBaseColorTexture());
+    = ResolveTextureIndex(material.resolved_asset->GetBaseColorTextureKey());
   constants.normal_texture_index = ResolveOptionalTextureIndex(
     material.resolved_asset->GetNormalTextureKey());
   constants.metallic_texture_index = ResolveOptionalTextureIndex(
@@ -415,8 +398,7 @@ auto SerializeMaterialShadingConstants(
   constants.emissive_factor
     = { emissive_factor[0], emissive_factor[1], emissive_factor[2] };
   constants.emissive_texture_index
-    = ResolveTextureIndex(material.resolved_asset->GetEmissiveTextureKey(),
-      material.resolved_asset->GetEmissiveTexture());
+    = ResolveTextureIndex(material.resolved_asset->GetEmissiveTextureKey());
 
   return constants;
 }

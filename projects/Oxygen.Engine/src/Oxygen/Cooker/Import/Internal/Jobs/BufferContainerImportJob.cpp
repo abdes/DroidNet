@@ -6,16 +6,24 @@
 
 #include <chrono>
 #include <exception>
-#include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
+#include <utility>
+#include <vector>
+
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/Internal/BufferSource.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/BufferContainerImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import::detail {
 
@@ -68,10 +76,10 @@ auto BufferContainerImportJob::ExecuteAsync() -> co::Co<ImportReport>
   };
 
   EnsureCookedRoot();
-  auto session = ImportSession(Request(), FileReader(), FileWriter(),
-    ThreadPool(), TableRegistry(), IndexRegistry());
+  auto& session = Session();
 
-  if (!Request().buffer_container.has_value()) {
+  const auto& payload = Request().buffer_container;
+  if (!payload.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
       "buffer.container.request_invalid",
       "BufferContainerImportJob requires request.buffer_container");
@@ -83,8 +91,7 @@ auto BufferContainerImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto descriptor_doc = nlohmann::json {};
   auto parse_exception = std::optional<std::string> {};
   try {
-    descriptor_doc = nlohmann::json::parse(
-      Request().buffer_container->normalized_descriptor_json);
+    descriptor_doc = nlohmann::json::parse(payload->normalized_descriptor_json);
   } catch (const std::exception& ex) {
     parse_exception = ex.what();
   }
@@ -105,22 +112,29 @@ auto BufferContainerImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  auto pipeline = BufferPipeline(*ThreadPool(),
+  auto& pipeline = CreatePipeline<BufferPipeline>(*ThreadPool(),
     BufferPipeline::Config {
       .queue_capacity = Concurrency().buffer.queue_capacity,
       .worker_count = Concurrency().buffer.workers,
       .with_content_hashing
       = EffectiveContentHashingEnabled(Request().options.with_content_hashing),
     });
-  StartPipeline(pipeline);
 
   auto submitter
     = BufferImportSubmitter(session, Request(), FileReader(), StopToken());
   const auto buffer_chunks = descriptor_doc.contains("buffers")
-    ? descriptor_doc["buffers"]
+    ? descriptor_doc.at("buffers")
     : nlohmann::json {};
-  const auto submission = co_await submitter.SubmitBufferChunks(
-    buffer_chunks, Request().source_path.parent_path(), pipeline);
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  const auto sources = internal::BufferSource::FromDeclarations(
+    buffer_chunks, Request().source_path, diagnostics);
+  for (auto& diagnostic : diagnostics) {
+    session.AddDiagnostic(std::move(diagnostic));
+  }
+  auto submission = BufferImportSubmitter::Submission {};
+  if (sources.has_value()) {
+    submission = co_await submitter.SubmitBuffers(*sources, pipeline);
+  }
   pipeline.Close();
 
   if (submission.submitted_count == 0U) {

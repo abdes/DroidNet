@@ -30,13 +30,15 @@ public static class AssetStatusPresentation
             {
                 AssetCookFreshness.MissingSource => "Source missing",
                 AssetCookFreshness.InvalidSource => "Invalid source",
-                AssetCookFreshness.Unknown => "Status unavailable",
-                _ when status.HasPublishedOutput && !status.HasVerifiedOutput => "Cooked content invalid",
+                AssetCookFreshness.Unknown when status.Diagnostics.Any(static diagnostic => diagnostic.Severity == Oxygen.Managed.Core.Diagnostics.DiagnosticSeverity.Error) => "Status unavailable",
+                AssetCookFreshness.Unknown => "Status pending",
+                _ when status.HasPublishedOutput && status.OutputAvailability == CookedOutputAvailability.Missing => "Needs cooking",
+                _ when status.HasPublishedOutput && status.OutputAvailability == CookedOutputAvailability.Unknown => "Status pending",
                 AssetCookFreshness.NeedsCooking => "Needs cooking",
                 AssetCookFreshness.OutOfDate => "Out of date",
                 AssetCookFreshness.Current when runtimeAvailability == AssetRuntimeAvailability.Failed => "Preview issue",
                 AssetCookFreshness.Current when runtimeAvailability == AssetRuntimeAvailability.Updating => "Updating preview",
-                AssetCookFreshness.Current when status.HasVerifiedOutput && runtimeAvailability == AssetRuntimeAvailability.Mounted => "Ready",
+                AssetCookFreshness.Current when status.HasAvailableOutput && runtimeAvailability == AssetRuntimeAvailability.Mounted => "Ready",
                 AssetCookFreshness.Current => "Cooked",
                 _ => null,
             },
@@ -51,8 +53,8 @@ public static class AssetStatusPresentation
     public static string GetTone(AssetCookStatus? status, AssetCookActivity? activity, bool hasUnsavedChanges = false, AssetRuntimeAvailability runtimeAvailability = AssetRuntimeAvailability.Unknown)
         => GetText(status, activity, hasUnsavedChanges, runtimeAvailability) switch
         {
-            "Unsaved changes" or "Needs save" or "Out of date" => "Caution",
-            "Cook failed" or "Source missing" or "Invalid source" or "Cooked content invalid" or "Preview issue" => "Critical",
+            "Unsaved changes" or "Needs save" or "Out of date" or "Status unavailable" => "Caution",
+            "Cook failed" or "Source missing" or "Invalid source" or "Preview issue" => "Critical",
             "Cooked" or "Ready" => "Success",
             _ => "Neutral",
         };
@@ -78,7 +80,9 @@ public static class AssetStatusPresentation
             "Cook failed" => "Cooking failed. Open Cooking for details and Retry.",
             "Source missing" => "Restore the missing source or choose a replacement.",
             "Invalid source" => "Correct the source errors before cooking.",
-            "Cooked content invalid" => "Cook again to replace missing or damaged output.",
+            "Status unavailable" => string.Join(" ", status!.Diagnostics.Select(static diagnostic => diagnostic.Message)),
+            "Status pending" => "Waiting for current source, publication or engine information.",
+            "Needs cooking" when status?.HasPublishedOutput == true => "Cooked output is missing. Cook again to restore it.",
             "Needs cooking" => "No cooked content yet. Cooking is needed to use this asset in the viewport.",
             "Out of date" => "Saved inputs have changed. Cooking is needed to update the output.",
             "Cooked" => "Cooked content matches the saved inputs. No cooking is needed.",
@@ -86,7 +90,7 @@ public static class AssetStatusPresentation
             "Preview issue" => "Cooked content is current, but a native load or application failed.",
             _ => "Cooking status is unavailable.",
         };
-        if (text is not ("Cooked" or "Ready" or "Updating preview") && status?.HasVerifiedOutput == true)
+        if (text is not ("Cooked" or "Ready" or "Updating preview") && status?.HasAvailableOutput == true)
         {
             description += " Previously cooked content remains available.";
         }

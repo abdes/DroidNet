@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 
 namespace Oxygen.Editor.MaterialEditor;
 
@@ -69,25 +69,8 @@ public sealed class MaterialEditState
     /// </summary>
     /// <param name="alphaMode">The new alpha mode.</param>
     public void SetAlphaMode(MaterialAlphaMode alphaMode)
-        => this.source = new MaterialSource(
-            schema: this.source.Schema,
-            type: this.source.Type,
-            name: this.source.Name,
-            pbrMetallicRoughness: this.source.PbrMetallicRoughness,
-            normalTexture: this.source.NormalTexture,
-            occlusionTexture: this.source.OcclusionTexture,
-            alphaMode: alphaMode,
-            alphaCutoff: this.source.AlphaCutoff,
-            doubleSided: this.source.DoubleSided);
+        => this.source = this.source with { AlphaMode = alphaMode };
 
-    private static MaterialSource WithPbr(MaterialSource source, MaterialPbrMetallicRoughness pbr) => new(
-        schema: source.Schema,
-        type: source.Type,
-        name: source.Name,
-        pbrMetallicRoughness: pbr,
-        normalTexture: source.NormalTexture,
-        occlusionTexture: source.OcclusionTexture,
-        alphaMode: source.AlphaMode,
-        alphaCutoff: source.AlphaCutoff,
-        doubleSided: source.DoubleSided);
+    private static MaterialSource WithPbr(MaterialSource source, MaterialPbrMetallicRoughness pbr)
+        => source with { PbrMetallicRoughness = pbr };
 }

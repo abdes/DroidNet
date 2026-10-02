@@ -46,7 +46,7 @@ internal sealed partial class NativeEngineSession(HostingContext hostingContext,
             _ = this.runner.ConfigureLogging(
                 new LoggingConfig
                 {
-                    Verbosity = 0,
+                    Verbosity = EngineConstants.DefaultLoggingVerbosity,
                     IsColored = false,
                     ModuleOverrides = string.Empty,
                 },

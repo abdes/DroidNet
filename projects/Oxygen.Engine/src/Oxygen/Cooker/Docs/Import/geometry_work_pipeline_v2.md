@@ -1,5 +1,70 @@
 # Geometry Pipeline (v2)
 
+Read [material-slot provenance](#material-slot-provenance) and
+[buffer ownership](#buffer-ownership) for source and cooked identity rules.
+
+## Buffer ownership
+
+Vertex, index and skinning buffer indices belong to the geometry's own cooked
+root. Geometry descriptors may reference existing `.obuf` sidecars in that root;
+foreign-root sidecars are rejected with `geometry.buffer.foreign_root`. Copying
+their numeric indices would address unrelated buffers in the destination.
+
+Reuse a library's geometry asset when sharing a complete mesh. To create new
+geometry from external source data, import its raw buffers into the destination
+root. Ordinary glTF/FBX import and library geometry references retain these
+workflows. Cross-root raw-buffer borrowing is not an authoring capability.
+
+## Material-slot provenance
+
+Adapters preserve source declarations independently of default material keys.
+Mesh optimization may combine ranges of the same declaration; equal material
+keys cannot merge distinct declarations. glTF primitives using the same material
+index share a declaration; distinct material indices remain distinct even when
+their payloads match. Unassigned primitives use a separate default declaration.
+FBX retains its mesh-local declarations before resolving global material references.
+
+The native importer allocates opaque SlotIds from a versioned retained geometry
+namespace and durable declaration identity, or the complete source-layout
+witness when durable identity is unavailable. Witnesses cover source surface
+ownership, positions and connectivity before optimization; material parameters,
+textures, normals and generated attributes do not participate. Exact witness
+matches retain IDs; unproven structural changes require explicit repair.
+
+Adapters compute `source_layout_witness` before coordinate conversion or mesh
+optimization and carry the digest in the work item. glTF hashes decoded source
+POSITION accessors, original index connectivity and index presence, primitive
+modes and source material declarations. FBX hashes source control points,
+polygon boundaries/connectivity and mesh-local declaration ownership. Its existing
+handedness probe runs with no target axes or units; the adapter captures digests
+from that probe before releasing it and loading the converted scene. No additional
+parse or retained DOM is introduced. Retained storage is 32 bytes per FBX mesh;
+hashing scans the source geometry once. The glTF cache similarly hashes each
+source mesh once even when it produces several bake variants.
+
+Producer unit conversion, attribute generation and transform baking do not enter
+the raw witness. Identity still includes the geometry key and source anchor:
+changing bake or material-binding policy can split/rename output variants and
+therefore change their geometry identities and SlotIds. Equal raw witnesses do
+not alias distinct output geometry. Unassigned surfaces use a dedicated declaration
+sentinel, independent of the number of imported material payloads.
+
+Retained import settings own provenance. Cooking returns candidate provenance
+to the publication owner and never overwrites source settings itself. The owner
+commits provenance and compatible geometry/scene outputs together. Runtime
+geometry stores SlotIds and bindings, not source witnesses.
+
+The built-in catalog's slot inventory describes its authored `asset_uri` and
+the exact native runtime geometry. Its separate `virtual_path` and descriptor
+describe the cooked contribution. Both preserve the same semantic SlotIds;
+scene cooking resolves them against the contribution and records its current
+layout revision. Live edits validate the authored geometry's own revision.
+
+UE5.7 reference: `Engine/Classes/Engine/StaticMesh.h` separates imported slot
+names from material objects; `UnrealEd/Private/Fbx/FbxStaticMeshImport.cpp`
+restores imported assignments by name. Oxygen retains opaque identity because
+duplicate names are valid and must remain independently editable.
+
 **Status:** Complete Design (Phase 5)
 **Date:** 2026-01-15
 **Parent:** [async_import_pipeline_v2.md](async_import_pipeline_v2.md)

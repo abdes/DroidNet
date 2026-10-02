@@ -21,6 +21,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -35,7 +36,8 @@ struct LooseCookedAssetRecord final {
   std::string descriptor_relpath;
 
   uint64_t descriptor_size = 0;
-  std::optional<base::Sha256Digest> descriptor_sha256;
+  std::optional<base::Sha256Digest> descriptor_sha256 {};
+  data::AssetReferences references;
 };
 
 //! Summary of one cooked file record written to disk.
@@ -44,6 +46,7 @@ struct LooseCookedFileRecord final {
   std::string relpath;
 
   uint64_t size = 0;
+  base::Sha256Digest sha256 {};
 };
 
 //! Collision decisions recorded while building/updating index records.
@@ -66,8 +69,8 @@ struct LooseCookedWriteResult final {
   data::SourceKey source_key {};
 
   uint16_t content_version = 0;
-  std::vector<LooseCookedAssetRecord> assets;
-  std::vector<LooseCookedFileRecord> files;
+  std::vector<LooseCookedAssetRecord> assets {};
+  std::vector<LooseCookedFileRecord> files {};
   LooseCookedCollisionSummary collision_summary {};
 };
 
@@ -77,7 +80,7 @@ struct LooseCookedWriteResult final {
  - writing asset descriptor files,
  - writing optional resource table/data files,
  - emitting a valid `container.index.bin` matching
-   oxygen::data::loose_cooked::v1.
+   the current oxygen::data::loose_cooked index format.
 
  It is designed to be used by importers (FBX/glTF) and other cook pipelines.
 
@@ -112,14 +115,6 @@ public:
   //! Set the cook-defined content version recorded in the index header.
   OXGN_COOK_API auto SetContentVersion(uint16_t version) -> void;
 
-  //! Enable or disable SHA-256 hashing in emitted file records.
-  /*!
-   When disabled, the writer emits all-zero hashes.
-
-   @note Runtime validation policy may still check size and existence.
-  */
-  OXGN_COOK_API auto SetComputeSha256(bool enabled) -> void;
-
   //! Configure collision handling for duplicate asset/file entries.
   OXGN_COOK_API auto SetCollisionPolicy(CollisionPolicy policy) -> void;
 
@@ -149,8 +144,8 @@ public:
   */
   OXGN_COOK_API auto WriteAssetDescriptor(const data::AssetKey& key,
     data::AssetType asset_type, std::string_view virtual_path,
-    std::string_view descriptor_relpath, std::span<const std::byte> bytes)
-    -> void;
+    std::string_view descriptor_relpath, std::span<const std::byte> bytes,
+    const data::AssetReferences& references) -> void;
 
   //! Write an arbitrary file and update its index record.
   /*!
@@ -207,8 +202,7 @@ public:
    @param descriptor_size Size of the descriptor bytes. If zero, the size will
      be read from disk.
    @param descriptor_sha256 Optional SHA-256 digest of the descriptor bytes.
-     When `SetComputeSha256(false)` was selected, the writer records an
-     all-zero hash.
+     If absent, the writer computes the digest from the completed file.
 
    @throw std::runtime_error if the file does not exist, paths are invalid, or
      metadata is inconsistent.
@@ -216,6 +210,7 @@ public:
   OXGN_COOK_API auto RegisterExternalAssetDescriptor(const data::AssetKey& key,
     data::AssetType asset_type, std::string_view virtual_path,
     std::string_view descriptor_relpath, uint64_t descriptor_size,
+    const data::AssetReferences& references,
     std::optional<base::Sha256Digest> descriptor_sha256 = std::nullopt) -> void;
 
   //! Finalize and write the loose cooked index.

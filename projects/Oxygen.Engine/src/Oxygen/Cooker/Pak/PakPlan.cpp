@@ -90,6 +90,11 @@ auto PakPlan::Footer() const noexcept -> const PakFooterPlan&
   return data_.footer;
 }
 
+auto PakPlan::Catalog() const noexcept -> const PakCatalogPlan&
+{
+  return data_.catalog;
+}
+
 auto PakPlan::PatchActions() const noexcept
   -> std::span<const PakPatchActionRecord>
 {
@@ -100,16 +105,6 @@ auto PakPlan::PatchClosure() const noexcept
   -> std::span<const PakPatchClosureRecord>
 {
   return data_.patch_closure;
-}
-
-auto PakPlan::ScriptSlots() const noexcept -> std::span<const PakScriptSlotPlan>
-{
-  return data_.script_slots;
-}
-
-auto PakPlan::ScriptParamRecordCount() const noexcept -> uint32_t
-{
-  return data_.script_param_record_count;
 }
 
 auto PakPlan::PlannedFileSize() const noexcept -> uint64_t

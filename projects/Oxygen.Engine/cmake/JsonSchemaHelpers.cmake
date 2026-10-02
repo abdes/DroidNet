@@ -97,7 +97,7 @@ function(oxygen_embed_json_schemas)
   endif()
 
   if(IS_ABSOLUTE "${x_OUTPUT_HEADER}")
-    set(_output_header "${x_OUTPUT_HEADER}")
+    cmake_path(NORMAL_PATH x_OUTPUT_HEADER OUTPUT_VARIABLE _output_header)
   else()
     cmake_path(
       ABSOLUTE_PATH
@@ -161,11 +161,10 @@ function(oxygen_embed_json_schemas)
   get_filename_component(_output_header_dir "${_output_header}" DIRECTORY)
   file(MAKE_DIRECTORY "${_output_header_dir}")
 
-  string(
-    MD5
-    _generation_id
-    "${_output_header}|${x_NAMESPACE}|${x_CHUNK_SIZE}|${_schema_names}|${_schema_files}"
-  )
+  # One stable project owns each output. Input edits update its manifest instead
+  # of leaving an obsolete project loaded in Visual Studio that can overwrite
+  # the same header with an older schema list.
+  string(MD5 _generation_id "${_output_header}")
   string(SUBSTRING "${_generation_id}" 0 16 _generation_id_short)
 
   set(

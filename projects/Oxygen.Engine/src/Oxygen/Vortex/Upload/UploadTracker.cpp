@@ -5,270 +5,108 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <cstddef>
 #include <cstdint>
-#include <expected>
+#include <limits>
+#include <memory>
 #include <mutex>
 #include <optional>
-#include <span>
-#include <string_view>
-#include <vector>
 
-#include <Oxygen/OxCo/Value.h>
 #include <Oxygen/Vortex/Upload/Errors.h>
-#include <Oxygen/Vortex/Upload/Types.h>
+#include <Oxygen/Vortex/Upload/Internal/UploadTimeline.h>
+#include <Oxygen/Vortex/Upload/UploadTicket.h>
 #include <Oxygen/Vortex/Upload/UploadTracker.h>
-#include <Oxygen/Vortex/Upload/UploaderTag.h>
 
 namespace oxygen::vortex::upload {
 
-UploadTracker::UploadTracker() = default;
-UploadTracker::~UploadTracker() = default;
-
-auto UploadTracker::Register(const FenceValue fence, const uint64_t bytes,
-  const std::string_view debug_name) -> UploadTicket
+UploadTracker::UploadTracker()
+  : timeline_(std::make_shared<internal::UploadTimeline>())
 {
-  std::scoped_lock lk(mu_);
-  const auto id = next_ticket_;
-  next_ticket_ = TicketId { id.get() + 1 };
-
-  auto& e = entries_[id];
-  e.fence = fence;
-  e.bytes = bytes;
-  e.name.assign(debug_name);
-  e.completed = false;
-  e.result = UploadResult {};
-  e.creation_slot = current_slot_;
-  // Track the raw fence so shutdown can wait for any recorded submissions
-  last_registered_fence_raw_.store(fence.get());
-  return UploadTicket { id, fence };
 }
 
-auto UploadTracker::RegisterFailedImmediate(
-  const std::string_view debug_name, const UploadError error) -> UploadTicket
-{
-  std::scoped_lock lk(mu_);
-  const auto id = next_ticket_;
-  next_ticket_ = TicketId { id.get() + 1 };
+UploadTracker::~UploadTracker() { Close(); }
 
-  auto& e = entries_[id];
-  e.fence = completed_fence_.Get();
-  e.bytes = 0;
-  e.name.assign(debug_name);
-  e.completed = true;
-  e.result.success = false;
-  e.result.bytes_uploaded = 0;
-  e.result.error = error;
-  return UploadTicket { id, e.fence };
+auto UploadTracker::Register(const FenceValue fence, const std::uint64_t bytes)
+  -> UploadTicket
+{
+  const auto timeline = timeline_;
+  const std::scoped_lock lock(timeline->mutex);
+  timeline->submitted = std::max(timeline->submitted, fence);
+  const auto id = timeline->next_ticket;
+  timeline->next_ticket = TicketId { id.get() + 1 };
+  return UploadTicket { std::make_shared<internal::UploadRecord>(
+    internal::UploadRecord { .timeline = timeline,
+      .id = id,
+      .fence = fence,
+      .bytes = bytes,
+      .failure = timeline->progress.closed }) };
+}
+
+auto UploadTracker::RegisterFailedImmediate(const UploadError error)
+  -> UploadTicket
+{
+  const auto timeline = timeline_;
+  const std::scoped_lock lock(timeline->mutex);
+  const auto id = timeline->next_ticket;
+  timeline->next_ticket = TicketId { id.get() + 1 };
+  return UploadTicket { std::make_shared<internal::UploadRecord>(
+    internal::UploadRecord { .timeline = timeline,
+      .id = id,
+      .fence = timeline->progress.completed,
+      .bytes = 0,
+      .failure = error }) };
+}
+
+auto UploadTracker::RecordSubmission(const FenceValue fence) -> void
+{
+  const std::scoped_lock lock(timeline_->mutex);
+  timeline_->submitted = std::max(timeline_->submitted, fence);
 }
 
 auto UploadTracker::MarkFenceCompleted(const FenceValue completed) -> void
 {
+  if (completed.get() == std::numeric_limits<std::uint64_t>::max()) {
+    Close(UploadError::kDeviceLost);
+    return;
+  }
+  // A resumed coroutine can destroy the tracker; hold no tracker references
+  // across notification, and never resume while holding the timeline lock.
+  const auto timeline = timeline_;
   {
-    std::scoped_lock lk(mu_);
-    for (auto& [id, e] : entries_) {
-      (void)id;
-      if (!e.completed && e.fence <= completed) {
-        MarkEntryCompleted(e);
-      }
+    const std::scoped_lock lock(timeline->mutex);
+    if (timeline->progress.closed
+      || completed <= timeline->progress.completed) {
+      return;
     }
+    timeline->progress.completed = completed;
   }
-  // Value resumes matching coroutines synchronously. Publish their results
-  // before notification, and never resume a caller while holding mu_.
-  completed_fence_.Modify([completed](FenceValue& value) -> void {
-    if (value < completed) {
-      value = completed;
-    }
-  });
-  cv_.notify_all();
+  timeline->changed.notify_all();
+  timeline->Notify();
 }
 
-auto UploadTracker::IsComplete(const TicketId id) const
-  -> std::expected<bool, UploadError>
+auto UploadTracker::Close(const UploadError error) -> void
 {
-  std::scoped_lock lk(mu_);
-  if (const auto it = entries_.find(id); it != entries_.end()) {
-    return it->second.completed;
-  }
-  return std::unexpected(UploadError::kTicketNotFound);
-}
-
-auto UploadTracker::TryGetResult(const TicketId id) const
-  -> std::optional<UploadResult>
-{
-  std::scoped_lock lk(mu_);
-  if (const auto it = entries_.find(id);
-    it != entries_.end() && it->second.completed) {
-    return it->second.result;
-  }
-
-  return std::nullopt;
-}
-
-auto UploadTracker::Await(const TicketId id)
-  -> std::expected<UploadResult, UploadError>
-{
-  std::unique_lock lk(mu_);
-
-  if (!entries_.contains(id)) {
-    return std::unexpected(UploadError::kTicketNotFound);
-  }
-
-  cv_.wait(lk, [&] noexcept -> bool {
-    const auto current = entries_.find(id);
-    return current == entries_.end() || current->second.completed;
-  });
-
-  const auto current = entries_.find(id);
-  if (current == entries_.end()) {
-    return std::unexpected(UploadError::kTicketNotFound);
-  }
-
-  return current->second.result;
-}
-
-auto UploadTracker::AwaitAll(const std::span<const UploadTicket> tickets)
-  -> std::expected<std::vector<UploadResult>, UploadError>
-{
-  std::unique_lock lk(mu_);
-
-  for (const auto& t : tickets) {
-    if (!entries_.contains(t.id)) {
-      return std::unexpected(UploadError::kTicketNotFound);
-    }
-  }
-
-  cv_.wait(lk, [&] noexcept -> bool {
-    bool all_completed = true;
-    for (const auto& t : tickets) {
-      const auto current = entries_.find(t.id);
-      if (current == entries_.end()) {
-        return true;
-      }
-      if (!current->second.completed) {
-        all_completed = false;
-      }
-    }
-    return all_completed;
-  });
-
-  std::vector<UploadResult> results;
-  for (const auto& t : tickets) {
-    const auto current = entries_.find(t.id);
-    if (current == entries_.end()) {
-      return std::unexpected(UploadError::kTicketNotFound);
-    }
-    results.push_back(current->second.result);
-  }
-  return results;
-}
-
-auto UploadTracker::CompletedFence() const noexcept -> FenceValue
-{
-  return completed_fence_.Get();
-}
-
-auto UploadTracker::CompletedFenceValue() noexcept
-  -> oxygen::co::Value<FenceValue>&
-{
-  return completed_fence_;
-}
-
-auto UploadTracker::Cancel(const TicketId id)
-  -> std::expected<bool, UploadError>
-{
-  std::scoped_lock lk(mu_);
-  const auto it = entries_.find(id);
-  if (it == entries_.end()) {
-    return std::unexpected(UploadError::kTicketNotFound);
-  }
-  auto& e = it->second;
-  if (e.completed) {
-    return false; // Too late to cancel, but not an error
-  }
-  // Mark as completed canceled
-  e.completed = true;
-  e.result.success = false;
-  e.result.bytes_uploaded = 0;
-  e.result.error = UploadError::kCanceled;
-  cv_.notify_all();
-  return true;
-}
-
-auto UploadTracker::HasPending() const -> bool
-{
-  std::scoped_lock lk(mu_);
-  return std::ranges::any_of(
-    entries_, [](const auto& p) -> bool { return !p.second.completed; });
-}
-
-auto UploadTracker::LastRegisteredFence() const -> FenceValue
-{
-  const auto raw = last_registered_fence_raw_.load();
-  return FenceValue { raw };
-}
-
-auto UploadTracker::MarkEntryCompleted(Entry& e) -> void
-{
-  e.completed = true;
-  e.result.success = true;
-  e.result.bytes_uploaded = e.bytes;
-  e.result.error = std::nullopt; // No error for successful completion
-}
-
-auto UploadTracker::OnFrameStart(UploaderTag /*tag*/, frame::Slot slot) -> void
-{
-  std::size_t erased = 0;
+  const auto timeline = timeline_;
   {
-    std::scoped_lock lk(mu_);
-    current_slot_ = slot;
-
-    // Frame-slot recycling removes entries created in the recycled slot.
-    // Notify waiting threads if anything was erased so they can observe
-    // TicketNotFound instead of blocking on stale predicates.
-    erased = std::erase_if(entries_, [slot](const auto& pair) -> bool {
-      return pair.second.creation_slot == slot;
-    });
+    const std::scoped_lock lock(timeline->mutex);
+    if (timeline->progress.closed) {
+      return;
+    }
+    timeline->progress.closed = error;
   }
-  if (erased != 0U) {
-    cv_.notify_all();
-  }
+  timeline->changed.notify_all();
+  timeline->Notify();
 }
 
-auto UploadTracker::AwaitAllPending()
-  -> std::expected<std::vector<UploadResult>, UploadError>
+auto UploadTracker::CompletedFence() const -> FenceValue
 {
-  // Loop until there are no pending entries. If entries are erased
-  // underneath us (OnFrameStart cleanup), retry until none remain.
-  while (true) {
-    std::vector<UploadTicket> pending;
-    {
-      std::scoped_lock lk(mu_);
-      for (const auto& p : entries_) {
-        if (!p.second.completed) {
-          pending.emplace_back(p.first, p.second.fence);
-        }
-      }
-    }
+  const std::scoped_lock lock(timeline_->mutex);
+  return timeline_->progress.completed;
+}
 
-    if (pending.empty()) {
-      // No pending tickets
-      return std::vector<UploadResult> {};
-    }
-
-    // AwaitAll will block until the pending set completes. If entries are
-    // removed while waiting we may receive TicketNotFound; treat that as a
-    // reason to retry collection and wait again until nothing remains.
-    auto res = AwaitAll(pending);
-    if (res) {
-      return res;
-    }
-    if (res.error() == UploadError::kTicketNotFound) {
-      // Some tickets vanished; loop and build a fresh pending list.
-      continue;
-    }
-    return std::unexpected(res.error());
-  }
+auto UploadTracker::LastSubmittedFence() const -> FenceValue
+{
+  const std::scoped_lock lock(timeline_->mutex);
+  return timeline_->submitted;
 }
 
 } // namespace oxygen::vortex::upload

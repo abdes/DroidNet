@@ -1443,6 +1443,9 @@ void SceneRenderer::BeginFrame(const frame::SequenceNumber sequence,
   if (screen_hzb_ != nullptr) {
     screen_hzb_->OnFrameStart();
   }
+  if (init_views_ != nullptr) {
+    init_views_->OnFrameStart(sequence, slot);
+  }
 }
 
 void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)

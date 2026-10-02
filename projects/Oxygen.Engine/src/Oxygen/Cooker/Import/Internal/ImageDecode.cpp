@@ -4,20 +4,37 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Cooker/Import/Internal/ImageDecode.h>
-
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <filesystem>
 #include <fstream>
+#include <ios>
 #include <limits>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Import/Internal/ImageDecode.h>
+#include <Oxygen/Cooker/Import/ScratchImage.h>
+#include <Oxygen/Cooker/Import/TextureImportError.h>
+#include <Oxygen/Core/Types/Format.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_THREAD_LOCALS
-#include <Oxygen/Cooker/Import/Internal/stb/stb_image.h>
-
 #include <spng.h>
 #include <tinyexr.h>
+
+#include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Cooker/Import/Internal/stb/stb_image.h>
 
 namespace oxygen::content::import {
 
@@ -242,7 +259,7 @@ namespace {
       // Load all images
       std::vector<EXRImage> images(static_cast<size_t>(num_headers));
       for (int i = 0; i < num_headers; ++i) {
-        InitEXRImage(&images[static_cast<size_t>(i)]);
+        InitEXRImage(&images.at(static_cast<size_t>(i)));
       }
 
       ret = LoadEXRMultipartImageFromMemory(images.data(),
@@ -254,7 +271,7 @@ namespace {
           FreeEXRErrorMessage(err);
         }
         for (int i = 0; i < num_headers; ++i) {
-          FreeEXRImage(&images[static_cast<size_t>(i)]);
+          FreeEXRImage(&images.at(static_cast<size_t>(i)));
           FreeEXRHeader(headers[i]);
           free(headers[i]);
         }
@@ -264,7 +281,7 @@ namespace {
 
       // Get the selected part
       const EXRHeader& hdr = *headers[part_idx];
-      const EXRImage& img = images[static_cast<size_t>(part_idx)];
+      const EXRImage& img = images.at(static_cast<size_t>(part_idx));
       const int width = img.width;
       const int height = img.height;
 
@@ -286,7 +303,7 @@ namespace {
       // Must have at least RGB
       if (idx_r < 0 || idx_g < 0 || idx_b < 0) {
         for (int i = 0; i < num_headers; ++i) {
-          FreeEXRImage(&images[static_cast<size_t>(i)]);
+          FreeEXRImage(&images.at(static_cast<size_t>(i)));
           FreeEXRHeader(headers[i]);
           free(headers[i]);
         }
@@ -312,15 +329,15 @@ namespace {
         : nullptr;
 
       for (size_t i = 0; i < pixel_count; ++i) {
-        out[i * 4 + 0] = r_data[i];
-        out[i * 4 + 1] = g_data[i];
-        out[i * 4 + 2] = b_data[i];
-        out[i * 4 + 3] = a_data != nullptr ? a_data[i] : 1.0F;
+        out[(i * 4) + 0] = r_data[i];
+        out[(i * 4) + 1] = g_data[i];
+        out[(i * 4) + 2] = b_data[i];
+        out[(i * 4) + 3] = a_data != nullptr ? a_data[i] : 1.0F;
       }
 
       // Cleanup
       for (int i = 0; i < num_headers; ++i) {
-        FreeEXRImage(&images[static_cast<size_t>(i)]);
+        FreeEXRImage(&images.at(static_cast<size_t>(i)));
         FreeEXRHeader(headers[i]);
         free(headers[i]);
       }
@@ -406,10 +423,10 @@ namespace {
       : nullptr;
 
     for (size_t i = 0; i < pixel_count; ++i) {
-      out[i * 4 + 0] = r_data[i];
-      out[i * 4 + 1] = g_data[i];
-      out[i * 4 + 2] = b_data[i];
-      out[i * 4 + 3] = a_data != nullptr ? a_data[i] : 1.0F;
+      out[(i * 4) + 0] = r_data[i];
+      out[(i * 4) + 1] = g_data[i];
+      out[(i * 4) + 2] = b_data[i];
+      out[(i * 4) + 3] = a_data != nullptr ? a_data[i] : 1.0F;
     }
 
     // Apply Y-flip if requested
@@ -507,7 +524,7 @@ namespace {
       return Err(TextureImportError::kOutOfMemory);
     }
 
-    const auto Cleanup = [ctx]() { spng_ctx_free(ctx); };
+    const auto Cleanup = [ctx] -> void { spng_ctx_free(ctx); };
 
     if (spng_set_png_buffer(ctx, bytes.data(), bytes.size()) != 0) {
       Cleanup();
@@ -624,10 +641,10 @@ namespace {
       const auto* src = decoded;
       auto* dst = reinterpret_cast<uint8_t*>(pixel_data.data());
       for (size_t i = 0; i < pixel_count; ++i) {
-        dst[i * 4 + 0] = src[i * 3 + 0];
-        dst[i * 4 + 1] = src[i * 3 + 1];
-        dst[i * 4 + 2] = src[i * 3 + 2];
-        dst[i * 4 + 3] = 255U;
+        dst[(i * 4) + 0] = src[(i * 3) + 0];
+        dst[(i * 4) + 1] = src[(i * 3) + 1];
+        dst[(i * 4) + 2] = src[(i * 3) + 2];
+        dst[(i * 4) + 3] = 255U;
       }
     } else {
       pixel_data.resize(byte_size);
@@ -674,7 +691,7 @@ namespace {
   [[nodiscard]] auto ReadFileBytes(const std::filesystem::path& path)
     -> Result<std::vector<std::byte>, TextureImportError>
   {
-    std::ifstream file(path, std::ios::binary);
+    std::ifstream file(base::ToNativePath(path), std::ios::binary);
     if (!file) {
       return Err(TextureImportError::kFileNotFound);
     }
@@ -713,7 +730,7 @@ auto DecodeImageRgba8FromMemory(std::span<const std::byte> bytes)
     };
   }
 
-  if (bytes.size() > static_cast<size_t>((std::numeric_limits<int>::max)())) {
+  if (bytes.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
     return ImageDecodeResult {
       .image = std::nullopt,
       .error = "input too large for stb",
@@ -727,7 +744,7 @@ auto DecodeImageRgba8FromMemory(std::span<const std::byte> bytes)
 auto DecodeImageRgba8FromFile(const std::filesystem::path& path)
   -> ImageDecodeResult
 {
-  std::ifstream file(path, std::ios::binary);
+  std::ifstream file(base::ToNativePath(path), std::ios::binary);
   if (!file) {
     return ImageDecodeResult {
       .image = std::nullopt,
@@ -744,7 +761,7 @@ auto DecodeImageRgba8FromFile(const std::filesystem::path& path)
     };
   }
 
-  if (size > static_cast<std::streamoff>((std::numeric_limits<int>::max)())) {
+  if (size > static_cast<std::streamoff>(std::numeric_limits<int>::max())) {
     return ImageDecodeResult {
       .image = std::nullopt,
       .error = "file too large for stb",
@@ -772,13 +789,9 @@ auto DecodeImageRgba8FromFile(const std::filesystem::path& path)
 
 auto IsExrSignature(std::span<const std::byte> bytes) noexcept -> bool
 {
-  // OpenEXR magic number: 0x76 0x2F 0x31 0x01
-  if (bytes.size() < 4) {
-    return false;
-  }
-
-  return bytes[0] == std::byte { 0x76 } && bytes[1] == std::byte { 0x2F }
-  && bytes[2] == std::byte { 0x31 } && bytes[3] == std::byte { 0x01 };
+  constexpr std::array magic { std::byte { 0x76 }, std::byte { 0x2F },
+    std::byte { 0x31 }, std::byte { 0x01 } };
+  return std::ranges::starts_with(bytes, magic);
 }
 
 auto IsHdrSignature(std::span<const std::byte> bytes) noexcept -> bool
@@ -789,7 +802,8 @@ auto IsHdrSignature(std::span<const std::byte> bytes) noexcept -> bool
   }
 
   // Check for "#?" prefix
-  if (bytes[0] != std::byte { '#' } || bytes[1] != std::byte { '?' }) {
+  constexpr std::array prefix { std::byte { '#' }, std::byte { '?' } };
+  if (!std::ranges::starts_with(bytes, prefix)) {
     return false;
   }
 
@@ -828,14 +842,14 @@ auto IsHdrFormat(
   }
 
   // Also check stb_image's HDR detection
-  if (!bytes.empty()
-    && bytes.size() <= static_cast<size_t>((std::numeric_limits<int>::max)())) {
-    if (stbi_is_hdr_from_memory(
+  if ((!bytes.empty()
+        && bytes.size()
+          <= static_cast<size_t>((std::numeric_limits<int>::max)()))
+    && (stbi_is_hdr_from_memory(
           reinterpret_cast<const unsigned char*>(bytes.data()),
           static_cast<int>(bytes.size()))
-      != 0) {
-      return true;
-    }
+      != 0)) {
+    return true;
   }
 
   return false;
@@ -850,7 +864,7 @@ auto DecodeToScratchImage(std::span<const std::byte> bytes,
     return Err(TextureImportError::kCorruptedData);
   }
 
-  if (bytes.size() > static_cast<size_t>((std::numeric_limits<int>::max)())) {
+  if (bytes.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
     return Err(TextureImportError::kOutOfMemory);
   }
 

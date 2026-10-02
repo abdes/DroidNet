@@ -4,15 +4,30 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "ScriptingModule_test_fixture.h"
+#include <gtest/gtest.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Span.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/Vertex.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scripting/Module/ScriptingModule.h>
+
+using oxygen::base::CheckedAt;
 
 namespace oxygen::scripting::test {
 class SceneBindingsTest : public ScriptingModuleTest { };
@@ -26,7 +41,7 @@ namespace {
   {
     TestEventLoop loop;
     oxygen::co::Run(
-      loop, [&]() -> co::Co<> { co_await module.OnSceneMutation(context); });
+      loop, [&] -> co::Co<> { co_await module.OnSceneMutation(context); });
   }
 
   auto ExpectMeshBuffers(const data::GeometryAsset& geometry,
@@ -38,13 +53,15 @@ namespace {
     const auto vertices = mesh->Vertices();
     ASSERT_EQ(vertices.size(), expected.first.size());
     for (size_t index = 0; index < vertices.size(); ++index) {
-      EXPECT_TRUE(data::StrictlyEqual(vertices[index], expected.first[index]))
+      EXPECT_TRUE(data::StrictlyEqual(
+        CheckedAt(vertices, index), expected.first.at(index)))
         << "vertex " << index;
     }
     const auto indices = mesh->IndexBuffer().AsU32();
     ASSERT_EQ(indices.size(), expected.second.size());
     for (size_t index = 0; index < indices.size(); ++index) {
-      EXPECT_EQ(indices[index], expected.second[index]) << "index " << index;
+      EXPECT_EQ(CheckedAt(indices, index), expected.second.at(index))
+        << "index " << index;
     }
   }
 
@@ -102,7 +119,9 @@ end
     const auto generator = name.substr(0, name.find('_'));
     const auto expected
       = data::GenerateMeshBuffers(generator + "/LuaParity", {});
-    ASSERT_TRUE(expected.has_value());
+    if (!expected.has_value()) {
+      FAIL() << "Expected expected to contain a value";
+    }
     const auto geometry = node.GetRenderable().GetGeometry();
     ASSERT_NE(geometry, nullptr);
     ExpectMeshBuffers(*geometry, *expected);
@@ -151,7 +170,9 @@ end
     SCOPED_TRACE(name);
     const auto geometry = node.GetRenderable().GetGeometry();
     ASSERT_NE(geometry, nullptr);
-    const auto expected = [&] {
+    const auto expected
+      = [&] -> std::optional<
+              std::pair<std::vector<data::Vertex>, std::vector<uint32_t>>> {
       if (name == "Capsule") {
         return data::MakeCapsuleMeshAsset(4, 12, 4.0F, 0.75F);
       }
@@ -163,7 +184,9 @@ end
       }
       return data::MakeTorusMeshAsset(12);
     }();
-    ASSERT_TRUE(expected.has_value());
+    if (!expected.has_value()) {
+      FAIL() << "Expected expected to contain a value";
+    }
     ExpectMeshBuffers(*geometry, *expected);
   }
 }
@@ -788,6 +811,13 @@ function on_scene_mutation()
   if camera_node:camera_set_perspective(1) ~= false then
     error("camera_set_perspective should require table")
   end
+  assert(camera_node:camera_get_perspective().aspect_mode == "auto")
+  assert(camera_node:camera_set_perspective({ aspect_mode = "fixed", aspect = 1.5 }))
+  assert(camera_node:camera_get_perspective().aspect_mode == "fixed")
+  assert(not camera_node:camera_set_perspective({ aspect_mode = "invalid", aspect = 2 }))
+  assert(camera_node:camera_get_perspective().aspect == 1.5)
+  assert(camera_node:camera_set_perspective({ aspect_mode = "auto" }))
+  assert(camera_node:camera_get_perspective().aspect == 1.5)
 
   local script_node = scene.create_node("ScriptHostInvalidArgs", nil)
   if script_node == nil then error("script node create failed") end

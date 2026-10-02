@@ -4,15 +4,39 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Windows.h> // IWYU pragma: keep
+
+#include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <memory>
+#include <mutex>
+#include <span>
+#include <system_error>
+#include <utility>
+
+#include <asio/buffer.hpp>
+#include <asio/io_context.hpp>
 #include <asio/windows/random_access_handle.hpp>
 #include <asio/write_at.hpp>
+#include <errhandlingapi.h>
+#include <fileapi.h>
+#include <handleapi.h>
+#include <minwindef.h>
+#include <winbase.h>
+#include <winerror.h>
+#include <winnt.h>
 
-#include <Windows.h>
-
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Import/FileError.h>
+#include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/WindowsFileWriter.h>
-#include <Oxygen/OxCo/Algorithms.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/asio.h>
 
 namespace {
@@ -46,6 +70,7 @@ auto MapWindowsError(DWORD error) -> FileError
   case ERROR_INVALID_NAME:
   case ERROR_BAD_PATHNAME:
     return FileError::kInvalidPath;
+  case ERROR_FILENAME_EXCED_RANGE:
   case ERROR_BUFFER_OVERFLOW:
     return FileError::kPathTooLong;
   case ERROR_OPERATION_ABORTED:
@@ -114,12 +139,12 @@ auto WindowsFileWriter::EnsureDirectories(const std::filesystem::path& path)
   -> Result<void, FileErrorInfo>
 {
   const auto parent = path.parent_path();
-  if (parent.empty() || std::filesystem::exists(parent)) {
+  if (parent.empty() || std::filesystem::exists(base::ToNativePath(parent))) {
     return Result<void, FileErrorInfo>::Ok();
   }
 
   std::error_code ec;
-  std::filesystem::create_directories(parent, ec);
+  std::filesystem::create_directories(base::ToNativePath(parent), ec);
   if (ec) {
     return Err(FileErrorInfo {
       .code = FileError::kIOError,
@@ -175,9 +200,10 @@ auto WindowsFileWriter::OpenFile(const std::filesystem::path& path,
     = FILE_SHARE_READ | (options.share_write ? FILE_SHARE_WRITE : 0);
 
   // Open file with FILE_FLAG_OVERLAPPED for async I/O
-  HANDLE file_handle = CreateFileW(path.c_str(), GENERIC_WRITE, share_mode,
-    nullptr, creation_disposition, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
-    nullptr);
+  const auto native_path = base::ToNativePath(path);
+  HANDLE file_handle = CreateFileW(native_path.c_str(), GENERIC_WRITE,
+    share_mode, nullptr, creation_disposition,
+    FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, nullptr);
 
   if (file_handle == INVALID_HANDLE_VALUE) {
     return Err(MakeCurrentError(path));
@@ -206,7 +232,7 @@ auto WindowsFileWriter::Write(const std::filesystem::path& path,
     co_return Err(open_result.error());
   }
 
-  HandleGuard guard { (open_result.value()) };
+  HandleGuard guard { open_result.value() };
 
   // Handle empty data
   if (data.empty()) {
@@ -303,7 +329,7 @@ void WindowsFileWriter::WriteAsync(const std::filesystem::path& path,
 
   // Start async write at offset 0
   asio::async_write_at(state->handle, 0, asio::buffer(data.data(), data.size()),
-    [state](const std::error_code& ec, size_t bytes_written) {
+    [state](const std::error_code& ec, size_t bytes_written) -> void {
       if (state->callback) {
         if (ec) {
           FileErrorInfo error {
@@ -353,7 +379,7 @@ auto WindowsFileWriter::WriteAt(const std::filesystem::path& path,
     co_return Err(open_result.error());
   }
 
-  HandleGuard guard { (open_result.value()) };
+  HandleGuard guard { open_result.value() };
 
   // Handle empty data
   if (data.empty()) {
@@ -450,7 +476,7 @@ void WindowsFileWriter::WriteAtAsync(const std::filesystem::path& path,
 
   asio::async_write_at(state->handle, offset,
     asio::buffer(data.data(), data.size()),
-    [state](const std::error_code& ec, size_t bytes_written) {
+    [state](const std::error_code& ec, size_t bytes_written) -> void {
       if (state->callback) {
         if (ec) {
           FileErrorInfo error {

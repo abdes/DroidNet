@@ -9,7 +9,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Materials;
@@ -55,6 +55,7 @@ public sealed partial class MaterialPickerService : IMaterialPickerService, IDis
         cancellationToken.ThrowIfCancellationRequested();
         this.currentFilter = filter;
         await this.assetProvider.RefreshAsync(AssetBrowserFilter.Default, cancellationToken).ConfigureAwait(false);
+        this.Publish(this.latestItems);
     }
 
     /// <inheritdoc />

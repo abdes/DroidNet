@@ -6,7 +6,9 @@
 
 #include <cstddef>
 #include <cstring>
+#include <initializer_list>
 #include <span>
+#include <stdexcept>
 #include <vector>
 
 #include <Oxygen/Content/Loaders/SceneLoader.h>
@@ -58,17 +60,16 @@ NOLINT_TEST(SceneScriptingLoaderTest, ValidateScriptingSlotRangesOutOfBounds)
     std::runtime_error);
 }
 
-NOLINT_TEST(
-  SceneScriptingLoaderTest, ValidateScriptingSlotRangesOverlapWarnsNoThrow)
+NOLINT_TEST(SceneScriptingLoaderTest, ValidateScriptingSlotRangesOverlapThrows)
 {
   const auto bytes = PackScriptingRecords({
     { .node_index = 0, .slot_start_index = 1, .slot_count = 2 },
     { .node_index = 1, .slot_start_index = 2, .slot_count = 2 },
   });
 
-  EXPECT_NO_THROW({
-    oxygen::content::loaders::detail::ValidateScriptingSlotRanges(bytes, 2, 6);
-  });
+  EXPECT_THROW(
+    oxygen::content::loaders::detail::ValidateScriptingSlotRanges(bytes, 2, 6),
+    std::runtime_error);
 }
 
 NOLINT_TEST(SceneScriptingLoaderTest, ValidateComponentTableRejectsBadSort)

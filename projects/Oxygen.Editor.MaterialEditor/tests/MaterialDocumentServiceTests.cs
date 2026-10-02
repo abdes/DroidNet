@@ -12,7 +12,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
@@ -93,7 +93,7 @@ public sealed partial class MaterialDocumentServiceTests
         var reopened = await service.OpenAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = reopened.MaterialGuid.Should().Be(created.MaterialGuid);
-        _ = reopened.Source.Schema.Should().Be("oxygen.material.v1");
+        _ = MaterialSourceWriter.ToJson(reopened.Source).ContainsKey("Schema").Should().BeFalse();
         _ = reopened.Source.PbrMetallicRoughness.MetallicFactor.Should().Be(0.75f);
         _ = reopened.Source.PbrMetallicRoughness.RoughnessFactor.Should().Be(0.5f);
     }
@@ -140,11 +140,11 @@ public sealed partial class MaterialDocumentServiceTests
     }
 
     /// <summary>
-    /// Verifies legacy scalar editing clamps fields to supported ranges.
+    /// Verifies scalar edits reject out-of-range values without changing authored state.
     /// </summary>
     /// <returns>The asynchronous test task.</returns>
     [TestMethod]
-    public async Task EditScalarAsyncClampsOutOfRangeScalarFields()
+    public async Task EditScalarAsyncRejectsOutOfRangeScalarFields()
     {
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
@@ -155,13 +155,13 @@ public sealed partial class MaterialDocumentServiceTests
             created.DocumentId,
             new MaterialFieldEdit(MaterialFieldKeys.BaseColorR, 2.0f),
             cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = edit.Succeeded.Should().BeTrue();
+        _ = edit.Succeeded.Should().BeFalse();
 
         edit = await service.EditScalarAsync(
             created.DocumentId,
             new MaterialFieldEdit(MaterialFieldKeys.RoughnessFactor, -1.0f),
             cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = edit.Succeeded.Should().BeTrue();
+        _ = edit.Succeeded.Should().BeFalse();
 
         _ = await service.SaveAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         await service.CloseAsync(created.DocumentId, discard: false, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -169,7 +169,7 @@ public sealed partial class MaterialDocumentServiceTests
         var reopened = await service.OpenAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = reopened.Source.PbrMetallicRoughness.BaseColorR.Should().Be(1.0f);
-        _ = reopened.Source.PbrMetallicRoughness.RoughnessFactor.Should().Be(0.0f);
+        _ = reopened.Source.PbrMetallicRoughness.RoughnessFactor.Should().Be(0.5f);
     }
 
     /// <summary>
@@ -393,12 +393,16 @@ public sealed partial class MaterialDocumentServiceTests
         _ = save.Succeeded.Should().BeTrue();
         _ = cook.State.Should().Be(MaterialCookState.Cooked);
 
-        var cookedBytes = await File.ReadAllBytesAsync(
-            Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "RoundTrip.omat"), cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
-        var indexStream = File.OpenRead(Path.Combine(workspace.Root, ".cooked", "Content", "container.index.bin"));
+        using var publication = await workspace.NativePipeline.Publication.AcquireReadAsync(
+            workspace.ContextService.ActiveProject!, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var cookedRoot = publication.FindProjectRoot("Content")
+            ?? throw new InvalidDataException("The material cook did not publish its Content root.");
+        var indexStream = File.OpenRead(Path.Combine(cookedRoot, "container.index.bin"));
         await using var indexLifetime = indexStream.ConfigureAwait(false);
-        var index = Oxygen.Managed.Assets.Persistence.LooseCooked.V1.LooseCookedIndex.Read(indexStream);
+            var index = Oxygen.Managed.Assets.Persistence.LooseCooked.V3.LooseCookedIndex.Read(indexStream);
         var materialEntry = index.Assets.Single(static asset => string.Equals(asset.VirtualPath, "/Content/Materials/RoundTrip.omat", StringComparison.Ordinal));
+        var cookedBytes = await File.ReadAllBytesAsync(
+            Path.Combine(cookedRoot, materialEntry.DescriptorRelativePath), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = cookedBytes.Should().HaveCount(checked((int)materialEntry.DescriptorSize));
         _ = ReadSingle(cookedBytes, 0x70).Should().BeApproximately(0.25f, 0.0001f);
         _ = ReadSingle(cookedBytes, 0x74).Should().BeApproximately(0.5f, 0.0001f);
@@ -406,7 +410,8 @@ public sealed partial class MaterialDocumentServiceTests
         _ = ReadSingle(cookedBytes, 0x7C).Should().BeApproximately(1.0f, 0.0001f);
         _ = ReadUnorm16(cookedBytes, 0x84).Should().BeApproximately(0.8f, 0.0001f);
         _ = ReadUnorm16(cookedBytes, 0x86).Should().BeApproximately(0.2f, 0.0001f);
-        _ = ReadUnorm16(cookedBytes, 0xC0).Should().BeApproximately(0.4f, 0.0001f);
+        // Material v3 stores three float32 emission channels before alpha cutoff.
+        _ = ReadUnorm16(cookedBytes, 0xC6).Should().BeApproximately(0.4f, 0.0001f);
         _ = cookedBytes[0x67].Should().Be(3);
 
         var flags = BinaryPrimitives.ReadUInt32LittleEndian(cookedBytes.AsSpan(0x68, 4));
@@ -425,8 +430,6 @@ public sealed partial class MaterialDocumentServiceTests
         var catalog = EditorSchemaCatalog.LoadFromDirectory(schemaRoot);
         var validator = new MaterialSchemaValidator(catalog);
         var source = new MaterialSource(
-            schema: "oxygen.material.v1",
-            type: "PBR",
             name: "Gold",
             pbrMetallicRoughness: new MaterialPbrMetallicRoughness(
                 baseColorR: 1.0f,
@@ -442,8 +445,8 @@ public sealed partial class MaterialDocumentServiceTests
             alphaMode: MaterialAlphaMode.Opaque,
             alphaCutoff: 0.5f,
             doubleSided: false);
-        var valid = MaterialSourceProjection.ToEngineJson(source);
-        var invalid = MaterialSourceProjection.ToEngineJson(source);
+        var valid = MaterialSourceWriter.ToJson(source);
+        var invalid = MaterialSourceWriter.ToJson(source);
         invalid["parameters"]!.AsObject()["metalness"] = 2.0;
 
         _ = validator.ValidatorParityHolds(valid).Should().BeTrue();
@@ -637,8 +640,6 @@ public sealed partial class MaterialDocumentServiceTests
     private static async Task WriteMaterialAsync(TempWorkspace workspace, string relativePath, string name)
     {
         var source = new MaterialSource(
-            schema: "oxygen.material.v1",
-            type: "PBR",
             name: name,
             pbrMetallicRoughness: new MaterialPbrMetallicRoughness(
                 baseColorR: 1.0f,
@@ -753,10 +754,12 @@ public sealed partial class MaterialDocumentServiceTests
         {
             this.Root = Path.Combine(Path.GetTempPath(), "oxygen-material-editor-tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(this.Root);
-            this.ContextService.Activate(ProjectContext.FromProjectInfo(new ProjectInfo("Material tests", Category.Games, this.Root)
+            var project = new ProjectInfo("Material tests", Category.Games, this.Root)
             {
                 AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-            }));
+            };
+            File.WriteAllText(Path.Combine(this.Root, Constants.ProjectFileName), ProjectInfo.ToJson(project));
+            this.ContextService.Activate(ProjectContext.FromProjectInfo(project));
             this.CookCoordinator = new ContentCookCoordinator(this.ContextService, NullLogger<ContentCookCoordinator>.Instance);
         }
 

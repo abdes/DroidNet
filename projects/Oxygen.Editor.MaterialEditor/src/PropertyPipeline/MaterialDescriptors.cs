@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Generic;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Editor.Schemas;
 
 namespace Oxygen.Editor.MaterialEditor;
@@ -114,14 +114,14 @@ public sealed class MaterialDescriptors
             ValidateUnitFloat);
 
         Register(byId, AmbientOcclusion, unitFloat, "material.ambient_occlusion",
-            static state => state.Source.OcclusionTexture?.Strength ?? 1.0f,
+            static state => state.Source.OcclusionStrength,
             static (state, v) => state.Replace(s => WithOcclusionStrength(s, v)),
             ValidateUnitFloat);
 
         Register(byId, NormalScale,
             new EditorAnnotation { Group = "Parameters", Renderer = "numberbox", Step = 0.01, SoftMin = 0.0, SoftMax = 4.0 },
             "material.normal_scale",
-            static state => state.Source.NormalTexture?.Scale ?? 1.0f,
+            static state => state.Source.NormalScale,
             static (state, v) => state.Replace(s => WithNormalScale(s, v)),
             ValidateNonNegativeFloat);
 
@@ -204,43 +204,16 @@ public sealed class MaterialDescriptors
             baseColorTexture: source.BaseColorTexture,
             metallicRoughnessTexture: source.MetallicRoughnessTexture);
 
-    private static MaterialSource WithAlphaCutoff(MaterialSource source, float v) => new(
-        schema: source.Schema,
-        type: source.Type,
-        name: source.Name,
-        pbrMetallicRoughness: source.PbrMetallicRoughness,
-        normalTexture: source.NormalTexture,
-        occlusionTexture: source.OcclusionTexture,
-        alphaMode: source.AlphaMode,
-        alphaCutoff: v,
-        doubleSided: source.DoubleSided);
+    private static MaterialSource WithAlphaCutoff(MaterialSource source, float v) => source with { AlphaCutoff = v };
 
-    private static MaterialSource WithDoubleSided(MaterialSource source, bool v) => new(
-        schema: source.Schema,
-        type: source.Type,
-        name: source.Name,
-        pbrMetallicRoughness: source.PbrMetallicRoughness,
-        normalTexture: source.NormalTexture,
-        occlusionTexture: source.OcclusionTexture,
-        alphaMode: source.AlphaMode,
-        alphaCutoff: source.AlphaCutoff,
-        doubleSided: v);
+    private static MaterialSource WithDoubleSided(MaterialSource source, bool v) => source with { DoubleSided = v };
 
     private static MaterialSource WithNormalScale(MaterialSource source, float scale)
     {
         var normal = source.NormalTexture is { } n
             ? (NormalTextureRef?)(n with { Scale = scale })
             : null;
-        return new MaterialSource(
-            schema: source.Schema,
-            type: source.Type,
-            name: source.Name,
-            pbrMetallicRoughness: source.PbrMetallicRoughness,
-            normalTexture: normal,
-            occlusionTexture: source.OcclusionTexture,
-            alphaMode: source.AlphaMode,
-            alphaCutoff: source.AlphaCutoff,
-            doubleSided: source.DoubleSided);
+        return source with { NormalTexture = normal, NormalScale = scale };
     }
 
     private static MaterialSource WithOcclusionStrength(MaterialSource source, float strength)
@@ -248,15 +221,6 @@ public sealed class MaterialDescriptors
         var occlusion = source.OcclusionTexture is { } o
             ? (OcclusionTextureRef?)(o with { Strength = strength })
             : null;
-        return new MaterialSource(
-            schema: source.Schema,
-            type: source.Type,
-            name: source.Name,
-            pbrMetallicRoughness: source.PbrMetallicRoughness,
-            normalTexture: source.NormalTexture,
-            occlusionTexture: occlusion,
-            alphaMode: source.AlphaMode,
-            alphaCutoff: source.AlphaCutoff,
-            doubleSided: source.DoubleSided);
+        return source with { OcclusionTexture = occlusion, OcclusionStrength = strength };
     }
 }

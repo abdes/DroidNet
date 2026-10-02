@@ -5,7 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;

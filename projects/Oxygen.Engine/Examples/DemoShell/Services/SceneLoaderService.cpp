@@ -8,52 +8,74 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <exception>
+#include <filesystem>
 #include <limits>
-#include <numbers>
+#include <memory>
 #include <optional>
 #include <ranges>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/SceneLoaderService.h"
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/vector_float3.hpp>
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Base/Span.h>
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Config/EngineConfig.h>
+#include <Oxygen/Config/PathFinder.h>
+#include <Oxygen/Content/ContentLoadScope.h>
 #include <Oxygen/Content/IAssetLoader.h>
-#include <Oxygen/Content/ResourceTable.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Core/Types/ViewPort.h>
-#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/InputActionAsset.h>
-#include <Oxygen/Data/InputMappingContextAsset.h>
-#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_input.h>
+#include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/ModuleEvent.h>
 #include <Oxygen/Engine/Scripting/IScriptCompilationService.h>
+#include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
+#include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
+#include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Physics/Aggregate/AggregateAuthority.h>
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Character/CharacterController.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Joint/JointDesc.h>
+#include <Oxygen/Physics/PhysicsError.h>
+#include <Oxygen/Physics/Shape.h>
 #include <Oxygen/Physics/SoftBody/SoftBodyDesc.h>
 #include <Oxygen/Physics/Vehicle/VehicleDesc.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
@@ -65,14 +87,16 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
+#include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneFlags.h>
+#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/Flags.h>
 #include <Oxygen/Scripting/Execution/CompiledScriptExecutable.h>
 #include <Oxygen/Scripting/IScriptSourceResolver.h>
 #include <Oxygen/Scripting/Resolver/ScriptSourceResolver.h>
-#include <Oxygen/Serio/FileStream.h>
-#include <Oxygen/Serio/Reader.h>
 
 namespace oxygen::examples {
 
@@ -89,19 +113,18 @@ namespace {
     return std::string(name_view);
   }
 
-  auto MakeLookRotationFromPosition(const glm::vec3& position,
-    const glm::vec3& target, const glm::vec3& up_direction = space::move::Up)
-    -> glm::quat
+  auto MakeLookRotationFromPosition(
+    const glm::vec3& position, const glm::vec3& target) -> glm::quat
   {
     const auto forward_raw = target - position;
     const float forward_len2 = glm::dot(forward_raw, forward_raw);
     if (forward_len2 <= 1e-8F) {
-      return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
+      return { 1.0F, 0.0F, 0.0F, 0.0F };
     }
 
     const auto forward = glm::normalize(forward_raw);
     // Avoid singularities when forward is colinear with up.
-    glm::vec3 up_dir = up_direction;
+    glm::vec3 up_dir = space::move::Up;
     const float dot_abs = std::abs(glm::dot(forward, glm::normalize(up_dir)));
     if (dot_abs > 0.999F) {
       // Pick an alternate up that is guaranteed to be non-colinear.
@@ -112,7 +135,7 @@ namespace {
     const auto right_raw = glm::cross(forward, up_dir);
     const float right_len2 = glm::dot(right_raw, right_raw);
     if (right_len2 <= 1e-8F) {
-      return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
+      return { 1.0F, 0.0F, 0.0F, 0.0F };
     }
 
     const auto right = right_raw / std::sqrt(right_len2);
@@ -141,7 +164,8 @@ namespace {
     using scene::SceneNodeFlags;
 
     scene::SceneNode::Flags flags {};
-    const auto apply = [&](const SceneNodeFlags flag, const uint32_t mask) {
+    const auto apply
+      = [&](const SceneNodeFlags flag, const uint32_t mask) -> void {
       const auto inherited = (node.inherited_flags & mask) != 0U;
       const auto local_value = (node.node_flags & mask) != 0U;
       flags = flags.SetFlag(flag,
@@ -317,8 +341,8 @@ namespace {
       return false;
     }
 
-    auto current = runtime_nodes[candidate_index];
-    const auto ancestor_handle = runtime_nodes[ancestor_index].GetHandle();
+    auto current = runtime_nodes.at(candidate_index);
+    const auto ancestor_handle = runtime_nodes.at(ancestor_index).GetHandle();
     while (true) {
       const auto parent_opt = current.GetParent();
       if (!parent_opt.has_value()) {
@@ -448,7 +472,8 @@ namespace {
       return &platform::InputSlots::End;
     }
 
-    static const std::vector<platform::InputSlot> all_slots = [] {
+    static const std::vector<platform::InputSlot> all_slots
+      = [] -> std::vector<platform::InputSlot> {
       std::vector<platform::InputSlot> slots;
       platform::InputSlots::GetAllInputSlots(slots);
       return slots;
@@ -494,7 +519,7 @@ namespace {
   constexpr uint64_t kLuauVmBytecodeVersion = 1ULL;
   constexpr uint64_t kUnknownCompilerFingerprint = 0x756E6B6E6F776E31ULL;
   constexpr uint64_t kUnknownVmBytecodeVersion = 0ULL;
-#if defined(_WIN64)
+#ifdef _WIN64
   constexpr uint64_t kPlatformAbiSalt = 0x77696E36345F6D73ULL;
 #elif defined(__linux__) && defined(__x86_64__)
   constexpr uint64_t kPlatformAbiSalt = 0x6C6E7836345F6763ULL;
@@ -561,7 +586,7 @@ namespace {
     std::string out;
     out.reserve(count * 3);
     for (size_t i = 0; i < count; ++i) {
-      const auto value = bytes[i];
+      const auto value = oxygen::base::CheckedAt(bytes, i);
       out.push_back(kHex[(value >> 4U) & 0x0FU]);
       out.push_back(kHex[value & 0x0FU]);
       if (i + 1 < count) {
@@ -591,7 +616,7 @@ namespace {
       if (i > 0) {
         out.append("; ");
       }
-      out.append(roots[i].lexically_normal().generic_string());
+      out.append(roots.at(i).lexically_normal().generic_string());
     }
     return out;
   }
@@ -626,7 +651,8 @@ SceneLoaderService::SceneLoaderService(content::IAssetLoader& loader,
 {
   if (engine_) {
     physics_module_subscription_ = engine_->SubscribeModuleAttached(
-      [this](const engine::ModuleEvent& event) { OnModuleAttached(event); },
+      [this](
+        const engine::ModuleEvent& event) -> void { OnModuleAttached(event); },
       /*replay_existing=*/true);
   }
 }
@@ -635,7 +661,7 @@ SceneLoaderService::~SceneLoaderService()
 {
   physics_module_subscription_.Cancel();
   // Ensure any geometry pins are released if the loader is torn down early.
-  ReleasePinnedGeometryAssets();
+  ClearGeometryReadiness();
   LOG_F(INFO, "SceneLoader: Destroying loader.");
 }
 
@@ -665,10 +691,12 @@ void SceneLoaderService::StartLoad(const data::AssetKey& key)
   failed_ = false;
   consumed_ = false;
   // Start loading the scene asset
-  loader_.StartLoadScene(key,
-    [weak_self = weak_from_this()](std::shared_ptr<data::SceneAsset> asset) {
+  const auto scope = loader_.BeginLoadScope();
+  loader_.StartLoadScene(key, content::LoadRequest { .scope = scope },
+    [weak_self = weak_from_this(), scope](
+      std::shared_ptr<data::SceneAsset> asset) -> void {
       if (auto self = weak_self.lock()) {
-        self->OnSceneLoaded(std::move(asset));
+        self->OnSceneLoaded(std::move(asset), scope);
       }
     });
 }
@@ -684,7 +712,7 @@ void SceneLoaderService::MarkConsumed()
   runtime_nodes_.clear();
   active_camera_ = {};
   // Drop any pins that were never released due to early consumption.
-  ReleasePinnedGeometryAssets();
+  ClearGeometryReadiness();
   linger_frames_ = 2;
 }
 
@@ -700,7 +728,8 @@ auto SceneLoaderService::Tick() -> bool
   return false;
 }
 
-void SceneLoaderService::OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset)
+void SceneLoaderService::OnSceneLoaded(
+  std::shared_ptr<data::SceneAsset> asset, content::ContentLoadScope scope)
 {
   try {
     if (!asset) {
@@ -714,11 +743,11 @@ void SceneLoaderService::OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset)
     runtime_nodes_.clear();
     active_camera_ = {};
     pending_geometry_keys_.clear();
-    pinned_geometry_keys_.clear();
+    ready_geometry_keys_.clear();
 
     const auto scene_asset = std::move(asset);
     const auto sidecar_key_opt
-      = ResolvePhysicsSidecarKey(scene_asset->GetAssetKey());
+      = loader_.FindPhysicsSidecarAssetKeyForScene(*scene_asset, scope);
 
     if (!sidecar_key_opt.has_value()) {
       LOG_F(INFO,
@@ -734,8 +763,9 @@ void SceneLoaderService::OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset)
 
     const auto sidecar_key = *sidecar_key_opt;
     loader_.StartLoadPhysicsSceneAsset(sidecar_key,
+      content::LoadRequest { .scope = std::move(scope) },
       [weak_self = weak_from_this(), scene_asset, sidecar_key](
-        std::shared_ptr<data::PhysicsSceneAsset> physics_asset) {
+        std::shared_ptr<data::PhysicsSceneAsset> physics_asset) -> void {
         if (const auto self = weak_self.lock()) {
           self->OnPhysicsSceneLoaded(
             scene_asset, sidecar_key, std::move(physics_asset));
@@ -801,12 +831,6 @@ void SceneLoaderService::OnPhysicsSceneLoaded(
   }
 }
 
-auto SceneLoaderService::ResolvePhysicsSidecarKey(
-  const data::AssetKey& scene_key) const -> std::optional<data::AssetKey>
-{
-  return loader_.FindPhysicsSidecarAssetKeyForScene(scene_key);
-}
-
 void SceneLoaderService::ValidatePhysicsSidecarIdentity(
   const data::SceneAsset& scene_asset,
   const data::PhysicsSceneAsset& physics_asset,
@@ -823,7 +847,7 @@ void SceneLoaderService::ValidatePhysicsSidecarIdentity(
 
   const auto scene_node_count = scene_asset.GetNodes().size();
   if (scene_node_count
-    > static_cast<size_t>((std::numeric_limits<uint32_t>::max)())) {
+    > static_cast<size_t>(std::numeric_limits<uint32_t>::max())) {
     throw std::runtime_error("scene node count exceeds uint32 range");
   }
   const auto scene_node_count_u32 = static_cast<uint32_t>(scene_node_count);
@@ -882,7 +906,7 @@ auto SceneLoaderService::ResolveCollisionShapeAsset(
     throw std::runtime_error(std::string(binding_kind)
       + " shape_asset_key is nil for node_index=" + std::to_string(node_index));
   }
-  if (!current_physics_context_asset_key_.has_value()) {
+  if (!current_physics_context_) {
     throw std::runtime_error(std::string(binding_kind)
       + " shape_asset_key resolution requires active physics hydration "
         "context (node_index="
@@ -890,7 +914,7 @@ auto SceneLoaderService::ResolveCollisionShapeAsset(
       + " shape_asset_key=" + data::to_string(shape_asset_key) + ")");
   }
   const auto shape_desc_opt = loader_.ReadCollisionShapeAssetDescForAsset(
-    *current_physics_context_asset_key_, shape_asset_key);
+    *current_physics_context_, shape_asset_key);
   if (!shape_desc_opt.has_value()) {
     throw std::runtime_error(std::string(binding_kind)
       + " shape_asset_key could not be resolved from content source "
@@ -910,7 +934,7 @@ auto SceneLoaderService::ResolvePhysicsMaterialAsset(
       + " material_asset_key is nil for node_index="
       + std::to_string(node_index));
   }
-  if (!current_physics_context_asset_key_.has_value()) {
+  if (!current_physics_context_) {
     throw std::runtime_error(std::string(binding_kind)
       + " material_asset_key resolution requires active physics hydration "
         "context (node_index="
@@ -918,7 +942,7 @@ auto SceneLoaderService::ResolvePhysicsMaterialAsset(
       + " material_asset_key=" + data::to_string(material_asset_key) + ")");
   }
   const auto material_desc_opt = loader_.ReadPhysicsMaterialAssetDescForAsset(
-    *current_physics_context_asset_key_, material_asset_key);
+    *current_physics_context_, material_asset_key);
   if (!material_desc_opt.has_value()) {
     throw std::runtime_error(std::string(binding_kind)
       + " material_asset_key could not be resolved from content source "
@@ -934,7 +958,7 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
   const std::string_view binding_kind, const uint32_t node_index)
   -> physics::CollisionShape
 {
-  const auto ensure_no_cooked_ref = [&]() {
+  const auto ensure_no_cooked_ref = [&] -> void {
     if (!shape_desc.cooked_shape_ref.payload_asset_key.IsNil()
       || shape_desc.cooked_shape_ref.payload_type
         != data::pak::physics::kInvalidShapePayloadType) {
@@ -1067,7 +1091,8 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
   case data::pak::physics::ShapeType::kConvexHull:
     return physics::ConvexHullShape {
       .cooked_payload = ResolveCookedShapePayload(shape_desc,
-        data::pak::physics::ShapePayloadType::kConvex, binding_kind, node_index)
+        data::pak::physics::ShapePayloadType::kConvex, binding_kind,
+        node_index),
     };
   case data::pak::physics::ShapeType::kTriangleMesh:
     return physics::TriangleMeshShape {
@@ -1124,10 +1149,11 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
     };
   }
   case data::pak::physics::ShapeType::kCompound:
-    return physics::CompoundShape { .cooked_payload
-      = ResolveCookedShapePayload(shape_desc,
+    return physics::CompoundShape {
+      .cooked_payload = ResolveCookedShapePayload(shape_desc,
         data::pak::physics::ShapePayloadType::kCompound, binding_kind,
-        node_index) };
+        node_index),
+    };
   default:
     throw std::runtime_error(
       std::string("OXY-SHAPE-001: unsupported shape_type in ")
@@ -1143,7 +1169,7 @@ auto SceneLoaderService::ResolveCookedShapePayload(
   const std::string_view binding_kind, const uint32_t node_index) const
   -> physics::CookedShapePayload
 {
-  if (!current_physics_context_asset_key_.has_value()) {
+  if (!current_physics_context_) {
     throw std::runtime_error(std::string(binding_kind)
       + " cooked_shape_ref requires active physics asset context (node_index="
       + std::to_string(node_index) + ")");
@@ -1167,7 +1193,7 @@ auto SceneLoaderService::ResolveCookedShapePayload(
   }
 
   const auto resource_key_opt = loader_.MakePhysicsResourceKeyForAsset(
-    *current_physics_context_asset_key_, cooked_ref.payload_asset_key);
+    *current_physics_context_, cooked_ref.payload_asset_key);
   if (!resource_key_opt.has_value()) {
     throw std::runtime_error(
       std::string("OXY-SHAPE-007: failed to resolve physics resource key in ")
@@ -1176,7 +1202,7 @@ auto SceneLoaderService::ResolveCookedShapePayload(
       + data::to_string(cooked_ref.payload_asset_key) + ")");
   }
 
-  auto resource = loader_.GetPhysicsResource(*resource_key_opt);
+  auto resource = FindHydrationPayload(*resource_key_opt);
   if (!resource) {
     throw std::runtime_error(
       std::string("OXY-SHAPE-007: physics payload resource not loaded in ")
@@ -1223,7 +1249,7 @@ void SceneLoaderService::HydrateJointBindings(
   if (!physics::IsValid(world_id)) {
     throw std::runtime_error("joint hydration requires a valid physics world");
   }
-  if (!current_physics_context_asset_key_.has_value()) {
+  if (!current_physics_context_) {
     throw std::runtime_error(
       "joint hydration requires active physics hydration context");
   }
@@ -1255,7 +1281,7 @@ void SceneLoaderService::HydrateJointBindings(
     auto constraint_blob = std::span<const uint8_t> {};
     if (!record.constraint_asset_key.IsNil()) {
       const auto resource_key_opt = loader_.MakePhysicsResourceKeyForAsset(
-        *current_physics_context_asset_key_, record.constraint_asset_key);
+        *current_physics_context_, record.constraint_asset_key);
       if (!resource_key_opt.has_value()) {
         throw std::runtime_error(
           std::string("joint constraint_asset_key could not be resolved ")
@@ -1263,8 +1289,7 @@ void SceneLoaderService::HydrateJointBindings(
           + " node_index_b=" + std::to_string(record.node_index_b)
           + " asset_key=" + data::to_string(record.constraint_asset_key) + ")");
       }
-      const auto constraint_resource
-        = loader_.GetPhysicsResource(*resource_key_opt);
+      const auto constraint_resource = FindHydrationPayload(*resource_key_opt);
       if (!constraint_resource) {
         throw std::runtime_error(
           std::string("joint constraint resource is not loaded ")
@@ -1301,7 +1326,7 @@ void SceneLoaderService::HydrateJointBindings(
 
     auto body_a = physics::ScenePhysics::GetRigidBody(
       observer_ptr<physics::PhysicsModule> { &physics_module },
-      runtime_nodes_[node_index_a].GetHandle());
+      runtime_nodes_.at(node_index_a).GetHandle());
     if (!body_a.has_value()) {
       throw std::runtime_error(
         std::string("joint node_index_a does not have a rigid body: ")
@@ -1309,7 +1334,7 @@ void SceneLoaderService::HydrateJointBindings(
     }
     auto body_b = physics::ScenePhysics::GetRigidBody(
       observer_ptr<physics::PhysicsModule> { &physics_module },
-      runtime_nodes_[node_index_b].GetHandle());
+      runtime_nodes_.at(node_index_b).GetHandle());
     if (!body_b.has_value()) {
       throw std::runtime_error(
         std::string("joint node_index_b does not have a rigid body: ")
@@ -1386,7 +1411,7 @@ void SceneLoaderService::HydrateColliderBindings(
       = ReadHydrationWorldPose(node_index);
     desc.initial_position = initial_position;
     desc.initial_rotation = initial_rotation;
-    auto& node = runtime_nodes_[node_index];
+    auto& node = runtime_nodes_.at(node_index);
     const auto attached = physics::ScenePhysics::AttachRigidBodyDetailed(
       observer_ptr<physics::PhysicsModule> { &physics_module }, node, desc);
     if (!attached.has_value()) {
@@ -1518,13 +1543,13 @@ void SceneLoaderService::HydrateRigidBodyBindings(
       = ReadHydrationWorldPose(node_index);
     desc.initial_position = initial_position;
     desc.initial_rotation = initial_rotation;
-    auto& node = runtime_nodes_[node_index];
+    auto& node = runtime_nodes_.at(node_index);
     const auto attached = physics::ScenePhysics::AttachRigidBodyDetailed(
       observer_ptr<physics::PhysicsModule> { &physics_module }, node, desc);
     if (!attached.has_value()) {
       const auto reason_text
         = std::string(physics::to_string(attached.error()));
-      const auto format_quat = [](const Quat& q) {
+      const auto format_quat = [](const Quat& q) -> std::string {
         return std::string("(") + std::to_string(q.w) + ", "
           + std::to_string(q.x) + ", " + std::to_string(q.y) + ", "
           + std::to_string(q.z) + ")";
@@ -1593,7 +1618,7 @@ void SceneLoaderService::HydrateCharacterBindings(
       = ReadHydrationWorldPose(node_index);
     desc.initial_position = initial_position;
     desc.initial_rotation = initial_rotation;
-    auto& node = runtime_nodes_[node_index];
+    auto& node = runtime_nodes_.at(node_index);
     const auto attached = physics::ScenePhysics::AttachCharacterDetailed(
       observer_ptr<physics::PhysicsModule> { &physics_module }, node, desc);
     if (!attached.has_value()) {
@@ -1615,7 +1640,7 @@ void SceneLoaderService::HydrateSoftBodyBindings(
     throw std::runtime_error(
       "soft-body hydration requires a valid physics world");
   }
-  if (!current_physics_context_asset_key_.has_value()) {
+  if (!current_physics_context_) {
     throw std::runtime_error(
       "soft-body hydration requires active physics hydration context");
   }
@@ -1661,13 +1686,13 @@ void SceneLoaderService::HydrateSoftBodyBindings(
     }
 
     const auto validate_non_negative_finite
-      = [&](const float value, const std::string_view field) {
-          if (!std::isfinite(value) || value < 0.0F) {
-            throw std::runtime_error(std::string("soft-body ")
-              + std::string(field) + " must be finite and >= 0 (node_index="
-              + std::to_string(record.node_index) + ")");
-          }
-        };
+      = [&](const float value, const std::string_view field) -> void {
+      if (!std::isfinite(value) || value < 0.0F) {
+        throw std::runtime_error(std::string("soft-body ") + std::string(field)
+          + " must be finite and >= 0 (node_index="
+          + std::to_string(record.node_index) + ")");
+      }
+    };
     validate_non_negative_finite(record.edge_compliance, "edge_compliance");
     validate_non_negative_finite(record.shear_compliance, "shear_compliance");
     validate_non_negative_finite(record.bend_compliance, "bend_compliance");
@@ -1713,7 +1738,7 @@ void SceneLoaderService::HydrateSoftBodyBindings(
 
     const auto settings_resource_key_opt
       = loader_.MakePhysicsResourceKeyForAsset(
-        *current_physics_context_asset_key_, selected_settings_asset_key);
+        *current_physics_context_, selected_settings_asset_key);
     if (!settings_resource_key_opt.has_value()) {
       throw std::runtime_error(
         std::string("soft-body selected settings resource key could not be "
@@ -1723,7 +1748,7 @@ void SceneLoaderService::HydrateSoftBodyBindings(
         + " backend=" + selected_backend_name + ")");
     }
     const auto settings_resource
-      = loader_.GetPhysicsResource(*settings_resource_key_opt);
+      = FindHydrationPayload(*settings_resource_key_opt);
     if (!settings_resource) {
       throw std::runtime_error(
         std::string("soft-body settings resource is not loaded ")
@@ -1768,7 +1793,7 @@ void SceneLoaderService::HydrateSoftBodyBindings(
     desc.gravity_factor = runtime_gravity_factor;
     const auto [initial_position, initial_rotation]
       = ReadHydrationWorldPose(node_index);
-    auto& node = runtime_nodes_[node_index];
+    auto& node = runtime_nodes_.at(node_index);
     desc.settings_scale = oxygen::Vec3 { 1.0F, 1.0F, 1.0F };
     desc.collision_layer = physics::CollisionLayer { static_cast<uint32_t>(
       record.collision_layer) };
@@ -1861,7 +1886,7 @@ void SceneLoaderService::HydrateVehicleBindings(
     throw std::runtime_error(
       "vehicle hydration requires a valid physics world");
   }
-  if (!current_physics_context_asset_key_.has_value()) {
+  if (!current_physics_context_) {
     throw std::runtime_error(
       "vehicle hydration requires active physics hydration context");
   }
@@ -1897,15 +1922,14 @@ void SceneLoaderService::HydrateVehicleBindings(
     }
 
     const auto resource_key_opt = loader_.MakePhysicsResourceKeyForAsset(
-      *current_physics_context_asset_key_, record.constraint_asset_key);
+      *current_physics_context_, record.constraint_asset_key);
     if (!resource_key_opt.has_value()) {
       throw std::runtime_error(
         std::string("vehicle constraint_asset_key could not be resolved ")
         + "(node_index=" + std::to_string(record.node_index)
         + " asset_key=" + data::to_string(record.constraint_asset_key) + ")");
     }
-    const auto constraint_resource
-      = loader_.GetPhysicsResource(*resource_key_opt);
+    const auto constraint_resource = FindHydrationPayload(*resource_key_opt);
     if (!constraint_resource) {
       throw std::runtime_error(
         std::string("vehicle constraint resource is not loaded ")
@@ -1931,7 +1955,7 @@ void SceneLoaderService::HydrateVehicleBindings(
 
     const auto chassis_body = physics::ScenePhysics::GetRigidBody(
       observer_ptr<physics::PhysicsModule> { &physics_module },
-      runtime_nodes_[chassis_node_index].GetHandle());
+      runtime_nodes_.at(chassis_node_index).GetHandle());
     if (!chassis_body.has_value()) {
       throw std::runtime_error(
         std::string("vehicle chassis node does not have a rigid body ")
@@ -1986,7 +2010,8 @@ void SceneLoaderService::HydrateVehicleBindings(
       = std::vector<data::pak::physics::VehicleWheelBindingRecord> {};
     wheel_records_for_vehicle.reserve(wheel_slice_count);
     for (size_t i = 0; i < wheel_slice_count; ++i) {
-      const auto& wheel_binding = wheel_bindings[wheel_slice_offset + i];
+      const auto& wheel_binding
+        = oxygen::base::CheckedAt(wheel_bindings, wheel_slice_offset + i);
       if (wheel_binding.vehicle_node_index != record.node_index) {
         throw std::runtime_error(
           std::string("vehicle wheel slice references mismatched chassis node ")
@@ -2018,7 +2043,7 @@ void SceneLoaderService::HydrateVehicleBindings(
 
       const auto wheel_body = physics::ScenePhysics::GetRigidBody(
         observer_ptr<physics::PhysicsModule> { &physics_module },
-        runtime_nodes_[wheel_node_index].GetHandle());
+        runtime_nodes_.at(wheel_node_index).GetHandle());
       if (!wheel_body.has_value()) {
         throw std::runtime_error(
           std::string("vehicle wheel node does not have a rigid body ")
@@ -2119,7 +2144,7 @@ void SceneLoaderService::HydrateVehicleBindings(
     }
 
     const auto mapping_node_handle
-      = runtime_nodes_[chassis_node_index].GetHandle();
+      = runtime_nodes_.at(chassis_node_index).GetHandle();
     if (const auto existing_node
       = physics_module.GetNodeForAggregateId(created.value());
       existing_node.has_value() && *existing_node != mapping_node_handle) {
@@ -2163,7 +2188,7 @@ void SceneLoaderService::HydrateAggregateBindings(
         + std::to_string(record.node_index));
     }
 
-    auto& root_node = runtime_nodes_[root_node_index];
+    auto& root_node = runtime_nodes_.at(root_node_index);
     if (physics::ScenePhysics::GetRigidBody(
           observer_ptr<physics::PhysicsModule> { &physics_module },
           root_node.GetHandle())
@@ -2206,7 +2231,7 @@ void SceneLoaderService::HydrateAggregateBindings(
 
       const auto rigid_body = physics::ScenePhysics::GetRigidBody(
         observer_ptr<physics::PhysicsModule> { &physics_module },
-        runtime_nodes_[member_node_index].GetHandle());
+        runtime_nodes_.at(member_node_index).GetHandle());
       if (!rigid_body.has_value()) {
         throw std::runtime_error(
           std::string("aggregate member node does not have a rigid body ")
@@ -2239,7 +2264,7 @@ void SceneLoaderService::HydrateAggregateBindings(
 
     const auto aggregate_id = created.value();
     auto keep_aggregate = false;
-    ScopeGuard destroy_on_failure([&]() noexcept {
+    ScopeGuard destroy_on_failure([&] noexcept -> void {
       if (!keep_aggregate) {
         (void)aggregate_api.DestroyAggregate(world_id, aggregate_id);
       }
@@ -2369,7 +2394,7 @@ auto SceneLoaderService::ReadHydrationWorldPose(const size_t node_index) const
       "hydration world-pose read node_index out of range");
   }
 
-  const auto node = runtime_nodes_[node_index];
+  const auto node = runtime_nodes_.at(node_index);
   const auto transform = node.GetTransform();
   const auto world_position = transform.GetWorldPosition();
   const auto world_rotation = transform.GetWorldRotation();
@@ -2406,29 +2431,15 @@ void SceneLoaderService::QueueGeometryDependencies(
   (void)asset;
   ready_ = true;
   pending_geometry_keys_.clear();
-  pinned_geometry_keys_.clear();
+  ready_geometry_keys_.clear();
 }
 
-/*!
- Release loader-held geometry references after scene instantiation.
-
- Geometry assets are pinned only for the narrow window between scene load
- completion and runtime scene construction. Releasing here restores
- normal cache eviction behavior without leaving stale loader references
- behind.
-
- ### Performance Characteristics
-
- - Time Complexity: $O(n)$ over pinned geometry keys.
- - Memory: Releases pin bookkeeping.
- - Optimization: Early-out when nothing is pinned.
-*/
-void SceneLoaderService::ReleasePinnedGeometryAssets()
+//! Clear readiness tracking; owning scene/renderable pointers retain geometry.
+void SceneLoaderService::ClearGeometryReadiness()
 {
-  // Intentionally non-destructive: geometry dependency ownership is tracked by
-  // AssetLoader's scene/material dependency graph, and explicit ReleaseAsset()
-  // here can tear down live dependency edges.
-  pinned_geometry_keys_.clear();
+  // Scene bindings and runtime renderables own the geometry pointers; this
+  // collection tracks readiness only.
+  ready_geometry_keys_.clear();
   pending_geometry_keys_.clear();
 }
 
@@ -2456,29 +2467,38 @@ auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
   SelectActiveCamera(asset);
   EnsureCameraAndViewport(scene);
   // Geometry pins are only needed until scene instantiation finishes.
-  ReleasePinnedGeometryAssets();
+  ClearGeometryReadiness();
   LogSceneHierarchy(scene);
 
   LOG_F(INFO, "SceneLoader: Runtime scene instantiation complete.");
   co_return std::move(active_camera_);
 }
 
-auto SceneLoaderService::PreloadPhysicsDependencyResources(
-  const data::PhysicsSceneAsset& physics_asset) -> co::Co<>
+auto SceneLoaderService::FindHydrationPayload(
+  const content::ResourceKey key) const noexcept
+  -> observer_ptr<const data::PhysicsResource>
 {
-  const auto context_asset_key = physics_asset.GetAssetKey();
+  const auto found = hydration_payloads_.find(key);
+  return observer_ptr<const data::PhysicsResource> {
+    found == hydration_payloads_.end() ? nullptr : found->second.get()
+  };
+}
 
+auto SceneLoaderService::PreloadPhysicsDependencyResources(
+  const data::PhysicsSceneAsset& physics_asset) -> co::Co<PhysicsPayloads>
+{
   std::unordered_set<data::AssetKey> payload_asset_keys {};
   auto collect_payload_ref = [&](const data::AssetKey& shape_asset_key,
                                const std::string_view binding_kind,
-                               const uint32_t node_index) {
+                               const uint32_t node_index) -> void {
     const auto shape_desc
       = ResolveCollisionShapeAsset(shape_asset_key, binding_kind, node_index);
     if (!shape_desc.cooked_shape_ref.payload_asset_key.IsNil()) {
       payload_asset_keys.insert(shape_desc.cooked_shape_ref.payload_asset_key);
     }
   };
-  auto collect_constraint_asset_key = [&](const data::AssetKey& asset_key) {
+  auto collect_constraint_asset_key
+    = [&](const data::AssetKey& asset_key) -> void {
     if (!asset_key.IsNil()) {
       payload_asset_keys.insert(asset_key);
     }
@@ -2492,6 +2512,10 @@ auto SceneLoaderService::PreloadPhysicsDependencyResources(
   for (const auto& record :
     physics_asset.GetBindings<data::pak::physics::CharacterBindingRecord>()) {
     collect_payload_ref(record.shape_asset_key, "character", record.node_index);
+    if (!record.inner_shape_asset_key.IsNil()) {
+      collect_payload_ref(record.inner_shape_asset_key, "character inner shape",
+        record.node_index);
+    }
   }
   for (const auto& record :
     physics_asset.GetBindings<data::pak::physics::ColliderBindingRecord>()) {
@@ -2510,9 +2534,11 @@ auto SceneLoaderService::PreloadPhysicsDependencyResources(
     collect_constraint_asset_key(record.topology_asset_key);
   }
 
+  PhysicsPayloads owners;
+  owners.reserve(payload_asset_keys.size());
   for (const auto& payload_asset_key : payload_asset_keys) {
     const auto resource_key_opt = loader_.MakePhysicsResourceKeyForAsset(
-      context_asset_key, payload_asset_key);
+      physics_asset, payload_asset_key);
     if (!resource_key_opt.has_value()) {
       throw std::runtime_error(
         std::string(
@@ -2526,20 +2552,24 @@ auto SceneLoaderService::PreloadPhysicsDependencyResources(
           "OXY-SHAPE-007: failed to preload physics payload resource ")
         + data::to_string(payload_asset_key));
     }
+    owners.emplace(*resource_key_opt, std::move(payload));
   }
+  co_return owners;
 }
 
 auto SceneLoaderService::HydratePhysicsSidecar(
   const data::PhysicsSceneAsset& physics_asset) -> co::Co<>
 {
-  current_physics_context_asset_key_ = physics_asset.GetAssetKey();
   BeginHydrationWindow();
-  ScopeGuard clear_context([this]() noexcept {
+  current_physics_context_ = observer_ptr { &physics_asset };
+  ScopeGuard clear_context([this] noexcept -> void {
+    hydration_payloads_.clear();
     EndHydrationWindow();
-    current_physics_context_asset_key_.reset();
+    current_physics_context_.reset();
   });
   ResolveHydrationTransforms();
-  co_await PreloadPhysicsDependencyResources(physics_asset);
+  hydration_payloads_
+    = co_await PreloadPhysicsDependencyResources(physics_asset);
   HydratePhysicsBindings(physics_asset);
   co_return;
 }
@@ -2548,10 +2578,10 @@ auto SceneLoaderService::BuildEnvironment(const data::SceneAsset& asset)
   -> std::unique_ptr<scene::SceneEnvironment>
 {
   auto metering_mask = content::ResourceKey {};
-  if (const auto post = asset.TryGetPostProcessVolumeEnvironment(); post
-    && post->auto_exposure_metering_mask != data::pak::core::kNoResourceIndex) {
+  if (const auto post = asset.TryGetPostProcessVolumeEnvironment();
+    post && post->auto_exposure_metering_mask != data::kNoResourceReference) {
     const auto key = loader_.MakeTextureResourceKeyForAsset(
-      asset.GetAssetKey(), post->auto_exposure_metering_mask);
+      asset, post->auto_exposure_metering_mask);
     if (!key) {
       throw std::runtime_error("Scene exposure mask binding failed: scene="
         + data::to_string(asset.GetAssetKey()) + " texture_index="
@@ -2600,7 +2630,7 @@ void SceneLoaderService::InstantiateNodes(
   runtime_nodes_.reserve(nodes.size());
 
   for (const auto i : std::views::iota(size_t { 0 }, nodes.size())) {
-    const NodeRecord& node = nodes[i];
+    const NodeRecord& node = oxygen::base::CheckedAt(nodes, i);
     const std::string name = MakeNodeName(asset.GetNodeName(node), i);
 
     auto n = scene.CreateNode(name, DecodeNodeFlags(node));
@@ -2621,7 +2651,8 @@ void SceneLoaderService::ApplyHierarchy(
   const auto nodes = asset.GetNodes();
 
   for (const auto i : std::views::iota(size_t { 0 }, nodes.size())) {
-    const auto parent_index = static_cast<size_t>(nodes[i].parent_index);
+    const auto parent_index
+      = static_cast<size_t>(oxygen::base::CheckedAt(nodes, i).parent_index);
     if (parent_index == i) {
       continue;
     }
@@ -2630,8 +2661,8 @@ void SceneLoaderService::ApplyHierarchy(
       continue;
     }
 
-    const bool ok = scene.ReparentNode(runtime_nodes_[i],
-      runtime_nodes_[parent_index], /*preserve_world_transform=*/false);
+    const bool ok = scene.ReparentNode(runtime_nodes_.at(i),
+      runtime_nodes_.at(parent_index), /*preserve_world_transform=*/false);
     if (!ok) {
       LOG_F(WARNING, "Failed to reparent node {} under {}", i, parent_index);
     }
@@ -2642,25 +2673,15 @@ void SceneLoaderService::AttachRenderables(const data::SceneAsset& asset)
 {
   using data::pak::world::RenderableRecord;
 
-  const auto ApplyMaterialOverride
-    = [](scene::SceneNode::Renderable renderable,
-        std::shared_ptr<const data::GeometryAsset> geometry,
-        std::shared_ptr<const data::MaterialAsset> material) {
-        if (!geometry || !material) {
-          return;
-        }
-        const auto meshes = geometry->Meshes();
-        for (std::size_t lod = 0; lod < meshes.size(); ++lod) {
-          const auto& mesh = meshes[lod];
-          if (!mesh) {
-            continue;
-          }
-          const auto submeshes = mesh->SubMeshes();
-          for (std::size_t submesh = 0; submesh < submeshes.size(); ++submesh) {
-            renderable.SetMaterialOverride(lod, submesh, material);
-          }
-        }
-      };
+  const auto assignments
+    = asset.GetComponents<data::pak::world::MaterialOverrideRecord>();
+  std::unordered_multimap<data::pak::world::SceneNodeIndexT,
+    const data::pak::world::MaterialOverrideRecord*>
+    assignments_by_node;
+  assignments_by_node.reserve(assignments.size());
+  for (const auto& assignment : assignments) {
+    assignments_by_node.emplace(assignment.node_index, &assignment);
+  }
 
   const auto renderables = asset.GetComponents<RenderableRecord>();
   int valid_renderables = 0;
@@ -2677,20 +2698,23 @@ void SceneLoaderService::AttachRenderables(const data::SceneAsset& asset)
     // AssetLoader guarantees dependencies are loaded (or placeholders are
     // ready). We retrieve the asset directly to support placeholders and
     // avoid redundant async waits.
-    auto geo = loader_.GetGeometryAsset(r.geometry_key);
+    auto geo = loader_.GetGeometryAsset(r.geometry_key, asset);
     if (geo) {
-      auto renderable = runtime_nodes_[node_index].GetRenderable();
+      auto renderable = runtime_nodes_.at(node_index).GetRenderable();
       renderable.SetGeometry(geo);
-      if (r.material_key != data::AssetKey {}) {
-        auto material = loader_.GetMaterialAsset(r.material_key);
-        if (material) {
-          ApplyMaterialOverride(renderable, geo, std::move(material));
-          material_overrides++;
-        } else {
-          LOG_F(WARNING,
-            "SceneLoader: Missing material override dependency for node {}",
-            node_index);
+      const auto [begin, end] = assignments_by_node.equal_range(r.node_index);
+      for (auto current = begin; current != end; ++current) {
+        const auto& assignment = *current->second;
+        auto material
+          = loader_.GetMaterialAsset(assignment.material_key, asset);
+        if (!material
+          || assignment.layout_revision != geo->MaterialSlots().layout_revision
+          || !renderable.SetMaterialOverride(
+            assignment.slot_id, std::move(material))) {
+          throw std::runtime_error(
+            "Scene material slot assignment is unavailable or stale");
         }
+        ++material_overrides;
       }
       valid_renderables++;
     } else {
@@ -2713,20 +2737,20 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
   using data::pak::world::PointLightRecord;
   using data::pak::world::SpotLightRecord;
 
-  const auto ApplyCommonLight =
-    [](scene::CommonLightProperties& dst,
-      const data::pak::world::LightCommonRecord& src) {
-      dst.affects_world = (src.affects_world != 0U);
-      dst.color_rgb = { src.color_rgb[0], src.color_rgb[1], src.color_rgb[2] };
-      // intensity REMOVED from common - set via specific light class methods
-      dst.casts_shadows = (src.casts_shadows != 0U);
-      dst.shadow.bias = src.shadow.bias;
-      dst.shadow.normal_bias = src.shadow.normal_bias;
-      dst.shadow.contact_shadows = (src.shadow.contact_shadows != 0U);
-      dst.shadow.resolution_hint
-        = static_cast<scene::ShadowResolutionHint>(src.shadow.resolution_hint);
-      dst.exposure_compensation_ev = src.exposure_compensation_ev;
-    };
+  const auto ApplyCommonLight
+    = [](scene::CommonLightProperties& dst,
+        const data::pak::world::LightCommonRecord& src) -> void {
+    dst.affects_world = (src.affects_world != 0U);
+    dst.color_rgb = { src.color_rgb[0], src.color_rgb[1], src.color_rgb[2] };
+    // intensity REMOVED from common - set via specific light class methods
+    dst.casts_shadows = (src.casts_shadows != 0U);
+    dst.shadow.bias = src.shadow.bias;
+    dst.shadow.normal_bias = src.shadow.normal_bias;
+    dst.shadow.contact_shadows = (src.shadow.contact_shadows != 0U);
+    dst.shadow.resolution_hint
+      = static_cast<scene::ShadowResolutionHint>(src.shadow.resolution_hint);
+    dst.exposure_compensation_ev = src.exposure_compensation_ev;
+  };
 
   int attached_directional = 0;
   for (const DirectionalLightRecord& rec :
@@ -2740,10 +2764,14 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
     ApplyCommonLight(light->Common(), rec.common);
     light->SetIntensityLux(rec.intensity_lux);
     light->SetAngularSizeRadians(rec.angular_size_radians);
-    light->SetAtmosphereLightSlot(static_cast<scene::AtmosphereLightSlot>(rec.atmosphere_light_slot));
-    light->SetUsePerPixelAtmosphereTransmittance(rec.use_per_pixel_atmosphere_transmittance != 0U);
-    light->SetAtmosphereDiskLuminanceScale({ rec.atmosphere_disk_luminance_scale_rgb[0],
-      rec.atmosphere_disk_luminance_scale_rgb[1], rec.atmosphere_disk_luminance_scale_rgb[2] });
+    light->SetAtmosphereLightSlot(
+      static_cast<scene::AtmosphereLightSlot>(rec.atmosphere_light_slot));
+    light->SetUsePerPixelAtmosphereTransmittance(
+      rec.use_per_pixel_atmosphere_transmittance != 0U);
+    light->SetAtmosphereDiskLuminanceScale(
+      { rec.atmosphere_disk_luminance_scale_rgb[0],
+        rec.atmosphere_disk_luminance_scale_rgb[1],
+        rec.atmosphere_disk_luminance_scale_rgb[2] });
 
     auto& csm = light->CascadedShadows();
     csm.cascade_count = std::clamp<std::uint32_t>(
@@ -2753,7 +2781,7 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
     csm.max_shadow_distance = rec.max_shadow_distance;
     for (std::uint32_t i = 0U; i < scene::kMaxShadowCascades; ++i) {
       // NOLINTNEXTLINE(*-pro-bounds-constant-array-index)
-      csm.cascade_distances[i] = rec.cascade_distances[i];
+      csm.cascade_distances.at(i) = rec.cascade_distances[i];
     }
     csm.distribution_exponent = rec.distribution_exponent;
     csm.transition_fraction = rec.transition_fraction;
@@ -2761,7 +2789,7 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
     light->CascadedShadows() = scene::CanonicalizeCascadedShadowSettings(csm);
 
     const bool attached
-      = runtime_nodes_[node_index].ReplaceLight(std::move(light));
+      = runtime_nodes_.at(node_index).ReplaceLight(std::move(light));
     if (attached) {
       attached_directional++;
     } else {
@@ -2785,7 +2813,7 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
     light->SetSourceRadius(std::abs(rec.source_radius));
 
     const bool attached
-      = runtime_nodes_[node_index].ReplaceLight(std::move(light));
+      = runtime_nodes_.at(node_index).ReplaceLight(std::move(light));
     if (attached) {
       attached_point++;
     } else {
@@ -2811,7 +2839,7 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
     light->SetSourceRadius(std::abs(rec.source_radius));
 
     const bool attached
-      = runtime_nodes_[node_index].ReplaceLight(std::move(light));
+      = runtime_nodes_.at(node_index).ReplaceLight(std::move(light));
     if (attached) {
       attached_spot++;
     } else {
@@ -2841,7 +2869,7 @@ void SceneLoaderService::AttachLocalFogVolumes(const data::SceneAsset& asset)
       continue;
     }
 
-    const auto impl_opt = runtime_nodes_[node_index].GetImpl();
+    const auto impl_opt = runtime_nodes_.at(node_index).GetImpl();
     if (!impl_opt.has_value()) {
       continue;
     }
@@ -2892,15 +2920,15 @@ void SceneLoaderService::AttachScripting(const data::SceneAsset& asset)
       continue;
     }
 
-    if (!runtime_nodes_[node_index].HasScripting()) {
-      const bool attached = runtime_nodes_[node_index].AttachScripting();
-      if (!attached && !runtime_nodes_[node_index].HasScripting()) {
+    if (!runtime_nodes_.at(node_index).HasScripting()) {
+      const bool attached = runtime_nodes_.at(node_index).AttachScripting();
+      if (!attached && !runtime_nodes_.at(node_index).HasScripting()) {
         LOG_F(
           ERROR, "failed to attach scripting component to node {}", node_index);
         continue;
       }
     }
-    auto scripting = runtime_nodes_[node_index].GetScripting();
+    auto scripting = runtime_nodes_.at(node_index).GetScripting();
     auto slot_records = loader_.GetHydratedScriptSlots(asset, component);
     LOG_F(INFO, "hydrated script slots (node_index={}, slots={})", node_index,
       slot_records.size());
@@ -2914,7 +2942,8 @@ void SceneLoaderService::AttachScripting(const data::SceneAsset& asset)
         continue;
       }
 
-      auto script_asset = loader_.GetScriptAsset(slot_record.script_asset_key);
+      auto script_asset
+        = loader_.GetScriptAsset(slot_record.script_asset_key, asset);
       if (!script_asset) {
         LOG_F(ERROR, "missing script asset {}",
           data::to_string(slot_record.script_asset_key));
@@ -2941,7 +2970,7 @@ void SceneLoaderService::AttachScripting(const data::SceneAsset& asset)
       }
 
       QueueSlotCompilation(
-        runtime_nodes_[node_index], slot, std::move(script_asset));
+        runtime_nodes_.at(node_index), slot, std::move(script_asset));
     }
   }
 }
@@ -2986,15 +3015,15 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
   }
 
   auto load_script_resource
-    = [this, context_asset_key = script_asset->GetAssetKey()](
-        const uint32_t index) -> std::shared_ptr<const data::ScriptResource> {
-    return ReadScriptResource(index, context_asset_key);
+    = [this, script_asset](const data::ResourceReferenceIndex index)
+    -> std::shared_ptr<const data::ScriptResource> {
+    return ReadScriptResource(index, *script_asset);
   };
 
   auto map_origin
-    = [this, context_asset_key = script_asset->GetAssetKey()](
-        const uint32_t index) -> std::optional<scripting::ScriptBlobOrigin> {
-    if (auto res = ReadScriptResource(index, context_asset_key)) {
+    = [this, script_asset](const data::ResourceReferenceIndex index)
+    -> std::optional<scripting::ScriptBlobOrigin> {
+    if (auto res = ReadScriptResource(index, *script_asset)) {
       return scripting::ScriptBlobOrigin::kEmbeddedResource;
     }
     return std::nullopt;
@@ -3058,12 +3087,14 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
   const auto is_bytecode
     = std::holds_alternative<scripting::ScriptBytecodeBlob>(resolved_blob);
   const auto origin = std::visit(
-    [](const auto& blob) { return static_cast<uint32_t>(blob.GetOrigin()); },
+    [](const auto& blob) -> auto {
+      return static_cast<uint32_t>(blob.GetOrigin());
+    },
     resolved_blob);
-  const auto size
-    = std::visit([](const auto& blob) { return blob.Size(); }, resolved_blob);
+  const auto size = std::visit(
+    [](const auto& blob) -> auto { return blob.Size(); }, resolved_blob);
   const auto bytes = std::visit(
-    [](const auto& blob) { return blob.BytesView(); }, resolved_blob);
+    [](const auto& blob) -> auto { return blob.BytesView(); }, resolved_blob);
   LOG_F(INFO,
     "resolved script source (asset_key={}, origin={}, bytecode={}, size={})",
     data::to_string(script_asset->GetAssetKey()), origin,
@@ -3114,26 +3145,26 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
       .compile_mode = kCompileMode,
     },
     scripting::IScriptCompilationService::SlotAcquireCallbacks {
-      .on_ready =
-        [node, slot](std::shared_ptr<const scripting::ScriptBytecodeBlob>
-            bytecode) mutable {
-          if (node.IsAlive()) {
-            auto scripting = node.GetScripting();
-            (void)scripting.MarkSlotReady(slot,
-              std::make_shared<const scripting::CompiledScriptExecutable>(
-                std::move(bytecode)));
-            LOG_F(INFO, "slot ready from compilation");
-          }
-        },
-      .on_failed =
-        [node, slot](std::string diagnostic) mutable {
-          if (node.IsAlive()) {
-            auto scripting = node.GetScripting();
-            LOG_F(ERROR, "script compilation failed: {}", diagnostic);
-            (void)scripting.MarkSlotCompilationFailed(
-              slot, std::move(diagnostic));
-          }
-        },
+      .on_ready
+      = [node, slot](
+          std::shared_ptr<const scripting::ScriptBytecodeBlob> bytecode) mutable
+        -> void {
+        if (node.IsAlive()) {
+          auto scripting = node.GetScripting();
+          (void)scripting.MarkSlotReady(slot,
+            std::make_shared<const scripting::CompiledScriptExecutable>(
+              std::move(bytecode)));
+          LOG_F(INFO, "slot ready from compilation");
+        }
+      },
+      .on_failed = [node, slot](std::string diagnostic) mutable -> void {
+        if (node.IsAlive()) {
+          auto scripting = node.GetScripting();
+          LOG_F(ERROR, "script compilation failed: {}", diagnostic);
+          (void)scripting.MarkSlotCompilationFailed(
+            slot, std::move(diagnostic));
+        }
+      },
     });
   (void)acquire;
   LOG_F(INFO,
@@ -3146,121 +3177,54 @@ void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)
   using data::pak::world::OrthographicCameraRecord;
   using data::pak::world::PerspectiveCameraRecord;
 
-  const auto perspective_cams = asset.GetComponents<PerspectiveCameraRecord>();
-  if (!perspective_cams.empty()) {
-    LOG_F(INFO, "SceneLoader: Found {} perspective camera(s)",
-      perspective_cams.size());
-    const auto& rec = perspective_cams.front();
-    const auto node_index = static_cast<size_t>(rec.node_index);
-    if (node_index < runtime_nodes_.size()) {
-      active_camera_ = runtime_nodes_[node_index];
-      LOG_F(INFO,
-        "SceneLoader: Using perspective camera node_index={} name='{}'",
-        rec.node_index, active_camera_.GetName().c_str());
-      if (!active_camera_.HasCamera()) {
-        auto cam = std::make_unique<scene::PerspectiveCamera>();
-        const bool attached = active_camera_.AttachCamera(std::move(cam));
-        CHECK_F(
-          attached, "Failed to attach PerspectiveCamera to scene camera node");
-      }
-      if (auto cam_ref = active_camera_.GetCameraAs<scene::PerspectiveCamera>();
-        cam_ref) {
-        auto& cam = cam_ref->get();
-        float near_plane = std::abs(rec.near_plane);
-        float far_plane = std::abs(rec.far_plane);
-        if (far_plane < near_plane) {
-          std::swap(far_plane, near_plane);
-        }
-        cam.SetExposure({ .aperture_f = rec.aperture_f,
-          .shutter_rate = rec.shutter_rate,
-          .iso = rec.iso });
-        cam.SetFieldOfView(rec.fov_y);
-        cam.SetNearPlane(near_plane);
-        cam.SetFarPlane(far_plane);
-
-        const float fov_y_deg
-          = rec.fov_y * (180.0F / std::numbers::pi_v<float>);
-        LOG_F(INFO,
-          "SceneLoader: Applied perspective camera params fov_y_deg={} "
-          "near={} far={} aspect_hint={} aperture_f={} shutter_rate={} ISO={}",
-          fov_y_deg, near_plane, far_plane, rec.aspect_ratio, rec.aperture_f,
-          rec.shutter_rate, rec.iso);
-
-        auto tf = active_camera_.GetTransform();
-        glm::vec3 cam_pos { 0.0F, 0.0F, 0.0F };
-        glm::quat cam_rot { 1.0F, 0.0F, 0.0F, 0.0F };
-        if (auto lp = tf.GetLocalPosition()) {
-          cam_pos = *lp;
-        }
-        if (auto lr = tf.GetLocalRotation()) {
-          cam_rot = *lr;
-        }
-        const glm::vec3 forward = cam_rot * space::look::Forward;
-        const glm::vec3 up = cam_rot * space::look::Up;
-        LOG_F(INFO,
-          "SceneLoader: Camera local pose pos=({:.3F}, {:.3F}, {:.3F}) "
-          "forward=({:.3F}, {:.3F}, {:.3F}) up=({:.3F}, {:.3F}, {:.3F})",
-          cam_pos.x, cam_pos.y, cam_pos.z, forward.x, forward.y, forward.z,
-          up.x, up.y, up.z);
-      }
+  for (const auto& record : asset.GetComponents<PerspectiveCameraRecord>()) {
+    auto& node = runtime_nodes_.at(record.node_index);
+    auto camera = std::make_unique<scene::PerspectiveCamera>();
+    camera->SetFieldOfView(record.fov_y);
+    camera->SetAspectRatio(record.aspect_ratio);
+    camera->SetAspectMode(record.aspect_mode);
+    camera->SetNearPlane(record.near_plane);
+    camera->SetFarPlane(record.far_plane);
+    camera->SetExposure({
+      .aperture_f = record.aperture_f,
+      .shutter_rate = record.shutter_rate,
+      .iso = record.iso,
+    });
+    const bool attached = node.AttachCamera(std::move(camera));
+    CHECK_F(attached, "Failed to hydrate perspective camera");
+    if (!active_camera_.IsAlive()) {
+      active_camera_ = node;
     }
   }
 
-  if (!active_camera_.IsAlive()) {
-    const auto ortho_cams = asset.GetComponents<OrthographicCameraRecord>();
-    if (!ortho_cams.empty()) {
-      LOG_F(INFO, "SceneLoader: Found {} orthographic camera(s)",
-        ortho_cams.size());
-      const auto& rec = ortho_cams.front();
-      const auto node_index = static_cast<size_t>(rec.node_index);
-      if (node_index < runtime_nodes_.size()) {
-        active_camera_ = runtime_nodes_[node_index];
-        LOG_F(INFO,
-          "SceneLoader: Using orthographic camera node_index={} name='{}'",
-          rec.node_index, active_camera_.GetName().c_str());
-        if (!active_camera_.HasCamera()) {
-          auto cam = std::make_unique<scene::OrthographicCamera>();
-          const bool attached = active_camera_.AttachCamera(std::move(cam));
-          CHECK_F(attached,
-            "Failed to attach OrthographicCamera to scene camera node");
-        }
-        if (auto cam_ref
-          = active_camera_.GetCameraAs<scene::OrthographicCamera>();
-          cam_ref) {
-          float near_plane = std::abs(rec.near_plane);
-          float far_plane = std::abs(rec.far_plane);
-          if (far_plane < near_plane) {
-            std::swap(far_plane, near_plane);
-          }
-          cam_ref->get().SetExposure({ .aperture_f = rec.aperture_f,
-            .shutter_rate = rec.shutter_rate,
-            .iso = rec.iso });
-          cam_ref->get().SetExtents(
-            rec.left, rec.right, rec.bottom, rec.top, near_plane, far_plane);
-          LOG_F(INFO,
-            "SceneLoader: Applied orthographic camera extents l={} r={} "
-            "b={} "
-            "t={} near={} far={} aperture_f={} shutter_rate={} ISO={}",
-            rec.left, rec.right, rec.bottom, rec.top, near_plane, far_plane,
-            rec.aperture_f, rec.shutter_rate, rec.iso);
-        }
-      }
+  for (const auto& record : asset.GetComponents<OrthographicCameraRecord>()) {
+    auto& node = runtime_nodes_.at(record.node_index);
+    auto camera = std::make_unique<scene::OrthographicCamera>();
+    camera->SetExtents(record.left, record.right, record.bottom, record.top,
+      record.near_plane, record.far_plane);
+    camera->SetExposure({
+      .aperture_f = record.aperture_f,
+      .shutter_rate = record.shutter_rate,
+      .iso = record.iso,
+    });
+    const bool attached = node.AttachCamera(std::move(camera));
+    CHECK_F(attached, "Failed to hydrate orthographic camera");
+    if (!active_camera_.IsAlive()) {
+      active_camera_ = node;
     }
   }
 }
 
 void SceneLoaderService::EnsureCameraAndViewport(scene::Scene& scene)
 {
-  const float aspect = extent_.height > 0
-    ? (static_cast<float>(extent_.width) / static_cast<float>(extent_.height))
-    : 1.0F;
-
-  const ViewPort viewport { .top_left_x = 0.0F,
+  const ViewPort viewport {
+    .top_left_x = 0.0F,
     .top_left_y = 0.0F,
     .width = static_cast<float>(extent_.width),
     .height = static_cast<float>(extent_.height),
     .min_depth = 0.0F,
-    .max_depth = 1.0F };
+    .max_depth = 1.0F,
+  };
 
   if (!active_camera_.IsAlive()) {
     active_camera_ = scene.CreateNode("MainCamera");
@@ -3270,10 +3234,10 @@ void SceneLoaderService::EnsureCameraAndViewport(scene::Scene& scene)
     tf.SetLocalPosition(cam_pos);
     tf.SetLocalRotation(MakeLookRotationFromPosition(cam_pos, cam_target));
     const auto handle = active_camera_.GetHandle();
-    const bool already_tracked
-      = std::ranges::any_of(runtime_nodes_, [&](const scene::SceneNode& node) {
-          return node.IsAlive() && node.GetHandle() == handle;
-        });
+    const bool already_tracked = std::ranges::any_of(
+      runtime_nodes_, [&](const scene::SceneNode& node) -> bool {
+        return node.IsAlive() && node.GetHandle() == handle;
+      });
     if (!already_tracked) {
       runtime_nodes_.push_back(active_camera_);
     }
@@ -3289,7 +3253,6 @@ void SceneLoaderService::EnsureCameraAndViewport(scene::Scene& scene)
   if (auto cam_ref = active_camera_.GetCameraAs<scene::PerspectiveCamera>();
     cam_ref) {
     auto& cam = cam_ref->get();
-    cam.SetAspectRatio(aspect);
     cam.SetViewport(viewport);
     return;
   }
@@ -3305,7 +3268,8 @@ void SceneLoaderService::LogSceneHierarchy(const scene::Scene& scene)
   LOG_F(INFO, "SceneLoader: Runtime scene hierarchy:");
   std::unordered_set<scene::NodeHandle> visited_nodes;
   visited_nodes.reserve(runtime_nodes_.size());
-  const auto PrintNodeLine = [](scene::SceneNode& node, const int depth) {
+  const auto PrintNodeLine
+    = [](scene::SceneNode& node, const int depth) -> void {
     const std::string indent(static_cast<size_t>(depth * 2), ' ');
     const bool has_renderable = node.GetRenderable().HasGeometry();
     const bool has_camera = node.HasCamera();
@@ -3356,29 +3320,29 @@ void SceneLoaderService::LogSceneHierarchy(const scene::Scene& scene)
   }
 }
 
-auto SceneLoaderService::ReadScriptResource(
-  uint32_t index, const data::AssetKey& context_asset_key) const
+auto SceneLoaderService::ReadScriptResource(data::ResourceReferenceIndex index,
+  const data::ScriptAsset& context_asset) const
   -> std::shared_ptr<const data::ScriptResource>
 {
-  const auto resource_key_opt = loader_.MakeScriptResourceKeyForAsset(
-    context_asset_key, data::pak::core::ResourceIndexT { index });
+  const auto resource_key_opt
+    = loader_.MakeScriptResourceKeyForAsset(context_asset, index);
   if (!resource_key_opt.has_value()) {
     LOG_F(WARNING,
       "failed to resolve script resource key (context_asset={} index={})",
-      data::to_string(context_asset_key), index);
+      data::to_string(context_asset.GetAssetKey()), index);
     return nullptr;
   }
 
   auto resource = loader_.GetScriptResource(*resource_key_opt);
   if (!resource) {
     resource = std::const_pointer_cast<data::ScriptResource>(
-      loader_.ReadScriptResourceForAsset(
-        context_asset_key, data::pak::core::ResourceIndexT { index }));
+      loader_.ReadScriptResourceForAsset(context_asset, index));
   }
   if (!resource) {
     LOG_F(WARNING,
       "script resource unavailable (context_asset={} index={} key={:#x})",
-      data::to_string(context_asset_key), index, resource_key_opt->get());
+      data::to_string(context_asset.GetAssetKey()), index,
+      resource_key_opt->get());
   }
   return resource;
 }

@@ -13,6 +13,7 @@ m_gtest_program(
 )
 
 m_gtest_program(SettingsService SOURCES "SettingsService_test.cpp")
+m_gtest_program(ContentVm SOURCES "ContentVm_test.cpp")
 
 m_gtest_program(ConsoleDefaults SOURCES "DemoShellConsoleDefaults_test.cpp")
 m_gtest_program(PostProcessConsole SOURCES "PostProcessConsole_test.cpp")

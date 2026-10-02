@@ -2,7 +2,8 @@
 
 This document captures a refactoring direction for `Oxygen.Editor.ContentBrowser` so it can evolve into the UI side of the Oxygen asset/content pipeline.
 
-This document is the detailed, trackable source of truth for Content Browser implementation tasks. The pipeline-level milestone is tracked in `projects/Oxygen.Managed.Assets/docs/content-pipeline-design.md`.
+Current pipeline integration and validation are tracked in
+[ED-M08](../../../design/editor/plan/ED-M08-runtime-parity-and-standalone-validation.md).
 
 ## Goals
 
@@ -133,7 +134,7 @@ The Content Browser needs two different kinds of persistence, and they should be
 
 - Persist a compact “last session” snapshot per project.
 - `Oxygen.Editor.Data.Services.IProjectUsageService` already supports `UpdateContentBrowserStateAsync(...)` and the `ProjectsUsage.ContentBrowserState` field exists for this purpose.
-- Treat this as a *session restoration payload*: last active folder, last selected asset (optional), view mode, and key layout splits.
+- Treat this as a _session restoration payload_: last active folder, last selected asset (optional), view mode, and key layout splits.
 
 #### Important constraints and patterns
 
@@ -145,7 +146,7 @@ The Content Browser needs two different kinds of persistence, and they should be
 ### 8) Undo/Redo integration (TimeMachine)
 
 The content browser will eventually perform asset operations that must be undoable (rename/move/delete/import/reimport/cook/validate in editor workflows).
-TimeMachine is a good fit, but it impacts *where* mutations live and *how* they are expressed.
+TimeMachine is a good fit, but it impacts _where_ mutations live and _how_ they are expressed.
 
 #### What should be undoable
 
@@ -160,8 +161,8 @@ TimeMachine is a good fit, but it impacts *where* mutations live and *how* they 
 
 - Undo/redo integration should live in the **Application layer**, not in Views.
 - Actions that mutate state should:
-  1) perform the mutation now,
-  2) immediately register the inverse with a `HistoryKeeper`.
+  1. perform the mutation now,
+  2. immediately register the inverse with a `HistoryKeeper`.
 - Multi-item operations should be wrapped in a TimeMachine transaction so they appear as a single undo step.
 
 #### Choosing an undo root
@@ -172,10 +173,10 @@ TimeMachine is a good fit, but it impacts *where* mutations live and *how* they 
 
 ## Integration priorities for the Oxygen asset pipeline
 
-1) **Catalog & identity:** move UI to `AssetKey`/`VirtualPath` as soon as `Oxygen.Managed.Assets.Model` has them.
-2) **Operations:** add action entry points for import/reimport/cook/validate; UI wires to those commands.
-3) **Diagnostics-first:** surface validation/cook errors as first-class badges + a details panel/log stream.
-4) **Scalability:** virtualized asset lists, throttled change streams, incremental queries.
+1. **Catalog & identity:** move UI to `AssetKey`/`VirtualPath` as soon as `Oxygen.Managed.Assets.Model` has them.
+2. **Operations:** add action entry points for import/reimport/cook/validate; UI wires to those commands.
+3. **Diagnostics-first:** surface validation/cook errors as first-class badges + a details panel/log stream.
+4. **Scalability:** virtualized asset lists, throttled change streams, incremental queries.
 
 ## Migration strategy (phased)
 
@@ -187,8 +188,8 @@ TimeMachine is a good fit, but it impacts *where* mutations live and *how* they 
 
 ## Trackable tasks
 
-1. [X] Define a target folder layout and move files into `Shell/`, `Panes/`, `Infrastructure/Assets/`, `State/`, `Models/`, `Messages/` without behavior changes.
-2. [X] Extract URL/query-param parsing into a single route/state adapter (keep it in an existing namespace, e.g. `Oxygen.Editor.ContentBrowser.Shell`) so string paths stay at one boundary.
+1. [x] Define a target folder layout and move files into `Shell/`, `Panes/`, `Infrastructure/Assets/`, `State/`, `Models/`, `Messages/` without behavior changes.
+2. [x] Extract URL/query-param parsing into a single route/state adapter (keep it in an existing namespace, e.g. `Oxygen.Editor.ContentBrowser.Shell`) so string paths stay at one boundary.
 3. [ ] Add `OpenAssetAction` and route all item invocation through it (no asset-type switch in viewmodels).
 4. [ ] Add `NavigateToFolderAction` and route all folder navigation through it (single place updates state/router).
 5. [ ] Add `CreateSceneAction` and route scene creation through it.

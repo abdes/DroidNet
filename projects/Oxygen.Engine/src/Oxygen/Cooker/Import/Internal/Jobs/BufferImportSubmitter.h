@@ -8,15 +8,15 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
 
-#include <nlohmann/json_fwd.hpp>
-
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Import/Internal/BufferSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/OxCo/Co.h>
@@ -56,9 +56,9 @@ public:
   BufferImportSubmitter(ImportSession& session, const ImportRequest& request,
     observer_ptr<IAsyncFileReader> reader, std::stop_token stop_token);
 
-  [[nodiscard]] auto SubmitBufferChunks(const nlohmann::json& buffer_chunks,
-    const std::filesystem::path& descriptor_dir, BufferPipeline& pipeline,
-    std::string_view object_path_prefix = "buffers") -> co::Co<Submission>;
+  [[nodiscard]] auto SubmitBuffers(
+    std::span<const internal::BufferSource> entries, BufferPipeline& pipeline)
+    -> co::Co<Submission>;
 
   [[nodiscard]] auto CollectAndEmit(BufferPipeline& pipeline,
     const Submission& submission) -> co::Co<std::vector<EmittedBuffer>>;

@@ -5,13 +5,21 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
+#include <functional>
+#include <optional>
 #include <stdexcept>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Data/Asset.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ScriptAsset.h>
+#include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::data {
 
@@ -56,8 +64,9 @@ static_assert(std::is_trivially_copyable_v<pak::scripting::ScriptAssetDesc>,
 
 ScriptAsset::ScriptAsset(AssetKey asset_key,
   pak::scripting::ScriptAssetDesc desc,
-  const std::vector<pak::scripting::ScriptParamRecord>& params)
-  : Asset(asset_key)
+  const std::vector<pak::scripting::ScriptParamRecord>& params,
+  SourceOrigin source_origin)
+  : Asset(asset_key, source_origin)
   , desc_(desc)
 {
   params_.reserve(params.size());

@@ -9,8 +9,12 @@ using Oxygen.Managed.Core.Compatibility;
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>Uses the installed Inspector under the same native ownership boundary as cooking.</summary>
-public sealed partial class ImportToolContentPipelineApi : ICookedDependencyInspector, ICookedAssetKeyProvider
+public sealed partial class ImportToolContentPipelineApi : ICookedDependencyInspector, ICookedAssetKeyProvider, ICookedGeometryInspector
 {
+    /// <inheritdoc />
+    public Task<CookedGeometryReport> InspectGeometryAsync(string operationRoot, string cookedRoot, string virtualPath, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
+        => this.RunInspectorAsync(operationRoot, ["geometries", Path.GetFullPath(cookedRoot), "--virtual-path", virtualPath], request: null, CookedGeometryReport.Parse, artifacts, cancellationToken);
+
     /// <inheritdoc />
     public Task<CookedDependencyReport> InspectDependenciesAsync(string operationRoot, string cookedRoot, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
         => this.RunInspectorAsync(operationRoot, ["dependencies", Path.GetFullPath(cookedRoot)], request: null, CookedDependencyReport.Parse, artifacts, cancellationToken);
@@ -23,6 +27,16 @@ public sealed partial class ImportToolContentPipelineApi : ICookedDependencyInsp
         report.ValidatePaths(virtualPaths);
         return report;
     }
+
+    /// <inheritdoc />
+    public Task<CookedInventoryReport> ReadInventoryAsync(string cookedRoot, NativeArtifactLease? artifacts, CancellationToken cancellationToken)
+        => this.RunInspectorAsync(
+            Path.Combine(Path.GetTempPath(), "Oxygen", "ContentInventory"),
+            ["inventory", Path.GetFullPath(cookedRoot)],
+            request: null,
+            CookedInventoryReport.Parse,
+            artifacts,
+            cancellationToken);
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Failed termination transfers the Inspector handle to the returned worker-drain continuation; ordinary completion awaits disposal in finally.")]
     private async Task<T> RunInspectorAsync<T>(string operationRoot, IReadOnlyList<string> arguments, string? request, Func<string, T> parse, NativeArtifactLease? artifacts, CancellationToken cancellationToken)
@@ -59,7 +73,7 @@ public sealed partial class ImportToolContentPipelineApi : ICookedDependencyInsp
         }
         catch (ContentPipelineTerminationException failure)
         {
-            drain = ReleaseAfterWorkerDrainAsync(failure.DrainCompletion, output, artifacts is null ? compatible : null, additionalPath: input, additionalLease: inspector);
+            drain = ReleaseAfterWorkerDrainAsync(failure.DrainCompletion, input is null ? [output] : [output, input], artifacts is null ? compatible : null, additionalLease: inspector);
             inspector = null;
             throw new ContentPipelineTerminationException(failure.InnerException ?? failure, drain);
         }

@@ -10,14 +10,14 @@
 #include <stdexcept>
 #include <vector>
 
+#include "../Mocks/MockStream.h"
+
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
-
-#include "../Mocks/MockStream.h"
 
 namespace oxygen::content::testing {
 
@@ -141,6 +141,8 @@ protected:
     desc.header.version = pak7::kPhysicsSceneAssetVersion;
     desc.component_table_count = 0;
     desc.component_table_directory_offset = 0;
+    desc.target_scene_key
+      = oxygen::data::AssetKey::FromVirtualPath("/Test/PhysicsScene.oscene");
     return desc;
   }
 

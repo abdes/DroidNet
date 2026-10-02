@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <memory>
 #include <optional>
 
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -22,7 +23,8 @@ namespace oxygen::content::import::internal {
  * @return The build request, or nullopt if settings are invalid.
  */
 OXGN_COOK_API auto BuildSceneRequest(const SceneImportSettings& settings,
-  ImportFormat expected_format, std::ostream& error_stream)
+  ImportFormat expected_format, std::ostream& error_stream,
+  std::shared_ptr<const CapturedInputSet> captured_inputs = {})
   -> std::optional<ImportRequest>;
 
 } // namespace oxygen::content::import::internal

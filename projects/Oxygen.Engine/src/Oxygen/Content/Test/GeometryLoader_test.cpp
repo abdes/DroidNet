@@ -4,20 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 
-#include <Oxygen/Testing/GTest.h>
+#include "Fixtures/LoaderTestFixtures.h"
 
-#include <Oxygen/Content/DescriptorDependencies.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/MaterialSlotId.h>
+#include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
-
-#include "Fixtures/LoaderTestFixtures.h"
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::content::loaders::LoadGeometryAsset;
 
@@ -41,6 +43,7 @@ protected:
     GeometryAssetDesc desc {};
     desc.header.asset_type
       = static_cast<uint8_t>(oxygen::data::AssetType::kGeometry);
+    desc.header.version = kGeometryAssetVersion;
     desc.lod_count = 1;
     MeshDesc mesh {};
     ASSERT_LT(recipe_name.size(), sizeof(mesh.name));
@@ -50,11 +53,16 @@ protected:
     mesh.mesh_view_count = 1;
     mesh.info.procedural.params_size = static_cast<uint32_t>(parameters.size());
     SubMeshDesc submesh {};
+    submesh.slot_id = oxygen::data::MaterialSlotId::FromStableIdentity(
+      "GeometryLoaderTest/slot");
     submesh.material_asset_key
       = oxygen::data::AssetKey::FromVirtualPath("/Art/Materials/Shared.omat");
     submesh.mesh_view_count = 1;
     const MeshViewDesc view {
-      .first_index = 0, .index_count = 36, .first_vertex = 0, .vertex_count = 24
+      .first_index = 0,
+      .index_count = 36,
+      .first_vertex = 0,
+      .vertex_count = 24,
     };
     auto packed = desc_writer_.ScopedAlignment(1);
     WriteBlob(desc);
@@ -74,6 +82,7 @@ NOLINT_TEST_F(
   oxygen::data::pak::geometry::GeometryAssetDesc desc {};
   desc.header.asset_type
     = static_cast<uint8_t>(oxygen::data::AssetType::kGeometry);
+  desc.header.version = oxygen::data::pak::geometry::kGeometryAssetVersion;
   desc.lod_count = 1;
 
   oxygen::data::pak::geometry::MeshDesc mesh {};
@@ -150,25 +159,39 @@ NOLINT_TEST_F(
   GeometryAssetDesc desc {};
   desc.header.asset_type
     = static_cast<uint8_t>(oxygen::data::AssetType::kGeometry);
+  desc.header.version = kGeometryAssetVersion;
   desc.lod_count = 1;
   MeshDesc mesh {};
   mesh.mesh_type = static_cast<uint8_t>(oxygen::data::MeshType::kStandard);
   mesh.submesh_count = 2;
+  mesh.mesh_view_count = 2;
   SubMeshDesc submesh {};
   submesh.material_asset_key = material;
+  submesh.slot_id = oxygen::data::MaterialSlotId::FromStableIdentity(
+    "GeometryLoaderTest/slot");
+  submesh.mesh_view_count = 1;
+  const MeshViewDesc view {
+    .first_index = 0,
+    .index_count = 3,
+    .first_vertex = 0,
+    .vertex_count = 3,
+  };
   {
     auto packed = desc_writer_.ScopedAlignment(1);
     WriteBlob(desc);
     WriteBlob(mesh);
     WriteBlob(submesh);
+    WriteBlob(view);
     WriteBlob(submesh);
+    WriteBlob(view);
   }
   auto context = MakeLoaderContext(true, true);
-  const auto result = oxygen::content::InspectDescriptorDependencies(
-    *context.desc_reader, {}, oxygen::data::AssetType::kGeometry);
-  EXPECT_TRUE(result.complete);
-  ASSERT_EQ(result.assets.size(), 1U);
-  EXPECT_EQ(result.assets.front(), material);
+  const auto collector
+    = std::make_shared<oxygen::content::internal::DependencyCollector>();
+  context.dependency_collector = collector;
+  const auto geometry = oxygen::content::loaders::LoadGeometryAsset(context);
+  ASSERT_NE(geometry, nullptr);
+  EXPECT_THAT(collector->AssetDependencies(), ::testing::ElementsAre(material));
 }
 
 } // namespace

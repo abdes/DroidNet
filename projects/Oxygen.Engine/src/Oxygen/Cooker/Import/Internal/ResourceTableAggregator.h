@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
@@ -159,7 +160,7 @@ struct PhysicsTableTraits {
     signature.append(";n=");
     signature.append(std::to_string(desc.size_bytes));
     if (std::any_of(std::begin(desc.content_hash), std::end(desc.content_hash),
-          [](const uint8_t byte) { return byte != 0U; })) {
+          [](const uint8_t byte) -> bool { return byte != 0U; })) {
       signature.append(";h=");
       constexpr auto kHex = "0123456789abcdef";
       for (const auto byte : desc.content_hash) {
@@ -320,7 +321,7 @@ public:
     if (index >= table_.size()) {
       return std::nullopt;
     }
-    return table_[index];
+    return table_.at(index);
   }
 
 private:
@@ -335,28 +336,28 @@ private:
   //! `false` and manage index 0 externally.
   auto EnsureSentinelAtZero() -> void
   {
-    if constexpr (!Traits::kReserveSentinelAtZero) {
-      return; // This resource type manages index 0 externally.
+    if constexpr (Traits::kReserveSentinelAtZero) {
+      std::scoped_lock lock(mutex_);
+      if (!table_.empty()) {
+        return; // Already loaded from disk.
+      }
+      table_.push_back(Descriptor {}); // all-zero sentinel
+      next_index_.store(1, std::memory_order_release);
+      DLOG_F(INFO,
+        "ResourceTableAggregator: reserved index-0 sentinel for '{}'",
+        table_path_.string());
     }
-
-    std::scoped_lock lock(mutex_);
-    if (!table_.empty()) {
-      return; // Already loaded from disk.
-    }
-    table_.push_back(Descriptor {}); // all-zero sentinel
-    next_index_.store(1, std::memory_order_release);
-    DLOG_F(INFO, "ResourceTableAggregator: reserved index-0 sentinel for '{}'",
-      table_path_.string());
   }
 
   auto EnsureTableFileExists() -> void
   {
-    if (std::filesystem::exists(table_path_)) {
+    if (std::filesystem::exists(base::ToNativePath(table_path_))) {
       return;
     }
 
     std::error_code ec;
-    std::filesystem::create_directories(table_path_.parent_path(), ec);
+    std::filesystem::create_directories(
+      base::ToNativePath(table_path_.parent_path()), ec);
     if (ec) {
       LOG_F(ERROR,
         "ResourceTableAggregator: failed to create directory '{}' ({})",
@@ -364,7 +365,8 @@ private:
       return;
     }
 
-    std::ofstream out(table_path_, std::ios::binary | std::ios::trunc);
+    std::ofstream out(
+      base::ToNativePath(table_path_), std::ios::binary | std::ios::trunc);
     if (!out) {
       LOG_F(ERROR, "ResourceTableAggregator: failed to create table '{}'",
         table_path_.string());
@@ -373,11 +375,12 @@ private:
 
   auto LoadExistingTable() -> void
   {
-    if (!std::filesystem::exists(table_path_)) {
+    if (!std::filesystem::exists(base::ToNativePath(table_path_))) {
       return;
     }
 
-    std::ifstream in(table_path_, std::ios::binary | std::ios::ate);
+    std::ifstream in(
+      base::ToNativePath(table_path_), std::ios::binary | std::ios::ate);
     if (!in) {
       LOG_F(WARNING,
         "ResourceTableAggregator: failed to open existing table '{}'",
@@ -416,7 +419,7 @@ private:
     index_by_signature_.clear();
     index_by_signature_.reserve(table_.size());
     for (uint32_t i = 0; i < table_.size(); ++i) {
-      const auto signature = Traits::SignatureForDescriptor(table_[i]);
+      const auto signature = Traits::SignatureForDescriptor(table_.at(i));
       if (!signature.empty()) {
         index_by_signature_.emplace(signature, i);
       }
@@ -452,7 +455,8 @@ private:
     const std::filesystem::path& data_path) -> uint64_t
   {
     std::error_code ec;
-    const auto size = std::filesystem::file_size(data_path, ec);
+    const auto size
+      = std::filesystem::file_size(base::ToNativePath(data_path), ec);
     if (!ec) {
       return size;
     }

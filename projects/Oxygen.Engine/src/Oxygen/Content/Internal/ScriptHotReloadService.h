@@ -21,6 +21,7 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
+#include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::content::internal {
 
@@ -36,18 +37,17 @@ public:
     std::function<void(const data::AssetKey&,
       std::function<void(std::shared_ptr<data::ScriptAsset>)>)>
       start_load_script_asset;
-    std::function<std::optional<uint16_t>(const data::AssetKey&)>
-      resolve_source_id_for_asset;
-    std::function<ResourceKey(uint16_t, data::pak::core::ResourceIndexT)>
-      make_script_resource_key;
-    std::function<std::shared_ptr<data::ScriptResource>(ResourceKey)>
-      get_script_resource;
+    std::function<std::shared_ptr<data::ScriptResource>(
+      const data::ScriptAsset&)>
+      acquire_bytecode;
+    std::function<bool()> is_current;
   };
 
   explicit ScriptHotReloadService(std::optional<PathFinder> path_finder);
 
   auto Subscribe(uint64_t id, ScriptReloadCallback callback) -> void;
   auto Unsubscribe(uint64_t id) -> void;
+  auto Reset() -> void;
 
   auto ReloadScript(const std::filesystem::path& changed_path,
     const ReloadCallbacks& callbacks) -> void;

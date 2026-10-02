@@ -25,12 +25,12 @@ public sealed partial class EngineService
         {
             var snapshot = Volatile.Read(ref this.contentStatus);
             return (this.State != EngineServiceState.Running || snapshot.RunId != this.commandDispatcher.RunId) && snapshot.State != RuntimeContentState.Unavailable
-                ? snapshot with { State = RuntimeContentState.Unavailable, Roots = [], Reason = "The preview is not running." }
+                ? new(snapshot.RunId, snapshot.Revision, RuntimeContentState.Unavailable, [], "The preview is not running.")
                 : snapshot;
         }
     }
 
-    private void ChangeContentStatus(RuntimeContentState state, ImmutableArray<string> roots, string? reason = null)
+    private void ChangeContentStatus(RuntimeContentState state, ImmutableArray<RuntimeCookedRoot> roots, string? reason = null)
     {
         lock (this.contentStatusGate)
         {
@@ -44,7 +44,7 @@ public sealed partial class EngineService
     }
 
     private void FailContentStatus(Exception exception)
-        => this.ChangeContentStatus(this.State == EngineServiceState.Running ? RuntimeContentState.Failed : RuntimeContentState.Unavailable, [], exception.Message);
+        => this.ChangeContentStatus(this.State == EngineServiceState.Running ? RuntimeContentState.Failed : RuntimeContentState.Unavailable, this.State == EngineServiceState.Running ? this.contentStatus.Bindings : [], exception.Message);
 
     private void PublishContentChanges()
     {

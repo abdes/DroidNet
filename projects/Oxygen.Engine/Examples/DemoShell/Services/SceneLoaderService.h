@@ -10,6 +10,7 @@
 #include <memory>
 #include <span>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -18,6 +19,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Config/PathFinder.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/ResourceTable.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -31,6 +33,7 @@
 
 namespace oxygen::content {
 class IAssetLoader;
+class ContentLoadScope;
 } // namespace oxygen::content
 
 // Remove redundant forward declaration for FileStream as its header is included
@@ -41,6 +44,7 @@ class IAssetLoader;
 namespace oxygen::data {
 class SceneAsset;
 class PhysicsSceneAsset;
+class PhysicsResource;
 class InputActionAsset;
 class InputMappingContextAsset;
 class ScriptResource; // Add forward declaration for ScriptResource
@@ -72,7 +76,7 @@ namespace oxygen::examples {
 struct PendingSceneSwap {
   std::shared_ptr<data::SceneAsset> asset;
   std::shared_ptr<data::PhysicsSceneAsset> physics_asset;
-  data::AssetKey scene_key {};
+  data::AssetKey scene_key;
 };
 
 //! Async scene loading and instantiation service.
@@ -125,14 +129,14 @@ public:
 
 private:
   //! Handle completion of the async scene load.
-  void OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset);
+  void OnSceneLoaded(
+    std::shared_ptr<data::SceneAsset> asset, content::ContentLoadScope scope);
   //! Handle completion of the async physics sidecar load.
   void OnPhysicsSceneLoaded(std::shared_ptr<data::SceneAsset> scene_asset,
     data::AssetKey sidecar_key,
     std::shared_ptr<data::PhysicsSceneAsset> physics_asset);
   //! Resolve the mandatory physics sidecar key for the scene.
-  auto ResolvePhysicsSidecarKey(const data::AssetKey& scene_key) const
-    -> std::optional<data::AssetKey>;
+
   //! Validate strict scene/physics identity invariants.
   void ValidatePhysicsSidecarIdentity(const data::SceneAsset& scene_asset,
     const data::PhysicsSceneAsset& physics_asset,
@@ -152,9 +156,13 @@ private:
   void ResolveHydrationTransforms();
   //! Read world-space pose for a runtime node after hydration barrier.
   auto ReadHydrationWorldPose(size_t node_index) const -> std::pair<Vec3, Quat>;
-  //! Preload all physics dependency resources required by sidecar hydration.
+  using PhysicsPayloads = std::unordered_map<content::ResourceKey,
+    std::shared_ptr<data::PhysicsResource>>;
+  auto FindHydrationPayload(content::ResourceKey key) const noexcept
+    -> observer_ptr<const data::PhysicsResource>;
+  //! Acquire payload owners for the complete sidecar hydration window.
   auto PreloadPhysicsDependencyResources(
-    const data::PhysicsSceneAsset& physics_asset) -> co::Co<>;
+    const data::PhysicsSceneAsset& physics_asset) -> co::Co<PhysicsPayloads>;
   //! Attach rigid-body bindings; hard-fail on invalid/unsupported data.
   void HydrateRigidBodyBindings(physics::PhysicsModule& physics_module,
     std::span<const data::pak::physics::RigidBodyBindingRecord> bindings,
@@ -204,7 +212,7 @@ private:
   //! Legacy hook for geometry dependency readiness (currently no-op).
   void QueueGeometryDependencies(const data::SceneAsset& asset);
   //! Clear local pin bookkeeping (non-destructive).
-  void ReleasePinnedGeometryAssets();
+  void ClearGeometryReadiness();
 
   //! Build environment systems from the scene asset.
   auto BuildEnvironment(const data::SceneAsset& asset)
@@ -254,21 +262,22 @@ private:
   int linger_frames_ { 0 };
 
   std::unordered_set<data::AssetKey> pending_geometry_keys_;
-  std::vector<data::AssetKey> pinned_geometry_keys_;
+  std::vector<data::AssetKey> ready_geometry_keys_;
 
-  std::optional<data::AssetKey> current_physics_context_asset_key_ {};
-  observer_ptr<scene::Scene> runtime_scene_ {};
+  PhysicsPayloads hydration_payloads_ {};
+  observer_ptr<const data::PhysicsSceneAsset> current_physics_context_;
+  observer_ptr<scene::Scene> runtime_scene_;
   bool hydration_window_active_ { false };
   bool hydration_transforms_resolved_ { false };
   observer_ptr<AsyncEngine> engine_;
-  engine::ModuleManager::Subscription physics_module_subscription_ {};
+  engine::ModuleManager::Subscription physics_module_subscription_;
   observer_ptr<physics::PhysicsModule> physics_module_;
   observer_ptr<engine::InputSystem> input_system_;
   observer_ptr<scripting::IScriptCompilationService> compilation_service_;
   std::unique_ptr<scripting::IScriptSourceResolver> source_resolver_;
 
-  auto ReadScriptResource(
-    uint32_t index, const data::AssetKey& context_asset_key) const
+  auto ReadScriptResource(data::ResourceReferenceIndex index,
+    const data::ScriptAsset& context_asset) const
     -> std::shared_ptr<const data::ScriptResource>;
 };
 

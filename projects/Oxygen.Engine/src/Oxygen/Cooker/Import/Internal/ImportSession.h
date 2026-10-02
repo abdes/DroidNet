@@ -20,7 +20,9 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/ImportSessionToken.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
+#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 
@@ -89,7 +91,8 @@ public:
     observer_ptr<IAsyncFileWriter> file_writer,
     observer_ptr<co::ThreadPool> thread_pool,
     observer_ptr<ResourceTableRegistry> table_registry,
-    observer_ptr<LooseCookedIndexRegistry> index_registry);
+    observer_ptr<LooseCookedIndexRegistry> index_registry,
+    observer_ptr<IAsyncFileReader> cooked_reader = {});
 
   OXGN_COOK_API ~ImportSession();
 
@@ -115,6 +118,13 @@ public:
   //! Get the async file reader (non-owning).
   OXGN_COOK_NDAPI auto FileReader() const noexcept
     -> observer_ptr<IAsyncFileReader>;
+
+  //! Read derived resources resolved through the cooked-root/mount contract.
+  [[nodiscard]] auto CookedReader() const noexcept
+    -> observer_ptr<IAsyncFileReader>
+  {
+    return cooked_reader_;
+  }
 
   //! Get the async file writer (non-owning).
   OXGN_COOK_NDAPI auto FileWriter() const noexcept
@@ -196,6 +206,10 @@ public:
   //! Get total emit duration accumulated for this session.
   OXGN_COOK_NDAPI auto EmitDuration() const noexcept
     -> std::chrono::microseconds;
+
+  //! Accumulated finalization and drain time, including exceptional exits.
+  OXGN_COOK_NDAPI auto FinalizeDuration() const noexcept
+    -> std::chrono::microseconds;
   //=== Diagnostics
   //===--------------------------------------------------------//
 
@@ -207,6 +221,18 @@ public:
    @param diagnostic The diagnostic to add.
   */
   OXGN_COOK_API auto AddDiagnostic(ImportDiagnostic diagnostic) -> void;
+
+  //! Adds candidate identity metadata for an emitted geometry. Returned only
+  //! with a successful final report; source publication remains caller-owned.
+  OXGN_COOK_API auto AddMaterialSlotProvenance(
+    MaterialSlotGeometryProvenance geometry) -> void;
+
+  //! The complete source geometry set was processed successfully, even if
+  //! empty.
+  auto MarkMaterialSlotSourceProcessed() noexcept -> void
+  {
+    material_slot_source_processed_ = true;
+  }
 
   //! Get all diagnostics collected so far.
   /*!
@@ -235,10 +261,13 @@ public:
    @return Import report with success flag, diagnostics, and asset counts.
   */
   OXGN_COOK_NDAPI auto Finalize() -> co::Co<ImportReport>;
+  //! Called after producers join; retain emitters through callback-write drain.
+  OXGN_COOK_NDAPI auto DrainAndRetire() -> co::Co<>;
 
 private:
   ImportRequest request_;
   observer_ptr<IAsyncFileReader> file_reader_;
+  observer_ptr<IAsyncFileReader> cooked_reader_;
   observer_ptr<IAsyncFileWriter> file_writer_;
   observer_ptr<co::ThreadPool> thread_pool_;
   observer_ptr<ResourceTableRegistry> table_registry_;
@@ -255,6 +284,11 @@ private:
     resource_descriptor_emitter_;
 
   mutable std::mutex diagnostics_mutex_;
+  std::mutex slot_provenance_mutex_;
+  std::vector<MaterialSlotGeometryProvenance> slot_provenance_;
+  bool material_slot_source_processed_ = false;
+  std::optional<ImportSessionToken> table_participation_;
+  std::optional<ImportSessionToken> index_participation_;
   std::vector<ImportDiagnostic> diagnostics_;
   std::unordered_set<std::string> diagnostic_keys_;
   bool has_errors_ = false;
@@ -264,6 +298,7 @@ private:
   std::chrono::microseconds load_duration_ { 0 };
   std::chrono::microseconds cook_duration_ { 0 };
   std::chrono::microseconds emit_duration_ { 0 };
+  std::chrono::microseconds finalize_duration_ { 0 };
 };
 
 } // namespace oxygen::content::import

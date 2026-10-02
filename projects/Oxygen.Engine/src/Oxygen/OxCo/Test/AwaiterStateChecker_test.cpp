@@ -3,7 +3,12 @@
 
 #include <coroutine>
 #include <type_traits>
+#include <utility>
 
+#include "Utils/TestEventLoop.h"
+
+#include <Oxygen/OxCo/Coroutine.h>
+#include <Oxygen/OxCo/Detail/AwaitFn.h>
 #include <Oxygen/OxCo/Detail/AwaiterStateChecker.h>
 #include <Oxygen/OxCo/Detail/SanitizedAwaiter.h>
 #include <Oxygen/Testing/GTest.h>
@@ -14,6 +19,46 @@ using WrappedNonCancellable
   = oxygen::co::detail::SanitizedAwaiter<std::suspend_always>;
 static_assert(oxygen::co::detail::Cancellable<WrappedNonCancellable>);
 static_assert(oxygen::co::detail::CustomizesMustResume<WrappedNonCancellable>);
+using CancellableSleep
+  = oxygen::co::testing::TestEventLoop::SleepAwaitable<true>;
+using NonCancellableSleep
+  = oxygen::co::testing::TestEventLoop::SleepAwaitable<false>;
+static_assert(oxygen::co::detail::ValidAwaiter<CancellableSleep>);
+static_assert(oxygen::co::detail::ValidAwaiter<NonCancellableSleep>);
+static_assert(!oxygen::co::detail::CustomizesMustResume<CancellableSleep>);
+static_assert(oxygen::co::detail::CustomizesMustResume<NonCancellableSleep>);
+static_assert(std::is_same_v<decltype(oxygen::co::detail::AwaitMustResume(
+                               std::declval<const CancellableSleep&>())),
+  std::false_type>);
+
+struct DiscardAfterEarlyCancel {
+  int* must_resume_calls { nullptr };
+
+  auto await_early_cancel() noexcept -> bool { return false; }
+  auto await_ready() const noexcept -> bool { return true; }
+  void await_suspend(oxygen::co::detail::Handle) noexcept { }
+  auto await_cancel(oxygen::co::detail::Handle) noexcept -> bool
+  {
+    return false;
+  }
+  auto await_must_resume() const noexcept -> std::false_type
+  {
+    ++*must_resume_calls;
+    return {};
+  }
+  void await_resume() noexcept { }
+};
+
+NOLINT_TEST(AwaiterStateChecker, DiscardableMustResumeHookRunsOnce)
+{
+  int calls = 0;
+  oxygen::co::detail::SanitizedAwaiter awaiter(
+    DiscardAfterEarlyCancel { .must_resume_calls = &calls });
+  EXPECT_FALSE(awaiter.await_early_cancel());
+  EXPECT_TRUE(awaiter.await_ready());
+  EXPECT_FALSE(awaiter.await_must_resume());
+  EXPECT_EQ(calls, 1);
+}
 
 #if defined(OXCO_AWAITER_STATE_DEBUG)
 

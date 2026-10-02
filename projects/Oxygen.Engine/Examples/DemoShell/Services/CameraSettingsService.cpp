@@ -5,30 +5,56 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
 
+#include "DemoShell/Runtime/SceneActivationPolicy.h"
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
+#include "DemoShell/UI/CameraControlPanel.h"
 #include "DemoShell/UI/CameraRigController.h"
 #include "DemoShell/UI/FlyCameraController.h"
 #include "DemoShell/UI/OrbitCameraController.h"
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/vector_float3.hpp>
 #include <glm/geometric.hpp>
-#include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Time/Types.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/CompositionView.h>
 
 namespace oxygen::examples {
 
 namespace {
+
+  constexpr float kDefaultFlySpeed = 5.0F;
+  constexpr float kDefaultDroneSpeed = 6.0F;
+  constexpr float kDefaultDroneDamping = 8.0F;
+  constexpr float kDefaultDroneFocusHeight = 0.8F;
+  constexpr float kDefaultDroneBobAmplitude = 0.06F;
+  constexpr float kDefaultDroneBobFrequency = 1.6F;
+  constexpr float kDefaultDroneNoiseAmplitude = 0.03F;
+  constexpr float kDefaultDroneBankFactor = 0.045F;
+  constexpr float kDefaultDronePoiRadius = 3.0F;
+  constexpr float kDefaultDronePoiMinSpeed = 0.3F;
+  constexpr float kDefaultOrbitResetDistance = 15.0F;
 
   constexpr float kPersistEpsilon = 1e-4F;
 
@@ -92,9 +118,8 @@ namespace {
     return std::nullopt;
   }
 
-  auto MakeLookRotationFromPosition(const glm::vec3& position,
-    const glm::vec3& target, const glm::vec3& up_direction = space::move::Up)
-    -> glm::quat
+  auto MakeLookRotationFromPosition(
+    const glm::vec3& position, const glm::vec3& target) -> glm::quat
   {
     // NOLINTBEGIN(*-magic-numbers)
     const auto forward_raw = target - position;
@@ -105,7 +130,7 @@ namespace {
 
     const auto forward = glm::normalize(forward_raw);
     // Avoid singularities when forward is colinear with up.
-    glm::vec3 up_dir = up_direction;
+    glm::vec3 up_dir = space::move::Up;
     const float dot_abs = std::abs(glm::dot(forward, glm::normalize(up_dir)));
     if (dot_abs > 0.999F) {
       // Pick an alternate up that is guaranteed to be non-colinear.
@@ -251,7 +276,7 @@ auto CameraSettingsService::OnMainViewReady(
 }
 
 auto CameraSettingsService::OnRuntimeMainViewReady(
-  scene::SceneNode camera, const ViewPort& viewport) -> void
+  const scene::SceneNode& camera, const ViewPort& viewport) -> void
 {
   const bool camera_changed = !active_camera_.IsAlive()
     || active_camera_.GetHandle() != camera.GetHandle();
@@ -260,9 +285,7 @@ auto CameraSettingsService::OnRuntimeMainViewReady(
   }
 
   if (viewport.width > 0.0F && viewport.height > 0.0F) {
-    const float aspect
-      = viewport.height > 0.0F ? (viewport.width / viewport.height) : 1.0F;
-    ApplyViewportToActive(aspect, viewport);
+    ApplyViewportToActive(viewport);
   }
 
   ApplyPendingSync();
@@ -301,7 +324,7 @@ auto CameraSettingsService::GetFlyMoveSpeed() const -> float
   if (const auto value = settings->GetFloat(kFlyMoveSpeedKey)) {
     return *value;
   }
-  return 5.0F;
+  return kDefaultFlySpeed;
 }
 
 auto CameraSettingsService::SetFlyMoveSpeed(float speed) -> void
@@ -318,10 +341,11 @@ auto CameraSettingsService::GetDroneSpeed() const -> float
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   if (active_camera_id_.empty()) {
-    return 6.0F;
+    return kDefaultDroneSpeed;
   }
   const std::string prefix = "camera_rig." + active_camera_id_ + ".";
-  return settings->GetFloat(prefix + kDroneSpeedKey).value_or(6.0F);
+  return settings->GetFloat(prefix + kDroneSpeedKey)
+    .value_or(kDefaultDroneSpeed);
 }
 
 auto CameraSettingsService::SetDroneSpeed(float speed) -> void
@@ -341,10 +365,11 @@ auto CameraSettingsService::GetDroneDamping() const -> float
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   if (active_camera_id_.empty()) {
-    return 8.0F;
+    return kDefaultDroneDamping;
   }
   const std::string prefix = "camera_rig." + active_camera_id_ + ".";
-  return settings->GetFloat(prefix + kDroneDampingKey).value_or(8.0F);
+  return settings->GetFloat(prefix + kDroneDampingKey)
+    .value_or(kDefaultDroneDamping);
 }
 
 auto CameraSettingsService::SetDroneDamping(float damping) -> void
@@ -364,10 +389,11 @@ auto CameraSettingsService::GetDroneFocusHeight() const -> float
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   if (active_camera_id_.empty()) {
-    return 0.8F;
+    return kDefaultDroneFocusHeight;
   }
   const std::string prefix = "camera_rig." + active_camera_id_ + ".";
-  return settings->GetFloat(prefix + kDroneFocusHeightKey).value_or(0.8F);
+  return settings->GetFloat(prefix + kDroneFocusHeightKey)
+    .value_or(kDefaultDroneFocusHeight);
 }
 
 auto CameraSettingsService::SetDroneFocusHeight(float height) -> void
@@ -456,10 +482,11 @@ auto CameraSettingsService::GetDroneBobAmplitude() const -> float
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   if (active_camera_id_.empty()) {
-    return 0.06F;
+    return kDefaultDroneBobAmplitude;
   }
   const std::string prefix = "camera_rig." + active_camera_id_ + ".";
-  return settings->GetFloat(prefix + kDroneBobAmpKey).value_or(0.06F);
+  return settings->GetFloat(prefix + kDroneBobAmpKey)
+    .value_or(kDefaultDroneBobAmplitude);
 }
 
 auto CameraSettingsService::SetDroneBobAmplitude(float amp) -> void
@@ -479,10 +506,11 @@ auto CameraSettingsService::GetDroneBobFrequency() const -> float
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   if (active_camera_id_.empty()) {
-    return 1.6F;
+    return kDefaultDroneBobFrequency;
   }
   const std::string prefix = "camera_rig." + active_camera_id_ + ".";
-  return settings->GetFloat(prefix + kDroneBobFreqKey).value_or(1.6F);
+  return settings->GetFloat(prefix + kDroneBobFreqKey)
+    .value_or(kDefaultDroneBobFrequency);
 }
 
 auto CameraSettingsService::SetDroneBobFrequency(float hz) -> void
@@ -502,10 +530,11 @@ auto CameraSettingsService::GetDroneNoiseAmplitude() const -> float
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   if (active_camera_id_.empty()) {
-    return 0.03F;
+    return kDefaultDroneNoiseAmplitude;
   }
   const std::string prefix = "camera_rig." + active_camera_id_ + ".";
-  return settings->GetFloat(prefix + kDroneNoiseAmpKey).value_or(0.03F);
+  return settings->GetFloat(prefix + kDroneNoiseAmpKey)
+    .value_or(kDefaultDroneNoiseAmplitude);
 }
 
 auto CameraSettingsService::SetDroneNoiseAmplitude(float amp) -> void
@@ -525,10 +554,11 @@ auto CameraSettingsService::GetDroneBankFactor() const -> float
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   if (active_camera_id_.empty()) {
-    return 0.045F;
+    return kDefaultDroneBankFactor;
   }
   const std::string prefix = "camera_rig." + active_camera_id_ + ".";
-  return settings->GetFloat(prefix + kDroneBankFactorKey).value_or(0.045F);
+  return settings->GetFloat(prefix + kDroneBankFactorKey)
+    .value_or(kDefaultDroneBankFactor);
 }
 
 auto CameraSettingsService::SetDroneBankFactor(float factor) -> void
@@ -548,10 +578,11 @@ auto CameraSettingsService::GetDronePOISlowdownRadius() const -> float
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   if (active_camera_id_.empty()) {
-    return 3.0F;
+    return kDefaultDronePoiRadius;
   }
   const std::string prefix = "camera_rig." + active_camera_id_ + ".";
-  return settings->GetFloat(prefix + kDronePOIRadiusKey).value_or(3.0F);
+  return settings->GetFloat(prefix + kDronePOIRadiusKey)
+    .value_or(kDefaultDronePoiRadius);
 }
 
 auto CameraSettingsService::SetDronePOISlowdownRadius(float radius) -> void
@@ -571,10 +602,11 @@ auto CameraSettingsService::GetDronePOIMinSpeed() const -> float
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   if (active_camera_id_.empty()) {
-    return 0.3F;
+    return kDefaultDronePoiMinSpeed;
   }
   const std::string prefix = "camera_rig." + active_camera_id_ + ".";
-  return settings->GetFloat(prefix + kDronePOIMinSpeedKey).value_or(0.3F);
+  return settings->GetFloat(prefix + kDronePOIMinSpeedKey)
+    .value_or(kDefaultDronePoiMinSpeed);
 }
 
 auto CameraSettingsService::SetDronePOIMinSpeed(float factor) -> void
@@ -727,7 +759,7 @@ void CameraSettingsService::ApplyPendingReset()
     constexpr glm::vec3 orbit_target(0.0F, 0.0F, 0.0F);
     float orbit_distance = glm::length(initial_camera_position_ - orbit_target);
     if (!std::isfinite(orbit_distance) || orbit_distance < 1.0F) {
-      orbit_distance = 15.0F;
+      orbit_distance = kDefaultOrbitResetDistance;
       reset_position = orbit_target - space::look::Forward * orbit_distance;
     } else {
       // Keep the baseline direction, but enforce a valid orbit radius.
@@ -805,8 +837,9 @@ auto CameraSettingsService::PersistedCameraState::OrthoState::IsDirty(
   return enabled != other.enabled
     || (enabled
       && !std::equal(extents.begin(), extents.end(), other.extents.begin(),
-        [](
-          const float lhs, const float rhs) { return NearlyEqual(lhs, rhs); }));
+        [](const float lhs, const float rhs) -> bool {
+          return NearlyEqual(lhs, rhs);
+        }));
 }
 
 void CameraSettingsService::PersistedCameraState::OrthoState::Persist(
@@ -817,13 +850,13 @@ void CameraSettingsService::PersistedCameraState::OrthoState::Persist(
     return;
   }
 
-  settings.SetFloat(prefix + ".camera.ortho.left", extents[0]);
-  settings.SetFloat(prefix + ".camera.ortho.right", extents[1]);
-  settings.SetFloat(prefix + ".camera.ortho.bottom", extents[2]);
-  settings.SetFloat(prefix + ".camera.ortho.top", extents[3]);
-  settings.SetFloat(prefix + ".camera.ortho.near", extents[4]);
+  settings.SetFloat(prefix + ".camera.ortho.left", extents.at(0));
+  settings.SetFloat(prefix + ".camera.ortho.right", extents.at(1));
+  settings.SetFloat(prefix + ".camera.ortho.bottom", extents.at(2));
+  settings.SetFloat(prefix + ".camera.ortho.top", extents.at(3));
+  settings.SetFloat(prefix + ".camera.ortho.near", extents.at(4));
   // NOLINTNEXTLINE(*-magic-numbers)
-  settings.SetFloat(prefix + ".camera.ortho.far", extents[5]);
+  settings.SetFloat(prefix + ".camera.ortho.far", extents.at(5));
 }
 
 auto CameraSettingsService::PersistedCameraState::ExposureState::IsDirty(
@@ -1225,13 +1258,11 @@ auto CameraSettingsService::CaptureActiveCameraState() -> PersistedCameraState
   return current;
 }
 
-void CameraSettingsService::ApplyViewportToActive(
-  const float aspect, const ViewPort& viewport)
+void CameraSettingsService::ApplyViewportToActive(const ViewPort& viewport)
 {
   if (auto cam_ref = active_camera_.GetCameraAs<scene::PerspectiveCamera>();
     cam_ref) {
     auto& cam = cam_ref->get();
-    cam.SetAspectRatio(aspect);
     cam.SetViewport(viewport);
     return;
   }

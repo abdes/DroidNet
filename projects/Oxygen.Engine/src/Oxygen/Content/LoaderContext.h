@@ -7,11 +7,17 @@
 #pragma once
 
 #include <memory>
+#include <optional>
+#include <span>
+#include <stdexcept>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceTypeList.h>
-#include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Stream.h>
 
@@ -22,24 +28,56 @@ namespace internal {
   class IContentSource;
 } // namespace internal
 
-class PakFile;
-
 //! Context passed to loader functions containing all necessary loading state.
 
 struct LoaderContext {
+  //! Raw descriptor parsing may omit metadata. Source-backed validation and
+  //! loading supply it and must match every declared binding and key.
+  auto ValidateReferences(std::span<const data::ResourceReferenceUse> resources,
+    std::span<const data::KeyReference> keys) const -> void
+  {
+    if (!asset_references) {
+      return;
+    }
+    const auto valid = asset_references->ValidateUsage(resources, keys);
+    if (!valid) {
+      throw std::runtime_error(valid.error());
+    }
+  }
+
+  [[nodiscard]] auto ResolveResource(
+    const data::ResourceReferenceIndex reference,
+    const data::ResourceKind kind) const -> std::optional<ResourceIndexT>
+  {
+    if (reference == data::kNoResourceReference) {
+      return std::nullopt;
+    }
+    if (!asset_references) {
+      throw std::runtime_error(
+        "Asset reference metadata is required for resource resolution");
+    }
+    const auto resolved = asset_references->ResolveResource(reference, kind);
+    if (!resolved) {
+      throw std::runtime_error(resolved.error());
+    }
+    return *resolved;
+  }
+
   //! Key of the current asset being loaded (for dependency registration)
-  data::AssetKey current_asset_key {};
+  data::AssetKey current_asset_key;
 
   //! Opaque token representing the mounted source being decoded.
   /*!
    This token is safe to copy across threads and MUST be used by async decode
    pipelines when recording `internal::ResourceRef` dependencies.
   */
-  internal::SourceToken source_token {};
+  data::SourceInstanceId source_instance {};
 
   //! Reader, already positioned at the start of the asset/resource descriptor
   //! to load.
   serio::AnyReader* desc_reader {};
+  //! Borrowed only during synchronous decode; the result takes ownership.
+  observer_ptr<const data::AssetReferences> asset_references {};
 
   //=== Data Readers ===------------------------------------------------------//
 
@@ -93,18 +131,10 @@ struct LoaderContext {
   */
   std::shared_ptr<internal::DependencyCollector> dependency_collector {};
 
-  //! Source PAK file from which the asset/resource is being loaded. Guaranteed
-  //! to be valid during a load operation.
-  const PakFile* source_pak { nullptr };
-
-  //! Source abstraction for source-agnostic runtime data access.
-  /*!
-   This pointer is valid for the duration of the load operation and
-   * provides
-   source-neutral access to auxiliary data such as script
-   * slot/param records.
-  */
-  const internal::IContentSource* source_content { nullptr };
+  //! Retains source readers and auxiliary records through decode and asset use.
+  std::shared_ptr<const internal::IContentSource> source_content {};
+  //! Decoders preserve this identity on disk-loaded Data::Asset objects.
+  data::SourceKey source_key {};
 
   //! Parse-only mode: loaders should not attempt to load/register dependencies.
   /*!

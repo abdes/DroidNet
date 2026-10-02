@@ -38,7 +38,6 @@ In practice, it owns:
 Content does **not**:
 
 - Submit GPU uploads, track GPU residency, or manage GPU memory budgets
-- Resolve cross-source references (it is forbidden by design)
 - Interpret editor virtual paths (resolution happens above Content)
 
 GPU staging/submission is handled by the Vortex upload/resource layer on top of
@@ -48,28 +47,18 @@ Graphics command recording.
 
 ## Core invariants (do not violate)
 
-### 1) Intra-source dependencies only
+### 1) Preserve resolved source identity
 
-**Core rule:** all asset and resource dependencies must be contained within the
-same mounted cooked source (a `.pak` file or a loose cooked root).
+Resource table indices belong to their cooked source. Asset dependencies resolve
+in the owning source first; absent external AssetKeys may resolve through active
+source precedence. Once published, the direct dependency edge retains the actual
+resolved source. Contextual reads and repeated publication reuse that binding.
 
-What this means:
-
-- Assets (Geometry, Material, …) may reference other assets/resources **only
-  inside the same mounted source**
-- Resource indices (`ResourceIndexT`) are source-scoped; index values are only
-  meaningful within their originating source
-- No cross-source references: an asset in `level_forest.pak` cannot reference an
-  asset/resource in `base_game.pak`, and content from a loose cooked root cannot
-  reference content in a different root or PAK
-
-Why we enforce it:
-
-- Packaging: each PAK is a self-contained unit (levels, DLC, mods)
-- Runtime: improves locality, reduces seeking, and enables clean PAK-level
-  unload
-- Simplifies lifecycle: dependency tracking and cache accounting do not need to
-  span multiple sources
+Loaded assets expose `SourceOrigin` (persistent key and runtime instance). Use the retained asset for dependency queries
+and release; an AssetKey-only query deliberately selects the current winner.
+Immutable loose generations can coexist without replacing bytes used by old
+assets. [Generation ownership](loose_cooked_content.md#published-generations)
+defines the mount and cross-process storage lease contract.
 
 ### 2) Clear CPU vs GPU boundary
 
@@ -111,60 +100,27 @@ directory).
 - The editor is responsible for registering sources in a deterministic order
   for Play-in-Editor workflows.
 
-### Stable source identity: `data::SourceKey`
+### Persistent identity and runtime openings
 
-Every mounted cooked source has a **stable, globally-unique identity** that is
-derived from its container/header GUID and represented in code as
-`data::SourceKey`.
+`data::SourceKey` is the persistent UUIDv7 in the PAK header or loose index.
+`data::SourceInstanceId` identifies one runtime opening. Refreshing the same root
+with unchanged `SourceKey` bytes creates a new instance, so old and new decoded
+content cannot alias. Duplicate persistent keys make key-only source selection
+ambiguous; they do not merge cache entries.
 
-- **PAK sources**: `data::pak::core::PakHeader.source_identity` (16 bytes) is
-  the source GUID. Runtime derives `data::SourceKey` from these bytes.
-- **Loose cooked roots**: `data::IndexHeader.source_identity` (16 bytes, in
-  `container.index.bin`) is the source GUID. Runtime derives `data::SourceKey`
-  from these bytes.
+`AssetKey` identifies an authored asset; the same key can occur in different
+sources, with explicit source selection or normal mount precedence choosing the
+winner. Loaded assets expose `GetSourceOrigin()` for exact contextual lookup.
 
-Contract:
+`ResourceKey` is an opaque, nonzero runtime ID, allocated by the loader from a
+full typed identity. It encodes neither source bits nor a hash and is never
+serialized. New key creation is lazy, owning-thread work and can allocate;
+existing-ID lookup and cached inspection do not allocate. Decoded-cache eviction
+preserves locators for readable sources. Mutable refresh revokes old reads;
+retained immutable generations keep their exact readers and leases.
 
-- Source GUIDs MUST encode a valid **RFC 9562 UUIDv7** value.
-- Source GUIDs MUST be **non-zero**.
-- Source GUIDs MUST be **globally unique** across all mounted sources.
-- Text forms of `SourceKey` MUST use canonical lowercase UUID text.
-- Binary ingress paths MUST reject header/index source GUID bytes that are not
-  valid UUIDv7 values.
-
-Rationale: the loader and caches must treat two different cooked sources as
-different even if their internal indices overlap. If two mounts share the same
-source GUID (including the all-zero GUID), cache aliasing and wrong-scene/wrong-
-asset behavior is expected.
-
-### `AssetKey` vs `ResourceKey`
-
-- `data::AssetKey` is a stable, engine-wide identifier for assets (a GUID).
-- `ResourceKey` is the runtime-facing cache key for resources. It is stable for
-  the lifetime of a particular mount configuration, but it is **not a durable
-  persisted identifier** because it encodes a runtime-assigned 16-bit source id.
-
-Canonical identity rules:
-
-- **Asset identity**: `data::AssetKey` MUST be globally unique across all mounts.
-- **Resource identity**: a resource is uniquely identified by
-  `(SourceKey, resource_type, resource_index)`.
-  - `resource_index` is source-scoped.
-  - `resource_type` is the loader’s resource type list index used in
-    `ResourceKey` packing.
-
-#### Source id policy (contract)
-
-`ResourceKey` includes a 16-bit **source id**. This is a **runtime-assigned mount
-namespace id**, not the stable source GUID.
-
-Source ids are segregated by source type:
-
-- PAK ids: dense `0..N-1` in PAK registration order.
-- Loose cooked ids: start at `0x8000` in loose-cooked registration order.
-- `0xFFFF` is reserved for synthetic/buffer-backed sources.
-
-These constants are centralized in `Oxygen/Content/Constants.h`.
+The [identity and ownership contract](deps_and_cache.md#identities)
+owns identity fields, metadata retention and the next ownership migration.
 
 ---
 
@@ -198,21 +154,20 @@ This is the conceptual role of the core types (names match the code).
   - Implemented by at least PAK-backed and loose-cooked-backed source adapters.
 - `AssetLoader`
   - Orchestrates async loading from mounted sources + caching.
-  - Applies dependency edges during an owning-thread publish step.
+  - Freezes Data-owned dependency bindings before owner-thread publication.
   - Provides deterministic release/unload cascades.
 - `LoaderContext`
   - Passed by value into every loader.
   - Provides `desc_reader` (descriptor stream) and `data_readers` (data region
-    readers) plus `source_token`, `work_offline` policy, optional
+    readers) plus `source_instance`, `work_offline` policy, optional
     `DependencyCollector` for identity-only dependency recording, and optional
     `source_pak` / `source_content` source views.
 - `ResourceTable<T>`
   - Lightweight offset resolver: maps a PAK resource index to the descriptor
     offset.
 - `ResourceKey`
-  - Engine-wide cache key for a resource. Constructed from
-    (sourceId, resourceTypeIndex, resourceIndex), so resources remain unique
-    even though their indices are source-scoped.
+  - Opaque ContentId interned from the complete source/type/index identity;
+    it contains no packed source bits or hash-derived identity.
 
 ---
 
@@ -223,11 +178,11 @@ This is the conceptual role of the core types (names match the code).
 ```mermaid
 flowchart TD
   A["Caller: LoadAssetAsync&lt;T&gt;(AssetKey) or StartLoadAsset&lt;T&gt;(AssetKey)"] --> B{"Cache hit?"}
-  B -- Yes --> C["Return cached shared instance"]
+  B -- Yes --> C["Acquire one request control for the cached instance"]
   B -- No --> D["Resolve AssetKey to (source, locator)<br/>(owning thread)"]
   D --> E["Read cooked bytes (descriptor + tables/payloads)<br/>(thread pool)"]
   E --> F["Decode via registered loader<br/>Collect identity deps (DependencyCollector)<br/>(thread pool)"]
-  F --> G["Publish to cache + apply deps<br/>(owning thread)"]
+  F --> G["Bind dependencies, freeze the bundle, then publish<br/>(owning thread)"]
   G --> H["Fulfill awaiters / invoke StartLoad callback<br/>(owning thread)"]
 ```
 
@@ -236,7 +191,7 @@ flowchart TD
 ```mermaid
 flowchart TD
   A["Caller: LoadResourceAsync&lt;T&gt;(ResourceKey) or StartLoadResource&lt;T&gt;(ResourceKey)"] --> B{"Cache hit?"}
-  B -- Yes --> C["Return cached shared instance"]
+  B -- Yes --> C["Acquire one request control for the cached instance"]
   B -- No --> D["Resolve ResourceKey to source + offsets<br/>(owning thread)"]
   D --> E["Read cooked bytes (table + payload)<br/>(thread pool)"]
   E --> F["Decode via registered loader<br/>(thread pool)"]
@@ -246,17 +201,11 @@ flowchart TD
 
 ### Releasing and unloading
 
-```mermaid
-flowchart TD
-  A["Caller: ReleaseAsset(AssetKey)"] --> B["ReleaseAssetTree(AssetKey)"]
-  B --> C["Check-in all resource dependencies first<br/>(cache CheckIn for each ResourceKey)"]
-  C --> D["Recursively ReleaseAssetTree on each asset dependency"]
-  D --> E["Check-in the asset itself<br/>(cache CheckIn(HashAssetKey))"]
-  E --> F{"Refcount reaches zero?"}
-  F -- No --> G["Asset/resource remains cached<br/>(still used elsewhere)"]
-  F -- Yes --> H["Cache evicts entry"]
-  H --> I["Invoke registered unloader for the type<br/>(unload-on-eviction callback)"]
-```
+Owning pointers and residency pins return their usages automatically. Each request
+has an exact entry ticket; copied pointers share that request. Frame-start processing
+returns a bounded batch on the loader thread. Explicit trim drains returns and evicts
+idle entries. Retained parents keep their immutable child bindings after invalidation.
+See [ownership and release processing](deps_and_cache.md#release-processing).
 
 ---
 

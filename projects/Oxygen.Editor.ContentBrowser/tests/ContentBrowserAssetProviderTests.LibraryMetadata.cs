@@ -16,10 +16,10 @@ namespace Oxygen.Editor.ContentBrowser.Tests;
 /// <summary>Checks background library inspection independently of ordinary status projection.</summary>
 public sealed partial class ContentBrowserAssetProviderTests
 {
-    /// <summary>Rows are available before native inspection completes, then refresh once from the retained metadata.</summary>
+    /// <summary>Unchanged refreshes reuse status, and new producer facts invalidate it without starting native inspection.</summary>
     /// <returns>The asynchronous background-inspection regression.</returns>
     [TestMethod]
-    public async Task LibraryMetadataRefreshDoesNotBlockRowsOrRepeatForUnchangedCatalog()
+    public async Task StatusRefreshUsesSnapshotsAndNeverStartsLibraryInspection()
     {
         using var workspace = new TempWorkspace();
         var uri = new Uri("asset:///Content/Materials/Red.omat.json");
@@ -27,23 +27,12 @@ public sealed partial class ContentBrowserAssetProviderTests
         var catalog = new TestProjectAssetCatalog([new AssetRecord(uri)]);
         var projects = CreateProjectContextService(workspace);
         projects.Activate(projects.ActiveProject! with { LocalFolderMounts = [new("Library", workspace.Root)] });
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var updated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var known = false;
         var statuses = new Mock<IAssetCookStatusReader>();
         var metadata = statuses.As<ICookedLibraryMetadataService>();
         _ = statuses.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<IReadOnlyList<Uri>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => [new AssetCookStatus(uri, known ? AssetCookFreshness.Current : AssetCookFreshness.Unknown, HasPublishedOutput: true, HasVerifiedOutput: true, [], [], [])]);
-        _ = metadata.Setup(value => value.RefreshLibraryMetadataAsync(It.IsAny<ProjectContext>(), It.IsAny<CancellationToken>()))
-            .Returns(async (ProjectContext project, CancellationToken token) =>
-            {
-                _ = project.Should().BeSameAs(projects.ActiveProject);
-                _ = entered.TrySetResult();
-                await release.Task.WaitAsync(token).ConfigureAwait(false);
-                known = true;
-                return true;
-            });
+            .ReturnsAsync(() => [new AssetCookStatus(uri, known ? AssetCookFreshness.Current : AssetCookFreshness.Unknown, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], [])]);
         var runtime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
         await using var runtimeLifetime = runtime.ConfigureAwait(false);
         using var provider = new ContentBrowserAssetProvider(catalog, projects, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), statuses.Object, new CookDocumentRegistry(), EmptyCookRuns(), runtime);
@@ -56,11 +45,13 @@ public sealed partial class ContentBrowserAssetProviderTests
         });
         provider.Items.Subscribe(observer, this.TestContext.CancellationToken);
         await provider.RefreshAsync(AssetBrowserFilter.Default, this.TestContext.CancellationToken).WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = updated.Task.IsCompleted.Should().BeFalse();
-        release.SetResult();
+        await provider.RefreshAsync(AssetBrowserFilter.Default, this.TestContext.CancellationToken).ConfigureAwait(false);
+        statuses.Verify(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<IReadOnlyList<Uri>>(), It.IsAny<CancellationToken>()), Times.Once);
+        known = true;
+        statuses.Raise(value => value.Changed += null, EventArgs.Empty);
         await updated.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         await provider.RefreshAsync(AssetBrowserFilter.Default, this.TestContext.CancellationToken).ConfigureAwait(false);
-        metadata.Verify(value => value.RefreshLibraryMetadataAsync(It.IsAny<ProjectContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        metadata.Verify(value => value.RefreshLibraryMetadataAsync(It.IsAny<ProjectContext>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

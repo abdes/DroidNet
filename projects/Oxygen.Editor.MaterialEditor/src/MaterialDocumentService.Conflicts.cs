@@ -4,7 +4,7 @@
 
 using DroidNet.Storage;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 
 namespace Oxygen.Editor.MaterialEditor;
 

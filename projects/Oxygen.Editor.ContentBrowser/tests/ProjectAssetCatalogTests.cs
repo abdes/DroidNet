@@ -6,6 +6,10 @@ using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using AwesomeAssertions;
 using DroidNet.Storage;
+using DroidNet.Storage.Native;
+using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Publication;
+using Testably.Abstractions;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentPipeline.Discovery;
@@ -27,8 +31,8 @@ public sealed class ProjectAssetCatalogTests
     [TestMethod]
     public async Task ConcurrentInitializationAndFirstNotificationObserveEveryMount()
     {
-        var fixture = new Fixture();
-        using var catalog = fixture.CreateCatalog();
+        using var fixture = new Fixture();
+        await using var catalog = fixture.CreateCatalog();
         var observations = new ConcurrentQueue<Task<IReadOnlyList<AssetRecord>>>();
         var notified = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var subscription = catalog.Changes.Subscribe(change =>
@@ -57,8 +61,8 @@ public sealed class ProjectAssetCatalogTests
     [TestMethod]
     public async Task CanceledQueryLeavesSharedInitializationAvailable()
     {
-        var fixture = new Fixture();
-        using var catalog = fixture.CreateCatalog();
+        using var fixture = new Fixture();
+        await using var catalog = fixture.CreateCatalog();
         var initialization = catalog.InitializeAsync();
         await fixture.RootEntered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         using var cancellation = new CancellationTokenSource();
@@ -78,10 +82,10 @@ public sealed class ProjectAssetCatalogTests
     [TestMethod]
     public async Task FailedInitializationCanRetryWithoutDuplicatingCatalogs()
     {
-        var fixture = new Fixture { RootFailure = new IOException("Scan failed") };
+        using var fixture = new Fixture { RootFailure = new IOException("Scan failed") };
         fixture.RootRelease.SetResult();
         fixture.ContentRelease.SetResult();
-        using var catalog = fixture.CreateCatalog();
+        await using var catalog = fixture.CreateCatalog();
         Func<Task> initialize = catalog.InitializeAsync;
         _ = await initialize.Should().ThrowAsync<IOException>().ConfigureAwait(false);
         fixture.RootFailure = null;
@@ -96,8 +100,8 @@ public sealed class ProjectAssetCatalogTests
     [TestMethod]
     public async Task DisposeDuringInitializationSuppressesLateNotifications()
     {
-        var fixture = new Fixture();
-        using var catalog = fixture.CreateCatalog();
+        using var fixture = new Fixture();
+        await using var catalog = fixture.CreateCatalog();
         var notifications = new ConcurrentQueue<AssetChange>();
         using var subscription = catalog.Changes.Subscribe(notifications.Enqueue);
         var query = catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken);
@@ -117,9 +121,9 @@ public sealed class ProjectAssetCatalogTests
     [TestMethod]
     public async Task InitializationWithoutAProjectCanRunAfterActivation()
     {
-        var fixture = new Fixture();
+        using var fixture = new Fixture();
         fixture.SetProjectAvailable(available: false);
-        using var catalog = fixture.CreateCatalog();
+        await using var catalog = fixture.CreateCatalog();
         await catalog.InitializeAsync().ConfigureAwait(false);
         _ = (await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeEmpty();
         fixture.SetProjectAvailable(available: true);
@@ -128,21 +132,136 @@ public sealed class ProjectAssetCatalogTests
         AssertComplete(await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false));
     }
 
-    /// <summary>An added folder is not registered when its first scan fails.</summary>
-    /// <returns>The asynchronous folder-registration regression.</returns>
+    /// <summary>Concurrent consumers of one accepted publication share its initial scan.</summary>
     [TestMethod]
-    public async Task FailedAdditionalFolderLeavesTheExistingCatalogIntact()
+    public async Task ConcurrentRefreshesOfTheSamePublicationShareInitialization()
     {
-        var fixture = new Fixture();
+        using var fixture = new Fixture();
+        using var selected = await fixture.Publication.AcquireReadAsync(fixture.Project, this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var catalog = fixture.CreateCatalog();
+        var first = catalog.RefreshAsync(selected, this.TestContext.CancellationToken);
+        await fixture.RootEntered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var second = catalog.RefreshAsync(selected, this.TestContext.CancellationToken);
         fixture.RootRelease.SetResult();
         fixture.ContentRelease.SetResult();
-        using var catalog = fixture.CreateCatalog();
-        var before = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
-        var extra = fixture.AddFailingFolder();
-        Func<Task> add = () => catalog.AddFolderAsync(extra, "Extra");
-        _ = await add.Should().ThrowAsync<IOException>().ConfigureAwait(false);
-        var after = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = after.Should().Equal(before);
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = fixture.RootEnumerations.Should().Be(1);
+        AssertComplete(await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false));
+    }
+
+    /// <summary>A malformed head blocks native admission without hiding authored assets or repeatedly rebuilding their catalog.</summary>
+    [TestMethod]
+    public async Task DamagedPublicationRetainsAuthoringAndCanRecoverAfterRepair()
+    {
+        using var fixture = new Fixture();
+        var cooked = Directory.CreateDirectory(Path.Combine(fixture.Project.ProjectRoot, ".cooked"));
+        var head = Path.Combine(cooked.FullName, "head.json");
+        await File.WriteAllTextAsync(head, "{broken", this.TestContext.CancellationToken).ConfigureAwait(false);
+        fixture.RootRelease.SetResult();
+        fixture.ContentRelease.SetResult();
+        await using var catalog = fixture.CreateCatalog();
+        await catalog.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        using (var damaged = await catalog.ReadSnapshotAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false))
+        {
+            AssertComplete(damaged.Records);
+            _ = damaged.Publication.Should().BeNull();
+            _ = damaged.PublicationError.Should().NotBeNullOrEmpty();
+        }
+
+        await catalog.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = fixture.RootEnumerations.Should().Be(1);
+        Func<Task> admit = async () => { using var selected = await fixture.Publication.AcquireReadAsync(fixture.Project, this.TestContext.CancellationToken).ConfigureAwait(false); };
+        _ = await admit.Should().ThrowAsync<Exception>().ConfigureAwait(false);
+        File.Delete(head);
+        await catalog.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var repaired = await catalog.ReadSnapshotAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
+        AssertComplete(repaired.Records);
+        _ = repaired.Publication.Should().NotBeNull();
+        _ = repaired.PublicationError.Should().BeNull();
+    }
+
+    /// <summary>An older automatic observation cannot displace an explicitly accepted publication.</summary>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task AcceptedPublicationWinsOverDelayedAutomaticObservation(bool fail)
+    {
+        using var fixture = new Fixture();
+        using var accepted = await fixture.Publication.AcquireReadAsync(fixture.Project, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var files = new NativeAtomicFileStore(new RealFileSystem());
+        fixture.ReadOverride = async (path, token) =>
+        {
+            entered.TrySetResult();
+            await release.Task.WaitAsync(token).ConfigureAwait(false);
+            return fail ? throw new InvalidDataException("An obsolete observation failed.") : await files.ReadAsync(path, token).ConfigureAwait(false);
+        };
+        fixture.RootRelease.SetResult();
+        fixture.ContentRelease.SetResult();
+        await using var catalog = fixture.CreateCatalog();
+        var automatic = catalog.RefreshAsync(this.TestContext.CancellationToken);
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+            await catalog.RefreshAsync(accepted, this.TestContext.CancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+
+        await automatic.ConfigureAwait(false);
+        using var snapshot = await catalog.ReadSnapshotAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
+        AssertComplete(snapshot.Records);
+        _ = snapshot.Publication.Should().NotBeNull();
+        _ = snapshot.PublicationError.Should().BeNull();
+        _ = fixture.RootEnumerations.Should().Be(1);
+    }
+
+    /// <summary>Shutdown waits for independent catalog initialization after cancelling its readers.</summary>
+    [TestMethod]
+    public async Task AsyncDisposalDrainsInitializationBeforeReleasingItsLifetime()
+    {
+        using var fixture = new Fixture();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var files = new NativeAtomicFileStore(new RealFileSystem());
+        fixture.ReadOverride = async (path, token) =>
+        {
+            entered.TrySetResult();
+            try
+            {
+                await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false);
+            }
+            finally
+            {
+                cancelled.TrySetResult();
+                await release.Task.ConfigureAwait(false);
+            }
+
+            return await files.ReadAsync(path, token).ConfigureAwait(false);
+        };
+        fixture.RootRelease.SetResult();
+        fixture.ContentRelease.SetResult();
+        await using var catalog = fixture.CreateCatalog();
+        var initialization = catalog.InitializeAsync();
+        Task disposal = Task.CompletedTask;
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+            disposal = catalog.DisposeAsync().AsTask();
+            await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+            _ = disposal.IsCompleted.Should().BeFalse();
+        }
+        finally
+        {
+            release.TrySetResult();
+            await disposal.ConfigureAwait(false);
+        }
+
+        _ = await ((Func<Task>)(() => initialization)).Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
     }
 
     private static void AssertComplete(IReadOnlyList<AssetRecord> records)
@@ -151,17 +270,17 @@ public sealed class ProjectAssetCatalogTests
         _ = records.Should().Contain(record => record.Uri == new Uri("asset:///Content/Shape.ogeo"));
     }
 
-    private sealed class Fixture
+    private sealed class Fixture : IDisposable
     {
         private readonly Mock<IStorageProvider> storage = new();
         private readonly Mock<IProjectContextService> context = new();
         private readonly ProjectContext project;
-        private readonly Dictionary<string, IFolder> extraFolders = [with(StringComparer.Ordinal)];
+        private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-Catalog-");
         private int rootEnumerations;
 
         public Fixture()
         {
-            var root = Path.Combine(Path.GetTempPath(), "Oxygen-Catalog-" + Guid.NewGuid().ToString("N"));
+            var root = this.directory.FullName;
             var content = Path.Combine(root, "Content");
             this.project = new ProjectContext
             {
@@ -169,6 +288,12 @@ public sealed class ProjectAssetCatalogTests
                 ProjectRoot = root, AuthoringMounts = [new("Content", "Content")],
                 LocalFolderMounts = [], Scenes = [],
             };
+            var files = new NativeAtomicFileStore(new RealFileSystem());
+            var observedFiles = new Mock<IAtomicFileStore>();
+            _ = observedFiles.Setup(value => value.ReadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Returns((string path, CancellationToken token) => this.ReadOverride?.Invoke(path, token) ?? files.ReadAsync(path, token));
+            this.Publication = new(Mock.Of<IContentCookCoordinator>(), this.context.Object, observedFiles.Object,
+                new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()), atomicFiles: files));
             this.SetProjectAvailable(available: true);
             _ = this.storage.Setup(value => value.Normalize(It.IsAny<string>())).Returns(string.Empty);
             _ = this.storage.Setup(value => value.NormalizeRelativeTo(It.IsAny<string>(), It.IsAny<string>()))
@@ -178,7 +303,7 @@ public sealed class ProjectAssetCatalogTests
             var missing = new Mock<IFolder>();
             _ = missing.Setup(value => value.ExistsAsync()).ReturnsAsync(value: false);
             _ = this.storage.Setup(value => value.GetFolderFromPathAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((string path, CancellationToken _) => string.Equals(path, root, StringComparison.Ordinal) ? rootFolder : string.Equals(path, content, StringComparison.Ordinal) ? contentFolder : this.extraFolders.GetValueOrDefault(path, missing.Object));
+                .ReturnsAsync((string path, CancellationToken _) => string.Equals(path, root, StringComparison.Ordinal) ? rootFolder : string.Equals(path, content, StringComparison.Ordinal) ? contentFolder : missing.Object);
         }
 
         public TaskCompletionSource RootEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -193,6 +318,8 @@ public sealed class ProjectAssetCatalogTests
 
         public Exception? RootFailure { get; set; }
 
+        public Func<string, CancellationToken, Task<FileSnapshot>>? ReadOverride { get; set; }
+
         public ProjectAssetCatalog CreateCatalog()
         {
             var empty = new BuiltinCatalogSnapshot(Catalog: null, IsLastKnown: false, Notice: null);
@@ -200,19 +327,17 @@ public sealed class ProjectAssetCatalogTests
             _ = discovery.SetupGet(value => value.Snapshot).Returns(empty);
             _ = discovery.Setup(value => value.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(empty);
             _ = discovery.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).ReturnsAsync(empty);
-            return new(this.context.Object, this.storage.Object, discovery.Object);
+            return new(this.context.Object, this.storage.Object, discovery.Object, this.Publication);
         }
 
         public void SetProjectAvailable(bool available)
             => _ = this.context.SetupGet(static value => value.ActiveProject).Returns(available ? this.project : null);
 
-        public IFolder AddFailingFolder()
-        {
-            var path = Path.Combine(this.project.ProjectRoot, "Extra");
-            var folder = MakeFolder(path, (location, token) => throw new IOException("Extra folder failed"));
-            this.extraFolders.Add(path, folder);
-            return folder;
-        }
+        public ProjectContext Project => this.project;
+
+        public CookPublicationService Publication { get; }
+
+        public void Dispose() => this.directory.Delete(recursive: true);
 
         private static IFolder MakeFolder(string path, Func<string, CancellationToken, IAsyncEnumerable<IDocument>> documents)
         {

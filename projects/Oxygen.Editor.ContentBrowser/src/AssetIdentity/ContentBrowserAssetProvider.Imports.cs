@@ -14,10 +14,16 @@ public sealed partial class ContentBrowserAssetProvider
 {
     private static bool IsModelSource(Uri uri) => Path.GetExtension(uri.AbsolutePath).ToUpperInvariant() is ".GLTF" or ".GLB" or ".FBX";
 
-    private static bool IsProjectCookedOutput(ProjectContext project, ContentBrowserAssetItem item)
+    private static bool IsProjectCookedOutput(IEnumerable<string> roots, ContentBrowserAssetItem item)
         => item.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene
-            && item.CookedUri is not null && TryResolveSourcePath(project, item.CookedUri) is not null
-            && project.AuthoringMounts.Any(mount => IsInOutputRoot(item, Path.GetFullPath(Path.Combine(project.ProjectRoot, ".cooked", mount.Name))));
+            && item.CookedUri is not null && roots.Any(root => IsInOutputRoot(item, root));
+
+    private static string? ResolvePublishedOutputPath(ContentBrowserAssetItem item, AssetCookStatus status)
+    {
+        var output = status.Outputs.FirstOrDefault(output => output.CookedAssetUri == item.CookedUri);
+        return status.HasAvailableOutput && output?.DescriptorRelativePath is { } descriptor
+            && status.OutputRoots.TryGetValue(output.MountName, out var root) ? Path.Combine(root, descriptor) : null;
+    }
 
     private static bool IsInOutputRoot(ContentBrowserAssetItem item, string root)
         => item.CookedMetadata is { } metadata ? string.Equals(Path.GetFullPath(metadata.RootFolderPath), root, StringComparison.OrdinalIgnoreCase)
@@ -31,7 +37,7 @@ public sealed partial class ContentBrowserAssetProvider
         }
 
         var output = status.Outputs.FirstOrDefault(output => output.CookedAssetUri == item.IdentityUri && IsModelSource(output.SourceAssetUri));
-        return output is not null && IsProjectCookedOutput(project, item)
+        return output is not null && IsProjectCookedOutput(status.OutputRoots.Values, item)
             ? ApplyCookStatus(item with { ImportSourceUri = output.SourceAssetUri, ImportSourcePath = TryResolveSourcePath(project, output.SourceAssetUri) }, status)
             : item;
     }

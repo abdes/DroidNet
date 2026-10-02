@@ -21,7 +21,9 @@ public sealed partial class MaterialDocumentServiceTests
         var uri = new Uri("asset:///Content/Materials/Test.omat.json");
         var document = await service.CreateAsync(uri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         var cooked = await service.CookAsync(document.DocumentId, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = cooked.State.Should().Be(MaterialCookState.Cooked);
+        _ = cooked.State.Should().Be(
+            MaterialCookState.Cooked,
+            string.Join("; ", cooked.Cook?.Diagnostics.Select(static issue => issue.Message) ?? []));
         await service.CloseAsync(document.DocumentId, discard: false, this.TestContext.CancellationToken).ConfigureAwait(false);
         var count = workspace.CookCoordinator.Runs.Count;
 

@@ -4,27 +4,53 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#ifdef _WIN32
+#  include <Windows.h> // IWYU pragma: keep
+
+#  include <errhandlingapi.h>
+#  include <minwindef.h>
+#  include <winbase.h>
+#endif
+
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
+#include <ios>
 #include <limits>
+#include <memory>
+#include <mutex>
 #include <optional>
+#include <span>
 #include <system_error>
 #include <utility>
-
-#ifdef _WIN32
-#  include <Windows.h>
-#endif
+#include <vector>
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Console/CVar.h>
+#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Core/AnyCache.h>
+#include <Oxygen/Core/EngineTag.h>
+#include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Engine/Scripting/IScriptCompiler.h>
+#include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
 #include <Oxygen/Engine/Scripting/ScriptCompilationService.h>
+#include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/Shared.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 
 namespace oxygen::scripting {
 namespace {
@@ -694,13 +720,13 @@ auto ScriptCompilationService::TryGetCachedBytecode(
   const CompileKey compile_key) -> std::shared_ptr<const ScriptBytecodeBlob>
 {
   std::lock_guard lock(l1_cache_mutex_);
-  auto cached = l1_cache_.CheckOut<const ScriptBytecodeBlob>(
+  auto cached = l1_cache_.Acquire<const ScriptBytecodeBlob>(
     compile_key.get(), oxygen::CheckoutOwner::kInternal);
-  if (cached == nullptr) {
+  if (!cached) {
     return nullptr;
   }
-  l1_cache_.CheckIn(compile_key.get());
-  return cached;
+  static_cast<void>(l1_cache_.Release(std::move(cached->ticket)));
+  return std::move(cached->value);
 }
 
 auto ScriptCompilationService::StoreCachedBytecode(const CompileKey compile_key,

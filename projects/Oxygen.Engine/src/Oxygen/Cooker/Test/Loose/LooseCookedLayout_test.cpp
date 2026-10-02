@@ -4,15 +4,42 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::content::import::LooseCookedLayout;
 using oxygen::data::AssetType;
 
 namespace {
+
+NOLINT_TEST(LooseCookedLayoutTest, SourceSidecarsPreserveStableIdentityNaming)
+{
+  const auto layout = LooseCookedLayout {};
+  EXPECT_EQ(
+    layout.TextureDescriptorRelPath("folder\\paint.albedo.png", "retained-id"),
+    layout.TextureDescriptorRelPath("paint_albedo_4c53d36a5b11011d"));
+  EXPECT_EQ(
+    layout.BufferDescriptorRelPath("folder/vertices.bin", "retained-id"),
+    layout.BufferDescriptorRelPath("vertices_4c53d36a5b11011d"));
+  EXPECT_EQ(layout.TextureDescriptorRelPath("textures/paint.png", ""),
+    layout.TextureDescriptorRelPath("paint_06852ab67af73db3"));
+  EXPECT_EQ(layout.TextureDescriptorRelPath("", ""),
+    layout.TextureDescriptorRelPath("texture_cbf29ce484222325"));
+  EXPECT_EQ(layout.BufferDescriptorRelPath("", ""),
+    layout.BufferDescriptorRelPath("buffer_cbf29ce484222325"));
+}
+
+NOLINT_TEST(LooseCookedLayoutTest, SourceSidecarsRespectConfiguredLayout)
+{
+  auto layout = LooseCookedLayout {};
+  layout.descriptors_dir = "Assets";
+  layout.resources_dir = "Resources2";
+  EXPECT_EQ(layout.TextureDescriptorRelPath("paint.png", "retained-id"),
+    layout.TextureDescriptorRelPath("paint_4c53d36a5b11011d"));
+  EXPECT_NE(layout.TextureDescriptorRelPath("paint.png", "first-source"),
+    layout.TextureDescriptorRelPath("paint.png", "second-source"));
+}
 
 NOLINT_TEST(LooseCookedLayoutTest, DefaultSettingsAreCorrect)
 {
@@ -27,8 +54,6 @@ NOLINT_TEST(LooseCookedLayoutTest, DefaultSettingsAreCorrect)
   EXPECT_EQ(layout.physics_data_file_name, "physics.data");
   EXPECT_EQ(layout.scripts_table_file_name, "scripts.table");
   EXPECT_EQ(layout.scripts_data_file_name, "scripts.data");
-  EXPECT_EQ(layout.script_bindings_table_file_name, "script-bindings.table");
-  EXPECT_EQ(layout.script_bindings_data_file_name, "script-bindings.data");
   EXPECT_EQ(layout.descriptors_dir, "");
   EXPECT_EQ(layout.scenes_subdir, "Scenes");
   EXPECT_EQ(layout.geometry_subdir, "Geometry");
@@ -150,10 +175,6 @@ NOLINT_TEST(LooseCookedLayoutTest, ResourcePathsAreCorrect)
   EXPECT_EQ(layout.PhysicsDataRelPath(), "Physics/Resources/physics.data");
   EXPECT_EQ(layout.ScriptsTableRelPath(), "Resources/scripts.table");
   EXPECT_EQ(layout.ScriptsDataRelPath(), "Resources/scripts.data");
-  EXPECT_EQ(
-    layout.ScriptBindingsTableRelPath(), "Resources/script-bindings.table");
-  EXPECT_EQ(
-    layout.ScriptBindingsDataRelPath(), "Resources/script-bindings.data");
 
   layout.resources_dir = "";
   EXPECT_EQ(layout.BuffersTableRelPath(), "buffers.table");

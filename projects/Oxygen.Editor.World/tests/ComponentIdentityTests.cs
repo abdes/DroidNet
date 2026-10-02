@@ -50,6 +50,7 @@ public sealed class ComponentIdentityTests
                 },
                 new PerspectiveCameraData
                 {
+                    AspectMode = Oxygen.Managed.Core.CameraAspectMode.Auto,
                     Id = duplicateId,
                     Name = "Camera",
                 },

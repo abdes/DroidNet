@@ -5,16 +5,24 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
+#include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <nlohmann/json-schema.hpp>
-#include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+
+#include <nlohmann/json-schema.hpp>
+#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
@@ -25,6 +33,8 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import::detail {
 
@@ -195,10 +205,10 @@ auto PhysicsMaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   };
 
   EnsureCookedRoot();
-  auto session = ImportSession(Request(), FileReader(), FileWriter(),
-    ThreadPool(), TableRegistry(), IndexRegistry());
+  auto& session = Session();
 
-  if (!Request().physics_material_descriptor.has_value()) {
+  const auto& payload = Request().physics_material_descriptor;
+  if (!payload.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
       "physics.material.request_invalid",
       "PhysicsMaterialDescriptorImportJob requires request "
@@ -211,8 +221,7 @@ auto PhysicsMaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto descriptor_doc = json {};
   auto parse_exception = std::optional<std::string> {};
   try {
-    descriptor_doc = json::parse(
-      Request().physics_material_descriptor->normalized_descriptor_json);
+    descriptor_doc = json::parse(payload->normalized_descriptor_json);
   } catch (const std::exception& ex) {
     parse_exception = ex.what();
   }
@@ -279,14 +288,13 @@ auto PhysicsMaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       descriptor_doc.at("combine_mode_restitution").get<std::string>());
   }
 
-  auto pipeline = PhysicsMaterialImportPipeline(*ThreadPool(),
+  auto& pipeline = CreatePipeline<PhysicsMaterialImportPipeline>(*ThreadPool(),
     PhysicsMaterialImportPipeline::Config {
       .queue_capacity = Concurrency().material.queue_capacity,
       .worker_count = Concurrency().material.workers,
       .with_content_hashing
       = EffectiveContentHashingEnabled(Request().options.with_content_hashing),
     });
-  StartPipeline(pipeline);
 
   auto item = PhysicsMaterialImportPipeline::WorkItem {
     .source_id = target->virtual_path,
@@ -315,7 +323,7 @@ auto PhysicsMaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   const auto emit_start = std::chrono::steady_clock::now();
   const auto material_key = ResolveAssetKey(Request(), target->virtual_path);
   session.AssetEmitter().Emit(material_key, data::AssetType::kPhysicsMaterial,
-    target->virtual_path, target->relpath, result.descriptor_bytes);
+    target->virtual_path, target->relpath, result.descriptor_bytes, {});
   session.AddEmitDuration(
     MakeDuration(emit_start, std::chrono::steady_clock::now()));
 

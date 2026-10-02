@@ -4,6 +4,9 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Interop;
 
@@ -50,7 +53,7 @@ public sealed partial class NativeLoopCleanupTests
             {
                 await runner.WaitForEngineReadyAsync().WaitAsync(TimeSpan.FromSeconds(10), this.TestContext.CancellationToken).ConfigureAwait(false);
                 var transport = new NativeRuntimeCommandTransport(context);
-                await transport.ReplaceCookedRootsAsync(cookedRoots ?? []).ConfigureAwait(false);
+                await transport.ReplaceCookedRootsAsync((cookedRoots ?? []).Select(static path => new RuntimeCookedRoot(path)).ToArray()).ConfigureAwait(false);
                 _ = commands.BeginRun(transport, loop);
                 await check(commands).ConfigureAwait(false);
             }
@@ -93,9 +96,30 @@ public sealed partial class NativeLoopCleanupTests
         _ = commands.Execute(replacement, this.TestContext.CancellationToken).Status.Should().Be(RuntimeCommandStatus.Accepted);
         await this.WaitForAppliedAssetAsync(commands, replacement).ConfigureAwait(false);
         _ = commands.IsCurrentAssetFailure(failure).Should().BeFalse();
-        var material = new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetMaterialOverride(nodeId, 0, "asset:///Engine/Generated/Materials/Default"));
+        var inventory = await this.ReadNativeCubeSlotsAsync().ConfigureAwait(false);
+        var slot = inventory.Slots.Single();
+        var material = new RuntimeWorldRequest(Guid.NewGuid(), target,
+            new RuntimeSetMaterialOverride(nodeId, inventory.GeometryUri.AbsoluteUri, slot.SlotId,
+                inventory.LayoutRevision, "asset:///Engine/Generated/Materials/Default", MaterialSlotAssignmentIntent.ObservedEdit));
         _ = commands.Execute(material, this.TestContext.CancellationToken).Status.Should().Be(RuntimeCommandStatus.Accepted);
         await this.WaitForAppliedAssetAsync(commands, material).ConfigureAwait(false);
+    }
+
+    private async Task<GeometryMaterialSlotMetadata> ReadNativeCubeSlotsAsync()
+    {
+        var root = Directory.CreateTempSubdirectory("Oxygen.NativeSlotCatalog.");
+        try
+        {
+            using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+            var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(),
+                new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
+            var catalog = await api.GetBuiltinGeometryCatalogAsync(root.FullName, "Content", this.TestContext.CancellationToken).ConfigureAwait(false);
+            return catalog.Find(new Uri("asset:///Engine/Generated/BasicShapes/Cube"))!.MaterialSlots;
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
     }
 
     private async Task WaitForAppliedAssetAsync(RuntimeCommandDispatcher commands, RuntimeWorldRequest request)

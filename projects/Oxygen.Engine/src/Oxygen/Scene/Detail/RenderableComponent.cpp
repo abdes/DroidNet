@@ -6,28 +6,43 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <iterator>
 #include <limits>
+#include <memory>
+#include <optional>
 #include <stdexcept>
 #include <utility>
+#include <variant>
+
+#include <glm/common.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/geometric.hpp>
+#include <glm/gtc/matrix_access.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
+#include <Oxygen/Scene/Types/ActiveMesh.h>
+#include <Oxygen/Scene/Types/RenderablePolicies.h>
+#include <Oxygen/Scene/Types/Strong.h>
 
 using oxygen::scene::detail::RenderableComponent;
 
-bool RenderableComponent::UsesFixedPolicy() const noexcept
+auto RenderableComponent::UsesFixedPolicy() const noexcept -> bool
 {
   return std::holds_alternative<FixedPolicy>(policy_);
 }
 
-bool RenderableComponent::UsesDistancePolicy() const noexcept
+auto RenderableComponent::UsesDistancePolicy() const noexcept -> bool
 {
   return std::holds_alternative<DistancePolicy>(policy_);
 }
 
-bool RenderableComponent::UsesScreenSpaceErrorPolicy() const noexcept
+auto RenderableComponent::UsesScreenSpaceErrorPolicy() const noexcept -> bool
 {
   return std::holds_alternative<ScreenSpaceErrorPolicy>(policy_);
 }
@@ -37,7 +52,7 @@ void RenderableComponent::SetLodPolicy(FixedPolicy p)
   // Clamp against current geometry lod count if available
   if (geometry_asset_) {
     const auto lc = geometry_asset_->LodCount();
-    p.index = (lc == 0) ? 0u : p.Clamp(lc);
+    p.index = (lc == 0) ? 0U : p.Clamp(lc);
   }
   policy_ = std::move(p);
   current_lod_.reset();
@@ -75,8 +90,8 @@ RenderableComponent::RenderableComponent(
   RebuildLocalBoundsCache();
   RebuildSubmeshStateCache();
   if (auto* fp = std::get_if<FixedPolicy>(&policy_)) {
-    const auto lc = geometry_asset_ ? geometry_asset_->LodCount() : 0u;
-    fp->index = (lc == 0) ? 0u : fp->Clamp(lc);
+    const auto lc = geometry_asset_ ? geometry_asset_->LodCount() : 0U;
+    fp->index = (lc == 0) ? 0U : fp->Clamp(lc);
   }
   RecomputeWorldBoundingSphere();
   InvalidateWorldAabbCache();
@@ -97,16 +112,19 @@ RenderableComponent::RenderableComponent(
 auto RenderableComponent::GetActiveMesh() const noexcept
   -> std::optional<ActiveMesh>
 {
-  if (!geometry_asset_)
+  if (!geometry_asset_) {
     return std::nullopt;
+  }
 
   const auto lod_count = geometry_asset_->LodCount();
-  if (lod_count == 0)
+  if (lod_count == 0) {
     return std::nullopt;
+  }
 
   const auto resolved = ResolveEffectiveLod(lod_count);
-  if (!resolved)
+  if (!resolved) {
     return std::nullopt;
+  }
   const auto lod = *resolved;
 
   const auto& mesh_ptr = geometry_asset_->MeshAt(lod);
@@ -120,17 +138,19 @@ auto RenderableComponent::GetActiveMesh() const noexcept
 auto RenderableComponent::GetActiveLodIndex() const noexcept
   -> std::optional<std::size_t>
 {
-  if (!geometry_asset_)
+  if (!geometry_asset_) {
     return std::nullopt;
+  }
   const auto lod_count = geometry_asset_->LodCount();
-  if (lod_count == 0)
+  if (lod_count == 0) {
     return std::nullopt;
+  }
   return ResolveEffectiveLod(lod_count);
 }
 
 auto RenderableComponent::EffectiveLodCount() const noexcept -> std::size_t
 {
-  return geometry_asset_ ? geometry_asset_->LodCount() : 0u;
+  return geometry_asset_ ? geometry_asset_->LodCount() : 0U;
 }
 
 //=== Local bounds cache and world bounds recompute ===--------------------//
@@ -142,19 +162,20 @@ void RenderableComponent::SetGeometry(
     return; // no-op
   }
 
+  const auto previous_geometry = std::move(geometry_asset_);
   geometry_asset_ = std::move(geometry);
 
   // Reset/evaluate caches
   RebuildLocalBoundsCache();
-  RebuildSubmeshStateCache();
+  RebuildSubmeshStateCache(previous_geometry.get());
 
   // Reset dynamic LOD selection when geometry changes
   current_lod_.reset();
 
   // Clamp fixed LOD index to available range
   if (auto* fp = std::get_if<FixedPolicy>(&policy_)) {
-    const auto lc = geometry_asset_ ? geometry_asset_->LodCount() : 0u;
-    fp->index = (lc == 0) ? 0u : fp->Clamp(lc);
+    const auto lc = geometry_asset_ ? geometry_asset_->LodCount() : 0U;
+    fp->index = (lc == 0) ? 0U : fp->Clamp(lc);
   }
 
   // Recompute world bounds for current transform (if available)
@@ -180,7 +201,7 @@ void RenderableComponent::RebuildLocalBoundsCache() noexcept
       continue;
     }
 
-    auto& lb = lod_bounds_[i];
+    auto& lb = lod_bounds_.at(i);
     lb.mesh_bbox_min = mesh_ptr->BoundingBoxMin();
     lb.mesh_bbox_max = mesh_ptr->BoundingBoxMax();
     lb.mesh_sphere = mesh_ptr->BoundingSphere();
@@ -193,35 +214,40 @@ void RenderableComponent::RebuildLocalBoundsCache() noexcept
   }
 }
 
-void RenderableComponent::RebuildSubmeshStateCache() noexcept
+void RenderableComponent::RebuildSubmeshStateCache(
+  const data::GeometryAsset* previous_geometry) noexcept
 {
-  // Preserve existing where possible, clear or default-initialize new slots.
-  auto old = std::move(submesh_state_);
+  auto previous_materials = std::move(slot_materials_);
+  slot_materials_.clear();
   submesh_state_.clear();
   if (!geometry_asset_) {
     return;
   }
-  const auto lod_count = geometry_asset_->LodCount();
-  submesh_state_.resize(lod_count);
-  for (std::size_t i = 0; i < lod_count; ++i) {
-    const auto& mesh_ptr = geometry_asset_->MeshAt(i);
-    if (!mesh_ptr) {
+  const auto& slots = geometry_asset_->MaterialSlots().slots;
+  slot_materials_.resize(slots.size());
+  submesh_state_.resize(geometry_asset_->LodCount());
+  for (std::size_t lod = 0; lod < submesh_state_.size(); ++lod) {
+    submesh_state_.at(lod).resize(
+      geometry_asset_->MeshAt(lod)->SubMeshes().size());
+  }
+  if (previous_geometry == nullptr || previous_geometry->GetAssetKey().IsNil()
+    || previous_geometry->GetAssetKey() != geometry_asset_->GetAssetKey()) {
+    return;
+  }
+  const auto& previous_slots = previous_geometry->MaterialSlots().slots;
+  for (std::size_t index = 0; index < slots.size(); ++index) {
+    const auto previous = std::ranges::find(
+      previous_slots, slots.at(index).slot_id, &data::MaterialSlot::slot_id);
+    if (previous == previous_slots.end()) {
       continue;
     }
-    const auto submeshes = mesh_ptr->SubMeshes();
-    auto& lod_states = submesh_state_[i];
-    lod_states.resize(submeshes.size());
-    // Default initialize all
-    for (auto& st : lod_states) {
-      st = SubmeshState { .visible = true, .override_material = {} };
-    }
-    // Copy from old if available
-    if (i < old.size()) {
-      const auto& prev = old[i];
-      const auto count = (std::min)(prev.size(), lod_states.size());
-      for (std::size_t s = 0; s < count; ++s) {
-        lod_states[s] = prev[s];
-      }
+    const auto previous_index = static_cast<std::size_t>(
+      std::distance(previous_slots.begin(), previous));
+    slot_materials_.at(index) = previous_materials.at(previous_index);
+    for (const auto& binding : slots.at(index).bindings) {
+      submesh_state_.at(binding.lod_index)
+        .at(binding.submesh_index)
+        .override_material = slot_materials_.at(index);
     }
   }
 }
@@ -230,23 +256,23 @@ static inline auto MaxScaleFromMatrix(const glm::mat4& m) noexcept -> float
 {
   // Columns represent basis vectors (assuming column-major GLM). Compute their
   // lengths and take the maximum as conservative uniform scale for sphere.
-  const auto sx = glm::length(glm::vec3 { m[0][0], m[0][1], m[0][2] });
-  const auto sy = glm::length(glm::vec3 { m[1][0], m[1][1], m[1][2] });
-  const auto sz = glm::length(glm::vec3 { m[2][0], m[2][1], m[2][2] });
+  const auto sx = glm::length(glm::vec3(glm::column(m, 0)));
+  const auto sy = glm::length(glm::vec3(glm::column(m, 1)));
+  const auto sz = glm::length(glm::vec3(glm::column(m, 2)));
   return (std::max)((std::max)(sx, sy), sz);
 }
 
 static inline auto TransformPoint(
   const glm::mat4& m, const glm::vec3& p) noexcept -> glm::vec3
 {
-  return glm::vec3(m * glm::vec4(p, 1.0f));
+  return { m * glm::vec4(p, 1.0F) };
 }
 
 static inline auto SphereFromBounds(const glm::vec3& bounds_min,
   const glm::vec3& bounds_max) noexcept -> glm::vec4
 {
-  const auto center = 0.5f * (bounds_min + bounds_max);
-  const auto radius = 0.5f * glm::length(bounds_max - bounds_min);
+  const auto center = 0.5F * (bounds_min + bounds_max);
+  const auto radius = 0.5F * glm::length(bounds_max - bounds_min);
   return { center.x, center.y, center.z, radius };
 }
 
@@ -266,12 +292,12 @@ static inline auto IsUsableBounds(
 static inline auto IsUsableSphere(const glm::vec4& sphere) noexcept -> bool
 {
   return std::isfinite(sphere.x) && std::isfinite(sphere.y)
-    && std::isfinite(sphere.z) && std::isfinite(sphere.w) && sphere.w > 0.0f;
+    && std::isfinite(sphere.z) && std::isfinite(sphere.w) && sphere.w > 0.0F;
 }
 
 void RenderableComponent::RecomputeWorldBoundingSphere() const noexcept
 {
-  world_bounding_sphere_ = { 0.0f, 0.0f, 0.0f, 0.0f };
+  world_bounding_sphere_ = { 0.0F, 0.0F, 0.0F, 0.0F };
   if (!geometry_asset_) {
     return;
   }
@@ -281,7 +307,7 @@ void RenderableComponent::RecomputeWorldBoundingSphere() const noexcept
   const auto lod_count = geometry_asset_->LodCount();
   lod_opt = ResolveEffectiveLod(lod_count);
 
-  glm::vec4 local_sphere { 0.0f, 0.0f, 0.0f, 0.0f };
+  glm::vec4 local_sphere { 0.0F, 0.0F, 0.0F, 0.0F };
   if (lod_opt.has_value()) {
     const auto clamped = (std::min<std::size_t>)(*lod_opt, lod_count - 1);
     const auto& mesh_ptr = geometry_asset_->MeshAt(clamped);
@@ -340,8 +366,9 @@ auto RenderableComponent::GetWorldSubMeshBoundingBox(
   if (!aabb_cache_lod_.has_value() || *aabb_cache_lod_ != lod) {
     // Rebuild cache for this LOD
     submesh_world_aabb_cache_.clear();
-    const auto count
-      = lod_bounds_.size() > lod ? lod_bounds_[lod].submesh_aabbs.size() : 0u;
+    const auto count = lod_bounds_.size() > lod
+      ? lod_bounds_.at(lod).submesh_aabbs.size()
+      : 0U;
     submesh_world_aabb_cache_.resize(count);
     aabb_cache_lod_ = lod;
   }
@@ -350,18 +377,18 @@ auto RenderableComponent::GetWorldSubMeshBoundingBox(
     return std::nullopt;
   }
 
-  auto& slot = submesh_world_aabb_cache_[submesh_index];
+  auto& slot = submesh_world_aabb_cache_.at(submesh_index);
   if (slot.has_value()) {
     return slot; // cached
   }
 
   // Compute world AABB by transforming 8 corners of local AABB
   if (lod >= lod_bounds_.size()
-    || submesh_index >= lod_bounds_[lod].submesh_aabbs.size()) {
+    || submesh_index >= lod_bounds_.at(lod).submesh_aabbs.size()) {
     return std::nullopt;
   }
 
-  const auto [bmin, bmax] = lod_bounds_[lod].submesh_aabbs[submesh_index];
+  const auto [bmin, bmax] = lod_bounds_.at(lod).submesh_aabbs.at(submesh_index);
   const glm::vec3 corners[8] = {
     { bmin.x, bmin.y, bmin.z },
     { bmax.x, bmin.y, bmin.z },
@@ -388,15 +415,17 @@ auto RenderableComponent::GetWorldSubMeshBoundingBox(
 
 //=== Submesh visibility and material overrides ==========================//
 
-bool RenderableComponent::IsSubmeshVisible(
-  std::size_t lod, std::size_t submesh_index) const noexcept
+auto RenderableComponent::IsSubmeshVisible(
+  std::size_t lod, std::size_t submesh_index) const noexcept -> bool
 {
-  if (lod >= submesh_state_.size())
+  if (lod >= submesh_state_.size()) {
     return false;
-  const auto& lod_states = submesh_state_[lod];
-  if (submesh_index >= lod_states.size())
+  }
+  const auto& lod_states = submesh_state_.at(lod);
+  if (submesh_index >= lod_states.size()) {
     return false;
-  return lod_states[submesh_index].visible;
+  }
+  return lod_states.at(submesh_index).visible;
 }
 
 void RenderableComponent::SetSubmeshVisible(
@@ -409,7 +438,7 @@ void RenderableComponent::SetSubmeshVisible(
       lod, submesh_state_.size());
     return;
   }
-  auto& lod_states = submesh_state_[lod];
+  auto& lod_states = submesh_state_.at(lod);
   if (submesh_index >= lod_states.size()) {
     LOG_F(WARNING,
       "RenderableComponent::SetSubmeshVisible: Submesh index out of range "
@@ -418,7 +447,7 @@ void RenderableComponent::SetSubmeshVisible(
       lod, submesh_index, lod_states.size());
     return;
   }
-  lod_states[submesh_index].visible = visible;
+  lod_states.at(submesh_index).visible = visible;
 }
 
 void RenderableComponent::SetAllSubmeshesVisible(bool visible) noexcept
@@ -428,6 +457,35 @@ void RenderableComponent::SetAllSubmeshesVisible(bool visible) noexcept
       st.visible = visible;
     }
   }
+}
+
+auto RenderableComponent::SetMaterialOverride(const data::MaterialSlotId slot,
+  std::shared_ptr<const data::MaterialAsset> material) noexcept -> bool
+{
+  if (!geometry_asset_) {
+    return false;
+  }
+  const auto& slots = geometry_asset_->MaterialSlots().slots;
+  const auto declaration
+    = std::ranges::find(slots, slot, &data::MaterialSlot::slot_id);
+  if (declaration == slots.end()) {
+    return false;
+  }
+  const auto index
+    = static_cast<std::size_t>(std::distance(slots.begin(), declaration));
+  slot_materials_.at(index) = material;
+  for (const auto& binding : declaration->bindings) {
+    submesh_state_.at(binding.lod_index)
+      .at(binding.submesh_index)
+      .override_material = material;
+  }
+  return true;
+}
+
+auto RenderableComponent::ClearMaterialOverride(
+  const data::MaterialSlotId slot) noexcept -> bool
+{
+  return SetMaterialOverride(slot, nullptr);
 }
 
 void RenderableComponent::SetMaterialOverride(std::size_t lod,
@@ -442,7 +500,7 @@ void RenderableComponent::SetMaterialOverride(std::size_t lod,
       lod, submesh_state_.size());
     return;
   }
-  auto& lod_states = submesh_state_[lod];
+  auto& lod_states = submesh_state_.at(lod);
   if (submesh_index >= lod_states.size()) {
     LOG_F(WARNING,
       "RenderableComponent::SetMaterialOverride: Submesh index out of range "
@@ -451,7 +509,7 @@ void RenderableComponent::SetMaterialOverride(std::size_t lod,
       lod, submesh_index, lod_states.size());
     return;
   }
-  lod_states[submesh_index].override_material = std::move(material);
+  lod_states.at(submesh_index).override_material = std::move(material);
 }
 
 void RenderableComponent::ClearMaterialOverride(
@@ -465,7 +523,7 @@ void RenderableComponent::ClearMaterialOverride(
       lod, submesh_state_.size());
     return;
   }
-  auto& lod_states = submesh_state_[lod];
+  auto& lod_states = submesh_state_.at(lod);
   if (submesh_index >= lod_states.size()) {
     LOG_F(WARNING,
       "RenderableComponent::ClearMaterialOverride: Submesh index out of range "
@@ -474,7 +532,7 @@ void RenderableComponent::ClearMaterialOverride(
       lod, submesh_index, lod_states.size());
     return;
   }
-  lod_states[submesh_index].override_material.reset();
+  lod_states.at(submesh_index).override_material.reset();
 }
 
 auto RenderableComponent::ResolveSubmeshMaterial(
@@ -485,9 +543,9 @@ auto RenderableComponent::ResolveSubmeshMaterial(
   bool had_asset = false;
   // 1) Override if set
   if (lod < submesh_state_.size()) {
-    const auto& lod_states = submesh_state_[lod];
+    const auto& lod_states = submesh_state_.at(lod);
     if (submesh_index < lod_states.size()) {
-      const auto& ov = lod_states[submesh_index].override_material;
+      const auto& ov = lod_states.at(submesh_index).override_material;
       if (ov) {
         had_override = true;
         return ov;
@@ -501,7 +559,7 @@ auto RenderableComponent::ResolveSubmeshMaterial(
     if (mesh_ptr) {
       const auto submeshes = mesh_ptr->SubMeshes();
       if (submesh_index < submeshes.size()) {
-        auto mat = submeshes[submesh_index].Material();
+        auto mat = oxygen::base::CheckedAt(submeshes, submesh_index).Material();
         if (mat) {
           had_asset = true;
           return mat;
@@ -582,12 +640,14 @@ void RenderableComponent::OnWorldTransformUpdated(const glm::mat4& world)
 auto RenderableComponent::ResolveEffectiveLod(
   std::size_t lod_count) const noexcept -> std::optional<std::size_t>
 {
-  if (lod_count == 0)
+  if (lod_count == 0) {
     return std::nullopt;
+  }
   if (std::holds_alternative<FixedPolicy>(policy_)) {
     return std::get<FixedPolicy>(policy_).Clamp(lod_count);
   }
-  if (!current_lod_.has_value())
+  if (!current_lod_.has_value()) {
     return std::nullopt;
+  }
   return (std::min<std::size_t>)(*current_lod_, lod_count - 1);
 }

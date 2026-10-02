@@ -6,14 +6,20 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <optional>
+#include <span>
 #include <vector>
 
 #include <lua.h>
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Physics/CollisionLayers.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Query/Overlap.h>
 #include <Oxygen/Physics/Query/Raycast.h>
 #include <Oxygen/Physics/Query/Sweep.h>
@@ -64,7 +70,6 @@ namespace {
     lua_pop(state, 1);
     if (raw < 0) {
       luaL_error(state, "%s must be non-negative", field_name);
-      return physics::kCollisionMaskAll;
     }
     return physics::CollisionMask { static_cast<uint32_t>(raw) };
   }
@@ -76,8 +81,6 @@ namespace {
     if (lua_isnil(state, -1) == 0) {
       if (!TryCheckVec3(state, -1, direction)) {
         luaL_error(state, "query direction must be a vector");
-        lua_pop(state, 1);
-        return oxygen::space::move::Forward;
       }
     }
     lua_pop(state, 1);
@@ -86,7 +89,6 @@ namespace {
       + (direction.y * direction.y) + (direction.z * direction.z);
     if (!std::isfinite(len_sq) || len_sq <= 1.0e-8F) {
       luaL_error(state, "query direction must be finite and non-zero");
-      return oxygen::space::move::Forward;
     }
     const auto inv_len = 1.0F / std::sqrt(len_sq);
     return Vec3 {
@@ -122,7 +124,6 @@ namespace {
         if (!TryCheckVec3(state, -1, desc.origin)) {
           lua_pop(state, 1);
           luaL_error(state, "raycast origin must be a vector");
-          return {};
         }
       }
       lua_pop(state, 1);
@@ -179,7 +180,6 @@ namespace {
         if (!TryCheckVec3(state, -1, desc.origin)) {
           lua_pop(state, 1);
           luaL_error(state, "sweep origin must be a vector");
-          return {};
         }
       }
       lua_pop(state, 1);
@@ -236,7 +236,6 @@ namespace {
         if (!TryCheckVec3(state, -1, desc.center)) {
           lua_pop(state, 1);
           luaL_error(state, "overlap center must be a vector");
-          return {};
         }
       }
       lua_pop(state, 1);
@@ -257,7 +256,6 @@ namespace {
     const auto max_hits = static_cast<int>(luaL_checkinteger(state, arg_index));
     if (max_hits <= 0) {
       luaL_error(state, "max_hits must be > 0");
-      return 64;
     }
     return std::min(max_hits, 1024);
   }
@@ -357,7 +355,7 @@ namespace {
       static_cast<int>(result.value()), static_cast<int>(hits.size()));
     lua_createtable(state, count, 0);
     for (int i = 0; i < count; ++i) {
-      const auto& hit = hits[static_cast<size_t>(i)];
+      const auto& hit = hits.at(static_cast<size_t>(i));
       lua_createtable(state, 0, 4);
       PushBodyId(state, hit.body_id);
       lua_setfield(state, -2, "body_id");
@@ -406,7 +404,7 @@ namespace {
     for (int i = 0; i < count; ++i) {
       PushBodyId(state,
         physics::BodyId {
-          static_cast<uint32_t>(user_data[static_cast<size_t>(i)]),
+          static_cast<uint32_t>(user_data.at(static_cast<size_t>(i))),
         });
       lua_rawseti(state, -2, i + 1);
     }

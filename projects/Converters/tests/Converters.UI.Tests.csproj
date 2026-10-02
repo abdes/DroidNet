@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="MSTest.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
 
         <RootNamespace>$(RootNamespace).Converters.Tests</RootNamespace>
     </PropertyGroup>
@@ -12,4 +12,5 @@
         <ProjectReference Include="..\src\Converters.csproj" />
     </ItemGroup>
 
+    <Import Project="$(ProjectsRoot)\UITests.Shared\src\UITests.Shared.projitems" Label="Shared" />
 </Project>

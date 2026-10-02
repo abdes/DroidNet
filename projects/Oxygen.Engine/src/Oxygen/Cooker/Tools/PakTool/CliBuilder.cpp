@@ -8,6 +8,7 @@
 #  error OXYGEN_PAKTOOL_VERSION must be defined for PakTool CLI version.
 #endif
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -18,8 +19,9 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
-
 #include <Oxygen/Cooker/Tools/PakTool/CliBuilder.h>
+#include <Oxygen/Cooker/Tools/PakTool/PakToolOptions.h>
+#include <Oxygen/Data/CookedSource.h>
 
 namespace oxygen::content::pak::tool {
 
@@ -85,6 +87,18 @@ namespace {
             .kind = data::CookedSourceKind::kLooseCooked,
             .path = path,
           });
+        })
+        .Build());
+
+    group->Add(Option::WithKey("script-source-root")
+        .About(
+          "Authoring root for external scripts; searched in declaration order")
+        .Long("script-source-root")
+        .WithValue<std::filesystem::path>()
+        .UserFriendlyName("DIR")
+        .Repeatable()
+        .CallOnEachValue([&options](const std::filesystem::path& path) {
+          options.script_source_roots.push_back(path);
         })
         .Build());
 
@@ -198,15 +212,15 @@ namespace {
   {
     auto group = std::make_shared<Options>("Patch Options");
 
-    group->Add(Option::WithKey("base-catalog")
-        .About("Base pak catalog input for patch planning")
-        .Long("base-catalog")
+    group->Add(Option::WithKey("base-pak")
+        .About("Base PAK input in increasing layer priority")
+        .Long("base-pak")
         .Required()
         .WithValue<std::filesystem::path>()
         .UserFriendlyName("PATH")
         .Repeatable()
         .CallOnEachValue([&options](const std::filesystem::path& path) {
-          options.base_catalogs.push_back(path);
+          options.base_paks.push_back(path);
         })
         .Build());
 
@@ -217,42 +231,6 @@ namespace {
         .WithValue<std::filesystem::path>()
         .UserFriendlyName("PATH")
         .StoreTo(&options.manifest_output)
-        .Build());
-
-    group->Add(Option::WithKey("allow-base-set-mismatch")
-        .About("Allow base set mismatch during patch compatibility checks")
-        .Long("allow-base-set-mismatch")
-        .WithValue<bool>()
-        .DefaultValue(false, "false")
-        .ImplicitValue(true, "true")
-        .StoreTo(&options.allow_base_set_mismatch)
-        .Build());
-
-    group->Add(Option::WithKey("allow-content-version-mismatch")
-        .About("Allow base content version mismatch during patch checks")
-        .Long("allow-content-version-mismatch")
-        .WithValue<bool>()
-        .DefaultValue(false, "false")
-        .ImplicitValue(true, "true")
-        .StoreTo(&options.allow_content_version_mismatch)
-        .Build());
-
-    group->Add(Option::WithKey("allow-base-source-key-mismatch")
-        .About("Allow base source key mismatch during patch checks")
-        .Long("allow-base-source-key-mismatch")
-        .WithValue<bool>()
-        .DefaultValue(false, "false")
-        .ImplicitValue(true, "true")
-        .StoreTo(&options.allow_base_source_key_mismatch)
-        .Build());
-
-    group->Add(Option::WithKey("allow-catalog-digest-mismatch")
-        .About("Allow catalog digest mismatch during patch checks")
-        .Long("allow-catalog-digest-mismatch")
-        .WithValue<bool>()
-        .DefaultValue(false, "false")
-        .ImplicitValue(true, "true")
-        .StoreTo(&options.allow_catalog_digest_mismatch)
         .Build());
 
     return group;

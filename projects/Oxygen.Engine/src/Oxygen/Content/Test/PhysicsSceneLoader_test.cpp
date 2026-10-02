@@ -8,19 +8,19 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <span>
 #include <stdexcept>
 #include <vector>
 
+#include "Fixtures/PhysicsLoaderTestFixtures.h"
+
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
-#include <Oxygen/Content/SourceToken.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Testing/GTest.h>
-
-#include "Fixtures/PhysicsLoaderTestFixtures.h"
 
 using oxygen::content::loaders::LoadPhysicsSceneAsset;
 
@@ -72,9 +72,10 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadOneRigidBodyRecordSucceeds)
   ASSERT_NE(asset, nullptr);
   auto rigid = asset->GetBindings<pak7::RigidBodyBindingRecord>();
   ASSERT_EQ(rigid.size(), 1U);
-  EXPECT_EQ(rigid[0].node_index, 3U);
-  EXPECT_EQ(rigid[0].body_type, pak7::PhysicsBodyType::kKinematic);
-  EXPECT_FLOAT_EQ(rigid[0].mass, 42.0F);
+  EXPECT_EQ(oxygen::base::CheckedAt(rigid, 0).node_index, 3U);
+  EXPECT_EQ(oxygen::base::CheckedAt(rigid, 0).body_type,
+    pak7::PhysicsBodyType::kKinematic);
+  EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(rigid, 0).mass, 42.0F);
 }
 
 NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadMultipleBindingTypesSucceeds)
@@ -126,10 +127,14 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadMultipleBindingTypesSucceeds)
   ASSERT_NE(asset, nullptr);
   EXPECT_EQ(asset->GetBindings<pak7::RigidBodyBindingRecord>().size(), 1U);
   EXPECT_EQ(asset->GetBindings<pak7::ColliderBindingRecord>().size(), 1U);
-  EXPECT_EQ(
-    asset->GetBindings<pak7::RigidBodyBindingRecord>()[0].node_index, 1U);
-  EXPECT_EQ(
-    asset->GetBindings<pak7::ColliderBindingRecord>()[0].node_index, 2U);
+  EXPECT_EQ(oxygen::base::CheckedAt(
+              asset->GetBindings<pak7::RigidBodyBindingRecord>(), 0)
+              .node_index,
+    1U);
+  EXPECT_EQ(oxygen::base::CheckedAt(
+              asset->GetBindings<pak7::ColliderBindingRecord>(), 0)
+              .node_index,
+    2U);
 }
 
 NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadAllBindingTypesSucceeds)
@@ -157,7 +162,7 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadAllBindingTypesSucceeds)
   soft.solver_iteration_count = 9;
   auto topology_asset_key_bytes = std::array<oxygen::data::AssetKey::value_type,
     oxygen::data::AssetKey::kSizeBytes> {};
-  topology_asset_key_bytes[0] = 42U;
+  topology_asset_key_bytes.at(0) = 42U;
   soft.topology_asset_key
     = oxygen::data::AssetKey::FromBytes(topology_asset_key_bytes);
   soft.topology_format
@@ -232,28 +237,46 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadAllBindingTypesSucceeds)
   ASSERT_EQ(asset->GetBindings<pak7::VehicleBindingRecord>().size(), 1U);
   ASSERT_EQ(asset->GetBindings<pak7::AggregateBindingRecord>().size(), 1U);
 
-  EXPECT_EQ(
-    asset->GetBindings<pak7::RigidBodyBindingRecord>()[0].node_index, 11U);
-  EXPECT_EQ(
-    asset->GetBindings<pak7::ColliderBindingRecord>()[0].node_index, 12U);
-  EXPECT_EQ(
-    asset->GetBindings<pak7::CharacterBindingRecord>()[0].node_index, 13U);
-  EXPECT_EQ(
-    asset->GetBindings<pak7::SoftBodyBindingRecord>()[0].node_index, 14U);
-  EXPECT_EQ(
-    asset->GetBindings<pak7::SoftBodyBindingRecord>()[0].topology_asset_key,
+  EXPECT_EQ(oxygen::base::CheckedAt(
+              asset->GetBindings<pak7::RigidBodyBindingRecord>(), 0)
+              .node_index,
+    11U);
+  EXPECT_EQ(oxygen::base::CheckedAt(
+              asset->GetBindings<pak7::ColliderBindingRecord>(), 0)
+              .node_index,
+    12U);
+  EXPECT_EQ(oxygen::base::CheckedAt(
+              asset->GetBindings<pak7::CharacterBindingRecord>(), 0)
+              .node_index,
+    13U);
+  EXPECT_EQ(oxygen::base::CheckedAt(
+              asset->GetBindings<pak7::SoftBodyBindingRecord>(), 0)
+              .node_index,
+    14U);
+  EXPECT_EQ(oxygen::base::CheckedAt(
+              asset->GetBindings<pak7::SoftBodyBindingRecord>(), 0)
+              .topology_asset_key,
     soft.topology_asset_key);
-  EXPECT_EQ(
-    asset->GetBindings<pak7::SoftBodyBindingRecord>()[0].topology_format,
+  EXPECT_EQ(oxygen::base::CheckedAt(
+              asset->GetBindings<pak7::SoftBodyBindingRecord>(), 0)
+              .topology_format,
     pak7::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary);
   EXPECT_EQ(
-    asset->GetBindings<pak7::JointBindingRecord>()[0].node_index_a, 15U);
+    oxygen::base::CheckedAt(asset->GetBindings<pak7::JointBindingRecord>(), 0)
+      .node_index_a,
+    15U);
   EXPECT_EQ(
-    asset->GetBindings<pak7::JointBindingRecord>()[0].node_index_b, 16U);
+    oxygen::base::CheckedAt(asset->GetBindings<pak7::JointBindingRecord>(), 0)
+      .node_index_b,
+    16U);
   EXPECT_EQ(
-    asset->GetBindings<pak7::VehicleBindingRecord>()[0].node_index, 17U);
-  EXPECT_EQ(
-    asset->GetBindings<pak7::AggregateBindingRecord>()[0].node_index, 18U);
+    oxygen::base::CheckedAt(asset->GetBindings<pak7::VehicleBindingRecord>(), 0)
+      .node_index,
+    17U);
+  EXPECT_EQ(oxygen::base::CheckedAt(
+              asset->GetBindings<pak7::AggregateBindingRecord>(), 0)
+              .node_index,
+    18U);
 }
 
 // ============================================================================
@@ -381,7 +404,7 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest,
 
   auto rigid = asset->GetBindings<pak7::RigidBodyBindingRecord>();
   ASSERT_EQ(rigid.size(), 1U);
-  const auto& r = rigid[0];
+  const auto& r = oxygen::base::CheckedAt(rigid, 0);
   EXPECT_EQ(r.node_index, 7U);
   EXPECT_EQ(r.body_type, pak7::PhysicsBodyType::kDynamic);
   EXPECT_EQ(r.motion_quality, pak7::PhysicsMotionQuality::kLinearCast);

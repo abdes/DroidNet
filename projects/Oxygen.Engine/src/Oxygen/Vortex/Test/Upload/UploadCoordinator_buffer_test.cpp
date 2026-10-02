@@ -92,10 +92,8 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_MockedPath_Completes)
   });
 
   // Ticket completion
-  auto complete_result = uploader.IsComplete(ticket);
-  ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
-  EXPECT_TRUE(complete_result.value());
-  auto res = uploader.TryGetResult(ticket);
+  EXPECT_TRUE(ticket.TryGetResult().has_value());
+  auto res = ticket.TryGetResult();
   if (!res.has_value()) {
     FAIL() << "Expected completed upload result";
   }
@@ -165,10 +163,8 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_WithProducer_Completes)
     1,
   });
 
-  auto complete_result = uploader.IsComplete(ticket);
-  ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
-  EXPECT_TRUE(complete_result.value());
-  auto res = uploader.TryGetResult(ticket);
+  EXPECT_TRUE(ticket.TryGetResult().has_value());
+  auto res = ticket.TryGetResult();
   if (!res.has_value()) {
     FAIL() << "Expected completed upload result";
   }
@@ -248,12 +244,10 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferSubmitMany_CoalescesAndCompletes)
   // Assert: two tickets, both complete with expected byte counts
   ASSERT_EQ(tickets.size(), 2U);
   for (const auto& t : tickets) {
-    auto complete_result = uploader.IsComplete(t);
-    ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
-    EXPECT_TRUE(complete_result.value());
+    EXPECT_TRUE(t.TryGetResult().has_value());
   }
-  auto res_a = uploader.TryGetResult(tickets.at(0));
-  auto res_b = uploader.TryGetResult(tickets.at(1));
+  auto res_a = tickets.at(0).TryGetResult();
+  auto res_b = tickets.at(1).TryGetResult();
   if (!res_a.has_value()) {
     FAIL() << "Expected completed upload result";
   }
@@ -360,14 +354,10 @@ NOLINT_TEST_F(
 
   // Assert tickets complete
   ASSERT_EQ(tickets.size(), 2U);
-  auto complete_result_0 = uploader.IsComplete(tickets.at(0));
-  ASSERT_TRUE(complete_result_0.has_value()) << "IsComplete failed";
-  EXPECT_TRUE(complete_result_0.value());
-  auto complete_result_1 = uploader.IsComplete(tickets.at(1));
-  ASSERT_TRUE(complete_result_1.has_value()) << "IsComplete failed";
-  EXPECT_TRUE(complete_result_1.value());
-  auto res_a = uploader.TryGetResult(tickets.at(0));
-  auto res_b = uploader.TryGetResult(tickets.at(1));
+  EXPECT_TRUE(tickets.at(0).TryGetResult().has_value());
+  EXPECT_TRUE(tickets.at(1).TryGetResult().has_value());
+  auto res_a = tickets.at(0).TryGetResult();
+  auto res_b = tickets.at(1).TryGetResult();
   if (!res_a.has_value()) {
     FAIL() << "Expected completed upload result";
   }
@@ -438,10 +428,8 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_WithProducer_Fails_NoCopy)
     1,
   });
 
-  auto complete_result = uploader.IsComplete(ticket);
-  ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
-  ASSERT_TRUE(complete_result.value());
-  auto res = uploader.TryGetResult(ticket);
+  EXPECT_TRUE(ticket.TryGetResult().has_value());
+  auto res = ticket.TryGetResult();
   if (!res.has_value()) {
     FAIL() << "Expected completed upload result";
   }
@@ -530,14 +518,10 @@ NOLINT_TEST_F(
   });
 
   ASSERT_EQ(tickets.size(), 2U);
-  auto complete_result_0 = uploader.IsComplete(tickets.at(0));
-  ASSERT_TRUE(complete_result_0.has_value()) << "IsComplete failed";
-  ASSERT_TRUE(complete_result_0.value());
-  auto complete_result_1 = uploader.IsComplete(tickets.at(1));
-  ASSERT_TRUE(complete_result_1.has_value()) << "IsComplete failed";
-  ASSERT_TRUE(complete_result_1.value());
-  auto r0 = uploader.TryGetResult(tickets.at(0));
-  auto r1 = uploader.TryGetResult(tickets.at(1));
+  EXPECT_TRUE(tickets.at(0).TryGetResult().has_value());
+  EXPECT_TRUE(tickets.at(1).TryGetResult().has_value());
+  auto r0 = tickets.at(0).TryGetResult();
+  auto r1 = tickets.at(1).TryGetResult();
   if (!r0.has_value()) {
     FAIL() << "Expected completed upload result";
   }

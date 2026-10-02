@@ -5,28 +5,22 @@
 using DroidNet.Hosting.WinUI;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.Runtime.Engine;
 
 namespace Oxygen.Editor.World.Services;
 
 /// <summary>Applies confirmed mount configuration while retaining native and persisted ownership at its commit point.</summary>
 /// <param name="coordinator">The shared project writer.</param>
 /// <param name="projects">The active project context.</param>
-/// <param name="manager">Atomic project persistence.</param>
-/// <param name="engine">Native refresh and reader ownership.</param>
-/// <param name="mounts">Ordered root validation and readers.</param>
+/// <param name="publication">The journaled source, configuration and native publication owner.</param>
 /// <param name="catalog">The accepted browser catalog.</param>
 /// <param name="hosting">The owning workspace dispatcher.</param>
-public sealed class ContentMountChangeService(IContentCookCoordinator coordinator, IProjectContextService projects, IProjectManagerService manager, IEngineService engine, CookedContentMountService mounts, IProjectAssetCatalog catalog, HostingContext hosting)
+public sealed class ContentMountChangeService(IContentCookCoordinator coordinator, IProjectContextService projects, CookPublicationService publication, IProjectAssetCatalog catalog, HostingContext hosting)
 {
     private readonly IContentCookCoordinator coordinator = coordinator;
     private readonly IProjectContextService projects = projects;
-    private readonly IProjectManagerService manager = manager;
-    private readonly IEngineService engine = engine;
-    private readonly CookedContentMountService mounts = mounts;
+    private readonly CookPublicationService publication = publication;
     private readonly IProjectAssetCatalog catalog = catalog;
 
     /// <summary>Validates and commits one confirmed change, preserving old roots if it fails before saving.</summary>
@@ -90,60 +84,17 @@ public sealed class ContentMountChangeService(IContentCookCoordinator coordinato
     {
         this.VerifyExpectedContext(expected, operation);
         var next = CreateCandidateContext(expected, configuration);
-        CookedContentMountSet? candidate = null;
-        CookedContentMountSet? previous = null;
-        var nativeTouched = false;
-        var committed = false;
-        try
+        using var accepted = await this.publication.ChangeMountsAsync(operation, next, CreateProjectInfo(expected), configuration, token).ConfigureAwait(true);
+        if (!ReferenceEquals(expected, this.projects.ActiveProject))
         {
-            candidate = await this.mounts.PrepareAsync(next, CookedContentMountService.FindProjectRoots(next), await CookOutputLease.AcquireReadAsync(next.ProjectRoot, token).ConfigureAwait(true), token).ConfigureAwait(true);
-            if (this.engine.State == EngineServiceState.Running)
-            {
-                previous = await this.mounts.PrepareAsync(expected, CookedContentMountService.FindProjectRoots(expected), await CookOutputLease.AcquireReadAsync(next.ProjectRoot, token).ConfigureAwait(true), token).ConfigureAwait(true);
-                this.coordinator.VerifyWriter(operation);
-                nativeTouched = true;
-                await this.engine.SuspendCookedContentAsync().ConfigureAwait(true);
-                var accepted = candidate;
-                candidate = null;
-                await this.engine.RefreshProjectCookedRootsAsync(accepted.Roots, accepted, keepPaused: true).ConfigureAwait(true);
-            }
+            return;
+        }
 
-            this.coordinator.VerifyWriter(operation);
-            await this.manager.SaveProjectInfoAsync(configuration, CreateProjectInfo(expected), token).ConfigureAwait(true);
-            committed = true;
-            if (!ReferenceEquals(expected, this.projects.ActiveProject))
-            {
-                return;
-            }
-
-            beforeActivate(next);
-            this.projects.Activate(next);
-            await this.catalog.RefreshAsync(CancellationToken.None).ConfigureAwait(true);
-            if (nativeTouched && ReferenceEquals(next, this.projects.ActiveProject))
-            {
-                await this.engine.ResumeCookedContentAsync().ConfigureAwait(true);
-            }
-        }
-        catch (Exception failure) when (!committed)
-        {
-            if (nativeTouched && previous is not null && ReferenceEquals(expected, this.projects.ActiveProject))
-            {
-                var accepted = previous;
-                previous = null;
-                await this.RestorePreviousPreviewAsync(accepted, failure).ConfigureAwait(true);
-            }
-
-            throw;
-        }
-        catch (Exception failure) when (committed)
-        {
-            throw new InvalidOperationException("Content mounts were saved, but the workspace could not finish refreshing them. " + failure.Message, failure);
-        }
-        finally
-        {
-            candidate?.Dispose();
-            previous?.Dispose();
-        }
+        // Publication has committed both saved intent and native admission.
+        // Workspace notification is derived state and runs outside the head gate.
+        beforeActivate(next);
+        this.projects.Activate(next);
+        await this.catalog.RefreshAsync(accepted, CancellationToken.None).ConfigureAwait(true);
     }
 
     private void VerifyExpectedContext(ProjectContext expected, ContentCookOperation operation)
@@ -154,15 +105,4 @@ public sealed class ContentMountChangeService(IContentCookCoordinator coordinato
         }
     }
 
-    private async Task RestorePreviousPreviewAsync(CookedContentMountSet previous, Exception failure)
-    {
-        try
-        {
-            await this.engine.RefreshProjectCookedRootsAsync(previous.Roots, previous).ConfigureAwait(true);
-        }
-        catch (Exception rollbackFailure)
-        {
-            throw new AggregateException("The mount change failed and the previous preview could not be restored.", failure, rollbackFailure);
-        }
-    }
 }

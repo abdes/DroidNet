@@ -9,6 +9,12 @@ namespace Oxygen.Managed.Core.Diagnostics;
 /// </summary>
 public static class SceneDiagnosticCodes
 {
+    /// <summary>The observed material slot no longer matches an editable native inventory.</summary>
+    public const string MaterialSlotTargetInvalid = DiagnosticCodes.ScenePrefix + "MaterialSlot.Target.Invalid";
+
+    /// <summary>The native slot inventory is currently unavailable.</summary>
+    public const string MaterialSlotInventoryUnavailable = DiagnosticCodes.ScenePrefix + "MaterialSlot.Inventory.Unavailable";
+
     /// <summary>Transform scale has a zero axis.</summary>
     public const string TransformScaleZeroAxis = DiagnosticCodes.ScenePrefix + "TransformComponent.Scale.ZeroAxis";
 

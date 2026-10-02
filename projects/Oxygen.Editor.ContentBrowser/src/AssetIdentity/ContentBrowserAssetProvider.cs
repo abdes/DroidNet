@@ -20,7 +20,7 @@ namespace Oxygen.Editor.ContentBrowser.AssetIdentity;
 /// <summary>
 /// Shared ED-M06 browser asset provider over the composed project catalog.
 /// </summary>
-public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetProvider, IDisposable
+public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetProvider, IDisposable, IAsyncDisposable
 {
     private readonly IProjectAssetCatalog projectAssetCatalog;
     private readonly IProjectContextService projectContextService;
@@ -75,6 +75,7 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
             .Subscribe(_ => this.OnProjectChanged());
         this.documents.StateChanged += this.OnDocumentStateChanged;
         this.cooks.RunChanged += this.OnCookRunChanged;
+        this.cookStatus.Changed += this.OnFreshnessChanged;
         this.engine.ContentStatusChanged += this.OnRuntimeContentChanged;
         this.engine.StateChanged += this.OnRuntimeStateChanged;
         this.runtimeWorld.AssetStatusChanged += this.OnRuntimeAssetStatusChanged;
@@ -161,18 +162,40 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
         this.projectSubscription.Dispose();
         this.documents.StateChanged -= this.OnDocumentStateChanged;
         this.cooks.RunChanged -= this.OnCookRunChanged;
+        this.cookStatus.Changed -= this.OnFreshnessChanged;
         this.engine.ContentStatusChanged -= this.OnRuntimeContentChanged;
         this.engine.StateChanged -= this.OnRuntimeStateChanged;
         this.runtimeWorld.AssetStatusChanged -= this.OnRuntimeAssetStatusChanged;
+    }
+
+    /// <summary>Cancels discovery and waits until its retained publication readers have drained.</summary>
+    /// <returns>Completion after background refresh releases its resources.</returns>
+    public async ValueTask DisposeAsync()
+    {
+        this.Dispose();
+        Task? pending;
+        lock (this.refreshSync)
+        {
+            pending = this.refreshTask;
+        }
+
+        if (pending is not null)
+        {
+            await pending.ConfigureAwait(false);
+        }
+
+        GC.SuppressFinalize(this);
     }
 
     private static ContentBrowserAssetItem ApplyCookStatus(ContentBrowserAssetItem item, AssetCookStatus state)
         => item with
         {
             CookStatus = state,
-            DiagnosticCodes = item.DiagnosticCodes.Where(code => state.HasPublishedOutput || !string.Equals(code, AssetIdentityDiagnosticCodes.CookedMissing, StringComparison.Ordinal))
+            CookedPath = item.CookedMetadata is not null ? item.CookedPath : ResolvePublishedOutputPath(item, state),
+            DiagnosticCodes = item.DiagnosticCodes.Where(code => !string.Equals(code, AssetIdentityDiagnosticCodes.CookedMissing, StringComparison.Ordinal)
+                    || state.OutputAvailability == CookedOutputAvailability.Missing && state.HasPublishedOutput)
                 .Concat(state.Diagnostics.Select(static diagnostic => diagnostic.Code)).Distinct(StringComparer.Ordinal).ToArray(),
-            PrimaryState = state.Freshness switch
+            PrimaryState = state.Freshness == AssetCookFreshness.Unknown ? item.PrimaryState : state.Freshness switch
             {
                 AssetCookFreshness.MissingSource => AssetState.Missing,
                 AssetCookFreshness.InvalidSource => AssetState.Broken,
@@ -180,9 +203,10 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
                     : item.ImportSourceUri is not null && item.DescriptorPath is null ? AssetState.Cooked : AssetState.Descriptor,
             },
             DerivedState = !state.HasPublishedOutput ? null
-                : !state.HasVerifiedOutput ? AssetState.Broken
+                : state.OutputAvailability == CookedOutputAvailability.Missing ? AssetState.Missing
+                : state.OutputAvailability == CookedOutputAvailability.Unknown ? null
                 : state.Freshness == AssetCookFreshness.Current && !state.HasUnsavedChanges ? AssetState.Cooked : AssetState.Stale,
-            IsSelectable = state.Freshness is not (AssetCookFreshness.InvalidSource or AssetCookFreshness.MissingSource),
+            IsSelectable = state.Freshness == AssetCookFreshness.Unknown ? item.IsSelectable : state.Freshness is not (AssetCookFreshness.InvalidSource or AssetCookFreshness.MissingSource),
         };
 
     private static string GetLogicalKey(Uri uri)
@@ -213,23 +237,40 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
         return mount is null ? null : Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath, mountRelativePath));
     }
 
-    private async Task<IReadOnlyList<ContentBrowserAssetItem>> ApplyCookStatusAsync(ProjectContext project, IReadOnlyList<ContentBrowserAssetItem> source, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<ContentBrowserAssetItem>> ApplyCookStatusAsync(ProjectContext project, IReadOnlyList<ContentBrowserAssetItem> source, CancellationToken cancellationToken,
+        Oxygen.Editor.ContentPipeline.Publication.CookPublicationReadLease? publication = null, string? publicationError = null)
     {
         source = source.Select(item => item.Kind == AssetKind.ForeignSource && item.SourcePath is { } path
             && File.Exists(path + Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.SidecarSuffix)
                 ? item with { ImportSourceUri = item.IdentityUri, ImportSourcePath = path } : item).ToArray();
         var candidates = source.Where(item => item.Generated is not null || item.ImportSourceUri is not null
-            || (item.DescriptorPath is not null && item.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene)
-            || IsProjectCookedOutput(project, item)).ToArray();
+            || (item.DescriptorPath is not null && item.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene or AssetKind.Texture)
+            || IsProjectCookedOutput(publication?.ProjectRoots.Values ?? [], item)).ToArray();
         if (candidates.Length == 0)
         {
             return source;
         }
 
-        var states = (await this.cookStatus.ReadAsync(project, candidates.Select(static item => item.IdentityUri).ToArray(), cancellationToken).ConfigureAwait(false))
-            .ToDictionary(static state => state.AssetUri);
-        var origins = source.Where(item => item.Generated is not null && states.TryGetValue(item.IdentityUri, out var state) && state.HasVerifiedOutput)
-            .SelectMany(item => states[item.IdentityUri].Outputs.Select(output => new VerifiedBuiltinSource(Path.GetFullPath(Path.Combine(project.ProjectRoot, ".cooked", output.MountName)), output.CookedAssetUri, item)))
+        var identities = candidates.Select(static item => item.IdentityUri).ToArray();
+        if (publicationError is not null)
+        {
+            var diagnostic = new DiagnosticRecord
+            {
+                OperationId = Guid.Empty, Domain = FailureDomain.AssetCook, Severity = DiagnosticSeverity.Error,
+                Code = "Cook.PublicationUnavailable", Message = publicationError,
+            };
+            var affected = candidates.Select(static item => item.IdentityUri).ToHashSet();
+            return source.Select(item => affected.Contains(item.IdentityUri)
+                ? ApplyCookStatus(item, new(item.IdentityUri, AssetCookFreshness.Unknown, false, CookedOutputAvailability.Unknown, [], [], [diagnostic]))
+                : item).ToArray();
+        }
+
+        var read = publication is null ? this.cookStatus.ReadAsync(project, identities, cancellationToken)
+            : this.cookStatus.ReadAsync(project, publication, identities, cancellationToken);
+        var states = (await read.ConfigureAwait(false)).ToDictionary(static state => state.AssetUri);
+        var origins = source.Where(item => item.Generated is not null && states.TryGetValue(item.IdentityUri, out var state) && state.HasAvailableOutput)
+            .SelectMany(item => states[item.IdentityUri].Outputs.Where(output => states[item.IdentityUri].OutputRoots.ContainsKey(output.MountName))
+                .Select(output => new VerifiedBuiltinSource(states[item.IdentityUri].OutputRoots[output.MountName], output.CookedAssetUri, item)))
             .GroupBy(static entry => entry.CookedUri)
             .Where(static group => group.Select(entry => entry.Origin.IdentityUri).Distinct().Take(2).Count() == 1)
             .ToDictionary(static group => group.Key, static group => group.ToArray());

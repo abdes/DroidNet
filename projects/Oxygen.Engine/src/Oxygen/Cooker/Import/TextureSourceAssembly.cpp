@@ -8,16 +8,32 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <numbers>
+#include <optional>
+#include <span>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Span.h>
+#include <Oxygen/Cooker/Import/FileError.h>
+#include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/Internal/TextureSourceAssembly_internal.h>
+#include <Oxygen/Cooker/Import/ScratchImage.h>
+#include <Oxygen/Cooker/Import/TextureImportError.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import {
 
@@ -32,7 +48,7 @@ namespace {
     {{ "_px", "_nx", "_py", "_ny", "_pz", "_nz" }},
     {{ "_posx", "_negx", "_posy", "_negy", "_posz", "_negz" }},
     {{ "_right", "_left", "_top", "_bottom", "_front", "_back" }},
-  }};
+  },};
   // clang-format on
 
   [[nodiscard]] auto EndsWithI(
@@ -44,9 +60,9 @@ namespace {
     const auto start = str.size() - suffix.size();
     for (size_t i = 0; i < suffix.size(); ++i) {
       const auto ch_str = static_cast<char>(
-        std::tolower(static_cast<unsigned char>(str[start + i])));
+        std::tolower(static_cast<unsigned char>(str.at(start + i))));
       const auto ch_suf = static_cast<char>(
-        std::tolower(static_cast<unsigned char>(suffix[i])));
+        std::tolower(static_cast<unsigned char>(suffix.at(i))));
       if (ch_str != ch_suf) {
         return false;
       }
@@ -89,35 +105,62 @@ auto to_string(const CubeFace face) -> const char*
   return "Unknown";
 }
 
-auto DiscoverCubeFacePaths(const std::filesystem::path& path)
-  -> std::optional<std::array<std::filesystem::path, kCubeFaceCount>>
+detail::CubeFaceSearch::CubeFaceSearch(const std::filesystem::path& source)
+  : parent_(source.parent_path())
+  , stem_(source.stem().string())
+  , extension_(source.extension().string())
 {
-  const auto parent = path.parent_path();
-  const auto stem = path.stem().string();
-  const auto ext = path.extension().string();
+  UpdateCandidate();
+}
 
-  for (const auto& suffix_set : kCubeFaceSuffixSets) {
-    const auto base = StripFaceSuffix(stem, suffix_set.suffixes);
-
-    std::array<std::filesystem::path, kCubeFaceCount> paths;
-    bool all_found = true;
-    for (size_t i = 0; i < kCubeFaceCount; ++i) {
-      const auto face_name = base + std::string(suffix_set.suffixes[i]) + ext;
-      const auto face_path = parent / face_name;
-      std::error_code ec;
-      if (!std::filesystem::exists(face_path, ec)) {
-        all_found = false;
-        break;
-      }
-      paths[i] = face_path;
-    }
-
-    if (all_found) {
-      return paths;
-    }
+auto detail::CubeFaceSearch::UpdateCandidate() -> void
+{
+  if (face_ == kCubeFaceCount || suffix_set_ == kCubeFaceSuffixSets.size()) {
+    candidate_.clear();
+    return;
   }
+  const auto& suffixes = kCubeFaceSuffixSets.at(suffix_set_).suffixes;
+  const auto base = StripFaceSuffix(stem_, suffixes);
+  candidate_ = parent_ / (base + std::string(suffixes.at(face_)) + extension_);
+}
 
+auto detail::CubeFaceSearch::Observe(const bool present) -> void
+{
+  if (present) {
+    paths_.at(face_) = candidate_;
+    ++face_;
+  } else {
+    face_ = 0;
+    ++suffix_set_;
+  }
+  UpdateCandidate();
+}
+
+auto detail::CubeFaceSearch::TakeResult() && -> std::optional<CubeFacePaths>
+{
+  if (face_ == kCubeFaceCount) {
+    return std::move(paths_);
+  }
   return std::nullopt;
+}
+
+auto detail::DiscoverCubeFacePaths(const std::filesystem::path& path,
+  IAsyncFileReader& reader) -> co::Co<Result<CubeFacePaths, FileErrorInfo>>
+{
+  auto search = CubeFaceSearch(path);
+  while (!search.Candidate().empty()) {
+    const auto exists = co_await reader.Exists(search.Candidate());
+    if (!exists.has_value()) {
+      co_return Err(exists.error());
+    }
+    search.Observe(exists.value());
+  }
+  auto paths = std::move(search).TakeResult();
+  if (paths.has_value()) {
+    co_return Ok(std::move(*paths));
+  }
+  co_return Err(MakeFileError(
+    path, FileError::kNotFound, "No complete cubemap face set was found"));
 }
 
 //=== TextureSourceSet Implementation
@@ -193,7 +236,7 @@ auto TextureSourceSet::GetSource(const size_t index) const
   if (index >= sources_.size()) {
     throw std::out_of_range("TextureSourceSet index out of range");
   }
-  return sources_[index];
+  return sources_.at(index);
 }
 
 //=== Cube Map Assembly Helpers
@@ -203,18 +246,18 @@ auto ComputeCubeDirection(const CubeFace face, const float u,
   const float v) noexcept -> CubeFaceDirection
 {
   // Map [0,1] UV coordinates to [-1,+1] face coordinates
-  const float s = 2.0F * u - 1.0F; // -1 (left) to +1 (right)
-  const float t = 2.0F * v - 1.0F; // -1 (bottom) to +1 (top)
+  const float s = (2.0F * u) - 1.0F; // -1 (left) to +1 (right)
+  const float t = (2.0F * v) - 1.0F; // -1 (bottom) to +1 (top)
 
   const auto& basis = GetCubeFaceBasis(face);
 
   // Compute direction: center + s * right + t * up
-  const float x = basis.center.x + s * basis.right.x + t * basis.up.x;
-  const float y = basis.center.y + s * basis.right.y + t * basis.up.y;
-  const float z = basis.center.z + s * basis.right.z + t * basis.up.z;
+  const float x = basis.center.x + (s * basis.right.x) + (t * basis.up.x);
+  const float y = basis.center.y + (s * basis.right.y) + (t * basis.up.y);
+  const float z = basis.center.z + (s * basis.right.z) + (t * basis.up.z);
 
   // Normalize the direction
-  const float length = std::sqrt(x * x + y * y + z * z);
+  const float length = std::sqrt((x * x) + (y * y) + (z * z));
   return CubeFaceDirection { x / length, y / length, z / length };
 }
 
@@ -225,18 +268,18 @@ auto ComputeCubeDirectionD3D(const CubeFace face, const float u,
   // Map [0,1] UV coordinates to [-1,+1] face coordinates.
   // In texture space: u=0 is left, u=1 is right.
   // In texture space: v=0 is TOP, v=1 is BOTTOM (opposite of math Y).
-  const float s = 2.0F * u - 1.0F; // -1 (left) to +1 (right)
-  const float t = 1.0F - 2.0F * v; // +1 at v=0 (top), -1 at v=1 (bottom)
+  const float s = (2.0F * u) - 1.0F; // -1 (left) to +1 (right)
+  const float t = 1.0F - (2.0F * v); // +1 at v=0 (top), -1 at v=1 (bottom)
 
-  const auto& basis = kGpuCubeFaceBases[static_cast<size_t>(face)];
+  const auto& basis = kGpuCubeFaceBases.at(static_cast<size_t>(face));
 
   // Compute direction: center + s * right + t * up
-  const float x = basis.center.x + s * basis.right.x + t * basis.up.x;
-  const float y = basis.center.y + s * basis.right.y + t * basis.up.y;
-  const float z = basis.center.z + s * basis.right.z + t * basis.up.z;
+  const float x = basis.center.x + (s * basis.right.x) + (t * basis.up.x);
+  const float y = basis.center.y + (s * basis.right.y) + (t * basis.up.y);
+  const float z = basis.center.z + (s * basis.right.z) + (t * basis.up.z);
 
   // Normalize the direction
-  const float length = std::sqrt(x * x + y * y + z * z);
+  const float length = std::sqrt((x * x) + (y * y) + (z * z));
   return CubeFaceDirection { x / length, y / length, z / length };
 }
 
@@ -245,13 +288,13 @@ auto AssembleCubeFromFaces(std::span<const ScratchImage, kCubeFaceCount> faces)
 {
   // Validate all faces are valid
   for (size_t i = 0; i < kCubeFaceCount; ++i) {
-    if (!faces[i].IsValid()) {
+    if (!oxygen::base::CheckedAt(faces, i).IsValid()) {
       return Err(TextureImportError::kInvalidDimensions);
     }
   }
 
   // Get reference dimensions and format from first face
-  const auto& ref = faces[0];
+  const auto& ref = oxygen::base::CheckedAt(faces, 0);
   const auto& ref_meta = ref.Meta();
   const uint32_t face_width = ref_meta.width;
   const uint32_t face_height = ref_meta.height;
@@ -264,7 +307,7 @@ auto AssembleCubeFromFaces(std::span<const ScratchImage, kCubeFaceCount> faces)
 
   // Validate all faces have matching dimensions and format
   for (size_t i = 1; i < kCubeFaceCount; ++i) {
-    const auto& face_meta = faces[i].Meta();
+    const auto& face_meta = oxygen::base::CheckedAt(faces, i).Meta();
     if (face_meta.width != face_width || face_meta.height != face_height) {
       return Err(TextureImportError::kDimensionMismatch);
     }
@@ -295,7 +338,7 @@ auto AssembleCubeFromFaces(std::span<const ScratchImage, kCubeFaceCount> faces)
 
   // Copy each face into the cube map
   for (size_t i = 0; i < kCubeFaceCount; ++i) {
-    const auto src_image = faces[i].GetImage(0, 0);
+    const auto src_image = oxygen::base::CheckedAt(faces, i).GetImage(0, 0);
     const auto dst_pixels = cube.GetMutablePixels(static_cast<uint16_t>(i), 0);
 
     if (src_image.pixels.size() != dst_pixels.size()) {
@@ -330,8 +373,8 @@ namespace {
     const uint32_t height, const float u, const float v) -> std::array<float, 4>
   {
     // Map to pixel coordinates
-    const float px = u * static_cast<float>(width) - 0.5F;
-    const float py = v * static_cast<float>(height) - 0.5F;
+    const float px = (u * static_cast<float>(width)) - 0.5F;
+    const float py = (v * static_cast<float>(height)) - 0.5F;
 
     // Integer coordinates (with horizontal wrap, vertical clamp)
     auto x0 = static_cast<int32_t>(std::floor(px));
@@ -360,7 +403,7 @@ namespace {
     auto sample
       = [&](const int32_t x, const int32_t y) -> std::array<float, 4> {
       const size_t idx
-        = static_cast<size_t>(y) * stride + static_cast<size_t>(x) * 4U;
+        = (static_cast<size_t>(y) * stride) + (static_cast<size_t>(x) * 4U);
       return { data[idx], data[idx + 1], data[idx + 2], data[idx + 3] };
     };
 
@@ -372,9 +415,9 @@ namespace {
     // Bilinear interpolation
     std::array<float, 4> result {};
     for (size_t i = 0; i < 4; ++i) {
-      const float top = p00[i] * (1.0F - fx) + p10[i] * fx;
-      const float bottom = p01[i] * (1.0F - fx) + p11[i] * fx;
-      result[i] = top * (1.0F - fy) + bottom * fy;
+      const float top = (p00.at(i) * (1.0F - fx)) + (p10.at(i) * fx);
+      const float bottom = (p01.at(i) * (1.0F - fx)) + (p11.at(i) * fx);
+      result.at(i) = (top * (1.0F - fy)) + (bottom * fy);
     }
 
     return result;
@@ -385,10 +428,10 @@ namespace {
   {
     const float at = std::fabs(t);
     if (at <= 1.0F) {
-      return ((1.5F * at - 2.5F) * at) * at + 1.0F;
+      return ((((1.5F * at) - 2.5F) * at) * at) + 1.0F;
     }
     if (at < 2.0F) {
-      return ((-0.5F * at + 2.5F) * at - 4.0F) * at + 2.0F;
+      return (((((-0.5F * at) + 2.5F) * at) - 4.0F) * at) + 2.0F;
     }
     return 0.0F;
   }
@@ -409,8 +452,8 @@ namespace {
     const uint32_t height, const float u, const float v) -> std::array<float, 4>
   {
     // Map to pixel coordinates
-    const float px = u * static_cast<float>(width) - 0.5F;
-    const float py = v * static_cast<float>(height) - 0.5F;
+    const float px = (u * static_cast<float>(width)) - 0.5F;
+    const float py = (v * static_cast<float>(height)) - 0.5F;
 
     const auto x0 = static_cast<int32_t>(std::floor(px));
     const auto y0 = static_cast<int32_t>(std::floor(py));
@@ -427,7 +470,7 @@ namespace {
       // Clamp vertical
       y = std::clamp(y, 0, static_cast<int32_t>(height) - 1);
       const size_t idx
-        = static_cast<size_t>(y) * stride + static_cast<size_t>(x) * 4U;
+        = (static_cast<size_t>(y) * stride) + (static_cast<size_t>(x) * 4U);
       return { data[idx], data[idx + 1], data[idx + 2], data[idx + 3] };
     };
 
@@ -444,7 +487,7 @@ namespace {
 
         const auto s = sample(x0 + i, y0 + j);
         for (size_t c = 0; c < 4; ++c) {
-          result[c] += s[c] * weight;
+          result.at(c) += s.at(c) * weight;
         }
       }
     }
@@ -452,7 +495,7 @@ namespace {
     // Normalize
     if (weight_sum > 0.0F) {
       for (size_t c = 0; c < 4; ++c) {
-        result[c] /= weight_sum;
+        result.at(c) /= weight_sum;
       }
     }
 
@@ -482,8 +525,8 @@ namespace {
     // Map to [0, 1] UV coordinates.
     // u: θ=0 (Forward +Z) maps to u=0.5.
     // v: φ=π/2 (Up +Y) maps to v=0 (top of texture).
-    const float u = (theta / std::numbers::pi_v<float> + 1.0F) * 0.5F;
-    const float v = 0.5F - phi / std::numbers::pi_v<float>;
+    const float u = ((theta / std::numbers::pi_v<float>)+1.0F) * 0.5F;
+    const float v = 0.5F - (phi / std::numbers::pi_v<float>);
 
     return { u, v };
   }
@@ -520,11 +563,11 @@ namespace detail {
         }
 
         const size_t dst_idx
-          = (static_cast<size_t>(y) * face_size + static_cast<size_t>(x)) * 4;
-        dst_data[dst_idx + 0] = color[0];
-        dst_data[dst_idx + 1] = color[1];
-        dst_data[dst_idx + 2] = color[2];
-        dst_data[dst_idx + 3] = color[3];
+          = ((static_cast<size_t>(y) * face_size) + static_cast<size_t>(x)) * 4;
+        dst_data[dst_idx + 0] = color.at(0);
+        dst_data[dst_idx + 1] = color.at(1);
+        dst_data[dst_idx + 2] = color.at(2);
+        dst_data[dst_idx + 3] = color.at(3);
       }
     }
   }
@@ -804,8 +847,8 @@ namespace {
 
     for (uint32_t y = 0; y < face_size; ++y) {
       const std::size_t src_offset
-        = static_cast<std::size_t>(src_base_y + y) * src_row_pitch
-        + static_cast<std::size_t>(src_base_x) * bytes_per_pixel;
+        = (static_cast<std::size_t>(src_base_y + y) * src_row_pitch)
+        + (static_cast<std::size_t>(src_base_x) * bytes_per_pixel);
       const std::size_t dst_offset
         = static_cast<std::size_t>(y) * dst_row_pitch;
 

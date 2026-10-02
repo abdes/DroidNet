@@ -76,6 +76,11 @@ protected:
 
   [[nodiscard]] auto AllocatedSrvCount() const -> uint32_t;
   auto DestroyBinder() -> void;
+  auto BeginVisibleFrame() -> void
+  {
+    TexBinder().OnFrameStart();
+    TexBinder().EnsureFrameResources();
+  }
 
 private:
   std::shared_ptr<FakeGraphics> gfx_;

@@ -12,6 +12,7 @@
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Joint/JointDesc.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
@@ -85,7 +86,6 @@ namespace {
     lua_pop(state, 1);
     if (!std::isfinite(value)) {
       luaL_error(state, "joint field '%s' must be finite", field_name);
-      return fallback;
     }
     return value;
   }
@@ -115,7 +115,6 @@ namespace {
 
     luaL_error(state,
       "joint.type must be 'fixed'|'distance'|'hinge'|'slider'|'spherical'");
-    return physics::joint::JointType::kFixed;
   }
 
   auto ParseJointDesc(lua_State* state, const int arg_index)
@@ -136,14 +135,12 @@ namespace {
     lua_pop(state, 1);
     if (desc.body_a == desc.body_b) {
       luaL_error(state, "joint.body_b_id must differ from joint.body_a_id");
-      return {};
     }
 
     lua_getfield(state, desc_index, "anchor_a");
     if (lua_isnil(state, -1) == 0) {
       if (!TryCheckVec3(state, -1, desc.anchor_a)) {
         luaL_error(state, "joint.anchor_a must be a vec3");
-        return {};
       }
     }
     lua_pop(state, 1);
@@ -152,7 +149,6 @@ namespace {
     if (lua_isnil(state, -1) == 0) {
       if (!TryCheckVec3(state, -1, desc.anchor_b)) {
         luaL_error(state, "joint.anchor_b must be a vec3");
-        return {};
       }
     }
     lua_pop(state, 1);
@@ -174,12 +170,10 @@ namespace {
   {
     if (lua_isuserdata(state, index) == 0) {
       luaL_argerror(state, index, "expected JointHandle or JointId userdata");
-      return { physics::kInvalidWorldId, physics::kInvalidJointId };
     }
 
     if (lua_getmetatable(state, index) == 0) {
       luaL_argerror(state, index, "expected JointHandle or JointId userdata");
-      return { physics::kInvalidWorldId, physics::kInvalidJointId };
     }
     const int mt_index = lua_gettop(state);
 
@@ -207,7 +201,6 @@ namespace {
 
     lua_pop(state, 1);
     luaL_argerror(state, index, "expected JointHandle or JointId userdata");
-    return { physics::kInvalidWorldId, physics::kInvalidJointId };
   }
 
   auto LuaJointCreate(lua_State* state) -> int

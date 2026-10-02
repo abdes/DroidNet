@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <filesystem>
 #include <string_view>
 
@@ -26,30 +27,6 @@ namespace {
   auto AssetsEnabled(lua_State* state) -> int
   {
     lua_pushboolean(state, IsAssetLoaderEnabled(state) ? 1 : 0);
-    return 1;
-  }
-
-  auto AssetsReleaseResource(lua_State* state) -> int
-  {
-    const auto key = RequireResourceKey(state, 1);
-    const auto loader = GetAssetLoader(state);
-    if (loader == nullptr) {
-      lua_pushboolean(state, 0);
-      return 1;
-    }
-    lua_pushboolean(state, loader->ReleaseResource(key) ? 1 : 0);
-    return 1;
-  }
-
-  auto AssetsReleaseAsset(lua_State* state) -> int
-  {
-    const auto key = RequireAssetGuid(state, 1);
-    const auto loader = GetAssetLoader(state);
-    if (loader == nullptr) {
-      lua_pushboolean(state, 0);
-      return 1;
-    }
-    lua_pushboolean(state, loader->ReleaseAsset(key) ? 1 : 0);
     return 1;
   }
 
@@ -160,7 +137,6 @@ namespace {
       luaL_error(state,
         "oxygen.assets.%.*s was removed in v1; use oxygen.assets.%s",
         static_cast<int>(key.size()), key.data(), replacement);
-      return 0;
     }
     lua_pushnil(state);
     return 1;
@@ -180,10 +156,6 @@ auto RegisterContentModuleAvailability(lua_State* state, const int module_index)
 auto RegisterContentModuleLifecycle(lua_State* state, const int module_index)
   -> void
 {
-  lua_pushcfunction(state, AssetsReleaseResource, "assets.release_resource");
-  lua_setfield(state, module_index, "release_resource");
-  lua_pushcfunction(state, AssetsReleaseAsset, "assets.release_asset");
-  lua_setfield(state, module_index, "release_asset");
   lua_pushcfunction(state, AssetsTrimCache, "assets.trim_cache");
   lua_setfield(state, module_index, "trim_cache");
 

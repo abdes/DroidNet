@@ -5,11 +5,19 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <ranges>
+#include <cstdint>
+#include <filesystem>
+#include <memory>
+#include <optional>
+#include <string>
 #include <string_view>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Content/Internal/ScriptHotReloadService.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content::internal {
 
@@ -36,15 +44,21 @@ auto ScriptHotReloadService::Unsubscribe(const uint64_t id) -> void
   subscribers_.erase(erase_from, subscribers_.end());
 }
 
+auto ScriptHotReloadService::Reset() -> void
+{
+  [[maybe_unused]] auto retired = std::exchange(subscribers_, {});
+  script_path_to_asset_key_.clear();
+}
+
 auto ScriptHotReloadService::NormalizePathString(std::string_view path)
   -> std::string
 {
   std::string normalized(path);
-  while (!normalized.empty() && normalized[0] == '@') {
+  while (!normalized.empty() && normalized.front() == '@') {
     normalized = normalized.substr(1);
   }
   std::ranges::replace(normalized, '\\', '/');
-  while (!normalized.empty() && normalized[0] == '/') {
+  while (!normalized.empty() && normalized.front() == '/') {
     normalized = normalized.substr(1);
   }
   return std::filesystem::path(normalized).lexically_normal().generic_string();
@@ -108,25 +122,22 @@ auto ScriptHotReloadService::NotifyReloadedScript(const data::AssetKey& key,
   }
 
   const auto bytecode_index = asset->GetBytecodeResourceIndex();
-  if (bytecode_index == data::pak::core::kNoResourceIndex) {
+  if (bytecode_index == data::kNoResourceReference) {
     return;
   }
 
-  const auto source_id = callbacks.resolve_source_id_for_asset(key);
-  if (!source_id.has_value()) {
-    return;
-  }
-
-  const auto resource_key
-    = callbacks.make_script_resource_key(*source_id, bytecode_index);
-  auto resource = callbacks.get_script_resource(resource_key);
+  auto resource = callbacks.acquire_bytecode(*asset);
   if (!resource) {
     return;
   }
 
-  for (const auto& sub : subscribers_) {
+  const auto snapshot = subscribers_;
+  for (const auto& sub : snapshot) {
     if (sub.handler) {
       sub.handler(key, resource);
+      if (!callbacks.is_current()) {
+        return;
+      }
     }
   }
 }
@@ -164,9 +175,14 @@ auto ScriptHotReloadService::ReloadScript(
   LOG_F(INFO, "reloading script asset key={}", data::to_string(target_key));
 
   callbacks.invalidate_asset_tree(target_key);
+  if (!callbacks.is_current()) {
+    return;
+  }
   callbacks.start_load_script_asset(target_key,
     [this, target_key, callbacks](std::shared_ptr<data::ScriptAsset> asset) {
-      NotifyReloadedScript(target_key, asset, callbacks);
+      if (callbacks.is_current()) {
+        NotifyReloadedScript(target_key, asset, callbacks);
+      }
     });
 }
 
@@ -177,9 +193,14 @@ auto ScriptHotReloadService::ReloadAllScripts(const ReloadCallbacks& callbacks)
   const auto script_keys = callbacks.enumerate_loaded_script_keys();
   for (const auto& key : script_keys) {
     callbacks.invalidate_asset_tree(key);
+    if (!callbacks.is_current()) {
+      return;
+    }
     callbacks.start_load_script_asset(
       key, [this, key, callbacks](std::shared_ptr<data::ScriptAsset> asset) {
-        NotifyReloadedScript(key, asset, callbacks);
+        if (callbacks.is_current()) {
+          NotifyReloadedScript(key, asset, callbacks);
+        }
       });
   }
 }

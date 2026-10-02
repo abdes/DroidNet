@@ -4,22 +4,35 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
-
-#include <array>
+#include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import {
 
@@ -171,13 +184,15 @@ auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked,
   const auto resource_asset_key = MakePhysicsResourceAssetKey(signature);
 
   const auto resource_alignment = cooked.alignment > 0 ? cooked.alignment : 16;
-  const auto acquire = table_aggregator_.AcquireOrInsert(signature, [&]() {
-    const auto reserved = table_aggregator_.ReserveDataRange(
-      resource_alignment, cooked.data.size());
-    auto desc
-      = MakeTableEntry(cooked, reserved.aligned_offset, resource_asset_key);
-    return std::make_pair(desc, reserved);
-  });
+  const auto acquire = table_aggregator_.AcquireOrInsert(signature,
+    [&]
+    -> std::pair<data::pak::physics::PhysicsResourceDesc, WriteReservation> {
+      const auto reserved = table_aggregator_.ReserveDataRange(
+        resource_alignment, cooked.data.size());
+      auto desc
+        = MakeTableEntry(cooked, reserved.aligned_offset, resource_asset_key);
+      return std::make_pair(desc, reserved);
+    });
 
   if (!acquire.is_new) {
     if (hash_missing && !signature_salt.empty()) {
@@ -243,21 +258,18 @@ auto PhysicsResourceEmitter::TryGetDescriptor(const uint32_t index) const
   return table_aggregator_.TryGetDescriptor(index);
 }
 
-auto PhysicsResourceEmitter::Finalize() -> co::Co<bool>
+auto PhysicsResourceEmitter::Finalize() -> co::Co<Result<void, FileErrorInfo>>
 {
   finalize_started_.store(true, std::memory_order_release);
 
-  auto flush_result = co_await file_writer_.Flush();
-  if (!flush_result.has_value()) {
-    LOG_F(ERROR, "Finalize: physics flush failed: {}",
-      flush_result.error().ToString());
-    co_return false;
+  const auto flush_result = co_await file_writer_.Flush();
+  if (first_error_) {
+    co_return Result<void, FileErrorInfo>::Err(*first_error_);
   }
-
-  if (error_count_.load(std::memory_order_acquire) > 0U) {
-    co_return false;
+  if (!flush_result) {
+    co_return Result<void, FileErrorInfo>::Err(flush_result.error());
   }
-  co_return true;
+  co_return Result<void, FileErrorInfo>::Ok();
 }
 
 auto PhysicsResourceEmitter::MakeTableEntry(
@@ -290,8 +302,8 @@ auto PhysicsResourceEmitter::QueueDataWrite(const WriteKind kind,
 
   file_writer_.WriteAtAsync(data_path_, offset, bytes,
     WriteOptions { .create_directories = true, .share_write = true },
-    [this, kind, index, data = std::move(keepalive)](
-      const FileErrorInfo& error, [[maybe_unused]] uint64_t bytes_written) {
+    [this, kind, index, data = std::move(keepalive)](const FileErrorInfo& error,
+      [[maybe_unused]] uint64_t bytes_written) -> void {
       OnWriteComplete(kind, index, error);
     });
 }
@@ -306,6 +318,9 @@ auto PhysicsResourceEmitter::OnWriteComplete(const WriteKind kind,
   }
 
   error_count_.fetch_add(1, std::memory_order_acq_rel);
+  if (!first_error_) {
+    first_error_ = error;
+  }
   if (kind == WriteKind::kPadding) {
     LOG_F(
       ERROR, "Failed to write physics resource padding: {}", error.ToString());

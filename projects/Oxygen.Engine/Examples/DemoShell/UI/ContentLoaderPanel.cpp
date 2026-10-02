@@ -6,25 +6,31 @@
 
 #include <algorithm>
 #include <array>
-#include <fmt/format.h>
-#include <functional>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <string>
+#include <string_view>
 
+#include "DemoShell/Services/ContentSettingsService.h"
+#include "DemoShell/UI/ContentLoaderPanel.h"
+#include "DemoShell/UI/ContentVm.h"
+#include <fmt/format.h>
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/ImGui/Styles/IconsFontAwesome.h>
-
-#include "DemoShell/Services/ContentSettingsService.h"
-#include "DemoShell/Services/FileBrowserService.h"
-#include "DemoShell/UI/ContentLoaderPanel.h"
-#include "DemoShell/UI/ContentVm.h"
 
 namespace oxygen::examples::ui {
 
@@ -68,8 +74,9 @@ namespace {
           value = candidate;
           changed = true;
         }
-        if (is_selected)
+        if (is_selected) {
           ImGui::SetItemDefaultFocus();
+        }
       }
       ImGui::EndCombo();
     }
@@ -85,7 +92,7 @@ namespace {
     return fmt::format("Index: {}", file_name);
   }
 
-}
+} // namespace
 
 ContentLoaderPanel::ContentLoaderPanel(observer_ptr<ContentVm> vm)
   : vm_(vm)
@@ -112,27 +119,27 @@ auto ContentLoaderPanel::DrawContents() -> void
   ImGui::BeginDisabled(isImporting || isSceneLoading);
   ImGui::PushStyleVar(
     ImGuiStyleVar_ItemSpacing, ImVec2(style.ItemSpacing.x, 0.0F));
-  if (ImGui::BeginChild("ContentLoaderMain", ImVec2(0.0F, main_height))) {
-    if (ImGui::BeginTabBar("ContentLoaderTabs", ImGuiTabBarFlags_None)) {
-      if (ImGui::BeginTabItem("Sources")) {
-        DrawSourcesSection();
-        ImGui::EndTabItem();
-      }
-      if (ImGui::BeginTabItem("Library")) {
-        DrawLibrarySection();
-        ImGui::EndTabItem();
-      }
-      if (ImGui::BeginTabItem("Diagnostics")) {
-        DrawDiagnosticsSection();
-        ImGui::EndTabItem();
-      }
-      if (ImGui::BeginTabItem("Advanced")) {
-        DrawAdvancedSection();
-        ImGui::EndTabItem();
-      }
-      ImGui::EndTabBar();
+  if ((ImGui::BeginChild("ContentLoaderMain", ImVec2(0.0F, main_height)))
+    && (ImGui::BeginTabBar("ContentLoaderTabs", ImGuiTabBarFlags_None))) {
+    if (ImGui::BeginTabItem("Sources")) {
+      DrawSourcesSection();
+      ImGui::EndTabItem();
     }
+    if (ImGui::BeginTabItem("Library")) {
+      DrawLibrarySection();
+      ImGui::EndTabItem();
+    }
+    if (ImGui::BeginTabItem("Diagnostics")) {
+      DrawDiagnosticsSection();
+      ImGui::EndTabItem();
+    }
+    if (ImGui::BeginTabItem("Advanced")) {
+      DrawAdvancedSection();
+      ImGui::EndTabItem();
+    }
+    ImGui::EndTabBar();
   }
+
   ImGui::EndChild();
   ImGui::EndDisabled();
 
@@ -164,7 +171,7 @@ auto ContentLoaderPanel::DrawContents() -> void
       float button_width = 0.0F;
       if (cancel_label != nullptr) {
         const ImVec2 label_size = ImGui::CalcTextSize(cancel_label);
-        button_width = label_size.x + ImGui::GetStyle().FramePadding.x * 2.0F;
+        button_width = label_size.x + (ImGui::GetStyle().FramePadding.x * 2.0F);
       }
       const float progress_width = ImGui::GetContentRegionAvail().x
         - (cancel_label != nullptr
@@ -206,11 +213,12 @@ auto ContentLoaderPanel::DrawSourcesSection() -> void
   bool explorer_changed = false;
 
   ImGui::Dummy({ 0, 4 });
-  if (ImGui::CollapsingHeader("Content Root", ImGuiTreeNodeFlags_DefaultOpen)) {
+  if (ImGui::CollapsingHeader(
+        "Source Folder", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::Indent();
     std::string root_path = explorer.model_root.string();
     const float button_width = ImGui::CalcTextSize(ICON_FA_FOLDER " Browse").x
-      + ImGui::GetStyle().FramePadding.x * 2.0F;
+      + (ImGui::GetStyle().FramePadding.x * 2.0F);
     const float available_width = ImGui::GetContentRegionAvail().x;
     const float input_width = std::max(
       0.0F, available_width - button_width - ImGui::GetStyle().ItemSpacing.x);
@@ -227,14 +235,17 @@ auto ContentLoaderPanel::DrawSourcesSection() -> void
     }
     ImGui::PopStyleColor();
 
-    if (ImGui::Checkbox("FBX", &explorer.include_fbx))
+    if (ImGui::Checkbox("FBX", &explorer.include_fbx)) {
       explorer_changed = true;
+    }
     ImGui::SameLine();
-    if (ImGui::Checkbox("GLB", &explorer.include_glb))
+    if (ImGui::Checkbox("GLB", &explorer.include_glb)) {
       explorer_changed = true;
+    }
     ImGui::SameLine();
-    if (ImGui::Checkbox("GLTF", &explorer.include_gltf))
+    if (ImGui::Checkbox("GLTF", &explorer.include_gltf)) {
       explorer_changed = true;
+    }
     ImGui::Unindent();
   }
 
@@ -268,8 +279,9 @@ auto ContentLoaderPanel::DrawSourcesSection() -> void
     for (const auto& src : sources) {
       std::string filename = src.path.filename().string();
       if (strlen(source_filter) > 0
-        && filename.find(source_filter) == std::string::npos)
+        && filename.find(source_filter) == std::string::npos) {
         continue;
+      }
 
       if (ImGui::Selectable(filename.c_str())) {
         vm_->StartImport(src.path);
@@ -289,12 +301,13 @@ auto ContentLoaderPanel::DrawLibrarySection() -> void
     vm_->BrowseForPak();
   }
   ImGui::SameLine();
-  if (ImGui::Button(ICON_FA_FILE " Select Index##select_index")) {
-    vm_->BrowseForIndex();
+  if (ImGui::Button(ICON_FA_FILE " Select Library##select_index")) {
+    vm_->BrowseForLibrary();
   }
   ImGui::SameLine();
-  if (ImGui::Button("Unload All"))
+  if (ImGui::Button("Unload All")) {
     vm_->UnloadAllLibrary();
+  }
 
   ImGui::Dummy(ImVec2(0, 20));
 
@@ -324,8 +337,9 @@ auto ContentLoaderPanel::DrawLibrarySection() -> void
   if (ImGui::BeginChild("LibraryScenes", ImVec2(0, 0), true)) {
     for (const auto& scene : vm_->GetAvailableScenes()) {
       if (strlen(scene_filter) > 0
-        && scene.name.find(scene_filter) == std::string::npos)
+        && scene.name.find(scene_filter) == std::string::npos) {
         continue;
+      }
 
       const auto source_label = SceneSourceLabel(scene);
       const auto label = fmt::format("{} ({})##{}-{}", scene.name, source_label,
@@ -347,18 +361,20 @@ auto ContentLoaderPanel::DrawLibrarySection() -> void
 auto ContentLoaderPanel::DrawDiagnosticsSection() -> void
 {
   ImGui::SeparatorText("Diagnostics Control");
-  if (ImGui::Button("Clear All"))
+  if (ImGui::Button("Clear All")) {
     vm_->ClearDiagnostics();
+  }
   ImGui::Spacing();
 
   if (ImGui::BeginChild("DiagnosticsList", ImVec2(0, 0), true)) {
     for (const auto& diag : vm_->GetDiagnostics()) {
       auto color = ImVec4(0.8F, 0.8F, 0.8F, 1);
 
-      if (diag.severity == content::import::ImportSeverity::kError)
+      if (diag.severity == content::import::ImportSeverity::kError) {
         color = ImVec4(1, 0.4F, 0.4F, 1);
-      else if (diag.severity == content::import::ImportSeverity::kWarning)
+      } else if (diag.severity == content::import::ImportSeverity::kWarning) {
         color = ImVec4(1, 0.8F, 0.4F, 1);
+      }
 
       ImGui::TextColored(color, "[%s] %s: %s",
         std::string(nostd::to_string(diag.severity)).c_str(), diag.code.c_str(),
@@ -375,18 +391,22 @@ auto ContentLoaderPanel::DrawWorkflowSettings() -> void
     bool changed = false;
 
     if (ImGui::Checkbox(
-          "Auto-load scene after import", &explorer.auto_load_on_import))
+          "Auto-load scene after import", &explorer.auto_load_on_import)) {
       changed = true;
+    }
     if (ImGui::Checkbox(
-          "Auto-dump texture VRAM", &explorer.auto_dump_texture_memory))
+          "Auto-dump texture VRAM", &explorer.auto_dump_texture_memory)) {
       changed = true;
+    }
     if (explorer.auto_dump_texture_memory) {
       ImGui::Indent();
-      if (ImGui::SliderInt("Dump Top N", &explorer.dump_top_n, 1, 100))
+      if (ImGui::SliderInt("Dump Top N", &explorer.dump_top_n, 1, 100)) {
         changed = true;
+      }
       if (ImGui::SliderInt(
-            "Delay (frames)", &explorer.auto_dump_delay_frames, 0, 600))
+            "Delay (frames)", &explorer.auto_dump_delay_frames, 0, 600)) {
         changed = true;
+      }
       ImGui::Unindent();
     }
 
@@ -417,48 +437,59 @@ auto ContentLoaderPanel::DrawImportSettings() -> void
         = (options.import_content & content::import::ImportContentFlags::kScene)
         != content::import::ImportContentFlags::kNone;
 
-      if (ImGui::Checkbox("Textures", &textures))
+      if (ImGui::Checkbox("Textures", &textures)) {
         changed = true;
+      }
       ImGui::SameLine();
-      if (ImGui::Checkbox("Materials", &materials))
+      if (ImGui::Checkbox("Materials", &materials)) {
         changed = true;
+      }
       ImGui::SameLine();
-      if (ImGui::Checkbox("Geometry", &geometry))
+      if (ImGui::Checkbox("Geometry", &geometry)) {
         changed = true;
+      }
       ImGui::SameLine();
-      if (ImGui::Checkbox("Scene", &scene))
+      if (ImGui::Checkbox("Scene", &scene)) {
         changed = true;
+      }
 
       if (changed) {
         options.import_content = content::import::ImportContentFlags::kNone;
-        if (textures)
+        if (textures) {
           options.import_content
             |= content::import::ImportContentFlags::kTextures;
-        if (materials)
+        }
+        if (materials) {
           options.import_content
             |= content::import::ImportContentFlags::kMaterials;
-        if (geometry)
+        }
+        if (geometry) {
           options.import_content
             |= content::import::ImportContentFlags::kGeometry;
-        if (scene)
+        }
+        if (scene) {
           options.import_content |= content::import::ImportContentFlags::kScene;
+        }
       }
       ImGui::TreePop();
     }
 
     if (ImGui::TreeNodeEx("Processing", ImGuiTreeNodeFlags_DefaultOpen)) {
-      if (ImGui::Checkbox("Enable Hashing", &options.with_content_hashing))
+      if (ImGui::Checkbox("Enable Hashing", &options.with_content_hashing)) {
         changed = true;
-      if (ImGui::Checkbox(
-            "Ignore Non-Mesh Primitives", &options.ignore_non_mesh_primitives))
+      }
+      if (ImGui::Checkbox("Ignore Non-Mesh Primitives",
+            &options.ignore_non_mesh_primitives)) {
         changed = true;
+      }
 
       static constexpr std::array kPruningModes = {
         content::import::NodePruningPolicy::kKeepAll,
         content::import::NodePruningPolicy::kDropEmptyNodes,
       };
-      if (DrawEnumCombo("Node Pruning", options.node_pruning, kPruningModes))
+      if (DrawEnumCombo("Node Pruning", options.node_pruning, kPruningModes)) {
         changed = true;
+      }
 
       static constexpr std::array kUnitPolicies = {
         content::import::UnitNormalizationPolicy::kNormalizeToMeters,
@@ -466,27 +497,30 @@ auto ContentLoaderPanel::DrawImportSettings() -> void
         content::import::UnitNormalizationPolicy::kApplyCustomFactor,
       };
       if (DrawEnumCombo(
-            "Units", options.coordinate.unit_normalization, kUnitPolicies))
+            "Units", options.coordinate.unit_normalization, kUnitPolicies)) {
         changed = true;
-
-      if (options.coordinate.unit_normalization
-        == content::import::UnitNormalizationPolicy::kApplyCustomFactor) {
-        if (ImGui::DragFloat("Scale Factor", &options.coordinate.unit_scale,
-              0.1F, 0.001F, 1000.0F))
-          changed = true;
       }
 
-      static constexpr std::array kGeometryPolicies
-        = { content::import::GeometryAttributePolicy::kNone,
-            content::import::GeometryAttributePolicy::kPreserveIfPresent,
-            content::import::GeometryAttributePolicy::kGenerateMissing,
-            content::import::GeometryAttributePolicy::kAlwaysRecalculate };
-      if (DrawEnumCombo(
-            "Normal Policy", options.normal_policy, kGeometryPolicies))
+      if ((options.coordinate.unit_normalization
+            == content::import::UnitNormalizationPolicy::kApplyCustomFactor)
+        && (ImGui::DragFloat("Scale Factor", &options.coordinate.unit_scale,
+          0.1F, 0.001F, 1000.0F)))
         changed = true;
+
+      static constexpr std::array kGeometryPolicies = {
+        content::import::GeometryAttributePolicy::kNone,
+        content::import::GeometryAttributePolicy::kPreserveIfPresent,
+        content::import::GeometryAttributePolicy::kGenerateMissing,
+        content::import::GeometryAttributePolicy::kAlwaysRecalculate,
+      };
       if (DrawEnumCombo(
-            "Tangent Policy", options.tangent_policy, kGeometryPolicies))
+            "Normal Policy", options.normal_policy, kGeometryPolicies)) {
         changed = true;
+      }
+      if (DrawEnumCombo(
+            "Tangent Policy", options.tangent_policy, kGeometryPolicies)) {
+        changed = true;
+      }
       ImGui::TreePop();
     }
 
@@ -502,8 +536,9 @@ auto ContentLoaderPanel::DrawTextureTuningSettings() -> void
     auto tuning = vm_->GetTextureTuning();
     bool changed = false;
 
-    if (ImGui::Checkbox("Enabled", &tuning.enabled))
+    if (ImGui::Checkbox("Enabled", &tuning.enabled)) {
       changed = true;
+    }
 
     static constexpr std::array kIntents = {
       content::import::TextureIntent::kAlbedo,
@@ -519,24 +554,30 @@ auto ContentLoaderPanel::DrawTextureTuningSettings() -> void
       content::import::TextureIntent::kData,
       content::import::TextureIntent::kHeightMap,
     };
-    if (DrawEnumCombo("Intent", tuning.intent, kIntents))
+    if (DrawEnumCombo("Intent", tuning.intent, kIntents)) {
       changed = true;
+    }
 
     static constexpr std::array kColorSpaces
       = { ColorSpace::kLinear, ColorSpace::kSRGB };
-    static constexpr std::array kMipPolicies
-      = { content::import::MipPolicy::kNone,
-          content::import::MipPolicy::kFullChain,
-          content::import::MipPolicy::kMaxCount };
-    static constexpr std::array kMipFilters
-      = { content::import::MipFilter::kBox, content::import::MipFilter::kKaiser,
-          content::import::MipFilter::kLanczos };
+    static constexpr std::array kMipPolicies = {
+      content::import::MipPolicy::kNone,
+      content::import::MipPolicy::kFullChain,
+      content::import::MipPolicy::kMaxCount,
+    };
+    static constexpr std::array kMipFilters = {
+      content::import::MipFilter::kBox,
+      content::import::MipFilter::kKaiser,
+      content::import::MipFilter::kLanczos,
+    };
 
     if (DrawEnumCombo(
-          "Source Color Space", tuning.source_color_space, kColorSpaces))
+          "Source Color Space", tuning.source_color_space, kColorSpaces)) {
       changed = true;
-    if (DrawEnumCombo("Mip Policy", tuning.mip_policy, kMipPolicies))
+    }
+    if (DrawEnumCombo("Mip Policy", tuning.mip_policy, kMipPolicies)) {
       changed = true;
+    }
     if (tuning.mip_policy == content::import::MipPolicy::kMaxCount) {
       int max_mips = tuning.max_mip_levels;
       if (ImGui::SliderInt("Max Mips", &max_mips, 1, 16)) {
@@ -544,8 +585,9 @@ auto ContentLoaderPanel::DrawTextureTuningSettings() -> void
         changed = true;
       }
     }
-    if (DrawEnumCombo("Mip Filter", tuning.mip_filter, kMipFilters))
+    if (DrawEnumCombo("Mip Filter", tuning.mip_filter, kMipFilters)) {
       changed = true;
+    }
 
     static constexpr std::array kFormats = {
       Format::kR8UNorm,
@@ -573,52 +615,65 @@ auto ContentLoaderPanel::DrawTextureTuningSettings() -> void
       Format::kBC7UNorm,
       Format::kBC7UNormSRGB,
     };
-    if (DrawEnumCombo("Color Format", tuning.color_output_format, kFormats))
+    if (DrawEnumCombo("Color Format", tuning.color_output_format, kFormats)) {
       changed = true;
-    if (DrawEnumCombo("Data Format", tuning.data_output_format, kFormats))
+    }
+    if (DrawEnumCombo("Data Format", tuning.data_output_format, kFormats)) {
       changed = true;
+    }
 
     static constexpr std::array kBc7Tiers = {
-      content::import::Bc7Quality::kNone, content::import::Bc7Quality::kFast,
-      content::import::Bc7Quality::kDefault, content::import::Bc7Quality::kHigh
+      content::import::Bc7Quality::kNone,
+      content::import::Bc7Quality::kFast,
+      content::import::Bc7Quality::kDefault,
+      content::import::Bc7Quality::kHigh,
     };
-    if (DrawEnumCombo("BC7 Quality", tuning.bc7_quality, kBc7Tiers))
+    if (DrawEnumCombo("BC7 Quality", tuning.bc7_quality, kBc7Tiers)) {
       changed = true;
+    }
 
-    static constexpr std::array kHdrModes
-      = { content::import::HdrHandling::kError,
-          content::import::HdrHandling::kTonemapAuto,
-          content::import::HdrHandling::kKeepFloat };
-    if (DrawEnumCombo("HDR Handling", tuning.hdr_handling, kHdrModes))
+    static constexpr std::array kHdrModes = {
+      content::import::HdrHandling::kError,
+      content::import::HdrHandling::kTonemapAuto,
+      content::import::HdrHandling::kKeepFloat,
+    };
+    if (DrawEnumCombo("HDR Handling", tuning.hdr_handling, kHdrModes)) {
       changed = true;
+    }
 
     if (tuning.hdr_handling != content::import::HdrHandling::kKeepFloat) {
-      if (ImGui::Checkbox("Bake HDR to LDR", &tuning.bake_hdr_to_ldr))
+      if (ImGui::Checkbox("Bake HDR to LDR", &tuning.bake_hdr_to_ldr)) {
         changed = true;
+      }
       if (tuning.bake_hdr_to_ldr) {
         ImGui::Indent();
         if (ImGui::DragFloat(
-              "Exposure (EV)", &tuning.exposure_ev, 0.1F, -10.0F, 10.0F))
+              "Exposure (EV)", &tuning.exposure_ev, 0.1F, -10.0F, 10.0F)) {
           changed = true;
+        }
         ImGui::Unindent();
       }
     }
 
     ImGui::Separator();
     if (ImGui::Checkbox(
-          "Flip Green Channel (Normal)", &tuning.flip_normal_green))
+          "Flip Green Channel (Normal)", &tuning.flip_normal_green)) {
       changed = true;
+    }
     if (ImGui::Checkbox(
-          "Renormalize Mips", &tuning.renormalize_normals_in_mips))
+          "Renormalize Mips", &tuning.renormalize_normals_in_mips)) {
       changed = true;
+    }
 
     ImGui::Separator();
-    if (ImGui::Checkbox("Import as Cubemap", &tuning.import_cubemap))
+    if (ImGui::Checkbox("Import as Cubemap", &tuning.import_cubemap)) {
       changed = true;
+    }
     if (tuning.import_cubemap) {
       ImGui::Indent();
-      if (ImGui::Checkbox("Equirect to Cubemap", &tuning.equirect_to_cubemap))
+      if (ImGui::Checkbox("Equirect to Cubemap", &tuning.equirect_to_cubemap)) {
         changed = true;
+      }
       if (tuning.equirect_to_cubemap) {
         int face_size = static_cast<int>(tuning.cubemap_face_size);
         if (ImGui::DragInt("Face Size", &face_size, 256, 0, 8192)) {
@@ -635,8 +690,9 @@ auto ContentLoaderPanel::DrawTextureTuningSettings() -> void
         content::import::CubeMapImageLayout::kHorizontalCross,
         content::import::CubeMapImageLayout::kVerticalCross,
       };
-      if (DrawEnumCombo("Cube Layout", tuning.cubemap_layout, kCubeLayouts))
+      if (DrawEnumCombo("Cube Layout", tuning.cubemap_layout, kCubeLayouts)) {
         changed = true;
+      }
       ImGui::Unindent();
     }
 
@@ -655,8 +711,9 @@ auto ContentLoaderPanel::DrawAdvancedSection() -> void
     auto cfg = vm_->GetServiceConfig();
     bool changed = false;
 
-    auto draw_pipe = [&](const char* label,
-                       content::import::ImportPipelineConcurrency& pipe) {
+    auto draw_pipe
+      = [&](const char* label,
+          content::import::ImportPipelineConcurrency& pipe) -> void {
       ImGui::PushID(label);
       ImGui::AlignTextToFramePadding();
       ImGui::Text("%s", label);
@@ -716,6 +773,10 @@ auto ContentLoaderPanel::DrawAdvancedSection() -> void
   }
 
   if (ImGui::CollapsingHeader("Output Layout")) {
+    ImGui::TextWrapped(
+      "Generated storage: %s", vm_->GetGeneratedStorageRoot().c_str());
+    ImGui::TextUnformatted(
+      "Each import publishes an immutable source generation.");
     auto layout = vm_->GetLayout();
     bool changed = false;
 
@@ -726,7 +787,7 @@ auto ContentLoaderPanel::DrawAdvancedSection() -> void
         "Label", ImGuiTableColumnFlags_WidthFixed, 140.0F);
       ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
-      auto row_input = [&](const char* label, std::string& value) {
+      auto row_input = [&](const char* label, std::string& value) -> void {
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
@@ -739,7 +800,11 @@ auto ContentLoaderPanel::DrawAdvancedSection() -> void
       };
 
       row_input("Virtual Root", layout.virtual_mount_root);
-      row_input("Index Name", layout.index_file_name);
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn();
+      ImGui::TextUnformatted("Index Name");
+      ImGui::TableNextColumn();
+      ImGui::TextUnformatted("container.index.bin");
       row_input("Resources Dir", layout.resources_dir);
       row_input("Descriptors Dir", layout.descriptors_dir);
       row_input("Scenes Subdir", layout.scenes_subdir);

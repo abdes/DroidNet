@@ -4,15 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <filesystem>
 #include <latch>
-#include <ranges>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Finally.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportJobId.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -23,7 +30,7 @@ namespace {
     const std::string_view code) -> bool
   {
     return std::ranges::any_of(diagnostics,
-      [code](const ImportDiagnostic& d) { return d.code == code; });
+      [code](const ImportDiagnostic& d) -> bool { return d.code == code; });
   }
 
   auto MakeTempCookedRoot(const std::string_view suffix)
@@ -47,7 +54,7 @@ namespace {
     const auto submitted = service.SubmitImport(
       std::move(request),
       [&report, &done](
-        const ImportJobId /*job_id*/, const ImportReport& completed) {
+        const ImportJobId /*job_id*/, const ImportReport& completed) -> void {
         report = completed;
         done.count_down();
       },
@@ -67,7 +74,7 @@ namespace {
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
       .normalized_descriptor_json
-      = R"({"version":8,"name":"DemoScene","nodes":[{"name":"Root"}]})",
+      = R"({"version":9,"name":"DemoScene","nodes":[{"name":"Root"}]})",
     };
     return request;
   }
@@ -94,7 +101,7 @@ namespace {
       .thread_pool_size = 2U,
     });
     [[maybe_unused]] auto stop_service
-      = oxygen::Finally([&service]() { service.Stop(); });
+      = oxygen::Finally([&service] -> void { service.Stop(); });
     const auto cooked_root = MakeTempCookedRoot("inline_sidecar_success");
 
     const auto scene_report
@@ -120,7 +127,7 @@ namespace {
       .thread_pool_size = 2U,
     });
     [[maybe_unused]] auto stop_service
-      = oxygen::Finally([&service]() { service.Stop(); });
+      = oxygen::Finally([&service] -> void { service.Stop(); });
 
     auto request = ImportRequest {};
     request.source_path = "inline://physics-sidecar";
@@ -145,7 +152,7 @@ namespace {
       .thread_pool_size = 2U,
     });
     [[maybe_unused]] auto stop_service
-      = oxygen::Finally([&service]() { service.Stop(); });
+      = oxygen::Finally([&service] -> void { service.Stop(); });
 
     auto request = ImportRequest {};
     request.source_path = "inline://physics-sidecar";

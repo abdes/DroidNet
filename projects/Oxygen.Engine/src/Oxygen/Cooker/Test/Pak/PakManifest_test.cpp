@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -17,10 +15,11 @@
 #include <string_view>
 #include <vector>
 
+#include "PakTestSupport.h"
+
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/Pak/PakManifestWriter.h>
-
-#include "PakTestSupport.h"
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 namespace data = oxygen::data;
@@ -85,13 +84,15 @@ protected:
   auto MakeBaseCatalog(std::span<const data::PakCatalogEntry> entries) const
     -> data::PakCatalog
   {
-    return data::PakCatalog {
+    auto catalog = data::PakCatalog {
       .source_key = MakeSourceKey(static_cast<uint8_t>(0xB1U)),
       .content_version = kContentVersion,
       .catalog_digest = MakeDigest(static_cast<uint8_t>(0xC1U)),
       .entries
       = std::vector<data::PakCatalogEntry>(entries.begin(), entries.end()),
     };
+    catalog.catalog_digest = catalog.ComputeDigest().value();
+    return catalog;
   }
 };
 
@@ -131,7 +132,7 @@ NOLINT_TEST_F(
     = std::vector<data::PakCatalog> {
         MakeBaseCatalog(std::span<const data::PakCatalogEntry>(base_entries)),
       },
-    .patch_compat = {},
+
     .options = PakBuildOptions {
       .deterministic = true,
       .embed_browse_index = false,
@@ -159,12 +160,16 @@ NOLINT_TEST_F(
   EXPECT_EQ(manifest.patch_source_key, request.source_key);
   EXPECT_EQ(manifest.compatibility_envelope.patch_content_version,
     request.content_version);
-  EXPECT_EQ(
-    manifest.compatibility_envelope.required_base_source_keys.size(), 1U);
-  EXPECT_EQ(
-    manifest.compatibility_envelope.required_base_content_versions.size(), 1U);
-  EXPECT_EQ(
-    manifest.compatibility_envelope.required_base_catalog_digests.size(), 1U);
+  const auto& bases = manifest.compatibility_envelope.required_base_layers;
+  ASSERT_EQ(bases.size(), request.base_catalogs.size());
+  for (size_t index = 0; index < bases.size(); ++index) {
+    EXPECT_EQ(
+      bases.at(index).source_key, request.base_catalogs.at(index).source_key);
+    EXPECT_EQ(bases.at(index).content_version,
+      request.base_catalogs.at(index).content_version);
+    EXPECT_EQ(bases.at(index).catalog_digest,
+      request.base_catalogs.at(index).catalog_digest);
+  }
   EXPECT_TRUE(manifest.patch_pak_digest.has_value());
   ASSERT_TRUE(manifest.patch_pak_crc32.has_value());
   EXPECT_EQ(*manifest.patch_pak_crc32, result.pak_crc32);
@@ -177,7 +182,6 @@ NOLINT_TEST_F(
   using pak::PakBuilder;
   using pak::PakBuildOptions;
   using pak::PakBuildRequest;
-  using pak::PatchCompatibilityPolicy;
 
   const auto request = PakBuildRequest {
     .mode = BuildMode::kFull,
@@ -187,12 +191,7 @@ NOLINT_TEST_F(
     .content_version = kContentVersion,
     .source_key = MakeSourceKey(static_cast<uint8_t>(0xA2U)),
     .base_catalogs = {},
-    .patch_compat = PatchCompatibilityPolicy {
-      .require_exact_base_set = false,
-      .require_content_version_match = true,
-      .require_base_source_key_match = false,
-      .require_catalog_digest_match = true,
-    },
+
     .options = PakBuildOptions {
       .deterministic = true,
       .embed_browse_index = false,
@@ -216,29 +215,13 @@ NOLINT_TEST_F(
   EXPECT_TRUE(manifest.created.empty());
   EXPECT_TRUE(manifest.replaced.empty());
   EXPECT_TRUE(manifest.deleted.empty());
-  EXPECT_TRUE(
-    manifest.compatibility_envelope.required_base_source_keys.empty());
-  EXPECT_TRUE(
-    manifest.compatibility_envelope.required_base_content_versions.empty());
-  EXPECT_TRUE(
-    manifest.compatibility_envelope.required_base_catalog_digests.empty());
+  EXPECT_TRUE(manifest.compatibility_envelope.required_base_layers.empty());
   EXPECT_EQ(manifest.compatibility_envelope.patch_content_version,
     request.content_version);
   EXPECT_EQ(manifest.diff_basis_identifier, kPatchDiffBasisIdentifier);
   EXPECT_EQ(manifest.patch_source_key, request.source_key);
   EXPECT_TRUE(manifest.patch_pak_digest.has_value());
   EXPECT_TRUE(manifest.patch_pak_crc32.has_value());
-  EXPECT_EQ(manifest.compatibility_policy_snapshot.require_exact_base_set,
-    request.patch_compat.require_exact_base_set);
-  EXPECT_EQ(
-    manifest.compatibility_policy_snapshot.require_content_version_match,
-    request.patch_compat.require_content_version_match);
-  EXPECT_EQ(
-    manifest.compatibility_policy_snapshot.require_base_source_key_match,
-    request.patch_compat.require_base_source_key_match);
-  EXPECT_EQ(manifest.compatibility_policy_snapshot.require_catalog_digest_match,
-    request.patch_compat.require_catalog_digest_match);
-
   const auto manifest_text = ReadFileText(request.output_manifest_path);
   EXPECT_NE(manifest_text.find("\n  \"created\": []"), std::string::npos);
   EXPECT_NE(
@@ -273,7 +256,7 @@ NOLINT_TEST_F(PakManifestTest, PatchModeFailsWhenManifestCannotBeWritten)
     = std::vector<data::PakCatalog> {
         MakeBaseCatalog(std::span<const data::PakCatalogEntry>(base_entries)),
       },
-    .patch_compat = {},
+
     .options = {},
   };
 
@@ -306,7 +289,7 @@ NOLINT_TEST_F(PakManifestTest, FullModeFailsWhenManifestCannotBeWritten)
     .content_version = kContentVersion,
     .source_key = MakeSourceKey(static_cast<uint8_t>(0xA4U)),
     .base_catalogs = {},
-    .patch_compat = {},
+
     .options = PakBuildOptions {
       .deterministic = true,
       .embed_browse_index = false,
@@ -350,7 +333,7 @@ NOLINT_TEST_F(
     = std::vector<data::PakCatalog> {
         MakeBaseCatalog(std::span<const data::PakCatalogEntry>(empty_base_entries)),
       },
-    .patch_compat = {},
+
     .options = {},
   };
 
@@ -394,7 +377,7 @@ NOLINT_TEST_F(PakManifestTest, FullModeManifestEmissionIsBitExactDeterministic)
     .content_version = kContentVersion,
     .source_key = MakeSourceKey(static_cast<uint8_t>(0xA6U)),
     .base_catalogs = {},
-    .patch_compat = {},
+
     .options = PakBuildOptions {
       .deterministic = true,
       .embed_browse_index = false,

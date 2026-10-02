@@ -207,6 +207,67 @@ public partial class AssetsViewModel(
         return string.Create(CultureInfo.InvariantCulture, $"NewMaterial{Guid.NewGuid():N}");
     }
 
+    private async Task ImportImageSourceAsync(ProjectContext project, string sourcePath)
+    {
+        if (!ReferenceEquals(projectContextService.ActiveProject, project))
+        {
+            await dialogService.ShowMessageAsync("Import texture", "The project changed. Select the image again in the current project.").ConfigureAwait(true);
+            return;
+        }
+
+        var destination = this.GetSelectedTextureFolder(project);
+        var model = new TextureImportDialogViewModel(project, sourcePath, destination, dialogService);
+        var view = new TextureImportDialogView(model);
+        var button = await dialogService.ShowAsync(new DialogSpec("Import texture", view)
+        {
+            PrimaryButtonText = "Import",
+            CloseButtonText = "Cancel",
+            DefaultButton = DialogButton.Primary,
+            PrimaryAction = () => Task.FromResult(model.Validate()),
+        }).ConfigureAwait(true);
+        if (button != DialogButton.Primary || model.Request is not { } request)
+        {
+            return;
+        }
+
+        this.IsOperationResultVisible = false;
+        try
+        {
+            var textureUri = await TextureSourceAssetImporter.CreateAsync(request).ConfigureAwait(true);
+            await this.RunSourceImportAsync(
+                project,
+                () => contentPipelineService.CookAssetAsync(textureUri, CancellationToken.None, project),
+                "Import texture",
+                textureUri).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // The active texture import is cancelled before publication.
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            this.PublishFailure(ContentPipelineOperationKinds.Import, "Import texture", error.Message, AssetImportDiagnosticCodes.ImportFailed, request.DestinationFolder, error, showInBrowser: false);
+        }
+    }
+
+    private string GetSelectedTextureFolder(ProjectContext project)
+    {
+        var selected = this.GetSelectedFolderUri();
+        var parts = Uri.UnescapeDataString(selected.AbsolutePath).Trim('/').Split('/');
+        var mountName = parts.Length > 0
+            ? project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.OrdinalIgnoreCase))?.Name
+            : null;
+        mountName ??= project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.OrdinalIgnoreCase))?.Name
+            ?? project.AuthoringMounts.FirstOrDefault()?.Name
+            ?? throw new InvalidOperationException("The project has no authoring mount for texture assets.");
+        if (parts.Skip(1).Any(static part => string.Equals(part, "Textures", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "/" + string.Join('/', parts);
+        }
+
+        return "/" + mountName + "/Textures";
+    }
+
     /// <summary>Gets the authoring destination for a new material.</summary>
     /// <returns>The resolved virtual folder.</returns>
     public string GetSelectedMaterialFolder()
@@ -622,8 +683,9 @@ public partial class AssetsViewModel(
         }
 
         var path = this.GetSelectedFolderUri().AbsolutePath.TrimEnd('/');
-        return project.AuthoringMounts.Any(mount => string.Equals(path, "/" + mount.Name, StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith("/" + mount.Name + "/", StringComparison.OrdinalIgnoreCase));
+        return project.AuthoringMounts.Any(mount => !ProjectExplorer.ProjectLayoutViewModel.IsPersistedProjectRelativeVirtualMount(mount)
+            && (string.Equals(path, "/" + mount.Name, StringComparison.OrdinalIgnoreCase)
+                || path.StartsWith("/" + mount.Name + "/", StringComparison.OrdinalIgnoreCase)));
     }
 
     private void OnAssetSelectionChanged(object? sender, PropertyChangedEventArgs args)
@@ -908,14 +970,26 @@ public partial class AssetsViewModel(
                 picker.FileTypeFilter.Add(extension);
             }
 
+            foreach (var extension in TextureSourceAssetImporter.SupportedExtensions)
+            {
+                picker.FileTypeFilter.Add(extension);
+            }
+
             if (await picker.PickSingleFileAsync() is { } file)
             {
-                await this.ImportSourceFileAsync(project, file.Path).ConfigureAwait(true);
+                if (TextureSourceAssetImporter.IsSupportedImage(file.Path))
+                {
+                    await this.ImportImageSourceAsync(project, file.Path).ConfigureAwait(true);
+                }
+                else
+                {
+                    await this.ImportSourceFileAsync(project, file.Path).ConfigureAwait(true);
+                }
             }
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or System.Runtime.InteropServices.COMException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
-            await dialogService.ShowMessageAsync("Import model", error.Message).ConfigureAwait(true);
+            await dialogService.ShowMessageAsync("Import", error.Message).ConfigureAwait(true);
         }
     }
 
@@ -960,7 +1034,7 @@ public partial class AssetsViewModel(
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "This user-command boundary reports failures; the coordinator owns native work and scoped recovery.")]
-    private async Task RunSourceImportAsync(ProjectContext project, Func<Task<ContentCookResult>> import)
+    private async Task RunSourceImportAsync(ProjectContext project, Func<Task<ContentCookResult>> import, string operationTitle = "Import model", Uri? operationScope = null)
     {
         this.IsOperationResultVisible = false;
         try
@@ -973,7 +1047,7 @@ public partial class AssetsViewModel(
                 this.NotifyCookSelection();
             }
 
-            this.PublishCookResult(ContentPipelineOperationKinds.Import, "Import model", result, result.RetainedSourceUri);
+            this.PublishCookResult(ContentPipelineOperationKinds.Import, operationTitle, result, operationScope ?? result.RetainedSourceUri);
         }
         catch (OperationCanceledException)
         {
@@ -981,7 +1055,7 @@ public partial class AssetsViewModel(
         }
         catch (Exception error)
         {
-            this.PublishFailure(ContentPipelineOperationKinds.Import, "Import model", error.Message, AssetImportDiagnosticCodes.ImportFailed, scopeUri: null, error, showInBrowser: false);
+            this.PublishFailure(ContentPipelineOperationKinds.Import, operationTitle, error.Message, AssetImportDiagnosticCodes.ImportFailed, operationScope, error, showInBrowser: false);
         }
     }
 }

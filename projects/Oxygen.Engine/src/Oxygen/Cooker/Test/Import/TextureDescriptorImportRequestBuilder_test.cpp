@@ -6,14 +6,19 @@
 
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <optional>
 #include <sstream>
 #include <string_view>
+#include <system_error>
+#include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportSettings.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Core/Types/ColorSpace.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -55,6 +60,31 @@ auto MakeBaseSettings(const std::filesystem::path& descriptor_path)
 }
 
 NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
+  PreservesJobIdentityWithoutRewritingSourceDescriptor)
+{
+  auto settings = TextureDescriptorImportSettings {};
+  settings.descriptor_path = "texture.json";
+  settings.texture.virtual_path = "/Content/Textures/Retained.otex";
+  auto diagnostics = std::vector<oxygen::content::import::ImportDiagnostic> {};
+  const auto prepared
+    = settings.Prepare(R"({"source":"image.png"})", diagnostics);
+  if (!prepared.has_value()) {
+    ADD_FAILURE() << "Descriptor preparation unexpectedly failed";
+    return;
+  }
+  EXPECT_EQ(prepared->virtual_path, settings.texture.virtual_path);
+  EXPECT_TRUE(diagnostics.empty());
+  EXPECT_TRUE(settings.Prepare(
+    R"({"source":"image.png","virtual_path":"/Content/Textures/Retained.otex"})",
+    diagnostics));
+  EXPECT_FALSE(settings.Prepare(
+    R"({"source":"image.png","virtual_path":"/Content/Textures/Different.otex"})",
+    diagnostics));
+  ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_EQ(diagnostics.front().code, "texture.descriptor.identity_conflict");
+}
+
+NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
   BuildsRequestFromValidDescriptorAndReusesTexturePath)
 {
   const auto dir = MakeTempDir("valid_request");
@@ -62,6 +92,7 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
   WriteTextFile(descriptor_path,
     R"({
       "source": "images/brick_albedo.png",
+      "virtual_path": "/Content/Textures/brick.otex",
       "intent": "albedo",
       "decode": {
         "flip_y": true
@@ -81,9 +112,15 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
 
   const auto request = BuildTextureDescriptorRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << errors.str();
+  if (!request.has_value()) {
+    FAIL() << errors.str();
+  }
   EXPECT_TRUE(errors.str().empty());
-  ASSERT_TRUE(request->cooked_root.has_value());
+  EXPECT_EQ(
+    request.value().texture_virtual_path, "/Content/Textures/brick.otex");
+  if (!request->cooked_root.has_value()) {
+    FAIL();
+  }
   EXPECT_TRUE(request->cooked_root->is_absolute());
   EXPECT_EQ(request->source_path,
     (descriptor_path.parent_path() / "images" / "brick_albedo.png")
@@ -131,6 +168,104 @@ NOLINT_TEST(
   EXPECT_FALSE(request.has_value());
   EXPECT_TRUE(errors.str().find("failed to open texture descriptor")
     != std::string::npos);
+}
+
+NOLINT_TEST(
+  TextureDescriptorPreparationTest, ResolvesLayeredInputsWithoutAWriter)
+{
+  TextureDescriptorImportSettings settings;
+  settings.descriptor_path = (std::filesystem::temp_directory_path()
+    / "descriptor-preparation" / "texture.json")
+                               .string();
+  settings.texture.job_name = "Default";
+  settings.texture.flip_y = true;
+  std::vector<oxygen::content::import::ImportDiagnostic> diagnostics;
+  const auto prepared = settings.Prepare(R"({
+    "source":"images/base.png","name":"Layers","virtual_path":"/Content/Layers.otex",
+    "sources":[{"file":"images/layer.png","layer":1,"mip":0,"slice":0}],
+    "decode":{"flip_y":false},"mips":{"policy":"none"}
+  })",
+    diagnostics);
+  if (!prepared.has_value()) {
+    FAIL() << "Expected prepared to contain a value";
+  }
+  EXPECT_TRUE(diagnostics.empty());
+  EXPECT_TRUE(prepared->cooked_root.empty());
+  EXPECT_EQ(prepared->job_name, "Layers");
+  EXPECT_EQ(prepared->virtual_path, "/Content/Layers.otex");
+  EXPECT_FALSE(prepared->flip_y);
+  EXPECT_EQ(prepared->mip_policy, "none");
+  EXPECT_EQ(std::filesystem::path(prepared->source_path),
+    (std::filesystem::path(settings.descriptor_path).parent_path()
+      / "images/base.png")
+      .lexically_normal());
+  ASSERT_EQ(prepared->sources.size(), 1U);
+  EXPECT_EQ(prepared->sources.at(0).layer, 1U);
+  EXPECT_EQ(std::filesystem::path(prepared->sources.at(0).file),
+    (std::filesystem::path(settings.descriptor_path).parent_path()
+      / "images/layer.png")
+      .lexically_normal());
+}
+
+NOLINT_TEST(TextureDescriptorPreparationTest, KeepsNativeSchemaDiagnostics)
+{
+  TextureDescriptorImportSettings settings;
+  settings.descriptor_path = "texture.json";
+  std::vector<oxygen::content::import::ImportDiagnostic> diagnostics;
+  EXPECT_FALSE(settings.Prepare(
+    R"({"source":"image.png","decode":{"unexpected":true}})", diagnostics));
+  ASSERT_FALSE(diagnostics.empty());
+  EXPECT_EQ(
+    diagnostics.front().code, "texture.descriptor.schema_validation_failed");
+  EXPECT_EQ(diagnostics.front().source_path, "texture.json");
+}
+
+NOLINT_TEST(
+  TextureDescriptorPreparationTest, RejectsTrailingJsonInsteadOfIgnoringIt)
+{
+  TextureDescriptorImportSettings settings;
+  settings.descriptor_path = "texture.json";
+  std::vector<oxygen::content::import::ImportDiagnostic> diagnostics;
+  EXPECT_FALSE(
+    settings.Prepare(R"({"source":"image.png"} trailing)", diagnostics));
+  ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_EQ(diagnostics.front().code, "texture.descriptor.invalid_json");
+}
+
+NOLINT_TEST(TextureDescriptorPreparationTest,
+  ValidatesInheritedRecipeBeforeDestinationSelection)
+{
+  TextureDescriptorImportSettings settings;
+  settings.descriptor_path = "texture.json";
+  settings.texture.preset = "unknown-native-preset";
+  std::vector<oxygen::content::import::ImportDiagnostic> diagnostics;
+  EXPECT_FALSE(settings.Prepare(R"({"source":"image.png"})", diagnostics));
+  ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_EQ(diagnostics.front().code, "texture.descriptor.recipe_invalid");
+  EXPECT_TRUE(diagnostics.front().message.find("preset") != std::string::npos);
+}
+
+NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
+  PreparesLayeredSourcesWithoutDestination)
+{
+  auto settings = oxygen::content::import::TextureImportSettings {};
+  settings.source_path = "authoring/texture.png";
+  settings.job_name = "Layered";
+  settings.sources
+    = { { .file = "layer.png", .layer = 1, .mip = 0, .slice = 0 } };
+  std::ostringstream errors;
+  const auto request = settings.Prepare(errors);
+  if (!request.has_value()) {
+    FAIL() << errors.str();
+  }
+  EXPECT_FALSE(request->cooked_root.has_value());
+  ASSERT_EQ(request->additional_sources.size(), 1U);
+  EXPECT_EQ(request->additional_sources.front().path,
+    std::filesystem::path("authoring/layer.png"));
+  EXPECT_EQ(request->additional_sources.front().subresource.array_layer, 1U);
+  EXPECT_EQ(request->GetTextureDescriptorRelPath(),
+    request->loose_cooked_layout.TextureDescriptorRelPath(
+      "Layered", "Layered"));
 }
 
 } // namespace

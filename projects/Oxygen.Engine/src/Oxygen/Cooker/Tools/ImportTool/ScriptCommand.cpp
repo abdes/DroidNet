@@ -4,10 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <expected>
+#include <memory>
 #include <sstream>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
@@ -43,6 +49,15 @@ auto ScriptCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                        .WithValue<std::string>()
                        .StoreTo(&options_.cooked_root)
                        .Build();
+
+  auto source_root
+    = Option::WithKey("script-source-root")
+        .About(
+          "Authoring root for external scripts (matches runtime script roots)")
+        .Long("script-source-root")
+        .WithValue<std::string>()
+        .StoreTo(&options_.source_root)
+        .Build();
 
   auto with_content_hashing
     = Option::WithKey("content-hashing")
@@ -92,6 +107,7 @@ auto ScriptCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .About("Import a standalone script asset")
     .WithPositionalArguments(source_path)
     .WithOption(std::move(cooked_root))
+    .WithOption(std::move(source_root))
     .WithOption(std::move(job_name))
     .WithOption(std::move(report))
     .WithOption(std::move(compile_scripts))

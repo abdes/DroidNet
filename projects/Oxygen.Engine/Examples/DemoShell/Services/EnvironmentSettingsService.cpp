@@ -771,8 +771,7 @@ void EnvironmentSettingsService::HydrateEnvironment(
 {
   const auto post_record = source_asset.TryGetPostProcessVolumeEnvironment();
   const bool has_authored_mask = post_record
-    && post_record->auto_exposure_metering_mask
-      != data::pak::core::kNoResourceIndex;
+    && post_record->auto_exposure_metering_mask != data::kNoResourceReference;
   if (has_authored_mask != (metering_mask.get() != 0U)) {
     throw std::invalid_argument(
       "Scene exposure mask requires a resolved source resource key");

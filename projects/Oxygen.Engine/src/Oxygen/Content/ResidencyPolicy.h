@@ -10,6 +10,8 @@
 #include <cstdint>
 #include <limits>
 
+#include <Oxygen/Content/ContentLoadScope.h>
+
 namespace oxygen::content {
 
 enum class ResidencyTrimMode : uint8_t {
@@ -92,6 +94,7 @@ enum class LoadIntent : uint8_t {
 struct LoadRequest final {
   LoadPriority priority { LoadPriority::kDefault };
   LoadIntent intent { LoadIntent::kRuntime };
+  ContentLoadScope scope {};
 };
 
 struct ResidencyPolicy final {

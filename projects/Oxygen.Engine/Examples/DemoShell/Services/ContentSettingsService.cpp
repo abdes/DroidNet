@@ -4,10 +4,23 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <vector>
+
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Core/Types/ColorSpace.h>
+#include <Oxygen/Core/Types/Format.h>
 
 namespace oxygen::examples {
 
@@ -68,9 +81,10 @@ namespace {
   constexpr auto kTangentPolicyKey = "content.import.tangent_policy";
 
   // Paths
-  constexpr auto kLastCookedOutputKey = "content.paths.last_cooked_output";
   constexpr auto kMountedPaksKey = "content.library.mounted_paks";
   constexpr auto kMountedIndicesKey = "content.library.mounted_indices";
+  constexpr auto kMountedImportsKey = "content.library.import_records";
+  constexpr auto kActiveImportRecordKey = "content.active_scene.import_record";
 
   // Active scene selection
   constexpr auto kActiveSceneNameKey = "content.active_scene.name";
@@ -95,7 +109,6 @@ namespace {
 
   // Layout Keys
   constexpr auto kLayoutVirtualRootKey = "content.layout.virtual_root";
-  constexpr auto kLayoutIndexNameKey = "content.layout.index_name";
   constexpr auto kLayoutResourcesDirKey = "content.layout.resources_dir";
   constexpr auto kLayoutDescriptorsDirKey = "content.layout.descriptors_dir";
   constexpr auto kLayoutScenesSubdirKey = "content.layout.scenes_subdir";
@@ -208,7 +221,13 @@ auto ContentSettingsService::SetImportOptions(
 auto ContentSettingsService::GetTextureTuning() const
   -> content::import::ImportOptions::TextureTuning
 {
+  // Interactive imports keep full resolution and complete mip chains while
+  // using the faster filter and encoder tiers. Saved choices override these.
   content::import::ImportOptions::TextureTuning t;
+  t.enabled = true;
+  t.mip_policy = content::import::MipPolicy::kFullChain;
+  t.mip_filter = content::import::MipFilter::kBox;
+  t.bc7_quality = content::import::Bc7Quality::kFast;
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
 
@@ -288,9 +307,6 @@ auto ContentSettingsService::GetDefaultLayout() const
   if (auto val = settings->GetString(kLayoutVirtualRootKey)) {
     l.virtual_mount_root = *val;
   }
-  if (auto val = settings->GetString(kLayoutIndexNameKey)) {
-    l.index_file_name = *val;
-  }
   if (auto val = settings->GetString(kLayoutResourcesDirKey)) {
     l.resources_dir = *val;
   }
@@ -317,32 +333,11 @@ auto ContentSettingsService::SetDefaultLayout(
   DCHECK_NOTNULL_F(settings);
 
   settings->SetString(kLayoutVirtualRootKey, l.virtual_mount_root);
-  settings->SetString(kLayoutIndexNameKey, l.index_file_name);
   settings->SetString(kLayoutResourcesDirKey, l.resources_dir);
   settings->SetString(kLayoutDescriptorsDirKey, l.descriptors_dir);
   settings->SetString(kLayoutScenesSubdirKey, l.scenes_subdir);
   settings->SetString(kLayoutGeometrySubdirKey, l.geometry_subdir);
   settings->SetString(kLayoutMaterialsSubdirKey, l.materials_subdir);
-  ++epoch_;
-}
-
-auto ContentSettingsService::GetLastCookedOutputDirectory() const -> std::string
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  return settings
-    ->DecodePath(settings->GetString(kLastCookedOutputKey).value_or(""))
-    .string();
-}
-
-auto ContentSettingsService::SetLastCookedOutputDirectory(
-  const std::string& path) -> void
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-
-  settings->SetString(
-    kLastCookedOutputKey, settings->EncodePath(path).generic_string());
   ++epoch_;
 }
 
@@ -382,6 +377,24 @@ auto ContentSettingsService::SetMountedIndexPaths(
   ++epoch_;
 }
 
+auto ContentSettingsService::GetMountedImportRecords() const
+  -> std::vector<std::filesystem::path>
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  return SplitPaths(
+    settings->GetString(kMountedImportsKey).value_or(""), *settings);
+}
+
+auto ContentSettingsService::SetMountedImportRecords(
+  const std::vector<std::filesystem::path>& paths) -> void
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  settings->SetString(kMountedImportsKey, JoinPaths(paths, *settings));
+  ++epoch_;
+}
+
 auto ContentSettingsService::GetActiveSceneSelection() const
   -> std::optional<ContentActiveSceneSelection>
 {
@@ -400,6 +413,8 @@ auto ContentSettingsService::GetActiveSceneSelection() const
   selection.source_path = settings->DecodePath(source_path);
   selection.source_is_pak
     = settings->GetBool(kActiveSceneSourceIsPakKey).value_or(true);
+  selection.import_record_path = settings->DecodePath(
+    settings->GetString(kActiveImportRecordKey).value_or(""));
   return selection;
 }
 
@@ -414,6 +429,7 @@ auto ContentSettingsService::SetActiveSceneSelection(
     settings->SetString(kActiveSceneKeyKey, "");
     settings->SetString(kActiveSceneSourcePathKey, "");
     settings->SetBool(kActiveSceneSourceIsPakKey, true);
+    settings->Remove(kActiveImportRecordKey);
     ++epoch_;
     return;
   }
@@ -423,6 +439,12 @@ auto ContentSettingsService::SetActiveSceneSelection(
   settings->SetString(kActiveSceneSourcePathKey,
     settings->EncodePath(selection->source_path).generic_string());
   settings->SetBool(kActiveSceneSourceIsPakKey, selection->source_is_pak);
+  if (selection->import_record_path.empty()) {
+    settings->Remove(kActiveImportRecordKey);
+  } else {
+    settings->SetString(kActiveImportRecordKey,
+      settings->EncodePath(selection->import_record_path).generic_string());
+  }
   ++epoch_;
 }
 

@@ -7,21 +7,25 @@
 #pragma once
 
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <ranges>
 #include <shared_mutex>
+#include <span>
 #include <stdexcept>
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Core/CachePolicyContract.h>
 
@@ -58,73 +62,198 @@ concept CacheValueType = requires {
   requires IsTyped<typename V::element_type>;
 };
 
-//! Generic thread-safe heterogeneous cache class template.
-/*!
-  AnyCache is a flexible, type-erased, thread-safe cache for storing and
-  retrieving objects by key, with pluggable eviction and a borrowed ownership
-  model.
-
-  The cache is designed for scenarios where multiple subsystems or threads
-  need to share, reuse, and manage the lifetime of heterogeneous objects
-  (e.g., assets, resources, or components) in a concurrent environment.
-
-  ### Fundamental Working Model
-
-  - **Type Erasure**: Values are stored as `std::shared_ptr<void>`, with
-    runtime type information (TypeId) tracked per entry. API methods enforce
-    type safety at the boundary using the `CacheValueType` concept and
-    runtime checks.
-
-  - **Borrowed Ownership Model**: The cache enforces a check-out/check-in
-    protocol for item usage. When a client needs to use an object, it calls
-    `CheckOut()` to borrow it, and must later call `CheckIn()` to return it.
-    The cache itself does not interpret or enforce reference counting or usage
-    semantics; instead, it delegates all usage tracking and eviction logic to
-    the eviction policy. The eviction policy may use reference counting,
-    usage timestamps, or any other mechanism to determine when an item is
-    eligible for removal.
-
-    This separation allows the cache to remain agnostic to the specific
-    eviction or usage policy, supporting a wide range of resource management
-    strategies.
-
-  - **Eviction Policy**: The cache delegates eviction logic to a pluggable
-    policy (e.g., `RefCountedEviction`), which manages resource budgets,
-    cost estimation, and removal of unused items. The eviction policy is
-    responsible for interpreting check-out/check-in events and deciding when
-    items can be evicted.
-
-  - **Thread Safety**: All operations are protected by a shared mutex,
-    allowing concurrent reads and exclusive writes. Views (e.g., KeysView)
-    are not thread-safe and require external synchronization.
-
-  ### Key Features
-
-  - Thread-safe access and mutation.
-  - Type-erased storage with runtime type checking.
-  - Borrowed ownership model with pluggable usage/eviction policy.
-  - Range-compatible key views for iteration.
-
-  ### Usage Patterns
-
-  - Store and retrieve shared objects by key in multithreaded systems.
-  - Use with custom eviction policies for different resource constraints.
-  - Integrate with asset/resource managers, component systems, or service
-    registries requiring safe, concurrent object caching.
-
-  @warning Views (e.g., KeysView) are not thread-safe and require external
-  synchronization for safe use.
-  @see RefCountedEviction, CacheValueType, EvictionPolicyType
-*/
+//! Thread-safe heterogeneous cache with exact usage tickets.
+//! Acquire/StoreAndAcquire return a typed payload and one move-only ticket.
+//! Return the ticket through Release; payload pointer copies do not add usages.
+//! The owning service supplies RAII and any required deferred return policy.
+//! Peek keeps CPU storage alive without reserving residency. Invalidation
+//! retires the exact publication; old tickets never affect a replacement under
+//! its key. Keys() requires external synchronization; KeysSnapshot() is
+//! thread-safe.
 template <typename Key, typename Evict, typename Hash = std::hash<Key>>
   requires EvictionPolicyType<Evict, Key>
 class AnyCache {
 public:
   using KeyType = Key;
   using EvictionPolicyType = Evict;
-  using EntryType = typename EvictionPolicyType::EntryType;
-  using IteratorType = typename EvictionPolicyType::IteratorType;
-  using CostType = typename EvictionPolicyType::CostType;
+  using EntryType = EvictionPolicyType::EntryType;
+  using IteratorType = EvictionPolicyType::IteratorType;
+  using CostType = EvictionPolicyType::CostType;
+
+  enum class UsageKind : uint8_t { kCheckout, kPin };
+
+  //! Identifies one payload incarnation, independently of its lookup key.
+  class EntryReference final {
+  public:
+    ~EntryReference() = default;
+    OXYGEN_DEFAULT_COPYABLE(EntryReference)
+    OXYGEN_DEFAULT_MOVABLE(EntryReference)
+
+    [[nodiscard]] auto GetKey() const noexcept -> const KeyType&
+    {
+      return key_;
+    }
+    auto operator==(const EntryReference&) const -> bool = default;
+
+  private:
+    friend class AnyCache;
+    EntryReference(const KeyType& key, Uuid cache, const uint64_t incarnation)
+      : key_(key)
+      , cache_(cache)
+      , incarnation_(incarnation)
+    {
+    }
+
+    KeyType key_;
+    Uuid cache_ {};
+    uint64_t incarnation_ = 0;
+  };
+
+  //! A single cache usage. The owning service decides when to return it.
+  class UsageTicket final {
+  public:
+    static_assert(std::is_nothrow_move_constructible_v<KeyType>,
+      "Cache usage tickets require non-throwing key moves");
+    ~UsageTicket() = default;
+    OXYGEN_MAKE_NON_COPYABLE(UsageTicket)
+
+    UsageTicket(UsageTicket&& other) noexcept(
+      std::is_nothrow_move_constructible_v<KeyType>)
+      : entry_(std::move(other.entry_))
+      , owner_(other.owner_)
+      , kind_(other.kind_)
+      , active_(std::exchange(other.active_, false))
+    {
+    }
+    auto operator=(UsageTicket&&) -> UsageTicket& = delete;
+
+    [[nodiscard]] auto Entry() const noexcept -> const EntryReference&
+    {
+      return entry_;
+    }
+    [[nodiscard]] auto IsActive() const noexcept -> bool { return active_; }
+
+  private:
+    friend class AnyCache;
+    UsageTicket(EntryReference entry, CheckoutOwner owner, UsageKind kind)
+      : entry_(std::move(entry))
+      , owner_(owner)
+      , kind_(kind)
+    {
+    }
+
+    EntryReference entry_;
+    CheckoutOwner owner_ { CheckoutOwner::kInternal };
+    UsageKind kind_ { UsageKind::kCheckout };
+    bool active_ = true;
+  };
+
+  template <IsTyped V> struct Acquisition final {
+    std::shared_ptr<V> value {};
+    UsageTicket ticket;
+  };
+
+  //! Owns the exact retired publication until notification finishes.
+  struct RetiredEntry final {
+    EntryReference entry;
+    std::shared_ptr<void> value {};
+    TypeId type { kInvalidTypeId };
+  };
+
+  //! Acquire one exact, typed usage of the current cache entry.
+  template <IsTyped V>
+  [[nodiscard]] auto Acquire(const KeyType& key, CheckoutOwner owner,
+    const UsageKind kind = UsageKind::kCheckout)
+    -> std::optional<Acquisition<V>>
+  {
+    std::unique_lock lock(mutex_);
+    const auto found = map_.find(key);
+    if (found == map_.end()) {
+      return std::nullopt;
+    }
+    return AcquireRecord<V>(found->first, found->second, owner, kind);
+  }
+
+  //! Acquire only the publication represented by this reference.
+  template <IsTyped V>
+  [[nodiscard]] auto Acquire(const EntryReference& entry, CheckoutOwner owner)
+    -> std::optional<Acquisition<V>>
+  {
+    std::unique_lock lock(mutex_);
+    const auto found = map_.find(entry.key_);
+    if (entry.cache_ != *identity_ || found == map_.end()
+      || found->second.incarnation != entry.incarnation_) {
+      return std::nullopt;
+    }
+    return AcquireRecord<V>(
+      found->first, found->second, owner, UsageKind::kCheckout);
+  }
+
+  [[nodiscard]] auto AcquirePin(const KeyType& key, CheckoutOwner owner)
+    -> std::optional<UsageTicket>
+  {
+    std::unique_lock lock(mutex_);
+    const auto found = map_.find(key);
+    if (found == map_.end()) {
+      return std::nullopt;
+    }
+    UsageTicket ticket { EntryReference { found->first, *identity_,
+                           found->second.incarnation },
+      owner, UsageKind::kPin };
+    AddUsage(found->second, owner, UsageKind::kPin);
+    return ticket;
+  }
+
+  //! Return exactly this usage; an old incarnation cannot debit a new entry.
+  auto Release(UsageTicket&& ticket) -> bool
+  {
+    std::unique_lock lock(mutex_);
+    if (!ticket.active_ || ticket.entry_.cache_ != *identity_) {
+      return false;
+    }
+    const auto found = map_.find(ticket.entry_.key_);
+    if (found == map_.end()
+      || found->second.incarnation != ticket.entry_.incarnation_) {
+      ticket.active_ = false;
+      return false;
+    }
+    auto& count = UsageCount(found->second.owners, ticket.owner_, ticket.kind_);
+    if (count == 0) {
+      ticket.active_ = false;
+      return false;
+    }
+    const auto callback = on_eviction_;
+    auto evicted = eviction_.CheckIn(found->second.policy);
+    --count;
+    ticket.active_ = false;
+    if (evicted) {
+      RetiredEntry retired { .entry = std::move(ticket.entry_),
+        .value = eviction_.EntryValue(*evicted),
+        .type = eviction_.EntryTypeId(*evicted) };
+      map_.erase(found);
+      lock.unlock();
+      Rethrow(
+        DispatchEvictions(callback, std::span { &retired, 1U }, identity_));
+    }
+    return true;
+  }
+
+  template <IsTyped V>
+  [[nodiscard]] auto Contains(const KeyType& key) const -> bool
+  {
+    std::shared_lock lock(mutex_);
+    const auto found = map_.find(key);
+    return found != map_.end()
+      && eviction_.TypeOf(found->second.policy) == V::ClassTypeId();
+  }
+
+  [[nodiscard]] auto Contains(const EntryReference& entry) const -> bool
+  {
+    std::shared_lock lock(mutex_);
+    const auto found = map_.find(entry.key_);
+    return entry.cache_ == *identity_ && found != map_.end()
+      && found->second.incarnation == entry.incarnation_;
+  }
 
   struct Stats final {
     std::size_t size { 0 };
@@ -140,7 +269,7 @@ public:
   };
 
   //! Construct a cache with a given budget.
-  explicit AnyCache(CostType budget = (std::numeric_limits<CostType>::max)())
+  explicit AnyCache(CostType budget = std::numeric_limits<CostType>::max())
     : eviction_(budget)
   {
     if (budget == 0) {
@@ -161,73 +290,32 @@ public:
     - Time Complexity: O(1) average (hash map insert/replace).
     - Memory: May trigger eviction if budget exceeded.
 
-    @see Replace, CheckOut, EvictionPolicyType
+    @see Replace, Acquire, EvictionPolicyType
   */
   template <CacheValueType V> auto Store(const KeyType& key, V value) -> bool
   {
-    std::vector<EntryType> evicted;
-    bool stored = false;
-    std::unique_lock lock(mutex_);
-    auto it = map_.find(key);
-    auto type_id = value
-      ? std::remove_reference_t<decltype(*value)>::ClassTypeId()
-      : kInvalidTypeId;
-    std::shared_ptr<void> erased = std::move(value);
-    if (it != map_.end()) {
-      // Already exists: try replacing
-      if (!eviction_.TryReplace(it->second, erased, type_id)) {
-        return false;
-      }
-      stored = true;
-      lock.unlock();
-      DispatchEvictions(evicted);
-      return stored;
+    using Value = typename V::element_type;
+    const auto type = value ? Value::ClassTypeId() : kInvalidTypeId;
+    return StoreValue(key, std::move(value), type, std::nullopt).stored;
+  }
+
+  //! Publish with a usage already installed before eviction callbacks run.
+  template <IsTyped V>
+  [[nodiscard]] auto StoreAndAcquire(const KeyType& key,
+    std::shared_ptr<V> value, const CheckoutOwner owner,
+    const UsageKind kind = UsageKind::kCheckout)
+    -> std::optional<Acquisition<V>>
+  {
+    if (!value) {
+      return std::nullopt;
     }
-    EntryType entry = eviction_.MakeEntry(key, type_id, erased);
-    IteratorType ev_it = eviction_.Store(std::move(entry));
-    if (eviction_.IsEnd(ev_it)) {
-      const auto incoming_cost_as_size = eviction_.Cost(erased, type_id);
-      if (incoming_cost_as_size
-          > static_cast<std::size_t>((std::numeric_limits<CostType>::max)())
-        || static_cast<CostType>(incoming_cost_as_size) > eviction_.Budget()) {
-        stored = false;
-        lock.unlock();
-        DispatchEvictions(evicted);
-        return stored;
-      }
-
-      const auto incoming_cost = static_cast<CostType>(incoming_cost_as_size);
-      const auto original_budget = eviction_.Budget();
-      const auto target_budget = original_budget - incoming_cost;
-
-      // Force an eviction pass that creates room for the incoming item.
-      eviction_.SetBudget(target_budget);
-      static_cast<void>(
-        eviction_.EnforceBudget([this, &evicted](const KeyType& k) {
-          const auto doomed = map_.find(k);
-          if (doomed != map_.end()) {
-            evicted.push_back(eviction_.MakeEntry(doomed->first,
-              eviction_.TypeOf(doomed->second),
-              eviction_.ValueOf(doomed->second)));
-            map_.erase(doomed);
-          }
-        }));
-      eviction_.SetBudget(original_budget);
-
-      entry = eviction_.MakeEntry(key, type_id, erased);
-      ev_it = eviction_.Store(std::move(entry));
-      if (eviction_.IsEnd(ev_it)) {
-        stored = false;
-        lock.unlock();
-        DispatchEvictions(evicted);
-        return stored;
-      }
+    auto result
+      = StoreValue(key, value, V::ClassTypeId(), UsageRequest { owner, kind });
+    if (!result.usage) {
+      return std::nullopt;
     }
-    map_[key] = ev_it;
-    stored = true;
-    lock.unlock();
-    DispatchEvictions(evicted);
-    return stored;
+    return Acquisition<V> { .value = std::move(value),
+      .ticket = std::move(*result.usage) };
   }
 
   //! Replace an existing value by key. Returns false if key not present or not
@@ -235,97 +323,24 @@ public:
   template <CacheValueType V>
   auto Replace(const KeyType& key, const V& value) -> bool
   {
-    std::optional<EntryType> replaced_entry;
     std::unique_lock lock(mutex_);
-    auto it = map_.find(key);
-    if (it == map_.end()) {
+    const auto found = map_.find(key);
+    if (found == map_.end()) {
       return false;
     }
-    auto type_id = value
-      ? std::remove_reference_t<decltype(*value)>::ClassTypeId()
-      : kInvalidTypeId;
-    std::shared_ptr<void> erased = value;
-    replaced_entry = eviction_.MakeEntry(
-      key, eviction_.TypeOf(it->second), eviction_.ValueOf(it->second));
-    if (eviction_.TryReplace(it->second, erased, type_id)) {
-      lock.unlock();
-      if (on_eviction_ && replaced_entry.has_value()) {
-        on_eviction_(eviction_.EntryKey(*replaced_entry),
-          eviction_.EntryValue(*replaced_entry),
-          eviction_.EntryTypeId(*replaced_entry));
-      }
-      return true;
+    const auto retired = SnapshotRetired(found->first, found->second);
+    const auto callback = on_eviction_;
+    const auto incarnation = AllocateIncarnation();
+    using Value = typename V::element_type;
+    const auto type = value ? Value::ClassTypeId() : kInvalidTypeId;
+    if (!eviction_.TryReplace(found->second.policy, value, type)) {
+      return false;
     }
-    return false;
-  }
-
-  //! Check out (borrow) a value by key.
-  /*!
-    @tparam V Value type (must satisfy IsTyped concept).
-    @param key The key to check out.
-    @return Shared pointer to the value if present and type matches, else empty.
-
-    @see CheckIn, Peek
-  */
-  template <IsTyped V>
-  auto CheckOut(const KeyType& key, const CheckoutOwner owner)
-    -> std::shared_ptr<V>
-  {
-    std::unique_lock lock(mutex_);
-    auto it = map_.find(key);
-    if (it != map_.end()) {
-      eviction_.CheckOut(it->second);
-      auto& owner_counts = owner_counts_[key];
-      if (owner == CheckoutOwner::kInternal) {
-        ++owner_counts.checkout_internal;
-      } else {
-        ++owner_counts.checkout_external;
-      }
-      LOG_F(1, "AnyCache::CheckOut owner={} hit=true", to_string(owner));
-      TypeId stored_type = eviction_.TypeOf(it->second);
-      if constexpr (requires { V::ClassTypeId(); }) {
-        if (stored_type == V::ClassTypeId()) {
-          return std::static_pointer_cast<V>(eviction_.ValueOf(it->second));
-        }
-      }
-    }
-    LOG_F(1, "AnyCache::CheckOut owner={} hit=false", to_string(owner));
-    return {};
-  }
-
-  //! Mark an item as checked out without returning it.
-  /*!
-   This method has the same effect as the strongly typed CheckOut method, but
-   can be used when you simply need to mark an item as in use without
-   retrieving it. This is similar to touching a file to update its stats without
-   actually accessing its contents.
-  */
-  auto Touch(const KeyType& key, const CheckoutOwner owner) -> void
-  {
-    static_cast<void>(Pin(key, owner));
-  }
-
-  //! Mark an item as resident/in-use without retrieving it.
-  /*!
-    @return true if the key exists and was pinned, false otherwise.
-  */
-  auto Pin(const KeyType& key, const CheckoutOwner owner) -> bool
-  {
-    std::unique_lock lock(mutex_);
-    auto it = map_.find(key);
-    if (it != map_.end()) {
-      eviction_.CheckOut(it->second);
-      auto& owner_counts = owner_counts_[key];
-      if (owner == CheckoutOwner::kInternal) {
-        ++owner_counts.pin_internal;
-      } else {
-        ++owner_counts.pin_external;
-      }
-      LOG_F(1, "AnyCache::Pin owner={} hit=true", to_string(owner));
-      return true;
-    }
-    LOG_F(1, "AnyCache::Pin owner={} hit=false", to_string(owner));
-    return false;
+    found->second.incarnation = incarnation;
+    found->second.owners = {};
+    lock.unlock();
+    Rethrow(DispatchEvictions(callback, std::span { &retired, 1U }, identity_));
+    return true;
   }
 
   /*!
@@ -335,161 +350,74 @@ public:
     @param key The key to peek.
     @return Shared pointer to the value if present and type matches, else empty.
 
-    @see CheckOut
+    @see Acquire
   */
   template <IsTyped V> auto Peek(const KeyType& key) const -> std::shared_ptr<V>
   {
     std::shared_lock lock(mutex_);
     auto it = map_.find(key);
     if (it != map_.end()) {
-      TypeId stored_type = eviction_.TypeOf(it->second);
+      TypeId stored_type = eviction_.TypeOf(it->second.policy);
       if constexpr (requires { V::ClassTypeId(); }) {
         if (stored_type == V::ClassTypeId()) {
-          return std::static_pointer_cast<V>(eviction_.ValueOf(it->second));
+          return std::static_pointer_cast<V>(
+            eviction_.ValueOf(it->second.policy));
         }
       }
     }
     return {};
   }
 
-  //! Check in (return) a previously checked out value.
-  auto CheckIn(const KeyType& key) -> void
-  {
-    std::optional<EntryType> evicted_entry;
-    std::unique_lock lock(mutex_);
-    auto it = map_.find(key);
-    if (it != map_.end()) {
-      if (auto owner_it = owner_counts_.find(key);
-        owner_it != owner_counts_.end()) {
-        auto& counts = owner_it->second;
-        if (counts.checkout_external > 0U) {
-          --counts.checkout_external;
-        } else if (counts.checkout_internal > 0U) {
-          --counts.checkout_internal;
-        } else if (counts.pin_external > 0U) {
-          --counts.pin_external;
-        } else if (counts.pin_internal > 0U) {
-          --counts.pin_internal;
-        }
-        if (counts.checkout_internal == 0U && counts.checkout_external == 0U
-          && counts.pin_internal == 0U && counts.pin_external == 0U) {
-          owner_counts_.erase(owner_it);
-        }
-      }
-      evicted_entry = eviction_.CheckIn(it->second);
-      if (evicted_entry.has_value()) {
-        map_.erase(it);
-        owner_counts_.erase(key);
-      }
-      LOG_F(1, "AnyCache::CheckIn hit=true");
-    } else {
-      LOG_F(1, "AnyCache::CheckIn hit=false");
-    }
-    lock.unlock();
-    if (on_eviction_ && evicted_entry.has_value()) {
-      on_eviction_(eviction_.EntryKey(*evicted_entry),
-        eviction_.EntryValue(*evicted_entry),
-        eviction_.EntryTypeId(*evicted_entry));
-    }
-  }
-
-  //! Release one resident usage.
-  /*!
-    @return true when an active pin/checkout was released; false when key is
-    missing or no active checkout is tracked.
-  */
-  auto Unpin(const KeyType& key) -> bool
-  {
-    std::optional<EntryType> evicted_entry;
-    std::unique_lock lock(mutex_);
-    auto it = map_.find(key);
-    if (it == map_.end()) {
-      LOG_F(1, "AnyCache::Unpin hit=false released=false");
-      return false;
-    }
-    if (eviction_.RefCountOf(it->second) == 0) {
-      LOG_F(1, "AnyCache::Unpin hit=true released=false");
-      return false;
-    }
-    if (auto owner_it = owner_counts_.find(key);
-      owner_it != owner_counts_.end()) {
-      auto& counts = owner_it->second;
-      if (counts.pin_external > 0U) {
-        --counts.pin_external;
-      } else if (counts.pin_internal > 0U) {
-        --counts.pin_internal;
-      } else if (counts.checkout_external > 0U) {
-        --counts.checkout_external;
-      } else if (counts.checkout_internal > 0U) {
-        --counts.checkout_internal;
-      }
-      if (counts.checkout_internal == 0U && counts.checkout_external == 0U
-        && counts.pin_internal == 0U && counts.pin_external == 0U) {
-        owner_counts_.erase(owner_it);
-      }
-    }
-    evicted_entry = eviction_.CheckIn(it->second);
-    if (evicted_entry.has_value()) {
-      map_.erase(it);
-      owner_counts_.erase(key);
-    }
-    LOG_F(1, "AnyCache::Unpin hit=true released=true");
-    lock.unlock();
-    if (on_eviction_ && evicted_entry.has_value()) {
-      on_eviction_(eviction_.EntryKey(*evicted_entry),
-        eviction_.EntryValue(*evicted_entry),
-        eviction_.EntryTypeId(*evicted_entry));
-    }
-    return true;
-  }
-
   //! Remove a value by key if permitted by the eviction policy.
   auto Remove(const KeyType& key) -> bool
   {
-    std::optional<EntryType> evicted_entry;
     std::unique_lock lock(mutex_);
-    auto it = map_.find(key);
-    if (it != map_.end()) {
-      evicted_entry = eviction_.Evict(it->second);
-      if (evicted_entry.has_value()) {
-        owner_counts_.erase(key);
-        map_.erase(it);
-        lock.unlock();
-        if (on_eviction_) {
-          on_eviction_(eviction_.EntryKey(*evicted_entry),
-            eviction_.EntryValue(*evicted_entry),
-            eviction_.EntryTypeId(*evicted_entry));
-        }
-        return true;
-      }
+    const auto found = map_.find(key);
+    if (found == map_.end()) {
       return false;
     }
-    return false;
+    const auto retired = SnapshotRetired(found->first, found->second);
+    const auto callback = on_eviction_;
+    if (!eviction_.Evict(found->second.policy)) {
+      return false;
+    }
+    map_.erase(found);
+    lock.unlock();
+    Rethrow(DispatchEvictions(callback, std::span { &retired, 1U }, identity_));
+    return true;
   }
 
-  //! Remove all items from the cache, ignoring constraints.
+  //! Remove all entries; outstanding tickets become stale.
+  auto Invalidate(const KeyType& key) -> bool
+  {
+    std::unique_lock lock(mutex_);
+    const auto found = map_.find(key);
+    if (found == map_.end()) {
+      return false;
+    }
+    const auto retired = SnapshotRetired(found->first, found->second);
+    const auto callback = on_eviction_;
+    static_cast<void>(eviction_.Erase(found->second.policy));
+    map_.erase(found);
+    lock.unlock();
+    Rethrow(DispatchEvictions(callback, std::span { &retired, 1U }, identity_));
+    return true;
+  }
+
+  //! Remove all entries; outstanding tickets become stale.
   auto Clear() -> void
   {
-    std::vector<EntryType> evicted;
+    std::vector<RetiredEntry> retired;
     std::unique_lock lock(mutex_);
-    if (on_eviction_) {
-      evicted.reserve(map_.size());
-      for (auto& [key, it] : map_) {
-        evicted.push_back(eviction_.MakeEntry(
-          key, eviction_.TypeOf(it), eviction_.ValueOf(it)));
-      }
+    const auto callback = on_eviction_;
+    retired.reserve(map_.size());
+    for (const auto& [key, record] : map_) {
+      retired.push_back(SnapshotRetired(key, record));
     }
     eviction_.Clear();
     map_.clear();
-    owner_counts_.clear();
     lock.unlock();
-
-    if (on_eviction_) {
-      for (const auto& entry : evicted) {
-        on_eviction_(eviction_.EntryKey(entry), eviction_.EntryValue(entry),
-          eviction_.EntryTypeId(entry));
-      }
-    }
+    Rethrow(DispatchEvictions(callback, retired, identity_));
   }
 
   //! Returns true if the cache contains the given key.
@@ -506,7 +434,7 @@ public:
     std::shared_lock lock(mutex_);
     auto it = map_.find(key);
     if (it != map_.end()) {
-      return eviction_.TypeOf(it->second);
+      return eviction_.TypeOf(it->second.policy);
     }
     return kInvalidTypeId;
   }
@@ -515,29 +443,15 @@ public:
   {
     std::shared_lock lock(mutex_);
     auto it = map_.find(key);
-    return it != map_.end() && eviction_.RefCountOf(it->second) > 0;
+    return it != map_.end() && eviction_.RefCountOf(it->second.policy) > 0;
   }
 
-  //! Returns the number of active checkouts for a cached item.
-  /*!
-    @param key The key to query.
-    @return The number of active checkouts for the item, or 0 if not present or
-    not checked out.
-
-    ### Usage
-
-    This method is primarily intended for debugging and monitoring cache usage
-    patterns. It returns the current checkout count for an item, which reflects
-    how many times CheckOut() or Touch() have been called minus how many times
-    CheckIn() has been called.
-
-    @see IsCheckedOut, CheckOut, CheckIn, Touch
-  */
+  //! Policy reference count, including its single cache-residency reference.
   auto GetCheckoutCount(const KeyType& key) const noexcept -> std::size_t
   {
     std::shared_lock lock(mutex_);
     auto it = map_.find(key);
-    return it != map_.end() ? eviction_.RefCountOf(it->second) : 0;
+    return it != map_.end() ? eviction_.RefCountOf(it->second.policy) : 0;
   }
 
   //! Returns the number of items currently in the cache.
@@ -568,7 +482,7 @@ public:
     if (it == map_.end()) {
       return 0U;
     }
-    return eviction_.ValueOf(it->second).use_count();
+    return eviction_.ValueOf(it->second.policy).use_count();
   }
 
   //! Returns a thread-safe snapshot of cache keys.
@@ -623,7 +537,7 @@ public:
     std::size_t count = 0;
     for (const auto& [key, it] : map_) {
       static_cast<void>(key);
-      if (eviction_.RefCountOf(it) > 0) {
+      if (eviction_.RefCountOf(it.policy) > 0) {
         ++count;
       }
     }
@@ -641,9 +555,9 @@ public:
     std::size_t pinned_internal = 0;
     std::size_t pinned_external = 0;
     for (const auto& [key, it] : map_) {
-      if (const auto owner_it = owner_counts_.find(key);
-        owner_it != owner_counts_.end()) {
-        const auto& counts = owner_it->second;
+      static_cast<void>(key);
+      {
+        const auto& counts = it.owners;
         if (counts.checkout_internal > 0U) {
           ++checked_out_internal;
         }
@@ -657,7 +571,7 @@ public:
           ++pinned_external;
         }
       }
-      const auto refs = eviction_.RefCountOf(it);
+      const auto refs = eviction_.RefCountOf(it.policy);
       total_checkouts += refs;
       if (refs > 0) {
         ++checked_out_items;
@@ -683,26 +597,19 @@ public:
     if (budget == 0) {
       throw std::invalid_argument("Cache budget must be > 0");
     }
-    std::vector<EntryType> evicted;
+    std::vector<RetiredEntry> retired;
+    std::exception_ptr failure;
+    auto status = PolicyBudgetStatus::kUnsatisfiedBestEffort;
     std::unique_lock lock(mutex_);
-    eviction_.SetBudget(budget);
-    auto status = eviction_.EnforceBudget([this, &evicted](const KeyType& k) {
-      const auto it = map_.find(k);
-      if (it != map_.end()) {
-        evicted.push_back(eviction_.MakeEntry(it->first,
-          eviction_.TypeOf(it->second), eviction_.ValueOf(it->second)));
-        owner_counts_.erase(it->first);
-        map_.erase(it);
-      }
-    });
-    lock.unlock();
-
-    if (on_eviction_) {
-      for (const auto& entry : evicted) {
-        on_eviction_(eviction_.EntryKey(entry), eviction_.EntryValue(entry),
-          eviction_.EntryTypeId(entry));
-      }
+    const auto callback = on_eviction_;
+    try {
+      eviction_.SetBudget(budget);
+      status = EnforceBudget(retired);
+    } catch (...) {
+      failure = std::current_exception();
     }
+    lock.unlock();
+    Rethrow(DispatchEvictions(callback, retired, identity_, failure));
     return status;
   }
 
@@ -714,39 +621,50 @@ public:
 
   //=== Eviction Notification ===---------------------------------------------//
 
-  using EvictionCallbackFunction
-    = std::function<void(const KeyType&, std::shared_ptr<void>, TypeId)>;
+  using EvictionCallbackFunction = std::function<void(const RetiredEntry&)>;
 
   class EvictionNotificationScope {
   public:
-    EvictionNotificationScope(AnyCache& cache, EvictionCallbackFunction cb)
+    EvictionNotificationScope(
+      AnyCache& cache, EvictionCallbackFunction callback)
       : cache_(&cache)
-      , prev_([&] {
-        std::swap(cache.on_eviction_, cb);
-        return std::move(cb);
-      }())
+      , identity_(cache.identity_)
+      , previous_(cache.ExchangeEvictionCallback(
+          std::make_shared<EvictionCallbackFunction>(std::move(callback))))
     {
     }
 
     ~EvictionNotificationScope()
     {
-      if (cache_ != nullptr) {
-        cache_->on_eviction_ = std::move(prev_);
+      if (cache_ && !identity_.expired()) {
+        static_cast<void>(
+          cache_->ExchangeEvictionCallback(std::move(previous_)));
       }
     }
 
     OXYGEN_MAKE_NON_COPYABLE(EvictionNotificationScope)
-    OXYGEN_DEFAULT_MOVABLE(EvictionNotificationScope)
+    EvictionNotificationScope(EvictionNotificationScope&& other) noexcept
+      : cache_(std::exchange(other.cache_, nullptr))
+      , identity_(std::move(other.identity_))
+      , previous_(std::move(other.previous_))
+    {
+    }
+    auto operator=(EvictionNotificationScope&&)
+      -> EvictionNotificationScope& = delete;
 
   private:
     observer_ptr<AnyCache> cache_;
-    EvictionCallbackFunction prev_;
+    std::weak_ptr<const Uuid> identity_;
+    std::shared_ptr<EvictionCallbackFunction> previous_ {};
   };
 
-  [[nodiscard]] auto OnEviction(EvictionCallbackFunction cb)
+  //! Scopes nest on the registering thread; callbacks execute outside the cache
+  //! lock. All committed retirements are delivered before the first callback
+  //! error propagates.
+  [[nodiscard]] auto OnEviction(EvictionCallbackFunction callback)
     -> EvictionNotificationScope
   {
-    return EvictionNotificationScope(*this, std::move(cb));
+    return EvictionNotificationScope(*this, std::move(callback));
   }
 
   //=== Views ===-------------------------------------------------------------//
@@ -762,12 +680,12 @@ public:
     {
     }
     class iterator {
-      using base_iter = typename MapType::const_iterator;
+      using base_iter = MapType::const_iterator;
       base_iter it_;
 
     public:
       using iterator_concept = std::forward_iterator_tag;
-      using value_type = typename MapType::key_type;
+      using value_type = MapType::key_type;
       using difference_type = std::ptrdiff_t;
       iterator() = default;
       explicit iterator(base_iter it)
@@ -828,7 +746,7 @@ public:
          return cache.GetTypeId(key) == type_id;
        })
      | std::views::transform([&](const std::string& key) {
-         return cache.Peek<MyTypePtr>(key);
+         return cache.Peek<MyType>(key);
        })
      | std::views::filter([](const MyTypePtr& ptr) {
          return static_cast<bool>(ptr);
@@ -842,34 +760,238 @@ public:
 
    @see KeysView
   */
-  auto Keys() const
-  {
-    return KeysView<std::unordered_map<KeyType, IteratorType, Hash>>(map_);
-  }
+  auto Keys() const { return KeysView<decltype(map_)>(map_); }
 
 private:
-  auto DispatchEvictions(const std::vector<EntryType>& entries) -> void
+  auto ExchangeEvictionCallback(
+    std::shared_ptr<EvictionCallbackFunction> callback)
+    -> std::shared_ptr<EvictionCallbackFunction>
   {
-    if (!on_eviction_) {
-      return;
+    std::unique_lock lock(mutex_);
+    return std::exchange(on_eviction_, std::move(callback));
+  }
+
+  static auto DispatchEvictions(
+    const std::shared_ptr<EvictionCallbackFunction>& callback,
+    const std::span<const RetiredEntry> retired,
+    const std::weak_ptr<const Uuid>& lifetime,
+    std::exception_ptr failure = {}) noexcept -> std::exception_ptr
+  {
+    if (callback && *callback) {
+      for (const auto& entry : retired) {
+        if (lifetime.expired()) {
+          break;
+        }
+        try {
+          (*callback)(entry);
+        } catch (...) {
+          if (!failure) {
+            failure = std::current_exception();
+          }
+        }
+      }
     }
-    for (const auto& entry : entries) {
-      on_eviction_(eviction_.EntryKey(entry), eviction_.EntryValue(entry),
-        eviction_.EntryTypeId(entry));
+    return failure;
+  }
+
+  static auto Rethrow(const std::exception_ptr& failure) -> void
+  {
+    if (failure) {
+      std::rethrow_exception(failure);
     }
   }
 
   mutable std::shared_mutex mutex_;
   EvictionPolicyType eviction_;
-  std::unordered_map<KeyType, IteratorType, Hash> map_;
   struct OwnerCounts final {
     uint32_t checkout_internal { 0 };
     uint32_t checkout_external { 0 };
     uint32_t pin_internal { 0 };
     uint32_t pin_external { 0 };
   };
-  std::unordered_map<KeyType, OwnerCounts, Hash> owner_counts_;
-  EvictionCallbackFunction on_eviction_;
+  struct Record final {
+    IteratorType policy {};
+    uint64_t incarnation = 0;
+    OwnerCounts owners {};
+  };
+
+  auto SnapshotRetired(const KeyType& key, const Record& record) const
+    -> RetiredEntry
+  {
+    return { .entry = EntryReference { key, *identity_, record.incarnation },
+      .value = eviction_.ValueOf(record.policy),
+      .type = eviction_.TypeOf(record.policy) };
+  }
+
+  auto EnforceBudget(std::vector<RetiredEntry>& retired) -> PolicyBudgetStatus
+  {
+    return eviction_.EnforceBudget([&](const KeyType& key) {
+      const auto found = map_.find(key);
+      if (found != map_.end()) {
+        // Snapshot construction precedes the policy's destructive step.
+        retired.push_back(SnapshotRetired(found->first, found->second));
+        map_.erase(found);
+      }
+    });
+  }
+
+  static auto UsageCount(OwnerCounts& counts, const CheckoutOwner owner,
+    const UsageKind kind) -> uint32_t&
+  {
+    switch (owner) {
+    case CheckoutOwner::kInternal:
+      return kind == UsageKind::kPin ? counts.pin_internal
+                                     : counts.checkout_internal;
+    case CheckoutOwner::kExternal:
+      return kind == UsageKind::kPin ? counts.pin_external
+                                     : counts.checkout_external;
+    }
+    throw std::invalid_argument("Unknown cache usage owner");
+  }
+
+  auto AddUsage(Record& record, const CheckoutOwner owner, const UsageKind kind)
+    -> void
+  {
+    auto& count = UsageCount(record.owners, owner, kind);
+    if (count == std::numeric_limits<uint32_t>::max()
+      || eviction_.RefCountOf(record.policy)
+        == std::numeric_limits<std::size_t>::max()) {
+      throw std::overflow_error("Cache usage count exhausted");
+    }
+    eviction_.CheckOut(record.policy);
+    ++count;
+  }
+
+  template <IsTyped V>
+  auto AcquireRecord(const KeyType& key, Record& record,
+    const CheckoutOwner owner, const UsageKind kind)
+    -> std::optional<Acquisition<V>>
+  {
+    if (eviction_.TypeOf(record.policy) != V::ClassTypeId()) {
+      return std::nullopt;
+    }
+    Acquisition<V> result {
+      .value = std::static_pointer_cast<V>(eviction_.ValueOf(record.policy)),
+      .ticket
+      = UsageTicket { EntryReference { key, *identity_, record.incarnation },
+        owner, kind },
+    };
+    AddUsage(record, owner, kind);
+    return result;
+  }
+
+  struct UsageRequest final {
+    CheckoutOwner owner {};
+    UsageKind kind {};
+  };
+  struct StoreResult final {
+    bool stored = false;
+    std::optional<UsageTicket> usage {};
+  };
+
+  auto StoreValue(const KeyType& key, std::shared_ptr<void> value,
+    const TypeId type, const std::optional<UsageRequest> usage) -> StoreResult
+  {
+    std::vector<RetiredEntry> retired;
+    StoreResult result;
+    std::exception_ptr failure;
+    std::unique_lock lock(mutex_);
+    const auto callback = on_eviction_;
+    try {
+      Admit(key, value, type, usage, retired, result);
+    } catch (...) {
+      failure = std::current_exception();
+    }
+    lock.unlock();
+    const std::weak_ptr<const Uuid> alive = identity_;
+    failure = DispatchEvictions(callback, retired, identity_, failure);
+    if (failure) {
+      if (!alive.expired() && result.stored && result.usage) {
+        static_cast<void>(Release(std::move(*result.usage)));
+      }
+      Rethrow(failure);
+    }
+    return result;
+  }
+
+  auto Admit(const KeyType& key, const std::shared_ptr<void>& value,
+    const TypeId type, const std::optional<UsageRequest> usage,
+    std::vector<RetiredEntry>& retired, StoreResult& result) -> void
+  {
+    const auto incarnation = AllocateIncarnation();
+    std::optional<UsageTicket> ticket;
+    if (usage) {
+      OwnerCounts validation {};
+      static_cast<void>(UsageCount(validation, usage->owner, usage->kind));
+      ticket.emplace(
+        UsageTicket { EntryReference { key, *identity_, incarnation },
+          usage->owner, usage->kind });
+    }
+    const auto [position, inserted] = map_.try_emplace(key);
+    bool admitted = false;
+    const auto rollback = Finally([&]() noexcept {
+      if (inserted && !admitted) {
+        map_.erase(position);
+      }
+    });
+    if (!inserted) {
+      retired.push_back(SnapshotRetired(position->first, position->second));
+      bool replaced = false;
+      const auto discard_failed = Finally([&]() noexcept {
+        if (!replaced) {
+          retired.pop_back();
+        }
+      });
+      replaced = eviction_.TryReplace(position->second.policy, value, type);
+      if (!replaced) {
+        return;
+      }
+    } else {
+      auto policy_entry
+        = eviction_.Store(eviction_.MakeEntry(key, type, value));
+      if (eviction_.IsEnd(policy_entry)) {
+        const auto cost = eviction_.Cost(value, type);
+        const auto budget = eviction_.Budget();
+        if (cost > std::numeric_limits<CostType>::max()
+          || static_cast<CostType>(cost) > budget) {
+          return;
+        }
+        {
+          const auto restore_budget
+            = Finally([&]() noexcept { eviction_.SetBudget(budget); });
+          eviction_.SetBudget(budget - static_cast<CostType>(cost));
+          static_cast<void>(EnforceBudget(retired));
+        }
+        policy_entry = eviction_.Store(eviction_.MakeEntry(key, type, value));
+        if (eviction_.IsEnd(policy_entry)) {
+          return;
+        }
+      }
+      position->second.policy = policy_entry;
+    }
+    position->second.incarnation = incarnation;
+    position->second.owners = {};
+    if (usage) {
+      AddUsage(position->second, usage->owner, usage->kind);
+      result.usage.emplace(std::move(*ticket));
+    }
+    admitted = true;
+    result.stored = true;
+  }
+
+  std::unordered_map<KeyType, Record, Hash> map_;
+  std::shared_ptr<const Uuid> identity_ { std::make_shared<const Uuid>(
+    Uuid::Generate()) };
+  uint64_t next_incarnation_ = 1;
+
+  auto AllocateIncarnation() -> uint64_t
+  {
+    if (next_incarnation_ == std::numeric_limits<uint64_t>::max()) {
+      throw std::overflow_error("Cache entry incarnations exhausted");
+    }
+    return next_incarnation_++;
+  }
+  std::shared_ptr<EvictionCallbackFunction> on_eviction_ {};
 };
 
 } // namespace oxygen

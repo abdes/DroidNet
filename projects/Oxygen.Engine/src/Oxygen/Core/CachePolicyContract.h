@@ -53,6 +53,7 @@ concept EvictionPolicyType = requires(Eviction e, const Eviction ce,
   { ce.IsEnd(it) } -> std::same_as<bool>;
   { e.TryReplace(it, value, type_id) } -> std::same_as<bool>;
   { e.Evict(it) } -> std::same_as<std::optional<typename Eviction::EntryType>>;
+  { e.Erase(it) } -> std::same_as<typename Eviction::EntryType>;
   {
     e.CheckIn(it)
   } -> std::same_as<std::optional<typename Eviction::EntryType>>;

@@ -24,7 +24,7 @@ Param(
     [string[]]$PrependPath
 )
 
-if ($Variables.Count -eq 0) {
+if ($Variables.Count -eq 0 -and !$PrependPath) {
     return $true
 }
 
@@ -64,7 +64,7 @@ $Variables.GetEnumerator() |ForEach-Object {
         Write-Host "SET $($_.Key)=$($_.Value)"
     }
 
-    $CmdEnvScript += "SET $($_.Key)=$($_.Value)`r`n"
+    $CmdEnvScript += "SET `"$($_.Key)=$($_.Value)`"`r`n"
 }
 
 $pathDelimiter = ';'
@@ -74,7 +74,9 @@ if ($IsMacOS -or $IsLinux) {
 
 if ($PrependPath) {
     $PrependPath |ForEach-Object {
-        $newPathValue = "$_$pathDelimiter$env:PATH"
+        $pathEntry = $_
+        $remaining = @($env:PATH -split [regex]::Escape($pathDelimiter) | Where-Object { $_ -ne $pathEntry })
+        $newPathValue = (@($pathEntry) + $remaining) -join $pathDelimiter
         Set-Item -Path env:PATH -Value $newPathValue
         if ($cmdInstructions) {
             Write-Host "SET PATH=$newPathValue"
@@ -87,16 +89,16 @@ if ($PrependPath) {
             Add-Content -Path $env:GITHUB_PATH -Value $_
         }
 
-        $CmdEnvScript += "SET PATH=$_$pathDelimiter%PATH%"
+        $CmdEnvScript += "SET `"PATH=$newPathValue`"`r`n"
     }
 }
 
 if ($env:CmdEnvScriptPath) {
     if (Test-Path $env:CmdEnvScriptPath) {
-        $CmdEnvScript = (Get-Content -Path $env:CmdEnvScriptPath) + $CmdEnvScript
+        $CmdEnvScript = [IO.File]::ReadAllText($env:CmdEnvScriptPath) + $CmdEnvScript
     }
 
-    Set-Content -Path $env:CmdEnvScriptPath -Value $CmdEnvScript
+    [IO.File]::WriteAllText($env:CmdEnvScriptPath, $CmdEnvScript, [Text.UTF8Encoding]::new($false))
 }
 
 return !$cmdInstructions

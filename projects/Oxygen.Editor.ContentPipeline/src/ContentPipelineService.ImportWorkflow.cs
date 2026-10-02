@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
-using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Snapshots;
@@ -17,7 +16,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Owns explicit source retention, settings and cooking as one visible operation.</summary>
 public sealed partial class ContentPipelineService
 {
-    private readonly DroidNet.Storage.IAtomicFileStore importSettingsFiles = provenanceFiles ?? new NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem());
+    private readonly DroidNet.Storage.IAtomicFileStore importSettingsFiles = files;
 
     /// <inheritdoc />
     public Task<ContentCookResult> ImportSourceAsync(SceneImportRequest request, CancellationToken cancellationToken)
@@ -43,21 +42,6 @@ public sealed partial class ContentPipelineService
             cancellationToken);
     }
 
-    private static Uri? FindAuthoringSourceUri(ProjectContext project, string source)
-    {
-        foreach (var mount in project.AuthoringMounts)
-        {
-            var root = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath)).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-            if (source.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-            {
-                var relative = Path.GetRelativePath(root, source).Replace('\\', '/');
-                return new Uri(AssetUris.Scheme + ":///" + Uri.EscapeDataString(mount.Name) + "/" + string.Join('/', relative.Split('/').Select(Uri.EscapeDataString)));
-            }
-        }
-
-        return null;
-    }
-
     private async Task<ContentCookResult> ImportSourceCoreAsync(ContentCookOperation operation, SceneImportRequest request, Action<SceneImportRequest> retainRecovery, CancellationToken cancellationToken)
     {
         Uri? retainedUri = null;
@@ -75,9 +59,9 @@ public sealed partial class ContentPipelineService
             }
 
             var target = SceneImportTarget.Resolve(operation.Project, request.DestinationFolder, request.Name);
-            var retained = request.RetainedSource ?? await this.RetainRequestedSourceAsync(operation, request, cancellationToken).ConfigureAwait(false);
+            var retained = request.RetainedSource ?? await this.RetainRequestedSourceAsync(operation, request, target, cancellationToken).ConfigureAwait(false);
             var primary = Path.GetFullPath(Path.Combine(operation.Project.ProjectRoot, retained.DirectoryRelativePath, retained.PrimaryRelativePath));
-            retainedUri = FindAuthoringSourceUri(operation.Project, primary)
+            retainedUri = CookInputResolver.FindAuthoringSourceUri(operation.Project, primary)
                 ?? throw new InvalidDataException("The retained source is outside the project's authoring mounts.");
             var recovery = request with { RetainedSource = retained };
             retainRecovery(recovery);
@@ -85,7 +69,7 @@ public sealed partial class ContentPipelineService
             {
                 RecoveryRequest = new(CookTargetKind.Asset, retainedUri) { Import = recovery, OriginContext = operation.Project },
             });
-            await this.CreateImportSettingsAsync(operation, retained, target, request.Name, cancellationToken).ConfigureAwait(false);
+            await this.CreateImportSettingsAsync(operation, retained, target, request.Name, request.Provenance, cancellationToken).ConfigureAwait(false);
             CookRunContext.Report(new(Message: "Import settings saved. Cooking retained source.")
             {
                 RecoveryRequest = new(CookTargetKind.Asset, retainedUri) { IsReimport = true, OriginContext = operation.Project },
@@ -107,35 +91,35 @@ public sealed partial class ContentPipelineService
         }
     }
 
-    private async Task<RetainedImportSource> RetainRequestedSourceAsync(ContentCookOperation operation, SceneImportRequest request, CancellationToken cancellationToken)
+    private async Task<RetainedImportSource> RetainRequestedSourceAsync(ContentCookOperation operation, SceneImportRequest request, SceneImportTarget target, CancellationToken cancellationToken)
     {
         var source = Path.GetFullPath(request.SourcePath);
-        var inspector = this.engineContentPipelineApi as ISceneSourceInspector
-            ?? throw new InvalidOperationException("The native pipeline cannot inspect model sources.");
-        if (FindAuthoringSourceUri(operation.Project, source) is { } existingUri)
+        var input = new ContentCookInput(new Uri(source), ContentCookAssetKind.ForeignSource, target.MountName,
+            Path.GetFileName(source), source, null, ContentCookInputRole.Primary);
+        var recipe = this.manifestBuilder.BuildModelJob(input, [], request.Name, target.CreateLayout(source), request.Provenance);
+        var discovery = new SceneImportSourceDiscovery(cookDocuments, this.cookCoordinator, this.engineContentPipelineApi);
+        if (CookInputResolver.FindAuthoringSourceUri(operation.Project, source) is not null)
         {
-            var input = CookInputResolver.Resolve(operation.Project, existingUri, ContentCookInputRole.Primary);
-            var discovered = await this.DiscoverChangedImportedSourceAsync(operation, input, artifacts: null, cancellationToken).ConfigureAwait(false);
-            var primary = discovered.Bundle.Files.Single(file => string.Equals(file.SourcePath, source, StringComparison.OrdinalIgnoreCase));
+            var discovered = await discovery.DiscoverAsync(operation, source, recipe, cancellationToken).ConfigureAwait(false);
+            var primary = discovered.Files.Single(file => string.Equals(file.SourcePath, source, StringComparison.OrdinalIgnoreCase));
             var bundleRoot = source[..^primary.RelativePath.Replace('/', Path.DirectorySeparatorChar).Length].TrimEnd(Path.DirectorySeparatorChar);
             return new(
                 Path.GetRelativePath(operation.Project.ProjectRoot, bundleRoot).Replace('\\', '/'),
-                discovered.Bundle.PrimaryRelativePath,
-                discovered.Bundle.Files.Select(static file => new RetainedImportSourceFile(file.RelativePath, file.DiscoveryHash)).ToImmutableArray());
+                discovered.PrimaryRelativePath,
+                discovered.Files.Where(static file => file.Kind == Oxygen.Editor.ContentPipeline.Snapshots.CookSnapshotInputKind.File).Select(static file => new RetainedImportSourceFile(file.RelativePath, file.DiscoveryHash)).ToImmutableArray());
         }
 
-        var discovery = new SceneImportSourceDiscovery(cookDocuments, this.cookCoordinator, inspector);
         var result = await new ImportSourceRetention(cookDocuments, this.cookCoordinator).RetainAsync(
-            operation, request.Name, async token => (await discovery.DiscoverAsync(operation, source, token).ConfigureAwait(false)).Bundle, cancellationToken).ConfigureAwait(false);
+            operation, request.Name, token => discovery.DiscoverAsync(operation, source, recipe, token), cancellationToken).ConfigureAwait(false);
         return result.Source ?? (result.NeedsSave.IsEmpty
             ? throw new IOException("Reload changed source before importing.")
             : throw new CookInputsNeedSaveException(result.NeedsSave));
     }
 
-    private async Task CreateImportSettingsAsync(ContentCookOperation operation, RetainedImportSource source, SceneImportTarget target, string name, CancellationToken cancellationToken)
+    private async Task CreateImportSettingsAsync(ContentCookOperation operation, RetainedImportSource source, SceneImportTarget target, string name, NativeMaterialSlotProvenance provenance, CancellationToken cancellationToken)
     {
         this.cookCoordinator.VerifyWriter(operation);
-        var settings = NativeSceneImportSettings.Create(source, target.MountName, name, target.OutputDirectory);
+        var settings = NativeSceneImportSettings.Create(source, target.MountName, name, target.OutputDirectory) with { MaterialSlotProvenance = provenance };
         var path = settings.ResolveFile(operation.Project.ProjectRoot, settings.PrimaryRelativePath) + NativeSceneImportSettings.SidecarSuffix;
         using var reads = await cookDocuments.AcquireAsync([path], cancellationToken).ConfigureAwait(false);
         if (reads.Documents.Any(static document => document.IsDirty))

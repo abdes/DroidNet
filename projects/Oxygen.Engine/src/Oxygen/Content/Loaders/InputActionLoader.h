@@ -13,6 +13,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/LoaderFunctions.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/InputActionAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -27,7 +28,7 @@ inline auto LoadInputActionAsset(const LoaderContext& context)
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;
 
-  auto check_result = [](auto&& result, const char* field) {
+  auto check_result = [](auto&& result, const char* field) -> auto {
     if (!result) {
       LOG_F(
         ERROR, "-failed- on {}: {}", field, result.error().message().c_str());
@@ -45,6 +46,11 @@ inline auto LoadInputActionAsset(const LoaderContext& context)
   data::pak::input::InputActionAssetDesc desc {};
   std::memcpy(&desc, desc_blob->data(), sizeof(desc));
 
+  if (desc.header.version != data::pak::input::kInputActionAssetVersion) {
+    throw std::runtime_error(
+      "Input descriptor version is not current; re-cook the asset");
+  }
+
   if (static_cast<data::AssetType>(desc.header.asset_type)
     != data::AssetType::kInputAction) {
     throw std::runtime_error("invalid asset type for input action descriptor");
@@ -55,8 +61,10 @@ inline auto LoadInputActionAsset(const LoaderContext& context)
     throw std::runtime_error("invalid input action value_type");
   }
 
-  return std::make_unique<data::InputActionAsset>(
-    context.current_asset_key, desc);
+  context.ValidateReferences({}, {});
+
+  return std::make_unique<data::InputActionAsset>(context.current_asset_key,
+    desc, data::SourceOrigin { context.source_key, context.source_instance });
 }
 
 static_assert(oxygen::content::LoadFunction<decltype(LoadInputActionAsset)>);

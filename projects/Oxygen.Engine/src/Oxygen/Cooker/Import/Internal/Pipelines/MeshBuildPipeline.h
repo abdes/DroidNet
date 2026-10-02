@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <span>
@@ -22,12 +23,14 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
+#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -54,6 +57,7 @@ struct MeshStreamView {
 //! Range of triangle indices for a submesh.
 struct TriangleRange {
   uint32_t material_slot = 0;
+  uint32_t source_slot = 0;
   uint32_t first_index = 0;
   uint32_t index_count = 0;
 };
@@ -137,6 +141,7 @@ public:
     data::AssetKey geometry_key;
     std::string virtual_path;
     std::string descriptor_relpath;
+    std::optional<MaterialSlotGeometryProvenance> material_slot_provenance;
     std::vector<std::byte> descriptor_bytes;
     std::vector<MaterialSlotPatchOffset> material_patch_offsets;
     std::vector<CookedMeshPayload> lods;
@@ -151,21 +156,26 @@ public:
 
     std::vector<MeshLod> lods;
 
+    //! Adapter-owned raw positions/topology/declarations before coordinate
+    //! conversion.
+    base::Sha256Digest source_layout_witness {};
+
     //! Eligible static node-local transform, applied before bounds are
     //! computed.
     std::optional<glm::mat4> bake_transform;
 
     std::vector<data::AssetKey> material_keys;
+    std::map<uint32_t, std::string> material_slot_names;
     std::vector<uint32_t> material_slots_used;
     data::AssetKey default_material_key;
     bool want_textures = false;
     bool has_material_textures = false;
 
     //! Callback fired when a worker starts processing this item.
-    std::function<void()> on_started;
+    std::function<void()> on_started {};
 
     //! Callback fired when a worker finishes processing this item.
-    std::function<void()> on_finished;
+    std::function<void()> on_finished {};
 
     ImportRequest request;
     observer_ptr<NamingService> naming_service;
@@ -178,7 +188,7 @@ public:
     const void* source_key = nullptr;
     std::optional<CookedGeometryPayload> cooked;
     std::vector<ImportDiagnostic> diagnostics;
-    ImportWorkItemTelemetry telemetry;
+    ImportWorkItemTelemetry telemetry {};
     bool success = false;
   };
 
@@ -186,7 +196,7 @@ public:
   OXGN_COOK_API explicit MeshBuildPipeline(
     co::ThreadPool& thread_pool, std::optional<Config> config = {});
 
-  OXGN_COOK_API ~MeshBuildPipeline();
+  OXGN_COOK_API ~MeshBuildPipeline() override;
 
   OXYGEN_MAKE_NON_COPYABLE(MeshBuildPipeline)
   OXYGEN_MAKE_NON_MOVABLE(MeshBuildPipeline)

@@ -306,68 +306,26 @@ public interface ISceneEngineSync
     /// </summary>
     /// <param name="scene">The scene that owns the node.</param>
     /// <param name="node">The node whose material slot should be synchronized.</param>
-    /// <param name="slotIndex">The material slot index.</param>
+    /// <param name="target">The geometry, native slot and observed inventory revision.</param>
     /// <param name="materialUri">The authored material URI, or <see langword="null"/> to clear the slot.</param>
     /// <param name="cancellationToken">Cancellation token to abort stale live-sync work.</param>
     /// <returns>A classified live-sync outcome.</returns>
     public Task<SyncOutcome> UpdateMaterialSlotAsync(
         Scene scene,
         SceneNode node,
-        int slotIndex,
+        MaterialSlotTarget target,
         Uri? materialUri,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    ///     Updates a component-level material override slot for a geometry component.
-    /// </summary>
-    /// <param name="nodeId">The GUID of the node containing the geometry.</param>
-    /// <param name="slot">The override slot to apply (e.g., MaterialsSlot with new material).</param>
-    /// <returns>A task that completes when the override is applied.</returns>
-    /// <remarks>
-    ///     Component-level overrides apply to the entire geometry. For LOD or submesh-specific
-    ///     overrides, use <see cref="UpdateTargetedMaterialOverrideAsync"/>.
-    /// </remarks>
-    public Task UpdateMaterialOverrideAsync(Guid nodeId, OverrideSlot slot);
-
-    /// <summary>
-    ///     Updates a targeted material override for a specific LOD and/or submesh.
-    /// </summary>
-    /// <param name="nodeId">The GUID of the node containing the geometry.</param>
-    /// <param name="lodIndex">LOD index to target (-1 for all LODs).</param>
-    /// <param name="submeshIndex">Submesh index to target (-1 for all submeshes).</param>
-    /// <param name="slot">The override slot to apply.</param>
-    /// <returns>A task that completes when the targeted override is applied.</returns>
-    /// <remarks>
-    ///     Allows fine-grained control over specific parts of the geometry. For example,
-    ///     you can apply different materials to different submeshes or LOD levels.
-    /// </remarks>
-    public Task UpdateTargetedMaterialOverrideAsync(
-        Guid nodeId,
-        int lodIndex,
-        int submeshIndex,
-        OverrideSlot slot);
-
-    /// <summary>
-    ///     Removes a component-level material override.
-    /// </summary>
-    /// <param name="nodeId">The GUID of the node.</param>
-    /// <param name="slotType">The type of override slot to remove (e.g., typeof(MaterialsSlot)).</param>
-    /// <returns>A task that completes when the override is removed.</returns>
-    public Task RemoveMaterialOverrideAsync(Guid nodeId, Type slotType);
-
-    /// <summary>
-    ///     Removes a targeted material override.
-    /// </summary>
-    /// <param name="nodeId">The GUID of the node.</param>
-    /// <param name="lodIndex">LOD index that was targeted.</param>
-    /// <param name="submeshIndex">Submesh index that was targeted.</param>
-    /// <param name="slotType">The type of override slot to remove.</param>
-    /// <returns>A task that completes when the targeted override is removed.</returns>
-    public Task RemoveTargetedMaterialOverrideAsync(
-        Guid nodeId,
-        int lodIndex,
-        int submeshIndex,
-        Type slotType);
+    /// <summary>Restores saved or historical slot identity against the current native inventory.</summary>
+    /// <param name="scene">The originating scene.</param>
+    /// <param name="node">The unchanged geometry owner.</param>
+    /// <param name="target">The retained geometry and slot identity, including its original witness.</param>
+    /// <param name="materialUri">The retained material, or null to clear its override.</param>
+    /// <param name="cancellationToken">Cancels before dispatch.</param>
+    /// <returns>The current binding outcome; unresolved identity is reported rather than remapped.</returns>
+    public Task<SyncOutcome> RestoreMaterialSlotAsync(Scene scene, SceneNode node, MaterialSlotTarget target,
+        Uri? materialUri, CancellationToken cancellationToken = default);
 
     // ============================================================================
     // Geometry Operations - LOD & Rendering Updates

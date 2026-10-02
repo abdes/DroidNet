@@ -59,6 +59,7 @@ set(
   "Endian.h"
   "EnumIndexedArray.h"
   "Finally.h"
+  "Filesystem.h"
   "Hash.h"
   "Logging.h"
   "Macros.h"
@@ -75,6 +76,7 @@ set(
   "ScopeGuard.h"
   "Signals.h"
   "Sha256.h"
+  "Span.h"
   "StateMachine.h"
   "StaticVector.h"
   "StringTypes.h"
@@ -91,6 +93,7 @@ set(
 set(
   OXYGEN_BASE_PRIVATE_SOURCES
   "Detail/loguru.cpp"
+  "Filesystem.cpp"
   "Sha256.cpp"
   "Uuid.cpp"
   "Windows/ComError.cpp"
@@ -168,7 +171,8 @@ if(OXYGEN_BUILD_DOCS AND OXYGEN_WITH_DOXYGEN)
     VERSION ${META_VERSION}
     TITLE "\"Base\""
     BRIEF "\"Base infrastructure for Oxygen\""
-    INPUT_PATH "${CMAKE_CURRENT_SOURCE_DIR}"
+    INPUT_PATH
+      "${CMAKE_CURRENT_SOURCE_DIR}"
   )
 endif()
 

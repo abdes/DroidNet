@@ -26,6 +26,8 @@ struct ScriptAssetImportSettings final {
   std::string source_path;
   //! Absolute loose-cooked output root (CLI/manifest authored value).
   std::string cooked_root;
+  //! Authoring root for external script paths, independent of cooked output.
+  std::string source_root;
   //! Optional human-readable job name.
   std::string job_name;
   //! Optional report destination path.

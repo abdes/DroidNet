@@ -5,7 +5,6 @@
 using DryIoc;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 
@@ -19,9 +18,7 @@ public partial class WorkspaceViewModel
         var service = new Oxygen.Editor.World.Services.ContentMountChangeService(
             this.container.Resolve<IContentCookCoordinator>(),
             this.projectContextService,
-            this.projectManager,
-            this.engineService,
-            this.container.Resolve<CookedContentMountService>(),
+            this.container.Resolve<CookPublicationService>(),
             this.cookedCatalog!,
             this.cookHosting!);
         await service.ApplyAsync(

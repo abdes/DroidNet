@@ -9,6 +9,8 @@ namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 /// <inheritdoc cref="ProjectLayoutViewModel"/>
 public partial class ProjectLayoutViewModel
 {
+    [LoggerMessage(Level = LogLevel.Error, Message = "Could not refresh the published output folders.")]
+    private partial void LogCookedProjectionFailure(Exception exception);
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,

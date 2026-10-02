@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Model;
 
 namespace Oxygen.Editor.MaterialEditor;

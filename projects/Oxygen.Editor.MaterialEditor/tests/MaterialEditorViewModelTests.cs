@@ -5,7 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Schemas;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Model;
 using Windows.UI;
 
@@ -158,8 +158,6 @@ public sealed partial class MaterialEditorViewModelTests
     {
         var uri = new Uri("asset:///Content/Materials/Test.omat.json");
         var source = new MaterialSource(
-            schema: "oxygen.material.v1",
-            type: "PBR",
             name: "Test",
             pbrMetallicRoughness: new MaterialPbrMetallicRoughness(
                 baseColorR: 1.0f,
@@ -271,6 +269,19 @@ public sealed partial class MaterialEditorViewModelTests
             _ = edit;
             cancellationToken.ThrowIfCancellationRequested();
             this.ScalarEditCalls++;
+            return Task.FromResult(new MaterialEditResult(Succeeded: false, OperationId: null));
+        }
+
+        public Task<MaterialEditResult> EditTextureAsync(
+            Guid documentId,
+            string channel,
+            string? virtualPath,
+            CancellationToken cancellationToken = default)
+        {
+            _ = documentId;
+            _ = channel;
+            _ = virtualPath;
+            cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(new MaterialEditResult(Succeeded: false, OperationId: null));
         }
 

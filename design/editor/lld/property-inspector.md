@@ -148,6 +148,17 @@ layout revision and per-LOD/submesh bindings. Assignment stores the geometry URI
 slot ID, witnessed layout revision and material identity on that instance.
 
 Clear removes the override; engine Default is an explicit separate choice.
+The current Inspector uses one slot selector and one assignment picker. It offers
+only slots reported by the native inventory, keeps mixed assignment values for
+instances of the same geometry, and requires matching geometry before a batch
+edit. The picker captures geometry/SlotId/revision before its asynchronous work;
+the command revalidates that target before mutating any selected instance.
+Unavailable inventories and unresolved assignments appear beside the picker.
+New edits use `ObservedEdit` validation; saved scene projection and history use
+`RetainedAssignment`, resolving the same geometry and surviving SlotId against
+the current native inventory. This transport intent is not persisted authoring
+data. Missing or foreign identities remain unresolved; revision drift alone
+does not invalidate proven slot continuity.
 Every nonzero slot receives the same command/history/Save/cook/live-binding and
 failure recovery as slot zero. No adding/removing slots or modifying shared mesh
 or material data is offered.

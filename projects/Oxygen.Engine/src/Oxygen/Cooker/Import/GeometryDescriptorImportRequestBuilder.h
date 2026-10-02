@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <ostream>
 
@@ -17,7 +18,8 @@ namespace oxygen::content::import::internal {
 
 //! Build a normalized `ImportRequest` for schema-based geometry descriptors.
 OXGN_COOK_API auto BuildGeometryDescriptorRequest(
-  const GeometryDescriptorImportSettings& settings, std::ostream& error_stream)
+  const GeometryDescriptorImportSettings& settings, std::ostream& error_stream,
+  std::shared_ptr<const CapturedInputSet> captured_inputs = {})
   -> std::optional<ImportRequest>;
 
 } // namespace oxygen::content::import::internal

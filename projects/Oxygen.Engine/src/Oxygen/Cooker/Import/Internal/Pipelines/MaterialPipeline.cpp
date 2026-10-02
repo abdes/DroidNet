@@ -6,19 +6,38 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
-#include <limits>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <optional>
 #include <span>
+#include <stop_token>
+#include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -33,12 +52,10 @@ namespace {
   constexpr size_t kShaderDefinesMax
     = sizeof(data::pak::render::ShaderReferenceDesc::defines);
 
-  constexpr uint32_t kMaxShaderStages = 32;
-
   struct MaterialUvTransformDesc {
-    float uv_scale[2] = { 1.0f, 1.0f };
-    float uv_offset[2] = { 0.0f, 0.0f };
-    float uv_rotation_radians = 0.0f;
+    float uv_scale[2] = { 1.0F, 1.0F };
+    float uv_offset[2] = { 0.0F, 0.0F };
+    float uv_rotation_radians = 0.0F;
     uint8_t uv_set = 0;
   };
 
@@ -49,20 +66,12 @@ namespace {
   };
 
   struct BuildOutcome {
-    std::vector<std::byte> bytes;
-    std::vector<ImportDiagnostic> diagnostics;
+    data::AssetReferences references;
+    std::vector<std::byte> bytes {};
+    std::vector<ImportDiagnostic> diagnostics {};
     bool canceled = false;
     bool has_error = false;
   };
-
-  [[nodiscard]] auto IsShaderTypeValid(const uint8_t shader_type) -> bool
-  {
-    if (shader_type == 0) {
-      return false;
-    }
-    constexpr auto max_type = static_cast<uint32_t>(ShaderType::kMaxShaderType);
-    return static_cast<uint32_t>(shader_type) <= max_type;
-  }
 
   [[nodiscard]] auto ShaderStageBit(const uint8_t shader_type) -> uint32_t
   {
@@ -72,9 +81,10 @@ namespace {
   [[nodiscard]] auto HasErrorDiagnostic(
     const std::vector<ImportDiagnostic>& diagnostics) -> bool
   {
-    return std::ranges::any_of(diagnostics, [](const ImportDiagnostic& diag) {
-      return diag.severity == ImportSeverity::kError;
-    });
+    return std::ranges::any_of(
+      diagnostics, [](const ImportDiagnostic& diag) -> bool {
+        return diag.severity == ImportSeverity::kError;
+      });
   }
 
   [[nodiscard]] auto MakeWarningDiagnostic(std::string code,
@@ -117,7 +127,7 @@ namespace {
     -> std::vector<ShaderRequest>
   {
     const bool alpha_test_enabled
-      = (flags & data::pak::render::kMaterialFlag_AlphaTest) != 0u;
+      = (flags & data::pak::render::kMaterialFlag_AlphaTest) != 0U;
     const auto defines = BuildDefinesString(alpha_test_enabled);
 
     std::vector<ShaderRequest> shaders;
@@ -163,63 +173,8 @@ namespace {
   {
     ShaderBuildResult result;
 
-    if (shader_requests.empty()) {
-      diagnostics.push_back(MakeErrorDiagnostic(
-        "material.shader_stages_missing",
-        "Material requires at least one shader stage", source_id, object_path));
-      result.has_error = true;
-      return result;
-    }
-
-    if (shader_requests.size() > kMaxShaderStages) {
-      diagnostics.push_back(MakeErrorDiagnostic("material.shader_stage_count",
-        "Shader stage count exceeds 32", source_id, object_path));
-      result.has_error = true;
-      return result;
-    }
-
-    std::array<bool, kMaxShaderStages> seen {};
     for (const auto& request : shader_requests) {
-      if (!IsShaderTypeValid(request.shader_type)) {
-        diagnostics.push_back(
-          MakeErrorDiagnostic("material.shader_stage_invalid",
-            "Shader type is invalid", source_id, object_path));
-        result.has_error = true;
-        continue;
-      }
-
-      const auto stage_bit = ShaderStageBit(request.shader_type);
-      const auto stage_index = static_cast<size_t>(request.shader_type - 1u);
-      if (stage_index >= seen.size()) {
-        diagnostics.push_back(
-          MakeErrorDiagnostic("material.shader_stage_invalid",
-            "Shader type is out of range", source_id, object_path));
-        result.has_error = true;
-        continue;
-      }
-
-      if (seen[stage_index]) {
-        diagnostics.push_back(MakeErrorDiagnostic(
-          "material.shader_stage_duplicate",
-          "Shader type is duplicated in request list", source_id, object_path));
-        result.has_error = true;
-        continue;
-      }
-
-      if (request.source_path.empty() || request.entry_point.empty()) {
-        diagnostics.push_back(MakeErrorDiagnostic("material.shader_ref_invalid",
-          "Shader source_path and entry_point must be set", source_id,
-          object_path));
-        result.has_error = true;
-        continue;
-      }
-
-      seen[stage_index] = true;
-      result.shader_stages |= stage_bit;
-    }
-
-    if (result.has_error) {
-      return result;
+      result.shader_stages |= ShaderStageBit(request.shader_type);
     }
 
     std::ranges::sort(shader_requests,
@@ -247,14 +202,14 @@ namespace {
   }
 
   [[nodiscard]] auto BuildMaterialUvTransformDesc(
-    const std::vector<const MaterialTextureBinding*>& bindings)
-    -> MaterialUvTransformDesc
+    const MaterialTextureBindings& textures) -> MaterialUvTransformDesc
   {
     MaterialUvTransformDesc desc {};
 
     const MaterialTextureBinding* reference = nullptr;
-    for (const auto* binding : bindings) {
-      if (binding == nullptr || !binding->assigned) {
+    for (const auto& slot : MaterialSource::TextureSlots()) {
+      const auto* binding = &(textures.*slot.binding);
+      if (!binding->assigned) {
         continue;
       }
       reference = binding;
@@ -282,7 +237,7 @@ namespace {
 
   [[nodiscard]] auto Normalize01(const float value) -> float
   {
-    return std::clamp(value, 0.0f, 1.0f);
+    return std::clamp(value, 0.0F, 1.0F);
   }
 
   [[nodiscard]] auto ResolveMaterialKey(const ImportRequest& request,
@@ -304,12 +259,11 @@ namespace {
         && domain != data::MaterialDomain::kPostProcess) {
         resolved = data::MaterialDomain::kMasked;
       }
-    } else if (alpha_mode == MaterialAlphaMode::kBlended) {
-      if (domain != data::MaterialDomain::kDecal
+    } else if ((alpha_mode == MaterialAlphaMode::kBlended)
+      && (domain != data::MaterialDomain::kDecal
         && domain != data::MaterialDomain::kUserInterface
-        && domain != data::MaterialDomain::kPostProcess) {
-        resolved = data::MaterialDomain::kAlphaBlended;
-      }
+        && domain != data::MaterialDomain::kPostProcess)) {
+      resolved = data::MaterialDomain::kAlphaBlended;
     }
 
     return resolved;
@@ -325,11 +279,11 @@ namespace {
     desc.base_color[2] = Normalize01(inputs.base_color[2]);
     desc.base_color[3] = Normalize01(inputs.base_color[3]);
 
-    desc.normal_scale = (std::max)(0.0f, inputs.normal_scale);
+    desc.normal_scale = (std::max)(0.0F, inputs.normal_scale);
 
     float roughness = inputs.roughness;
     if (inputs.roughness_as_glossiness) {
-      roughness = 1.0f - roughness;
+      roughness = 1.0F - roughness;
     }
 
     desc.metalness = data::Unorm16 { Normalize01(inputs.metalness) };
@@ -337,13 +291,13 @@ namespace {
     desc.ambient_occlusion
       = data::Unorm16 { Normalize01(inputs.ambient_occlusion) };
 
-    desc.emissive_factor[0] = data::HalfFloat { inputs.emissive_factor[0] };
-    desc.emissive_factor[1] = data::HalfFloat { inputs.emissive_factor[1] };
-    desc.emissive_factor[2] = data::HalfFloat { inputs.emissive_factor[2] };
+    desc.emissive_factor[0] = inputs.emissive_factor[0];
+    desc.emissive_factor[1] = inputs.emissive_factor[1];
+    desc.emissive_factor[2] = inputs.emissive_factor[2];
 
     float alpha_cutoff = inputs.alpha_cutoff;
     if (alpha_mode == MaterialAlphaMode::kMasked
-      && (alpha_cutoff < 0.0f || alpha_cutoff > 1.0f)) {
+      && (alpha_cutoff < 0.0F || alpha_cutoff > 1.0F)) {
       diagnostics.push_back(MakeWarningDiagnostic("material.alpha_cutoff_range",
         "Alpha cutoff outside [0,1] was clamped", source_id, object_path));
     }
@@ -354,7 +308,7 @@ namespace {
     // instructions.
     desc.alpha_cutoff = data::Unorm16 { alpha_cutoff };
 
-    desc.ior = (std::max)(1.0f, inputs.ior);
+    desc.ior = (std::max)(1.0F, inputs.ior);
     desc.specular_factor
       = data::Unorm16 { Normalize01(inputs.specular_factor) };
 
@@ -380,125 +334,57 @@ namespace {
       = data::HalfFloat { Normalize01(inputs.attenuation_color[1]) };
     desc.attenuation_color[2]
       = data::HalfFloat { Normalize01(inputs.attenuation_color[2]) };
-    desc.attenuation_distance = (std::max)(0.0f, inputs.attenuation_distance);
+    desc.attenuation_distance = (std::max)(0.0F, inputs.attenuation_distance);
   }
 
   [[nodiscard]] auto HasAnyAssignedTextures(
     const MaterialTextureBindings& textures) -> bool
   {
-    return textures.base_color.assigned || textures.normal.assigned
-      || textures.metallic.assigned || textures.roughness.assigned
-      || textures.ambient_occlusion.assigned || textures.emissive.assigned
-      || textures.specular.assigned || textures.sheen_color.assigned
-      || textures.clearcoat.assigned || textures.clearcoat_normal.assigned
-      || textures.transmission.assigned || textures.thickness.assigned;
+    return std::ranges::any_of(MaterialSource::TextureSlots(),
+      [&](const auto& slot) { return (textures.*slot.binding).assigned; });
   }
 
-  auto AssignTextureIndices(const MaterialTextureBindings& textures,
-    const bool orm_packed, const data::pak::core::ResourceIndexT orm_index,
-    data::pak::render::MaterialAssetDesc& desc) -> void
+  auto AssignTextureReferences(const MaterialTextureBindings& textures,
+    const std::optional<data::pak::core::ResourceIndexT> orm_index,
+    data::pak::render::MaterialAssetDesc& desc,
+    AssetReferenceBuilder& references) -> void
   {
-    desc.base_color_texture = textures.base_color.assigned
-      ? data::pak::core::ResourceIndexT { textures.base_color.index }
-      : data::pak::core::kNoResourceIndex;
-    desc.normal_texture = textures.normal.assigned
-      ? data::pak::core::ResourceIndexT { textures.normal.index }
-      : data::pak::core::kNoResourceIndex;
-
-    const auto metallic_index = textures.metallic.assigned
-      ? data::pak::core::ResourceIndexT { textures.metallic.index }
-      : data::pak::core::kNoResourceIndex;
-    const auto roughness_index = textures.roughness.assigned
-      ? data::pak::core::ResourceIndexT { textures.roughness.index }
-      : data::pak::core::kNoResourceIndex;
-    const auto ao_index = textures.ambient_occlusion.assigned
-      ? data::pak::core::ResourceIndexT { textures.ambient_occlusion.index }
-      : data::pak::core::kNoResourceIndex;
-
-    if (orm_packed) {
-      desc.metallic_texture = orm_index;
-      desc.roughness_texture = orm_index;
-      // If ORM is packed (flag set), the shader defaults to reading AO from the
-      // Red channel of the ORM texture. We only override this if the material
-      // explicitly assigns a different texture for AO.
-      if (textures.ambient_occlusion.assigned
-        && textures.ambient_occlusion.source_id
-          != textures.metallic.source_id) {
-        desc.ambient_occlusion_texture = ao_index;
-      } else {
-        desc.ambient_occlusion_texture = orm_index;
-      }
+    const auto bind = [&references](const MaterialTextureBinding& texture) {
+      return texture.assigned
+        ? references.AddResource(
+            data::ResourceKind::kTexture, ResourceIndexT { texture.index })
+        : data::kNoResourceReference;
+    };
+    desc.base_color_texture = bind(textures.base_color);
+    desc.normal_texture = bind(textures.normal);
+    if (orm_index) {
+      const auto orm
+        = references.AddResource(data::ResourceKind::kTexture, *orm_index);
+      desc.metallic_texture = orm;
+      desc.roughness_texture = orm;
     } else {
-      desc.metallic_texture = metallic_index;
-      desc.roughness_texture = roughness_index;
-      desc.ambient_occlusion_texture = ao_index;
+      desc.metallic_texture = bind(textures.metallic);
+      desc.roughness_texture = bind(textures.roughness);
     }
-
-    desc.emissive_texture = textures.emissive.assigned
-      ? data::pak::core::ResourceIndexT { textures.emissive.index }
-      : data::pak::core::kNoResourceIndex;
-    desc.specular_texture = textures.specular.assigned
-      ? data::pak::core::ResourceIndexT { textures.specular.index }
-      : data::pak::core::kNoResourceIndex;
-    desc.sheen_color_texture = textures.sheen_color.assigned
-      ? data::pak::core::ResourceIndexT { textures.sheen_color.index }
-      : data::pak::core::kNoResourceIndex;
-    desc.clearcoat_texture = textures.clearcoat.assigned
-      ? data::pak::core::ResourceIndexT { textures.clearcoat.index }
-      : data::pak::core::kNoResourceIndex;
-    desc.clearcoat_normal_texture = textures.clearcoat_normal.assigned
-      ? data::pak::core::ResourceIndexT { textures.clearcoat_normal.index }
-      : data::pak::core::kNoResourceIndex;
-    desc.transmission_texture = textures.transmission.assigned
-      ? data::pak::core::ResourceIndexT { textures.transmission.index }
-      : data::pak::core::kNoResourceIndex;
-    desc.thickness_texture = textures.thickness.assigned
-      ? data::pak::core::ResourceIndexT { textures.thickness.index }
-      : data::pak::core::kNoResourceIndex;
+    desc.ambient_occlusion_texture = bind(textures.ambient_occlusion);
+    desc.emissive_texture = bind(textures.emissive);
+    desc.specular_texture = bind(textures.specular);
+    desc.sheen_color_texture = bind(textures.sheen_color);
+    desc.clearcoat_texture = bind(textures.clearcoat);
+    desc.clearcoat_normal_texture = bind(textures.clearcoat_normal);
+    desc.transmission_texture = bind(textures.transmission);
+    desc.thickness_texture = bind(textures.thickness);
   }
 
-  [[nodiscard]] auto ResolveOrmPacked(const OrmPolicy policy,
-    const MaterialTextureBindings& textures, std::string_view source_id,
-    std::string_view object_path, std::vector<ImportDiagnostic>& diagnostics)
+  [[nodiscard]] auto ResolveOrmPacked(const MaterialSource& material)
     -> std::optional<data::pak::core::ResourceIndexT>
   {
-    const auto& metallic = textures.metallic;
-    const auto& roughness = textures.roughness;
-
-    // We primarily check if Metallic and Roughness are compatible for packing,
-    // as they are the core of the glTF PBR model (shared texture, usually).
-    // The shader flag kMaterialFlag_GltfOrmPacked implies M is in Blue and R
-    // is in Green. Even if AO is separate or missing, we must enable this flag
-    // to read M/R from the correct channels.
-    const bool mr_assigned = metallic.assigned && roughness.assigned;
-    const bool mr_same_source = metallic.source_id == roughness.source_id
-      && !metallic.source_id.empty();
-    const bool mr_same_uv_set = metallic.uv_set == roughness.uv_set;
-    const auto& mr_uv_a = metallic.uv_transform;
-    const auto& mr_uv_b = roughness.uv_transform;
-    const bool mr_same_uv_transform = mr_uv_a.scale[0] == mr_uv_b.scale[0]
-      && mr_uv_a.scale[1] == mr_uv_b.scale[1]
-      && mr_uv_a.offset[0] == mr_uv_b.offset[0]
-      && mr_uv_a.offset[1] == mr_uv_b.offset[1]
-      && mr_uv_a.rotation_radians == mr_uv_b.rotation_radians;
-    const bool mr_same_uv = mr_same_uv_set && mr_same_uv_transform;
-
-    const bool can_pack = mr_assigned && mr_same_source && mr_same_uv;
-
-    if (policy == OrmPolicy::kForcePacked) {
-      if (!can_pack) {
-        diagnostics.push_back(MakeErrorDiagnostic("material.orm_policy",
-          "ForcePacked requires metallic/roughness to share source and UV",
-          source_id, object_path));
-        return std::nullopt;
-      }
-      return data::pak::core::ResourceIndexT { metallic.index };
+    if (material.orm_policy != OrmPolicy::kForceSeparate
+      && material.CanPackOrm()) {
+      return data::pak::core::ResourceIndexT {
+        material.textures.metallic.index
+      };
     }
-
-    if (policy == OrmPolicy::kAuto && can_pack) {
-      return data::pak::core::ResourceIndexT { metallic.index };
-    }
-
     return std::nullopt;
   }
 
@@ -523,7 +409,7 @@ namespace {
     }
 
     const auto data = stream.Data();
-    return std::vector(data.begin(), data.end());
+    return { data.begin(), data.end() };
   }
 
   auto PatchContentHash(std::vector<std::byte>& bytes,
@@ -543,7 +429,8 @@ namespace {
     -> co::Co<std::optional<data::pak::core::ContentHashDigest>>
   {
     const auto hash = co_await thread_pool.Run(
-      [bytes, stop_token](co::ThreadPool::CancelToken canceled) noexcept {
+      [bytes, stop_token](
+        co::ThreadPool::CancelToken canceled) noexcept -> base::Sha256Digest {
         DLOG_F(1, "Compute content hash");
         if (stop_token.stop_requested() || canceled) {
           return data::pak::core::ContentHashDigest {};
@@ -558,45 +445,51 @@ namespace {
     co_return hash;
   }
 
-  [[nodiscard]] auto BuildMaterialPayload(
-    const MaterialPipeline::WorkItem& item,
+  [[nodiscard]] auto BuildMaterialPayload(const MaterialSource& material,
+    const std::string_view source_id, const std::stop_token stop_token,
     std::vector<ImportDiagnostic> diagnostics) -> BuildOutcome
   {
-    DLOG_F(1, "Building material payload: {}", item.material_name);
+    DLOG_F(1, "Building material payload: {}", material.name);
     BuildOutcome outcome {
       .diagnostics = std::move(diagnostics),
     };
 
-    if (item.stop_token.stop_requested()) {
+    if (stop_token.stop_requested()) {
       outcome.canceled = true;
       return outcome;
     }
 
-    const auto object_path = std::string_view(item.material_name);
+    if (!material.Validate(source_id, outcome.diagnostics)) {
+      outcome.has_error = true;
+      return outcome;
+    }
+    const auto object_path = std::string_view(material.name);
 
     data::pak::render::MaterialAssetDesc desc {};
     desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
     desc.header.version = data::pak::render::kMaterialAssetVersion;
     util::TruncateAndNullTerminate(
-      desc.header.name, std::size(desc.header.name), item.material_name);
+      desc.header.name, std::size(desc.header.name), material.name);
 
     desc.flags = data::pak::render::kMaterialFlag_NoTextureSampling;
-    if (item.inputs.double_sided) {
+    if (material.inputs.double_sided) {
       desc.flags |= data::pak::render::kMaterialFlag_DoubleSided;
     }
-    if (item.inputs.unlit) {
+    if (material.inputs.unlit) {
       desc.flags |= data::pak::render::kMaterialFlag_Unlit;
     }
+    if (material.occlusion_mode == AmbientOcclusionMode::kStrength) {
+      desc.flags |= data::pak::render::kMaterialFlag_AmbientOcclusionStrength;
+    }
 
-    const auto resolved_domain = ResolveMaterialDomain(
-      item.material_domain, item.alpha_mode, desc.flags);
+    const auto resolved_domain
+      = ResolveMaterialDomain(material.domain, material.alpha_mode, desc.flags);
     desc.material_domain = static_cast<uint8_t>(resolved_domain);
 
-    ApplyMaterialInputs(item.inputs, item.alpha_mode, item.source_id,
+    ApplyMaterialInputs(material.inputs, material.alpha_mode, source_id,
       object_path, outcome.diagnostics, desc);
 
-    const auto orm_index = ResolveOrmPacked(item.orm_policy, item.textures,
-      item.source_id, object_path, outcome.diagnostics);
+    const auto orm_index = ResolveOrmPacked(material);
     const bool orm_packed = orm_index.has_value();
 
     if (HasErrorDiagnostic(outcome.diagnostics)) {
@@ -609,33 +502,18 @@ namespace {
     }
 
     if ([[maybe_unused]] const auto any_textures
-      = HasAnyAssignedTextures(item.textures)) {
+      = HasAnyAssignedTextures(material.textures)) {
       desc.flags &= ~data::pak::render::kMaterialFlag_NoTextureSampling;
     } else {
       DLOG_F(INFO,
         "Material '{}' has no assigned textures; using scalar fallbacks",
-        item.source_id);
+        source_id);
     }
 
-    AssignTextureIndices(item.textures, orm_packed,
-      orm_packed ? *orm_index : data::pak::core::kNoResourceIndex, desc);
+    AssetReferenceBuilder references;
+    AssignTextureReferences(material.textures, orm_index, desc, references);
 
-    const std::vector bindings {
-      &item.textures.base_color,
-      &item.textures.normal,
-      &item.textures.metallic,
-      &item.textures.roughness,
-      &item.textures.ambient_occlusion,
-      &item.textures.emissive,
-      &item.textures.specular,
-      &item.textures.sheen_color,
-      &item.textures.clearcoat,
-      &item.textures.clearcoat_normal,
-      &item.textures.transmission,
-      &item.textures.thickness,
-    };
-
-    const auto uv_desc = BuildMaterialUvTransformDesc(bindings);
+    const auto uv_desc = BuildMaterialUvTransformDesc(material.textures);
     desc.uv_scale[0] = uv_desc.uv_scale[0];
     desc.uv_scale[1] = uv_desc.uv_scale[1];
     desc.uv_offset[0] = uv_desc.uv_offset[0];
@@ -643,13 +521,13 @@ namespace {
     desc.uv_rotation_radians = uv_desc.uv_rotation_radians;
     desc.uv_set = uv_desc.uv_set;
 
-    auto shader_requests = item.shader_requests;
+    auto shader_requests = material.shader_requests;
     if (shader_requests.empty()) {
       shader_requests = BuildDefaultShaderRequests(resolved_domain, desc.flags);
     }
 
-    auto shader_build = BuildShaderReferences(std::move(shader_requests),
-      item.source_id, object_path, outcome.diagnostics);
+    auto shader_build = BuildShaderReferences(
+      std::move(shader_requests), source_id, object_path, outcome.diagnostics);
     if (shader_build.has_error) {
       outcome.has_error = true;
       return outcome;
@@ -658,6 +536,7 @@ namespace {
     desc.shader_stages = shader_build.shader_stages;
 
     outcome.bytes = SerializeMaterialDescriptor(desc, shader_build.shader_refs);
+    outcome.references = std::move(references).Build();
     outcome.has_error = HasErrorDiagnostic(outcome.diagnostics);
 
     return outcome;
@@ -692,7 +571,7 @@ auto MaterialPipeline::Start(co::Nursery& nursery) -> void
 
   const auto worker_count = std::max(1U, config_.worker_count);
   for (uint32_t i = 0; i < worker_count; ++i) {
-    nursery.Start([this]() -> co::Co<> { co_await Worker(); });
+    nursery.Start([this] -> co::Co<> { co_await Worker(); });
   }
 }
 
@@ -792,7 +671,7 @@ auto MaterialPipeline::Worker() -> co::Co<>
     if (item.on_started) {
       item.on_started();
     }
-    auto NotifyFinished = [&item]() {
+    auto NotifyFinished = [&item] -> void {
       if (item.on_finished) {
         item.on_finished();
       }
@@ -801,28 +680,29 @@ auto MaterialPipeline::Worker() -> co::Co<>
     const auto cook_start = std::chrono::steady_clock::now();
     const auto virtual_path
       = item.request.loose_cooked_layout.MaterialVirtualPath(
-        item.storage_material_name);
+        item.material.storage_name);
     const auto descriptor_relpath
       = item.request.loose_cooked_layout.MaterialDescriptorRelPath(
-        item.storage_material_name);
+        item.material.storage_name);
     const auto material_key = ResolveMaterialKey(item.request, virtual_path);
 
     BuildOutcome build_outcome;
     if (config_.use_thread_pool) {
-      auto item_copy = item;
       build_outcome = co_await thread_pool_.Run(
-        [item = std::move(item_copy)](
-          co::ThreadPool::CancelToken canceled) noexcept {
+        [material = item.material, source_id = item.source_id,
+          stop_token = item.stop_token](
+          co::ThreadPool::CancelToken canceled) noexcept -> BuildOutcome {
           DLOG_F(1, "Build material task begin");
-          if (item.stop_token.stop_requested() || canceled) {
+          if (stop_token.stop_requested() || canceled) {
             return BuildOutcome { .canceled = true };
           }
-          return BuildMaterialPayload(item, {});
+          return BuildMaterialPayload(material, source_id, stop_token, {});
         });
     } else {
       DLOG_F(2, "Build material payload on import thread material={}",
-        item.material_name);
-      build_outcome = BuildMaterialPayload(item, {});
+        item.material.name);
+      build_outcome = BuildMaterialPayload(
+        item.material, item.source_id, item.stop_token, {});
     }
     if (build_outcome.canceled) {
       co_await ReportCancelled(std::move(item));
@@ -848,7 +728,7 @@ auto MaterialPipeline::Worker() -> co::Co<>
     if (build_outcome.bytes.empty()) {
       output.diagnostics.push_back(MakeErrorDiagnostic(
         "material.serialize_failed", "Material descriptor serialization failed",
-        item.source_id, item.material_name));
+        item.source_id, item.material.name));
       output.telemetry.cook_duration
         = MakeDuration(cook_start, std::chrono::steady_clock::now());
       NotifyFinished();
@@ -875,6 +755,7 @@ auto MaterialPipeline::Worker() -> co::Co<>
       .virtual_path = virtual_path,
       .descriptor_relpath = descriptor_relpath,
       .descriptor_bytes = std::move(bytes),
+      .references = std::move(build_outcome.references),
     };
     output.success = true;
     output.telemetry.cook_duration

@@ -8,8 +8,11 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
+#include <ios>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <ranges>
@@ -17,21 +20,32 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Endian.h>
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Content/Internal/LooseCookedIndexCodec.h>
+#include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Content/AssetValidation.h>
+#include <Oxygen/Content/Internal/LooseCookedIndexCodec.h> // IWYU pragma: keep
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/AtomicFile.h>
 #include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -56,7 +70,8 @@ namespace {
 
   auto IsAllZeros(std::span<const uint8_t> bytes) noexcept -> bool
   {
-    return std::ranges::all_of(bytes, [](const auto b) { return b == 0; });
+    return std::ranges::all_of(
+      bytes, [](const auto b) -> auto { return b == 0; });
   }
 
   auto ValidateNoDotSegments(
@@ -140,7 +155,7 @@ namespace {
         return it->second;
       }
 
-      if (table_.size() > (std::numeric_limits<uint32_t>::max)()) {
+      if (table_.size() > std::numeric_limits<uint32_t>::max()) {
         throw std::runtime_error("String table too large");
       }
 
@@ -174,12 +189,14 @@ namespace {
     std::string descriptor_relpath;
     uint64_t descriptor_size = 0;
     std::array<uint8_t, data::loose_cooked::kSha256Size> descriptor_sha256 = {};
+    data::AssetReferences references;
   };
 
   struct StoredFile final {
     FileKind kind = FileKind::kUnknown;
     std::string relpath;
     uint64_t size = 0;
+    base::Sha256Digest sha256 {};
     bool updated = false;
     bool externally_written = false;
   };
@@ -191,7 +208,8 @@ namespace {
       && lhs.virtual_path == rhs.virtual_path
       && lhs.descriptor_relpath == rhs.descriptor_relpath
       && lhs.descriptor_size == rhs.descriptor_size
-      && lhs.descriptor_sha256 == rhs.descriptor_sha256;
+      && lhs.descriptor_sha256 == rhs.descriptor_sha256
+      && lhs.references == rhs.references;
   }
 
   [[nodiscard]] auto IsEquivalent(const StoredFile& lhs, const StoredFile& rhs)
@@ -235,7 +253,7 @@ namespace {
   auto WriteBinaryFile(const std::filesystem::path& path,
     const std::span<const std::byte> bytes) -> void
   {
-    std::filesystem::create_directories(path.parent_path());
+    std::filesystem::create_directories(base::ToNativePath(path.parent_path()));
 
     serio::FileStream stream(path, std::ios::out | std::ios::trunc);
     ThrowOnError(stream.Write(bytes), "Failed to write cooked file");
@@ -274,7 +292,7 @@ namespace {
     static std::mutex map_mutex;
     static std::unordered_map<std::string, std::shared_ptr<std::mutex>> locks;
 
-    const auto key = cooked_root.lexically_normal().string();
+    const auto key = base::PathIdentityKey(cooked_root);
     std::scoped_lock lock(map_mutex);
     auto it = locks.find(key);
     if (it != locks.end()) {
@@ -303,8 +321,6 @@ struct LooseCookedWriter::Impl final {
   {
     content_version_override_ = version;
   }
-
-  auto SetComputeSha256(bool enabled) -> void { compute_sha256_ = enabled; }
 
   auto SetCollisionPolicy(const LooseCookedWriter::CollisionPolicy policy)
     -> void
@@ -440,24 +456,23 @@ struct LooseCookedWriter::Impl final {
 
   auto WriteAssetDescriptor(const data::AssetKey& key,
     data::AssetType asset_type, std::string_view virtual_path,
-    std::string_view descriptor_relpath, std::span<const std::byte> bytes)
-    -> void
+    std::string_view descriptor_relpath, std::span<const std::byte> bytes,
+    const data::AssetReferences& references) -> void
   {
     ValidateVirtualPath(virtual_path);
     ValidateRelativePath(descriptor_relpath);
+    ValidateAssetDescriptor(asset_type, key, bytes, references);
 
-    std::optional<base::Sha256Digest> digest;
-    if (compute_sha256_) {
-      digest = base::ComputeSha256(bytes);
-    }
+    const auto digest = base::ComputeSha256(bytes);
 
     StoredAsset record {
       .key = key,
       .asset_type = asset_type,
       .virtual_path = std::string(virtual_path),
       .descriptor_relpath = std::string(descriptor_relpath),
-      .descriptor_size = (bytes.size()),
+      .descriptor_size = bytes.size(),
       .descriptor_sha256 = CopyDigestOrZero(digest),
+      .references = references,
     };
 
     if (!HandleVirtualPathCollision(record, "WriteAssetDescriptor")) {
@@ -484,22 +499,19 @@ struct LooseCookedWriter::Impl final {
     ValidateRelativePath(relpath);
 
     const auto path_on_disk = cooked_root_ / std::filesystem::path(relpath);
-    WriteBinaryFile(path_on_disk, bytes);
 
     StoredFile record {
       .kind = kind,
       .relpath = std::string(relpath),
       .size = bytes.size(),
+      .sha256 = base::ComputeSha256(bytes),
       .updated = true,
       .externally_written = false,
     };
 
-    if (const auto existing_it = files_.find(kind); existing_it != files_.end()
-      && !HandleFileCollision_(
-        kind, existing_it->second, record, "WriteFile")) {
-      return;
+    if (StoreFile_(std::move(record), "WriteFile")) {
+      WriteBinaryFile(path_on_disk, bytes);
     }
-    files_.insert_or_assign(kind, record);
   }
 
   auto RegisterExternalFile(const FileKind kind, std::string_view relpath)
@@ -510,12 +522,13 @@ struct LooseCookedWriter::Impl final {
     const auto path_on_disk = cooked_root_ / std::filesystem::path(relpath);
 
     std::error_code ec;
-    if (!std::filesystem::exists(path_on_disk, ec)) {
+    if (!std::filesystem::exists(base::ToNativePath(path_on_disk), ec)) {
       throw std::runtime_error(
         "RegisterExternalFile: file does not exist: " + path_on_disk.string());
     }
 
-    const auto size = std::filesystem::file_size(path_on_disk, ec);
+    const auto size
+      = std::filesystem::file_size(base::ToNativePath(path_on_disk), ec);
     if (ec) {
       throw std::runtime_error("RegisterExternalFile: failed to get file size: "
         + path_on_disk.string());
@@ -529,17 +542,13 @@ struct LooseCookedWriter::Impl final {
       .externally_written = true,
     };
 
-    if (const auto existing_it = files_.find(kind); existing_it != files_.end()
-      && !HandleFileCollision_(
-        kind, existing_it->second, record, "RegisterExternalFile")) {
-      return;
-    }
-    files_.insert_or_assign(kind, record);
+    static_cast<void>(StoreFile_(std::move(record), "RegisterExternalFile"));
   }
 
   auto RegisterExternalAssetDescriptor(const data::AssetKey& key,
     const data::AssetType asset_type, std::string_view virtual_path,
     std::string_view descriptor_relpath, uint64_t descriptor_size,
+    const data::AssetReferences& references,
     std::optional<base::Sha256Digest> descriptor_sha256) -> void
   {
     ValidateVirtualPath(virtual_path);
@@ -549,13 +558,14 @@ struct LooseCookedWriter::Impl final {
       = cooked_root_ / std::filesystem::path(descriptor_relpath);
 
     std::error_code ec;
-    if (!std::filesystem::exists(path_on_disk, ec)) {
+    if (!std::filesystem::exists(base::ToNativePath(path_on_disk), ec)) {
       throw std::runtime_error("RegisterExternalAssetDescriptor: file does not "
                                "exist: "
         + path_on_disk.string());
     }
 
-    const auto size_on_disk = std::filesystem::file_size(path_on_disk, ec);
+    const auto size_on_disk
+      = std::filesystem::file_size(base::ToNativePath(path_on_disk), ec);
     if (ec) {
       throw std::runtime_error(
         "RegisterExternalAssetDescriptor: failed to get file size: "
@@ -570,8 +580,19 @@ struct LooseCookedWriter::Impl final {
         + path_on_disk.string());
     }
 
-    if (!compute_sha256_) {
-      descriptor_sha256 = std::nullopt;
+    if (descriptor_size > std::numeric_limits<size_t>::max()) {
+      throw std::runtime_error("Asset descriptor exceeds addressable size");
+    }
+    serio::FileStream<> stream(path_on_disk, std::ios::in);
+    serio::Reader reader(stream);
+    const auto bytes = reader.ReadBlob(static_cast<size_t>(descriptor_size));
+    if (!bytes) {
+      throw std::runtime_error(
+        "Could not read registered descriptor: " + path_on_disk.string());
+    }
+    ValidateAssetDescriptor(asset_type, key, *bytes, references);
+    if (!descriptor_sha256.has_value()) {
+      descriptor_sha256 = base::ComputeSha256(*bytes);
     }
 
     StoredAsset record {
@@ -581,6 +602,7 @@ struct LooseCookedWriter::Impl final {
       .descriptor_relpath = std::string(descriptor_relpath),
       .descriptor_size = descriptor_size,
       .descriptor_sha256 = CopyDigestOrZero(descriptor_sha256),
+      .references = references,
     };
 
     if (!HandleVirtualPathCollision(
@@ -625,19 +647,18 @@ struct LooseCookedWriter::Impl final {
       key_by_virtual_path_.insert_or_assign(asset.virtual_path, key);
     }
 
-    for (auto& [kind, file] : current_files) {
+    for (auto& [path, file] : current_files) {
+      static_cast<void>(path);
       if (!file.updated) {
         continue; // Preserve other writers' published metadata.
       }
       if (file.externally_written) {
-        file.size = std::filesystem::file_size(cooked_root_ / file.relpath);
+        const auto physical_path = cooked_root_ / file.relpath;
+        file.size
+          = std::filesystem::file_size(base::ToNativePath(physical_path));
+        file.sha256 = base::ComputeFileSha256(physical_path);
       }
-      if (const auto existing = files_.find(kind); existing != files_.end()
-        && !HandleFileCollision_(
-          kind, existing->second, file, "Finish.merge_files")) {
-        continue;
-      }
-      files_.insert_or_assign(kind, file);
+      static_cast<void>(StoreFile_(std::move(file), "Finish.merge_files"));
     }
 
     const auto cooked_root_str = cooked_root_.string();
@@ -650,7 +671,8 @@ struct LooseCookedWriter::Impl final {
 
     const auto index_path
       = cooked_root_ / std::filesystem::path(kIndexFileName);
-    std::filesystem::create_directories(index_path.parent_path());
+    std::filesystem::create_directories(
+      base::ToNativePath(index_path.parent_path()));
 
     WriteIndex_(index_path, source_key, content_version);
 
@@ -670,6 +692,8 @@ struct LooseCookedWriter::Impl final {
         .virtual_path = a.virtual_path,
         .descriptor_relpath = a.descriptor_relpath,
         .descriptor_size = a.descriptor_size,
+        .descriptor_sha256 = {},
+        .references = a.references,
       };
 
       if (!IsAllZeros(a.descriptor_sha256)) {
@@ -688,6 +712,7 @@ struct LooseCookedWriter::Impl final {
         .kind = f.kind,
         .relpath = f.relpath,
         .size = f.size,
+        .sha256 = f.sha256,
       };
 
       out.files.push_back(std::move(rec));
@@ -697,11 +722,36 @@ struct LooseCookedWriter::Impl final {
   }
 
 private:
+  [[nodiscard]] auto HasFileKind_(const FileKind kind) const -> bool
+  {
+    return std::ranges::any_of(
+      files_, [kind](const auto& item) { return item.second.kind == kind; });
+  }
+
+  auto StoreFile_(StoredFile file, const std::string_view context) -> bool
+  {
+    const auto existing = file.kind == FileKind::kAuxiliary
+      ? files_.find(file.relpath)
+      : std::ranges::find_if(files_,
+          [&](const auto& item) { return item.second.kind == file.kind; });
+    if (existing != files_.end()) {
+      if (!HandleFileCollision_(file.kind, existing->second, file, context)) {
+        return false;
+      }
+      if (existing->first != file.relpath) {
+        files_.erase(existing);
+      }
+    }
+    const auto path = file.relpath;
+    files_.insert_or_assign(path, std::move(file));
+    return true;
+  }
+
   auto LoadExistingIndexIfPresent_() -> void
   {
     const auto index_path
       = cooked_root_ / std::filesystem::path(kIndexFileName);
-    if (!std::filesystem::exists(index_path)) {
+    if (!std::filesystem::exists(base::ToNativePath(index_path))) {
       return;
     }
 
@@ -726,8 +776,9 @@ private:
         const auto type_u8 = index.FindAssetType(key);
         const auto size = index.FindDescriptorSize(key);
         const auto sha = index.FindDescriptorSha256(key);
+        auto references = index.FindAssetReferences(key);
 
-        if (!rel || !vpath || !type_u8 || !size) {
+        if (!rel || !vpath || !type_u8 || !size || !references) {
           continue;
         }
 
@@ -737,6 +788,8 @@ private:
           .virtual_path = std::string(*vpath),
           .descriptor_relpath = std::string(*rel),
           .descriptor_size = *size,
+          .descriptor_sha256 = {},
+          .references = std::move(*references),
         };
 
         if (sha.has_value()) {
@@ -749,20 +802,19 @@ private:
         loaded_asset_keys_.insert(key);
       }
 
-      for (const auto kind : index.GetAllFileKinds()) {
-        const auto rel = index.FindFileRelPath(kind);
-        const auto size = index.FindFileSize(kind);
-        if (!rel || !size) {
-          continue;
+      for (const auto& file : index.GetFileInventory()) {
+        if (!file.kind.has_value()) {
+          continue; // Asset records are restored above.
         }
-
-        StoredFile record {
-          .kind = kind,
-          .relpath = std::string(*rel),
-          .size = *size,
-        };
-
-        files_.insert_or_assign(kind, record);
+        files_.emplace(file.relative_path,
+          StoredFile {
+            .kind = *file.kind,
+            .relpath = file.relative_path,
+            .size = file.size,
+            .sha256 = file.sha256,
+            .updated = false,
+            .externally_written = false,
+          });
       }
 
       DLOG_F(INFO, "Loaded existing loose cooked index: assets={}, files={}",
@@ -776,42 +828,32 @@ private:
 
   auto ValidateRequiredFilePairs_() const -> void
   {
-    const auto has_buffers_table = files_.contains(FileKind::kBuffersTable);
-    const auto has_buffers_data = files_.contains(FileKind::kBuffersData);
+    const auto has_buffers_table = HasFileKind_(FileKind::kBuffersTable);
+    const auto has_buffers_data = HasFileKind_(FileKind::kBuffersData);
     if (has_buffers_table != has_buffers_data) {
       throw std::runtime_error(
         "Loose cooked index must provide both buffers.table and buffers.data");
     }
 
-    const auto has_textures_table = files_.contains(FileKind::kTexturesTable);
-    const auto has_textures_data = files_.contains(FileKind::kTexturesData);
+    const auto has_textures_table = HasFileKind_(FileKind::kTexturesTable);
+    const auto has_textures_data = HasFileKind_(FileKind::kTexturesData);
     if (has_textures_table != has_textures_data) {
       throw std::runtime_error("Loose cooked index must provide both "
                                "textures.table and textures.data");
     }
 
-    const auto has_scripts_table = files_.contains(FileKind::kScriptsTable);
-    const auto has_scripts_data = files_.contains(FileKind::kScriptsData);
+    const auto has_scripts_table = HasFileKind_(FileKind::kScriptsTable);
+    const auto has_scripts_data = HasFileKind_(FileKind::kScriptsData);
     if (has_scripts_table != has_scripts_data) {
       throw std::runtime_error(
         "Loose cooked index must provide both scripts.table and scripts.data");
     }
 
-    const auto has_physics_table = files_.contains(FileKind::kPhysicsTable);
-    const auto has_physics_data = files_.contains(FileKind::kPhysicsData);
+    const auto has_physics_table = HasFileKind_(FileKind::kPhysicsTable);
+    const auto has_physics_data = HasFileKind_(FileKind::kPhysicsData);
     if (has_physics_table != has_physics_data) {
       throw std::runtime_error(
         "Loose cooked index must provide both physics.table and physics.data");
-    }
-
-    const auto has_script_bindings_table
-      = files_.contains(FileKind::kScriptBindingsTable);
-    const auto has_script_bindings_data
-      = files_.contains(FileKind::kScriptBindingsData);
-    if (has_script_bindings_table != has_script_bindings_data) {
-      throw std::runtime_error("Loose cooked index must provide both "
-                               "script-bindings.table and "
-                               "script-bindings.data");
     }
   }
 
@@ -890,29 +932,25 @@ private:
     std::vector<FileRecord> file_records;
     file_records.reserve(files_.size());
 
-    std::vector<FileKind> kinds;
-    kinds.reserve(files_.size());
-    for (const auto& [kind, file] : files_) {
-      (void)file;
-      kinds.push_back(kind);
+    std::vector<std::string> paths;
+    paths.reserve(files_.size());
+    for (const auto& [path, file] : files_) {
+      static_cast<void>(file);
+      paths.push_back(path);
     }
-    std::ranges::sort(kinds, [](const FileKind a, const FileKind b) {
-      return static_cast<uint16_t>(a) < static_cast<uint16_t>(b);
-    });
-
-    for (const auto kind : kinds) {
-      const auto& f = files_.at(kind);
-
-      FileRecord record {};
-      record.kind = f.kind;
-      record.relpath_offset = strings.Add(f.relpath);
-      record.size = f.size;
-
-      file_records.push_back(record);
+    std::ranges::sort(paths);
+    for (const auto& path : paths) {
+      const auto& file = files_.at(path);
+      file_records.push_back(FileRecord {
+        .kind = file.kind,
+        .size = file.size,
+        .relpath_offset = strings.Add(file.relpath),
+        .sha256 = file.sha256,
+      });
     }
 
     IndexHeader header {};
-    header.version = 1;
+    header.version = data::loose_cooked::kIndexVersion;
     header.content_version = content_version;
 
     header.flags = data::loose_cooked::kHasVirtualPaths;
@@ -933,11 +971,31 @@ private:
     header.file_record_count = static_cast<uint32_t>(file_records.size());
     header.file_record_size = sizeof(FileRecord);
 
+    auto reference_cursor = header.file_records_offset
+      + (uint64_t { header.file_record_count } * sizeof(FileRecord));
+    for (size_t i = 0; i < keys.size(); ++i) {
+      const auto& references = assets_.at(keys.at(i)).references;
+      auto& table = asset_entries.at(i).references;
+      table.resource_count
+        = static_cast<uint32_t>(references.Resources().size());
+      table.key_count = static_cast<uint32_t>(references.Keys().size());
+      const auto size = data::AssetReferences::EncodedSize(
+        table.resource_count, table.key_count);
+      if (size != 0U) {
+        if (size > std::numeric_limits<uint64_t>::max() - reference_cursor) {
+          throw std::overflow_error(
+            "Loose cooked reference block offset overflow");
+        }
+        table.offset = reference_cursor;
+        reference_cursor += size;
+      }
+    }
+
     const auto guid_bytes = data::as_bytes(source_key);
     std::ranges::transform(guid_bytes, std::begin(header.source_identity),
-      [](const auto byte) { return std::to_integer<uint8_t>(byte); });
+      [](const auto byte) -> auto { return std::to_integer<uint8_t>(byte); });
 
-    serio::FileStream stream(index_path, std::ios::out | std::ios::trunc);
+    serio::MemoryStream stream;
     serio::Writer writer(stream);
 
     ThrowOnError(writer.WriteBlob(std::as_bytes(std::span(&header, 1))),
@@ -956,7 +1014,25 @@ private:
         "Failed to write file record");
     }
 
-    ThrowOnError(writer.Flush(), "Failed to flush index file");
+    for (const auto& key : keys) {
+      const auto encoded = assets_.at(key).references.Encode();
+      if (!encoded) {
+        throw std::runtime_error(encoded.error());
+      }
+      ThrowOnError(
+        writer.WriteBlob(*encoded), "Failed to write asset references");
+    }
+
+    ThrowOnError(writer.Flush(), "Failed to encode index file");
+    const auto commit = serio::WriteFileAtomically(index_path, stream.Data());
+    if (!commit) {
+      throw std::system_error(
+        commit.error(), "Failed to publish loose cooked index");
+    }
+    if (commit->durability_error) {
+      throw std::system_error(commit->durability_error,
+        "Loose cooked index published but directory synchronization failed");
+    }
 
     LOG_F(INFO,
       "Wrote loose cooked index: assets={}, files={}, strings={} bytes",
@@ -965,7 +1041,6 @@ private:
 
   std::filesystem::path cooked_root_;
 
-  bool compute_sha256_ = true;
   LooseCookedWriter::CollisionPolicy collision_policy_
     = LooseCookedWriter::CollisionPolicy::kWarnReplace;
 
@@ -976,7 +1051,7 @@ private:
   std::optional<uint16_t> existing_content_version_;
 
   std::unordered_map<data::AssetKey, StoredAsset> assets_;
-  std::unordered_map<FileKind, StoredFile> files_;
+  std::unordered_map<std::string, StoredFile> files_;
   std::unordered_map<std::string, data::AssetKey> key_by_virtual_path_;
   std::unordered_set<data::AssetKey> loaded_asset_keys_;
   std::unordered_set<std::string> replaced_loaded_virtual_paths_;
@@ -1000,11 +1075,6 @@ auto LooseCookedWriter::SetContentVersion(const uint16_t version) -> void
   impl_->SetContentVersion(version);
 }
 
-auto LooseCookedWriter::SetComputeSha256(const bool enabled) -> void
-{
-  impl_->SetComputeSha256(enabled);
-}
-
 auto LooseCookedWriter::SetCollisionPolicy(const CollisionPolicy policy) -> void
 {
   impl_->SetCollisionPolicy(policy);
@@ -1012,11 +1082,11 @@ auto LooseCookedWriter::SetCollisionPolicy(const CollisionPolicy policy) -> void
 
 auto LooseCookedWriter::WriteAssetDescriptor(const data::AssetKey& key,
   const data::AssetType asset_type, std::string_view virtual_path,
-  std::string_view descriptor_relpath, const std::span<const std::byte> bytes)
-  -> void
+  std::string_view descriptor_relpath, const std::span<const std::byte> bytes,
+  const data::AssetReferences& references) -> void
 {
   impl_->WriteAssetDescriptor(
-    key, asset_type, virtual_path, descriptor_relpath, bytes);
+    key, asset_type, virtual_path, descriptor_relpath, bytes, references);
 }
 
 auto LooseCookedWriter::WriteFile(const FileKind kind, std::string_view relpath,
@@ -1034,11 +1104,11 @@ auto LooseCookedWriter::RegisterExternalFile(
 auto LooseCookedWriter::RegisterExternalAssetDescriptor(
   const data::AssetKey& key, const data::AssetType asset_type,
   std::string_view virtual_path, std::string_view descriptor_relpath,
-  const uint64_t descriptor_size,
+  const uint64_t descriptor_size, const data::AssetReferences& references,
   std::optional<base::Sha256Digest> descriptor_sha256) -> void
 {
   impl_->RegisterExternalAssetDescriptor(key, asset_type, virtual_path,
-    descriptor_relpath, descriptor_size, descriptor_sha256);
+    descriptor_relpath, descriptor_size, references, descriptor_sha256);
 }
 
 auto LooseCookedWriter::Finish() -> LooseCookedWriteResult

@@ -5,21 +5,30 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <memory>
+#include <optional>
 #include <span>
-
-#include <Oxygen/Content/Internal/DependencyCollector.h>
-#include <Oxygen/Content/Loaders/InputActionLoader.h>
-#include <Oxygen/Content/Loaders/InputMappingContextLoader.h>
-#include <Oxygen/Content/SourceToken.h>
-#include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Serio/Writer.h>
-#include <Oxygen/Testing/GTest.h>
+#include <stdexcept>
+#include <string_view>
+#include <utility>
 
 #include "Mocks/MockStream.h"
+
+#include <Oxygen/Base/Span.h>
+#include <Oxygen/Content/Internal/DependencyCollector.h>
+#include <Oxygen/Content/LoaderContext.h>
+#include <Oxygen/Content/Loaders/InputActionLoader.h>
+#include <Oxygen/Content/Loaders/InputMappingContextLoader.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SourceOrigin.h>
+#include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/Writer.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::serio::Reader;
 
@@ -62,7 +71,7 @@ protected:
       = std::make_shared<oxygen::content::internal::DependencyCollector>();
     return { oxygen::content::LoaderContext {
                .current_asset_key = oxygen::data::AssetKey {},
-               .source_token = oxygen::content::internal::SourceToken(11U),
+               .source_instance = oxygen::data::SourceInstanceId(11U),
                .desc_reader = &reader_,
                .work_offline = true,
                .dependency_collector = collector,
@@ -128,7 +137,7 @@ NOLINT_TEST_F(InputLoadersTest,
 
   const auto make_asset_key = [](const std::uint8_t seed) {
     auto bytes = std::array<std::uint8_t, AssetKey::kSizeBytes> {};
-    bytes[0] = seed;
+    bytes.at(0) = seed;
     return AssetKey::FromBytes(bytes);
   };
   const AssetKey action_a = make_asset_key(0xAAU);
@@ -191,10 +200,10 @@ NOLINT_TEST_F(InputLoadersTest,
   ASSERT_EQ(asset->GetTriggers().size(), 1U);
   ASSERT_EQ(asset->GetTriggerAuxRecords().size(), 1U);
 
-  const auto slot_name
-    = asset->TryGetString(asset->GetMappings()[0].slot_name_offset);
+  const auto slot_name = asset->TryGetString(
+    oxygen::base::CheckedAt(asset->GetMappings(), 0).slot_name_offset);
   ASSERT_TRUE(slot_name.has_value());
-  EXPECT_EQ(*slot_name, "Keyboard.PageUp");
+  EXPECT_EQ(slot_name, std::optional<std::string_view> { "Keyboard.PageUp" });
 
   const auto& deps = collector->AssetDependencies();
   EXPECT_THAT(deps, ::testing::Contains(action_a));

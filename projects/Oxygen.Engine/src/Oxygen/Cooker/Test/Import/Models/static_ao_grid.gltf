@@ -1,0 +1,469 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "Oxygen AO material validation"
+  },
+  "buffers": [
+    {
+      "uri": "data:application/octet-stream;base64,ZmZmv2ZmZr8AAAAAZmZmP2ZmZr8AAAAAZmZmP2ZmZj8AAAAAZmZmv2ZmZj8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAgD8AAIA/AAAAAAAAgD8AAAEAAgAAAAIAAwA=",
+      "byteLength": 140
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 48
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 48,
+      "byteLength": 48
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 96,
+      "byteLength": 32
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 128,
+      "byteLength": 12
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 4,
+      "type": "VEC3",
+      "min": [
+        -0.9,
+        -0.9,
+        0
+      ],
+      "max": [
+        0.9,
+        0.9,
+        0
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 4,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 4,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 6,
+      "type": "SCALAR"
+    }
+  ],
+  "images": [
+    {
+      "uri": "static_textured_checker.png"
+    },
+    {
+      "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAD0lEQVR4nGNgOMOAQMRxAEvDDMGKi0kSAAAAAElFTkSuQmCC"
+    },
+    {
+      "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAD0lEQVR4nGOYiQQYiOMAAOoyHLGFEARbAAAAAElFTkSuQmCC"
+    }
+  ],
+  "textures": [
+    {
+      "source": 0
+    },
+    {
+      "source": 1
+    },
+    {
+      "source": 2
+    }
+  ],
+  "materials": [
+    {
+      "name": "NoAO",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.7,
+          0.7,
+          0.7,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 1,
+        "metallicRoughnessTexture": {
+          "index": 1
+        }
+      }
+    },
+    {
+      "name": "SharedStrength0",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.7,
+          0.7,
+          0.7,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 1,
+        "metallicRoughnessTexture": {
+          "index": 1
+        }
+      },
+      "occlusionTexture": {
+        "index": 1,
+        "strength": 0
+      }
+    },
+    {
+      "name": "SharedStrengthHalf",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.7,
+          0.7,
+          0.7,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 1,
+        "metallicRoughnessTexture": {
+          "index": 1
+        }
+      },
+      "occlusionTexture": {
+        "index": 1,
+        "strength": 0.5
+      }
+    },
+    {
+      "name": "SharedStrength1",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.7,
+          0.7,
+          0.7,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 1,
+        "metallicRoughnessTexture": {
+          "index": 1
+        }
+      },
+      "occlusionTexture": {
+        "index": 1,
+        "strength": 1
+      }
+    },
+    {
+      "name": "SeparateStrength0",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.7,
+          0.7,
+          0.7,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 1,
+        "metallicRoughnessTexture": {
+          "index": 1
+        }
+      },
+      "occlusionTexture": {
+        "index": 2,
+        "strength": 0
+      }
+    },
+    {
+      "name": "SeparateStrengthHalf",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.7,
+          0.7,
+          0.7,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 1,
+        "metallicRoughnessTexture": {
+          "index": 1
+        }
+      },
+      "occlusionTexture": {
+        "index": 2,
+        "strength": 0.5
+      }
+    },
+    {
+      "name": "SeparateStrength1",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.7,
+          0.7,
+          0.7,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 1,
+        "metallicRoughnessTexture": {
+          "index": 1
+        }
+      },
+      "occlusionTexture": {
+        "index": 2,
+        "strength": 1
+      }
+    },
+    {
+      "name": "NoAOReference",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.7,
+          0.7,
+          0.7,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 1,
+        "metallicRoughnessTexture": {
+          "index": 1
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "NoAO",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0
+        }
+      ]
+    },
+    {
+      "name": "SharedStrength0",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 1
+        }
+      ]
+    },
+    {
+      "name": "SharedStrengthHalf",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 2
+        }
+      ]
+    },
+    {
+      "name": "SharedStrength1",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 3
+        }
+      ]
+    },
+    {
+      "name": "SeparateStrength0",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 4
+        }
+      ]
+    },
+    {
+      "name": "SeparateStrengthHalf",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 5
+        }
+      ]
+    },
+    {
+      "name": "SeparateStrength1",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 6
+        }
+      ]
+    },
+    {
+      "name": "NoAOReference",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 7
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "NoAO",
+      "mesh": 0,
+      "translation": [
+        -3.1500000000000004,
+        1.05,
+        0
+      ]
+    },
+    {
+      "name": "SharedStrength0",
+      "mesh": 1,
+      "translation": [
+        -1.05,
+        1.05,
+        0
+      ]
+    },
+    {
+      "name": "SharedStrengthHalf",
+      "mesh": 2,
+      "translation": [
+        1.05,
+        1.05,
+        0
+      ]
+    },
+    {
+      "name": "SharedStrength1",
+      "mesh": 3,
+      "translation": [
+        3.1500000000000004,
+        1.05,
+        0
+      ]
+    },
+    {
+      "name": "SeparateStrength0",
+      "mesh": 4,
+      "translation": [
+        -3.1500000000000004,
+        -1.05,
+        0
+      ]
+    },
+    {
+      "name": "SeparateStrengthHalf",
+      "mesh": 5,
+      "translation": [
+        -1.05,
+        -1.05,
+        0
+      ]
+    },
+    {
+      "name": "SeparateStrength1",
+      "mesh": 6,
+      "translation": [
+        1.05,
+        -1.05,
+        0
+      ]
+    },
+    {
+      "name": "NoAOReference",
+      "mesh": 7,
+      "translation": [
+        3.1500000000000004,
+        -1.05,
+        0
+      ]
+    },
+    {
+      "name": "AOValidationCamera",
+      "camera": 0,
+      "translation": [
+        0,
+        0,
+        11
+      ]
+    }
+  ],
+  "cameras": [
+    {
+      "type": "perspective",
+      "perspective": {
+        "yfov": 0.7853981633974483,
+        "znear": 0.1,
+        "zfar": 100
+      }
+    }
+  ],
+  "scenes": [
+    {
+      "nodes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    }
+  ],
+  "scene": 0
+}

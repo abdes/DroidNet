@@ -13,10 +13,14 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/TextureResourceLocator.h>
-
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
 namespace oxygen::content {
@@ -33,6 +37,20 @@ class Scene;
 }
 
 namespace oxygen::interop::module {
+struct CookedRootBinding;
+
+//! New edits validate their observed revision; saved assignments retain identity.
+enum class MaterialSlotAssignmentIntent : std::uint8_t {
+  kObservedEdit = 0,
+  kRetainedAssignment = 1,
+};
+
+//! Native target captured from the currently observed authored geometry.
+struct MaterialSlotTarget final {
+  std::string geometry_uri;
+  data::MaterialSlotId slot_id;
+  base::Sha256Digest layout_revision {};
+};
 
 //! Scene-session request authority. Only completion callbacks are thread-safe;
 //! all other operations belong to the editor's scene-mutation phase.
@@ -70,24 +88,30 @@ public:
                      AssetAvailability available, TextureLoader texture_loader);
   ~SceneAssetRequests();
 
-  SceneAssetRequests(const SceneAssetRequests &) = delete;
-  auto operator=(const SceneAssetRequests &) -> SceneAssetRequests & = delete;
+  OXYGEN_MAKE_NON_COPYABLE(SceneAssetRequests)
+  OXYGEN_MAKE_NON_MOVABLE(SceneAssetRequests)
 
   //! Begin before resolving or consulting caches, so failed requests supersede.
   auto BeginGeometry(scene::NodeHandle node, const std::string &uri,
                      FailureCallback on_failure = {}, SuccessCallback on_success = {})
       -> GeometryCompletion;
   void LoadGeometry(const std::string &uri, GeometryCompletion complete);
-  void SetMaterial(scene::NodeHandle node, std::size_t slot,
-                   const std::string &uri, FailureCallback on_failure = {},
+  void SetMaterial(scene::NodeHandle node, MaterialSlotTarget target,
+                   const std::optional<std::string>& uri, MaterialSlotAssignmentIntent intent,
+                   FailureCallback on_failure = {},
                    SuccessCallback on_success = {});
   void Detach(scene::NodeHandle node);
 
   //! Supersede pending mask work and apply the complete revision when ready.
   void SetExposureMask(scene::Scene& scene,
     std::optional<content::TextureResourceLocator> locator, TextureApply apply,
-    FailureCallback on_failure = {}, SuccessCallback on_success = {});
+    FailureCallback on_failure = {}, SuccessCallback on_success = {},
+    std::optional<std::wstring> project_mount = {});
   [[nodiscard]] auto InspectExposureMask() const -> ExposureMaskStatus;
+
+  //! Accept the same immutable bindings as the native mount owners.
+  void SetCookedRoots(
+    std::shared_ptr<const std::vector<CookedRootBinding>> roots) noexcept;
 
   //! Re-request current bindings after mounted sources have been refreshed.
   //! Existing scene objects remain usable until their replacements arrive.
@@ -101,6 +125,9 @@ public:
   void Drain(scene::Scene &scene);
 
 private:
+  void QueueMaterial(scene::NodeHandle node, MaterialSlotTarget target,
+    const std::optional<std::string>& uri, MaterialSlotAssignmentIntent intent, FailureCallback on_failure,
+    SuccessCallback on_success, std::optional<data::AssetKey> accepted_geometry);
   struct State;
   std::unique_ptr<State> state_;
 };

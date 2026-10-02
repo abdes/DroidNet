@@ -9,6 +9,7 @@ using DroidNet.Documents;
 using DroidNet.TimeMachine;
 using Microsoft.UI;
 using Oxygen.Editor.ContentBrowser.Messages;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
@@ -40,6 +41,8 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// <param name="messenger">The messenger.</param>
 /// <param name="operationResults">The operation results.</param>
 /// <param name="statusReducer">The status reducer.</param>
+/// <param name="materialSlots">The native geometry inventory reader.</param>
+/// <param name="projectContexts">The active project lifetime.</param>
 public sealed partial class SceneDocumentCommandService(
     Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService automaticCooking,
     ISceneExplorerService sceneExplorerService,
@@ -50,10 +53,11 @@ public sealed partial class SceneDocumentCommandService(
     WindowId windowId,
     IMessenger messenger,
     IOperationResultPublisher operationResults,
-    IStatusReducer statusReducer) : ISceneDocumentCommandService
+    IStatusReducer statusReducer,
+    IGeometryMaterialSlotProvider materialSlots,
+    IProjectContextService projectContexts) : ISceneDocumentCommandService
 {
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Scene, SemaphoreSlim> SaveGates = [];
-    private static readonly Uri EmptyMaterialUri = new($"{AssetUris.Scheme}:///__uninitialized__");
 
     private readonly ISceneExplorerService sceneExplorerService = sceneExplorerService;
     private readonly ISceneSelectionService selectionService = selectionService;
@@ -210,75 +214,6 @@ public sealed partial class SceneDocumentCommandService(
     {
         using var authoring = EnterAuthoring(context);
         return authoring is null ? new(Succeeded: false) : await this.EditGeometryCoreAsync(context, nodeIds, edit, session).ConfigureAwait(true);
-    }
-
-    /// <inheritdoc />
-    public async Task<SceneCommandResult> EditMaterialSlotAsync(
-        SceneDocumentCommandContext context,
-        IReadOnlyList<Guid> nodeIds,
-        int slotIndex,
-        Uri? newMaterialUri,
-        EditSessionToken session)
-    {
-        using var authoring = EnterAuthoring(context);
-        if (authoring is null)
-        {
-            return new SceneCommandResult(Succeeded: false);
-        }
-
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(nodeIds);
-        ArgumentNullException.ThrowIfNull(session);
-
-        if (SkipUncommittedSession(session) is { } sessionResult)
-        {
-            return sessionResult;
-        }
-
-        if (slotIndex != 0)
-        {
-            return this.ValidationFailure(
-                SceneOperationKinds.EditMaterialSlot,
-                SceneDiagnosticCodes.ComponentAddDenied,
-                "Material slot was not edited",
-                "ED-M04 supports only geometry material slot 0.",
-                context);
-        }
-
-        var targets = ResolveNodes(context.Scene, nodeIds)
-            .Select(static node => new { Node = node, Geometry = node.Components.OfType<GeometryComponent>().FirstOrDefault() })
-            .Where(static target => target.Geometry is not null)
-            .ToList();
-        if (targets.Count == 0)
-        {
-            return this.ValidationFailure(
-                SceneOperationKinds.EditMaterialSlot,
-                SceneDiagnosticCodes.ComponentRemoveDenied,
-                "Material slot was not edited",
-                "No selected node has a geometry component.",
-                context);
-        }
-
-        var before = targets.ConvertAll(static target => MaterialSlotState.Capture(target.Node, target.Geometry!));
-        foreach (var target in targets)
-        {
-            ApplyMaterialSlotEdit(target.Geometry!, newMaterialUri);
-        }
-
-        var after = targets.ConvertAll(static target => MaterialSlotState.Capture(target.Node, target.Geometry!));
-        if (MaterialSlotStatesEqual(before, after))
-        {
-            return SceneCommandResult.Success;
-        }
-
-        this.RecordMaterialSlotHistory(context, before, after);
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        var operationResultId = await this.SyncEditedNodesAsync(
-            context,
-            targets.ConvertAll(static target => target.Node),
-            SceneOperationKinds.EditMaterialSlot,
-            node => this.sceneEngineSync.UpdateMaterialSlotAsync(context.Scene, node, slotIndex, newMaterialUri)).ConfigureAwait(true);
-        return new SceneCommandResult(Succeeded: true, operationResultId);
     }
 
     /// <inheritdoc />
@@ -1136,28 +1071,6 @@ public sealed partial class SceneDocumentCommandService(
             HeightFogContribution = Math.Max(0.0f, value.HeightFogContribution),
         };
 
-    private static void ApplyMaterialSlotEdit(GeometryComponent geometry, Uri? materialUri)
-    {
-        var slot = geometry.OverrideSlots.OfType<MaterialsSlot>().FirstOrDefault();
-        if (slot is null)
-        {
-            slot = new MaterialsSlot();
-            geometry.OverrideSlots.Add(slot);
-        }
-
-        slot.Material = new AssetReference<MaterialAsset>(materialUri ?? EmptyMaterialUri);
-    }
-
-
-
-
-
-
-
-
-
-
-
     private static bool GeometryStatesEqual(IReadOnlyList<GeometryState> before, IReadOnlyList<GeometryState> after)
     {
         if (before.Count != after.Count)
@@ -1177,34 +1090,8 @@ public sealed partial class SceneDocumentCommandService(
         return true;
     }
 
-    private static bool MaterialSlotStatesEqual(IReadOnlyList<MaterialSlotState> before, IReadOnlyList<MaterialSlotState> after)
-    {
-        if (before.Count != after.Count)
-        {
-            return false;
-        }
-
-        for (var i = 0; i < before.Count; i++)
-        {
-            if (before[i].Node.Id != after[i].Node.Id ||
-                before[i].HasSlot != after[i].HasSlot ||
-                !UriValuesEqual(before[i].MaterialUri, after[i].MaterialUri))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     private static bool UriValuesEqual(Uri? left, Uri? right)
         => left == right || (left is not null && right is not null && string.Equals(left.ToString(), right.ToString(), StringComparison.Ordinal));
-
-    private static bool IsEmptyMaterialUri(Uri? uri)
-        => UriValuesEqual(uri, EmptyMaterialUri);
-
-    private static Uri? ToMaterialSyncUri(Uri? uri)
-        => IsEmptyMaterialUri(uri) ? null : uri;
 
     private static bool CanAddComponent(SceneNode node, Type componentType, out string reason)
     {
@@ -1569,27 +1456,6 @@ public sealed partial class SceneDocumentCommandService(
         context.History.AddChange("Reapply Geometry", async () => await this.ApplyGeometryStatesForHistoryAsync(context, inverse, states).ConfigureAwait(true));
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
         _ = await this.SyncGeometryStatesAsync(context, states, SceneOperationKinds.EditGeometry).ConfigureAwait(true);
-    }
-
-    private void RecordMaterialSlotHistory(SceneDocumentCommandContext context, IReadOnlyList<MaterialSlotState> before, IReadOnlyList<MaterialSlotState> after)
-        => context.History.AddChange("Restore Material Slot", async () => await this.ApplyMaterialSlotStatesForHistoryAsync(context, before, after).ConfigureAwait(true));
-
-    private async Task ApplyMaterialSlotStatesForHistoryAsync(SceneDocumentCommandContext context, IReadOnlyList<MaterialSlotState> states, IReadOnlyList<MaterialSlotState> inverse)
-    {
-        using var authoring = EnterAuthoring(context);
-        if (authoring is null)
-        {
-            return;
-        }
-
-        foreach (var state in states)
-        {
-            state.Apply();
-        }
-
-        context.History.AddChange("Reapply Material Slot", async () => await this.ApplyMaterialSlotStatesForHistoryAsync(context, inverse, states).ConfigureAwait(true));
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        _ = await this.SyncEditedNodesAsync(context, states.Select(static state => state.Node).ToList(), SceneOperationKinds.EditMaterialSlot, node => this.sceneEngineSync.UpdateMaterialSlotAsync(context.Scene, node, 0, ToMaterialSyncUri(states.First(state => state.Node == node).MaterialUri))).ConfigureAwait(true);
     }
 
     private void RecordCameraHistory(SceneDocumentCommandContext context, IReadOnlyList<CameraState> before, IReadOnlyList<CameraState> after)
@@ -1998,31 +1864,6 @@ public sealed partial class SceneDocumentCommandService(
 
         public void Apply()
             => this.Geometry.Geometry = this.GeometryUri is null ? null : new AssetReference<GeometryAsset>(this.GeometryUri);
-    }
-
-    private sealed record MaterialSlotState(SceneNode Node, GeometryComponent Geometry, bool HasSlot, Uri? MaterialUri)
-    {
-        public static MaterialSlotState Capture(SceneNode node, GeometryComponent geometry)
-        {
-            var slot = geometry.OverrideSlots.OfType<MaterialsSlot>().FirstOrDefault();
-            return new(node, geometry, slot is not null, slot?.Material.Uri);
-        }
-
-        public void Apply()
-        {
-            if (!this.HasSlot)
-            {
-                var slot = this.Geometry.OverrideSlots.OfType<MaterialsSlot>().FirstOrDefault();
-                if (slot is not null)
-                {
-                    _ = this.Geometry.OverrideSlots.Remove(slot);
-                }
-
-                return;
-            }
-
-            ApplyMaterialSlotEdit(this.Geometry, this.MaterialUri);
-        }
     }
 
     private sealed record CameraState(SceneNode Node, PerspectiveCamera Camera, float FieldOfView, float AspectRatio, float NearPlane, float FarPlane)

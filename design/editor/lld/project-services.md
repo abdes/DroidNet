@@ -13,18 +13,18 @@ workspace UI, content pipeline execution, engine mounts, or native interop.
 
 ## 2. PRD Traceability
 
-| ID | Coverage |
-| --- | --- |
+| ID        | Coverage                                                                                           |
+| --------- | -------------------------------------------------------------------------------------------------- |
 | `REQ-002` | Project open/create services support Project Browser workflows and invalid project classification. |
-| `REQ-003` | Project state exposes enough persisted context for workspace restoration. |
-| `REQ-017` | Project content roots and authoring mounts provide the source identity basis for assets. |
-| `REQ-018` | Project policy can identify descriptor/cooked roots for later pipeline milestones. |
-| `REQ-019` | Project cook scope is defined as policy, not hardcoded in UI. |
-| `REQ-020` | Content Browser can derive browsable roots from project content-root policy. |
-| `REQ-021` | Asset references use project mount identity rather than cooked filesystem paths. |
-| `REQ-022` | Project workflows return typed results to the caller. |
-| `REQ-024` | Project load/save failures expose useful diagnostics. |
-| `REQ-036` | Project content-root policy supports predictable browser navigation and creation targets. |
+| `REQ-003` | Project state exposes enough persisted context for workspace restoration.                          |
+| `REQ-017` | Project content roots and authoring mounts provide the source identity basis for assets.           |
+| `REQ-018` | Project policy can identify descriptor/cooked roots for later pipeline milestones.                 |
+| `REQ-019` | Project cook scope is defined as policy, not hardcoded in UI.                                      |
+| `REQ-020` | Content Browser can derive browsable roots from project content-root policy.                       |
+| `REQ-021` | Asset references use project mount identity rather than cooked filesystem paths.                   |
+| `REQ-022` | Project workflows return typed results to the caller.                                              |
+| `REQ-024` | Project load/save failures expose useful diagnostics.                                              |
+| `REQ-036` | Project content-root policy supports predictable browser navigation and creation targets.          |
 
 ## 3. Architecture Links
 
@@ -125,14 +125,14 @@ Target invariants:
 
 ## 6. Ownership
 
-| Owner | Responsibility |
-| --- | --- |
-| `Oxygen.Editor.Projects` | project metadata, project validation, active project context, future project settings ownership, authoring/local roots, cook scope policy |
-| `Oxygen.Editor.ProjectBrowser` | project discovery UX, create/open request UI, recent-project presentation |
-| `Oxygen.Editor.Data` | persistent recent usage, per-project restoration hints, settings storage |
-| `Oxygen.Editor.World` | shared project and scene-domain abstractions consumed by authoring features |
-| `Oxygen.Editor.ContentPipeline` | descriptor generation, import/cook execution, cooked validation |
-| `Oxygen.Editor.Runtime` | engine lifecycle and cooked-root mounts based on project policy |
+| Owner                           | Responsibility                                                                                                                            |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `Oxygen.Editor.Projects`        | project metadata, project validation, active project context, future project settings ownership, authoring/local roots, cook scope policy |
+| `Oxygen.Editor.ProjectBrowser`  | project discovery UX, create/open request UI, recent-project presentation                                                                 |
+| `Oxygen.Editor.Data`            | persistent recent usage, per-project restoration hints, settings storage                                                                  |
+| `Oxygen.Editor.World`           | shared project and scene-domain abstractions consumed by authoring features                                                               |
+| `Oxygen.Editor.ContentPipeline` | descriptor generation, import/cook execution, cooked validation                                                                           |
+| `Oxygen.Editor.Runtime`         | engine lifecycle and cooked-root mounts based on project policy                                                                           |
 
 Required cleanup: `ProjectManagerService` no longer performs scene cooking, but
 the brownfield `IProjectManagerService.SaveSceneAsync` scene-persistence method
@@ -286,12 +286,11 @@ project cooked-root policy. Full selected roots, descriptor roots, scene/asset
 selection, and pipeline execution are owned by `content-pipeline.md` in ED-M07.
 Cook scope is a declarative input. It must not perform cooking.
 
-For ED-M06, the browser reads cooked-root policy through
-`IProjectCookScopeProvider` / `ProjectCookScope.CookedOutputRoot` when
-resolving diagnostic paths and displaying derived cooked entries. It should not
-continue hardcoding `.cooked/<MountName>` outside the project catalog
-composition layer. It must not use cook scope to redirect authored identities
-or to execute cook.
+The browser resolves physical output through a retained publication snapshot.
+`ProjectCookScope.CookedOutputRoot` names the derived storage area; it does not
+map asset identities to selected generations. Catalog records and cooking status
+share the captured root bindings described in content-pipeline section 16.
+Authored identities remain logical, and browsing never cooks.
 
 ## 8. Commands, Services, Or Adapters
 

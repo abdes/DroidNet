@@ -5,9 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
-#include <cctype>
+#include <atomic>
 #include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <span>
@@ -16,10 +17,17 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import {
 
@@ -52,112 +60,6 @@ namespace {
     return std::vector<std::byte>(bytes.begin(), bytes.end());
   }
 
-  [[nodiscard]] auto Fnv1a64(const std::string_view text) -> uint64_t
-  {
-    constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
-    constexpr uint64_t kFnvPrime = 1099511628211ULL;
-    auto hash = kFnvOffsetBasis;
-    for (const auto c : text) {
-      hash ^= static_cast<uint64_t>(static_cast<unsigned char>(c));
-      hash *= kFnvPrime;
-    }
-    return hash;
-  }
-
-  [[nodiscard]] auto Hex64(const uint64_t value) -> std::string
-  {
-    constexpr std::array kDigits {
-      '0',
-      '1',
-      '2',
-      '3',
-      '4',
-      '5',
-      '6',
-      '7',
-      '8',
-      '9',
-      'a',
-      'b',
-      'c',
-      'd',
-      'e',
-      'f',
-    };
-
-    auto out = std::string(16, '0');
-    for (size_t i = 0; i < out.size(); ++i) {
-      const auto shift = static_cast<unsigned>((out.size() - 1U - i) * 4U);
-      out[i] = kDigits[(value >> shift) & 0xFU];
-    }
-    return out;
-  }
-
-  [[nodiscard]] auto ExtractLeafStem(const std::string_view text) -> std::string
-  {
-    auto normalized = std::string(text);
-    std::replace(normalized.begin(), normalized.end(), '\\', '/');
-
-    const auto slash_pos = normalized.find_last_of('/');
-    auto leaf = (slash_pos == std::string::npos)
-      ? normalized
-      : normalized.substr(slash_pos + 1U);
-
-    const auto dot_pos = leaf.find_last_of('.');
-    if (dot_pos != std::string::npos) {
-      leaf.resize(dot_pos);
-    }
-
-    return leaf;
-  }
-
-  [[nodiscard]] auto SanitizeStem(
-    std::string stem, const std::string_view fallback) -> std::string
-  {
-    if (stem.empty()) {
-      stem = std::string(fallback);
-    }
-
-    std::string out;
-    out.reserve(stem.size());
-
-    auto last_was_underscore = false;
-    for (const auto ch : stem) {
-      const auto u = static_cast<unsigned char>(ch);
-      const bool keep = std::isalnum(u) != 0 || ch == '_' || ch == '-';
-      const char normalized = keep ? static_cast<char>(ch) : '_';
-      if (normalized == '_') {
-        if (!last_was_underscore) {
-          out.push_back('_');
-        }
-        last_was_underscore = true;
-      } else {
-        out.push_back(normalized);
-        last_was_underscore = false;
-      }
-    }
-
-    while (!out.empty() && out.front() == '_') {
-      out.erase(out.begin());
-    }
-    while (!out.empty() && out.back() == '_') {
-      out.pop_back();
-    }
-
-    if (out.empty()) {
-      return std::string(fallback);
-    }
-    return out;
-  }
-
-  [[nodiscard]] auto BuildStem(std::string_view name_hint,
-    std::string_view stable_id, std::string_view fallback) -> std::string
-  {
-    const auto base = SanitizeStem(ExtractLeafStem(name_hint), fallback);
-    const auto id_source = stable_id.empty() ? name_hint : stable_id;
-    return base + "_" + Hex64(Fnv1a64(id_source));
-  }
-
 } // namespace
 
 ResourceDescriptorEmitter::ResourceDescriptorEmitter(
@@ -174,16 +76,32 @@ auto ResourceDescriptorEmitter::EmitTexture(std::string_view name_hint,
   const data::pak::core::ResourceIndexT resource_index,
   const data::pak::core::TextureResourceDesc& descriptor) -> std::string
 {
+  return EmitTextureAtRelPath(
+    layout_.TextureDescriptorRelPath(name_hint, stable_id), resource_index,
+    descriptor);
+}
+
+auto ResourceDescriptorEmitter::EmitTextureAtRelPath(
+  const std::string_view relpath,
+  const data::pak::core::ResourceIndexT resource_index,
+  const data::pak::core::TextureResourceDesc& descriptor) -> std::string
+{
+  const auto path = std::filesystem::path(relpath);
+  if (path.empty() || path.has_root_path()
+    || std::ranges::any_of(
+      path, [](const auto& part) { return part == ".."; })) {
+    throw std::invalid_argument(
+      "texture descriptor path must remain within its cooked root");
+  }
+
   TextureSidecarFile file {};
   file.resource_index = resource_index;
   file.descriptor = descriptor;
 
-  const auto stem = BuildStem(name_hint, stable_id, "texture");
-  auto relpath = layout_.TextureDescriptorRelPath(stem);
   auto bytes = std::make_shared<std::vector<std::byte>>(SerializePod(file));
-  record_sizes_[relpath] = bytes->size();
-  QueueWrite(std::move(relpath), std::move(bytes));
-  return layout_.TextureDescriptorRelPath(stem);
+  record_sizes_.insert_or_assign(std::string(relpath), bytes->size());
+  QueueWrite(std::string(relpath), std::move(bytes));
+  return std::string(relpath);
 }
 
 auto ResourceDescriptorEmitter::EmitBuffer(std::string_view name_hint,
@@ -192,14 +110,13 @@ auto ResourceDescriptorEmitter::EmitBuffer(std::string_view name_hint,
   const data::pak::core::BufferResourceDesc& descriptor,
   const std::span<const internal::BufferDescriptorView> views) -> std::string
 {
-  const auto stem = BuildStem(name_hint, stable_id, "buffer");
-  auto relpath = layout_.BufferDescriptorRelPath(stem);
+  auto relpath = layout_.BufferDescriptorRelPath(name_hint, stable_id);
   auto bytes = std::make_shared<std::vector<std::byte>>(
     internal::SerializeBufferDescriptorSidecar(
       resource_index, descriptor, views));
   record_sizes_[relpath] = bytes->size();
-  QueueWrite(std::move(relpath), std::move(bytes));
-  return layout_.BufferDescriptorRelPath(stem);
+  QueueWrite(relpath, std::move(bytes));
+  return relpath;
 }
 
 auto ResourceDescriptorEmitter::EmitBufferAtRelPath(
@@ -234,8 +151,8 @@ auto ResourceDescriptorEmitter::QueueWrite(
       .overwrite = true,
       .share_write = true,
     },
-    [this, relpath = std::move(relpath), bytes](
-      const FileErrorInfo& error, [[maybe_unused]] uint64_t bytes_written) {
+    [this, relpath = std::move(relpath), bytes](const FileErrorInfo& error,
+      [[maybe_unused]] uint64_t bytes_written) -> void {
       OnWriteComplete(relpath, error);
     });
 }
@@ -249,6 +166,9 @@ auto ResourceDescriptorEmitter::OnWriteComplete(
   }
 
   error_count_.fetch_add(1, std::memory_order_acq_rel);
+  if (!first_error_) {
+    first_error_ = error;
+  }
   LOG_F(ERROR, "resource descriptor write failed '{}': {}", relpath,
     error.ToString());
 }
@@ -263,25 +183,23 @@ auto ResourceDescriptorEmitter::Records() const -> std::vector<Record>
       .size_bytes = size,
     });
   }
-  std::ranges::sort(records, [](const Record& lhs, const Record& rhs) {
+  std::ranges::sort(records, [](const Record& lhs, const Record& rhs) -> bool {
     return lhs.relpath < rhs.relpath;
   });
   return records;
 }
 
-auto ResourceDescriptorEmitter::Finalize() -> co::Co<bool>
+auto ResourceDescriptorEmitter::Finalize()
+  -> co::Co<Result<void, FileErrorInfo>>
 {
-  auto flush_result = co_await file_writer_.Flush();
-  if (!flush_result.has_value()) {
-    LOG_F(ERROR, "resource descriptor emitter flush failed: {}",
-      flush_result.error().ToString());
-    co_return false;
+  const auto flush_result = co_await file_writer_.Flush();
+  if (first_error_) {
+    co_return Result<void, FileErrorInfo>::Err(*first_error_);
   }
-
-  if (error_count_.load(std::memory_order_acquire) > 0U) {
-    co_return false;
+  if (!flush_result) {
+    co_return Result<void, FileErrorInfo>::Err(flush_result.error());
   }
-  co_return true;
+  co_return Result<void, FileErrorInfo>::Ok();
 }
 
 } // namespace oxygen::content::import

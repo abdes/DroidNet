@@ -37,7 +37,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         var reader = new DelegateStatusReader((_, _, _) =>
         {
             _ = Interlocked.Increment(ref reads);
-            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, HasVerifiedOutput: true, [], [], []) { SourcePaths = [path], SavedSourceHash = sourceHash }]);
+            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []) { SourcePaths = [path], SavedSourceHash = sourceHash }]);
         });
         var unavailableRuntime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
         await using var runtimeLifetime = unavailableRuntime.ConfigureAwait(false);
@@ -57,7 +57,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         owner.UpdateState(initial with { IsDirty = true });
         _ = rows.Single().PrimaryBadge.Should().Be("Unsaved changes");
         _ = choices.Single(choice => choice.MaterialUri == uri).StatusText.Should().Be(rows.Single().PrimaryBadge);
-        _ = rows.Single().CookStatus!.HasVerifiedOutput.Should().BeTrue();
+        _ = rows.Single().CookStatus!.HasAvailableOutput.Should().BeTrue();
         owner.UpdateState(initial);
         _ = rows.Single().PrimaryBadge.Should().Be("Cooked");
         owner.UpdateState(initial with { IsDirty = true });
@@ -93,7 +93,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         var reader = new DelegateStatusReader((_, uris, _) =>
         {
             _ = Interlocked.Increment(ref reads);
-            return Task.FromResult<IReadOnlyList<AssetCookStatus>>(uris.Select(uri => new AssetCookStatus(uri, AssetCookFreshness.Current, HasPublishedOutput: true, HasVerifiedOutput: true, [], [], [])).ToArray());
+            return Task.FromResult<IReadOnlyList<AssetCookStatus>>(uris.Select(uri => new AssetCookStatus(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], [])).ToArray());
         });
         var unavailableRuntime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
         await using var runtimeLifetime = unavailableRuntime.ConfigureAwait(false);
@@ -123,7 +123,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         runs = [run];
         cookService.Raise(service => service.RunChanged += null, new CookRunChangedEventArgs(run));
         _ = rows.Count(row => string.Equals(row.PrimaryBadge, "Cooking", StringComparison.Ordinal)).Should().Be(affected);
-        _ = rows.Should().OnlyContain(row => row.CookStatus!.HasVerifiedOutput);
+        _ = rows.Should().OnlyContain(row => row.CookStatus!.HasAvailableOutput);
         _ = reads.Should().Be(1);
     }
 
@@ -153,7 +153,7 @@ public sealed partial class ContentBrowserAssetProviderTests
                 await release.Task.WaitAsync(token).ConfigureAwait(false);
             }
 
-            return [new(uri, changed ? AssetCookFreshness.OutOfDate : AssetCookFreshness.Current, HasPublishedOutput: true, HasVerifiedOutput: true, [], [], []) { SourcePaths = [path], SavedSourceHash = changed ? "new" : "old" }];
+            return [new(uri, changed ? AssetCookFreshness.OutOfDate : AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []) { SourcePaths = [path], SavedSourceHash = changed ? "new" : "old" }];
         });
         var catalog = new TestProjectAssetCatalog([new AssetRecord(uri)]);
         var unavailableRuntime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
@@ -177,7 +177,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         release.SetResult();
         await published.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = reads.Should().Be(2);
-        _ = rows.Single().CookStatus!.HasVerifiedOutput.Should().BeTrue();
+        _ = rows.Single().CookStatus!.HasAvailableOutput.Should().BeTrue();
     }
 
     /// <summary>Completed cooks refresh output evidence once, including successful automatic cooks.</summary>
@@ -201,7 +201,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         var reader = new DelegateStatusReader((_, _, _) =>
         {
             var complete = Interlocked.Increment(ref reads) > 1;
-            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(uri, complete ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate, HasPublishedOutput: true, HasVerifiedOutput: true, [], [], [])]);
+            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(uri, complete ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], [])]);
         });
         var unavailableRuntime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
         await using var runtimeLifetime = unavailableRuntime.ConfigureAwait(false);

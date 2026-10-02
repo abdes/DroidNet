@@ -227,11 +227,14 @@ public sealed partial class SceneEngineSync
 
     private static void ApplyMaterialOverrides(WorldDispatch world, SceneNode node, GeometryComponent geometry)
     {
-        var slots = geometry.OverrideSlots.OfType<MaterialsSlot>().ToList();
-        for (var index = 0; index < slots.Count; index++)
+        foreach (var slot in geometry.OverrideSlots.OfType<MaterialsSlot>())
         {
-            var materialUri = slots[index].Material.Uri;
-            world.Execute(new RuntimeSetMaterialOverride(node.Id, index, MaterialOverridePathMapper.ToEnginePath(materialUri)));
+            world.Execute(new RuntimeSetMaterialOverride(
+                node.Id,
+                GeometryPathMapper.ToEnginePath(slot.Target.GeometryUri),
+                slot.Target.SlotId,
+                slot.Target.LayoutRevision,
+                MaterialOverridePathMapper.ToEnginePath(slot.Material.Uri), MaterialSlotAssignmentIntent.RetainedAssignment));
         }
     }
 

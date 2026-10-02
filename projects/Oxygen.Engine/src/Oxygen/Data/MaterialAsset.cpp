@@ -6,9 +6,9 @@
 
 #pragma once
 
-#include <Oxygen/Data/MaterialAsset.h>
-
 #include <algorithm>
+
+#include <Oxygen/Data/MaterialAsset.h>
 
 using oxygen::data::MaterialAsset;
 namespace {
@@ -112,23 +112,6 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
     desc.metalness = Unorm16 { 0.0f }; // Non-metallic
     desc.roughness = Unorm16 { 0.8f }; // Fairly rough (diffuse-like)
     desc.ambient_occlusion = Unorm16 { 1.0f }; // No AO
-
-    // Texture indices - fallback texture. Sampling is disabled via flags.
-    desc.base_color_texture = pak::core::kFallbackResourceIndex;
-    desc.normal_texture = pak::core::kFallbackResourceIndex;
-    desc.metallic_texture = pak::core::kFallbackResourceIndex;
-    desc.roughness_texture = pak::core::kFallbackResourceIndex;
-    desc.ambient_occlusion_texture = pak::core::kFallbackResourceIndex;
-
-    // Tier 1/2 texture indices - fallback texture. Sampling is disabled via
-    // flags.
-    desc.emissive_texture = pak::core::kFallbackResourceIndex;
-    desc.specular_texture = pak::core::kFallbackResourceIndex;
-    desc.sheen_color_texture = pak::core::kFallbackResourceIndex;
-    desc.clearcoat_texture = pak::core::kFallbackResourceIndex;
-    desc.clearcoat_normal_texture = pak::core::kFallbackResourceIndex;
-    desc.transmission_texture = pak::core::kFallbackResourceIndex;
-    desc.thickness_texture = pak::core::kFallbackResourceIndex;
 
     desc.uv_scale[0] = 1.0f;
     desc.uv_scale[1] = 1.0f;

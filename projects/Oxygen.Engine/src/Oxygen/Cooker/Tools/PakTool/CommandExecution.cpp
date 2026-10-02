@@ -4,12 +4,23 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <utility>
+#include <filesystem>
+#include <string>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Pak/PakBuildPhase.h>
+#include <Oxygen/Cooker/Pak/PakBuildReport.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
+#include <Oxygen/Cooker/Pak/PakBuildResult.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/Pak/PakCatalogIo.h>
+#include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
+#include <Oxygen/Cooker/Tools/PakTool/BuildReportJson.h>
 #include <Oxygen/Cooker/Tools/PakTool/CommandExecution.h>
+#include <Oxygen/Cooker/Tools/PakTool/PakToolOptions.h>
+#include <Oxygen/Cooker/Tools/PakTool/RequestPreparation.h>
+#include <Oxygen/Cooker/Tools/PakTool/RequestSnapshot.h>
 #include <Oxygen/Cooker/Tools/PakTool/ScriptSealing.h>
 
 namespace oxygen::content::pak::tool {
@@ -276,7 +287,8 @@ auto ExecutePakToolCommand(const pak::BuildMode mode, std::string command,
     ? request.publication_plan.pak.final_path.parent_path()
     : std::filesystem::temp_directory_path();
   const auto sealed_request
-    = SealLooseCookedSourcesForPakBuild(request.build_request, sealing_parent);
+    = SealLooseCookedSourcesForPakBuild(request.build_request, sealing_parent,
+      request.request_snapshot.script_source_roots);
   if (!sealed_request.has_value()) {
     LogScriptSealingFailure(sealed_request.error());
     command_result.exit_code = PakToolExitCode::kPreparationFailure;

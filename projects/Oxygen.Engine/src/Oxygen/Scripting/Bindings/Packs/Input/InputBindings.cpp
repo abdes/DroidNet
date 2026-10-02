@@ -56,14 +56,12 @@ namespace {
   {
     if (lua_type(state, arg_index) != LUA_TSTRING) {
       (void)luaL_error(state, "%s", error_message);
-      return {};
     }
     const auto* value = lua_tostring(state, arg_index);
     const std::string_view value_sv
       = value == nullptr ? std::string_view {} : std::string_view(value);
     if (value_sv.empty()) {
       (void)luaL_error(state, "%s", error_message);
-      return {};
     }
     return value_sv;
   }
@@ -78,13 +76,11 @@ namespace {
       (void)luaL_error(state,
         "oxygen.input action registration expects options table as arg #4 "
         "when provided");
-      return kLuaNoResults;
     }
 
     if (lua_isfunction(state, lua_upvalueindex(kLuaUpvalue1)) == 0) {
       (void)luaL_error(state,
         "oxygen.input is not bound to a valid events registration function");
-      return kLuaNoResults;
     }
 
     lua_pushvalue(state, lua_upvalueindex(kLuaUpvalue1));
@@ -118,7 +114,6 @@ namespace {
     if (!IsSupportedEdge(edge_name)) {
       (void)luaL_error(state, "oxygen.input.event_name unsupported edge '%s'",
         std::string(edge_name).c_str());
-      return kLuaNoResults;
     }
 
     const auto event_name = BuildActionEdgeEventName(action_name, edge_name);
@@ -135,12 +130,10 @@ namespace {
     if (lua_isfunction(state, kLuaArg3) == 0) {
       (void)luaL_error(
         state, "oxygen.input.on_action expects callback as arg #3");
-      return kLuaNoResults;
     }
     if (!IsSupportedEdge(edge_name)) {
       (void)luaL_error(state, "oxygen.input.on_action unsupported edge '%s'",
         std::string(edge_name).c_str());
-      return kLuaNoResults;
     }
 
     const auto event_name = BuildActionEdgeEventName(action_name, edge_name);

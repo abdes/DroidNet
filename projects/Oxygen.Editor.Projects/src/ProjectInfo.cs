@@ -134,7 +134,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     /// <param name="json">The JSON string to deserialize.</param>
     /// <returns>The deserialized <see cref="IProjectInfo" /> object.</returns>
     /// <exception cref="JsonException">Thrown when the JSON does not contain a valid non-empty id.</exception>
-    internal static IProjectInfo FromJson(string json)
+    public static IProjectInfo FromJson(string json)
     {
         // First check that the JSON contains a valid, non-empty id property to provide a clear JsonException
         using var doc = JsonDocument.Parse(json);
@@ -175,7 +175,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     /// </summary>
     /// <param name="projectInfo">The <see cref="IProjectInfo" /> object to serialize.</param>
     /// <returns>The JSON string representation of the <see cref="IProjectInfo" /> object.</returns>
-    internal static string ToJson(IProjectInfo projectInfo)
+    public static string ToJson(IProjectInfo projectInfo)
     {
         var descriptor = new ProjectManifestDescriptor
         {

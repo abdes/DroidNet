@@ -5,16 +5,24 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
+#include <cstddef>
 #include <cstring>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/ScriptingSidecarImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptingSidecarImportPipeline.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import::detail {
 
@@ -67,8 +75,7 @@ auto ScriptingSidecarImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   EnsureCookedRoot();
 
-  auto session = ImportSession(Request(), FileReader(), FileWriter(),
-    ThreadPool(), TableRegistry(), IndexRegistry());
+  auto& session = Session();
 
   if (Request().options.scripting.import_kind
     != ScriptingImportKind::kScriptingSidecar) {
@@ -94,12 +101,11 @@ auto ScriptingSidecarImportJob::ExecuteAsync() -> co::Co<ImportReport>
   ReportPhaseProgress(
     ImportPhase::kWorking, 0.5F, "Applying scripting sidecar...");
 
-  auto pipeline
-    = ScriptingSidecarImportPipeline(ScriptingSidecarImportPipeline::Config {
+  auto& pipeline = CreatePipeline<ScriptingSidecarImportPipeline>(
+    ScriptingSidecarImportPipeline::Config {
       .queue_capacity = Concurrency().scene.queue_capacity,
       .worker_count = Concurrency().scene.workers,
     });
-  StartPipeline(pipeline);
 
   co_await pipeline.Submit(ScriptingSidecarImportPipeline::WorkItem {
     .source_id = Request().source_path.string(),
@@ -153,6 +159,7 @@ auto ScriptingSidecarImportJob::LoadSource(ImportSession& session)
       "Scripting sidecar import requires source_path or inline_bindings_json");
     co_return LoadedSource {
       .success = false,
+      .bytes = {},
     };
   }
 
@@ -163,6 +170,7 @@ auto ScriptingSidecarImportJob::LoadSource(ImportSession& session)
       "Async file reader is not available");
     co_return LoadedSource {
       .success = false,
+      .bytes = {},
     };
   }
 
@@ -173,6 +181,7 @@ auto ScriptingSidecarImportJob::LoadSource(ImportSession& session)
       "Failed to read source file: " + read.error().ToString());
     co_return LoadedSource {
       .success = false,
+      .bytes = {},
     };
   }
 

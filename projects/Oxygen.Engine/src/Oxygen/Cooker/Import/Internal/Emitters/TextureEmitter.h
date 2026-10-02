@@ -18,6 +18,8 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
@@ -30,7 +32,6 @@
 namespace oxygen::content::import {
 
 class IAsyncFileWriter;
-struct FileErrorInfo;
 
 //! Emits cooked textures with async I/O.
 /*!
@@ -43,7 +44,7 @@ struct FileErrorInfo;
 
  - Texture resource index `data::pak::core::kFallbackResourceIndex` is reserved
  for the fallback texture.
- - The fallback entry is ensured on the first call to `Emit()` or
+ - The fallback entry is ensured by `EnsureFallbackTexture()`, `Emit()` or
     `Finalize()`.
 
  ### Design Principles
@@ -116,7 +117,7 @@ public:
       = DedupCollisionPolicy::kWarnKeepFirst;
 
     //! Optional sink used to publish collision diagnostics.
-    std::function<void(ImportDiagnostic)> on_dedup_diagnostic;
+    std::function<void(ImportDiagnostic)> on_dedup_diagnostic {};
   };
 
   //! Runtime statistics for the emitter.
@@ -176,6 +177,10 @@ public:
   OXGN_COOK_NDAPI auto Emit(
     CookedTexturePayload cooked, std::string_view signature_salt) -> uint32_t;
 
+  //! Ensure the reserved fallback payload and descriptor before publishing its
+  //! index.
+  OXGN_COOK_API auto EnsureFallbackTexture() -> void;
+
   //=== State Query
   //===-------------------------------------------------------//
 
@@ -194,16 +199,17 @@ public:
    This method:
    1. Waits for all pending async writes to complete.
 
-   @return True if all writes succeeded, false if any errors occurred.
+   @return Success or the first I/O failure, including its path and system
+   error.
 
    ### Errors
 
    If any I/O errors occurred during `Emit()` calls, this method returns
-   false. The caller should check `ErrorCount()` for details.
+   the first failure. The caller should check `ErrorCount()` for details.
 
    @note Must be called from the import thread.
   */
-  OXGN_COOK_NDAPI auto Finalize() -> co::Co<bool>;
+  OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, FileErrorInfo>>;
 
 private:
   using TextureResourceDesc = data::pak::core::TextureResourceDesc;
@@ -230,7 +236,6 @@ private:
   auto UpdateDataFileSize(uint64_t new_size) -> void;
   auto RecordEmissionSignature(const std::string& signature) -> void;
 
-  auto EnsureFallbackTexture() -> void;
   auto CreateFallbackPayload() const -> CookedTexturePayload;
   auto ToPakDescriptor(const CookedTexturePayload& cooked,
     uint64_t data_offset) const -> TextureResourceDesc;
@@ -248,6 +253,7 @@ private:
   std::atomic<uint64_t> data_file_size_ { 0 };
   std::atomic<size_t> pending_count_ { 0 };
   std::atomic<size_t> error_count_ { 0 };
+  std::optional<FileErrorInfo> first_error_ {}; // Import-thread callbacks.
 };
 
 } // namespace oxygen::content::import

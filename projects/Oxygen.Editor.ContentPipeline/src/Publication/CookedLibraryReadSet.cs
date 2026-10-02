@@ -60,12 +60,12 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                 {
                     CookOutputLease.RejectReparsePoint(path);
                     files = await CookOutputReadLease.AcquireAsync(path, cancellationToken).ConfigureAwait(false);
-                    using var catalog = new LooseCookedIndexAssetCatalog(new NativeStorageProvider(new RealFileSystem()), new LooseCookedIndexAssetCatalogOptions { CookedRootFolderPath = path });
+                    var index = await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false);
+                    using var catalog = new LooseCookedIndexAssetCatalog(index.Index, path);
                     var records = await catalog.QueryAsync(new(AssetQueryScope.All), cancellationToken).ConfigureAwait(false);
-                    await files.VerifyDescriptorsAsync(records, cancellationToken).ConfigureAwait(false);
-                    var fingerprint = await CookedDependencyCache.FingerprintAsync(files, cancellationToken).ConfigureAwait(false);
+                    var fingerprint = index.Fingerprint;
                     var metadata = await CookedDependencyCache.ReadAsync(project.ProjectRoot, fingerprint, records, cancellationToken).ConfigureAwait(false);
-                    result.roots.Add(new(mount.Name, path, records, fingerprint, files) { Dependencies = metadata });
+                    result.roots.Add(new(mount.Name, path, records, fingerprint, files) { SourceKey = index.Index.SourceGuid, Dependencies = metadata });
                     files = null;
                 }
                 catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException)
@@ -114,6 +114,22 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         return asset is not null && !this.ProjectSourceWins(nativeUri, root);
     }
 
+    /// <summary>Finds the selected library asset while this read set retains its files.</summary>
+    /// <param name="uri">The authored or cooked identity.</param>
+    /// <returns>The preferred physical root and index entry, or null when the project wins.</returns>
+    public (string CookedRoot, AssetRecord Asset)? FindPreferredAsset(Uri uri)
+    {
+        var nativeUri = uri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? new Uri(uri.AbsoluteUri[..^5]) : uri;
+        var (root, asset) = this.FindUri(nativeUri);
+        if (asset is null || this.ProjectSourceWins(nativeUri, root))
+        {
+            return null;
+        }
+
+        var selected = this.FindKey(asset.Cooked!.AssetKey.ToString());
+        return (selected.root.Path, selected.asset);
+    }
+
     /// <summary>Resolves embedded keys separately from authored virtual-path references.</summary>
     /// <param name="consumer">The source whose dependency closure is being captured.</param>
     /// <param name="references">Direct authored references read from this source.</param>
@@ -150,9 +166,17 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                 continue;
             }
 
-            foreach (var dependency in metadata.Dependencies)
+            foreach (var reference in metadata.KeyReferences.Where(static reference => reference.TargetKind == CookedKeyReferenceTargetKind.Asset))
             {
+                var dependency = reference.AssetKey;
                 var found = this.FindKey(dependency);
+                if (found.asset?.Cooked is { } target && !MatchesExpectedAssetType(reference, target))
+                {
+                    diagnostics.Add(Issue(consumer, "asset_cook.library_type_mismatch",
+                        $"Library asset key '{dependency}' has type {target.AssetType}, but the native reference expects type {reference.ExpectedAssetType}."));
+                    continue;
+                }
+
                 var candidate = found.asset is null || this.ProjectSourceWins(found.asset.Uri, found.root)
                     ? await this.ResolveProjectKeyAsync(dependency, inspector as ICookedAssetKeyProvider, operationRoot, artifacts, cancellationToken).ConfigureAwait(false) : null;
                 if (candidate is not null && (found.asset is null || this.ProjectHasPriority(found.root)))
@@ -227,13 +251,6 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
             }
         }
 
-        var usedRoots = graph.CookedDependencies.Values.SelectMany(static bindings => bindings).Select(static binding => binding.RootPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var unused in this.roots.Where(root => !usedRoots.Contains(root.Path)).ToArray())
-        {
-            unused.Reader.Dispose();
-            _ = this.roots.Remove(unused);
-        }
-
         return graph with { Diagnostics = diagnostics.ToImmutable() };
 
         void AddIssue(Uri uri, string code, string message)
@@ -248,6 +265,31 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     /// <summary>Uses the same saved low-to-high source order as runtime mounting.</summary>
     /// <param name="projectRoots">The operation's staged and reusable project roots.</param>
     /// <returns>Native lookup roots ordered from lowest to highest priority.</returns>
+    internal ImmutableArray<CookPublicationRoot> OrderBindings(IEnumerable<CookPublicationRoot> projectRoots)
+    {
+        if (this.failures.Count != 0)
+        {
+            throw new InvalidDataException("Cooked libraries could not be read: "
+                + string.Join("; ", this.failures.Select(static failure => failure.name + ": " + failure.message)));
+        }
+
+        var owned = projectRoots.OrderBy(static root => root.Name, StringComparer.Ordinal).ToArray();
+        var result = new List<CookPublicationRoot>();
+        foreach (var source in this.order)
+        {
+            if (source.Kind == CookedContentSourceKind.ProjectOutput)
+            {
+                result.AddRange(owned);
+            }
+            else if (this.roots.FirstOrDefault(root => string.Equals(root.Name, source.Name, StringComparison.OrdinalIgnoreCase)) is { } library)
+            {
+                result.Add(new(CookPublicationRootOwner.Library, library.Name, library.SourceKey, library.Fingerprint, library.Path));
+            }
+        }
+
+        return [.. result.AsEnumerable().Reverse().DistinctBy(root => root.ResolvePath(this.projectRoot), StringComparer.OrdinalIgnoreCase).Reverse()];
+    }
+
     public IReadOnlyList<string> OrderRoots(IEnumerable<string> projectRoots)
     {
         var paths = this.order.SelectMany(source => source.Kind == CookedContentSourceKind.ProjectOutput ? projectRoots.Order(StringComparer.Ordinal)
@@ -263,7 +305,8 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     {
         foreach (var root in this.roots)
         {
-            var result = await native.ValidateLooseCookedRootAsync(root.Path, cancellationToken).ConfigureAwait(false);
+            var inventory = await root.Reader.ReadInventoryAsync(native, cancellationToken).ConfigureAwait(false);
+            var result = inventory.ToValidation(root.Path);
             if (!result.Succeeded)
             {
                 throw new CookInputDiscoveryException(result.Diagnostics);
@@ -293,6 +336,9 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
 
     private static bool HasProjectOwner(CookDependencyGraph graph, Uri uri)
         => graph.Assets.Any(input => input.OwnsOutput(uri.AbsolutePath));
+
+    internal static bool MatchesExpectedAssetType(CookedKeyReference reference, CookedAssetMetadata target)
+        => reference.ExpectedAssetType == 0 || target.AssetType == reference.ExpectedAssetType;
 
     private static DiagnosticRecord Issue(ContentCookInput consumer, string code, string message)
         => new() { OperationId = Guid.Empty, Domain = FailureDomain.AssetCook, Severity = DiagnosticSeverity.Error, Code = code, Message = message, AffectedPath = consumer.SourceAbsolutePath, AffectedVirtualPath = consumer.AssetUri.AbsolutePath };
@@ -351,6 +397,8 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
 
     private sealed record Root(string Name, string Path, IReadOnlyList<AssetRecord> Assets, string Fingerprint, CookOutputReadLease Reader)
     {
+        public required Guid SourceKey { get; init; }
+
         public CookedDependencyReport? Dependencies { get; set; }
     }
 }

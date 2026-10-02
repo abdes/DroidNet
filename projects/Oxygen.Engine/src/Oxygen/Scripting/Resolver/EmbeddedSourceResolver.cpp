@@ -14,7 +14,8 @@ namespace oxygen::scripting {
 namespace {
 
   auto LoadEmbeddedBlob(const IScriptSourceResolver::ResolveRequest& request,
-    const uint32_t index) -> IScriptSourceResolver::ResolveResult
+    const data::ResourceReferenceIndex index)
+    -> IScriptSourceResolver::ResolveResult
   {
     if (!request.load_script_resource) {
       return IScriptSourceResolver::ResolveResult {
@@ -30,7 +31,7 @@ namespace {
         .ok = false,
         .blob = {},
         .error_message = "embedded script resource not found for index "
-          + std::to_string(index),
+          + std::to_string(index.get()),
       };
     }
     if (resource->GetData().empty()) {
@@ -38,7 +39,7 @@ namespace {
         .ok = false,
         .blob = {},
         .error_message = "embedded script resource is empty for index "
-          + std::to_string(index),
+          + std::to_string(index.get()),
       };
     }
 
@@ -59,7 +60,7 @@ namespace {
           resource->GetLanguage(), resource->GetCompression(),
           resource->GetContentHash(), origin,
           ScriptBlobCanonicalName {
-            "embedded-resource:" + std::to_string(index) }) },
+            "embedded-resource:" + std::to_string(index.get()) }) },
         .error_message = {},
       };
     } else if (resource->GetEncoding()
@@ -73,7 +74,7 @@ namespace {
           resource->GetLanguage(), resource->GetCompression(),
           resource->GetContentHash(), origin,
           ScriptBlobCanonicalName {
-            "embedded-resource:" + std::to_string(index) }) },
+            "embedded-resource:" + std::to_string(index.get()) }) },
         .error_message = {},
       };
     } else {
@@ -92,14 +93,14 @@ auto EmbeddedSourceResolver::Resolve(
   -> IScriptSourceResolver::ResolveResult
 {
   const auto& asset = request.asset.get();
-  const std::array<uint32_t, 2> preferred_indices {
+  const std::array<data::ResourceReferenceIndex, 2> preferred_indices {
     asset.GetBytecodeResourceIndex(),
     asset.GetSourceResourceIndex(),
   };
 
   for (size_t i = 0; i < preferred_indices.size(); ++i) {
     const auto index = preferred_indices.at(i);
-    if (index == data::pak::core::kNoResourceIndex) {
+    if (index == data::kNoResourceReference) {
       continue;
     }
     if (i == 1 && index == preferred_indices[0]) {

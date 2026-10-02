@@ -16,7 +16,7 @@ This spec is implementation-facing and must be treated as the source contract fo
 4. output layout,
 5. dependency planning,
 6. diagnostics,
-7. parity closure against legacy PakGen physics workflows.
+7. native authoring-to-runtime physics integration.
 
 ## 1. Objective and Parity Target
 
@@ -28,7 +28,7 @@ Objective:
 
 Parity target:
 
-1. The manifest-based cooker must represent the same physics authoring surface required by existing PakGen scene+physics specs (including practical coverage exemplified by `Examples/Content/physics_domains_park_spec.yaml` patterns).
+1. The manifest-based cooker supports the maintained physics scenarios under `Examples/Content/scenes/` through native JSON descriptors.
 
 Authoring intent:
 

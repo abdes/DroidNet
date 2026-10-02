@@ -6,25 +6,48 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
+#include <exception>
 #include <filesystem>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
+#include <vector>
 
+#include <fmt/format.h>
+
+#include <Oxygen/Base/EnumIndexedArray.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Composition/Typed.h>
+#include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Config/PathFinder.h>
+#include <Oxygen/Config/PathFinderConfig.h>
+#include <Oxygen/Console/CVar.h>
+#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Console/StartupPlan.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Core/Time/PhysicalClock.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/ModuleEvent.h>
+#include <Oxygen/Engine/ModuleManager.h>
 #include <Oxygen/Engine/Scripting/ScriptCompilationService.h>
 #include <Oxygen/Engine/Scripting/ScriptHotReloadService.h>
 #include <Oxygen/Engine/TimeManager.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Input/InputSystem.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Platform/Platform.h>
 
@@ -90,7 +113,7 @@ namespace {
     {
       const auto duration
         = duration_cast<microseconds>(clock_.Since(start_).get());
-      stage_timings_[phase_] = duration;
+      stage_timings_.at(phase_) = duration;
     }
 
     StageTimings& stage_timings_;
@@ -161,6 +184,7 @@ auto AsyncEngine::Run() -> void
     if (asset_loader_) {
       co_await nursery_->Start(
         &oxygen::content::AssetLoader::ActivateAsync, asset_loader_.get());
+      asset_loader_->Run();
     }
     co_await nursery_->Start(
       &scripting::ScriptCompilationService::ActivateAsync,
@@ -421,7 +445,7 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
     // Publish to FrameContext only once the frame is fully complete.
     PhaseTimer::StageTimings working_stage_timings {};
     for (const auto phase : enum_as_index<core::PhaseId>) {
-      working_stage_timings[phase] = std::chrono::microseconds(0);
+      working_stage_timings.at(phase) = std::chrono::microseconds(0);
     }
 
     // Fence polling, epoch advance, deferred destruction retirement
@@ -634,6 +658,9 @@ auto AsyncEngine::PhaseFrameStart(observer_ptr<FrameContext> context)
   context->SetCurrentPhase(
     PhaseId::kFrameStart, internal::EngineTagFactory::Get());
   frame_start_ts_ = GetPhysicalClock().Now();
+  if (asset_loader_) {
+    asset_loader_->ProcessPendingReleases();
+  }
 
   // TODO: setup all the properties of context that need to be set
 
@@ -925,7 +952,9 @@ auto AsyncEngine::PhaseInput(observer_ptr<FrameContext> context) -> co::Co<>
   // available early in the frame to subsequent phases. The FrameContext
   // contract requires SetInputSnapshot to be called during kInput.
   const auto input_sys_opt = module_manager_->GetModule<InputSystem>();
-  DCHECK_F(input_sys_opt.has_value());
+  if (!input_sys_opt) {
+    throw std::logic_error("InputSystem is required during the input phase");
+  }
   const auto& input_sys = input_sys_opt.value().get();
   if (auto snap = input_sys.GetCurrentSnapshot()) {
     // Publish type-erased input snapshot directly as blob

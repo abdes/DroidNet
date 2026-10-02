@@ -19,8 +19,6 @@
 #include <variant>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Data/ScriptAsset.h>
@@ -32,6 +30,7 @@
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 #include <Oxygen/Scripting/Resolver/ScriptSourceResolver.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::scripting::test {
 
@@ -45,12 +44,8 @@ namespace {
   }
 
   struct ScriptAssetResourceIndices {
-    data::pak::core::ResourceIndexT bytecode_index {
-      data::pak::core::kNoResourceIndex
-    };
-    data::pak::core::ResourceIndexT source_index {
-      data::pak::core::kNoResourceIndex
-    };
+    data::ResourceReferenceIndex bytecode_index { data::kNoResourceReference };
+    data::ResourceReferenceIndex source_index { data::kNoResourceReference };
   };
 
   auto MakeScriptAsset(std::string_view external_source,
@@ -143,8 +138,8 @@ NOLINT_TEST_F(
 {
   const auto asset = MakeScriptAsset("external.luau",
     ScriptAssetResourceIndices {
-      .bytecode_index = data::pak::core::ResourceIndexT { 1u },
-      .source_index = data::pak::core::ResourceIndexT { 2u },
+      .bytecode_index = data::ResourceReferenceIndex { 1u },
+      .source_index = data::ResourceReferenceIndex { 2u },
     },
     data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
 
@@ -156,11 +151,11 @@ NOLINT_TEST_F(
   const auto result = Resolver().Resolve({
     .asset = *asset,
     .load_script_resource =
-      [bytecode, source](const uint32_t index) {
-        if (index == 1) {
+      [bytecode, source](const data::ResourceReferenceIndex index) {
+        if (index.get() == 1) {
           return bytecode;
         }
-        if (index == 2) {
+        if (index.get() == 2) {
           return source;
         }
         return std::shared_ptr<const data::ScriptResource> {};
@@ -187,7 +182,7 @@ NOLINT_TEST_F(
   const auto result = Resolver().Resolve({
     .asset = *asset,
     .load_script_resource =
-      [](const uint32_t) {
+      [](const data::ResourceReferenceIndex) {
         return std::shared_ptr<const data::ScriptResource> {};
       },
     .map_resource_origin = {},
@@ -212,7 +207,7 @@ NOLINT_TEST_F(
   const auto first = Resolver().Resolve({
     .asset = *asset,
     .load_script_resource =
-      [](const uint32_t) {
+      [](const data::ResourceReferenceIndex) {
         return std::shared_ptr<const data::ScriptResource> {};
       },
     .map_resource_origin = {},
@@ -230,7 +225,7 @@ NOLINT_TEST_F(
   const auto second = Resolver().Resolve({
     .asset = *asset,
     .load_script_resource =
-      [](const uint32_t) {
+      [](const data::ResourceReferenceIndex) {
         return std::shared_ptr<const data::ScriptResource> {};
       },
     .map_resource_origin = {},
@@ -253,7 +248,7 @@ NOLINT_TEST_F(ScriptSourceResolverTest, ResolveRejectsAbsoluteExternalPath)
   const auto result = Resolver().Resolve({
     .asset = *asset,
     .load_script_resource =
-      [](const uint32_t) {
+      [](const data::ResourceReferenceIndex) {
         return std::shared_ptr<const data::ScriptResource> {};
       },
     .map_resource_origin = {},
@@ -272,7 +267,7 @@ NOLINT_TEST_F(ScriptSourceResolverTest, ResolveRejectsParentTraversalPath)
   const auto result = Resolver().Resolve({
     .asset = *asset,
     .load_script_resource =
-      [](const uint32_t) {
+      [](const data::ResourceReferenceIndex) {
         return std::shared_ptr<const data::ScriptResource> {};
       },
     .map_resource_origin = {},
@@ -287,8 +282,8 @@ NOLINT_TEST_F(ScriptSourceResolverTest, ResolveUsesMappedLooseCookedOrigin)
 {
   const auto asset = MakeScriptAsset({},
     ScriptAssetResourceIndices {
-      .bytecode_index = data::pak::core::ResourceIndexT { 3u },
-      .source_index = data::pak::core::kNoResourceIndex,
+      .bytecode_index = data::ResourceReferenceIndex { 3u },
+      .source_index = data::kNoResourceReference,
     },
     data::pak::scripting::ScriptAssetFlags::kNone);
 
@@ -297,15 +292,15 @@ NOLINT_TEST_F(ScriptSourceResolverTest, ResolveUsesMappedLooseCookedOrigin)
   const auto result = Resolver().Resolve({
     .asset = *asset,
     .load_script_resource =
-      [source](const uint32_t index) {
-        if (index == 3) {
+      [source](const data::ResourceReferenceIndex index) {
+        if (index.get() == 3) {
           return source;
         }
         return std::shared_ptr<const data::ScriptResource> {};
       },
-    .map_resource_origin
-    = [](const uint32_t index) -> std::optional<ScriptBlobOrigin> {
-      if (index == 3) {
+    .map_resource_origin = [](const data::ResourceReferenceIndex index)
+      -> std::optional<ScriptBlobOrigin> {
+      if (index.get() == 3) {
         return ScriptBlobOrigin::kLooseCookedResource;
       }
       return std::nullopt;
@@ -333,7 +328,7 @@ NOLINT_TEST_F(
   const auto resolve_result = Resolver().Resolve({
     .asset = *asset,
     .load_script_resource =
-      [](const uint32_t) {
+      [](const data::ResourceReferenceIndex) {
         return std::shared_ptr<const data::ScriptResource> {};
       },
     .map_resource_origin = {},

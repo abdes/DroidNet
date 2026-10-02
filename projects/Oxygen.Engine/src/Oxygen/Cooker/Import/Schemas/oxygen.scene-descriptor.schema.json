@@ -9,7 +9,7 @@
     },
     "version": {
       "type": "integer",
-      "const": 8
+      "const": 10
     },
     "name": {
       "$ref": "#/definitions/identifier"
@@ -19,7 +19,7 @@
     },
     "nodes": {
       "type": "array",
-      "minItems": 1,
+      "description": "An empty array represents a scene with only scene-level environment settings.",
       "maxItems": 65535,
       "items": {
         "$ref": "#/definitions/node"
@@ -198,8 +198,25 @@
         "geometry_ref": {
           "$ref": "#/definitions/canonical_ogeo_path"
         },
-        "material_ref": {
-          "$ref": "#/definitions/canonical_omat_path"
+        "material_overrides": {
+          "type": "array",
+          "maxItems": 65535,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["slot_id", "material_ref", "layout_revision"],
+            "properties": {
+              "slot_id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              },
+              "material_ref": { "$ref": "#/definitions/canonical_omat_path" },
+              "layout_revision": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
         },
         "visible": {
           "type": "boolean"
@@ -209,7 +226,7 @@
     "perspective_camera": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["node"],
+      "required": ["node", "aspect_mode"],
       "properties": {
         "node": {
           "type": "integer",
@@ -217,7 +234,11 @@
         },
         "fov_y": {
           "type": "number",
-          "exclusiveMinimum": 0.0
+          "exclusiveMinimum": 0.0,
+          "exclusiveMaximum": 3.141592653589793
+        },
+        "aspect_mode": {
+          "enum": ["auto", "fixed"]
         },
         "aspect_ratio": {
           "type": "number",

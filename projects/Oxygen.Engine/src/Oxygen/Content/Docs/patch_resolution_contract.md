@@ -6,7 +6,8 @@ SPDX-License-Identifier: BSD-3-Clause
 
 # Runtime Patch Resolution Contract
 
-This document is normative for Content runtime patch lookup behavior.
+Read [precedence](#precedence-policy), [path lookup](#virtualpath-resolution)
+and [patch admission](#compatibility-validation).
 
 ## Precedence Policy
 
@@ -39,20 +40,25 @@ This guarantees parity between virtual-path and direct asset-key lookups.
 
 ## Compatibility Validation
 
-Patch application must validate `data::PatchManifest::compatibility_envelope`
-against the currently mounted base set before mounting patch tombstones.
+`AddPakFile` reads the archive's embedded `Data::PakCatalog`; callers do not pass
+an external manifest. Declared base records must match the contiguous suffix of
+layers immediately below the patch, comparing SourceKey, content version and
+catalog digest in order. Additional lower-priority layers are allowed. A
+cumulative patch replaces earlier patches built against the same original base.
+There are no compatibility opt-outs.
 
-Validation uses:
+Validate before changing the active mount set. Install source identity and
+embedded deletion records together. Refreshing a lower layer must also preserve
+the requirements of any patch above it. Reject incompatible asset-type overrides.
 
-- mounted runtime source keys,
-- mounted base `data::PakCatalog` snapshots,
-- policy switches from `PatchCompatibilityPolicySnapshot`.
-
-Validation failures are hard errors and patch application must be rejected.
+New asset graphs capture one immutable ordered layer view; all dependencies share
+that view. Existing objects retain their exact bindings. Cache identity includes
+the binding view, while physical resource identity remains source-local. See
+[published generations](loose_cooked_content.md#published-generations).
 
 ## Diagnostics
 
 - When a lower-priority virtual-path mapping is masked by a higher-priority
   mapping, runtime emits a collision warning with winner/masked source IDs and
   keys.
-- Compatibility validation failures emit one diagnostic per violated rule.
+- Invalid patch baselines are errors; mounting leaves the previous view usable.

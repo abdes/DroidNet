@@ -11,6 +11,11 @@
     "name": {
       "type": "string"
     },
+    "virtual_path": {
+      "type": "string",
+      "pattern": "^/[^\\\\:]+\\.otex$",
+      "description": "Exact descriptor output under the effective virtual mount. Omit for hashed resource naming."
+    },
     "content_hashing": {
       "type": "boolean"
     },

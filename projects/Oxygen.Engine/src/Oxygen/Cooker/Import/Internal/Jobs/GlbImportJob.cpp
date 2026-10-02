@@ -5,30 +5,40 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPlanner.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/GlbImportJob.h>
+#include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/WorkDispatcher.h>
 #include <Oxygen/Cooker/Import/Internal/WorkPayloadStore.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 
 namespace oxygen::content::import::detail {
@@ -97,6 +107,14 @@ namespace {
 */
 auto GlbImportJob::ExecuteAsync() -> co::Co<ImportReport>
 {
+  EnsureCookedRoot();
+  auto& session = Session();
+  co_return co_await ExecuteSessionAsync(session);
+}
+
+auto GlbImportJob::ExecuteSessionAsync(ImportSession& session)
+  -> co::Co<ImportReport>
+{
   DLOG_F(INFO, "Starting job: job_id={} path={}", JobId(),
     Request().source_path.string());
 
@@ -135,23 +153,18 @@ auto GlbImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return report;
   };
 
-  EnsureCookedRoot();
-
-  ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool(),
-    TableRegistry(), IndexRegistry());
-
-  ReportPhaseProgress(ImportPhase::kLoading, 0.0f, "Parsing glTF...");
+  ReportPhaseProgress(ImportPhase::kLoading, 0.0F, "Parsing glTF...");
   const auto load_start = std::chrono::steady_clock::now();
   auto asset = co_await ParseAsset(session);
   const auto load_end = std::chrono::steady_clock::now();
   session.AddSourceLoadDuration(MakeDuration(load_start, load_end));
   AddDiagnostics(session, std::move(asset.diagnostics));
   if (asset.canceled || !asset.success) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "glTF parse failed");
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0F, "glTF parse failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  ReportPhaseProgress(ImportPhase::kPlanning, 0.1f, "Building import plan...");
+  ReportPhaseProgress(ImportPhase::kPlanning, 0.1F, "Building import plan...");
   const auto request_copy = Request();
   const auto stop_token = StopToken();
   const auto plan_start = std::chrono::steady_clock::now();
@@ -168,22 +181,23 @@ auto GlbImportJob::ExecuteAsync() -> co::Co<ImportReport>
     });
   AddDiagnostics(session, std::move(plan_outcome.diagnostics));
   if (plan_outcome.canceled || !plan_outcome.plan) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Plan build failed");
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0F, "Plan build failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  ReportPhaseProgress(ImportPhase::kWorking, 0.2f, "Executing plan...");
+  ReportPhaseProgress(ImportPhase::kWorking, 0.2F, "Executing plan...");
   const bool executed = co_await ExecutePlan(*plan_outcome.plan, session);
   if (!executed) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Plan execution failed");
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0F, "Plan execution failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  ReportPhaseProgress(ImportPhase::kFinalizing, 0.9f, "Finalizing import...");
+  ReportPhaseProgress(ImportPhase::kFinalizing, 0.9F, "Finalizing import...");
+  session.MarkMaterialSlotSourceProcessed();
   auto report = co_await FinalizeWithTelemetry(session);
 
   ReportPhaseProgress(
-    report.success ? ImportPhase::kComplete : ImportPhase::kFailed, 1.0f,
+    report.success ? ImportPhase::kComplete : ImportPhase::kFailed, 1.0F,
     report.success ? "Import complete" : "Import failed");
 
   co_return report;
@@ -202,6 +216,7 @@ auto GlbImportJob::ParseAsset(ImportSession& session) -> co::Co<ParsedGlbAsset>
     return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
   };
   auto reader = FileReader();
+  const auto source_snapshot = SourceSnapshot();
   std::shared_ptr<std::vector<std::byte>> source_bytes;
 
   if (reader != nullptr) {
@@ -217,12 +232,15 @@ auto GlbImportJob::ParseAsset(ImportSession& session) -> co::Co<ParsedGlbAsset>
       session.AddDiagnostic(MakeErrorDiagnostic("gltf.read_failed",
         "Failed to read glTF source bytes", request_copy.source_path.string(),
         ""));
+      ParsedGlbAsset failed;
+      failed.success = false;
+      co_return failed;
     }
   }
 
   auto parsed = co_await ThreadPool()->Run(
-    [request_copy, stop_token, naming_service, source_bytes](
-      co::ThreadPool::CancelToken canceled) {
+    [request_copy, stop_token, naming_service, source_bytes, source_snapshot](
+      co::ThreadPool::CancelToken canceled) -> ParsedGlbAsset {
       DLOG_F(1, "Parse asset task begin");
       ParsedGlbAsset out;
       if (canceled || stop_token.stop_requested()) {
@@ -240,6 +258,7 @@ auto GlbImportJob::ParseAsset(ImportSession& session) -> co::Co<ParsedGlbAsset>
         .naming_service = naming_service,
         .stop_token = stop_token,
         .external_texture_bytes = {},
+        .source_snapshot = source_snapshot,
       };
 
       auto adapter = std::make_shared<adapters::GltfAdapter>();
@@ -325,11 +344,11 @@ auto GlbImportJob::BuildPlan(ParsedGlbAsset& asset,
       const auto handle = plan_.payloads.Store(std::move(item));
       auto& payload = plan_.payloads.Material(handle);
       const auto id
-        = plan_.planner.AddMaterialAsset(payload.item.material_name, handle);
+        = plan_.planner.AddMaterialAsset(payload.item.material.name, handle);
       plan_.material_items.push_back(id);
       plan_.material_slots.push_back(id);
 
-      auto add_dep = [&](const MaterialTextureBinding& binding) {
+      auto add_dep = [&](const MaterialTextureBinding& binding) -> void {
         if (!binding.assigned || binding.source_id.empty()) {
           return;
         }
@@ -345,18 +364,9 @@ auto GlbImportJob::BuildPlan(ParsedGlbAsset& asset,
         plan_.planner.AddDependency(id, it->second);
       };
 
-      add_dep(payload.item.textures.base_color);
-      add_dep(payload.item.textures.normal);
-      add_dep(payload.item.textures.metallic);
-      add_dep(payload.item.textures.roughness);
-      add_dep(payload.item.textures.ambient_occlusion);
-      add_dep(payload.item.textures.emissive);
-      add_dep(payload.item.textures.specular);
-      add_dep(payload.item.textures.sheen_color);
-      add_dep(payload.item.textures.clearcoat);
-      add_dep(payload.item.textures.clearcoat_normal);
-      add_dep(payload.item.textures.transmission);
-      add_dep(payload.item.textures.thickness);
+      for (const auto& slot : MaterialSource::TextureSlots()) {
+        add_dep(payload.item.material.textures.*slot.binding);
+      }
 
       return true;
     }
@@ -385,7 +395,8 @@ auto GlbImportJob::BuildPlan(ParsedGlbAsset& asset,
       plan_.planner.AddDependency(geometry_id, mesh_build_id);
       for (const auto slot : payload.item.material_slots_used) {
         if (slot < plan_.material_slots.size()) {
-          plan_.planner.AddDependency(geometry_id, plan_.material_slots[slot]);
+          plan_.planner.AddDependency(
+            geometry_id, plan_.material_slots.at(slot));
         }
       }
       plan_.geometry_items.push_back(geometry_id);
@@ -475,8 +486,8 @@ auto GlbImportJob::ExecutePlan(PlannedGlbImport& plan, ImportSession& session)
     progress = WorkDispatcher::ProgressReporter {
       .job_id = JobId(),
       .on_progress = ProgressCallback(),
-      .overall_start = 0.2f,
-      .overall_end = 0.9f,
+      .overall_start = 0.2F,
+      .overall_end = 0.9F,
     };
   }
   // Keep dispatcher alive for the whole nursery lifetime. Locals declared

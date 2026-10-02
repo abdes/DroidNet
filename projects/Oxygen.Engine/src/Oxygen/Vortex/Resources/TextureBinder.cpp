@@ -14,6 +14,7 @@
 #include <iomanip>
 #include <ios>
 #include <limits>
+#include <list>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -27,6 +28,11 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ScopeGuard.h>
+#ifdef OXYGEN_WITH_TRACY
+#  include <Oxygen/Profiling/CpuProfileScope.h>
+#  include <Oxygen/Profiling/ProfileScope.h>
+#endif
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Types/Geometry.h>
@@ -54,6 +60,7 @@
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 #include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
+#include <Oxygen/Vortex/Upload/UploadTicket.h>
 
 namespace oxygen::vortex::resources {
 
@@ -225,7 +232,7 @@ namespace {
       for (std::uint32_t mip = 0; mip < mip_count; ++mip) {
         const std::size_t idx
           = (static_cast<std::size_t>(layer) * mip_count) + mip;
-        const auto& sr_layout = layouts[idx];
+        const auto& sr_layout = layouts.subspan(idx, 1U).front();
 
         const auto mip_w = (std::max)(desc.width >> mip, 1U);
         const auto mip_h = (std::max)(desc.height >> mip, 1U);
@@ -496,8 +503,11 @@ namespace {
     if (!texture) {
       return;
     }
+    auto release = reclaimer.PrepareDeferredAction(
+      [retained = texture]() mutable { retained.reset(); });
     registry.UnRegisterResource(*texture);
-    reclaimer.RegisterDeferredRelease(std::move(texture));
+    reclaimer.CommitDeferredAction(std::move(release));
+    texture.reset();
   }
 
   //! Generate a magenta/black checkerboard pattern for an error texture.
@@ -548,6 +558,7 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(Impl)
 
   auto OnFrameStart() -> void;
+  auto EnsureFrameResources() -> void;
   auto OnFrameEnd() -> void;
   auto GetOrAllocate(const content::ResourceKey& resource_key)
     -> ShaderVisibleIndex;
@@ -585,6 +596,7 @@ private:
     bool is_placeholder { true };
     bool load_failed { false };
     bool evicted { false };
+    bool eviction_pending { false };
     std::weak_ptr<const ReadyTexture> resident_lease;
 
     std::optional<vortex::upload::UploadTicket> pending_ticket;
@@ -613,6 +625,12 @@ private:
     VersionedBindlessHandle handle;
   };
 
+  struct PendingCompletion {
+    content::ResourceKey key;
+    VersionedBindlessHandle handle;
+    vortex::upload::TicketId ticket_id { 0 };
+  };
+
   struct DeferredRetry {
     content::ResourceKey key;
     VersionedBindlessHandle handle;
@@ -621,6 +639,7 @@ private:
   struct PendingEviction {
     content::ResourceKey key;
     content::EvictionReason reason { content::EvictionReason::kRefCountZero };
+    VersionedBindlessHandle handle;
   };
 
   auto CreatePlaceholderTexture(std::optional<content::ResourceKey> for_key)
@@ -633,6 +652,7 @@ private:
     VersionedBindlessHandle handle,
     std::shared_ptr<data::TextureResource> tex_res) -> void;
 
+  auto DiscardStaleQueuedUploads() -> void;
   auto SubmitQueuedTextureUploads(std::size_t max_bytes) -> void;
   auto ReissueDeferredLoads(std::size_t max_retries) -> void;
 
@@ -640,8 +660,9 @@ private:
     FailurePolicy policy,
     std::shared_ptr<graphics::Texture>&& texture_to_release) -> void;
 
+  auto AcceptEvictions() -> void;
   auto ProcessEvictions() -> void;
-  auto ReleaseEntryTexturesIfOwned(TextureEntry& entry) -> void;
+  auto PublishCompletedUploads() -> void;
 
   [[nodiscard]] auto TryRepointEntryToErrorTexture(
     content::ResourceKey resource_key, const TextureEntry& entry) const -> bool;
@@ -670,6 +691,8 @@ private:
   observer_ptr<vortex::upload::StagingProvider> staging_provider_;
   observer_ptr<content::IAssetLoader> texture_loader_;
   UploadLimits limits_;
+  bool frame_resources_ensured_ { false };
+  std::list<PendingCompletion> pending_completions_;
 
   std::shared_ptr<CallbackGate> callback_gate_;
 
@@ -678,7 +701,11 @@ private:
   std::uint32_t slot_generation_capacity_ { 0U };
 
   mutable std::mutex pending_uploads_mutex_;
-  std::deque<PendingUpload> pending_uploads_;
+  std::list<PendingUpload> pending_uploads_;
+  std::list<PendingUpload>::iterator decoded_cleanup_cursor_ {
+    pending_uploads_.end()
+  };
+  std::size_t decoded_cleanup_remaining_ { 0U };
   std::size_t pending_upload_bytes_ { 0U };
 
   mutable std::mutex deferred_retries_mutex_;
@@ -686,7 +713,9 @@ private:
   std::unordered_set<content::ResourceKey> deferred_retry_keys_;
 
   std::mutex eviction_mutex_;
-  std::deque<PendingEviction> pending_evictions_;
+  std::list<PendingEviction> pending_evictions_;
+  std::atomic_bool has_pending_evictions_ { false };
+  std::list<PendingEviction> eviction_work_;
 
   content::IAssetLoader::EvictionSubscription eviction_subscription_;
 
@@ -727,6 +756,10 @@ TextureBinder::TextureBinder(observer_ptr<Graphics> gfx,
 TextureBinder::~TextureBinder() = default;
 
 auto TextureBinder::OnFrameStart() -> void { impl_->OnFrameStart(); }
+auto TextureBinder::EnsureFrameResources() -> void
+{
+  impl_->EnsureFrameResources();
+}
 
 auto TextureBinder::IsResourceReady(
   const content::ResourceKey& key) const noexcept -> bool
@@ -808,7 +841,7 @@ auto TextureBinder::GetOrAllocate(const content::ResourceKey& resource_key)
 auto TextureBinder::Impl::IsResourceReady(
   const content::ResourceKey& resource_key) const noexcept -> bool
 {
-  if (resource_key.IsPlaceholder()) {
+  if (resource_key.IsPlaceholder() || resource_key.IsError()) {
     return false;
   }
 
@@ -819,7 +852,8 @@ auto TextureBinder::Impl::IsResourceReady(
   }
 
   const auto& entry = it->second;
-  if (entry.load_failed) {
+  if (entry.load_failed
+    || (entry.eviction_pending && entry.resident_lease.expired())) {
     return false;
   }
   if (entry.pending_ticket.has_value()) {
@@ -831,6 +865,9 @@ auto TextureBinder::Impl::IsResourceReady(
 auto TextureBinder::Impl::HasResourceFailed(
   const content::ResourceKey& key) const noexcept -> bool
 {
+  if (key.IsError()) {
+    return true;
+  }
   const auto it = texture_map_.find(key);
   return it != texture_map_.end() && it->second.load_failed;
 }
@@ -857,6 +894,11 @@ auto TextureBinder::Impl::TryGetMipLevels(
   const content::ResourceKey& resource_key) const noexcept
   -> std::optional<std::uint32_t>
 {
+  if (resource_key.IsError()) {
+    return error_texture_
+      ? std::optional { error_texture_->GetDescriptor().mip_levels }
+      : std::nullopt;
+  }
   if (resource_key.IsFallback()) {
     if (placeholder_texture_) {
       return placeholder_texture_->GetDescriptor().mip_levels;
@@ -892,7 +934,11 @@ auto TextureBinder::Impl::GetOrAllocate(
     DLOG_F(6, "GetOrAllocate: fallback sentinel -> placeholder");
     return placeholder_tex_svi_;
   }
+  if (resource_key.IsError()) {
+    return error_text_svi_;
+  }
 
+  AcceptEvictions();
   auto it = texture_map_.find(resource_key);
   if (it != texture_map_.end()) {
     ++cache_hits_;
@@ -1019,6 +1065,9 @@ TextureBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
   DCHECK_NOTNULL_F(uploader_, "UploadCoordinator cannot be null");
   CHECK_NOTNULL_F(texture_loader_, "IAssetLoader cannot be null");
 
+  CHECK_GT_F(limits_.max_completion_visits_per_frame, 0U);
+  CHECK_GT_F(limits_.max_upload_visits_per_frame, 0U);
+  CHECK_GT_F(limits_.max_eviction_visits_per_frame, 0U);
   if (limits_.max_upload_bytes_per_frame == 0U) {
     limits_.max_upload_bytes_per_frame = 1U;
   }
@@ -1056,7 +1105,9 @@ TextureBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
       pending_evictions_.push_back(PendingEviction {
         .key = event.key,
         .reason = event.reason,
+        .handle = {},
       });
+      has_pending_evictions_.store(true, std::memory_order_release);
     });
 
   error_texture_ = CreateErrorTexture();
@@ -1161,9 +1212,30 @@ TextureBinder::Impl::~Impl()
 auto TextureBinder::Impl::OnFrameStart() -> void
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
-  DLOG_SCOPE_F(5, "TextureBinder OnFrameStart");
-  DLOG_F(6, "entries: {}", texture_map_.size());
+  frame_resources_ensured_ = false;
   ProcessEvictions();
+  DiscardStaleQueuedUploads();
+  PublishCompletedUploads();
+}
+
+auto TextureBinder::Impl::EnsureFrameResources() -> void
+{
+  if (frame_resources_ensured_) {
+    return;
+  }
+  frame_resources_ensured_ = true;
+  SubmitQueuedTextureUploads(limits_.max_upload_bytes_per_frame);
+  ReissueDeferredLoads(limits_.max_deferred_retries_per_frame);
+}
+
+auto TextureBinder::Impl::PublishCompletedUploads() -> void
+{
+#ifdef OXYGEN_WITH_TRACY
+  static const profiling::CpuProfileScopeDesc kScope { .label
+    = "Vortex.Texture.PublishCompletedUploads",
+    .category = profiling::ProfileCategory::kUpload };
+  const profiling::CpuProfileScope profile(kScope);
+#endif
   // Drain completed upload tickets and perform SRV repointing on the render
   // thread. This keeps descriptor updates serialized with other render-thread
   // mutations and relies on UploadCoordinator as the authoritative source of
@@ -1175,8 +1247,26 @@ auto TextureBinder::Impl::OnFrameStart() -> void
   auto& registry = gfx_->GetResourceRegistry();
   auto& reclaimer = gfx_->GetDeferredReclaimer();
 
-  for (auto& [resource_key, entry] : texture_map_) {
-    if (!entry.pending_ticket.has_value()) {
+  const auto visits = std::min(
+    pending_completions_.size(), limits_.max_completion_visits_per_frame);
+  for (std::size_t visit = 0; visit < visits; ++visit) {
+    const auto work = pending_completions_.begin();
+    bool handled = false;
+    const ScopeGuard remove_completed([&]() noexcept {
+      if (handled) {
+        pending_completions_.erase(work);
+      }
+    });
+    const auto resource_key = work->key;
+    const auto found = texture_map_.find(resource_key);
+    if (found == texture_map_.end()) {
+      handled = true;
+      continue;
+    }
+    auto& entry = found->second;
+    if (!entry.pending_ticket || entry.pending_ticket->Id() != work->ticket_id
+      || entry.pending_handle != work->handle) {
+      handled = true;
       continue;
     }
 
@@ -1194,25 +1284,32 @@ auto TextureBinder::Impl::OnFrameStart() -> void
       entry.pending_ticket.reset();
       entry.pending_view_desc.reset();
       entry.pending_handle = VersionedBindlessHandle {};
+      handled = true;
       continue;
     }
 
+    if (entry.eviction_pending) {
+      pending_completions_.splice(
+        pending_completions_.end(), pending_completions_, work);
+      continue;
+    }
     const auto ticket = *entry.pending_ticket;
-    const auto maybe_result = uploader_->TryGetResult(ticket);
+    const auto maybe_result = ticket.TryGetResult();
     if (!maybe_result.has_value()) {
-      // Not completed yet
+      pending_completions_.splice(
+        pending_completions_.end(), pending_completions_, work);
       continue;
     }
 
     DLOG_SCOPE_F(4, "Upload completion");
     DLOG_F(4, "resource: {}", resource_key);
-    DLOG_F(4, "ticket: {}", ticket.id);
+    DLOG_F(4, "ticket: {}", ticket.Id());
     DLOG_F(
       4, "descriptor_index: {}", entry.descriptor_handle.ToBindlessHandle());
     DLOG_F(4, "is_placeholder: {}", entry.is_placeholder);
     DLOG_F(4, "load_failed: {}", entry.load_failed);
 
-    DLOG_F(2, "Upload ticket {} completed for resource key {}", ticket.id,
+    DLOG_F(2, "Upload ticket {} completed for resource key {}", ticket.Id(),
       resource_key);
 
     const auto& result = *maybe_result;
@@ -1226,7 +1323,7 @@ auto TextureBinder::Impl::OnFrameStart() -> void
       LOG_F(WARNING,
         "Texture upload failed for resource entry (ticket={}): keeping "
         "placeholder",
-        ticket.id);
+        ticket.Id());
 
       entry.load_failed = true;
       entry.is_placeholder = true;
@@ -1240,42 +1337,41 @@ auto TextureBinder::Impl::OnFrameStart() -> void
         entry.texture = entry.placeholder_texture;
       }
     } else {
-      // Successful upload: repoint the descriptor to the final texture
-      entry.is_placeholder = false;
-      entry.load_failed = false;
-
-      if (!entry.descriptor_handle.IsValid()
-        || !entry.pending_view_desc.has_value()) {
-        entry.pending_ticket.reset();
-        entry.pending_view_desc.reset();
-        continue;
-      }
-
-      const bool updated = registry.UpdateView(*entry.texture,
-        entry.descriptor_handle.ToBindlessHandle(), *entry.pending_view_desc);
-      if (!updated) {
-        LOG_F(ERROR,
-          "Failed to update SRV view after upload completion (ticket={})",
-          ticket.id);
+      if (!entry.descriptor_handle.IsValid() || !entry.pending_view_desc) {
         entry.load_failed = true;
         entry.is_placeholder = true;
-        entry.pending_ticket.reset();
-        entry.pending_view_desc.reset();
-        continue;
-      }
-
-      ++content_revisions_[entry.srv_index];
-      LOG_F(INFO,
-        "Repointed descriptor {} to final texture for resource {} (ticket={})",
-        entry.descriptor_handle.ToBindlessHandle(), resource_key, ticket.id);
-
-      if (entry.placeholder_texture
-        && entry.placeholder_texture != entry.texture
-        && entry.placeholder_texture != placeholder_texture_
-        && entry.placeholder_texture != error_texture_) {
-        DLOG_F(4, "releasing entry placeholder texture");
-        ReleaseTextureNextFrame(
-          registry, reclaimer, std::move(entry.placeholder_texture));
+      } else {
+        const bool release_placeholder = entry.placeholder_texture
+          && entry.placeholder_texture != entry.texture
+          && entry.placeholder_texture != placeholder_texture_
+          && entry.placeholder_texture != error_texture_;
+        auto retirement
+          = graphics::detail::DeferredReclaimer::PreparedDeferredAction {};
+        if (release_placeholder) {
+          retirement = reclaimer.PrepareDeferredAction(
+            [texture = entry.placeholder_texture]() mutable {
+              texture.reset();
+            });
+        }
+        auto& revision = content_revisions_.at(entry.srv_index);
+        const bool updated = registry.UpdateView(*entry.texture,
+          entry.descriptor_handle.ToBindlessHandle(), *entry.pending_view_desc);
+        if (!updated) {
+          entry.load_failed = true;
+          entry.is_placeholder = true;
+          ReleaseTextureNextFrame(
+            registry, reclaimer, std::move(entry.texture));
+          entry.texture = entry.placeholder_texture;
+        } else {
+          if (release_placeholder) {
+            registry.UnRegisterResource(*entry.placeholder_texture);
+            reclaimer.CommitDeferredAction(std::move(retirement));
+            entry.placeholder_texture.reset();
+          }
+          ++revision;
+          entry.is_placeholder = false;
+          entry.load_failed = false;
+        }
       }
     }
 
@@ -1283,10 +1379,8 @@ auto TextureBinder::Impl::OnFrameStart() -> void
     entry.pending_ticket.reset();
     entry.pending_view_desc.reset();
     entry.pending_handle = VersionedBindlessHandle {};
+    handled = true;
   }
-
-  SubmitQueuedTextureUploads(limits_.max_upload_bytes_per_frame);
-  ReissueDeferredLoads(limits_.max_deferred_retries_per_frame);
 }
 
 auto TextureBinder::Impl::OnFrameEnd() -> void { }
@@ -1352,7 +1446,7 @@ auto TextureBinder::Impl::DumpEstimatedTextureMemory(
     PrettyBytes(total_bytes).c_str(), count, emit_count);
 
   for (std::size_t i = 0U; i < emit_count; ++i) {
-    const auto& r = records[i];
+    const auto& r = records.at(i);
     LOG_F(INFO, "  #{} {}: {} ({}, {}x{}x{}, mips={}, layers={})", i + 1U,
       r.key, PrettyBytes(r.bytes).c_str(), to_string(r.desc.format),
       r.desc.width, r.desc.height, r.desc.depth, r.desc.mip_levels,
@@ -1567,10 +1661,6 @@ auto TextureBinder::Impl::OnTextureResourceLoaded(
   } else {
     ++lifecycle_async_enqueued_;
   }
-
-  if (texture_loader_) {
-    (void)texture_loader_->ReleaseResource(resource_key);
-  }
 }
 
 auto TextureBinder::Impl::FindEntryOrLog(
@@ -1619,6 +1709,43 @@ auto TextureBinder::Impl::CurrentDescriptorHandle_(
     CurrentGeneration_(entry) };
 }
 
+auto TextureBinder::Impl::DiscardStaleQueuedUploads() -> void
+{
+  std::size_t visits = 0U;
+  {
+    const std::scoped_lock lock(pending_uploads_mutex_);
+    visits
+      = std::min(pending_uploads_.size(), limits_.max_upload_visits_per_frame);
+  }
+  for (std::size_t visit = 0U; visit < visits; ++visit) {
+    PendingUpload discarded;
+    {
+      const std::scoped_lock lock(pending_uploads_mutex_);
+      // A sweep ends after its original item count, even if producers keep
+      // appending. Otherwise new arrivals can starve an evicted earlier item.
+      if (decoded_cleanup_remaining_ == 0U
+        || decoded_cleanup_cursor_ == pending_uploads_.end()) {
+        decoded_cleanup_cursor_ = pending_uploads_.begin();
+        decoded_cleanup_remaining_ = pending_uploads_.size();
+      }
+      const auto work = decoded_cleanup_cursor_++;
+      --decoded_cleanup_remaining_;
+      const auto entry = texture_map_.find(work->key);
+      if (entry == texture_map_.end() || entry->second.evicted
+        || entry->second.eviction_pending
+        || work->handle != CurrentDescriptorHandle_(entry->second)) {
+        discarded = std::move(*work);
+        if (discarded.resource) {
+          pending_upload_bytes_ -= std::min(
+            pending_upload_bytes_, discarded.resource->GetDataSize());
+        }
+        pending_uploads_.erase(work);
+      }
+    }
+    // Destroy decoded storage outside the producer mutex.
+  }
+}
+
 auto TextureBinder::Impl::SubmitQueuedTextureUploads(
   const std::size_t max_bytes) -> void
 {
@@ -1628,7 +1755,8 @@ auto TextureBinder::Impl::SubmitQueuedTextureUploads(
 
   std::size_t submitted_bytes = 0U;
 
-  for (;;) {
+  for (std::size_t visit = 0; visit < limits_.max_upload_visits_per_frame;
+    ++visit) {
     if (submitted_bytes >= max_bytes) {
       return;
     }
@@ -1639,6 +1767,14 @@ auto TextureBinder::Impl::SubmitQueuedTextureUploads(
       std::scoped_lock lock(pending_uploads_mutex_);
       if (pending_uploads_.empty()) {
         return;
+      }
+      const auto& next = pending_uploads_.front();
+      if (next.resource && submitted_bytes != 0U
+        && next.resource->GetDataSize() > max_bytes - submitted_bytes) {
+        return;
+      }
+      if (decoded_cleanup_cursor_ == pending_uploads_.begin()) {
+        ++decoded_cleanup_cursor_;
       }
       pending = std::move(pending_uploads_.front());
       pending_uploads_.pop_front();
@@ -1655,7 +1791,8 @@ auto TextureBinder::Impl::SubmitQueuedTextureUploads(
     }
     auto& entry = *entry_ptr;
 
-    if (entry.evicted || pending.handle != CurrentDescriptorHandle_(entry)) {
+    if (entry.evicted || entry.eviction_pending
+      || pending.handle != CurrentDescriptorHandle_(entry)) {
       ++lifecycle_stale_discard_count_;
       DLOG_F(4,
         "Discarding pending upload for {} due to eviction/generation mismatch",
@@ -1677,13 +1814,6 @@ auto TextureBinder::Impl::SubmitQueuedTextureUploads(
         "Texture {} requires {} bytes; exceeds per-frame budget {}. Submitting "
         "anyway.",
         pending.key, data_bytes, max_bytes);
-    } else if (submitted_bytes + data_bytes > max_bytes) {
-      {
-        std::scoped_lock lock(pending_uploads_mutex_);
-        pending_upload_bytes_ += pending_bytes;
-        pending_uploads_.push_front(std::move(pending));
-      }
-      return;
     }
 
     DLOG_F(2, "format: {}", pending.resource->GetFormat());
@@ -1720,7 +1850,10 @@ auto TextureBinder::Impl::SubmitQueuedTextureUploads(
         LOG_F(ERROR, "CreateTexture returned null during async load");
         break;
       case PrepareTexture2DUploadFailure::Reason::kLayoutFailure: {
-        DCHECK_F(failure.layout_failure.has_value());
+        if (!failure.layout_failure.has_value()) {
+          LOG_F(ERROR, "Texture upload layout validation failed");
+          break;
+        }
         const auto& lf = *failure.layout_failure;
 
         switch (lf.reason) {
@@ -1802,7 +1935,8 @@ auto TextureBinder::Impl::ReissueDeferredLoads(const std::size_t max_retries)
       continue;
     }
     auto& entry = *entry_ptr;
-    if (entry.evicted || retry.handle != CurrentDescriptorHandle_(entry)
+    if (entry.evicted || entry.eviction_pending
+      || retry.handle != CurrentDescriptorHandle_(entry)
       || entry.pending_ticket.has_value()) {
       continue;
     }
@@ -1825,129 +1959,122 @@ auto TextureBinder::Impl::ReissueDeferredLoads(const std::size_t max_retries)
  @note Evicted entries retain their stable SRV indices; the descriptor is
        repointed to the global placeholder.
 */
-auto TextureBinder::Impl::ProcessEvictions() -> void
+auto TextureBinder::Impl::AcceptEvictions() -> void
 {
-  std::deque<PendingEviction> evictions;
+  if (!has_pending_evictions_.load(std::memory_order_acquire)) {
+    return;
+  }
+  std::list<PendingEviction>::iterator first;
   {
-    std::scoped_lock lock(eviction_mutex_);
+    const std::scoped_lock lock(eviction_mutex_);
     if (pending_evictions_.empty()) {
+      has_pending_evictions_.store(false, std::memory_order_release);
       return;
     }
-    evictions.swap(pending_evictions_);
+    first = pending_evictions_.begin();
+    eviction_work_.splice(eviction_work_.end(), pending_evictions_);
+    has_pending_evictions_.store(false, std::memory_order_release);
   }
+  for (auto it = first; it != eviction_work_.end();) {
+    const auto entry = texture_map_.find(it->key);
+    if (entry == texture_map_.end() || entry->second.evicted) {
+      it = eviction_work_.erase(it);
+      continue;
+    }
+    it->handle = CurrentDescriptorHandle_(entry->second);
+    entry->second.eviction_pending = true;
+    ++it;
+  }
+}
 
-  DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
+auto TextureBinder::Impl::ProcessEvictions() -> void
+{
+  AcceptEvictions();
+#ifdef OXYGEN_WITH_TRACY
+  static const profiling::CpuProfileScopeDesc kScope { .label
+    = "Vortex.Texture.ProcessEvictions",
+    .category = profiling::ProfileCategory::kUpload };
+  const profiling::CpuProfileScope profile(kScope);
+#endif
   auto& registry = gfx_->GetResourceRegistry();
-  std::size_t evictions_without_entry = 0U;
-
-  for (const auto& eviction : evictions) {
-    auto it = texture_map_.find(eviction.key);
-    if (it == texture_map_.end()) {
-      ++evictions_without_entry;
+  auto& reclaimer = gfx_->GetDeferredReclaimer();
+  const auto visits
+    = std::min(eviction_work_.size(), limits_.max_eviction_visits_per_frame);
+  for (std::size_t visit = 0; visit < visits; ++visit) {
+    const auto work = eviction_work_.begin();
+    const auto found = texture_map_.find(work->key);
+    if (found == texture_map_.end() || found->second.evicted
+      || work->handle != CurrentDescriptorHandle_(found->second)) {
+      eviction_work_.erase(work);
       continue;
     }
-
-    auto& entry = it->second;
-    if (entry.evicted) {
-      continue;
-    }
+    auto& entry = found->second;
     if (!entry.resident_lease.expired()) {
-      // Keep this accepted revision's descriptor stable until all readers
-      // retire.
-      std::scoped_lock lock(eviction_mutex_);
-      pending_evictions_.push_back(eviction);
+      eviction_work_.splice(eviction_work_.end(), eviction_work_, work);
       continue;
     }
+
+    const auto owned
+      = [this](const std::shared_ptr<graphics::Texture>& texture) {
+          return texture && texture != placeholder_texture_
+            && texture != error_texture_;
+        };
+    const auto old_texture = owned(entry.texture) ? entry.texture : nullptr;
+    const auto old_placeholder = owned(entry.placeholder_texture)
+        && entry.placeholder_texture != old_texture
+      ? entry.placeholder_texture
+      : nullptr;
+    const auto prepare = [&reclaimer](
+                           const std::shared_ptr<graphics::Texture>& texture) {
+      if (!texture) {
+        return graphics::detail::DeferredReclaimer::PreparedDeferredAction {};
+      }
+      return reclaimer.PrepareDeferredAction(
+        [retained = texture]() mutable { retained.reset(); });
+    };
+    auto release_texture = prepare(old_texture);
+    auto release_placeholder = prepare(old_placeholder);
+
+    if (entry.descriptor_handle.IsValid()) {
+      auto& revision = content_revisions_.at(entry.srv_index);
+      const auto description
+        = MakeTextureSrvViewDesc(Format::kRGBA8UNorm, {}, {});
+      if (!registry.UpdateView(*placeholder_texture_,
+            entry.descriptor_handle.ToBindlessHandle(), description)) {
+        entry.load_failed = true;
+        eviction_work_.splice(eviction_work_.end(), eviction_work_, work);
+        continue;
+      }
+      ++revision;
+      entry.is_placeholder = true;
+    }
+    if (old_texture) {
+      registry.UnRegisterResource(*old_texture);
+    }
+    if (old_placeholder) {
+      registry.UnRegisterResource(*old_placeholder);
+    }
+    reclaimer.CommitDeferredAction(std::move(release_texture));
+    reclaimer.CommitDeferredAction(std::move(release_placeholder));
 
     entry.evicted = true;
-    entry.last_eviction_reason = eviction.reason;
+    entry.eviction_pending = false;
+    entry.last_eviction_reason = work->reason;
     if (entry.descriptor_handle.IsValid()) {
-      const auto descriptor_index = entry.descriptor_handle.ToBindlessHandle();
-      slot_generations_.Bump(descriptor_index);
+      const auto index = entry.descriptor_handle.ToBindlessHandle();
+      slot_generations_.Bump(index);
       ++lifecycle_generation_bumps_;
-      entry.descriptor_handle = VersionedBindlessHandle { descriptor_index,
-        slot_generations_.Load(descriptor_index) };
+      entry.descriptor_handle
+        = VersionedBindlessHandle { index, slot_generations_.Load(index) };
     }
-    entry.pending_handle = VersionedBindlessHandle {};
+    entry.pending_handle = {};
     entry.pending_ticket.reset();
     entry.pending_view_desc.reset();
-
-    auto old_texture = entry.texture;
-    auto old_placeholder = entry.placeholder_texture;
-
-    if (entry.descriptor_handle.IsValid() && placeholder_texture_) {
-      const auto view_desc
-        = MakeTextureSrvViewDesc(Format::kRGBA8UNorm, {}, {});
-      const bool updated = registry.UpdateView(*placeholder_texture_,
-        entry.descriptor_handle.ToBindlessHandle(), view_desc);
-      if (updated) {
-        ++content_revisions_[entry.srv_index];
-      }
-      if (!updated) {
-        LOG_F(ERROR,
-          "TextureBinder eviction failed to repoint descriptor {} for {}",
-          entry.descriptor_handle.ToBindlessHandle(), eviction.key);
-      }
-    }
-
     entry.texture = placeholder_texture_;
     entry.placeholder_texture = placeholder_texture_;
     entry.is_placeholder = true;
     entry.load_failed = false;
-
-    if (old_texture || old_placeholder) {
-      if (old_texture == old_placeholder) {
-        old_placeholder.reset();
-      }
-      auto& reclaimer = gfx_->GetDeferredReclaimer();
-      if (old_texture && old_texture != placeholder_texture_
-        && old_texture != error_texture_) {
-        ReleaseTextureNextFrame(registry, reclaimer, std::move(old_texture));
-      }
-      if (old_placeholder && old_placeholder != placeholder_texture_
-        && old_placeholder != error_texture_) {
-        ReleaseTextureNextFrame(
-          registry, reclaimer, std::move(old_placeholder));
-      }
-    }
-
-    LOG_F(INFO, "Eviction processed for {} (reason={})", eviction.key,
-      eviction.reason);
-  }
-
-  if (evictions_without_entry != 0U) {
-    LOG_F(INFO, "{} eviction(s) had no resident texture entry",
-      evictions_without_entry);
-  }
-}
-
-//! Release any non-shared textures owned by an entry.
-auto TextureBinder::Impl::ReleaseEntryTexturesIfOwned(TextureEntry& entry)
-  -> void
-{
-  DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
-
-  auto& registry = gfx_->GetResourceRegistry();
-  auto& reclaimer = gfx_->GetDeferredReclaimer();
-
-  auto texture = std::move(entry.texture);
-  auto placeholder = std::move(entry.placeholder_texture);
-  const bool same_texture = texture && placeholder && texture == placeholder;
-
-  const auto release_if_owned
-    = [&](std::shared_ptr<graphics::Texture>&& tex) -> void {
-    if (!tex) {
-      return;
-    }
-    if (tex == placeholder_texture_ || tex == error_texture_) {
-      return;
-    }
-    ReleaseTextureNextFrame(registry, reclaimer, std::move(tex));
-  };
-
-  release_if_owned(std::move(texture));
-  if (!same_texture) {
-    release_if_owned(std::move(placeholder));
+    eviction_work_.erase(work);
   }
 }
 
@@ -1973,7 +2100,7 @@ auto TextureBinder::Impl::SubmitTextureUpload(
   DLOG_F(3, "subresources: {}", dst_subresources.size());
   DLOG_F(3, "trailing_bytes: {}", trailing_bytes);
 
-  if (entry.evicted) {
+  if (entry.evicted || entry.eviction_pending) {
     DLOG_F(4, "Discarding texture upload submission for evicted resource {}",
       resource_key);
     return;
@@ -1998,6 +2125,16 @@ auto TextureBinder::Impl::SubmitTextureUpload(
     .data = std::move(src_view),
   };
 
+  const auto work = pending_completions_.emplace(pending_completions_.end(),
+    PendingCompletion { .key = resource_key,
+      .handle = CurrentDescriptorHandle_(entry),
+      .ticket_id = vortex::upload::TicketId { 0 } });
+  bool tracked = false;
+  const ScopeGuard rollback([&]() noexcept {
+    if (!tracked) {
+      pending_completions_.erase(work);
+    }
+  });
   const auto upload_result = uploader_->Submit(req, *staging_provider_);
   if (!upload_result) {
     const auto error_code
@@ -2013,7 +2150,7 @@ auto TextureBinder::Impl::SubmitTextureUpload(
 
   ++total_upload_submissions_;
 
-  DLOG_F(3, "ticket: {}", upload_result->id);
+  DLOG_F(3, "ticket: {}", upload_result->Id());
 
   // Register the created texture so the ResourceRegistry can manage it and
   // allow us to UpdateView later when upload completes.
@@ -2026,14 +2163,16 @@ auto TextureBinder::Impl::SubmitTextureUpload(
 
   // Store pending ticket + view desc for OnFrameStart() to observe; also
   // set the entry.texture now so UpdateView can target it when complete.
+  work->ticket_id = upload_result->Id();
   entry.pending_ticket = *upload_result;
   entry.pending_handle = CurrentDescriptorHandle_(entry);
   entry.pending_view_desc = view_desc;
   entry.texture = std::move(new_texture);
   entry.is_placeholder = true;
   entry.load_failed = false;
+  tracked = true;
   DLOG_F(3, "InitiateAsyncLoad: submitted upload ticket {} for resource {}",
-    entry.pending_ticket->id, resource_key);
+    entry.pending_ticket->Id(), resource_key);
 }
 
 /*!
@@ -2076,15 +2215,8 @@ auto TextureBinder::Impl::HandleLoadFailure(
   entry.pending_handle = VersionedBindlessHandle {};
 
   if (texture_to_release) {
-    auto& registry = gfx_->GetResourceRegistry();
-    auto& reclaimer = gfx_->GetDeferredReclaimer();
-    try {
-      registry.UnRegisterResource(*texture_to_release);
-    } catch (const std::exception&) {
-      // Not registered (or already unregistered); safe to continue.
-      (void)0;
-    }
-    reclaimer.RegisterDeferredRelease(std::move(texture_to_release));
+    ReleaseTextureNextFrame(gfx_->GetResourceRegistry(),
+      gfx_->GetDeferredReclaimer(), std::move(texture_to_release));
   }
 
   if (policy == FailurePolicy::kKeepPlaceholderBound) {

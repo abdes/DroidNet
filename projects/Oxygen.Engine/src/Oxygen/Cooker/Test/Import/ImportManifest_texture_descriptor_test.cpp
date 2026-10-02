@@ -6,14 +6,21 @@
 
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 
-#include <Oxygen/Testing/GTest.h>
+#include <nlohmann/json.hpp>
 
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Core/Types/ColorSpace.h>
+#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -39,6 +46,35 @@ auto WriteTextFile(
   auto out = std::ofstream(path, std::ios::binary | std::ios::trunc);
   ASSERT_TRUE(out.is_open());
   out << text;
+}
+
+NOLINT_TEST(ImportManifestTextureDescriptorTest,
+  CarriesExplicitRootIdentitiesIntoNativeRequests)
+{
+  const auto root = MakeManifestPath("root-identities").parent_path();
+  const auto top = oxygen::Uuid::Generate();
+  const auto defaults = oxygen::Uuid::Generate();
+  const auto job_key = oxygen::Uuid::Generate();
+  const auto manifest_json = nlohmann::json { { "version", 1 },
+    { "output", (root / "first").generic_string() },
+    { "source_key", top.ToString() },
+    { "defaults", { { "source_key", defaults.ToString() } } },
+    { "jobs",
+      nlohmann::json::array({ { { "type", "texture" },
+                                { "source", "first.png" }, { "id", "first" } },
+        { { "type", "texture" }, { "source", "second.png" }, { "id", "second" },
+          { "output", (root / "second").generic_string() },
+          { "source_key", job_key.ToString() } } }) } };
+  std::ostringstream errors;
+  const auto manifest
+    = ImportManifest::Parse(manifest_json.dump(), root, std::nullopt, errors);
+  if (!manifest.has_value()) {
+    FAIL() << errors.str();
+  }
+  const auto requests = manifest->BuildRequests(errors);
+  ASSERT_EQ(requests.size(), 2U) << errors.str();
+  EXPECT_EQ(requests.at(0).source_key, oxygen::data::SourceKey { defaults });
+  EXPECT_EQ(requests.at(1).source_key, oxygen::data::SourceKey { job_key });
 }
 
 NOLINT_TEST(ImportManifestTextureDescriptorTest,
@@ -87,12 +123,16 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  if (!manifest.has_value()) {
+    FAIL() << errors.str();
+  }
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   auto request_errors = std::ostringstream {};
-  const auto request = manifest->jobs[0].BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
+  const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
+  if (!request.has_value()) {
+    FAIL() << request_errors.str();
+  }
   ASSERT_TRUE(request->cooked_root.has_value());
   EXPECT_EQ(request->source_path,
     (root / "Textures" / "images" / "brick_nrm.png").lexically_normal());
@@ -159,11 +199,13 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  if (!manifest.has_value()) {
+    FAIL() << errors.str();
+  }
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   auto request_errors = std::ostringstream {};
-  const auto request = manifest->jobs[0].BuildRequest(request_errors);
+  const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
   EXPECT_FALSE(request.has_value());
   EXPECT_TRUE(
     request_errors.str().find("texture.descriptor.schema_validation_failed")

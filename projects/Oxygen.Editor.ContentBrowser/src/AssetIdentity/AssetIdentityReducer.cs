@@ -6,7 +6,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -217,14 +217,6 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         return mount is null ? null : Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath, mountRelativePath));
     }
 
-    private static string? TryResolveCookedPath(ProjectCookScope cookScope, Uri uri)
-    {
-        var relative = Uri.UnescapeDataString(uri.AbsolutePath).TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
-        return string.IsNullOrWhiteSpace(cookScope.CookedOutputRoot)
-            ? null
-            : Path.Combine(cookScope.CookedOutputRoot, relative);
-    }
-
     private static string GetDisplayPath(AssetRecord selected, ProjectContext project)
     {
         var local = selected.Cooked is { } cooked ? project.LocalFolderMounts.FirstOrDefault(mount =>
@@ -323,8 +315,7 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         var sourcePath = source is null ? null : TryResolveSourcePath(project, source.Uri);
         var descriptorPath = descriptor is null ? null : TryResolveSourcePath(project, descriptor.Uri);
         var cookedUri = cooked?.Uri ?? (descriptor is null ? null : ToCookedUri(descriptor.Uri));
-        var cookedPath = cooked?.Cooked is { } metadata ? TryResolveIndexedDescriptorPath(metadata)
-            : cookedUri is null ? null : TryResolveCookedPath(cookScope, cookedUri);
+        var cookedPath = cooked?.Cooked is { } metadata ? TryResolveIndexedDescriptorPath(metadata) : null;
         var diagnostics = new List<string>();
 
         var primaryState = descriptor is not null

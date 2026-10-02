@@ -6,23 +6,33 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <ios>
+#include <stdexcept>
 #include <string>
+#include <string_view>
+#include <system_error>
 #include <vector>
+
+#include "../Fixtures/DescriptorFixtures.h"
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Testing/GTest.h>
 
 // NOLINTBEGIN(*-magic-numbers)
 
 namespace oxygen::content::testing {
+namespace fixtures = oxygen::content::test;
 
 namespace {
 
@@ -53,17 +63,17 @@ namespace {
   {
     std::array<uint8_t, 16> bytes {};
     for (uint8_t i = 0; i < 16; ++i) {
-      bytes[i] = static_cast<uint8_t>(seed + i);
+      bytes.at(i) = static_cast<uint8_t>(seed + i);
     }
-    bytes[6] = static_cast<uint8_t>((bytes[6] & 0x0FU) | 0x70U);
-    bytes[8] = static_cast<uint8_t>((bytes[8] & 0x3FU) | 0x80U);
+    bytes.at(6) = static_cast<uint8_t>((bytes.at(6) & 0x0FU) | 0x70U);
+    bytes.at(8) = static_cast<uint8_t>((bytes.at(8) & 0x3FU) | 0x80U);
     return SourceKey::FromBytes(bytes).value();
   }
 
   auto MakeTestAssetKey(const uint8_t seed) -> AssetKey
   {
     auto bytes = std::array<uint8_t, AssetKey::kSizeBytes> {};
-    bytes[0] = seed;
+    bytes.at(0) = seed;
     return AssetKey::FromBytes(bytes);
   }
 
@@ -124,11 +134,9 @@ namespace {
 
     const auto key = MakeTestAssetKey(0x11);
 
-    const std::vector<std::byte> bytes0 = {
-      std::byte { 0x01 },
-      std::byte { 0x02 },
-      std::byte { 0x03 },
-    };
+    const auto first = fixtures::TexturedMaterialDescriptor("white",
+      data::pak::core::kFallbackResourceIndex,
+      fixtures::MaterialVariant::kWithShader);
 
     {
       LooseCookedWriter writer(cooked_root);
@@ -136,13 +144,12 @@ namespace {
         "/.cooked/Materials/"
           + LooseCookedLayout::MaterialDescriptorFileName("A"),
         "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"),
-        bytes0);
+        first.bytes, first.references);
       (void)writer.Finish();
     }
 
-    const std::vector<std::byte> bytes1 = {
-      std::byte { 0x04 },
-    };
+    const auto second = fixtures::TexturedMaterialDescriptor(
+      "error", data::pak::core::kErrorTextureResourceIndex);
 
     // Act
     {
@@ -151,7 +158,7 @@ namespace {
         "/.cooked/Materials/"
           + LooseCookedLayout::MaterialDescriptorFileName("A"),
         "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A2"),
-        bytes1);
+        second.bytes, second.references);
       (void)writer.Finish();
     }
 
@@ -167,7 +174,9 @@ namespace {
     ASSERT_NE(it, assets.end());
     EXPECT_EQ(it->descriptor_relpath,
       "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A2"));
-    EXPECT_EQ(it->descriptor_size, 1U);
+    EXPECT_EQ(it->descriptor_size, second.bytes.size());
+    EXPECT_EQ(it->references, second.references);
+    EXPECT_EQ(it->descriptor_sha256, base::ComputeSha256(second.bytes));
   }
 
   //! Test: Legacy key for same material output is replaced on recook.
@@ -178,7 +187,7 @@ namespace {
    mapping instead of failing the index write.
   */
   NOLINT_TEST(LooseCookedWriterTest,
-    WriteAssetDescriptorSameVirtualPathAndRelPathReplacesLoadedLegacyKey)
+    WriteAssetDescriptorSameVirtualPathAndRelPathReplacesLoadedStaleKey)
   {
     const auto cooked_root
       = MakeTempCookedRoot("loose_cooked_writer_recook_legacy_key");
@@ -190,25 +199,24 @@ namespace {
     const auto descriptor_relpath = std::string("Materials/")
       + LooseCookedLayout::MaterialDescriptorFileName("A");
 
-    const std::vector<std::byte> first_bytes = {
-      std::byte { 0x01 },
-    };
-    const std::vector<std::byte> recook_bytes = {
-      std::byte { 0x02 },
-      std::byte { 0x03 },
-    };
+    const auto first_bytes = fixtures::MaterialDescriptor(
+      "first_bytes", fixtures::MaterialVariant::kPlain)
+                               .bytes;
+    const auto recook_bytes = fixtures::MaterialDescriptor(
+      "recook_bytes", fixtures::MaterialVariant::kWithShader)
+                                .bytes;
 
     {
       LooseCookedWriter writer(cooked_root);
       writer.WriteAssetDescriptor(legacy_key, AssetType::kMaterial,
-        virtual_path, descriptor_relpath, first_bytes);
+        virtual_path, descriptor_relpath, first_bytes, {});
       (void)writer.Finish();
     }
 
     {
       LooseCookedWriter writer(cooked_root);
       writer.WriteAssetDescriptor(native_key, AssetType::kMaterial,
-        virtual_path, descriptor_relpath, recook_bytes);
+        virtual_path, descriptor_relpath, recook_bytes, {});
       const auto result = writer.Finish();
       EXPECT_EQ(result.collision_summary.asset_collisions, 1U);
       EXPECT_EQ(result.collision_summary.replaced_existing, 1U);
@@ -223,7 +231,7 @@ namespace {
     EXPECT_EQ(inspection.Assets().front().virtual_path, virtual_path);
     EXPECT_EQ(
       inspection.Assets().front().descriptor_relpath, descriptor_relpath);
-    EXPECT_EQ(inspection.Assets().front().descriptor_size, 2U);
+    EXPECT_EQ(inspection.Assets().front().descriptor_size, recook_bytes.size());
   }
 
   //! Test: Conflicting virtual path mapping throws
@@ -240,15 +248,16 @@ namespace {
     const auto key0 = MakeTestAssetKey(0x11);
     const auto key1 = MakeTestAssetKey(0x22);
 
-    const std::vector<std::byte> bytes = {
-      std::byte { 0x01 },
-    };
+    const auto bytes
+      = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
+          .bytes;
 
     LooseCookedWriter writer(cooked_root);
     writer.WriteAssetDescriptor(key0, AssetType::kMaterial,
       "/.cooked/Materials/"
         + LooseCookedLayout::MaterialDescriptorFileName("A"),
-      "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"), bytes);
+      "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"), bytes,
+      {});
 
     // Act & Assert
     try {
@@ -256,7 +265,7 @@ namespace {
         "/.cooked/Materials/"
           + LooseCookedLayout::MaterialDescriptorFileName("A"),
         "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("B"),
-        bytes);
+        bytes, {});
       FAIL() << "Expected virtual path collision.";
     } catch (const std::runtime_error& ex) {
       const std::string message = ex.what();
@@ -366,6 +375,42 @@ namespace {
     EXPECT_EQ(inspection.Guid(), source_key);
   }
 
+  NOLINT_TEST(
+    LooseCookedWriterTest, ExplicitSourceKeyReidentifiesASeededGeneration)
+  {
+    const auto root = MakeTempCookedRoot("generation_source_identity");
+    const auto old_root = root / "old";
+    const auto new_root = root / "new";
+    const auto old_key = MakeTestSourceKey(31);
+    const auto new_key = MakeTestSourceKey(32);
+    const auto asset_key = MakeTestAssetKey(7);
+    const auto bytes
+      = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
+          .bytes;
+    {
+      LooseCookedWriter writer(old_root);
+      writer.SetSourceKey(old_key);
+      writer.WriteAssetDescriptor(asset_key, AssetType::kMaterial,
+        "/Content/Materials/kept.omat", "Materials/kept.omat", bytes, {});
+      static_cast<void>(writer.Finish());
+    }
+    std::filesystem::copy(
+      old_root, new_root, std::filesystem::copy_options::recursive);
+    LooseCookedWriter candidate(new_root);
+    candidate.SetSourceKey(new_key);
+    EXPECT_EQ(candidate.Finish().source_key, new_key);
+    Inspection previous;
+    Inspection next;
+    previous.LoadFromRoot(old_root);
+    next.LoadFromRoot(new_root);
+    EXPECT_EQ(previous.Guid(), old_key);
+    EXPECT_EQ(next.Guid(), new_key);
+    ASSERT_EQ(next.Assets().size(), 1U);
+    EXPECT_EQ(next.Assets().front().key, asset_key);
+    EXPECT_EQ(next.Assets().front().descriptor_sha256,
+      previous.Assets().front().descriptor_sha256);
+  }
+
   //! Test: Existing content version is preserved when not overridden
   /*!
    Scenario: Writes an index with an explicit content version.
@@ -460,13 +505,12 @@ namespace {
 
     const auto key = MakeTestAssetKey(0x61);
 
-    const std::vector<std::byte> desc_a = {
-      std::byte { 0x01 },
-    };
-    const std::vector<std::byte> desc_b = {
-      std::byte { 0xAA },
-      std::byte { 0xBB },
-    };
+    const auto desc_a = fixtures::MaterialDescriptor(
+      "desc_a", fixtures::MaterialVariant::kPlain)
+                          .bytes;
+    const auto desc_b = fixtures::MaterialDescriptor(
+      "desc_b", fixtures::MaterialVariant::kWithShader)
+                          .bytes;
     const std::vector<std::byte> file_a = {
       std::byte { 0x02 },
     };
@@ -480,13 +524,13 @@ namespace {
     writer.WriteAssetDescriptor(key, AssetType::kMaterial,
       "/.cooked/Materials/"
         + LooseCookedLayout::MaterialDescriptorFileName("A"),
-      "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"),
-      desc_a);
+      "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"), desc_a,
+      {});
     writer.WriteAssetDescriptor(key, AssetType::kMaterial,
       "/.cooked/Materials/"
         + LooseCookedLayout::MaterialDescriptorFileName("A"),
-      "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("B"),
-      desc_b);
+      "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("B"), desc_b,
+      {});
 
     writer.WriteFile(
       FileKind::kBuffersData, "Resources/buffers_a.data", file_a);
@@ -503,7 +547,7 @@ namespace {
     ASSERT_EQ(inspection.Assets().size(), 1U);
     EXPECT_EQ(inspection.Assets().front().descriptor_relpath,
       "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("B"));
-    EXPECT_EQ(inspection.Assets().front().descriptor_size, 2U);
+    EXPECT_EQ(inspection.Assets().front().descriptor_size, desc_b.size());
 
     const auto files = inspection.Files();
     ASSERT_EQ(files.size(), 2U);
@@ -626,9 +670,9 @@ namespace {
     const auto key0 = MakeTestAssetKey(0x10);
     const auto key1 = MakeTestAssetKey(0x20);
 
-    const std::vector<std::byte> bytes = {
-      std::byte { 0x01 },
-    };
+    const auto bytes
+      = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
+          .bytes;
 
     {
       LooseCookedWriter writer(cooked_root);
@@ -636,7 +680,7 @@ namespace {
         "/.cooked/Materials/"
           + LooseCookedLayout::MaterialDescriptorFileName("A"),
         "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"),
-        bytes);
+        bytes, {});
       (void)writer.Finish();
     }
 
@@ -647,7 +691,7 @@ namespace {
         "/.cooked/Materials/"
           + LooseCookedLayout::MaterialDescriptorFileName("B"),
         "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("B"),
-        bytes);
+        bytes, {});
       (void)writer.Finish();
     }
 
@@ -658,31 +702,24 @@ namespace {
     EXPECT_EQ(inspection.Assets().size(), 2U);
   }
 
-  //! Test: Disabling SHA-256 emits zero hashes
-  /*!
-   Scenario: Disables hashing, writes an asset descriptor, finishes.
-   Verifies the emitted descriptor SHA-256 (if present) is all-zero.
-  */
-  NOLINT_TEST(LooseCookedWriterTest, FinishComputeSha256DisabledEmitsZeroHashes)
+  //! Every finalized descriptor has its exact content digest.
+  NOLINT_TEST(LooseCookedWriterTest, FinishAlwaysEmitsDescriptorDigest)
   {
     // Arrange
     const auto cooked_root = MakeTempCookedRoot("loose_cooked_writer_no_sha");
 
     const auto key = MakeTestAssetKey(0x33);
 
-    const std::vector<std::byte> bytes = {
-      std::byte { 0xDE },
-      std::byte { 0xAD },
-      std::byte { 0xBE },
-      std::byte { 0xEF },
-    };
+    const auto bytes
+      = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
+          .bytes;
 
     LooseCookedWriter writer(cooked_root);
-    writer.SetComputeSha256(false);
     writer.WriteAssetDescriptor(key, AssetType::kMaterial,
       "/.cooked/Materials/"
         + LooseCookedLayout::MaterialDescriptorFileName("A"),
-      "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"), bytes);
+      "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"), bytes,
+      {});
 
     // Act
     (void)writer.Finish();
@@ -693,9 +730,10 @@ namespace {
     // Assert
     ASSERT_EQ(inspection.Assets().size(), 1U);
     const auto& asset = inspection.Assets().front();
-    if (asset.descriptor_sha256.has_value()) {
-      EXPECT_TRUE(IsAllZerosDigest(*asset.descriptor_sha256));
+    if (!asset.descriptor_sha256.has_value()) {
+      FAIL();
     }
+    EXPECT_EQ(*asset.descriptor_sha256, oxygen::base::ComputeSha256(bytes));
   }
 
   //! Test: Invalid virtual path strings throw
@@ -713,9 +751,9 @@ namespace {
 
     const auto key = MakeTestAssetKey(0x44);
 
-    const std::vector<std::byte> bytes = {
-      std::byte { 0x01 },
-    };
+    const auto bytes
+      = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
+          .bytes;
 
     LooseCookedWriter writer(cooked_root);
 
@@ -724,7 +762,7 @@ namespace {
       writer.WriteAssetDescriptor(key, AssetType::kMaterial,
         std::string_view(GetParam().virtual_path),
         "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"),
-        bytes),
+        bytes, {}),
       std::runtime_error);
   }
 
@@ -772,9 +810,9 @@ namespace {
 
     const auto key = MakeTestAssetKey(0x46);
 
-    const std::vector<std::byte> bytes = {
-      std::byte { 0x01 },
-    };
+    const auto bytes
+      = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
+          .bytes;
 
     LooseCookedWriter writer(cooked_root);
 
@@ -784,7 +822,7 @@ namespace {
         "/.cooked/Materials/"
           + LooseCookedLayout::MaterialDescriptorFileName("A"),
         "/Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"),
-        bytes),
+        bytes, {}),
       std::runtime_error);
   }
 
@@ -828,9 +866,9 @@ namespace {
     const auto key0 = MakeTestAssetKey(0x50);
     const auto key1 = MakeTestAssetKey(0x51);
 
-    const std::vector<std::byte> bytes = {
-      std::byte { 0x01 },
-    };
+    const auto bytes
+      = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
+          .bytes;
 
     {
       LooseCookedWriter writer(cooked_root);
@@ -838,7 +876,7 @@ namespace {
         "/.cooked/Materials/"
           + LooseCookedLayout::MaterialDescriptorFileName("A"),
         "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"),
-        bytes);
+        bytes, {});
       (void)writer.Finish();
     }
 
@@ -849,7 +887,7 @@ namespace {
         "/.cooked/Materials/"
           + LooseCookedLayout::MaterialDescriptorFileName("A"),
         "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("B"),
-        bytes);
+        bytes, {});
       FAIL() << "Expected virtual path collision.";
     } catch (const std::runtime_error& ex) {
       const std::string message = ex.what();
@@ -876,9 +914,9 @@ namespace {
 
     const auto key = MakeTestAssetKey(0x63);
 
-    const std::vector<std::byte> bytes = {
-      std::byte { 0x01 },
-    };
+    const auto bytes
+      = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
+          .bytes;
 
     LooseCookedWriter writer(cooked_root);
 
@@ -888,7 +926,7 @@ namespace {
                      + LooseCookedLayout::MaterialDescriptorFileName("A"),
                    "Materials/../materials/"
                      + LooseCookedLayout::MaterialDescriptorFileName("A"),
-                   bytes),
+                   bytes, {}),
       std::runtime_error);
   }
 
@@ -906,9 +944,9 @@ namespace {
 
     const auto key = MakeTestAssetKey(0x64);
 
-    const std::vector<std::byte> bytes = {
-      std::byte { 0x01 },
-    };
+    const auto bytes
+      = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
+          .bytes;
 
     LooseCookedWriter writer(cooked_root);
 
@@ -918,7 +956,7 @@ namespace {
         "/.cooked/Materials/"
           + LooseCookedLayout::MaterialDescriptorFileName("A"),
         "C:/Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"),
-        bytes),
+        bytes, {}),
       std::runtime_error);
   }
 
@@ -955,6 +993,27 @@ NOLINT_TEST(LooseCookedWriterTest,
     files, FileKind::kBuffersData, &Inspection::FileEntry::kind);
   ASSERT_NE(data, files.end());
   EXPECT_EQ(data->size, 2U);
+}
+
+NOLINT_TEST(LooseCookedWriterTest,
+  ExternalDescriptorRejectsMalformedBytesBeforeIndexPublication)
+{
+  const auto root = MakeTempCookedRoot("external_descriptor_rejection");
+  std::filesystem::create_directories(root);
+  const auto invalid_path = root / "invalid.omat";
+  {
+    serio::FileStream<> stream(invalid_path, std::ios::out);
+    constexpr auto invalid = std::array { std::byte { 1U } };
+    ASSERT_TRUE(stream.Write(invalid));
+    ASSERT_TRUE(stream.Flush());
+  }
+  import::LooseCookedWriter writer(root);
+  EXPECT_THROW(
+    writer.RegisterExternalAssetDescriptor(MakeTestAssetKey(1U),
+      data::AssetType::kMaterial, "/Test/invalid.omat", "invalid.omat", 1U, {}),
+    std::runtime_error);
+  EXPECT_FALSE(std::filesystem::exists(root / "container.index.bin"));
+  EXPECT_TRUE(writer.Finish().assets.empty());
 }
 
 } // namespace oxygen::content::testing

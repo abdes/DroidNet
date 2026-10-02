@@ -15,6 +15,7 @@
 
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -114,7 +115,9 @@ NOLINT_TEST(MaterialDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
   const auto schema = LoadJsonFile(SchemaFile(repo_root));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
 
   const auto doc = json::parse(R"({
     "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json",
@@ -166,7 +169,9 @@ NOLINT_TEST(MaterialDescriptorJsonSchemaTest, RejectsUnknownNestedFields)
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
   const auto schema = LoadJsonFile(SchemaFile(repo_root));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
 
   const auto doc = json::parse(R"({
     "name": "WoodFloor",
@@ -182,12 +187,44 @@ NOLINT_TEST(MaterialDescriptorJsonSchemaTest, RejectsUnknownNestedFields)
   EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
 }
 
+NOLINT_TEST(MaterialDescriptorJsonSchemaTest, ValidatesCanonicalEmission)
+{
+  const auto repo_root = FindRepoRoot();
+  ASSERT_FALSE(repo_root.empty());
+  const auto schema = LoadJsonFile(SchemaFile(repo_root));
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
+  auto doc = json::parse(R"({
+    "name": "HDR",
+    "parameters": {
+      "emissive_color": [1.0, 0.25, 0.0],
+      "emissive_intensity": 65504.0
+    }
+  })");
+  auto errors = std::string {};
+  EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
+
+  doc.at("parameters").update({ { "emissive_intensity", 65505.0 } });
+  EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
+  doc.at("parameters").update({ { "emissive_intensity", -1.0 } });
+  EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
+  doc.at("parameters").update({ { "emissive_intensity", 0.0 } });
+  doc.at("parameters").update({ { "emissive_color", { 1.1, 0.0, 0.0 } } });
+  EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
+  doc.update(
+    { { "parameters", { { "emissive_factor", { 1.0, 1.0, 1.0 } } } } });
+  EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
+}
+
 NOLINT_TEST(MaterialDescriptorJsonSchemaTest, RequiresTextureVirtualPath)
 {
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
   const auto schema = LoadJsonFile(SchemaFile(repo_root));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    FAIL() << "Expected schema to contain a value";
+  }
 
   const auto doc = json::parse(R"({
     "name": "WoodFloor",

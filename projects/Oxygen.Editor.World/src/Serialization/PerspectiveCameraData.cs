@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.World;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Serialization;
 
@@ -20,4 +21,7 @@ public record PerspectiveCameraData : CameraComponentData
     /// Gets the camera aspect ratio (width / height).
     /// </summary>
     public float AspectRatio { get; init; } = PerspectiveCamera.DefaultAspectRatio;
+
+    /// <summary>Gets the authored framing policy.</summary>
+    public required CameraAspectMode AspectMode { get; init; }
 }

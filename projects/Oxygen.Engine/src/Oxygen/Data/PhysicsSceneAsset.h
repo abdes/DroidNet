@@ -31,7 +31,7 @@ template <typename T> struct BindingTraits;
 
 // Hash functor for PhysicsBindingType (scoped enum over uint32_t)
 struct PhysicsBindingTypeHash {
-  size_t operator()(pak::physics::PhysicsBindingType bt) const noexcept
+  auto operator()(pak::physics::PhysicsBindingType bt) const noexcept -> size_t
   {
     return std::hash<uint32_t> {}(static_cast<uint32_t>(bt));
   }
@@ -68,12 +68,13 @@ class PhysicsSceneAsset final : public Asset {
   OXYGEN_TYPED(PhysicsSceneAsset)
 public:
   //! Constructs a PhysicsSceneAsset from a borrowed span (non-owning).
-  OXGN_DATA_API PhysicsSceneAsset(
-    AssetKey key, std::span<const std::byte> data);
+  OXGN_DATA_API PhysicsSceneAsset(AssetKey key, std::span<const std::byte> data,
+    SourceOrigin source_origin = {});
 
   //! Constructs a PhysicsSceneAsset that owns the raw data blob.
   //! This is the preferred path for loaders.
-  OXGN_DATA_API PhysicsSceneAsset(AssetKey key, std::vector<std::byte> data);
+  OXGN_DATA_API PhysicsSceneAsset(
+    AssetKey key, std::vector<std::byte> data, SourceOrigin source_origin = {});
 
   ~PhysicsSceneAsset() override = default;
 
@@ -143,8 +144,8 @@ public:
       std::vector<T> decoded;
       decoded.resize(entry->count);
       for (size_t i = 0; i < entry->count; ++i) {
-        std::memcpy(&decoded[i], bytes.subspan(i * sizeof(T), sizeof(T)).data(),
-          sizeof(T));
+        std::memcpy(&decoded.at(i),
+          bytes.subspan(i * sizeof(T), sizeof(T)).data(), sizeof(T));
       }
 
       binding_cache_.insert_or_assign(type, std::move(decoded));
@@ -165,7 +166,7 @@ public:
   {
     auto bindings = GetBindings<T>();
     auto it = std::lower_bound(bindings.begin(), bindings.end(), node_index,
-      [](const T& rec, pak::world::SceneNodeIndexT idx) {
+      [](const T& rec, pak::world::SceneNodeIndexT idx) -> auto {
         return rec.node_index < idx;
       });
     if (it != bindings.end() && it->node_index == node_index) {
@@ -177,7 +178,7 @@ public:
 private:
   struct BindingTableEntry;
 
-  [[nodiscard]] inline auto FindBindingTableEntry(
+  [[nodiscard]] auto FindBindingTableEntry(
     pak::physics::PhysicsBindingType type) const noexcept
     -> const BindingTableEntry*
   {
@@ -191,7 +192,7 @@ private:
 
   auto ParseAndValidate() -> void;
 
-  std::shared_ptr<std::vector<std::byte>> owned_data_ {};
+  std::shared_ptr<std::vector<std::byte>> owned_data_;
   std::span<const std::byte> data_;
   pak::physics::PhysicsSceneAssetDesc desc_ {};
 
@@ -205,7 +206,7 @@ private:
 
   mutable std::unordered_map<pak::physics::PhysicsBindingType, std::any,
     PhysicsBindingTypeHash>
-    binding_cache_ {};
+    binding_cache_;
 };
 
 // ---------------------------------------------------------------------------

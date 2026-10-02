@@ -12,17 +12,17 @@ public sealed partial class EngineService
     private readonly List<IDisposable> cookedContentReaders = [];
 
     /// <inheritdoc />
-    public async Task RefreshProjectCookedRootsAsync(IReadOnlyList<string> paths, IDisposable? readLease = null, bool keepPaused = false)
+    public async Task RefreshProjectCookedRootsAsync(IReadOnlyList<RuntimeCookedRoot> bindings, IDisposable? readLease = null, bool keepPaused = false)
     {
         var unclaimed = readLease;
         var entered = false;
         try
         {
-            var requestedRoots = paths.ToImmutableArray();
+            var requestedRoots = bindings.ToImmutableArray();
             await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
             entered = true;
             var runtime = this.EnsureIsRunning();
-            this.ChangeContentStatus(RuntimeContentState.Updating, this.contentStatus.Roots);
+            this.ChangeContentStatus(RuntimeContentState.Updating, this.contentStatus.Bindings);
             var previousReaders = this.cookedContentReaders.ToArray();
             if (readLease is not null)
             {
@@ -76,10 +76,8 @@ public sealed partial class EngineService
         try
         {
             var runtime = this.EnsureIsRunning();
-            this.ChangeContentStatus(RuntimeContentState.Updating, this.contentStatus.Roots);
+            this.ChangeContentStatus(RuntimeContentState.Updating, this.contentStatus.Bindings);
             await this.AwaitRuntimeOperationAsync(runtime.Commands.SetCookedContentPausedAsync(paused: true)).ConfigureAwait(true);
-            this.ChangeContentStatus(RuntimeContentState.Updating, []);
-            this.ReleaseCookedContentReaders();
         }
         catch (Exception exception)
         {
@@ -100,7 +98,7 @@ public sealed partial class EngineService
         {
             var runtime = this.EnsureIsRunning();
             await this.AwaitRuntimeOperationAsync(runtime.Commands.SetCookedContentPausedAsync(paused: false)).ConfigureAwait(true);
-            var roots = this.contentStatus.Roots;
+            var roots = this.contentStatus.Bindings;
             this.ChangeContentStatus(roots.IsEmpty ? RuntimeContentState.Unmounted : RuntimeContentState.Mounted, roots);
         }
         catch (Exception exception)

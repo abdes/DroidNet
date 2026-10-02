@@ -316,9 +316,35 @@ dotnet_diagnostic.CA1515.severity = suggestion
 # don't want this to be auto-fixed because it will delete generated properties before they are generated
 # CA1823: Avoid unused private fields
 dotnet_diagnostic.CA1823.severity = suggestion
-# Remove unused private member (duplicate of CA1823)
+# Keep disabled for generated-member consumers; CA1823 covers fields only.
 dotnet_diagnostic.IDE0051.severity = none
 
+
+# One diagnostic owner per convention; analysis remains enabled on demand.
+# IDE owns language style; StyleCop retains documentation and layout.
+# Owner: IDE0009
+dotnet_diagnostic.SA1101.severity = none
+# Owner: IDE0011
+dotnet_diagnostic.SA1503.severity = none
+dotnet_diagnostic.RCS1001.severity = none
+dotnet_diagnostic.RCS1003.severity = none
+# Owner: IDE0040
+dotnet_diagnostic.SA1400.severity = none
+dotnet_diagnostic.RCS1018.severity = none
+# Owner: IDE0049
+dotnet_diagnostic.SA1121.severity = none
+# Owner: IDE0065
+dotnet_diagnostic.RCS1094.severity = none
+# Owner: SA1413
+dotnet_diagnostic.MA0007.severity = none
+# Owner: CA1018
+dotnet_diagnostic.MA0010.severity = none
+dotnet_diagnostic.RCS1203.severity = none
+# Owner: CA2200
+dotnet_diagnostic.MA0027.severity = none
+dotnet_diagnostic.RCS1044.severity = none
+# Owner: CA1825
+dotnet_diagnostic.MA0005.severity = none
 
 # Suppress specific StyleCop rule(s) for files whose name ends with .Log.cs
 [**/*.Logs.cs]

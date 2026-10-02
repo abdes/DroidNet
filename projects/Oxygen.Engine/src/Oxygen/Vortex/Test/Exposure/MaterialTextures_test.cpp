@@ -455,9 +455,7 @@ NOLINT_TEST_F(
             };
             material_desc.uv_scale[0] = material_desc.uv_scale[1] = 1;
             for (auto& v : material_desc.emissive_factor) {
-              v = data::HalfFloat {
-                base_color_source ? 0.0F : 1.0F,
-              };
+              v = base_color_source ? 0.0F : 1.0F;
             }
             std::vector<content::ResourceKey> keys(6);
             keys.at(base_color_source ? 0 : 5) = key;
@@ -602,6 +600,7 @@ NOLINT_TEST_F(
     observer_ptr { &renderer_->GetUploadCoordinator() },
     observer_ptr<content::IAssetLoader> { owned_asset_loader_.get() });
   binder->OnFrameStart();
+  binder->EnsureFrameResources();
 
   for (const bool wide : {
          false,
@@ -666,6 +665,7 @@ NOLINT_TEST_F(
         vortex::internal::RendererTagFactory::Get(),
         frame::Slot { (attempt + 1U) % 3U });
       binder->OnFrameStart();
+      binder->EnsureFrameResources();
       ctx_.frame_sequence = frame::SequenceNumber {
         ctx_.frame_sequence.get() + 1U,
       };
@@ -757,6 +757,7 @@ NOLINT_TEST_F(ExposureGpuTest,
     observer_ptr { &renderer_->GetUploadCoordinator() },
     observer_ptr<content::IAssetLoader> { owned_asset_loader_.get() });
   binder->OnFrameStart();
+  binder->EnsureFrameResources();
 
   data::pak::core::TextureResourceDesc desc {};
   desc.texture_type = static_cast<std::uint8_t>(TextureType::kTextureCube);
@@ -819,6 +820,7 @@ NOLINT_TEST_F(ExposureGpuTest,
       vortex::internal::RendererTagFactory::Get(),
       frame::Slot { (attempt + 1U) % 3U });
     binder->OnFrameStart();
+    binder->EnsureFrameResources();
     ready = refresh(ready.probe_state);
   }
   auto state = ready.probe_state;

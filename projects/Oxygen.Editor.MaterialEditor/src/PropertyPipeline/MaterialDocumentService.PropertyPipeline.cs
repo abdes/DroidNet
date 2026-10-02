@@ -5,7 +5,7 @@
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Schemas;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.MaterialEditor;
@@ -78,7 +78,7 @@ public sealed partial class MaterialDocumentService
             return null;
         }
 
-        var json = MaterialSourceProjection.ToEngineJson(source);
+        var json = MaterialSourceWriter.ToJson(source);
         var engine = validator.ValidateAgainstEngineSchema(json);
         var overlay = validator.ValidateAgainstMergedSchema(json);
         return engine.IsValid && overlay.IsValid

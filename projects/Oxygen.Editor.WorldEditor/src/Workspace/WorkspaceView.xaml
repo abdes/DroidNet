@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 
 <local:DockingWorkspaceView
     x:Class="Oxygen.Editor.World.Workspace.WorkspaceView"
@@ -7,4 +7,32 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:Oxygen.Editor.World.Workspace"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    mc:Ignorable="d" />
+    mc:Ignorable="d">
+    <local:DockingWorkspaceView.Template>
+        <ControlTemplate TargetType="local:WorkspaceView">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <InfoBar
+                    Title="{Binding ViewModel.ContentFailureTitle, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}"
+                    AutomationProperties.AutomationId="WorkspaceContentFailure"
+                    IsClosable="False"
+                    IsOpen="{Binding ViewModel.HasContentFailure, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}"
+                    Message="{Binding ViewModel.ContentFailureMessage, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}"
+                    Severity="Error">
+                    <InfoBar.ActionButton>
+                        <Button Command="{Binding ViewModel.RetryContentCommand, RelativeSource={RelativeSource TemplatedParent}}" Content="Retry" />
+                    </InfoBar.ActionButton>
+                    <HyperlinkButton Command="{Binding ViewModel.ShowContentFailureDetailsCommand, RelativeSource={RelativeSource TemplatedParent}}" Content="Details" />
+                </InfoBar>
+                <ContentPresenter
+                    Grid.Row="1"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch"
+                    Content="{TemplateBinding Content}" />
+            </Grid>
+        </ControlTemplate>
+    </local:DockingWorkspaceView.Template>
+</local:DockingWorkspaceView>

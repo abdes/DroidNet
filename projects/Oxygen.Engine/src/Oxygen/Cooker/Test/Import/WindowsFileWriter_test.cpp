@@ -4,19 +4,45 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Windows.h> // IWYU pragma: keep
+
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <latch>
+#include <ios>
+#include <iterator>
+#include <memory>
+#include <span>
+#include <string>
+#include <system_error>
+#include <vector>
 
-#include <Windows.h>
+#include <errhandlingapi.h>
+#include <fileapi.h>
+#include <handleapi.h>
+#include <processthreadsapi.h>
+#include <winerror.h>
+#include <winnt.h>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Finally.h>
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/FileError.h>
+#include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Cooker/Import/Internal/WindowsFileReader.h>
 #include <Oxygen/Cooker/Import/Internal/WindowsFileWriter.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/FileLock.h>
+#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen::co;
@@ -51,7 +77,7 @@ protected:
       return;
     }
     std::error_code ec;
-    std::filesystem::remove_all(test_dir_, ec);
+    std::filesystem::remove_all(oxygen::base::ToNativePath(test_dir_), ec);
     EXPECT_FALSE(ec) << "Failed to remove " << test_dir_.string() << ": "
                      << ec.message();
   }
@@ -83,6 +109,95 @@ protected:
 
 //=== Write Tests ===---------------------------------------------------------//
 
+NOLINT_TEST_F(WindowsFileWriterTest, EmitterRetainsErrorAfterSharedWriterFlush)
+{
+  const LooseCookedLayout layout;
+  {
+    std::ofstream blocked_directory(test_dir_ / layout.resources_dir);
+    blocked_directory << "not a directory";
+  }
+  ResourceDescriptorEmitter emitter(*writer_, layout, test_dir_);
+  const oxygen::data::pak::core::TextureResourceDesc descriptor {};
+  static_cast<void>(emitter.EmitTexture("texture", "texture-source",
+    oxygen::data::pak::core::ResourceIndexT { 1U }, descriptor));
+  co::Run(*loop_, [&] -> Co<> {
+    const auto first_flush = co_await writer_->Flush();
+    EXPECT_FALSE(first_flush.has_value());
+    const auto result = co_await emitter.Finalize();
+    if (result) {
+      ADD_FAILURE() << "Emitter discarded its write failure";
+      co_return;
+    }
+    EXPECT_FALSE(result.error().path.empty());
+    EXPECT_NE(result.error().system_error.value(), 0);
+    EXPECT_EQ(
+      result.error().path, oxygen::base::ToLogicalPath(result.error().path));
+  });
+}
+
+NOLINT_TEST_F(
+  WindowsFileWriterTest, LongUnicodePathsSupportCompleteFileLifecycle)
+{
+  constexpr std::size_t kDirectoryLength = 100U;
+  constexpr std::size_t kLegacyWindowsPathLimit = 260U;
+  const auto path = test_dir_ / std::string(kDirectoryLength, 'a')
+    / std::string(kDirectoryLength, 'b')
+    / std::filesystem::path(u8"模型-é.bin");
+  ASSERT_GT(path.native().size(), kLegacyWindowsPathLimit);
+  const std::string original = "native async bytes";
+  WindowsFileReader reader(*loop_);
+  co::Run(*loop_, [&] -> Co<> {
+    const auto written = co_await writer_->Write(path, ToBytes(original));
+    if (!written) {
+      ADD_FAILURE() << written.error().ToString();
+      co_return;
+    }
+    EXPECT_EQ(written.value(), original.size());
+    const auto present = co_await reader.Exists(path);
+    EXPECT_TRUE(present && present.value());
+    const auto info = co_await reader.GetFileInfo(path);
+    if (!info) {
+      ADD_FAILURE() << info.error().ToString();
+      co_return;
+    }
+    EXPECT_EQ(info.value().size, original.size());
+    const auto bytes = co_await reader.ReadFile(path);
+    if (!bytes) {
+      ADD_FAILURE() << bytes.error().ToString();
+      co_return;
+    }
+    EXPECT_EQ(bytes.value(),
+      std::vector<std::byte>(
+        ToBytes(original).begin(), ToBytes(original).end()));
+  });
+  EXPECT_EQ(oxygen::base::ComputeFileSha256(path),
+    oxygen::base::ComputeSha256(ToBytes(original)));
+
+  const std::string replacement = "atomically replaced bytes";
+  ASSERT_TRUE(oxygen::serio::WriteFileAtomically(path, ToBytes(replacement)));
+  EXPECT_EQ(oxygen::base::ComputeFileSha256(path),
+    oxygen::base::ComputeSha256(ToBytes(replacement)));
+  {
+    oxygen::serio::FileStream<> stream(path, std::ios::in);
+    const auto size = stream.Size();
+    ASSERT_TRUE(size.has_value());
+    EXPECT_EQ(size.value(), replacement.size());
+  }
+  const auto lock_path = path.parent_path() / "generation.lock";
+  {
+    const auto lock = oxygen::serio::FileLock::TryAcquire(lock_path,
+      oxygen::serio::FileLockMode::kExclusive,
+      oxygen::serio::FileLockOpenMode::kOpenOrCreate);
+    ASSERT_TRUE(lock.has_value());
+    const auto competing = oxygen::serio::FileLock::TryAcquire(
+      lock_path, oxygen::serio::FileLockMode::kShared);
+    ASSERT_FALSE(competing.has_value());
+    EXPECT_EQ(competing.error(), std::errc::device_or_resource_busy);
+  }
+  EXPECT_TRUE(oxygen::serio::FileLock::TryAcquire(
+    lock_path, oxygen::serio::FileLockMode::kShared));
+}
+
 //! Verify writing a small file.
 NOLINT_TEST_F(WindowsFileWriterTest, WriteSmallFileWritesContent)
 {
@@ -92,7 +207,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteSmallFileWritesContent)
 
   // Act
   uint64_t bytes_written = 0;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto result = co_await writer_->Write(path, ToBytes(content));
     EXPECT_TRUE(result.has_value());
     bytes_written = result.value();
@@ -110,13 +225,13 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteLargerFileWritesContent)
   // Arrange
   std::string content(64 * 1024, 'X'); // 64KB
   for (size_t i = 0; i < content.size(); ++i) {
-    content[i] = static_cast<char>('A' + (i % 26));
+    content.at(i) = static_cast<char>('A' + (i % 26));
   }
   auto path = test_dir_ / "larger.bin";
 
   // Act
   uint64_t bytes_written = 0;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto result = co_await writer_->Write(path, ToBytes(content));
     EXPECT_TRUE(result.has_value());
     bytes_written = result.value();
@@ -135,16 +250,16 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteEmptyDataCreatesEmptyFile)
 
   // Act
   uint64_t bytes_written = 0;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto result = co_await writer_->Write(path, std::span<const std::byte> {});
     EXPECT_TRUE(result.has_value());
     bytes_written = result.value();
   });
 
   // Assert
-  EXPECT_EQ(bytes_written, 0u);
+  EXPECT_EQ(bytes_written, 0U);
   EXPECT_TRUE(std::filesystem::exists(path));
-  EXPECT_EQ(std::filesystem::file_size(path), 0u);
+  EXPECT_EQ(std::filesystem::file_size(path), 0U);
 }
 
 //! Verify overwrite mode replaces existing content.
@@ -162,7 +277,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteOverwriteExistingReplacesContent)
   }
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto result = co_await writer_->Write(path, ToBytes(replacement));
     EXPECT_TRUE(result.has_value());
   });
@@ -183,7 +298,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteNoOverwriteFailsIfExists)
 
   // Act
   FileError error = FileError::kOk;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     WriteOptions options;
     options.overwrite = false;
     auto result = co_await writer_->Write(path, ToBytes("new"), options);
@@ -203,7 +318,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteCreateDirectoriesCreatesParents)
   const std::string content = "nested content";
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto result = co_await writer_->Write(path, ToBytes(content));
     EXPECT_TRUE(result.has_value());
   });
@@ -221,7 +336,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteNoCreateDirectoriesFailsIfMissing)
 
   // Act
   FileError error = FileError::kOk;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     WriteOptions options;
     options.create_directories = false;
     auto result = co_await writer_->Write(path, ToBytes("content"), options);
@@ -238,7 +353,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteEmptyPathReturnsError)
 {
   // Arrange & Act
   FileError error = FileError::kOk;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto result = co_await writer_->Write("", ToBytes("content"));
     EXPECT_TRUE(result.has_error());
     error = result.error().code;
@@ -259,7 +374,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteAtNewFileCreatesFile)
 
   // Act
   uint64_t bytes_written = 0;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto result = co_await writer_->WriteAt(path, 0, ToBytes(content));
     EXPECT_TRUE(result.has_value());
     bytes_written = result.value();
@@ -285,7 +400,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteAtExistingFilePreservesPrefix)
   }
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     // Overwrite starting at offset 7 ("World" begins at 7)
     auto result = co_await writer_->WriteAt(
       path, 7, ToBytes(patch), WriteOptions { .overwrite = false });
@@ -304,7 +419,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteAtCreateDirectoriesCreatesParents)
   const std::string content = "nested content";
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto result = co_await writer_->WriteAt(path, 0, ToBytes(content));
     EXPECT_TRUE(result.has_value());
   });
@@ -327,9 +442,9 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteAsyncCompletesWithCallback)
   FileError callback_error = FileError::kUnknown;
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     writer_->WriteAsync(path, ToBytes(content), {},
-      [&](const FileErrorInfo& err, uint64_t bytes) {
+      [&](const FileErrorInfo& err, uint64_t bytes) -> void {
         callback_invoked = true;
         callback_error = err.code;
         callback_bytes = bytes;
@@ -355,7 +470,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteAsyncPendingCountTracked)
   const std::string content = "content";
 
   // Assert initial state
-  EXPECT_EQ(writer_->PendingCount(), 0u);
+  EXPECT_EQ(writer_->PendingCount(), 0U);
   EXPECT_FALSE(writer_->HasPending());
 
   // Act - start write without waiting
@@ -363,10 +478,10 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteAsyncPendingCountTracked)
 
   // The write is posted but may or may not have completed yet
   // Just verify Flush works
-  co::Run(*loop_, [&]() -> Co<> { co_await writer_->Flush(); });
+  co::Run(*loop_, [&] -> Co<> { co_await writer_->Flush(); });
 
   // Assert - after flush, pending should be 0
-  EXPECT_EQ(writer_->PendingCount(), 0u);
+  EXPECT_EQ(writer_->PendingCount(), 0U);
 }
 
 //=== WriteAtAsync Tests ===--------------------------------------------------//
@@ -382,9 +497,9 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteAtAsyncCompletesWithCallback)
   FileError callback_error = FileError::kUnknown;
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     writer_->WriteAtAsync(path, 0, ToBytes(content), {},
-      [&](const FileErrorInfo& err, uint64_t bytes) {
+      [&](const FileErrorInfo& err, uint64_t bytes) -> void {
         callback_invoked = true;
         callback_error = err.code;
         callback_bytes = bytes;
@@ -416,16 +531,16 @@ NOLINT_TEST_F(
   opts.share_write = true;
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
-    writer_->WriteAtAsync(
-      path, 0, ToBytes(a), opts, [&](const FileErrorInfo& err, uint64_t bytes) {
+  co::Run(*loop_, [&] -> Co<> {
+    writer_->WriteAtAsync(path, 0, ToBytes(a), opts,
+      [&](const FileErrorInfo& err, uint64_t bytes) -> void {
         EXPECT_EQ(err.code, FileError::kOk);
         EXPECT_EQ(bytes, a.size());
         completed.fetch_add(1, std::memory_order_relaxed);
       });
 
-    writer_->WriteAtAsync(
-      path, 8, ToBytes(b), opts, [&](const FileErrorInfo& err, uint64_t bytes) {
+    writer_->WriteAtAsync(path, 8, ToBytes(b), opts,
+      [&](const FileErrorInfo& err, uint64_t bytes) -> void {
         EXPECT_EQ(err.code, FileError::kOk);
         EXPECT_EQ(bytes, b.size());
         completed.fetch_add(1, std::memory_order_relaxed);
@@ -438,7 +553,7 @@ NOLINT_TEST_F(
   // Assert
   EXPECT_EQ(completed.load(std::memory_order_relaxed), 2);
   const auto content = ReadFileContent(path);
-  ASSERT_GE(content.size(), 12u);
+  ASSERT_GE(content.size(), 12U);
   EXPECT_EQ(content.substr(0, 4), a);
   EXPECT_EQ(content.substr(8, 4), b);
 }
@@ -463,13 +578,13 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteAtAsyncAllowsCooperativeReaders)
       FILE_ATTRIBUTE_NORMAL, nullptr);
     ASSERT_NE(reader, INVALID_HANDLE_VALUE) << GetLastError();
     [[maybe_unused]] const auto close_reader = oxygen::Finally(
-      [reader]() -> void { static_cast<void>(CloseHandle(reader)); });
+      [reader] -> void { static_cast<void>(CloseHandle(reader)); });
     auto callback_count = 0U;
     auto callback_error = FileErrorInfo {};
     auto callback_bytes = uint64_t { 0 };
     // Run owns this full expression until the coroutine and callbacks drain.
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-    co::Run(*loop_, [&]() -> Co<> {
+    co::Run(*loop_, [&] -> Co<> {
       writer_->WriteAtAsync(path, original.size(), ToBytes(appended),
         WriteOptions { .share_write = share_write },
         [&](const FileErrorInfo& error, const uint64_t count) -> void {
@@ -504,13 +619,13 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteAtAsyncRejectsReadersDenyingWrites)
       FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     ASSERT_NE(reader, INVALID_HANDLE_VALUE) << GetLastError();
     [[maybe_unused]] const auto close_reader = oxygen::Finally(
-      [reader]() -> void { static_cast<void>(CloseHandle(reader)); });
+      [reader] -> void { static_cast<void>(CloseHandle(reader)); });
     auto callback_count = 0U;
     auto callback_error = FileErrorInfo {};
     auto callback_bytes = uint64_t { 1 };
     // Run owns this full expression until the coroutine and callbacks drain.
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-    co::Run(*loop_, [&]() -> Co<> {
+    co::Run(*loop_, [&] -> Co<> {
       writer_->WriteAtAsync(path, original.size(), ToBytes("rejected"),
         WriteOptions { .share_write = share_write },
         [&](const FileErrorInfo& error, const uint64_t count) -> void {
@@ -542,10 +657,10 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteAtPreservesExclusiveWriteAccess)
     FILE_ATTRIBUTE_NORMAL, nullptr);
   ASSERT_NE(held_writer, INVALID_HANDLE_VALUE) << GetLastError();
   [[maybe_unused]] const auto close_writer = oxygen::Finally(
-    [held_writer]() -> void { static_cast<void>(CloseHandle(held_writer)); });
+    [held_writer] -> void { static_cast<void>(CloseHandle(held_writer)); });
   // Run owns this full expression until the coroutine completes.
   // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     const auto result = co_await writer_->WriteAt(path, 0, ToBytes("rejected"));
     EXPECT_TRUE(result.has_error());
     if (result.has_error()) {
@@ -566,14 +681,14 @@ NOLINT_TEST_F(WindowsFileWriterTest, FlushWaitsForAllPending)
   int completed_count = 0;
 
   // Act
-  writer_->WriteAsync(
-    path1, ToBytes(content), {}, [&](auto, auto) { ++completed_count; });
-  writer_->WriteAsync(
-    path2, ToBytes(content), {}, [&](auto, auto) { ++completed_count; });
-  writer_->WriteAsync(
-    path3, ToBytes(content), {}, [&](auto, auto) { ++completed_count; });
+  writer_->WriteAsync(path1, ToBytes(content), {},
+    [&](auto, auto) -> auto { ++completed_count; });
+  writer_->WriteAsync(path2, ToBytes(content), {},
+    [&](auto, auto) -> auto { ++completed_count; });
+  writer_->WriteAsync(path3, ToBytes(content), {},
+    [&](auto, auto) -> auto { ++completed_count; });
 
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto result = co_await writer_->Flush();
     EXPECT_TRUE(result.has_value());
   });
@@ -601,7 +716,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, FlushReturnsFirstError)
   writer_->WriteAsync(invalid_path, ToBytes(content), no_create, nullptr);
 
   FileError error = FileError::kOk;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto result = co_await writer_->Flush();
     if (result.has_error()) {
       error = result.error().code;
@@ -624,7 +739,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, CancelAllPreventsNewOperations)
   writer_->CancelAll();
 
   FileError error = FileError::kOk;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto result = co_await writer_->Write(path, ToBytes("content"));
     EXPECT_TRUE(result.has_error());
     error = result.error().code;
@@ -646,8 +761,8 @@ NOLINT_TEST_F(WindowsFileWriterTest, CancelAllInvokesCallbacksWithCancelled)
   writer_->CancelAll();
 
   // Act
-  writer_->WriteAsync(
-    path, ToBytes("content"), {}, [&](const FileErrorInfo& err, uint64_t) {
+  writer_->WriteAsync(path, ToBytes("content"), {},
+    [&](const FileErrorInfo& err, uint64_t) -> void {
       callback_invoked = true;
       callback_error = err.code;
     });

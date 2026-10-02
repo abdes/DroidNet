@@ -34,8 +34,29 @@ public sealed record CookDependencyGraph(
     public ImmutableArray<Uri> ImportedReferences { get; init; } = [];
 
     /// <summary>Gets changed model sources whose dependency layout needs explicit native discovery.</summary>
-    public ImmutableHashSet<Uri> ImportsNeedingDiscovery { get; init; } = [];
+    public ImmutableHashSet<Uri> SourcesNeedingAnalysis { get; init; } = [];
 
     /// <summary>Gets source-revision dependency facts retained with successful imported products.</summary>
     public ImmutableDictionary<Uri, Import.ImportedSourceDependencyState> ImportedSources { get; init; } = ImmutableDictionary<Uri, Import.ImportedSourceDependencyState>.Empty;
+
+    /// <summary>Gets scene projections retained for cooking without regeneration.</summary>
+    internal ImmutableDictionary<Uri, SceneDescriptorGenerationResult> SceneDescriptors { get; init; }
+        = ImmutableDictionary<Uri, SceneDescriptorGenerationResult>.Empty;
+
+    /// <summary>Gets the exact native recipes used during discovery.</summary>
+    internal ImmutableDictionary<Uri, ContentImportJob> NativeJobs { get; init; }
+        = ImmutableDictionary<Uri, ContentImportJob>.Empty;
+
+    /// <summary>Gets operation-owned builtin sources, separate from authored provenance.</summary>
+    internal ImmutableArray<ContentCookInput> GeneratedSources { get; init; } = [];
+
+    /// <summary>Gets verified generated inputs for native execution.</summary>
+    internal ImmutableArray<Import.NativeCapturedInput> GeneratedInputs { get; init; } = [];
+
+    /// <summary>Gets source facts to retain with successfully published products.</summary>
+    internal ImmutableDictionary<Uri, CookSourceFacts> SourceFacts { get; init; } = ImmutableDictionary<Uri, CookSourceFacts>.Empty;
+
+    /// <summary>Gets source dependencies whose buffer indices are embedded by value during cooking.</summary>
+    internal ImmutableDictionary<Uri, ImmutableArray<Uri>> ResourceDependencies { get; init; } = ImmutableDictionary<Uri, ImmutableArray<Uri>>.Empty;
+
 }

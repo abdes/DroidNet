@@ -20,6 +20,17 @@ public sealed partial class ContentBrowserAssetProviderTests
     /// <summary>Gets or sets the running test context.</summary>
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>Unavailable evidence is a neutral status, not a corruption or runtime failure.</summary>
+    [TestMethod]
+    public void UnknownOutputAvailabilityDoesNotClaimDamage()
+    {
+        var status = new AssetCookStatus(new Uri("asset:///Content/Material.omat.json"), AssetCookFreshness.Current,
+            HasPublishedOutput: true, CookedOutputAvailability.Unknown, [], [], []);
+        _ = AssetStatusPresentation.GetText(status, activity: null).Should().Be("Status pending");
+        _ = AssetStatusPresentation.GetTone(status, activity: null).Should().Be("Neutral");
+        _ = AssetStatusPresentation.GetDescription(status, activity: null).Should().NotContain("damaged");
+    }
+
     /// <summary>Browser and picker retain the exact same saved-output evidence.</summary>
     /// <param name="freshness">The input comparison result.</param>
     /// <param name="published">Whether a committed product exists.</param>
@@ -29,7 +40,7 @@ public sealed partial class ContentBrowserAssetProviderTests
     [TestMethod]
     [DataRow(AssetCookFreshness.Current, true, true, AssetState.Cooked)]
     [DataRow(AssetCookFreshness.OutOfDate, true, true, AssetState.Stale)]
-    [DataRow(AssetCookFreshness.OutOfDate, true, false, AssetState.Broken)]
+    [DataRow(AssetCookFreshness.OutOfDate, true, false, AssetState.Missing)]
     [DataRow(AssetCookFreshness.NeedsCooking, false, false, null)]
     public async Task BrowserAndPickerUseTheSameCookFacts(AssetCookFreshness freshness, bool published, bool verified, AssetState? expected)
     {
@@ -37,7 +48,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
         var uri = new Uri("asset:///Content/Materials/Red.omat.json");
         var catalog = new TestProjectAssetCatalog([new AssetRecord(uri)]);
-        var state = new AssetCookStatus(uri, freshness, published, verified, [], [], []);
+        var state = new AssetCookStatus(uri, freshness, published, verified ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], [], []);
         var reader = new DelegateStatusReader((_, _, _) => Task.FromResult<IReadOnlyList<AssetCookStatus>>([state]));
         var unavailableRuntime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
         await using var runtimeLifetime = unavailableRuntime.ConfigureAwait(false);
@@ -156,10 +167,95 @@ public sealed partial class ContentBrowserAssetProviderTests
         _ = rows.Should().BeEmpty();
     }
 
+    /// <summary>Publication admission errors leave authoring selectable and surface their diagnostic without reopening the failed head.</summary>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task UnavailablePublicationShowsAuthoredRowsWithDiagnostic(bool broken)
+    {
+        using var workspace = new TempWorkspace();
+        WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
+        var uri = new Uri("asset:///Content/Materials/Red.omat.json");
+        if (broken)
+        {
+            await File.WriteAllTextAsync(workspace.SourcePath("Content/Materials/Red.omat.json"), "{broken", this.TestContext.CancellationToken).ConfigureAwait(false);
+        }
+
+        const string failure = "The publication document does not match the selected digest.";
+        var catalog = new TestProjectAssetCatalog([new AssetRecord(uri)]) { PublicationError = failure };
+        var reader = new DelegateStatusReader((_, _, _) => throw new InvalidOperationException("Must not reopen failed publication."));
+        var runtime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
+        await using var runtimeLifetime = runtime.ConfigureAwait(false);
+        using var provider = new ContentBrowserAssetProvider(catalog, CreateProjectContextService(workspace), new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), EmptyCookRuns(), runtime);
+        var item = await provider.ResolveAsync(uri, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = item.Should().NotBeNull();
+        _ = item!.IsSelectable.Should().Be(!broken);
+        _ = item.PrimaryState.Should().Be(broken ? AssetState.Broken : AssetState.Descriptor);
+        _ = item.CookStatus!.Freshness.Should().Be(AssetCookFreshness.Unknown);
+        _ = item.CookStatus.OutputAvailability.Should().Be(CookedOutputAvailability.Unknown);
+        _ = item.CookedPath.Should().BeNull();
+        _ = AssetStatusPresentation.GetText(item.CookStatus, null).Should().Be("Status unavailable");
+        _ = AssetStatusPresentation.GetDescription(item.CookStatus, null).Should().Be(failure);
+    }
+
+    /// <summary>Awaitable shutdown drains a cancelled status read before its owner removes retained output.</summary>
+    [TestMethod]
+    public async Task AsyncDisposalWaitsForThePublicationReaderToDrain()
+    {
+        using var workspace = new TempWorkspace();
+        WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
+        var uri = new Uri("asset:///Content/Materials/Red.omat.json");
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reader = new DelegateStatusReader(async (_, _, token) =>
+        {
+            entered.SetResult();
+            try
+            {
+                await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false);
+            }
+            finally
+            {
+                cancelled.SetResult();
+                await release.Task.ConfigureAwait(false);
+            }
+
+            return [];
+        });
+        var runtime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
+        await using var runtimeLifetime = runtime.ConfigureAwait(false);
+        var provider = new ContentBrowserAssetProvider(new TestProjectAssetCatalog([new(uri)]), CreateProjectContextService(workspace), new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), EmptyCookRuns(), runtime);
+        var refresh = provider.RefreshAsync(AssetBrowserFilter.Default, this.TestContext.CancellationToken);
+        Task disposal = Task.CompletedTask;
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+            disposal = provider.DisposeAsync().AsTask();
+            await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+            _ = disposal.IsCompleted.Should().BeFalse("the status reader still owns its publication");
+        }
+        finally
+        {
+            release.TrySetResult();
+            await disposal.ConfigureAwait(false);
+            await provider.DisposeAsync().ConfigureAwait(false);
+        }
+
+        _ = await ((Func<Task>)(() => refresh)).Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
+    }
+
     private static ICookRunService EmptyCookRuns() => Mock.Of<ICookRunService>(runs => runs.Runs == Array.Empty<CookRunSnapshot>());
 
     private sealed class DelegateStatusReader(Func<ProjectContext, IReadOnlyList<Uri>, CancellationToken, Task<IReadOnlyList<AssetCookStatus>>> read) : IAssetCookStatusReader
     {
+        public event EventHandler? Changed;
+
+        public void NotifyChanged() => this.Changed?.Invoke(this, EventArgs.Empty);
+
+        public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, Oxygen.Editor.ContentPipeline.Publication.CookPublicationReadLease publication, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default)
+            => this.ReadAsync(project, assetUris, cancellationToken);
+
         public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default)
             => read(project, assetUris, cancellationToken);
     }

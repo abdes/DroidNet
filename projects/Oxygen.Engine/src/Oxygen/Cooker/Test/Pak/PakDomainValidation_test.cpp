@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <array>
 #include <cstdint>
 #include <span>
@@ -13,12 +11,13 @@
 #include <utility>
 #include <vector>
 
+#include "PakTestSupport.h"
+
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/Pak/PakPlanPolicy.h>
 #include <Oxygen/Cooker/Pak/PakValidation.h>
 #include <Oxygen/Data/PakFormat_render.h>
-
-#include "PakTestSupport.h"
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 namespace data = oxygen::data;
@@ -31,7 +30,6 @@ constexpr auto kSourceKeySeed = uint8_t { 0x7CU };
 constexpr auto kRegionBaseOffset = uint64_t { 256U };
 constexpr auto kRegionSize = uint64_t { 64U };
 constexpr auto kOverlapOffset = uint64_t { 288U };
-constexpr auto kScriptParamRecordCount = uint32_t { 4U };
 
 struct BaselinePlanInput final {
   pak::PakBuildRequest request;
@@ -57,8 +55,6 @@ auto ClonePlanData(const pak::PakPlan& plan) -> pak::PakPlan::Data
     plan.PatchActions().begin(), plan.PatchActions().end());
   out.patch_closure.assign(
     plan.PatchClosure().begin(), plan.PatchClosure().end());
-  out.script_slots.assign(plan.ScriptSlots().begin(), plan.ScriptSlots().end());
-  out.script_param_record_count = plan.ScriptParamRecordCount();
   out.planned_file_size = plan.PlannedFileSize();
   return out;
 }
@@ -75,7 +71,7 @@ protected:
       .content_version = kContentVersion,
       .source_key = paktest::MakeSourceKey(kSourceKeySeed),
       .base_catalogs = {},
-      .patch_compat = {},
+
       .options = pak::PakBuildOptions {
         .deterministic = true,
         .embed_browse_index = false,
@@ -154,31 +150,6 @@ NOLINT_TEST_F(PakDomainValidationTest, RejectsTableEntrySizeMismatch)
   EXPECT_FALSE(result.success);
   EXPECT_TRUE(paktest::HasDiagnosticCode(
     result.diagnostics, "pak.plan.table_entry_size_mismatch"));
-}
-
-NOLINT_TEST_F(PakDomainValidationTest, RejectsOverlappingScriptParamRanges)
-{
-  auto baseline = MakeBaselinePlan();
-  auto data = ClonePlanData(baseline.plan);
-  data.script_param_record_count = kScriptParamRecordCount;
-  data.script_slots = {
-    pak::PakScriptSlotPlan { .slot_index = 0U,
-      .script_asset_key = paktest::MakeAssetKey(0x60U),
-      .params_array_index = 0U,
-      .params_count = 3U },
-    pak::PakScriptSlotPlan { .slot_index = 1U,
-      .script_asset_key = paktest::MakeAssetKey(0x61U),
-      .params_array_index = 2U,
-      .params_count = 2U },
-  };
-
-  const auto policy = pak::DerivePakPlanPolicy(baseline.request);
-  const auto result = pak::PakValidation::Validate(
-    pak::PakPlan(std::move(data)), policy, baseline.request);
-
-  EXPECT_FALSE(result.success);
-  EXPECT_TRUE(paktest::HasDiagnosticCode(
-    result.diagnostics, "pak.plan.script_param_overlap"));
 }
 
 } // namespace

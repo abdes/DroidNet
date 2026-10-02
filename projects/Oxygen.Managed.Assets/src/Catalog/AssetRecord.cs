@@ -11,7 +11,7 @@ namespace Oxygen.Managed.Assets.Catalog;
 /// </summary>
 /// <remarks>
 /// Catalog records are intentionally lightweight. Consumers that need the full asset metadata
-/// should load the asset via <see cref="IAssetService"/>.
+/// use the native content pipeline for runtime loading.
 /// </remarks>
 public sealed record AssetRecord(Uri Uri)
 {

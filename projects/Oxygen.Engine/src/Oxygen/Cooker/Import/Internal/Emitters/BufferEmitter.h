@@ -17,7 +17,9 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
+#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
@@ -29,7 +31,6 @@
 namespace oxygen::content::import {
 
 class IAsyncFileWriter;
-struct FileErrorInfo;
 
 //! Emits cooked buffers with async I/O.
 /*!
@@ -178,16 +179,17 @@ public:
    This method:
    1. Waits for all pending async writes to complete.
 
-   @return True if all writes succeeded, false if any errors occurred.
+   @return Success or the first I/O failure, including its path and system
+   error.
 
    ### Errors
 
    If any I/O errors occurred during `Emit()` calls, this method returns
-   false. The caller should check `ErrorCount()` for details.
+   the first failure. The caller should check `ErrorCount()` for details.
 
    @note Must be called from the import thread.
   */
-  OXGN_COOK_NDAPI auto Finalize() -> co::Co<bool>;
+  OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, FileErrorInfo>>;
 
 private:
   using BufferResourceDesc = data::pak::core::BufferResourceDesc;
@@ -217,6 +219,7 @@ private:
   std::atomic<uint32_t> emitted_count_ { 0 };
   std::atomic<size_t> pending_count_ { 0 };
   std::atomic<size_t> error_count_ { 0 };
+  std::optional<FileErrorInfo> first_error_ {}; // Import-thread callbacks.
   std::unordered_map<std::string, std::string> identity_by_key_;
   std::unordered_map<std::string, uint32_t> index_by_key_;
 };

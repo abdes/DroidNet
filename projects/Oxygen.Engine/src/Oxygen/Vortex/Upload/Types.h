@@ -21,7 +21,7 @@
 #include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/Types/FenceValue.h>
-#include <Oxygen/Vortex/Upload/Errors.h>
+#include <Oxygen/Vortex/Upload/UploadTicket.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen {
@@ -44,15 +44,6 @@ namespace oxygen::vortex::upload {
  - kResized: Existing buffer replaced with a larger one.
 */
 enum class EnsureBufferResult : uint8_t { kUnchanged, kCreated, kResized };
-
-using TicketId = NamedType<uint64_t, struct TicketIdTag,
-  // clang-format off
-  DefaultInitialized,
-  Comparable,
-  Printable,
-  Hashable>; // clang-format on
-
-inline auto to_string(TicketId const& t) { return std::to_string(t.get()); }
 
 using Priority = NamedType<int, struct PriorityTag,
   // clang-format off
@@ -145,40 +136,6 @@ struct UploadRequest {
   // For buffers: UploadDataView or UploadProducer.
   // For textures: UploadTextureSourceView or UploadProducer.
   std::variant<UploadDataView, UploadTextureSourceView, UploadProducer> data;
-};
-
-//! Represents a valid GPU upload operation that can be tracked for completion.
-/*!
- A ticket is issued for every successful upload submission and provides a way to
- query completion status and retrieve results. All tickets are guaranteed to be
- valid and represent actual upload operations.
-
- @see UploadCoordinator::Submit(), UploadTracker::IsComplete()
-*/
-struct UploadTicket {
-  TicketId id;
-  FenceValue fence;
-
-  // Non-default constructible - all tickets must be explicitly created with
-  // valid values
-  UploadTicket() = delete;
-  UploadTicket(TicketId ticket_id, FenceValue fence_value)
-    : id(ticket_id)
-    , fence(fence_value)
-  {
-  }
-
-  // Rule of 5: explicit copy/move semantics
-  OXYGEN_DEFAULT_COPYABLE(UploadTicket)
-  OXYGEN_DEFAULT_MOVABLE(UploadTicket)
-
-  ~UploadTicket() = default;
-};
-
-struct UploadResult {
-  bool success { false };
-  uint64_t bytes_uploaded { 0 };
-  std::optional<UploadError> error;
 };
 
 } // namespace oxygen::vortex::upload

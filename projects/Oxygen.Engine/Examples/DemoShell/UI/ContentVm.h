@@ -17,6 +17,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include "DemoShell/Services/ContentSettingsService.h"
+#include "DemoShell/Services/FileBrowserService.h"
+
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
@@ -25,9 +28,6 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Data/AssetKey.h>
-
-#include "DemoShell/Services/ContentSettingsService.h"
-#include "DemoShell/Services/FileBrowserService.h"
 
 namespace oxygen::content {
 class IAssetLoader;
@@ -45,6 +45,11 @@ enum class SceneSourceKind : uint8_t {
 struct SceneSource {
   SceneSourceKind kind { SceneSourceKind::kPak };
   std::filesystem::path path;
+};
+
+struct GenerationPublication final {
+  std::filesystem::path cooked_root;
+  std::optional<std::filesystem::path> previous_root;
 };
 
 //! Represents a scene that can be loaded.
@@ -112,10 +117,13 @@ public:
     std::function<void(const std::filesystem::path&)> callback) -> void;
   auto SetOnIndexLoaded(
     std::function<void(const std::filesystem::path&)> callback) -> void;
+  auto SetOnGenerationPublished(
+    std::function<void(const GenerationPublication&)> callback) -> void;
   auto SetOnClearMounts(std::function<void()> callback) -> void;
 
   auto MountPak(const std::filesystem::path& path) -> void;
   auto LoadIndex(const std::filesystem::path& path) -> void;
+  auto LoadImportRecord(const std::filesystem::path& path) -> void;
   auto UnloadAllLibrary() -> void;
   auto RestorePersistedLibraryState() -> void;
   auto PersistLibraryState() -> void;
@@ -130,7 +138,7 @@ public:
     -> const std::vector<std::filesystem::path>&;
 
   auto BrowseForPak() -> void;
-  auto BrowseForIndex() -> void;
+  auto BrowseForLibrary() -> void;
 
   //! Register callback for scene load requests.
   auto SetOnSceneLoadRequested(std::function<void(const SceneEntry&)> callback)
@@ -140,8 +148,7 @@ public:
 
   // --- Settings & Configuration ---
 
-  [[nodiscard]] auto GetLastCookedOutput() const -> std::string;
-  auto SetLastCookedOutput(const std::string& path) -> void;
+  [[nodiscard]] auto GetGeneratedStorageRoot() const -> std::string;
 
   [[nodiscard]] auto GetExplorerSettings() const -> ContentExplorerSettings;
   auto SetExplorerSettings(const ContentExplorerSettings& settings) -> void;
@@ -214,9 +221,9 @@ private:
     const std::optional<data::AssetKey>& key) const -> std::string;
 
   struct SceneEntryKey {
-    data::AssetKey key {};
+    data::AssetKey key;
     SceneSourceKind source_kind { SceneSourceKind::kPak };
-    std::string source_key {};
+    std::string source_key;
   };
 
   struct SceneEntryKeyHash {
@@ -243,17 +250,20 @@ private:
                           SceneEntryKeyHash, SceneEntryKeyEq>& entries,
     std::vector<SceneEntry>& out) -> void;
   auto PersistMountedSources() -> void;
+  auto MountGeneration(const GenerationPublication& publication) -> void;
   auto PersistActiveSceneSelection(const SceneEntry& entry) -> void;
+  auto FindRetainedRecord(const std::filesystem::path& index_path)
+    -> std::optional<std::filesystem::path>;
   auto PruneActiveSceneSelectionForSource(
     SceneSourceKind source_kind, const std::filesystem::path& path) -> void;
   auto TryResolvePendingSceneSelection() -> void;
 
-  enum class BrowseMode {
+  enum class BrowseMode : uint8_t {
     kNone,
     kModelRoot,
     kSourceFile,
     kPakFile,
-    kIndexFile
+    kLibraryFile,
   };
   BrowseMode browse_mode_ { BrowseMode::kNone };
   FileBrowserService::RequestId browse_request_id_ { 0 };
@@ -273,6 +283,7 @@ private:
   std::vector<std::filesystem::path> discovered_paks_;
   std::vector<std::filesystem::path> loaded_paks_;
   std::vector<std::filesystem::path> loaded_indices_;
+  std::vector<std::filesystem::path> loaded_import_records_;
   std::vector<SceneEntry> available_scenes_;
   std::unordered_map<SceneEntryKey, SceneEntry, SceneEntryKeyHash,
     SceneEntryKeyEq>
@@ -281,6 +292,7 @@ private:
   //! Callbacks to update engine state
   std::function<void(const std::filesystem::path&)> on_pak_mounted_;
   std::function<void(const std::filesystem::path&)> on_index_loaded_;
+  std::function<void(const GenerationPublication&)> on_generation_published_;
   std::function<void()> on_clear_mounts_;
   std::function<void(const SceneEntry&)> on_scene_load_requested_;
   std::function<void()> on_scene_load_cancel_requested_;

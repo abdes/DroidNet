@@ -15,7 +15,7 @@ using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Schemas;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.UI;
 using WindowId = Microsoft.UI.WindowId;
@@ -42,6 +42,9 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     private bool isDisposed;
     private bool isApplyingBaseColor;
     private bool isClosing;
+    private IReadOnlyList<MaterialTextureChoice> availableTextureChoices = [];
+    private float normalScale = 1.0f;
+    private float occlusionStrength = 1.0f;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MaterialEditorViewModel"/> class.
@@ -74,6 +77,21 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.windowId = windowId;
         this.conflictPrompt = conflictPrompt;
         this.MaterialUriText = metadata.MaterialUri.ToString();
+        this.TextureChannels =
+        [
+            new("base_color", "Base color", this.OnTextureSelectionChanged),
+            new("normal", "Normal", this.OnTextureSelectionChanged),
+            new("metallic", "Metallic", this.OnTextureSelectionChanged),
+            new("roughness", "Roughness", this.OnTextureSelectionChanged),
+            new("ambient_occlusion", "Ambient occlusion", this.OnTextureSelectionChanged),
+            new("emissive", "Emissive", this.OnTextureSelectionChanged),
+            new("specular", "Specular", this.OnTextureSelectionChanged),
+            new("sheen_color", "Sheen color", this.OnTextureSelectionChanged),
+            new("clearcoat", "Clearcoat", this.OnTextureSelectionChanged),
+            new("clearcoat_normal", "Clearcoat normal", this.OnTextureSelectionChanged),
+            new("transmission", "Transmission", this.OnTextureSelectionChanged),
+            new("thickness", "Thickness", this.OnTextureSelectionChanged),
+        ];
 
         this.assetStatusSubscription = assetProvider.Items.ObserveOn(uiScheduler)
             .Subscribe(this.ApplyAssetItems, this.OnAssetStatusFailed);
@@ -85,6 +103,9 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     /// Gets the available alpha modes.
     /// </summary>
     public IReadOnlyList<string> AlphaModes { get; } = ["Opaque", "Mask", "Blend"];
+
+    /// <summary>Gets all native material texture channels and their current assignment choices.</summary>
+    public IReadOnlyList<MaterialTextureChannel> TextureChannels { get; }
 
     /// <summary>Gets a value indicating whether the document's authored values have finished loading.</summary>
     public bool IsLoaded => this.document is not null && !this.isLoading;
@@ -135,6 +156,32 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
     [ObservableProperty]
     public partial float RoughnessFactor { get; set; } = 0.5f;
+
+    /// <summary>Gets or sets the normal-map scale.</summary>
+    public float NormalScale
+    {
+        get => this.normalScale;
+        set
+        {
+            if (this.SetProperty(ref this.normalScale, value))
+            {
+                this.ApplyEdit(PropertyEdit.Single(MaterialDescriptors.NormalScale, value));
+            }
+        }
+    }
+
+    /// <summary>Gets or sets the occlusion texture strength.</summary>
+    public float OcclusionStrength
+    {
+        get => this.occlusionStrength;
+        set
+        {
+            if (this.SetProperty(ref this.occlusionStrength, value))
+            {
+                this.ApplyEdit(PropertyEdit.Single(MaterialDescriptors.AmbientOcclusion, value));
+            }
+        }
+    }
 
     [ObservableProperty]
     public partial string AlphaMode { get; set; } = "Opaque";
@@ -342,6 +389,46 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         }
     }
 
+    private void OnTextureSelectionChanged(MaterialTextureChannel channel, string? virtualPath)
+    {
+        if (!this.isLoading && !this.isClosing && !this.isDisposed && !this.isResolvingConflict && this.acceptsInput && this.document is not null)
+        {
+            _ = this.ApplyTextureReferenceAsync(channel, virtualPath);
+        }
+    }
+
+    private async Task ApplyTextureReferenceAsync(MaterialTextureChannel channel, string? virtualPath)
+    {
+        var current = this.document;
+        if (current is null)
+        {
+            return;
+        }
+
+        await this.editGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
+        try
+        {
+            if (this.isDisposed || this.document?.DocumentId != current.DocumentId)
+            {
+                return;
+            }
+
+            var result = await this.documentService.EditTextureAsync(
+                current.DocumentId,
+                channel.Channel,
+                virtualPath,
+                CancellationToken.None).ConfigureAwait(true);
+            this.RefreshDocument(current.DocumentId);
+            this.StatusText = result.Succeeded
+                ? string.Empty
+                : $"The {channel.DisplayName.ToLowerInvariant()} texture change was rejected.";
+        }
+        finally
+        {
+            _ = this.editGate.Release();
+        }
+    }
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Pending material work failed while disposing the editor.")]
     private partial void LogPendingWorkFailedDuringDispose(Exception exception);
 
@@ -456,9 +543,16 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.BaseColorA = pbr.BaseColorA;
         this.MetallicFactor = pbr.MetallicFactor;
         this.RoughnessFactor = pbr.RoughnessFactor;
+        this.NormalScale = source.NormalScale;
+        this.OcclusionStrength = source.OcclusionStrength;
         this.AlphaMode = ToDisplayAlphaMode(source.AlphaMode);
         this.AlphaCutoff = source.AlphaCutoff;
         this.DoubleSided = source.DoubleSided;
+        foreach (var channel in this.TextureChannels)
+        {
+            _ = source.TextureReferences.TryGetValue(channel.Channel, out var virtualPath);
+            channel.Refresh(this.availableTextureChoices, virtualPath);
+        }
         this.IsDirty = value.IsDirty;
         this.OnPropertyChanged(nameof(this.BaseColorBrush));
         this.OnPropertyChanged(nameof(this.BaseColorColor));

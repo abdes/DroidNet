@@ -6,6 +6,9 @@
 
 #include "ScriptingModule_test_fixture.h"
 
+#include <Oxygen/Scripting/Module/ScriptingModule.h>
+#include <Oxygen/Testing/GTest.h>
+
 namespace oxygen::scripting::test {
 
 class ContentBindingsTest : public ScriptingModuleTest { };
@@ -28,7 +31,7 @@ local expected = {
   "has_input_action", "get_input_action", "has_input_mapping_context", "get_input_mapping_context",
   "load_texture_async", "load_buffer_async", "load_material_async", "load_geometry_async",
   "load_script_async", "load_input_action_async", "load_input_mapping_context_async",
-  "release_resource", "release_asset", "trim_cache",
+  "trim_cache",
   "mint_synthetic_texture_key", "mint_synthetic_buffer_key",
   "add_pak_file", "add_loose_cooked_root", "clear_mounts",
   "create_procedural_geometry", "create_default_material", "create_debug_material"
@@ -66,9 +69,7 @@ if assets.get_buffer(1) ~= nil then error("get_buffer should be nil") end
 local guid = "01234567-89ab-cdef-0123-456789abcdef"
 if assets.has_material(guid) ~= false then error("has_material should be false") end
 if assets.get_material(guid) ~= nil then error("get_material should be nil") end
-if assets.release_asset(guid) ~= false then error("release_asset should be false") end
 
-if assets.release_resource(42) ~= false then error("release_resource should be false") end
 if assets.trim_cache() ~= false then error("trim_cache should be false") end
 if assets.mint_synthetic_texture_key() ~= 0 then error("mint_synthetic_texture_key should be 0") end
 if assets.mint_synthetic_buffer_key() ~= 0 then error("mint_synthetic_buffer_key should be 0") end

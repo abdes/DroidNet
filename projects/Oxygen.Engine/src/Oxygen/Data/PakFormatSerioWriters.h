@@ -18,9 +18,7 @@ namespace oxygen::serio {
 inline auto Store(AnyWriter& writer,
   const data::pak::world::PerspectiveCameraRecord& record) -> Result<void>
 {
-  if (!std::isfinite(record.aperture_f) || record.aperture_f <= 0.0F
-    || !std::isfinite(record.shutter_rate) || record.shutter_rate <= 0.0F
-    || !std::isfinite(record.iso) || record.iso <= 0.0F) {
+  if (!data::pak::world::HasValidPerspectiveCameraValues(record)) {
     return ::oxygen::Err(std::errc::invalid_argument);
   }
   auto pack = writer.ScopedAlignment(1);
@@ -32,6 +30,7 @@ inline auto Store(AnyWriter& writer,
   CHECK_RESULT(writer.Write(record.aperture_f));
   CHECK_RESULT(writer.Write(record.shutter_rate));
   CHECK_RESULT(writer.Write(record.iso));
+  CHECK_RESULT(writer.Write(record.aspect_mode));
   return {};
 }
 

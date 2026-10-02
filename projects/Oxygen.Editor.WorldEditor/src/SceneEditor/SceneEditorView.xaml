@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.World.SceneEditor.SceneEditorView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -106,8 +106,8 @@
                                         Maximum="60"
                                         Minimum="1"
                                         SmallChange="1"
-                                        Value="{x:Bind ViewModel.RunAtFps, Mode=TwoWay}" />
-                                    <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.RunAtFps, Mode=OneWay}" />
+                                        Value="{x:Bind ViewModel.PreviewSettings.RunAtFps, Mode=TwoWay}" />
+                                    <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.PreviewSettings.RunAtFps, Mode=OneWay}" />
                                 </StackPanel>
                                 <TextBlock Margin="0,10,0,8" Text="Native engine log verbosity:" />
                                 <Grid ColumnSpacing="8">
@@ -118,7 +118,7 @@
                                     <seg:Segmented
                                         x:Name="LogVerbositySegmented"
                                         HorizontalAlignment="Left"
-                                        SelectedIndex="{x:Bind ViewModel.LoggingVerbosity, Mode=TwoWay, Converter={StaticResource VerbosityIndexConverter}}"
+                                        SelectedIndex="{x:Bind ViewModel.PreviewSettings.LoggingVerbosity, Mode=TwoWay, Converter={StaticResource VerbosityIndexConverter}}"
                                         SelectionMode="Single">
                                         <seg:SegmentedItem Content="E" ToolTipService.ToolTip="Error (ERR)" />
                                         <seg:SegmentedItem Content="W" ToolTipService.ToolTip="Warning (WARN)" />
@@ -131,7 +131,7 @@
                                         HorizontalValueAlignment="Right"
                                         Mask="#.#"
                                         Multiplier="1"
-                                        NumberValue="{x:Bind ViewModel.LoggingVerbosity, Mode=TwoWay, Converter={StaticResource IntFloatConverter}}"
+                                        NumberValue="{x:Bind ViewModel.PreviewSettings.LoggingVerbosity, Mode=TwoWay, Converter={StaticResource IntFloatConverter}}"
                                         WithPadding="False" />
                                 </Grid>
                             </StackPanel>

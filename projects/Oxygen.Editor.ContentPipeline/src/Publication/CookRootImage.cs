@@ -17,7 +17,7 @@ internal sealed record CookRootImage(bool Exists, ImmutableDictionary<string, Co
     /// <param name="copyTo">Optional new staging destination.</param>
     /// <param name="cancellationToken">Cancels before publication.</param>
     /// <returns>The protected source content identities.</returns>
-    public static async Task<CookRootImage> CaptureAsync(string root, string? copyTo, CancellationToken cancellationToken)
+    public static async Task<CookRootImage> CaptureAsync(string root, string? copyTo, CancellationToken cancellationToken, bool excludeGenerationMarker = false)
     {
         var files = ImmutableDictionary.CreateBuilder<string, FileImage>(StringComparer.Ordinal);
         CookOutputLease.RejectReparsePoint(root);
@@ -32,10 +32,30 @@ internal sealed record CookRootImage(bool Exists, ImmutableDictionary<string, Co
             throw new IOException($"A cooked root is not a directory: '{root}'.");
         }
 
-        foreach (var path in EnumerateFiles(root))
+        if (copyTo is not null)
+        {
+            _ = Directory.CreateDirectory(copyTo);
+        }
+
+        foreach (var (path, isDirectory) in EnumerateEntries(root))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
+            if (isDirectory)
+            {
+                if (copyTo is not null)
+                {
+                    _ = Directory.CreateDirectory(Path.Combine(copyTo, relative));
+                }
+
+                continue;
+            }
+
+            if (excludeGenerationMarker && string.Equals(relative, CookedGeneration.MarkerFileName, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
             var source = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
             await using var sourceLifetime = source.ConfigureAwait(false);
             var lastWrite = File.GetLastWriteTimeUtc(path);
@@ -67,7 +87,7 @@ internal sealed record CookRootImage(bool Exists, ImmutableDictionary<string, Co
             && this.Files.All(pair => other.Files.TryGetValue(pair.Key, out var file)
                 && file.Size == pair.Value.Size && string.Equals(file.Sha256, pair.Value.Sha256, StringComparison.Ordinal));
 
-    private static IEnumerable<string> EnumerateFiles(string root)
+    private static IEnumerable<(string Path, bool IsDirectory)> EnumerateEntries(string root)
     {
         var directories = new Stack<string>();
         directories.Push(root);
@@ -76,13 +96,11 @@ internal sealed record CookRootImage(bool Exists, ImmutableDictionary<string, Co
             foreach (var entry in Directory.EnumerateFileSystemEntries(directory).Order(StringComparer.Ordinal))
             {
                 CookOutputLease.RejectReparsePoint(entry);
-                if (File.GetAttributes(entry).HasFlag(FileAttributes.Directory))
+                var isDirectory = File.GetAttributes(entry).HasFlag(FileAttributes.Directory);
+                yield return (entry, isDirectory);
+                if (isDirectory)
                 {
                     directories.Push(entry);
-                }
-                else
-                {
-                    yield return entry;
                 }
             }
         }

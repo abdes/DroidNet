@@ -6,17 +6,19 @@
 
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 
 #include <nlohmann/json.hpp>
-
-#include <Oxygen/Testing/GTest.h>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -63,6 +65,7 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
           "procedural": { "generator": "Cube", "mesh_name": "CubeMesh" },
           "submeshes": [
             {
+              "slot_id": "018f8f8f-1111-7111-8111-111111111111",
               "material_ref": "/.cooked/Materials/default.omat",
               "views": [ { "view_ref": "__all__" } ]
             }
@@ -97,18 +100,26 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  if (!manifest.has_value()) {
+    FAIL() << "Expected manifest to contain a value" << errors.str();
+  }
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   auto request_errors = std::ostringstream {};
-  const auto request = manifest->jobs[0].BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
-  ASSERT_TRUE(request->cooked_root.has_value());
+  const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
+  if (!request.has_value()) {
+    FAIL() << "Expected request to contain a value" << request_errors.str();
+  }
+  if (!request->cooked_root.has_value()) {
+    FAIL() << "Expected request->cooked_root to contain a value";
+  }
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name, std::optional<std::string> { "cube-job" });
-  ASSERT_TRUE(request->geometry_descriptor.has_value());
+  if (!request->geometry_descriptor.has_value()) {
+    FAIL() << "Expected request->geometry_descriptor to contain a value";
+  }
   ASSERT_EQ(request->cooked_context_roots.size(), 1U);
-  EXPECT_EQ(request->cooked_context_roots[0], root / "Libraries/Materials");
+  EXPECT_EQ(request->cooked_context_roots.at(0), root / "Libraries/Materials");
 
   EXPECT_EQ(request->options.with_content_hashing,
     EffectiveContentHashingEnabled(false));
@@ -136,6 +147,7 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
           "procedural": { "generator": "Cube", "mesh_name": "CubeMesh" },
           "submeshes": [
             {
+              "slot_id": "018f8f8f-1111-7111-8111-111111111111",
               "material_ref": "/.cooked/Materials/default.omat",
               "views": [ { "view_ref": "__all__" } ]
             }
@@ -166,19 +178,25 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  if (!manifest.has_value()) {
+    FAIL() << "Expected manifest to contain a value" << errors.str();
+  }
   ASSERT_EQ(manifest->jobs.size(), 2U);
-  EXPECT_EQ(manifest->jobs[1].id, "proc.cube");
-  ASSERT_EQ(manifest->jobs[1].depends_on.size(), 1U);
-  EXPECT_EQ(manifest->jobs[1].depends_on[0], "shared.buffers");
+  EXPECT_EQ(manifest->jobs.at(1).id, "proc.cube");
+  ASSERT_EQ(manifest->jobs.at(1).depends_on.size(), 1U);
+  EXPECT_EQ(manifest->jobs.at(1).depends_on.at(0), "shared.buffers");
 
   auto request_errors = std::ostringstream {};
-  const auto request = manifest->jobs[1].BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
-  ASSERT_TRUE(request->orchestration.has_value());
+  const auto request = manifest->jobs.at(1).BuildRequest(request_errors);
+  if (!request.has_value()) {
+    FAIL() << "Expected request to contain a value" << request_errors.str();
+  }
+  if (!request->orchestration.has_value()) {
+    FAIL() << "Expected request->orchestration to contain a value";
+  }
   EXPECT_EQ(request->orchestration->job_id, "proc.cube");
   ASSERT_EQ(request->orchestration->depends_on.size(), 1U);
-  EXPECT_EQ(request->orchestration->depends_on[0], "shared.buffers");
+  EXPECT_EQ(request->orchestration->depends_on.at(0), "shared.buffers");
 }
 
 NOLINT_TEST(ImportManifestGeometryDescriptorTest,

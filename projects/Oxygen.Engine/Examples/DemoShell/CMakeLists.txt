@@ -236,6 +236,7 @@ if(OXYGEN_BUILD_UI_TESTS)
     ${META_MODULE_TARGET}
     PRIVATE
       "Test/UiTestSession.cpp"
+      "Test/RuntimeSmoke.cpp"
       "Test/UiTestSession.h"
       "Test/UiTestAssets.cpp"
       "Test/UiTestAssets.h"

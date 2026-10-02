@@ -7,9 +7,12 @@
 #pragma once
 
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <ostream>
+#include <stop_token>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <Oxygen/Cooker/Import/BufferContainerImportSettings.h>
@@ -26,11 +29,15 @@
 #include <Oxygen/Cooker/Import/ScriptImportSettings.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
 #include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::import {
 
+struct ImportSourceAnalysis;
+
 struct ImportManifestJob {
   std::string job_type;
+  std::optional<data::SourceKey> source_key {};
   LooseCookedLayout loose_cooked_layout;
   TextureImportSettings texture;
   SceneImportSettings fbx;
@@ -48,11 +55,17 @@ struct ImportManifestJob {
   std::string id;
   std::vector<std::string> depends_on;
 
-  OXGN_COOK_NDAPI auto BuildRequest(std::ostream& error_stream) const
+  //! Declared primary input, available even when preparation fails or is
+  //! unsupported.
+  OXGN_COOK_NDAPI auto SourcePath() const -> std::filesystem::path;
+
+  OXGN_COOK_NDAPI auto BuildRequest(std::ostream& error_stream,
+    std::shared_ptr<const CapturedInputSet> captured_inputs = {}) const
     -> std::optional<ImportRequest>;
 };
 
 struct ImportManifestDefaults {
+  std::optional<data::SourceKey> source_key {};
   LooseCookedLayout loose_cooked_layout;
   TextureImportSettings texture;
   SceneImportSettings fbx;
@@ -77,7 +90,15 @@ struct ImportManifest {
   ImportManifestDefaults defaults;
   std::vector<ImportManifestJob> jobs;
 
-  OXGN_COOK_NDAPI auto BuildRequests(std::ostream& error_stream) const
+  //! Discover native dependencies and declared outputs without cooking.
+  //! Captured inputs preserve logical paths while reading retained private
+  //! bytes.
+  OXGN_COOK_NDAPI auto AnalyzeSources(std::stop_token stop_token = {},
+    std::shared_ptr<const CapturedInputSet> captured_inputs = {}) const
+    -> ImportSourceAnalysis;
+
+  OXGN_COOK_NDAPI auto BuildRequests(std::ostream& error_stream,
+    std::shared_ptr<const CapturedInputSet> captured_inputs = {}) const
     -> std::vector<ImportRequest>;
 
   //! Load a manifest from a JSON file.
@@ -96,6 +117,12 @@ struct ImportManifest {
   OXGN_COOK_NDAPI static auto Load(const std::filesystem::path& manifest_path,
     const std::optional<std::filesystem::path>& root_override = std::nullopt,
     std::ostream& error_stream = std::cerr) -> std::optional<ImportManifest>;
+
+  //! Parses the same native manifest schema with an explicit path base.
+  OXGN_COOK_NDAPI static auto Parse(std::string_view text,
+    const std::filesystem::path& manifest_directory,
+    const std::optional<std::filesystem::path>& root_override,
+    std::ostream& error_stream) -> std::optional<ImportManifest>;
 };
 
 } // namespace oxygen::content::import

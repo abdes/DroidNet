@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -247,9 +248,9 @@ OXGN_COOK_API auto to_string(ScriptingImportKind value) -> std::string;
 enum class SceneContentPolicy : uint8_t {
   //! Preserve the normal native importer's supported feature set.
   kDefault = 0,
-  //! Reject features outside static geometry and scalar materials before
-  //! emitting.
-  kStaticScalar,
+  //! Reject unsupported static-scene features before emitting; supported
+  //! material texture bindings are preserved.
+  kStatic,
 };
 
 //! Coordinate conversion policy.
@@ -480,6 +481,9 @@ struct ImportOptions final {
 
     //! Script payload storage strategy.
     ScriptStorageMode script_storage = ScriptStorageMode::kEmbedded;
+
+    //! Physical authoring root used by external script source resolution.
+    std::filesystem::path source_root;
 
     //! For sidecar imports only: canonical target scene virtual path.
     std::string target_scene_virtual_path;

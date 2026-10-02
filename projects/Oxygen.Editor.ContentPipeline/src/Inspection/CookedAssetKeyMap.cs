@@ -32,7 +32,7 @@ public sealed record CookedAssetKeyMap(ImmutableDictionary<string, string> Paths
         foreach (var entry in document.RootElement.GetProperty("assets").EnumerateArray())
         {
             var path = entry.GetProperty("virtual_path").GetString()!;
-            if (!paths.Add(path) || !keys.TryAdd(CookedDependencyReport.IndexKey(entry.GetProperty("asset_key").GetString()!), path))
+            if (!paths.Add(path) || !keys.TryAdd(entry.GetProperty("asset_key").GetGuid().ToString("D"), path))
             {
                 throw new InvalidDataException("The native asset key map contains duplicate paths or keys.");
             }

@@ -8,7 +8,8 @@ a bounded path for renderer-owned lookup products.
 owns implementation state, adopter migration and integration qualification.
 
 Read: [immutable initialization](#immutable-texture-initialization),
-[async ownership](#async-request-ownership), [frame retirement](#frame-retirement),
+[async ownership](#async-request-ownership), [result ownership](#result-ownership),
+[consumer maintenance](#consumer-maintenance), [frame retirement](#frame-retirement),
 [C++ guidance](../../../../../design/oxygen/RULES.md#c).
 
 ## Immutable texture initialization
@@ -69,14 +70,108 @@ tracker lock.
 `Shutdown` drains ticketed submissions. Prepared immutable uploads belong to
 their caller's recording and retire through Graphics submission receipts.
 
+## Result ownership
+
+`UploadTicket` owns a retained CPU result record and exposes identity, fence,
+nonblocking result lookup, cancellation and waiting. Copies share that record;
+there is no frame expiry or manual release call. Dropping the last copy releases
+only CPU metadata. The record owns no Graphics object, destination or staging
+allocation: existing recording holds and Graphics/Nexus retirement protect GPU
+resources independently.
+
+One `make_shared` allocation creates the record, replacing the tracker's former
+map-node allocation. Copying, polling, cancellation and frame progress allocate
+nothing. All records refer to one shared coordinator timeline; success is derived
+from its monotonic completed fence, without a registry or per-frame ticket scan.
+Numeric ticket IDs are diagnostic identifiers, never authority to query another
+coordinator. Tracker and coordinator ownership is non-movable. `UploadTicket`
+declarations remain C++20-compatible.
+
+Terminal precedence is explicit failure/cancellation, observed GPU success, then
+tracker shutdown for unfinished work. Closing the timeline never advances the
+GPU fence. Completed results remain readable after the coordinator is destroyed;
+unfinished results report shutdown. Cancellation does not undo submitted copies
+or shorten GPU-resource retention.
+
+Record allocation occurs after the submitted-fence highwater has advanced, so
+allocation failure cannot hide issued work from shutdown. Highwater updates use
+max, including out-of-order registrations. Remove whole-tracker pending scans and
+frame-slot cleanup; shutdown waits on physical submission highwater.
+
+Blocking result waits may return cancellation. Asynchronous GPU-completion waits
+retain tickets before lazy execution and wait for the real fence or timeline
+close; logical cancellation alone does not satisfy a physical wait. Batch
+coroutines own their ticket vector. Progress, close and asynchronous waits run on
+the upload-owner thread; notifications resume coroutines inline and retain the
+timeline across reentrant owner destruction. Unchanged progress sends no
+notification. Polling, cancellation and blocking result waits are thread-safe.
+Resumed coroutine work is not represented as constant-time polling.
+
+## Consumer maintenance
+
+`SceneRenderer::BeginFrame` advances InitViews resource maintenance even when
+there are no scene views. InitViews guards the frame sequence/slot so standalone
+restoration and view preparation cannot spend the same budget twice. Environment
+and post-process retirement run first, releasing their frame leases.
+
+Texture `OnFrameStart` accepts evictions, retires bounded resource/completion
+work and discards stale decoded uploads. `EnsureFrameResources` submits uploads
+and retries loads only when a view needs them. Geometry submission, transform,
+material and draw-atlas resets, and scene collection remain in view preparation.
+The sky-cubemap and exposure-mask binders use the same maintenance/demand split.
+
+| Work                                      | Default per-frame limit |
+| ----------------------------------------- | ----------------------: |
+| Geometry completion visits                |                     128 |
+| Geometry LOD reclamations                 |                      64 |
+| Texture completion visits                 |                     128 |
+| Texture eviction visits                   |                      64 |
+| Decoded texture cleanup/submission visits |                128 each |
+
+Completion queues contain pending work only and rotate unready items without
+allocation. Every visit counts, including stale and pinned items. Handle/content
+revision and ticket identity checks prevent late publication into replacements.
+Owned ticket snapshots are built on demand; no resident-table scan maintains them.
+Texture byte admission limits remain in force alongside the visit limits.
+
+Geometry eviction replaces the composite asset/LOD identity map with one
+asset-indexed collection of LOD handles; it does not add a second reverse registry.
+Logical invalidation occurs when the render-thread owner accepts and detaches a
+queued eviction, before reclamation or new geometry admission. Detached old asset generations cannot
+admit new reads or publish late completions, and their cleanup cannot erase a
+reload. Reclamation budgets count resident LOD entries, not merely asset events.
+Existing Nexus handle generations and Graphics deferred release remain the
+physical lifetime authorities. Texture eviction work captures the descriptor
+generation at acceptance; delayed duplicates cannot evict a reload. Pinned
+accepted-revision leases remain usable, while unpinned pending evictions deny new
+ready leases and upload work. Prepare deferred actions before releasing registry
+or entry ownership; failed preparation retains the work for retry.
+
+Graphics owns [view indexing and transactional repointing](../../../src/Oxygen/Graphics/Common/README.md#view-indexing-and-removal).
+Removal touches owned views only. Failed repointing preserves the original slot
+and binding, maintaining TextureBinder's lifetime-stable index contract.
+
+Tracy scopes separate geometry acceptance/reclamation/completion and texture
+eviction/publication. Measure native scene replacement and viewless cleanup;
+reproducible CPU baselines isolate registry unrelated-resource growth,
+equivalent-view fanout and a 4,096-asset geometry unload. Frame maintenance polls
+completion and uses deferred release; GPU draining belongs to shutdown.
+
+**Checks:** delayed polling across arbitrary frame cycles; ticket copies/moves and
+coordinator close; independent timelines with equal numeric IDs; cancellation
+versus physical completion; allocation failure after submission; highwater after
+all tickets are dropped; pending-only budget fairness; paused views; stale
+completion after reload; large multi-LOD eviction and existing texture leases.
+Replay the editor's automatic publication and scene replacement workflow.
+
 ## Frame retirement
 
 `UploadCoordinator::OnFrameStart` runs after `Graphics::BeginFrame`, which waits
 for the recycled slot across every queue. This protects staging partition reuse.
 The coordinator polls the upload queue's completed fence; it never flushes newer
-work merely to retire uploads. Device-loss fence values are rejected before
-publishing completion or recycling staging.
+work merely to retire uploads. Device-loss fence values close unfinished results
+as device-lost; they never publish successful completion.
 
-`Shutdown` polls until the last ticketed submission completes, including tickets
-already removed by slot cleanup or cancellation. Its timeout bounds that wait;
+`Shutdown` polls until the last ticketed submission completes, including work
+whose result tickets were dropped or canceled. Its timeout bounds that wait;
 ordinary frame retirement does not wait for unrelated queued work.

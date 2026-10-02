@@ -272,7 +272,7 @@ cd projects
 .\open.cmd
 ```
 
-This uses `dotnet slngen` to generate an optimal solution structure.
+This uses the shared SlnGen script to generate an optimal solution structure.
 
 ## Coding Standards
 

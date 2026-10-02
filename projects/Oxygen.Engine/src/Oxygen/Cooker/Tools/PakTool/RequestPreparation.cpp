@@ -6,11 +6,24 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Cooker/Pak/PakCatalogIo.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
+#include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
+#include <Oxygen/Cooker/Tools/PakTool/PakToolOptions.h>
 #include <Oxygen/Cooker/Tools/PakTool/RequestPreparation.h>
+#include <Oxygen/Cooker/Tools/PakTool/RequestSnapshot.h>
+#include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/PakCatalog.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::pak::tool {
 
@@ -326,32 +339,32 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
   }
 
   auto base_catalogs = std::vector<data::PakCatalog> {};
-  auto base_catalog_paths = std::vector<std::filesystem::path> {};
+  auto base_pak_paths = std::vector<std::filesystem::path> {};
   if (mode == pak::BuildMode::kPatch) {
-    if (options.patch.base_catalogs.empty()) {
-      return MakeError("paktool.prepare.base_catalog_required",
-        "Patch mode requires at least one --base-catalog.");
+    if (options.patch.base_paks.empty()) {
+      return MakeError("paktool.prepare.base_pak_required",
+        "Patch mode requires at least one --base-pak.");
     }
 
-    base_catalogs.reserve(options.patch.base_catalogs.size());
-    base_catalog_paths.reserve(options.patch.base_catalogs.size());
+    base_catalogs.reserve(options.patch.base_paks.size());
+    base_pak_paths.reserve(options.patch.base_paks.size());
 
-    for (const auto& path : options.patch.base_catalogs) {
+    for (const auto& path : options.patch.base_paks) {
       if (const auto validated
-        = ValidateFileInput(path, "paktool.prepare.base_catalog", fs);
+        = ValidateFileInput(path, "paktool.prepare.base_pak", fs);
         !validated) {
         return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
           validated.error());
       }
 
-      const auto read_result = pak::PakCatalogIo::Read(path);
-      if (!read_result.has_value()) {
-        return MakeError("paktool.prepare.base_catalog_invalid",
-          "Failed to read canonical pak catalog sidecar.", path);
+      try {
+        const content::PakFile archive(path);
+        base_catalogs.push_back(archive.Catalog());
+      } catch (const std::exception& error) {
+        return MakeError("paktool.prepare.base_pak_invalid",
+          std::string("Could not read base PAK: ") + error.what(), path);
       }
-
-      base_catalog_paths.push_back(path);
-      base_catalogs.push_back(read_result.value());
+      base_pak_paths.push_back(path);
     }
   }
 
@@ -365,7 +378,7 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
 
   auto distinct_paths = std::vector<NamedPath> {};
   distinct_paths.reserve(
-    options.request.sources.size() + base_catalog_paths.size() + 8U);
+    options.request.sources.size() + base_pak_paths.size() + 8U);
   for (const auto& source : options.request.sources) {
     distinct_paths.push_back(NamedPath {
       .label = source.kind == data::CookedSourceKind::kLooseCooked
@@ -374,9 +387,9 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
       .path = source.path,
     });
   }
-  for (const auto& base_catalog_path : base_catalog_paths) {
+  for (const auto& base_catalog_path : base_pak_paths) {
     distinct_paths.push_back(NamedPath {
-      .label = "base-catalog",
+      .label = "base-pak",
       .path = base_catalog_path,
     });
   }
@@ -436,6 +449,19 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
       validated.error());
   }
 
+  std::vector<std::filesystem::path> script_roots;
+  script_roots.reserve(options.request.script_source_roots.size());
+  for (const auto& input : options.request.script_source_roots) {
+    std::error_code error;
+    const auto root
+      = std::filesystem::absolute(input, error).lexically_normal();
+    if (input.empty() || error || !fs.IsDirectory(root)) {
+      return MakeError("paktool.prepare.script_source_root_invalid",
+        "Script source root must be an existing directory", input);
+    }
+    script_roots.push_back(root);
+  }
+
   auto build_request = pak::PakBuildRequest {};
   build_request.mode = mode;
   build_request.sources = options.request.sources;
@@ -446,14 +472,6 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
   build_request.content_version = options.request.content_version;
   build_request.source_key = source_key.value();
   build_request.base_catalogs = std::move(base_catalogs);
-  build_request.patch_compat.require_exact_base_set
-    = !options.patch.allow_base_set_mismatch;
-  build_request.patch_compat.require_content_version_match
-    = !options.patch.allow_content_version_mismatch;
-  build_request.patch_compat.require_base_source_key_match
-    = !options.patch.allow_base_source_key_mismatch;
-  build_request.patch_compat.require_catalog_digest_match
-    = !options.patch.allow_catalog_digest_mismatch;
   build_request.options.deterministic = options.request.deterministic;
   build_request.options.embed_browse_index = options.request.embed_browse_index;
   build_request.options.compute_crc32 = options.request.compute_crc32;
@@ -466,7 +484,8 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
       .build_request = build_request,
       .request_snapshot = PakToolRequestSnapshot {
         .request = build_request,
-        .base_catalog_paths = std::move(base_catalog_paths),
+        .base_pak_paths = std::move(base_pak_paths),
+        .script_source_roots = std::move(script_roots),
       },
       .publication_plan = publication_plan,
     });

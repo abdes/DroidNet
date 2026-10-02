@@ -4,14 +4,33 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <string>
+#include <algorithm>
 #include <array>
-#include <unordered_set>
+#include <bit>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <set>
+#include <span>
+#include <stdexcept>
+#include <string>
 #include <string_view>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Base/Span.h>
+#include <Oxygen/Data/Asset.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 
@@ -23,11 +42,8 @@ namespace {
   auto ReadPackedRecord(const std::span<const std::byte> bytes,
     const std::string_view what) -> RecordT
   {
-    std::vector<std::byte> buffer;
-    buffer.assign(bytes.begin(), bytes.end());
-
-    oxygen::serio::MemoryStream stream { std::span<std::byte>(buffer) };
-    oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+    oxygen::serio::ReadOnlyMemoryStream stream(bytes);
+    oxygen::serio::Reader reader(stream);
     auto packed = reader.ScopedAlignment(1);
 
     RecordT record {};
@@ -40,15 +56,60 @@ namespace {
 
 } // namespace
 
-SceneAsset::SceneAsset(AssetKey key, std::span<const std::byte> data)
-  : Asset(key)
+auto SceneAsset::ReadScriptSlots(const uint32_t start,
+  const uint32_t count) const -> std::vector<pak::scripting::ScriptSlotRecord>
+{
+  if (start > desc_.script_slots.count
+    || count > desc_.script_slots.count - start) {
+    throw std::out_of_range("Scene script slot range is out of bounds");
+  }
+  std::vector<pak::scripting::ScriptSlotRecord> slots;
+  slots.reserve(count);
+  for (uint32_t i = 0; i < count; ++i) {
+    const auto offset = desc_.script_slots.offset
+      + (uint64_t { start + i } * sizeof(pak::scripting::ScriptSlotRecord));
+    slots.push_back(ReadPackedRecord<pak::scripting::ScriptSlotRecord>(
+      data_.subspan(
+        static_cast<size_t>(offset), sizeof(pak::scripting::ScriptSlotRecord)),
+      "Scene script slot"));
+  }
+  return slots;
+}
+
+auto SceneAsset::ReadScriptParameters(
+  const pak::scripting::ScriptSlotRecord& slot) const
+  -> std::vector<pak::scripting::ScriptParamRecord>
+{
+  const auto size = uint64_t { slot.params_count }
+    * sizeof(pak::scripting::ScriptParamRecord);
+  if (slot.params_array_offset > data_.size()
+    || size > data_.size() - slot.params_array_offset) {
+    throw std::out_of_range("Scene script parameter range is out of bounds");
+  }
+  std::vector<pak::scripting::ScriptParamRecord> parameters;
+  parameters.reserve(slot.params_count);
+  for (uint32_t i = 0; i < slot.params_count; ++i) {
+    const auto offset = slot.params_array_offset
+      + (uint64_t { i } * sizeof(pak::scripting::ScriptParamRecord));
+    parameters.push_back(ReadPackedRecord<pak::scripting::ScriptParamRecord>(
+      data_.subspan(
+        static_cast<size_t>(offset), sizeof(pak::scripting::ScriptParamRecord)),
+      "Scene script parameter"));
+  }
+  return parameters;
+}
+
+SceneAsset::SceneAsset(
+  AssetKey key, std::span<const std::byte> data, SourceOrigin source_origin)
+  : Asset(key, source_origin)
   , data_(data)
 {
   ParseAndValidate();
 }
 
-SceneAsset::SceneAsset(AssetKey key, std::vector<std::byte> data)
-  : Asset(key)
+SceneAsset::SceneAsset(
+  AssetKey key, std::vector<std::byte> data, SourceOrigin source_origin)
+  : Asset(key, source_origin)
   , owned_data_(std::make_shared<std::vector<std::byte>>(std::move(data)))
   , data_(owned_data_->data(), owned_data_->size())
 {
@@ -76,7 +137,7 @@ auto SceneAsset::GetNodes() const noexcept
     nodes_cache_.clear();
     nodes_cache_.resize(node_count_);
     for (size_t i = 0; i < node_count_; ++i) {
-      const auto res = reader.ReadInto(nodes_cache_[i]);
+      const auto res = reader.ReadInto(nodes_cache_.at(i));
       if (!res) {
         DCHECK_F(false,
           "SceneAsset failed to deserialize node table (validated by "
@@ -97,7 +158,7 @@ auto SceneAsset::GetNode(pak::world::SceneNodeIndexT index) const noexcept
 {
   const auto nodes = GetNodes();
   DCHECK_LT_F(index, nodes.size());
-  return nodes[index];
+  return oxygen::base::CheckedAt(nodes, index);
 }
 
 auto SceneAsset::GetNodeName(const pak::world::NodeRecord& node) const noexcept
@@ -117,7 +178,7 @@ auto SceneAsset::GetRootNode() const noexcept -> const pak::world::NodeRecord&
 {
   const auto nodes = GetNodes();
   DCHECK_GT_F(nodes.size(), 0);
-  return nodes[0];
+  return oxygen::base::CheckedAt(nodes, 0);
 }
 
 auto SceneAsset::ParseAndValidate() -> void
@@ -135,9 +196,9 @@ auto SceneAsset::ParseAndValidate() -> void
   }
 
   auto range_ok
-    = [](const size_t offset, const size_t size, const size_t total) {
-        return offset <= total && size <= (total - offset);
-      };
+    = [](const size_t offset, const size_t size, const size_t total) -> bool {
+    return offset <= total && size <= (total - offset);
+  };
 
   has_environment_block_ = false;
   environment_system_records_.clear();
@@ -160,7 +221,7 @@ auto SceneAsset::ParseAndValidate() -> void
     for (uint32_t index = 0; index < desc_.nodes.count; ++index) {
       const auto record = ReadPackedRecord<pak::world::NodeRecord>(
         data_.subspan(desc_.nodes.offset
-            + static_cast<size_t>(index) * sizeof(pak::world::NodeRecord),
+            + (static_cast<size_t>(index) * sizeof(pak::world::NodeRecord)),
           sizeof(pak::world::NodeRecord)),
         "SceneAsset node record");
       if (!pak::world::HasCanonicalNodeFlags(record)) {
@@ -189,7 +250,8 @@ auto SceneAsset::ParseAndValidate() -> void
     // Minimal runtime-safety invariant: offset 0 must refer to empty string.
     const auto bytes
       = data_.subspan(desc_.scene_strings.offset, desc_.scene_strings.size);
-    if (!bytes.empty() && bytes[0] != std::byte { 0 }) {
+    if (!bytes.empty()
+      && oxygen::base::CheckedAt(bytes, 0) != std::byte { 0 }) {
       throw std::runtime_error(
         "SceneAsset string table must start with a NUL byte");
     }
@@ -215,6 +277,7 @@ auto SceneAsset::ParseAndValidate() -> void
       = data_.subspan(desc_.component_table_directory_offset, dir_bytes);
 
     std::unordered_set<std::uint32_t> light_nodes;
+    std::unordered_set<std::uint32_t> camera_nodes;
     std::array<bool, 3> atmosphere_slots {};
     component_tables_.clear();
     component_tables_.reserve(desc_.component_table_count);
@@ -242,6 +305,12 @@ auto SceneAsset::ParseAndValidate() -> void
       if (type == ComponentType::kRenderable
         && entry.table.entry_size != sizeof(pak::world::RenderableRecord)) {
         throw std::runtime_error("SceneAsset renderable record size mismatch");
+      }
+      if (type == ComponentType::kMaterialOverride
+        && entry.table.entry_size
+          != sizeof(pak::world::MaterialOverrideRecord)) {
+        throw std::runtime_error(
+          "SceneAsset material override record size mismatch");
       }
       if (type == ComponentType::kLocalFogVolume
         && entry.table.entry_size != sizeof(pak::world::LocalFogVolumeRecord)) {
@@ -280,43 +349,66 @@ auto SceneAsset::ParseAndValidate() -> void
         || type == ComponentType::kOrthographicCamera) {
         for (uint32_t index = 0; index < entry.table.count; ++index) {
           const auto camera_bytes = data_.subspan(entry.table.offset
-              + static_cast<size_t>(index) * entry.table.entry_size,
+              + (static_cast<size_t>(index) * entry.table.entry_size),
             entry.table.entry_size);
           if (type == ComponentType::kPerspectiveCamera) {
-            ReadPackedRecord<pak::world::PerspectiveCameraRecord>(
-              camera_bytes, "SceneAsset perspective camera");
+            const auto record
+              = ReadPackedRecord<pak::world::PerspectiveCameraRecord>(
+                camera_bytes, "SceneAsset perspective camera");
+            if (record.node_index >= desc_.nodes.count
+              || !camera_nodes.insert(record.node_index).second) {
+              throw std::runtime_error(
+                "SceneAsset camera node ownership is invalid");
+            }
           } else {
-            ReadPackedRecord<pak::world::OrthographicCameraRecord>(
-              camera_bytes, "SceneAsset orthographic camera");
+            const auto record
+              = ReadPackedRecord<pak::world::OrthographicCameraRecord>(
+                camera_bytes, "SceneAsset orthographic camera");
+            if (record.node_index >= desc_.nodes.count
+              || !camera_nodes.insert(record.node_index).second) {
+              throw std::runtime_error(
+                "SceneAsset camera node ownership is invalid");
+            }
           }
         }
       }
 
-      const auto validate_lights = [&]<typename T>() {
+      const auto validate_lights = [&]<typename T> -> auto {
         for (std::uint32_t index = 0U; index < entry.table.count; ++index) {
-          const auto record = ReadPackedRecord<T>(data_.subspan(entry.table.offset
-              + static_cast<std::size_t>(index) * entry.table.entry_size,
-            entry.table.entry_size), "SceneAsset light");
+          const auto record = ReadPackedRecord<T>(
+            data_.subspan(entry.table.offset
+                + (static_cast<std::size_t>(index) * entry.table.entry_size),
+              entry.table.entry_size),
+            "SceneAsset light");
           if (record.node_index >= desc_.nodes.count
             || !light_nodes.insert(record.node_index).second) {
-            throw std::runtime_error("SceneAsset light node ownership is invalid");
+            throw std::runtime_error(
+              "SceneAsset light node ownership is invalid");
           }
           if constexpr (requires { record.atmosphere_light_slot; }) {
             const auto slot = record.atmosphere_light_slot;
-            if (slot != 0U && std::exchange(atmosphere_slots[slot], true)) {
-              throw std::runtime_error("SceneAsset atmosphere slot has multiple owners");
+            if (slot != 0U && std::exchange(atmosphere_slots.at(slot), true)) {
+              throw std::runtime_error(
+                "SceneAsset atmosphere slot has multiple owners");
             }
           }
         }
       };
-      if (type == ComponentType::kDirectionalLight) validate_lights.template operator()<pak::world::DirectionalLightRecord>();
-      else if (type == ComponentType::kPointLight) validate_lights.template operator()<pak::world::PointLightRecord>();
-      else if (type == ComponentType::kSpotLight) validate_lights.template operator()<pak::world::SpotLightRecord>();
+      if (type == ComponentType::kDirectionalLight) {
+        validate_lights
+          .template operator()<pak::world::DirectionalLightRecord>();
+      } else if (type == ComponentType::kPointLight) {
+        validate_lights.template operator()<pak::world::PointLightRecord>();
+      } else if (type == ComponentType::kSpotLight) {
+        validate_lights.template operator()<pak::world::SpotLightRecord>();
+      }
 
-      component_tables_.push_back({ .type = type,
+      component_tables_.push_back({
+        .type = type,
         .offset = entry.table.offset,
         .count = entry.table.count,
-        .entry_size = entry.table.entry_size });
+        .entry_size = entry.table.entry_size,
+      });
     }
   }
 
@@ -330,6 +422,69 @@ auto SceneAsset::ParseAndValidate() -> void
     ? nullptr
     : std::bit_cast<const char*>(
         data_.subspan(desc_.scene_strings.offset).data());
+
+  if (desc_.script_slots.count != 0U) {
+    const auto slots_size = uint64_t { desc_.script_slots.count }
+      * sizeof(pak::scripting::ScriptSlotRecord);
+    if (desc_.script_slots.entry_size
+        != sizeof(pak::scripting::ScriptSlotRecord)
+      || desc_.script_slots.offset < payload_end
+      || !range_ok(desc_.script_slots.offset, slots_size, data_.size())) {
+      throw std::runtime_error("SceneAsset script slot table is invalid");
+    }
+    payload_end = desc_.script_slots.offset + slots_size;
+    for (const auto& slot : ReadScriptSlots(0U, desc_.script_slots.count)) {
+      if (slot.script_asset_key.IsNil()) {
+        throw std::runtime_error("Scene script slot has no script asset");
+      }
+      const auto params_size = uint64_t { slot.params_count }
+        * sizeof(pak::scripting::ScriptParamRecord);
+      if (params_size == 0U) {
+        if (slot.params_array_offset != 0U) {
+          throw std::runtime_error(
+            "Empty scene script parameters must have zero offset");
+        }
+        continue;
+      }
+      if (slot.params_array_offset != payload_end
+        || !range_ok(slot.params_array_offset, params_size, data_.size())) {
+        throw std::runtime_error("SceneAsset script parameters must follow "
+                                 "slots without gaps or overlap");
+      }
+      payload_end += params_size;
+    }
+  } else if (desc_.script_slots.offset != 0U
+    || desc_.script_slots.entry_size != 0U) {
+    throw std::runtime_error(
+      "Empty scene script table must use a canonical empty range");
+  }
+
+  std::vector<std::pair<uint32_t, uint32_t>> script_ranges;
+  for (const auto& component :
+    GetComponents<pak::scripting::ScriptingComponentRecord>()) {
+    if (component.slot_start_index > desc_.script_slots.count
+      || component.slot_count
+        > desc_.script_slots.count - component.slot_start_index) {
+      throw std::runtime_error(
+        "Scene scripting component slot range is out of bounds");
+    }
+    if (component.slot_count != 0U) {
+      script_ranges.emplace_back(component.slot_start_index,
+        component.slot_start_index + component.slot_count);
+    }
+  }
+  std::ranges::sort(script_ranges);
+  uint32_t next_script_slot = 0;
+  for (const auto [begin, end] : script_ranges) {
+    if (begin != next_script_slot) {
+      throw std::runtime_error(
+        "Scene script slot ownership has gaps or overlap");
+    }
+    next_script_slot = end;
+  }
+  if (next_script_slot != desc_.script_slots.count) {
+    throw std::runtime_error("Scene script table contains unowned slots");
+  }
 
   // Optional trailing environment block (v3+ scenes).
   // This block is not referenced by offsets in the descriptor; it begins at
@@ -349,7 +504,7 @@ auto SceneAsset::ParseAndValidate() -> void
     }
 
     const size_t env_end = payload_end + env_header.byte_size;
-    if (env_end > data_.size() || env_end < payload_end) {
+    if (env_end != data_.size() || env_end < payload_end) {
       throw std::runtime_error("SceneAsset environment block out of bounds");
     }
 
@@ -422,13 +577,32 @@ auto SceneAsset::ParseAndValidate() -> void
         post_process_record_ = record;
       }
       environment_system_records_.push_back(EnvironmentSystemRecordView {
-        .header = record_header, .record_offset = cursor, .bytes = bytes });
+        .header = record_header,
+        .record_offset = cursor,
+        .bytes = bytes,
+      });
       cursor = record_end;
     }
 
     if (cursor != env_end) {
       throw std::runtime_error(
         "SceneAsset environment block contains trailing bytes");
+    }
+  }
+  std::set<std::pair<pak::world::SceneNodeIndexT, MaterialSlotId>> assignments;
+  std::unordered_set<pak::world::SceneNodeIndexT> renderable_nodes;
+  for (const auto& renderable : GetComponents<pak::world::RenderableRecord>()) {
+    renderable_nodes.insert(renderable.node_index);
+  }
+  for (const auto& assignment :
+    GetComponents<pak::world::MaterialOverrideRecord>()) {
+    if (!renderable_nodes.contains(assignment.node_index)
+      || assignment.slot_id.IsNil() || assignment.material_key.IsNil()
+      || base::IsAllZero(assignment.layout_revision)
+      || !assignments.emplace(assignment.node_index, assignment.slot_id)
+        .second) {
+      throw std::runtime_error(
+        "SceneAsset contains an invalid material assignment");
     }
   }
 }

@@ -53,18 +53,6 @@ inline constexpr uint8_t kCubeFaceCount = 6;
 //! String representation of CubeFace enum values.
 OXGN_COOK_NDAPI auto to_string(CubeFace face) -> const char*;
 
-//! Discover cube face file paths using common suffix conventions.
-/*!
-  Attempts to resolve the six cube face images by inspecting the filename
-  suffixes (e.g., _px/_nx, _posx/_negx, _right/_left). The returned array
-  is ordered in CubeFace order (+X, -X, +Y, -Y, +Z, -Z).
-
-  @param path Path to any of the face images (or the base name).
-  @return Array of face paths if all six faces are present; nullopt otherwise.
-*/
-OXGN_COOK_NDAPI auto DiscoverCubeFacePaths(const std::filesystem::path& path)
-  -> std::optional<std::array<std::filesystem::path, kCubeFaceCount>>;
-
 //! Identifies a subresource within a multi-source texture.
 /*!
   Used to map source image data to a specific location in the assembled texture.
@@ -326,7 +314,7 @@ inline constexpr std::array<CubeFaceBasis, kCubeFaceCount> kGpuCubeFaceBases = {
 [[nodiscard]] inline auto GetCubeFaceBasis(CubeFace face) noexcept
   -> const CubeFaceBasis&
 {
-  return kCubeFaceBases[static_cast<size_t>(face)];
+  return kCubeFaceBases.at(static_cast<size_t>(face));
 }
 
 //! Compute a normalized 3D direction from face UV coordinates.

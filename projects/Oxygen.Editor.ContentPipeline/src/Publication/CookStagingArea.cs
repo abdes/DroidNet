@@ -3,96 +3,138 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using DroidNet.Storage;
+using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
-/// <summary>Owns same-volume private output and the published baselines used to seed it.</summary>
-internal sealed partial class CookStagingArea : IDisposable
+/// <summary>Owns fresh candidate roots at their final paths under the coordinator's operation lifetime.</summary>
+internal sealed class CookStagingArea : IAsyncDisposable
 {
-    private readonly string outputDirectory;
-    private readonly FileStream operationLease;
     private bool retained;
     private bool disposed;
+    private readonly List<CookStagingRoot> roots;
 
-    private CookStagingArea(string outputDirectory, FileStream operationLease)
+    private CookStagingArea(CookPublicationReadLease baseline, CookPublicationTransaction transaction, int rootCount)
     {
-        this.outputDirectory = outputDirectory;
-        this.operationLease = operationLease;
+        this.roots = new(rootCount);
+        this.Baseline = baseline;
+        this.Transaction = transaction;
     }
 
-    /// <summary>Gets the complete affected-root set and its pre-cook identities.</summary>
-    public ImmutableArray<Root> Roots { get; private set; } = [];
+    internal CookPublicationReadLease Baseline { get; }
 
-    /// <summary>Seeds only the affected roots, preserving unrelated assets and timestamps within them.</summary>
-    /// <param name="operation">The project cook that owns this output.</param>
-    /// <param name="mounts">Distinct physical authoring mount names.</param>
-    /// <param name="cancellationToken">Cancels private preparation.</param>
-    /// <returns>The operation's private output owner.</returns>
-    public static async Task<CookStagingArea> CreateAsync(ContentCookOperation operation, IEnumerable<string> mounts, CancellationToken cancellationToken)
+    internal CookPublicationTransaction Transaction { get; }
+
+    internal IReadOnlyList<CookStagingRoot> Roots => this.roots;
+
+    internal static async Task<CookStagingArea> CreateAsync(ContentCookOperation operation, CookPublicationReadLease baseline,
+        IEnumerable<string> mounts, IAtomicFileStore files, IProjectManagerService manager,
+        CancellationToken cancellationToken, IReadOnlySet<string>? emptyRoots = null, Func<string, Task>? checkpoint = null)
     {
         var names = ValidateMounts(mounts);
-        using var reader = await CookOutputLease.AcquireInspectionAsync(operation.Project.ProjectRoot, cancellationToken).ConfigureAwait(false);
-        var operationDirectory = Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N"));
-        CookOutputLease.RejectReparsePoint(operationDirectory);
-        var output = Path.Combine(operationDirectory, "output");
-        CookOutputLease.RejectReparsePoint(output);
-        if (Directory.Exists(output))
-        {
-            throw new IOException("This cook operation already owns a staging directory.");
-        }
-
-        _ = Directory.CreateDirectory(output);
-        var roots = ImmutableArray.CreateBuilder<Root>();
-        var lease = CookOutputLease.AcquireOperation(operation.Project.ProjectRoot, operation.OperationId);
-        var area = new CookStagingArea(output, lease);
-        Exception? originalFailure = null;
+        var generations = names.Select(static _ => Guid.CreateVersion7()).ToImmutableArray();
+        var transaction = await CookPublicationTransaction.ReserveAsync(operation, baseline, generations, files, manager, cancellationToken, checkpoint).ConfigureAwait(false);
+        CookStagingArea? area = null;
+        var retainedBaseline = baseline.Retain();
         try
         {
-            foreach (var name in names)
+            area = new(retainedBaseline, transaction, names.Length);
+            retainedBaseline = null;
+            for (var index = 0; index < names.Length; index++)
             {
-                var published = Path.Combine(operation.Project.ProjectRoot, ".cooked", name);
-                CookOutputLease.RejectReparsePoint(Path.GetDirectoryName(published)!);
-                var staging = Path.Combine(output, name);
-                _ = Directory.CreateDirectory(staging);
-                var before = await CookRootImage.CaptureAsync(published, staging, cancellationToken).ConfigureAwait(false);
-                var after = await CookRootImage.CaptureAsync(published, copyTo: null, cancellationToken).ConfigureAwait(false);
-                if (!before.Matches(after))
+                var name = names[index];
+                var path = CookPublicationPaths.Generation(operation.Project.ProjectRoot, generations[index]);
+                if (Directory.Exists(path) || File.Exists(path))
                 {
-                    throw new IOException($"Published content changed while seeding '{name}'. Retry the cook.");
+                    throw new IOException("A fresh generation identity already has an output path.");
                 }
 
-                roots.Add(new(name, published, staging, before));
+                // Publish ownership to the area before a fallible seed copy.
+                var root = new CookStagingRoot(name, generations[index], path);
+                area.roots.Add(root);
+                _ = Directory.CreateDirectory(path);
+                if (emptyRoots?.Contains(name) != true && baseline.FindProjectRoot(name) is { } previous)
+                {
+                    await root.SeedAsync(previous, cancellationToken).ConfigureAwait(false);
+                }
             }
 
-            area.Roots = roots.ToImmutable();
-            var result = area;
-            area = null;
-            return result;
+            return area;
         }
-        catch (Exception failure)
+        catch
         {
-            originalFailure = failure;
+            if (area is not null)
+            {
+                await area.DisposeAsync().ConfigureAwait(false);
+            }
+
+            retainedBaseline?.Dispose();
             throw;
         }
-        finally
+    }
+
+    internal void RetainForPublication() => this.retained = true;
+
+    internal ImmutableArray<CookPublicationRoot> SealRoots() => [.. this.Roots.Select(static root => root.Seal())];
+
+    public void VerifyAcceptedInventories(IReadOnlyDictionary<string, CookedInventoryReport> inventories, IReadOnlySet<string> emptyRoots)
+    {
+        foreach (var root in this.Roots)
         {
-            try
+            if (emptyRoots.Contains(root.Mount))
             {
-                area?.Dispose();
+                continue;
             }
-            catch (Exception cleanup) when (originalFailure is not null && cleanup is IOException or UnauthorizedAccessException)
+
+            if (root.Before.Files.Count == 0)
             {
-                originalFailure.Data["RetainedStaging"] = output;
-                originalFailure.Data["StagingCleanupFailure"] = cleanup.Message;
+                if (inventories.ContainsKey(root.Mount))
+                {
+                    throw new IOException($"Cooked root disappeared after verification: '{root.Mount}'. Retry the cook.");
+                }
+
+                continue;
+            }
+
+            if (!inventories.TryGetValue(root.Mount, out var inventory)
+                || !root.Before.Files.TryGetValue("container.index.bin", out var index)
+                || index.Size != inventory.IndexSize
+                || !string.Equals(index.Sha256, inventory.IndexSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new IOException($"Cooked index changed before staging '{root.Mount}'. Retry the cook.");
+            }
+
+            var damaged = inventory.Issues.Select(static issue => issue.RelativePath).ToHashSet(StringComparer.Ordinal);
+            var missing = inventory.Issues.Where(static issue => issue.Reason == "missing").Select(static issue => issue.RelativePath).ToHashSet(StringComparer.Ordinal);
+            foreach (var (path, expected) in inventory.Files)
+            {
+                if (!root.Before.Files.TryGetValue(path, out var actual))
+                {
+                    if (missing.Contains(path))
+                    {
+                        continue;
+                    }
+
+                    throw new IOException($"Cooked file disappeared before staging '{root.Mount}/{path}'. Retry the cook.");
+                }
+
+                if (!emptyRoots.Contains(root.Mount) && !damaged.Contains(path)
+                    && (actual.Size != expected.Size || !string.Equals(actual.Sha256, expected.Sha256, StringComparison.OrdinalIgnoreCase)))
+                {
+                    throw new IOException($"Cooked file changed after verification: '{root.Mount}/{path}'. Retry the cook.");
+                }
+            }
+
+            if (root.Before.Files.Keys.Any(path => path is not ("container.index.bin" or ".generation.lock") && !inventory.Files.ContainsKey(path)))
+            {
+                throw new IOException($"Cooked membership changed before staging '{root.Mount}'. Retry the cook.");
             }
         }
     }
 
-    /// <summary>Transfers cleanup to the publication journal, which may need staging after an interruption.</summary>
-    public void RetainForPublication() => this.retained = true;
-
-    /// <inheritdoc />
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         if (this.disposed)
         {
@@ -102,21 +144,45 @@ internal sealed partial class CookStagingArea : IDisposable
         this.disposed = true;
         try
         {
-            if (!this.retained && Directory.Exists(this.outputDirectory))
+            Exception? releaseFailure = null;
+            foreach (var root in this.Roots)
             {
-                CookOutputLease.RejectReparsePoint(this.outputDirectory);
-                Directory.Delete(this.outputDirectory, recursive: true);
+                try
+                {
+                    await root.DisposeAsync().ConfigureAwait(false);
+                }
+                catch (Exception failure)
+                {
+                    releaseFailure ??= failure;
+                }
+            }
+
+            if (releaseFailure is not null)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(releaseFailure).Throw();
+            }
+
+            if (!this.retained)
+            {
+                await this.Transaction.AbandonBuildAsync().ConfigureAwait(false);
+                foreach (var root in this.Roots)
+                {
+                    CookOutputLease.RejectReparsePoint(root.Path);
+                    if (Directory.Exists(root.Path))
+                    {
+                        // No head has referenced these candidates; native work
+                        // has drained while the coordinator retains operation ownership.
+                        Directory.Delete(root.Path, recursive: true);
+                    }
+                }
             }
         }
         finally
         {
-            this.operationLease.Dispose();
+            this.Baseline.Dispose();
         }
     }
 
-    /// <summary>Validates physical mount directory names before publication or recovery.</summary>
-    /// <param name="mounts">The names being resolved into owned paths.</param>
-    /// <returns>The validated, ordered names.</returns>
     internal static string[] ValidateMounts(IEnumerable<string> mounts)
     {
         ArgumentNullException.ThrowIfNull(mounts);
@@ -129,10 +195,4 @@ internal sealed partial class CookStagingArea : IDisposable
             : names.Order(StringComparer.Ordinal).ToArray();
     }
 
-    /// <summary>One seeded root and the prior complete published file set.</summary>
-    /// <param name="Mount">The physical output mount name.</param>
-    /// <param name="PublishedPath">The fixed runtime output location.</param>
-    /// <param name="StagingPath">The private native writer destination.</param>
-    /// <param name="Before">The coherent pre-cook output identity.</param>
-    public sealed record Root(string Mount, string PublishedPath, string StagingPath, CookRootImage Before);
 }

@@ -2,11 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Numerics;
+using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using DroidNet.Controls;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Schemas;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Windows.UI;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
@@ -14,6 +17,56 @@ namespace Oxygen.Editor.MaterialEditor.Tests;
 /// <summary>Exercises document history and the material editor's real command routing.</summary>
 public sealed partial class MaterialDocumentServiceTests
 {
+    /// <summary>Scalar history preserves HDR emission and unedited native texture/shader bindings.</summary>
+    /// <returns>The asynchronous document regression.</returns>
+    [TestMethod]
+    public async Task ScalarHistoryAndSavePreserveNativeMaterialFields()
+    {
+        using var workspace = new TempWorkspace();
+        var path = Path.Combine(workspace.Root, "Content/Materials/NativeFields.omat.json");
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        const string source = """
+        {
+          "name": "NativeFields", "orm_policy": "force_separate",
+          "parameters": { "roughness": 0.4, "clearcoat_factor": 0.6,
+            "emissive_color": [0.25, 0.5, 1], "emissive_intensity": 9.7 },
+          "textures": {
+            "metallic": { "virtual_path": "/Art/Metal.otex", "uv_set": 1 },
+            "roughness": { "virtual_path": "/Art/Rough.otex", "uv_set": 2,
+              "uv_transform": { "scale": [2, 3], "offset": [0.1, 0.2], "rotation_radians": 0.4 } },
+            "emissive": { "virtual_path": "/Art/Emission.otex" }
+          },
+          "shaders": [{ "stage": "pixel", "source_path": "NativeFields.hlsl", "entry_point": "PSMain" }]
+        }
+        """;
+        await File.WriteAllTextAsync(path, source, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var expected = JsonNode.Parse(source)!;
+        var service = CreateService(workspace);
+        var document = await service.OpenAsync(new("asset:///Content/Materials/NativeFields.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var edit = new PropertyEdit();
+        edit.Set(MaterialDescriptors.Roughness, 0.7f);
+        _ = (await service.EditPropertiesAsync(document.DocumentId, edit, this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+        AssertRetained(service.GetDocument(document.DocumentId).Source);
+        _ = service.Undo(document.DocumentId).Succeeded.Should().BeTrue();
+        _ = service.GetDocument(document.DocumentId).Source.PbrMetallicRoughness.RoughnessFactor.Should().Be(0.4f);
+        AssertRetained(service.GetDocument(document.DocumentId).Source);
+        _ = service.Redo(document.DocumentId).Succeeded.Should().BeTrue();
+        _ = (await service.SaveAsync(document.DocumentId, this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+        var saved = MaterialSourceReader.Read(await File.ReadAllBytesAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false));
+        _ = saved.PbrMetallicRoughness.RoughnessFactor.Should().Be(0.7f);
+        AssertRetained(saved);
+
+        void AssertRetained(MaterialSource material)
+        {
+            _ = material.EmissiveIntensity.Should().Be(9.7f);
+            _ = material.EmissiveColor.Should().Be(new Vector3(0.25f, 0.5f, 1f));
+            var json = MaterialSourceWriter.ToJson(material);
+            _ = JsonNode.DeepEquals(json["textures"], expected["textures"]).Should().BeTrue();
+            _ = JsonNode.DeepEquals(json["shaders"], expected["shaders"]).Should().BeTrue();
+            _ = json["parameters"]!["clearcoat_factor"]!.GetValue<float>().Should().Be(0.6f);
+        }
+    }
+
     /// <summary>Checks exact scalar and multichannel undo/redo with saved-content dirty identity.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]

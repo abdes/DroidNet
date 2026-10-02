@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -99,20 +100,17 @@ namespace {
       return 1;
     }
     luaL_error(state, "uuid.to_string expects uuid userdata");
-    return 0;
   }
 
   auto LuaUuidFromString(lua_State* state) -> int
   {
     if (lua_type(state, kLuaArg1) != LUA_TSTRING) {
       luaL_argerror(state, kLuaArg1, "uuid string expected");
-      return 0;
     }
     size_t len = 0;
     const char* str = lua_tolstring(state, kLuaArg1, &len);
     if (str == nullptr) {
       luaL_argerror(state, kLuaArg1, "uuid string expected");
-      return 0;
     }
 
     if (const auto parsed = ParseUuidString(std::string_view(str, len));
@@ -177,7 +175,6 @@ namespace {
       }
       luaL_argerror(
         state, index, "hash integer, hash userdata, or string expected");
-      return 0;
     }
     if (lua_isstring(state, index) != 0) {
       size_t len = 0;
@@ -187,14 +184,12 @@ namespace {
       }
     }
     luaL_argerror(state, index, "hash, number, or string expected");
-    return 0;
   }
 
   auto LuaHash64(lua_State* state) -> int
   {
     if (lua_type(state, kLuaArg1) != LUA_TSTRING) {
       luaL_argerror(state, kLuaArg1, "string expected");
-      return 0;
     }
     size_t len = 0;
     const char* s = lua_tolstring(state, kLuaArg1, &len);
@@ -203,7 +198,6 @@ namespace {
       return 1;
     }
     luaL_argerror(state, kLuaArg1, "string expected");
-    return 0;
   }
 
   auto LuaHashCombine64(lua_State* state) -> int

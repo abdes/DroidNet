@@ -86,8 +86,9 @@ namespace Oxygen::Interop::World {
 
   SetMaterialOverrideCommand*
     CommandFactory::CreateSetMaterialOverride(oxygen::scene::NodeHandle handle,
-      std::size_t slotIndex, std::string materialUri) {
-    return new SetMaterialOverrideCommand(handle, slotIndex, materialUri);
+      oxygen::interop::module::MaterialSlotTarget target, std::optional<std::string> materialUri,
+      oxygen::interop::module::MaterialSlotAssignmentIntent intent) {
+    return new SetMaterialOverrideCommand(handle, std::move(target), std::move(materialUri), intent);
   }
 
   SetBackgroundColorCommand* CommandFactory::CreateSetBackgroundColor(
@@ -108,9 +109,10 @@ namespace Oxygen::Interop::World {
   AttachPerspectiveCameraCommand*
     CommandFactory::CreateAttachPerspectiveCamera(
       oxygen::scene::NodeHandle handle, float fieldOfViewYRadians,
-      float aspectRatio, float nearPlane, float farPlane) {
+      float aspectRatio, float nearPlane, float farPlane,
+      oxygen::CameraAspectMode aspectMode) {
     return new AttachPerspectiveCameraCommand(handle, fieldOfViewYRadians,
-      aspectRatio, nearPlane, farPlane);
+      aspectRatio, nearPlane, farPlane, aspectMode);
   }
 
   DetachCameraCommand*

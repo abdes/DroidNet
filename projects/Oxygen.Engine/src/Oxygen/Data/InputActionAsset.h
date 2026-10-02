@@ -19,8 +19,8 @@ class InputActionAsset final : public Asset {
   OXYGEN_TYPED(InputActionAsset)
 
 public:
-  OXGN_DATA_API InputActionAsset(
-    AssetKey asset_key, pak::input::InputActionAssetDesc desc);
+  OXGN_DATA_API InputActionAsset(AssetKey asset_key,
+    pak::input::InputActionAssetDesc desc, SourceOrigin source_origin = {});
 
   ~InputActionAsset() override = default;
 

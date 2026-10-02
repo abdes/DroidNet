@@ -15,6 +15,8 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/TypeSystem.h>
+#include <Oxygen/Content/Internal/ContentIdentityRegistry.h>
+#include <Oxygen/Content/Internal/ContentPublication.h>
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
 #include <Oxygen/Content/Internal/InFlightOperationTable.h>
 #include <Oxygen/Content/LoaderContext.h>
@@ -36,8 +38,7 @@ public:
 
   struct Callbacks final {
     std::function<void()> assert_owning_thread;
-    std::function<uint64_t(const ResourceKey&)> hash_resource_key;
-    std::function<void(uint64_t, ResourceKey)> map_resource_key;
+    std::function<void(ResourceKey)> on_resource_published;
     std::function<LoadPriorityClass()> default_priority_class;
     std::function<uint64_t()> next_request_sequence;
     std::function<void(TypeId)> on_resource_request;
@@ -47,33 +48,35 @@ public:
     std::function<void(TypeId)> on_resource_started_inflight;
     std::function<void(TypeId)> on_resource_decode_failure;
     std::function<void(TypeId)> on_resource_type_mismatch;
-    std::function<void(TypeId)> on_resource_store_retry;
-    std::function<void(TypeId)> on_resource_store_retry_failed;
+    std::function<void(TypeId)> on_resource_store_retry {};
+    std::function<void(TypeId)> on_resource_store_retry_failed {};
     std::function<void(std::string_view, bool)> on_store_pressure;
   };
 
   ResourceLoadPipeline(const ContentSourceRegistry& source_registry,
+    const ContentIdentityRegistry& identities,
     const ResourceLoaderMap& resource_loaders, ContentCache& content_cache,
     InFlightOperationTable& in_flight_ops,
+    const std::shared_ptr<ContentReleaseQueue>& releases,
     observer_ptr<co::ThreadPool> thread_pool, bool work_offline,
     Callbacks callbacks);
 
-  auto LoadErased(TypeId resource_type, ResourceKey key)
-    -> co::Co<std::shared_ptr<void>>;
   auto LoadErased(TypeId resource_type, ResourceKey key,
-    const LoadRequest& request) -> co::Co<std::shared_ptr<void>>;
+    LoadRequest request = {}, CheckoutOwner owner = CheckoutOwner::kExternal)
+    -> co::Co<ContentAcquisition>;
 
   auto LoadErasedFromCooked(TypeId resource_type, ResourceKey key,
-    std::span<const uint8_t> bytes) -> co::Co<std::shared_ptr<void>>;
-  auto LoadErasedFromCooked(TypeId resource_type, ResourceKey key,
-    std::span<const uint8_t> bytes, const LoadRequest& request)
-    -> co::Co<std::shared_ptr<void>>;
+    std::span<const uint8_t> bytes, LoadRequest request = {},
+    CheckoutOwner owner = CheckoutOwner::kExternal)
+    -> co::Co<ContentAcquisition>;
 
 private:
   const ContentSourceRegistry& source_registry_;
+  const ContentIdentityRegistry& identities_;
   const ResourceLoaderMap& resource_loaders_;
   ContentCache& content_cache_;
   InFlightOperationTable& in_flight_ops_;
+  const std::shared_ptr<ContentReleaseQueue>& releases_;
   observer_ptr<co::ThreadPool> thread_pool_;
   bool work_offline_ { false };
   Callbacks callbacks_;

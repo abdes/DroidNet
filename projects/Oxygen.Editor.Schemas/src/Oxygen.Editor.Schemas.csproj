@@ -2,14 +2,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
 
         <Title>Oxygen Editor Schemas</Title>
         <Description>Property descriptor pipeline driven by engine JSON schemas plus editor overlays.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>oxygen;editor;property-pipeline;json-schema</PackageTags>
-        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-
         <RootNamespace>Oxygen.Editor.Schemas</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
 

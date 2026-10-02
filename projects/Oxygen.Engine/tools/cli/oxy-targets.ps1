@@ -730,8 +730,8 @@ function Resolve-TargetName($targetPattern, $buildRoot, [switch]$NoInteractive) 
 
   do {
     Write-Host "→ " -ForegroundColor Cyan -NoNewline
-    $choice = Read-Host "Select target (1-$([Math]::Min($candidates.Count, 10)), 0 to cancel)"
-    if ($choice -eq "0") {
+    $choice = Read-Host "Select target (1-$([Math]::Min($candidates.Count, 10)), 0 or Enter to cancel)"
+    if ([string]::IsNullOrWhiteSpace($choice) -or $choice -eq "0") {
       Write-LogDim "Target selection cancelled by user"
       return $null
     }
@@ -853,23 +853,15 @@ function Get-PlatformName() {
     Preset timestamps do not trigger a standalone configure here.
 #>
 function Invoke-BuildForTarget($Target, $Selection, [switch]$DryRun) {
-  $PSNativeCommandUseErrorActionPreference = $false
-  if (-not (Test-Path -LiteralPath (Join-Path $Selection.BuildRoot 'CMakeCache.txt'))) {
-    throw "Build tree is not configured: $($Selection.BuildRoot). Run build-tree generate <profile> or build-tree configure <preset> first."
-  }
   if (-not $Target) { Write-LogErrorAndExit 'Target resolution failed or was cancelled' 1 }
-  $arguments = if ($Selection.BuildPreset) { @('--build', '--preset', $Selection.BuildPreset, '--target', $Target) }
-  else { @('--build', $Selection.BuildRoot, '--config', $Selection.Config, '--target', $Target) }
-  if ($DryRun) {
-    Write-Host "Would build: cmake $($arguments -join ' ')"
-    return $Target
-  }
-  Push-Location $Selection.SourceRoot
   try {
-    # Native arguments are passed as an array, never evaluated as shell code.
-    & cmake @arguments | Out-Host
-    if ($LASTEXITCODE -ne 0) { Write-LogErrorAndExit 'Build failed' $LASTEXITCODE }
-  } finally { Pop-Location }
+    Invoke-OxygenBuild -Targets @($Target) -Selection $Selection -DryRun:$DryRun
+  } catch {
+    if ($_.Exception.Data.Contains('NativeExitCode')) {
+      Write-LogErrorAndExit $_.Exception.Message ([int]$_.Exception.Data['NativeExitCode'])
+    }
+    throw
+  }
   return $Target
 }
 

@@ -266,6 +266,7 @@ auto PostProcessService::ResolveViewExposureSettings(
     if (binder) {
       [[maybe_unused]] const auto slot
         = binder->GetOrAllocate(requested.metering_mask);
+      binder->EnsureFrameResources();
       mask = binder->AcquireReadyTexture(requested.metering_mask);
       if (binder->HasResourceFailed(requested.metering_mask)) {
         failure = "texture load or upload failed";

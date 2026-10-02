@@ -40,6 +40,7 @@ struct ContentActiveSceneSelection {
   std::string scene_key;
   std::filesystem::path source_path;
   bool source_is_pak { true };
+  std::filesystem::path import_record_path;
 };
 
 //! Service responsible for persisting content loader related UI settings.
@@ -74,11 +75,6 @@ public:
   virtual auto SetDefaultLayout(
     const content::import::LooseCookedLayout& layout) -> void;
 
-  // --- Paths ---
-  [[nodiscard]] virtual auto GetLastCookedOutputDirectory() const
-    -> std::string;
-  virtual auto SetLastCookedOutputDirectory(const std::string& path) -> void;
-
   // --- Mounted Sources ---
   [[nodiscard]] virtual auto GetMountedPakPaths() const
     -> std::vector<std::filesystem::path>;
@@ -88,6 +84,10 @@ public:
   [[nodiscard]] virtual auto GetMountedIndexPaths() const
     -> std::vector<std::filesystem::path>;
   virtual auto SetMountedIndexPaths(
+    const std::vector<std::filesystem::path>& paths) -> void;
+  [[nodiscard]] virtual auto GetMountedImportRecords() const
+    -> std::vector<std::filesystem::path>;
+  virtual auto SetMountedImportRecords(
     const std::vector<std::filesystem::path>& paths) -> void;
 
   // --- Active Scene ---

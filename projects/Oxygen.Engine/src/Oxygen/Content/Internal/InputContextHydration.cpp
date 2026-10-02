@@ -6,11 +6,12 @@
 
 #include <algorithm>
 #include <array>
-#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <optional>
-#include <ranges>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -18,11 +19,13 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/InputContextHydration.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/InputActionAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
+#include <Oxygen/Data/PakFormat_input.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionState.h>
 #include <Oxygen/Input/ActionTriggers.h>
@@ -94,17 +97,18 @@ namespace {
     }
 
     platform::InputSlots::Initialize();
-    static const std::vector<platform::InputSlot> all_slots = [] {
+    static const std::vector<platform::InputSlot> all_slots
+      = [] -> std::vector<platform::InputSlot> {
       auto slots = std::vector<platform::InputSlot> {};
       platform::InputSlots::GetAllInputSlots(slots);
       return slots;
     }();
 
     const auto canonical_name = CanonicalizeInputSlotName(slot_name);
-    const auto it
-      = std::ranges::find_if(all_slots, [canonical_name](const auto& slot) {
-          return slot.GetName() == canonical_name;
-        });
+    const auto it = std::ranges::find_if(
+      all_slots, [canonical_name](const auto& slot) -> auto {
+        return slot.GetName() == canonical_name;
+      });
     return it != all_slots.end() ? &(*it) : nullptr;
   }
 
@@ -113,9 +117,8 @@ namespace {
     constexpr auto kNanosPerSecond = 1000000000.0L;
     const auto seconds
       = static_cast<long double>(nanoseconds) / kNanosPerSecond;
-    if (seconds
-      > static_cast<long double>((std::numeric_limits<float>::max)())) {
-      return (std::numeric_limits<float>::max)();
+    if (seconds > static_cast<long double>(std::numeric_limits<float>::max())) {
+      return std::numeric_limits<float>::max();
     }
     return static_cast<float>(seconds);
   }
@@ -127,7 +130,7 @@ auto HydrateInputContext(const data::InputMappingContextAsset& asset,
   -> std::shared_ptr<input::InputMappingContext>
 {
   try {
-    const auto context_name = [&asset] {
+    const auto context_name = [&asset] -> std::string {
       const auto name = asset.GetAssetName();
       if (!name.empty()) {
         return std::string(name);
@@ -164,7 +167,7 @@ auto HydrateInputContext(const data::InputMappingContextAsset& asset,
         return it->second;
       }
 
-      auto action_asset = loader.GetInputActionAsset(action_asset_key);
+      auto action_asset = loader.GetInputActionAsset(action_asset_key, asset);
       if (!action_asset) {
         LOG_F(WARNING,
           "WARNING [input.context.action_unresolved]: action asset {} missing "
@@ -220,7 +223,7 @@ auto HydrateInputContext(const data::InputMappingContextAsset& asset,
 
     for (size_t mapping_index = 0; mapping_index < mappings.size();
       ++mapping_index) {
-      const auto& mapping = mappings[mapping_index];
+      const auto& mapping = oxygen::base::CheckedAt(mappings, mapping_index);
 
       const auto trigger_start
         = static_cast<size_t>(mapping.trigger_start_index);
@@ -264,7 +267,8 @@ auto HydrateInputContext(const data::InputMappingContextAsset& asset,
       const auto trigger_end = trigger_start + trigger_count;
       for (size_t trigger_index = trigger_start; trigger_index < trigger_end;
         ++trigger_index) {
-        const auto& trigger_record = triggers[trigger_index];
+        const auto& trigger_record
+          = oxygen::base::CheckedAt(triggers, trigger_index);
         std::shared_ptr<input::ActionTrigger> trigger;
 
         using data::pak::input::InputTriggerType;
@@ -351,7 +355,8 @@ auto HydrateInputContext(const data::InputMappingContextAsset& asset,
           }
           const auto aux_end = aux_start + aux_count;
           for (size_t aux_index = aux_start; aux_index < aux_end; ++aux_index) {
-            const auto& aux_record = trigger_aux[aux_index];
+            const auto& aux_record
+              = oxygen::base::CheckedAt(trigger_aux, aux_index);
             auto aux_action = resolve_action(aux_record.action_asset_key,
               "mappings[" + std::to_string(mapping_index) + "].triggers["
                 + std::to_string(trigger_index - trigger_start) + "].aux["

@@ -4,14 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <chrono>
-#include <type_traits>
+#include <utility>
 
+#include <SDL3/SDL_events.h>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Platform.h>
+#include <Oxygen/Platform/PlatformEvent.h>
 #include <Oxygen/Platform/SDL/Wrapper.h>
 
 using oxygen::platform::EventPump;
-using namespace std::chrono_literals;
 
 EventPump::EventPump()
   : event_source_([this]() -> co::Co<PlatformEvent> {
@@ -25,7 +28,9 @@ EventPump::EventPump()
 
     auto* sdl_event = event.NativeEventAs<SDL_Event>();
     const auto got_one = sdl::PollEvent(sdl_event);
-    DCHECK_F(got_one); // There should always be an event
+    if (!got_one) { // There should always be an event
+      ABORT_F("Expected a queued SDL event");
+    }
     co_return std::move(event);
   })
 {

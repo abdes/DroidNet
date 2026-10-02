@@ -12,7 +12,6 @@
 #include <vector>
 
 #include <Oxygen/Content/ResourceKey.h>
-#include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_render.h>
@@ -122,10 +121,8 @@ NOLINT_TEST_F(MaterialBinderBasicTest, DifferentMaterialsReturnDifferentHandle)
 }
 
 //! Distinct emitted radiance must survive content-based material deduplication.
-NOLINT_TEST_F(
-  MaterialBinderBasicTest, EmissiveIdentityPreservesAllChannelsAndHalfEndpoints)
+NOLINT_TEST_F(MaterialBinderBasicTest, EmissiveIdentityPreservesFloat32Channels)
 {
-  using oxygen::data::HalfFloat;
   using oxygen::data::MaterialAsset;
   using oxygen::vortex::sceneprep::MaterialRef;
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
@@ -137,6 +134,8 @@ NOLINT_TEST_F(
       1,
     });
   const std::array colors {
+    std::array { 9.7F, 0.00001F, 0.0F },
+    std::array { 9.703125F, 0.00001F, 0.0F },
     std::array {
       0.0F,
       0.0F,
@@ -180,9 +179,7 @@ NOLINT_TEST_F(
       = static_cast<std::uint8_t>(oxygen::data::MaterialDomain::kOpaque);
     desc.flags = oxygen::data::pak::render::kMaterialFlag_NoTextureSampling;
     for (unsigned c = 0; c < 3; ++c) {
-      desc.emissive_factor[c] = HalfFloat {
-        rgb.at(c),
-      };
+      desc.emissive_factor[c] = rgb.at(c);
     }
     return MaterialRef {
       .source_asset_key = {},

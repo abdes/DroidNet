@@ -1,4 +1,3 @@
 @ECHO OFF
-
-SET COMMAND=dotnet slngen -d . -o Oxygen.Editor.WorldEditor.sln --folders false .\**\*.csproj
-PowerShell -NoProfile -NoLogo -ExecutionPolicy unrestricted -Command "[System.Threading.Thread]::CurrentThread.CurrentCulture = ''; [System.Threading.Thread]::CurrentThread.CurrentUICulture = '';& {%COMMAND% %*}; exit $LASTEXITCODE"
+PowerShell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tooling\GenerateSolution.ps1" -Scope "%~dp0." -SolutionPath "%~dp0Oxygen.Editor.WorldEditor.sln" -Launch %*
+EXIT /B %ERRORLEVEL%

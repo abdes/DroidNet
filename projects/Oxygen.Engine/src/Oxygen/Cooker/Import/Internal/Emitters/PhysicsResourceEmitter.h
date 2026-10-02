@@ -19,7 +19,9 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
@@ -31,7 +33,6 @@
 namespace oxygen::content::import {
 
 class IAsyncFileWriter;
-struct FileErrorInfo;
 
 //! Cooked payload consumed by `PhysicsResourceEmitter`.
 struct CookedPhysicsResourcePayload final {
@@ -80,7 +81,7 @@ public:
   OXGN_COOK_NDAPI auto TryGetDescriptor(uint32_t index) const
     -> std::optional<data::pak::physics::PhysicsResourceDesc>;
 
-  OXGN_COOK_NDAPI auto Finalize() -> co::Co<bool>;
+  OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, FileErrorInfo>>;
 
 private:
   enum class WriteKind : uint8_t {
@@ -104,6 +105,7 @@ private:
   std::atomic<uint32_t> emitted_count_ { 0 };
   std::atomic<size_t> pending_count_ { 0 };
   std::atomic<size_t> error_count_ { 0 };
+  std::optional<FileErrorInfo> first_error_ {}; // Import-thread callbacks.
   std::unordered_map<std::string, std::string> identity_by_key_;
   std::unordered_map<std::string, uint32_t> index_by_key_;
 };

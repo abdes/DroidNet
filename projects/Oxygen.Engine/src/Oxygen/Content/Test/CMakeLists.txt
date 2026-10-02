@@ -9,8 +9,6 @@
 # ------------------------------------------------------------------------------
 
 find_package(GTest REQUIRED CONFIG)
-# Reuse the configured interpreter used by PakGen's editable installation.
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -33,14 +31,33 @@ add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 
 include(GTestHelpers)
 
+m_gtest_program(ContentOwnership SOURCES "ContentReleaseQueue_test.cpp")
+target_sources(
+  "${META_MODULE_NAME}.ContentOwnership.Tests"
+  PRIVATE
+    "../Internal/ContentReleaseQueue.cpp"
+    "../Internal/ContentBindingBundle.cpp"
+)
+
+m_gtest_program(ContentIdentity SOURCES "ContentIdentityRegistry_test.cpp")
+target_sources(
+  "${META_MODULE_NAME}.ContentIdentity.Tests"
+  PRIVATE
+    "../Internal/ContentIdentity.cpp"
+    "../Internal/ContentIdentityRegistry.cpp"
+)
+
 m_gtest_program(
   AssetLoader
   SOURCES
     "AssetLoader_async_test.cpp"
+    "AssetLoader_publication_test.cpp"
+    "Fixtures/AssetLoaderSources.h"
+    "Fixtures/AssetLoaderSources.cpp"
+    "AssetLoader_generation_test.cpp"
+    "AssetLoader_physics_test.cpp"
     "AssetLoader_basic_test.cpp"
     "AssetLoader_buffer_test.cpp"
-    "AssetLoader_cancellation_test.cpp"
-    "AssetLoader_deps_test.cpp"
     "AssetLoader_eviction_test.cpp"
     "AssetLoader_eviction_reentrancy_test.cpp"
     "AssetLoader_autotrim_test.cpp"
@@ -50,7 +67,6 @@ m_gtest_program(
     "AssetLoader_texture_locator_test.cpp"
     "AssetLoader_scripting_test.cpp"
     "AssetLoader_test_fixture.cpp"
-    "AssetLoader_test_helpers.cpp"
     "AssetLoader_test.h"
     "Fixtures/LooseCookedTestLayout.h"
     "Utils/PakUtils.h"
@@ -59,11 +75,6 @@ target_link_libraries(
   "${META_MODULE_NAME}.AssetLoader.Tests"
   PRIVATE
     oxygen::input
-)
-target_compile_definitions(
-  "${META_MODULE_NAME}.AssetLoader.Tests"
-  PRIVATE
-    OXYGEN_CONTENT_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}"
 )
 
 m_gtest_program(
@@ -109,4 +120,18 @@ m_gtest_program(
 
 m_gtest_program(LoadersScripting SOURCES "SceneScriptingLoader_test.cpp")
 
-# PakGen is provisioned during setup and checked during configuration.
+m_gtest_program(
+  SourceRegistry
+  SOURCES
+    "ContentSourceRegistry_test.cpp"
+    "AssetLoader_test_fixture.cpp"
+    "AssetLoader_test.h"
+    "Fixtures/LooseCookedTestWriter.h"
+    "Fixtures/LooseCookedTestLayout.h"
+)
+target_sources(
+  "Oxygen.Content.SourceRegistry.Tests"
+  PRIVATE
+    "../Internal/ContentSourceRegistry.cpp"
+    "../Internal/ContentSourceRegistry.h"
+)

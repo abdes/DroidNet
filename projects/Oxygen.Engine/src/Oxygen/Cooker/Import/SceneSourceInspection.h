@@ -18,7 +18,7 @@
 
 namespace oxygen::content::import {
 
-//! Parsed source facts for retaining a portable static/scalar import bundle.
+//! Parsed source facts for retaining a portable static model import bundle.
 struct SceneSourceInspection final {
   bool parsed = false;
   bool supported = false;
@@ -43,7 +43,7 @@ struct SceneSourceInspection final {
 //! Inspect source metadata without loading external glTF buffers or emitting.
 //! The caller may inspect a private copy of the primary file before discovering
 //! and coherently capturing its referenced files. Unsupported features are
-//! reported using the same static/scalar policy enforced by native cooking.
+//! reported using the same static model policy enforced by native cooking.
 OXGN_COOK_NDAPI auto InspectSceneSource(
   const std::filesystem::path& source_path,
   const std::stop_token& stop_token = {}) -> SceneSourceInspection;

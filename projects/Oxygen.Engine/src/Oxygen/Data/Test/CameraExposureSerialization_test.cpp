@@ -4,8 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <cstdint>
 #include <limits>
 
+#include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h>
 #include <Oxygen/Data/PakFormatSerioWriters.h>
 #include <Oxygen/Data/PakFormat_world.h>
@@ -48,8 +51,12 @@ NOLINT_TEST(CameraExposureSerializationTest, BothProjectionRecordsRoundTrip)
 
 template <typename Record> auto VerifyInvalidPhysicalCameraWrites() -> void
 {
-  for (const auto value : { 0.0F, -1.0F, std::numeric_limits<float>::infinity(),
-         std::numeric_limits<float>::quiet_NaN() }) {
+  for (const auto value : {
+         0.0F,
+         -1.0F,
+         std::numeric_limits<float>::infinity(),
+         std::numeric_limits<float>::quiet_NaN(),
+       }) {
     for (const auto member :
       { &Record::aperture_f, &Record::shutter_rate, &Record::iso }) {
       auto source = Record {};
@@ -69,6 +76,45 @@ NOLINT_TEST(CameraExposureSerializationTest,
     oxygen::data::pak::world::PerspectiveCameraRecord>();
   VerifyInvalidPhysicalCameraWrites<
     oxygen::data::pak::world::OrthographicCameraRecord>();
+}
+
+NOLINT_TEST(
+  CameraExposureSerializationTest, AspectPolicyRetainsRatioInBothModes)
+{
+  using oxygen::CameraAspectMode;
+  using oxygen::data::pak::world::PerspectiveCameraRecord;
+  constexpr auto kRetainedRatio = 4.0F / 3.0F;
+  for (const auto mode :
+    { CameraAspectMode::kAuto, CameraAspectMode::kFixed }) {
+    PerspectiveCameraRecord source;
+    source.aspect_mode = mode;
+    source.aspect_ratio = kRetainedRatio;
+    oxygen::serio::MemoryStream stream;
+    oxygen::serio::Writer writer(stream);
+    ASSERT_TRUE(oxygen::serio::Store(writer, source));
+    ASSERT_TRUE(stream.Seek(0));
+    oxygen::serio::Reader reader(stream);
+    PerspectiveCameraRecord decoded;
+    ASSERT_TRUE(oxygen::serio::Load(reader, decoded));
+    EXPECT_EQ(decoded.aspect_mode, mode);
+    EXPECT_FLOAT_EQ(decoded.aspect_ratio, kRetainedRatio);
+  }
+}
+
+NOLINT_TEST(CameraExposureSerializationTest, InvalidProjectionCannotBeWritten)
+{
+  using oxygen::data::pak::world::PerspectiveCameraRecord;
+  std::array<PerspectiveCameraRecord, 4> records {};
+  records.at(0).aspect_mode = static_cast<oxygen::CameraAspectMode>(UINT8_MAX);
+  records.at(1).aspect_ratio = 0.0F;
+  records.at(2).fov_y = std::numeric_limits<float>::infinity();
+  records.at(3).far_plane = records.at(3).near_plane;
+  for (const auto& record : records) {
+    oxygen::serio::MemoryStream stream;
+    oxygen::serio::Writer writer(stream);
+    EXPECT_FALSE(oxygen::serio::Store(writer, record));
+    EXPECT_TRUE(stream.Data().empty());
+  }
 }
 
 } // namespace

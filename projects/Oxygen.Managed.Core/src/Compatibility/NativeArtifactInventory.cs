@@ -16,6 +16,12 @@ public static class NativeArtifactInventory
     /// <summary>The native import tool.</summary>
     public const string ImportToolId = "engine/bin/Oxygen.Cooker.ImportTool.exe";
 
+    /// <summary>The native source-analysis report schema.</summary>
+    public const string SourceAnalysisSchemaId = "engine/schemas/oxygen.source-analysis.schema.json";
+
+    /// <summary>The native captured-input admission schema.</summary>
+    public const string CapturedInputsSchemaId = "engine/schemas/oxygen.captured-inputs.schema.json";
+
     /// <summary>Builds the startup inventory without requiring cooker tools or editor UI binaries.</summary>
     /// <param name="installation">The editor and SDK installation.</param>
     /// <returns>The runtime's required files.</returns>
@@ -33,7 +39,7 @@ public static class NativeArtifactInventory
     {
         var files = NativeLibraries(installation);
         files[ImportToolId] = new(ImportToolId, Path.Combine(installation.EngineRoot, "bin", "Oxygen.Cooker.ImportTool.exe"));
-        foreach (var name in new[] { "oxygen.scene-descriptor.schema.json", "oxygen.material-descriptor.schema.json", "oxygen.geometry-descriptor.schema.json", "oxygen.import-manifest.schema.json", "oxygen.buffer-container.schema.json", "oxygen.scene-source-inspection.schema.json" })
+        foreach (var name in new[] { "oxygen.scene-descriptor.schema.json", "oxygen.material-descriptor.schema.json", "oxygen.geometry-descriptor.schema.json", "oxygen.import-manifest.schema.json", "oxygen.buffer-container.schema.json", "oxygen.scene-source-inspection.schema.json", "oxygen.source-analysis.schema.json", "oxygen.captured-inputs.schema.json" })
         {
             AddSchema("engine/schemas/" + name, Path.Combine(installation.SchemaDirectory, name));
             AddSchema("editor/Schemas/" + name, Path.Combine(installation.EditorRoot, "Schemas", name));

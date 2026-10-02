@@ -1,5 +1,23 @@
 # Renderable Component – Design & Integration Spec
 
+## Material-slot identity
+
+`GeometryAsset` owns the immutable slot inventory. Authored changes use
+`MaterialSlotId`; the renderable resolves all of a slot's LOD/submesh bindings
+when an edit or geometry replacement occurs. Rendering continues to read the
+indexed per-submesh cache without hashing or identity lookup per draw.
+
+Geometry replacement retains assignments only for the same geometry identity
+and surviving SlotIds. Ordinal coincidence cannot transfer an override to a
+different surface. Clearing removes the assignment and restores each binding's
+own default. Missing authored identities remain repair state in the editor;
+runtime never guesses a replacement.
+
+Authored slot assignments have their own instance storage. Indexed binding
+overrides and per-binding visibility are transient geometry state; replacement
+rebuilds them and reapplies surviving authored slot assignments. A former first
+LOD binding cannot overwrite the state of every new binding.
+
 This document defines the Renderable component for the Oxygen Scene system and describes how it integrates with Data and Renderer modules, migration from the current MeshData usage, update hooks, culling/LOD behavior, and submission.
 
 ---

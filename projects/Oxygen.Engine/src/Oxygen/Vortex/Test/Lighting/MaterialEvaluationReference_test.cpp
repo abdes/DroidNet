@@ -16,6 +16,34 @@
 
 namespace oxygen::vortex::testing::reference {
 namespace {
+  NOLINT_TEST(MaterialEvaluationReferenceTest, OcclusionStrengthBlendsFromWhite)
+  {
+    auto input = MaterialEvaluationInput {
+      .factors = { .ambient_occlusion = 0.5 },
+      .samples = { .orm = OrmSample { .roughness = 0.4, .metallic = 0.8 },
+        .occlusion = 0.2 },
+      .occlusion_mode = OcclusionMode::kStrength,
+    };
+    const auto expect_ao = [&](const double expected) {
+      const auto result = EvaluateMaterial(input);
+      if (!result.has_value()) {
+        ADD_FAILURE() << "Valid material inputs were rejected";
+        return;
+      }
+      EXPECT_DOUBLE_EQ(result->ambient_occlusion, expected);
+    };
+    expect_ao(0.6);
+    input.factors.ambient_occlusion = 0.0;
+    expect_ao(1.0);
+    input.factors.ambient_occlusion = 1.0;
+    expect_ao(0.2);
+    input.samples.occlusion.reset();
+    expect_ao(1.0);
+    input.samples.occlusion = 0.2;
+    input.textures_enabled = false;
+    expect_ao(1.0);
+  }
+
   NOLINT_TEST(
     MaterialEvaluationReferenceTest, FactorsPackedChannelsAndNormalScaleCompose)
   {
@@ -29,7 +57,7 @@ namespace {
       .samples = {
         .base_color = LinearRgba { .rgb = { .red = 0.5, .green = 0.25, .blue = 1.0 }, .alpha = 0.8 },
         .normal = LinearRgb { .red = 0.75, .green = 0.5, .blue = 1.0 },
-        .orm = OrmSample { .occlusion = 0.75, .roughness = 0.25, .metallic = 0.5 },
+        .orm = OrmSample { .roughness = 0.25, .metallic = 0.5 },
         .metallic = 0.9, .roughness = 0.9, .occlusion = 0.2,
         .emissive = LinearRgb { .red = 3.0, .green = 0.5, .blue = 0.25 },
       },

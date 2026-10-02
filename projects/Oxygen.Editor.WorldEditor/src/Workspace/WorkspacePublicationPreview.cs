@@ -17,18 +17,18 @@ namespace Oxygen.Editor.World.Workspace;
 /// <param name="project">The project whose output is being published.</param>
 /// <param name="engine">The workspace runtime.</param>
 /// <param name="hosting">The dispatcher owning workspace and runtime operations.</param>
-/// <param name="mountService">The ordered, validated mount owner.</param>
 /// <param name="catalog">The catalog refreshed after publication.</param>
 /// <param name="messenger">Asset-change notifications for workspace consumers.</param>
 /// <param name="isCurrent">Checks that this workspace still owns the originating project.</param>
+/// <param name="contentReady">Clears the workspace failure after runtime and catalog recovery.</param>
 internal sealed class WorkspacePublicationPreview(
     ProjectContext project,
     IEngineService engine,
     HostingContext hosting,
-    CookedContentMountService mountService,
     IProjectAssetCatalog catalog,
     IMessenger? messenger,
-    Func<bool> isCurrent) : ICookPublicationPreview
+    Func<bool> isCurrent,
+    Action contentReady) : ICookPublicationPreview
 {
     /// <inheritdoc />
     public bool IsRuntimeAvailable { get; } = engine.State == EngineServiceState.Running;
@@ -43,26 +43,56 @@ internal sealed class WorkspacePublicationPreview(
     });
 
     /// <inheritdoc />
-    public Task MountAsync(IReadOnlyList<string> roots, CookOutputWriteLease? writer) => hosting.Dispatcher.DispatchAsync(async () =>
+    public async Task MountAsync(CookedContentMountSet mounts)
     {
-        if (isCurrent() && this.IsRuntimeAvailable)
+        CookedContentMountSet? pending = mounts;
+        try
         {
-            var reader = writer?.CreateReader() ?? await CookOutputLease.AcquireReadAsync(project.ProjectRoot, CancellationToken.None).ConfigureAwait(true);
-            var mounts = await mountService.PrepareAsync(project, roots, reader, CancellationToken.None).ConfigureAwait(true);
-            await engine.RefreshProjectCookedRootsAsync(mounts.Roots, mounts, keepPaused: true).ConfigureAwait(true);
+            if (mounts.Publication.ProjectId != project.ProjectId)
+            {
+                throw new InvalidOperationException("Preview admission belongs to another project.");
+            }
+
+            await hosting.Dispatcher.DispatchAsync(async () =>
+            {
+                if (isCurrent() && this.IsRuntimeAvailable)
+                {
+                    var publication = mounts.Publication;
+                    var bindings = publication.Roots.Zip(publication.RootPaths,
+                        static (root, path) => new RuntimeCookedRoot(path, root.Owner == CookPublicationRootOwner.Project ? root.Name : null)).ToArray();
+                    pending = null;
+                    await engine.RefreshProjectCookedRootsAsync(bindings, mounts, keepPaused: true).ConfigureAwait(true);
+                }
+            }).ConfigureAwait(false);
         }
-    });
+        finally
+        {
+            pending?.Dispose();
+        }
+    }
 
     /// <inheritdoc />
     public Task ResumeAsync() => hosting.Dispatcher.DispatchAsync(async () =>
     {
         if (isCurrent())
         {
-            await catalog.RefreshAsync(CancellationToken.None).ConfigureAwait(true);
-            _ = messenger?.Send(new AssetsChangedMessage());
             if (this.IsRuntimeAvailable)
             {
                 await engine.ResumeCookedContentAsync().ConfigureAwait(true);
+            }
+        }
+    });
+
+    /// <inheritdoc />
+    public Task CommittedAsync(CookPublicationReadLease publication) => hosting.Dispatcher.DispatchAsync(async () =>
+    {
+        if (isCurrent())
+        {
+            await catalog.RefreshAsync(publication, CancellationToken.None).ConfigureAwait(true);
+            _ = messenger?.Send(new AssetsChangedMessage());
+            if (isCurrent() && this.IsRuntimeAvailable)
+            {
+                contentReady();
             }
         }
     });

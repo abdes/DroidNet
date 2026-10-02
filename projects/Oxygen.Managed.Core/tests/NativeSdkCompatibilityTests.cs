@@ -10,7 +10,7 @@ namespace Oxygen.Managed.Core.Tests;
 /// <summary>Exercises embedded SDK receipts and cooking preflight using the existing test assembly.</summary>
 [TestClass]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
-public sealed class NativeSdkCompatibilityTests
+public sealed partial class NativeSdkCompatibilityTests
 {
     /// <summary>Gets or sets test cancellation.</summary>
     public TestContext TestContext { get; set; } = null!;
@@ -35,7 +35,8 @@ public sealed class NativeSdkCompatibilityTests
         using var fixture = new Fixture();
         var path = Path.Combine(fixture.Installation.EngineRoot, "bin", Path.GetFileName(NativeArtifactInventory.RuntimeId(EditorNativeCompatibilityService.CurrentConfiguration)));
         await File.WriteAllTextAsync(path, "WXYZ", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var result = await new EditorNativeCompatibilityService(fixture.Installation).VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var compatibility = new EditorNativeCompatibilityService(fixture.Installation);
+        var result = await compatibility.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Succeeded.Should().BeFalse();
         _ = result.Diagnostics.Should().Contain(value => value.Code == NativeCompatibilityDiagnosticCodes.ArtifactMismatch && value.AffectedPath == path);
     }
@@ -52,7 +53,7 @@ public sealed class NativeSdkCompatibilityTests
         using var fixture = new Fixture();
         fixture.CreateCookingInputs();
         File.Delete(fixture.Installation.InteropPath);
-        var service = new EditorNativeCompatibilityService(fixture.Installation, cooking: true);
+        using var service = new EditorNativeCompatibilityService(fixture.Installation, cooking: true);
         var first = await service.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.Succeeded.Should().BeTrue();
         var fingerprint = first.Artifacts!.Fingerprint;
@@ -66,14 +67,19 @@ public sealed class NativeSdkCompatibilityTests
     }
 
     /// <summary>Schema disagreement blocks cooking while runtime startup remains available.</summary>
+    /// <param name="schemaFile">The cooking protocol whose editor copy differs.</param>
     /// <returns>The asynchronous operation-scoping test.</returns>
     [TestMethod]
-    public async Task CookingSchemaMismatchDoesNotBlockRuntime()
+    [DataRow("oxygen.scene-descriptor.schema.json")]
+    [DataRow("oxygen.source-analysis.schema.json")]
+    [DataRow("oxygen.captured-inputs.schema.json")]
+    public async Task CookingSchemaMismatchDoesNotBlockRuntime(string schemaFile)
     {
         using var fixture = new Fixture();
         fixture.CreateCookingInputs();
-        await File.WriteAllTextAsync(Path.Combine(fixture.Installation.EditorRoot, "Schemas", "oxygen.scene-descriptor.schema.json"), """{"$id":"different"}""", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var result = await new EditorNativeCompatibilityService(fixture.Installation, cooking: true).VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Installation.EditorRoot, "Schemas", schemaFile), """{"$id":"different"}""", this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var compatibility = new EditorNativeCompatibilityService(fixture.Installation, cooking: true);
+        var result = await compatibility.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Succeeded.Should().BeFalse();
         _ = result.Diagnostics.Should().ContainSingle(value => value.Message.Contains("schemas differ", StringComparison.Ordinal));
         await fixture.VerifyRuntimeAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -83,10 +89,10 @@ public sealed class NativeSdkCompatibilityTests
     {
         private readonly DirectoryInfo root = Directory.CreateTempSubdirectory("OxygenSdk-");
 
-        public Fixture()
+        public Fixture(bool bundled = false)
         {
             var editor = Directory.CreateDirectory(Path.Combine(this.root.FullName, "Editor"));
-            var sdk = Directory.CreateDirectory(Path.Combine(this.root.FullName, "SDK"));
+            var sdk = Directory.CreateDirectory(Path.Combine(bundled ? editor.FullName : this.root.FullName, bundled ? "Engine" : "SDK"));
             this.Installation = new(editor.FullName, sdk.FullName, EditorNativeCompatibilityService.CurrentConfiguration);
             File.Copy(typeof(NativeSdkCompatibilityTests).Assembly.Location, this.Installation.InteropPath);
             using var image = File.OpenRead(this.Installation.InteropPath);
@@ -102,7 +108,8 @@ public sealed class NativeSdkCompatibilityTests
 
         public async Task VerifyRuntimeAsync(CancellationToken cancellationToken)
         {
-            var result = await new EditorNativeCompatibilityService(this.Installation).VerifyAsync(Guid.NewGuid(), cancellationToken).ConfigureAwait(false);
+            using var compatibility = new EditorNativeCompatibilityService(this.Installation);
+            var result = await compatibility.VerifyAsync(Guid.NewGuid(), cancellationToken).ConfigureAwait(false);
             _ = result.Succeeded.Should().BeTrue(string.Join("; ", result.Diagnostics.Select(static value => value.TechnicalMessage ?? value.Message)));
             await result.Artifacts!.DisposeAsync().ConfigureAwait(false);
         }

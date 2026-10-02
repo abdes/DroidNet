@@ -45,17 +45,10 @@ internal interface IRuntimeCommandTransport
     /// <param name="input">The input transport value.</param>
     public void ExecuteInput(ulong viewId, RuntimeInputEvent input);
 
-    /// <summary>Performs the native MountCookedRoot operation.</summary>
-    /// <param name="path">The path transport value.</param>
-    public void MountCookedRoot(string path);
-
-    /// <summary>Performs the native ClearCookedRoots operation.</summary>
-    public void ClearCookedRoots();
-
     /// <summary>Replaces the complete native loose-root set and refreshes current scene bindings.</summary>
-    /// <param name="paths">All project roots that remain mounted after publication.</param>
+    /// <param name="bindings">All project roots that remain mounted after publication.</param>
     /// <returns>Completion after current native bindings settle.</returns>
-    public Task ReplaceCookedRootsAsync(IReadOnlyList<string> paths);
+    public Task ReplaceCookedRootsAsync(IReadOnlyList<RuntimeCookedRoot> bindings);
 
     /// <summary>Pauses and drains cooked-content reads, or resumes current bindings and rendering.</summary>
     /// <param name="paused">Whether published files are about to be replaced.</param>

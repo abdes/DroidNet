@@ -71,12 +71,8 @@ Common options:
 
 `patch`:
 
-- `--base-catalog <path>` repeatable, required
+- `--base-pak <path>` repeatable, required
 - `--manifest-out <path>` required
-- `--allow-base-set-mismatch`
-- `--allow-content-version-mismatch`
-- `--allow-base-source-key-mismatch`
-- `--allow-catalog-digest-mismatch`
 
 ## Published Artifacts
 
@@ -103,9 +99,10 @@ builder:
 - no bytecode is invented if it was not already cooked
 - the source cooked root is never mutated
 
-Path resolution for external script sources is relative to the loose-cooked
-root parent, after normalization. Unresolvable or escaping paths are hard build
-errors.
+Pass each authored content directory with `--script-source-root <directory>`.
+External script paths resolve against those roots in the supplied order. Missing
+sources and paths escaping a declared root fail the build. Moving cooked output
+does not change the authored content root.
 
 ## Patch Precedence
 
@@ -138,7 +135,7 @@ Patch build against a published base catalog:
 ```powershell
 out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe patch `
   --loose-source Examples/Content/.cooked `
-  --base-catalog Examples/Content/pak/all-base.catalog.json `
+  --base-pak Examples/Content/pak/all-base.pak `
   --out Examples/Content/pak/all-patch-1.pak `
   --catalog-out Examples/Content/pak/all-patch-1.catalog.json `
   --manifest-out Examples/Content/pak/all-patch-1.manifest.json `

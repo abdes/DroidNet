@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
 using System.Text.Json;
 using Json.Schema;
 using Oxygen.Managed.Core.Diagnostics;
@@ -40,8 +41,9 @@ internal static class NativeImportReportReader
             throw new InvalidDataException("The native import report has an incomplete job set.");
         }
 
-        var outputs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var outputsBySource = ImmutableDictionary.CreateBuilder<string, ImmutableArray<string>>(StringComparer.Ordinal);
         var diagnostics = new List<DiagnosticRecord>();
+        var provenance = ImmutableDictionary.CreateBuilder<string, NativeMaterialSlotProvenance>(StringComparer.Ordinal);
         var succeeded = exitCode == 0;
         var indices = new HashSet<int>();
         foreach (var job in jobs)
@@ -54,7 +56,27 @@ internal static class NativeImportReportReader
             }
 
             succeeded &= string.Equals(job.GetProperty("status").GetString(), "succeeded", StringComparison.Ordinal);
-            AddOutputs(job, outputs);
+            var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            AddOutputs(job, emitted);
+
+            var requested = execution.Manifest.Jobs[index];
+            outputsBySource.Add(requested.Source, [.. emitted.Order(StringComparer.Ordinal)]);
+            if (requested.MaterialSlotProvenance is { } previous
+                && string.Equals(job.GetProperty("status").GetString(), "succeeded", StringComparison.Ordinal))
+            {
+                if (!job.TryGetProperty("material_slot_provenance", out var candidate))
+                {
+                    throw new InvalidDataException("Successful model import omitted its material-slot provenance.");
+                }
+
+                var retained = NativeMaterialSlotProvenance.Parse(candidate);
+                if (retained.SourceIdentity != previous.SourceIdentity || provenance.ContainsKey(requested.Source))
+                {
+                    throw new InvalidDataException("Native slot provenance does not identify the requested source uniquely.");
+                }
+
+                provenance.Add(requested.Source, retained);
+            }
 
             foreach (var issue in job.GetProperty("diagnostics").EnumerateArray())
             {
@@ -81,7 +103,11 @@ internal static class NativeImportReportReader
             });
         }
 
-        return new(succeeded, diagnostics) { OutputFiles = outputs.Order(StringComparer.Ordinal).ToArray() };
+        return new(succeeded, diagnostics)
+        {
+            OutputsBySource = outputsBySource.ToImmutable(),
+            MaterialSlotProvenance = succeeded ? provenance.ToImmutable() : ImmutableDictionary<string, NativeMaterialSlotProvenance>.Empty,
+        };
     }
 
     private static void AddOutputs(JsonElement job, HashSet<string> outputs)

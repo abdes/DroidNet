@@ -5,63 +5,27 @@
 //===----------------------------------------------------------------------===//
 
 #include <filesystem>
-#include <nlohmann/json-schema.hpp>
-#include <nlohmann/json.hpp>
+#include <memory>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
-#include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ImportSourceDocument.h>
+#include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h>
 
 namespace oxygen::content::import::internal {
 
-namespace {
-
-  using nlohmann::json;
-  using nlohmann::json_schema::json_validator;
-
-  auto GetMaterialDescriptorValidator() -> json_validator&
-  {
-    static auto validator = []() {
-      auto out = json_validator {};
-      out.set_root_schema(json::parse(kMaterialDescriptorSchema));
-      return out;
-    }();
-    return validator;
-  }
-
-  auto ValidateDescriptorSchema(
-    const json& descriptor_doc, std::ostream& error_stream) -> bool
-  {
-    const auto config = JsonSchemaValidationDiagnosticConfig {
-      .validation_failed_code = "material.descriptor.schema_validation_failed",
-      .validation_failed_prefix = "Material descriptor validation failed: ",
-      .validation_overflow_prefix = "Material descriptor validation emitted ",
-      .validator_failure_code = "material.descriptor.schema_validator_failure",
-      .validator_failure_prefix
-      = "Material descriptor schema validator failed: ",
-      .max_issues = 12,
-    };
-
-    return ValidateJsonSchemaWithDiagnostics(GetMaterialDescriptorValidator(),
-      descriptor_doc, config,
-      [&](const std::string_view code, const std::string& message,
-        const std::string& object_path) {
-        error_stream << "ERROR [" << code << "]: " << message;
-        if (!object_path.empty()) {
-          error_stream << " (" << object_path << ")";
-        }
-        error_stream << "\n";
-      });
-  }
-
-} // namespace
-
 auto BuildMaterialDescriptorRequest(
-  const MaterialDescriptorImportSettings& settings, std::ostream& error_stream)
+  const MaterialDescriptorImportSettings& settings, std::ostream& error_stream,
+  std::shared_ptr<const CapturedInputSet> captured_inputs)
   -> std::optional<ImportRequest>
 {
   if (settings.descriptor_path.empty()) {
@@ -71,18 +35,30 @@ auto BuildMaterialDescriptorRequest(
 
   const auto descriptor_path
     = std::filesystem::path(settings.descriptor_path).lexically_normal();
-  const auto descriptor_doc
-    = LoadDescriptorJsonObject(descriptor_path, "material", error_stream);
-  if (!descriptor_doc.has_value()) {
+  auto document = ImportSourceDocument::Load(
+    descriptor_path, "material", error_stream, captured_inputs.get());
+  if (!document.has_value()) {
     return std::nullopt;
   }
 
-  if (!ValidateDescriptorSchema(*descriptor_doc, error_stream)) {
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  const auto prepared = MaterialSource::FromDescriptor(
+    document->text, descriptor_path, settings.job_name, diagnostics);
+  for (const auto& diagnostic : diagnostics) {
+    error_stream << "ERROR [" << diagnostic.code << "]: " << diagnostic.message;
+    if (!diagnostic.object_path.empty()) {
+      error_stream << " (" << diagnostic.object_path << ")";
+    }
+    error_stream << '\n';
+  }
+  if (!prepared) {
     return std::nullopt;
   }
 
   auto request = ImportRequest {};
   request.source_path = descriptor_path;
+  request.captured_inputs = std::move(captured_inputs);
+  request.preparation_inputs.push_back(document->Observation());
 
   if (settings.cooked_root.empty()) {
     error_stream << "ERROR: --output or --cooked-root is required\n";
@@ -96,26 +72,12 @@ auto BuildMaterialDescriptorRequest(
   }
   request.cooked_root = std::move(cooked_root);
 
-  if (!settings.job_name.empty()) {
-    request.job_name = settings.job_name;
-  } else if (descriptor_doc->contains("name")) {
-    request.job_name = descriptor_doc->at("name").get<std::string>();
-  } else {
-    const auto stem = descriptor_path.stem().string();
-    if (!stem.empty()) {
-      request.job_name = stem;
-    }
-  }
-
-  auto with_content_hashing = settings.with_content_hashing;
-  if (descriptor_doc->contains("content_hashing")) {
-    with_content_hashing = descriptor_doc->at("content_hashing").get<bool>();
-  }
-  request.options.with_content_hashing
-    = EffectiveContentHashingEnabled(with_content_hashing);
+  request.job_name = prepared->name;
+  request.options.with_content_hashing = EffectiveContentHashingEnabled(
+    prepared->content_hashing.value_or(settings.with_content_hashing));
 
   request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
-    .normalized_descriptor_json = descriptor_doc->dump(),
+    .normalized_descriptor_json = std::move(document->text),
   };
 
   return request;

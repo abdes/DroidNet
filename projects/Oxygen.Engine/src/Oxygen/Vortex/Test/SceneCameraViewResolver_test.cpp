@@ -7,8 +7,10 @@
 #include <memory>
 
 #include <glm/ext/quaternion_float.hpp>
+#include <glm/gtc/matrix_access.hpp>
 #include <glm/trigonometric.hpp>
 
+#include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
@@ -25,6 +27,45 @@ using oxygen::scene::PerspectiveCamera;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
 using oxygen::vortex::SceneCameraViewResolver;
+
+TEST(SceneCameraViewResolverTest, TargetAspectDoesNotRewriteAuthoredCamera)
+{
+  auto scene = std::make_shared<Scene>("resolver-aspect", 4U);
+  auto camera_node = scene->CreateNode("camera");
+  ASSERT_TRUE(camera_node.AttachCamera(std::make_unique<PerspectiveCamera>()));
+  auto camera = camera_node.GetCameraAs<PerspectiveCamera>();
+  if (!camera.has_value()) {
+    FAIL() << "Expected camera to contain a value";
+  }
+  constexpr auto kAuthoredAspect = 4.0F / 3.0F;
+  camera->get().SetAspectRatio(kAuthoredAspect);
+  camera->get().SetAspectMode(oxygen::CameraAspectMode::kAuto);
+  const auto lookup
+    = [camera_node](const ViewId&) -> SceneNode { return camera_node; };
+  const auto wide_target = ViewPort { .width = 1200.0F, .height = 600.0F };
+  const auto square_target = ViewPort { .width = 600.0F, .height = 600.0F };
+  const auto wide = SceneCameraViewResolver(lookup, wide_target)(ViewId { 1U });
+  const auto square
+    = SceneCameraViewResolver(lookup, square_target)(ViewId { 2U });
+
+  EXPECT_FLOAT_EQ(glm::column(wide.ProjectionMatrix(), 1).y
+      / glm::column(wide.ProjectionMatrix(), 0).x,
+    2.0F);
+  EXPECT_FLOAT_EQ(glm::column(square.ProjectionMatrix(), 1).y
+      / glm::column(square.ProjectionMatrix(), 0).x,
+    1.0F);
+  EXPECT_FLOAT_EQ(glm::column(wide.ProjectionMatrix(), 1).y,
+    glm::column(square.ProjectionMatrix(), 1).y);
+  EXPECT_FLOAT_EQ(camera->get().GetAspectRatio(), kAuthoredAspect);
+
+  camera->get().SetAspectMode(oxygen::CameraAspectMode::kFixed);
+  const auto fixed
+    = SceneCameraViewResolver(lookup, wide_target)(ViewId { 1U });
+  EXPECT_FLOAT_EQ(glm::column(fixed.ProjectionMatrix(), 1).y
+      / glm::column(fixed.ProjectionMatrix(), 0).x,
+    kAuthoredAspect);
+  EXPECT_FLOAT_EQ(camera->get().GetAspectRatio(), kAuthoredAspect);
+}
 
 TEST(SceneCameraViewResolverTest, UsesViewportOverrideWhenProvided)
 {

@@ -4,15 +4,30 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
+#include <memory>
+#include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Content/AssetValidation.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import {
 
@@ -109,7 +124,7 @@ AssetEmitter::~AssetEmitter()
 
 auto AssetEmitter::Emit(const data::AssetKey& key, data::AssetType asset_type,
   std::string_view virtual_path, std::string_view descriptor_relpath,
-  std::span<const std::byte> bytes) -> void
+  std::span<const std::byte> bytes, data::AssetReferences references) -> void
 {
   if (finalize_started_.load(std::memory_order_acquire)) {
     throw std::runtime_error("AssetEmitter is finalized");
@@ -118,6 +133,7 @@ auto AssetEmitter::Emit(const data::AssetKey& key, data::AssetType asset_type,
   // Validate paths (must match PAK format requirements)
   ValidateVirtualPath(virtual_path);
   ValidateRelativePath(descriptor_relpath);
+  ValidateAssetDescriptor(asset_type, key, bytes, references);
 
   if (const auto it = key_by_virtual_path_.find(std::string(virtual_path));
     it != key_by_virtual_path_.end() && it->second != key) {
@@ -143,15 +159,15 @@ auto AssetEmitter::Emit(const data::AssetKey& key, data::AssetType asset_type,
     static_cast<int>(asset_type), virtual_path, descriptor_relpath,
     bytes.size());
 
-  RecordAsset(
-    key, asset_type, virtual_path, descriptor_relpath, bytes.size(), sha256);
+  RecordAsset(key, asset_type, virtual_path, descriptor_relpath, bytes.size(),
+    std::move(references), sha256);
   QueueDescriptorWrite(descriptor_path, descriptor_relpath, bytes);
 }
 
 auto AssetEmitter::EmitSync(const data::AssetKey& key,
   const data::AssetType asset_type, std::string_view virtual_path,
-  std::string_view descriptor_relpath, std::span<const std::byte> bytes)
-  -> co::Co<void>
+  std::string_view descriptor_relpath, std::span<const std::byte> bytes,
+  data::AssetReferences references) -> co::Co<void>
 {
   if (finalize_started_.load(std::memory_order_acquire)) {
     throw std::runtime_error("AssetEmitter is finalized");
@@ -159,6 +175,7 @@ auto AssetEmitter::EmitSync(const data::AssetKey& key,
 
   ValidateVirtualPath(virtual_path);
   ValidateRelativePath(descriptor_relpath);
+  ValidateAssetDescriptor(asset_type, key, bytes, references);
 
   if (const auto it = key_by_virtual_path_.find(std::string(virtual_path));
     it != key_by_virtual_path_.end() && it->second != key) {
@@ -186,8 +203,8 @@ auto AssetEmitter::EmitSync(const data::AssetKey& key,
       + "': " + write_result.error().ToString());
   }
 
-  RecordAsset(
-    key, asset_type, virtual_path, descriptor_relpath, bytes.size(), sha256);
+  RecordAsset(key, asset_type, virtual_path, descriptor_relpath, bytes.size(),
+    std::move(references), sha256);
 }
 
 auto AssetEmitter::Count() const noexcept -> size_t { return records_.size(); }
@@ -211,11 +228,12 @@ auto AssetEmitter::Records() const noexcept
 auto AssetEmitter::RecordAsset(const data::AssetKey& key,
   const data::AssetType asset_type, std::string_view virtual_path,
   std::string_view descriptor_relpath, const uint64_t descriptor_size,
-  std::optional<base::Sha256Digest> sha256) -> void
+  data::AssetReferences references, std::optional<base::Sha256Digest> sha256)
+  -> void
 {
   if (const auto it = record_index_by_key_.find(key);
     it != record_index_by_key_.end()) {
-    auto& record = records_[it->second];
+    auto& record = records_.at(it->second);
 
     if (record.virtual_path != virtual_path) {
       const auto old_virtual_path = record.virtual_path;
@@ -241,6 +259,7 @@ auto AssetEmitter::RecordAsset(const data::AssetKey& key,
     record.descriptor_relpath = std::string(descriptor_relpath);
     record.descriptor_size = descriptor_size;
     record.descriptor_sha256 = std::move(sha256);
+    record.references = std::move(references);
     return;
   }
 
@@ -251,6 +270,7 @@ auto AssetEmitter::RecordAsset(const data::AssetKey& key,
     .descriptor_relpath = std::string(descriptor_relpath),
     .descriptor_size = descriptor_size,
     .descriptor_sha256 = std::move(sha256),
+    .references = std::move(references),
   };
 
   const auto index = records_.size();
@@ -285,9 +305,8 @@ auto AssetEmitter::QueueDescriptorWrite(
     std::span<const std::byte>(*bytes_ptr),
     WriteOptions { .create_directories = true, .share_write = true },
     [this, bytes_ptr, relpath = std::string(descriptor_relpath)](
-      const FileErrorInfo& error, [[maybe_unused]] uint64_t bytes_written) {
-      OnWriteComplete(relpath, error);
-    });
+      const FileErrorInfo& error, [[maybe_unused]] uint64_t bytes_written)
+      -> void { OnWriteComplete(relpath, error); });
 }
 
 auto AssetEmitter::OnWriteComplete(
@@ -312,7 +331,7 @@ auto AssetEmitter::OnWriteComplete(
         WriteOptions { .create_directories = true, .share_write = true },
         [this, bytes_ptr, relpath = std::string(descriptor_relpath)](
           const FileErrorInfo& next_error,
-          [[maybe_unused]] uint64_t bytes_written) {
+          [[maybe_unused]] uint64_t bytes_written) -> void {
           OnWriteComplete(relpath, next_error);
         });
     }
@@ -323,11 +342,14 @@ auto AssetEmitter::OnWriteComplete(
   }
 
   error_count_.fetch_add(1, std::memory_order_acq_rel);
+  if (!first_error_) {
+    first_error_ = error;
+  }
   LOG_F(
     ERROR, "Failed to write '{}': {}", descriptor_relpath, error.ToString());
 }
 
-auto AssetEmitter::Finalize() -> co::Co<bool>
+auto AssetEmitter::Finalize() -> co::Co<Result<void, FileErrorInfo>>
 {
   finalize_started_.store(true, std::memory_order_release);
 
@@ -335,23 +357,14 @@ auto AssetEmitter::Finalize() -> co::Co<bool>
     pending_count_.load(std::memory_order_acquire));
 
   // Wait for all pending writes via flush
-  auto flush_result = co_await file_writer_.Flush();
-
-  if (!flush_result.has_value()) {
-    LOG_F(ERROR, "Finalize: flush failed: {}", flush_result.error().ToString());
-    co_return false;
+  const auto flush_result = co_await file_writer_.Flush();
+  if (first_error_) {
+    co_return Result<void, FileErrorInfo>::Err(*first_error_);
   }
-
-  // Check for accumulated errors
-  const auto errors = error_count_.load(std::memory_order_acquire);
-  if (errors > 0) {
-    LOG_F(ERROR, "Finalize: {} I/O errors occurred", errors);
-    co_return false;
+  if (!flush_result) {
+    co_return Result<void, FileErrorInfo>::Err(flush_result.error());
   }
-
-  DLOG_F(INFO, "Finalize: complete, {} assets emitted", records_.size());
-
-  co_return true;
+  co_return Result<void, FileErrorInfo>::Ok();
 }
 
 } // namespace oxygen::content::import

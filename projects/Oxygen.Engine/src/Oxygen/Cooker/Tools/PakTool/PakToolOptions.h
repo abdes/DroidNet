@@ -23,6 +23,7 @@ struct PakToolOutputOptions {
 
 struct PakToolRequestOptions {
   std::vector<data::CookedSource> sources;
+  std::vector<std::filesystem::path> script_source_roots;
   std::filesystem::path output_pak;
   std::filesystem::path catalog_output;
   uint16_t content_version = 0;
@@ -38,12 +39,8 @@ struct PakToolBuildCommandOptions {
 };
 
 struct PakToolPatchCommandOptions {
-  std::vector<std::filesystem::path> base_catalogs;
+  std::vector<std::filesystem::path> base_paks;
   std::filesystem::path manifest_output;
-  bool allow_base_set_mismatch = false;
-  bool allow_content_version_mismatch = false;
-  bool allow_base_source_key_mismatch = false;
-  bool allow_catalog_digest_mismatch = false;
 };
 
 struct PakToolCliOptions {

@@ -14,6 +14,185 @@ Engine. The design uses OxCo structured concurrency with a **dedicated import
 thread** running its own event loop and ThreadPool, completely decoupled from
 the main application thread.
 
+Retained model imports use [immutable publication](#retained-model-publication);
+the editor continues to own its broader project publication transaction.
+[Source analysis](#source-analysis-and-input-observations) shares preparation and
+input observation with native cooking.
+
+## Source analysis and input observations
+
+Status: native source analysis and captured batch execution are validated.
+Editor integration remains ED-M08.1.9.3.
+
+Native preparation owns descriptor validation,
+logical references and recipe-dependent output naming. Batch analysis invokes
+that preparation without cooking or emitting files. Import jobs consume the same
+interpretation; analysis must not add a second descriptor parser or a no-op cook.
+
+`MaterialSource`, `GeometrySource` and `SceneSource` retain owned source values
+and symbolic references before cooked linking. The model adapters prepare named
+materials, geometry variants and texture uses before producing payloads.
+Metadata parsing omits external glTF geometry buffers and FBX layout witnesses.
+`SceneImportSettings::Prepare` and `TextureImportSettings::Prepare` apply native
+recipe rules without file I/O or a cooked destination; execution builders attach
+the destination afterward.
+
+`ImportManifest::AnalyzeSources` analyzes material, texture, geometry and scene
+descriptors, standalone textures, and glTF/FBX sources. The same operation is
+available from ImportTool:
+
+```text
+Oxygen.Cooker.ImportTool.exe analyze-sources --manifest imports.json --report analysis.json
+```
+
+`--root` selects the authoring root for relative paths, as it does for `batch`.
+Both commands accept `--captured-inputs captures.json`. Replacement analysis reads
+incoming captured bytes under the retained logical paths, leaving published
+sources untouched until publication. Output identities do not depend on the
+capture directory. No cooked destination is needed. The
+[report schema](../../Import/Schemas/oxygen.source-analysis.schema.json) separates
+declared outputs, logical references, file dependencies and verified observations.
+Model texture files and outputs are optional because native cooking supports
+error-index and placeholder recovery. Cubemap discovery records selected faces
+and the rejected suffix probes. Cooking performs payload validation and resolves
+cooked references.
+
+Texture jobs may supply `virtual_path` as their explicit output identity. A
+descriptor may omit that field or repeat it; a conflicting descriptor identity
+is rejected by both analysis and cooking. Tools need not rewrite descriptors to
+assign project asset paths.
+
+The caller binds the report to its toolchain artifact fingerprint;
+`producer_version` is a display version. The CLI protects declared and accessed
+inputs from report-path aliases, including after failed verification. With a
+capture map, this also protects the map itself and every declared logical and
+captured file, including entries unused by the current frontier.
+`accessed_paths` serves that protection; `observations` carries verified facts.
+
+`ImportSourceSnapshot`, the existing reader and parser-buffer observer, records
+byte ranges and presence/absence/metadata observations. A missing file
+is a fact; denied access and I/O failures remain errors. Contradictory observations
+invalidate an attempt. Collection seals before verification, including probes
+that suspend; cancellation releases active-operation ownership.
+`Observations()` exports owned facts only after successful verification.
+Overlapping verification and failed observation bookkeeping invalidate the
+snapshot, preventing partial proof reports.
+
+`ImportRequest::captured_inputs` optionally supplies an immutable
+`CapturedInputSet`: logical authored paths map to private captured files, expected
+size/digest and original metadata, or to explicit presence/absence probes.
+Resource naming continues to use authored paths. Reads use captured files;
+verification never substitutes live originals. Undeclared reads invalidate the
+operation even when a texture importer recovers with a placeholder.
+Captured absence and directory facts reproduce the native file error so optional
+texture recovery remains available. Positive probes carry no byte permission.
+`ParserRead` scopes synchronous glTF reads through the same observer.
+Cooked asset references use the separate cooked reader and mount resolution.
+Verification checks consumed captures only, reuses full-read hashes and qualifies
+range-only reads with bounded chunks.
+
+`ImportSourceDocument` is the shared synchronous reader for request preparation
+and batch dependency preflight. It preserves logical paths, validates captured
+size/digest and returns the exact document bytes with a pending observation.
+Builders attach those observations to `ImportRequest::preparation_inputs`;
+job admission transfers them into the snapshot before execution. Final
+verification also covers ordinary, uncaptured descriptor and provenance reads.
+Cooked resource reads in jobs and pipelines use their separate cooked reader.
+
+Captured execution uses the same manifest and source names as ordinary imports:
+
+```text
+Oxygen.Cooker.ImportTool.exe batch --manifest imports.json --captured-inputs captures.json
+```
+
+The [capture schema](../../Import/Schemas/oxygen.captured-inputs.schema.json)
+requires absolute logical and captured paths. File entries carry their expected
+SHA-256, size and original metadata; presence-only and absence entries carry no
+bytes. Duplicate identities, inconsistent facts and unknown fields are rejected
+before preparation. Analysis provides original metadata for declared files;
+negative cubemap search candidates remain presence-only observations.
+
+Descriptor preparation consumes observed bytes and their source location.
+Source adapters use the same observation boundary for parser-owned reads.
+Logical asset references and physical input files remain distinct. Reports carry
+per-job declared outputs, typed logical references, attributed input proofs,
+producer/schema identity, completeness and diagnostics. They do not predict
+internal byte offsets or replace post-cook output validation.
+
+The editor resolves project/library references and batches each newly discovered
+frontier. It captures the reported source closure and compares those bytes with
+the observations before cooking. Native cooking rejects reads outside the
+captured contract. Analysis may read whole files while cooking reads ranges;
+qualification compares source membership and consumed content, not identical
+I/O schedules. Passive editor status uses existing dependency facts.
+
+UE5.7 references informing these boundaries are `InterchangeTranslatorBase`
+(native translation before asset production), `FCookDependency` (separate file
+and package/build dependencies), and `UAssetImportData` (reuse precomputed source
+hashes). Oxygen's coherent read and negative-probe checks remain explicit;
+filename-based cached hashes do not establish them.
+
+## Retained model publication
+
+Self-contained glTF/FBX imports have a Cooker-owned authored record in the
+existing Content import-record area. It retains the native model recipe, source
+namespace/provenance and selected cooked generation. Original external files are
+read inputs; importing never writes metadata beside them.
+
+Each attempt cooks into a new private directory under
+`Content/.cooked/imports/<source-id>/<generation-id>`. It neither modifies a
+published generation nor copies an earlier aggregate root. After successful
+native validation, one atomic authored-record replacement selects both the
+candidate provenance and generation. Record/settings changes or a competing
+publication fail the expected-revision check and leave the previous generation
+selected. Failed or interrupted attempts remain unselected and cannot affect
+subsequent source identity allocation.
+
+`AsyncImportService::SubmitImport` is the staging primitive used by project
+transactions. The retained model entry point owns record preparation, isolated
+cooking and publication for native hosts; DemoShell and CLI consume that same
+API and schema. The editor keeps its existing project coordinator and uses the
+shared native provenance value.
+
+`RetainedModelImport::SaveRecipe` creates or updates
+`Content/imports/<name>.import.json`; `Prepare` reserves one unique attempt,
+and `AsyncImportService::SubmitRetainedImport` executes it. The native
+`oxygen.retained-model-import.schema.json` record contains the recipe, native
+material-slot provenance, and selected generation ID/index digest. Generation
+paths are derived, never copied into the authored recipe. A prepared attempt is
+submitted once. Staging imports reject writes into marked generation roots.
+Source bytes consumed during import are checked again before publication.
+
+Physical I/O uses [Base filesystem paths](../../../Base/Docs/Filesystem.md),
+including parser callbacks and generated output. Authored paths and identities
+keep their logical spelling. Emitter failures retain the original file error
+through session finalization, even when another emitter has flushed the shared
+writer.
+
+DemoShell persists retained record paths (`content.library.import_records`)
+and the active scene's record (`content.active_scene.import_record`). It resolves
+the current generation when restoring the library, so external CLI reimports
+do not strand the UI on a historical directory. The source-browser folder is
+independent from the app-owned Content destination.
+
+Content mounts immutable generation paths. Replaced generations remain available
+to referenced assets and in-flight reads. Publication does not delete them;
+reclamation requires the owning Content lifetime to release them.
+`ReclaimUnusedGenerations` checks selection under the record lock, then removes
+only UUID-named private generations for that source whose exclusive marker lock
+can be acquired. Import workers run this cleanup before new work; selected,
+mounted and in-flight generations remain. Retained jobs own existing native
+file writers and registries per generation. Cancellation drains that writer
+before destroying its session/emitters, without cancelling or draining another
+job. One source namespace belongs to one authored record. Hosts expose
+the selected generation without adding workspace-selection UI.
+
+Acceptance: interrupted/failed cooks preserve the selected record and all prior
+bytes; concurrent publishers cannot overwrite each other's accepted generation;
+source/settings edits invalidate an in-flight candidate; deleting derived
+generations preserves SlotIds after recook from retained provenance; old readers
+remain valid through generation replacement.
+
 ### Core Principles
 
 1. **Dedicated Import Thread**: The importer runs on its own thread with an

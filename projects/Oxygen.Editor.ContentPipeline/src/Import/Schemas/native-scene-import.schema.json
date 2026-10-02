@@ -4,7 +4,7 @@
   "type": "object",
   "properties": {
     "SchemaVersion": {
-      "enum": [2, 3]
+      "const": 4
     },
     "Importer": {
       "const": "Oxygen.Cooker.Scene/v1"
@@ -43,7 +43,7 @@
       "minLength": 1
     },
     "ContentPolicy": {
-      "const": "static-scalar"
+      "const": "static"
     },
     "UnitPolicy": {
       "const": "normalize"
@@ -55,7 +55,10 @@
       "const": "generate"
     },
     "TangentsPolicy": {
-      "const": "preserve"
+      "const": "generate"
+    },
+    "MaterialSlotProvenance": {
+      "type": "object"
     }
   },
   "required": [
@@ -72,7 +75,8 @@
     "UnitPolicy",
     "BakeTransforms",
     "NormalsPolicy",
-    "TangentsPolicy"
+    "TangentsPolicy",
+    "MaterialSlotProvenance"
   ],
   "additionalProperties": false
 }

@@ -11,7 +11,7 @@ using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -72,7 +72,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         Directory.CreateDirectory(Path.GetDirectoryName(cookedPath)!);
         await File.WriteAllBytesAsync(cookedPath, [1], this.TestContext.CancellationToken).ConfigureAwait(false);
         var catalog = new TestProjectAssetCatalog(
-            [new AssetRecord(new Uri("asset:///Content/Materials/Red.omat"))]);
+            [IndexedOutput(new Uri("asset:///Content/Materials/Red.omat"), cookedPath)]);
         var projectContext = CreateProjectContextService(workspace);
         var unavailableRuntime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
         await using var runtimeLifetime = unavailableRuntime.ConfigureAwait(false);
@@ -205,7 +205,20 @@ public sealed partial class ContentBrowserAssetProviderTests
                 Scenes = [],
             });
 
+        var context = service.ActiveProject!;
+        var info = new ProjectInfo(context.ProjectId, context.Name, context.Category, context.ProjectRoot)
+        {
+            AuthoringMounts = [.. context.AuthoringMounts],
+        };
+        File.WriteAllText(Path.Combine(workspace.Root, "Project.oxy"), ProjectInfo.ToJson(info));
         return service;
+    }
+
+    private static AssetRecord IndexedOutput(Uri uri, string path, byte type = 1)
+    {
+        var descriptor = uri.AbsolutePath["/Content/".Length..];
+        var root = path[..^(descriptor.Length + 1)];
+        return new(uri) { Cooked = new(root, descriptor, Guid.NewGuid(), new(1, 2), type, 6, new string('0', 64)) { VirtualPath = uri.AbsolutePath } };
     }
 
     private static void WriteMaterial(string path)
@@ -215,8 +228,6 @@ public sealed partial class ContentBrowserAssetProviderTests
         MaterialSourceWriter.Write(
             stream,
             new MaterialSource(
-                "oxygen.material.v1",
-                "PBR",
                 "Material",
                 new MaterialPbrMetallicRoughness(
                     1.0f,
@@ -242,6 +253,10 @@ public sealed partial class ContentBrowserAssetProviderTests
 
         public IObservable<AssetChange> Changes => this.changes;
 
+        public Oxygen.Editor.ContentPipeline.Publication.CookPublicationReadLease? Publication { get; init; }
+
+        public string? PublicationError { get; init; }
+
         public int RefreshCount { get; private set; }
 
         public Task<IReadOnlyList<AssetRecord>> QueryAsync(AssetQuery query, CancellationToken cancellationToken = default)
@@ -250,6 +265,9 @@ public sealed partial class ContentBrowserAssetProviderTests
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(this.records);
         }
+
+        public Task<ProjectAssetSnapshot> ReadSnapshotAsync(AssetQuery query, CancellationToken cancellationToken = default)
+            => Task.FromResult(new ProjectAssetSnapshot(this.records, this.Publication, this.PublicationError));
 
         public Task InitializeAsync() => Task.CompletedTask;
 
@@ -266,12 +284,8 @@ public sealed partial class ContentBrowserAssetProviderTests
             return Task.CompletedTask;
         }
 
-        public Task AddFolderAsync(IFolder folder, string mountPoint)
-        {
-            _ = folder;
-            _ = mountPoint;
-            return Task.CompletedTask;
-        }
+        public Task RefreshAsync(Oxygen.Editor.ContentPipeline.Publication.CookPublicationReadLease publication, CancellationToken cancellationToken = default)
+            => this.RefreshAsync(cancellationToken);
 
         public void SetRecords(IReadOnlyList<AssetRecord> nextRecords) => this.records = nextRecords;
 
@@ -323,6 +337,11 @@ public sealed partial class ContentBrowserAssetProviderTests
 
     private sealed class EmptyCookStatusReader : IAssetCookStatusReader
     {
+        public event EventHandler? Changed { add { } remove { } }
+
+        public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, Oxygen.Editor.ContentPipeline.Publication.CookPublicationReadLease publication, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default)
+            => this.ReadAsync(project, assetUris, cancellationToken);
+
         public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<AssetCookStatus>>([]);
     }

@@ -4,14 +4,27 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Cooker/Import/Internal/Pipelines/PhysicsResourceImportPipeline.h>
-
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
 #include <span>
+#include <stop_token>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/PhysicsResourceImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 
 namespace oxygen::content::import {
 
@@ -24,6 +37,12 @@ namespace {
   }
 
 } // namespace
+
+PhysicsResourceImportPipeline::PhysicsResourceImportPipeline(
+  co::ThreadPool& thread_pool)
+  : PhysicsResourceImportPipeline(thread_pool, Config {})
+{
+}
 
 PhysicsResourceImportPipeline::PhysicsResourceImportPipeline(
   co::ThreadPool& thread_pool, Config config)
@@ -53,7 +72,7 @@ auto PhysicsResourceImportPipeline::Start(co::Nursery& nursery) -> void
 
   const auto worker_count = std::max(1U, config_.worker_count);
   for (uint32_t i = 0; i < worker_count; ++i) {
-    nursery.Start([this]() -> co::Co<> { co_await Worker(); });
+    nursery.Start([this] -> co::Co<> { co_await Worker(); });
   }
 }
 
@@ -197,7 +216,7 @@ auto PhysicsResourceImportPipeline::ComputeContentHash(WorkItem& item)
   const auto source_id = item.source_id;
   const auto content_hash = co_await thread_pool_.Run(
     [bytes, stop_token = item.stop_token, source_id](
-      co::ThreadPool::CancelToken canceled) noexcept {
+      co::ThreadPool::CancelToken canceled) noexcept -> base::Sha256Digest {
       if (IsStopRequested(stop_token) || canceled) {
         return base::Sha256Digest {};
       }

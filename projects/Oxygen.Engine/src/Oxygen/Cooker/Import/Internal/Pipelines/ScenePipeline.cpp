@@ -6,27 +6,38 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
-#include <filesystem>
-#include <numbers>
+#include <cstdint>
+#include <cstring>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
-#include <unordered_set>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
-#include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Data/PakFormatSerioWriters.h>
+#include <Oxygen/Data/PakFormatSerioWriters.h> // IWYU pragma: keep
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -51,6 +62,7 @@ namespace {
   using data::pak::world::SpotLightRecord;
 
   struct BuildOutcome {
+    data::AssetReferences references;
     std::vector<std::byte> bytes;
     std::vector<ImportDiagnostic> diagnostics;
     bool canceled = false;
@@ -109,13 +121,20 @@ namespace {
 
   auto SortSceneComponents(SceneBuild& build) -> void
   {
+    std::ranges::sort(
+      build.material_overrides, [](const auto& lhs, const auto& rhs) -> auto {
+        if (lhs.node_index != rhs.node_index) {
+          return lhs.node_index < rhs.node_index;
+        }
+        return lhs.slot_id < rhs.slot_id;
+      });
     std::ranges::sort(build.renderables,
-      [](const RenderableRecord& a, const RenderableRecord& b) {
+      [](const RenderableRecord& a, const RenderableRecord& b) -> bool {
         return a.node_index < b.node_index;
       });
 
     std::ranges::sort(build.local_fog_volumes,
-      [](const LocalFogVolumeRecord& a, const LocalFogVolumeRecord& b) {
+      [](const LocalFogVolumeRecord& a, const LocalFogVolumeRecord& b) -> bool {
         if (a.node_index != b.node_index) {
           return a.node_index < b.node_index;
         }
@@ -123,27 +142,24 @@ namespace {
       });
 
     std::ranges::sort(build.perspective_cameras,
-      [](const PerspectiveCameraRecord& a, const PerspectiveCameraRecord& b) {
-        return a.node_index < b.node_index;
-      });
+      [](const PerspectiveCameraRecord& a, const PerspectiveCameraRecord& b)
+        -> bool { return a.node_index < b.node_index; });
 
     std::ranges::sort(build.orthographic_cameras,
-      [](const OrthographicCameraRecord& a, const OrthographicCameraRecord& b) {
-        return a.node_index < b.node_index;
-      });
+      [](const OrthographicCameraRecord& a, const OrthographicCameraRecord& b)
+        -> bool { return a.node_index < b.node_index; });
 
     std::ranges::sort(build.directional_lights,
-      [](const DirectionalLightRecord& a, const DirectionalLightRecord& b) {
-        return a.node_index < b.node_index;
-      });
+      [](const DirectionalLightRecord& a, const DirectionalLightRecord& b)
+        -> bool { return a.node_index < b.node_index; });
 
     std::ranges::sort(build.point_lights,
-      [](const PointLightRecord& a, const PointLightRecord& b) {
+      [](const PointLightRecord& a, const PointLightRecord& b) -> bool {
         return a.node_index < b.node_index;
       });
 
     std::ranges::sort(build.spot_lights,
-      [](const SpotLightRecord& a, const SpotLightRecord& b) {
+      [](const SpotLightRecord& a, const SpotLightRecord& b) -> bool {
         return a.node_index < b.node_index;
       });
   }
@@ -165,13 +181,21 @@ namespace {
   [[nodiscard]] auto SerializeScene(const std::string_view scene_name,
     const AssetKey scene_key, const SceneBuild& build,
     std::span<const SceneEnvironmentSystem> environment_systems,
+    const data::AssetReferences& environment_references,
     std::vector<ImportDiagnostic>& diagnostics, std::string_view source_id)
     -> BuildOutcome
   {
     BuildOutcome outcome;
+    AssetReferenceBuilder references(environment_references);
+    for (const auto& renderable : build.renderables) {
+      references.AddAsset(renderable.geometry_key, data::AssetType::kGeometry);
+    }
+    for (const auto& assignment : build.material_overrides) {
+      references.AddAsset(assignment.material_key, data::AssetType::kMaterial);
+    }
 
     for (size_t index = 0; index < build.nodes.size(); ++index) {
-      if (!data::pak::world::HasCanonicalNodeFlags(build.nodes[index])) {
+      if (!data::pak::world::HasCanonicalNodeFlags(build.nodes.at(index))) {
         diagnostics.push_back(MakeErrorDiagnostic("scene.node.flags_invalid",
           "Scene node flags contain unsupported source modes or inherited "
           "values",
@@ -195,23 +219,49 @@ namespace {
     desc.nodes.entry_size = sizeof(NodeRecord);
 
     std::unordered_set<std::uint32_t> light_nodes;
-    std::array<bool, 3> atmosphere_slots {};
-    const auto valid_lights = [&](const auto& lights) {
-      for (const auto& light : lights) {
-        if (!data::IsValidLightRecord(light) || light.node_index >= build.nodes.size()
-          || !light_nodes.insert(light.node_index).second) return false;
-        if constexpr (requires { light.atmosphere_light_slot; }) {
-          const auto slot = light.atmosphere_light_slot;
-          if (slot != 0U && std::exchange(atmosphere_slots[slot], true)) return false;
+    std::unordered_set<std::uint32_t> camera_nodes;
+    const auto valid_camera_owners = [&](const auto& cameras) -> bool {
+      for (const auto& camera : cameras) {
+        if (camera.node_index >= build.nodes.size()
+          || !camera_nodes.insert(camera.node_index).second) {
+          return false;
         }
       }
       return true;
     };
-    if (!valid_lights(build.directional_lights) || !valid_lights(build.point_lights)
+    if (!valid_camera_owners(build.perspective_cameras)
+      || !valid_camera_owners(build.orthographic_cameras)) {
+      diagnostics.push_back(
+        MakeErrorDiagnostic("scene.camera.invalid_ownership",
+          "Each camera must own a valid, distinct scene node", source_id,
+          "cameras"));
+      return outcome;
+    }
+    std::array<bool, 3> atmosphere_slots {};
+    const auto valid_lights = [&](const auto& lights) -> auto {
+      for (const auto& light : lights) {
+        if (!data::IsValidLightRecord(light)
+          || light.node_index >= build.nodes.size()
+          || !light_nodes.insert(light.node_index).second) {
+          return false;
+        }
+        if constexpr (requires { light.atmosphere_light_slot; }) {
+          const auto slot = light.atmosphere_light_slot;
+          if (slot != 0U && std::exchange(atmosphere_slots.at(slot), true)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    };
+    if (!valid_lights(build.directional_lights)
+      || !valid_lights(build.point_lights)
       || !valid_lights(build.spot_lights)) {
-      diagnostics.push_back(MakeErrorDiagnostic("scene.light.invalid_parameters",
-        "Light values, per-node ownership or atmosphere assignments are invalid",
-        source_id, "lights"));
+      diagnostics.push_back(
+        MakeErrorDiagnostic("scene.light.invalid_parameters",
+          "Light values, per-node ownership or atmosphere assignments are "
+          "invalid",
+          source_id, "lights"));
       return outcome;
     }
     const auto nodes_bytes = std::as_bytes(std::span(build.nodes));
@@ -224,15 +274,15 @@ namespace {
 
     struct ComponentTablePayload {
       SceneComponentTableDesc desc {};
-      std::span<const std::byte> bytes {};
+      std::span<const std::byte> bytes;
     };
 
     std::vector<ComponentTablePayload> component_tables;
     component_tables.reserve(7);
 
-    auto add_component_table = [&](const ComponentType type,
-                                 const size_t entry_size,
-                                 std::span<const std::byte> bytes) {
+    auto add_component_table
+      = [&](const ComponentType type, const size_t entry_size,
+          std::span<const std::byte> bytes) -> void {
       if (bytes.empty()) {
         return;
       }
@@ -247,6 +297,9 @@ namespace {
 
     add_component_table(ComponentType::kRenderable, sizeof(RenderableRecord),
       std::as_bytes(std::span(build.renderables)));
+    add_component_table(ComponentType::kMaterialOverride,
+      sizeof(data::pak::world::MaterialOverrideRecord),
+      std::as_bytes(std::span(build.material_overrides)));
     add_component_table(ComponentType::kLocalFogVolume,
       sizeof(LocalFogVolumeRecord),
       std::as_bytes(std::span(build.local_fog_volumes)));
@@ -258,8 +311,7 @@ namespace {
         build.orthographic_cameras);
     if (!perspective_bytes || !orthographic_bytes) {
       diagnostics.push_back(MakeErrorDiagnostic("scene.camera.serialize_failed",
-        "Camera serialization requires finite positive aperture, shutter rate "
-        "and ISO",
+        "Camera projection, aspect policy or physical exposure is invalid",
         source_id,
         !perspective_bytes ? "cameras.perspective" : "cameras.orthographic"));
       return outcome;
@@ -372,6 +424,37 @@ namespace {
         return outcome;
       }
 
+      if (!data::pak::world::IsValidEnvironmentRecordSize(
+            header.system_type, header.record_size)) {
+        diagnostics.push_back(
+          MakeErrorDiagnostic("scene.environment.record_size_mismatch",
+            "Environment record does not match its declared type", source_id,
+            {}));
+        return outcome;
+      }
+      using EnvironmentKind = data::pak::world::EnvironmentComponentType;
+      switch (static_cast<EnvironmentKind>(header.system_type)) {
+      case EnvironmentKind::kFog: {
+        data::pak::world::FogEnvironmentRecord record {};
+        std::memcpy(&record, system.record_bytes.data(), sizeof(record));
+        references.AddLogical(record.inscattering_color_cubemap_asset);
+        break;
+      }
+      case EnvironmentKind::kSkyLight: {
+        data::pak::world::SkyLightEnvironmentRecord record {};
+        std::memcpy(&record, system.record_bytes.data(), sizeof(record));
+        references.AddLogical(record.cubemap_asset);
+        break;
+      }
+      case EnvironmentKind::kSkySphere: {
+        data::pak::world::SkySphereEnvironmentRecord record {};
+        std::memcpy(&record, system.record_bytes.data(), sizeof(record));
+        references.AddLogical(record.cubemap_asset);
+        break;
+      }
+      default:
+        break;
+      }
       env_header.byte_size += header.record_size;
       ++env_header.systems_count;
     }
@@ -399,6 +482,7 @@ namespace {
 
     const auto bytes = stream.Data();
     outcome.bytes.assign(bytes.begin(), bytes.end());
+    outcome.references = std::move(references).Build();
     outcome.success = true;
     return outcome;
   }
@@ -443,7 +527,7 @@ auto ScenePipeline::Start(co::Nursery& nursery) -> void
 
   const auto worker_count = std::max(1U, config_.worker_count);
   for (uint32_t i = 0; i < worker_count; ++i) {
-    nursery.Start([this]() -> co::Co<> { co_await Worker(); });
+    nursery.Start([this] -> co::Co<> { co_await Worker(); });
   }
 }
 
@@ -589,9 +673,9 @@ auto ScenePipeline::Worker() -> co::Co<>
           = item.request.loose_cooked_layout.SceneVirtualPath(scene_name);
         const auto scene_key = BuildSceneAssetKey(virtual_path);
 
-        outcome
-          = SerializeScene(scene_name, scene_key, stage_outcome.result.build,
-            item.environment_systems, diagnostics, item.source_id);
+        outcome = SerializeScene(scene_name, scene_key,
+          stage_outcome.result.build, item.environment_systems,
+          item.environment_references, diagnostics, item.source_id);
       } else if (diagnostics.empty()) {
         diagnostics.push_back(MakeErrorDiagnostic("scene.stage_failed",
           "Scene adapter stage failed without diagnostics", item.source_id,
@@ -644,6 +728,7 @@ auto ScenePipeline::Worker() -> co::Co<>
         .virtual_path = virtual_path,
         .descriptor_relpath = relpath,
         .descriptor_bytes = std::move(outcome.bytes),
+        .references = std::move(outcome.references),
       };
     }
     if (item.on_finished) {

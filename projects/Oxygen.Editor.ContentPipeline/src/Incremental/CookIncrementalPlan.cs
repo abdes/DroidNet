@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Managed.Core;
 
@@ -17,6 +18,9 @@ internal sealed record CookIncrementalPlan(
     ImmutableDictionary<Uri, CookProvenance.Product> Reusable,
     ImmutableHashSet<string> ValidSharedRoots)
 {
+    /// <summary>Gets committed inventory metadata for comparison with candidate outputs; this is not a live read lease.</summary>
+    public ImmutableDictionary<string, CookedInventoryReport> PriorInventories { get; init; } = ImmutableDictionary<string, CookedInventoryReport>.Empty;
+
     /// <summary>Gets output descriptors whose shared resources and own bytes remain verified.</summary>
     public ImmutableHashSet<(string rootMount, string virtualPath)> VerifiedOutputs { get; init; } = [];
 

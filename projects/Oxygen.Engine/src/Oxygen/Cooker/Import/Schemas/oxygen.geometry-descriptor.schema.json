@@ -725,6 +725,10 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "slot_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
         "name": {
           "$ref": "#/definitions/identifier"
         },
@@ -742,7 +746,7 @@
           }
         }
       },
-      "required": ["material_ref", "views"]
+      "required": ["slot_id", "material_ref", "views"]
     },
     "lod_descriptor": {
       "type": "object",

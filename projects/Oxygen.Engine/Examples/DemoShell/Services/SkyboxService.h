@@ -16,6 +16,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/ResidencyPin.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Scene/Scene.h>
 
@@ -157,6 +158,7 @@ private:
   std::shared_ptr<RequestState> request_state_;
   content::ResourceKey current_resource_key_ { 0U };
   content::ResourceKey pinned_resource_key_ { 0U };
+  content::ResidencyPin resource_pin_;
 
   //! Cached RGBA8 pixel data for sun direction estimation.
   std::vector<std::byte> cached_rgba8_;

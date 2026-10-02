@@ -4,21 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <limits>
 #include <string>
 
-#include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Content/Internal/InternalResourceKey.h>
 #include <Oxygen/Content/ResourceKey.h>
 
 namespace oxygen::content {
 
 const ResourceKey ResourceKey::kPlaceholder { 0U };
 const ResourceKey ResourceKey::kFallback { 0U };
+// ContentIdentityRegistry never issues the maximum ID.
+const ResourceKey ResourceKey::kError { std::numeric_limits<uint64_t>::max() };
 
 auto to_string(const ResourceKey& key) -> std::string
 {
-  const internal::InternalResourceKey i_key { key };
-  return nostd::to_string(i_key);
+  return "ResourceKey{" + std::to_string(key.get()) + "}";
 }
 
 } // namespace oxygen::content

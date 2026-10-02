@@ -4,13 +4,27 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <numbers>
+#include <cstddef>
+#include <cstdint>
+#include <initializer_list>
+#include <memory>
+#include <optional>
+#include <span>
+#include <string_view>
 #include <tuple>
 #include <type_traits>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialSlotId.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/ProceduralMeshDefaults.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/Vertex.h>
+#include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/Reader.h>
 
 // ReSharper disable CppClangTidyModernizeUseDesignatedInitializers
 
@@ -28,18 +42,21 @@ auto BuildMesh(std::string_view name,
 
   const auto vertex_count = static_cast<uint32_t>(vertices.size());
   const auto index_count = static_cast<uint32_t>(indices.size());
-  auto mesh = MeshBuilder(0, name)
-                .WithVertices(std::move(vertices))
-                .WithIndices(std::move(indices))
-                .BeginSubMesh("default", MaterialAsset::CreateDefault())
-                .WithMeshView(MeshViewDesc {
-                  .first_index = 0,
-                  .index_count = index_count,
-                  .first_vertex = 0,
-                  .vertex_count = vertex_count,
-                })
-                .EndSubMesh()
-                .Build();
+  auto mesh
+    = MeshBuilder(0, name)
+        .WithVertices(std::move(vertices))
+        .WithIndices(std::move(indices))
+        .BeginSubMesh("default", MaterialAsset::CreateDefault())
+        .WithMaterialSlotId(oxygen::data::MaterialSlotId::FromStableIdentity(
+          "oxygen.procedural.surface/v1"))
+        .WithMeshView(MeshViewDesc {
+          .first_index = 0,
+          .index_count = index_count,
+          .first_vertex = 0,
+          .vertex_count = vertex_count,
+        })
+        .EndSubMesh()
+        .Build();
 
   return mesh;
 }
@@ -59,9 +76,9 @@ auto HandleSphereMesh(std::span<const std::byte> param_blob)
       const_cast<std::byte*>(param_blob.data()), param_blob.size()));
     Reader<MemoryStream> reader(stream);
     bool exhausted = false;
-    [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+    [&]<std::size_t... Is>(std::index_sequence<Is...>) -> auto {
       (void(std::initializer_list<int> { (
-         [&] {
+         [&] -> void {
            if (exhausted) {
              return;
            }
@@ -132,9 +149,9 @@ auto HandleIcoSphereMesh(std::span<const std::byte> param_blob)
       const_cast<std::byte*>(param_blob.data()), param_blob.size()));
     Reader<MemoryStream> reader(stream);
     bool exhausted = false;
-    [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+    [&]<std::size_t... Is>(std::index_sequence<Is...>) -> auto {
       (void(std::initializer_list<int> { (
-         [&] {
+         [&] -> void {
            if (exhausted) {
              return;
            }
@@ -164,9 +181,9 @@ auto HandleSubdividedCubeMesh(std::span<const std::byte> param_blob)
       const_cast<std::byte*>(param_blob.data()), param_blob.size()));
     Reader<MemoryStream> reader(stream);
     bool exhausted = false;
-    [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+    [&]<std::size_t... Is>(std::index_sequence<Is...>) -> auto {
       (void(std::initializer_list<int> { (
-         [&] {
+         [&] -> void {
            if (exhausted) {
              return;
            }
@@ -197,9 +214,9 @@ auto HandlePlaneMesh(std::span<const std::byte> param_blob)
       const_cast<std::byte*>(param_blob.data()), param_blob.size()));
     Reader<MemoryStream> reader(stream);
     bool exhausted = false;
-    [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+    [&]<std::size_t... Is>(std::index_sequence<Is...>) -> auto {
       (void(std::initializer_list<int> { (
-         [&] {
+         [&] -> void {
            if (exhausted) {
              return;
            }
@@ -230,9 +247,9 @@ auto HandleCylinderMesh(std::span<const std::byte> param_blob)
       const_cast<std::byte*>(param_blob.data()), param_blob.size()));
     Reader<MemoryStream> reader(stream);
     bool exhausted = false;
-    [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+    [&]<std::size_t... Is>(std::index_sequence<Is...>) -> auto {
       (void(std::initializer_list<int> { (
-         [&] {
+         [&] -> void {
            if (exhausted) {
              return;
            }
@@ -263,9 +280,9 @@ auto HandleConeMesh(std::span<const std::byte> param_blob)
       const_cast<std::byte*>(param_blob.data()), param_blob.size()));
     Reader<MemoryStream> reader(stream);
     bool exhausted = false;
-    [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+    [&]<std::size_t... Is>(std::index_sequence<Is...>) -> auto {
       (void(std::initializer_list<int> { (
-         [&] {
+         [&] -> void {
            if (exhausted) {
              return;
            }
@@ -297,9 +314,9 @@ auto HandleTorusMesh(std::span<const std::byte> param_blob)
       const_cast<std::byte*>(param_blob.data()), param_blob.size()));
     Reader<MemoryStream> reader(stream);
     bool exhausted = false;
-    [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+    [&]<std::size_t... Is>(std::index_sequence<Is...>) -> auto {
       (void(std::initializer_list<int> { (
-         [&] {
+         [&] -> void {
            if (exhausted) {
              return;
            }
@@ -329,9 +346,9 @@ auto HandleQuadMesh(std::span<const std::byte> param_blob)
       const_cast<std::byte*>(param_blob.data()), param_blob.size()));
     Reader<MemoryStream> reader(stream);
     bool exhausted = false;
-    [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+    [&]<std::size_t... Is>(std::index_sequence<Is...>) -> auto {
       (void(std::initializer_list<int> { (
-         [&] {
+         [&] -> void {
            if (exhausted) {
              return;
            }

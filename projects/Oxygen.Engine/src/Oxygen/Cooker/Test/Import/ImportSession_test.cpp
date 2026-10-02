@@ -11,15 +11,15 @@
 #include <filesystem>
 #include <latch>
 #include <memory>
-#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <thread>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
+#include "../Fixtures/DescriptorFixtures.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
@@ -27,6 +27,7 @@
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
@@ -44,9 +45,12 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace co = oxygen::co;
 namespace import = oxygen::content::import;
@@ -180,6 +184,9 @@ NOLINT_TEST_F(ImportSessionTest, ConstructorValidRequestSucceeds)
 
   // Assert
   EXPECT_EQ(session.Request().source_path, request.source_path);
+  if (!request.cooked_root.has_value()) {
+    FAIL() << "The fixture requires a cooked root";
+  }
   EXPECT_EQ(session.CookedRoot(), request.cooked_root.value());
 }
 
@@ -395,7 +402,7 @@ NOLINT_TEST_F(
     auto second = MakeTestBufferPayload();
     second.content_hash = 0;
     if (!second.data.empty()) {
-      second.data[0] ^= std::byte { 0xFF };
+      second.data.at(0) ^= std::byte { 0xFF };
     }
     first.content_hash = 0;
 
@@ -421,6 +428,9 @@ NOLINT_TEST_F(
   request.options.with_content_hashing = false;
   request.options.dedup_collision_policy
     = import::DedupCollisionPolicy::kWarnKeepFirst;
+  if (!request.cooked_root.has_value()) {
+    FAIL() << "The fixture requires a cooked root";
+  }
   std::filesystem::create_directories(request.cooked_root.value());
   ImportSession session(request, observer_ptr(reader_.get()),
     oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
@@ -444,7 +454,7 @@ NOLINT_TEST_F(
     first.content_hash = 0;
     second.content_hash = 0;
     if (!second.data.empty()) {
-      second.data[0] ^= std::byte { 0xAA };
+      second.data.at(0) ^= std::byte { 0xAA };
     }
     (void)session.BufferEmitter().Emit(std::move(first), "same_salt");
     (void)session.BufferEmitter().Emit(std::move(second), "same_salt");
@@ -457,7 +467,6 @@ NOLINT_TEST_F(
     EXPECT_EQ(report.packaging.buffer_dedup_collisions, 1U);
     EXPECT_EQ(report.packaging.texture_dedup_collisions, 0U);
     EXPECT_TRUE(report.packaging.index_written);
-    EXPECT_FALSE(report.packaging.index_write_deferred);
     EXPECT_EQ(report.packaging.outputs_written,
       static_cast<uint32_t>(report.outputs.size()));
     co_return;
@@ -512,6 +521,10 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeNoErrorsReturnsSuccess)
   co::Run(*loop_, [&]() -> co::Co<> {
     // Arrange
     const auto request = MakeRequest();
+    if (!request.cooked_root.has_value()) {
+      ADD_FAILURE() << "The fixture requires a cooked root";
+      co_return;
+    }
     std::filesystem::create_directories(request.cooked_root.value());
     ImportSession session(request, observer_ptr(reader_.get()),
       oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
@@ -542,6 +555,10 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeHasErrorsReturnsFailure)
   co::Run(*loop_, [&]() -> co::Co<> {
     // Arrange
     const auto request = MakeRequest();
+    if (!request.cooked_root.has_value()) {
+      ADD_FAILURE() << "The fixture requires a cooked root";
+      co_return;
+    }
     std::filesystem::create_directories(request.cooked_root.value());
     ImportSession session(request, observer_ptr(reader_.get()),
       oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
@@ -571,6 +588,10 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeSuccessWritesIndex)
   co::Run(*loop_, [&]() -> co::Co<> {
     // Arrange
     const auto request = MakeRequest();
+    if (!request.cooked_root.has_value()) {
+      ADD_FAILURE() << "The fixture requires a cooked root";
+      co_return;
+    }
     std::filesystem::create_directories(request.cooked_root.value());
     ImportSession session(request, observer_ptr(reader_.get()),
       oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
@@ -595,6 +616,10 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeHasErrorsWritesIndexWithWarning)
   co::Run(*loop_, [&]() -> co::Co<> {
     // Arrange
     const auto request = MakeRequest();
+    if (!request.cooked_root.has_value()) {
+      ADD_FAILURE() << "The fixture requires a cooked root";
+      co_return;
+    }
     std::filesystem::create_directories(request.cooked_root.value());
     ImportSession session(request, observer_ptr(reader_.get()),
       oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
@@ -623,6 +648,66 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeHasErrorsWritesIndexWithWarning)
   });
 }
 
+//! Participant diagnostics stay local while successful publication is shared.
+NOLINT_TEST_F(ImportSessionTest, CohortPublicationPreservesParticipantFailures)
+{
+  const auto request = MakeRequest();
+  if (!request.cooked_root.has_value()) {
+    FAIL() << "The fixture requires a cooked root";
+  }
+  std::filesystem::create_directories(request.cooked_root.value());
+  const auto make_session = [&] {
+    return std::make_unique<ImportSession>(request, observer_ptr(reader_.get()),
+      oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
+      observer_ptr(thread_pool_.get()), observer_ptr(table_registry_.get()),
+      observer_ptr(index_registry_.get()));
+  };
+  const std::array sessions { make_session(), make_session(), make_session() };
+  const std::array names { "first", "failed", "last" };
+  oxygen::data::pak::render::MaterialAssetDesc descriptor {};
+  descriptor.header.asset_type
+    = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
+  descriptor.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
+  for (size_t index = 0; index < sessions.size(); ++index) {
+    const auto relative = std::string(names.at(index)) + ".omat";
+    const auto virtual_path = std::string("/Content/") + relative;
+    sessions.at(index)->AssetEmitter().Emit(
+      oxygen::data::AssetKey::FromVirtualPath(virtual_path),
+      oxygen::data::AssetType::kMaterial, virtual_path, relative,
+      std::as_bytes(std::span { &descriptor, 1 }), {});
+  }
+  sessions.at(1)->AddDiagnostic({
+    .severity = ImportSeverity::kError,
+    .code = "test.participant_failed",
+    .message = "A local failure does not invalidate other producers",
+    .source_path = {},
+    .object_path = {},
+  });
+  std::array<ImportReport, 3> reports {};
+  co::Run(*loop_, [&]() -> co::Co<> {
+    OXCO_WITH_NURSERY(tasks)
+    {
+      for (size_t index = 0; index < sessions.size(); ++index) {
+        tasks.Start([&, index]() -> co::Co<> {
+          reports.at(index) = co_await sessions.at(index)->Finalize();
+          EXPECT_TRUE(std::filesystem::exists(
+            request.cooked_root.value() / "container.index.bin"));
+        });
+      }
+      co_return co::kJoin;
+    };
+  });
+  EXPECT_TRUE(reports.at(0).success);
+  EXPECT_FALSE(reports.at(1).success);
+  EXPECT_TRUE(reports.at(2).success);
+  EXPECT_EQ(reports.at(0).source_key, reports.at(1).source_key);
+  EXPECT_EQ(reports.at(0).source_key, reports.at(2).source_key);
+  EXPECT_EQ(
+    std::ranges::count_if(reports,
+      [](const auto& report) { return report.packaging.index_written; }),
+    1);
+}
+
 //! Verify Finalize waits for pending writes.
 NOLINT_TEST_F(ImportSessionTest, FinalizePendingWritesWaitsForCompletion)
 {
@@ -630,6 +715,10 @@ NOLINT_TEST_F(ImportSessionTest, FinalizePendingWritesWaitsForCompletion)
   co::Run(*loop_, [&]() -> co::Co<> {
     // Arrange
     const auto request = MakeRequest();
+    if (!request.cooked_root.has_value()) {
+      ADD_FAILURE() << "The fixture requires a cooked root";
+      co_return;
+    }
     std::filesystem::create_directories(request.cooked_root.value());
     ImportSession session(request, observer_ptr(reader_.get()),
       oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
@@ -663,6 +752,10 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithDiagnosticsIncludesInReport)
   co::Run(*loop_, [&]() -> co::Co<> {
     // Arrange
     const auto request = MakeRequest();
+    if (!request.cooked_root.has_value()) {
+      ADD_FAILURE() << "The fixture requires a cooked root";
+      co_return;
+    }
     std::filesystem::create_directories(request.cooked_root.value());
     ImportSession session(request, observer_ptr(reader_.get()),
       oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
@@ -702,6 +795,10 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
   co::Run(*loop_, [&]() -> co::Co<> {
     // Arrange
     auto request = MakeRequest();
+    if (!request.cooked_root.has_value()) {
+      ADD_FAILURE() << "The fixture requires a cooked root";
+      co_return;
+    }
     std::filesystem::create_directories(request.cooked_root.value());
     ImportSession session(request, observer_ptr(reader_.get()),
       oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
@@ -715,7 +812,7 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
       = request.loose_cooked_layout.MaterialDescriptorRelPath("Wood");
     const auto virtual_path
       = request.loose_cooked_layout.MaterialVirtualPath("Wood");
-    constexpr std::string_view kBytes = "abc";
+    const auto descriptor = oxygen::content::test::MaterialDescriptor("Wood");
 
     // Act
     const auto tex_idx
@@ -723,8 +820,8 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
     const auto buf_idx
       = session.BufferEmitter().Emit(MakeTestBufferPayload(), "test_texture");
     session.AssetEmitter().Emit(kKey, oxygen::data::AssetType::kMaterial,
-      virtual_path, descriptor_relpath,
-      std::as_bytes(std::span(kBytes.data(), kBytes.size())));
+      virtual_path, descriptor_relpath, descriptor.bytes,
+      descriptor.references);
 
     const auto& report = co_await session.Finalize();
 
@@ -784,6 +881,10 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeIncludesResourceSidecarOutputs)
 {
   co::Run(*loop_, [&]() -> co::Co<> {
     auto request = MakeRequest();
+    if (!request.cooked_root.has_value()) {
+      ADD_FAILURE() << "The fixture requires a cooked root";
+      co_return;
+    }
     std::filesystem::create_directories(request.cooked_root.value());
     ImportSession session(request, observer_ptr(reader_.get()),
       oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),

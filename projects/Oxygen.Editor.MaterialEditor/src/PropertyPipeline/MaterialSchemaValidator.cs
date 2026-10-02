@@ -21,7 +21,7 @@ namespace Oxygen.Editor.MaterialEditor;
 /// <para>
 /// This is the cooking-side proof of the property pipeline: the editor
 /// can validate authored material descriptors against the SAME engine
-/// schema that the cooker (<c>oxgn-cook</c>, <c>pakgen</c>) embeds at
+/// schema that the cooker (<c>Oxygen.Cooker.ImportTool</c>) embeds at
 /// build time via the <c>oxygen_embed_json_schemas(...)</c> CMake macro.
 /// The overlay (<c>oxygen.material-descriptor.editor.schema.json</c>)
 /// $refs the engine schema and adds <c>x-editor-*</c> annotations only —

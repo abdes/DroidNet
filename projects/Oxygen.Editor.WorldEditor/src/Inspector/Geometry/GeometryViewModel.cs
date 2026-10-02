@@ -12,6 +12,8 @@ using Microsoft.UI.Dispatching;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.ContentPipeline.Discovery;
+using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World.Services;
@@ -36,10 +38,11 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     private readonly IMaterialPickerService materialPickerService;
     private readonly IBuiltinCatalogDiscovery builtins;
     private readonly ISceneContentDemandService contentDemand;
+    private readonly IGeometryMaterialSlotProvider materialSlots;
+    private readonly IProjectContextService projectContexts;
     private readonly ISceneDocumentCommandService? commandService;
     private readonly Func<SceneDocumentCommandContext?>? commandContextProvider;
     private readonly PropertyBinding<Uri?> geometryUriBinding = new(SceneDocumentCommandService.Geometry.GeometryUriDescriptor);
-    private readonly PropertyBinding<Uri?> materialSlot0UriBinding = new(SceneDocumentCommandService.Geometry.MaterialSlot0UriDescriptor);
     private readonly ObservableCollection<AssetPickerRow> contentItems = [];
     private readonly ObservableCollection<AssetPickerRow> engineItems = [];
     private readonly ObservableCollection<MaterialPickerRow> engineMaterials = [];
@@ -62,6 +65,8 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <param name="materialPickerService">Material picker service used to populate material choices.</param>
     /// <param name="builtins">The shared engine-provided catalog and last-known availability.</param>
     /// <param name="contentDemand">The lifetime owner for saved-asset preview requests.</param>
+    /// <param name="materialSlots">The native geometry slot inventory reader.</param>
+    /// <param name="projectContexts">The active project lifetime.</param>
     /// <param name="commandService">Optional command service used to apply geometry edits.</param>
     /// <param name="commandContextProvider">Optional provider for the active scene command context.</param>
     public GeometryViewModel(
@@ -70,6 +75,8 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         IMaterialPickerService materialPickerService,
         IBuiltinCatalogDiscovery builtins,
         ISceneContentDemandService contentDemand,
+        IGeometryMaterialSlotProvider materialSlots,
+        IProjectContextService projectContexts,
         ISceneDocumentCommandService? commandService = null,
         Func<SceneDocumentCommandContext?>? commandContextProvider = null)
     {
@@ -77,6 +84,8 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         this.materialPickerService = materialPickerService;
         this.builtins = builtins;
         this.contentDemand = contentDemand;
+        this.materialSlots = materialSlots;
+        this.projectContexts = projectContexts;
         this.commandService = commandService;
         this.commandContextProvider = commandContextProvider;
         this.dispatcherQueue = hosting.Dispatcher;
@@ -256,6 +265,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         this.SelectedAssetName = item.Name;
         this.IsMixed = false;
         this.contentDemand.RequestAssignment(context.Scene, nodes.ConvertAll(static node => node.Id), newUri, AssetKind.Geometry);
+        await this.RefreshMaterialSlotsAsync().ConfigureAwait(true);
     }
 
     /// <summary>
@@ -265,54 +275,29 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <returns>A <see cref="Task"/> that completes when the operation has finished.</returns>
     public async Task ApplyMaterialAsync(MaterialPickerItem item)
     {
-        if (!this.IsInputEnabled)
+        var picker = this.materialEdit;
+        this.materialEdit = null;
+        if (!this.IsInputEnabled || item is not { IsEnabled: true } || picker is null
+            || this.commandService is null || !this.IsCurrentSelection(picker.Nodes)
+            || !ReferenceEquals(this.commandContextProvider?.Invoke()?.Scene, picker.Context.Scene))
         {
             return;
         }
 
-        if (item is null)
+        var result = await this.commandService.EditMaterialSlotAsync(picker.Context,
+            picker.Nodes.ConvertAll(static node => node.Id), picker.Target, item.Uri, EditSessionToken.OneShot).ConfigureAwait(true);
+        if (!this.IsCurrentSelection(picker.Nodes))
         {
             return;
         }
 
-        if (!item.IsEnabled)
+        if (result.Succeeded)
         {
-            return;
+            this.UpdateMaterialDisplay(item.Uri);
+            this.contentDemand.RequestAssignment(picker.Context.Scene, picker.Nodes.ConvertAll(static node => node.Id), item.Uri, AssetKind.Material);
         }
 
-        if (this.selectedItems is null || this.selectedItems.Count == 0)
-        {
-            return;
-        }
-
-        var nodes = this.selectedItems.ToList();
-        if (this.commandService is null || this.commandContextProvider?.Invoke() is not { } context)
-        {
-            return;
-        }
-
-        var currentMaterial = !this.IsMaterialMixed && Uri.TryCreate(this.SelectedMaterialUriString, UriKind.Absolute, out var currentUri)
-            ? currentUri
-            : null;
-        if (!this.IsMaterialMixed && UriValuesEqual(currentMaterial, item.Uri))
-        {
-            return;
-        }
-
-        var edit = PropertyEdit.Single(SceneDocumentCommandService.Geometry.MaterialSlot0Uri, item.Uri);
-        var result = await this.commandService.EditPropertiesAsync(
-            context,
-            nodes.ConvertAll(static node => node.Id),
-            edit,
-            "Edit Material Slot",
-            EditSessionToken.OneShot).ConfigureAwait(true);
-        if (!result.Succeeded || !this.IsCurrentSelection(nodes))
-        {
-            return;
-        }
-
-        this.UpdateMaterialDisplay(item.Uri);
-        this.contentDemand.RequestAssignment(context.Scene, nodes.ConvertAll(static node => node.Id), item.Uri, AssetKind.Material);
+        await this.RefreshMaterialSlotsAsync().ConfigureAwait(true);
     }
 
     /// <summary>
@@ -321,6 +306,9 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <returns>A task that completes when the picker snapshot has been republished.</returns>
     public async Task RefreshMaterialPickerAsync()
     {
+        this.materialEdit = this.SelectedMaterialSlot is { } slot && this.CanEditMaterialSlot
+            && this.selectedItems is { Count: > 0 } nodes && this.commandContextProvider?.Invoke() is { } context
+                ? new(context, nodes.ToList(), slot.Target) : null;
         await this.materialPickerService
             .RefreshAsync(MaterialPickerFilter.Default with { IncludeGenerated = false })
             .ConfigureAwait(true);
@@ -362,27 +350,17 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
             this.SelectedAssetName = selectedUri is null ? "None" : this.ResolveGeometryDisplayName(selectedUri);
         }
 
-        this.materialSlot0UriBinding.UpdateFromModel(nodeIds, nodeId => targetsByNode.TryGetValue(nodeId, out var target) ? target : null);
-        this.IsMaterialMixed = this.materialSlot0UriBinding.IsMixed;
-
-        if (this.materialSlot0UriBinding.IsMixed)
-        {
-            this.SelectedMaterialUriString = null;
-            this.SelectedMaterialName = "--";
-            return;
-        }
-
-        var selectedMaterial = this.materialSlot0UriBinding.HasValue ? this.materialSlot0UriBinding.Value : null;
-        this.SelectedMaterialUriString = selectedMaterial?.ToString();
-        this.SelectedMaterialName = selectedMaterial is null
-            ? "None"
-            : this.ResolveMaterialDisplayName(selectedMaterial);
+        // Authored assignments change synchronously, including during undo/redo.
+        this.UpdateSelectedMaterialSlotDisplay();
+        _ = this.RefreshMaterialSlotsAsync();
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
         this.disposed = true;
+        this.slotRefresh?.Cancel();
+        this.slotRefresh?.Dispose();
         this.builtins.Changed -= this.OnBuiltinCatalogChanged;
         this.assetChangesSubscription?.Dispose();
         this.materialResultsSubscription?.Dispose();
@@ -431,10 +409,10 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 
     private static MaterialPickerItem CreateNoMaterialItem()
         => new(
-            Name: "None",
+            Name: "Clear override",
             Uri: null,
-            DisplayType: "No material override",
-            DisplayPath: "<None>",
+            DisplayType: "Use the geometry default",
+            DisplayPath: "Geometry default",
             Group: AssetPickerGroup.Engine,
             IsEnabled: true,
             ThumbnailModel: string.Empty);
@@ -477,7 +455,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     private void UpdateMaterialDisplay(Uri? uri)
     {
         this.SelectedMaterialUriString = uri?.ToString();
-        this.SelectedMaterialName = uri is null ? "None" : this.ResolveMaterialDisplayName(uri);
+        this.SelectedMaterialName = uri is null ? "Geometry default" : this.ResolveMaterialDisplayName(uri);
         this.IsMaterialMixed = false;
     }
 

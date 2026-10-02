@@ -10,17 +10,22 @@ public interface ICookPublicationPreview : IAsyncDisposable
     /// <summary>Gets a value indicating whether native rendering participates in this publication.</summary>
     public bool IsRuntimeAvailable { get; }
 
-    /// <summary>Pauses rendering, drains content work, and releases mounted readers before filesystem replacement.</summary>
-    /// <returns>Completion after conflicting native reads and file handles have drained.</returns>
+    /// <summary>Pauses rendering and drains content work while retaining the prior accepted roots.</summary>
+    /// <returns>Completion after outstanding scene requests have settled.</returns>
     public Task PrepareReplacementAsync();
 
     /// <summary>Mounts the complete root set and refreshes current reference intents while preview remains paused.</summary>
-    /// <param name="roots">All roots belonging to the installed or restored publication.</param>
-    /// <param name="writer">The writer granting read ownership, or null when restoring unchanged output after a busy result.</param>
+    /// <param name="mounts">Prepared admission and reader ownership, transferred to the preview even on failure.</param>
     /// <returns>Completion after native bindings settle.</returns>
-    public Task MountAsync(IReadOnlyList<string> roots, CookOutputWriteLease? writer);
+    public Task MountAsync(Mounting.CookedContentMountSet mounts);
 
     /// <summary>Resumes the current authoring preview after metadata and native bindings agree.</summary>
     /// <returns>Completion of the preview transition.</returns>
     public Task ResumeAsync();
+
+    /// <summary>Refreshes derived catalogs after durable commit and selection-gate release.</summary>
+    /// <param name="publication">The borrowed committed snapshot.</param>
+    /// <returns>Completion of catalog and observer updates.</returns>
+    public Task CommittedAsync(CookPublicationReadLease publication);
+
 }

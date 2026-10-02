@@ -18,16 +18,6 @@ internal static class CookedDependencyCache
 {
     private static readonly NativeAtomicFileStore Files = new(new RealFileSystem());
 
-    /// <summary>Hashes the protected container inputs with the same ordering as cook provenance.</summary>
-    /// <param name="reader">The protected library files.</param>
-    /// <param name="cancellationToken">Cancels hashing.</param>
-    /// <returns>The container content fingerprint.</returns>
-    public static async Task<string> FingerprintAsync(CookOutputReadLease reader, CancellationToken cancellationToken)
-    {
-        var hashes = await reader.ReadHashesAsync(cancellationToken).ConfigureAwait(false);
-        return Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(hashes.Values.OrderBy(static file => file.RelativePath, StringComparer.Ordinal))));
-    }
-
     /// <summary>Reads cached metadata without starting native work.</summary>
     /// <param name="projectRoot">The owning project's cache location.</param>
     /// <param name="fingerprint">The verified library content identity.</param>
@@ -102,7 +92,7 @@ internal static class CookedDependencyCache
     }
 
     private static string CachePath(string projectRoot, string fingerprint)
-        => Path.Combine(projectRoot, ".build", "cache", "cooked-dependencies-v1", fingerprint + ".json");
+        => Path.Combine(projectRoot, ".build", "cache", "cooked-dependencies-v2", fingerprint + ".json");
 
     private sealed record CachedReport(string Fingerprint, string Digest, string Report);
 }

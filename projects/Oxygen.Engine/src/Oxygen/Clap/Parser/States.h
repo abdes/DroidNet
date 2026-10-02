@@ -155,8 +155,8 @@ private:
   [[nodiscard]] auto MaybeCommand(const std::string& token) const -> bool
   {
     return std::ranges::any_of(
-      context->commands, [&token](const auto& command) {
-        return (!command->Path().empty() && command->Path()[0] == token);
+      context->commands, [&token](const auto& command) -> auto {
+        return (!command->Path().empty() && command->Path().front() == token);
       });
   }
 
@@ -226,11 +226,11 @@ struct IdentifyCommandState {
     const auto commands_end = Commands().cend();
     std::copy_if(commands_begin, commands_end,
       std::back_inserter(filtered_commands_),
-      [this, &event](const CommandPtr& command) {
+      [this, &event](const CommandPtr& command) -> bool {
         if (command->IsDefault()) {
           default_command_ = command;
         }
-        if (command->Path().empty() || command->Path()[0] != event.token) {
+        if (command->Path().empty() || command->Path().at(0) != event.token) {
           return false;
         }
         if (command->Path().size() == 1) {
@@ -294,10 +294,10 @@ struct IdentifyCommandState {
     path_segments_.push_back(event.token);
     auto segments_count = path_segments_.size();
     std::erase_if(filtered_commands_,
-      [this, segments_count, &event](const CommandPtr& command) {
+      [this, segments_count, &event](const CommandPtr& command) -> bool {
         const auto& command_path = command->Path();
         if (command_path.size() < segments_count
-          || command_path[segments_count - 1] != event.token) {
+          || command_path.at(segments_count - 1) != event.token) {
           return true;
         }
         if (command->Path().size() == segments_count) {
@@ -460,9 +460,9 @@ private:
   [[nodiscard]] auto MaybeCommand(const std::string& token) const -> bool
   {
     return std::ranges::any_of(
-      context->commands, [&token](const auto& command) {
+      context->commands, [&token](const auto& command) -> auto {
         return (!command->IsDefault() && !command->Path().empty()
-          && command->Path()[0] == token);
+          && command->Path().front() == token);
       });
   }
 
@@ -736,12 +736,11 @@ struct ParseLongOptionState : Will<ByDefault<TransitionTo<ParseOptionsState>>> {
     if (value) {
       return TransitionTo<ParseOptionsState> {};
     }
-    if (!after_equal_sign) {
-      if (!context->allow_long_option_value_with_no_equal) {
-        return ReportError(OptionSyntaxError(context,
-          "option name must be followed by '=' sign because this option "
-          "takes a value and does not have an implicit one"));
-      }
+    if ((!after_equal_sign)
+      && (!context->allow_long_option_value_with_no_equal)) {
+      return ReportError(OptionSyntaxError(context,
+        "option name must be followed by '=' sign because this option "
+        "takes a value and does not have an implicit one"));
     }
 
     // Try the value and if it fails parsing, try the implicit value, if
@@ -754,12 +753,11 @@ struct ParseLongOptionState : Will<ByDefault<TransitionTo<ParseOptionsState>>> {
       value = event.token;
       return DoNothing {};
     }
-    if (!after_equal_sign) {
-      if (TryImplicitValue(context)) {
-        value = "_implicit_";
-        return TransitionTo<ParseOptionsState> {};
-      }
+    if ((!after_equal_sign) && (TryImplicitValue(context))) {
+      value = "_implicit_";
+      return TransitionTo<ParseOptionsState> {};
     }
+
     return ReportError(InvalidValueForOption(context, event.token));
   }
 
@@ -879,8 +877,8 @@ struct FinalState : Will<ByDefault<DoNothing>> {
     std::size_t rest_index = positionals.size();
     // 1. Find rest positional and check for after-rest positionals
     for (std::size_t i = 0; i < positionals.size(); ++i) {
-      if (positionals[i]->IsPositionalRest()) {
-        rest_option = positionals[i];
+      if (positionals.at(i)->IsPositionalRest()) {
+        rest_option = positionals.at(i);
         rest_index = i;
         break;
       }
@@ -888,17 +886,22 @@ struct FinalState : Will<ByDefault<DoNothing>> {
     // Check for after-rest positionals
     if (rest_option && rest_index + 1 < positionals.size()) {
       // There are positionals defined after rest: this is not allowed
-      return TerminateWithError { PositionalAfterRestError(
-        context, rest_option, "") };
+      return TerminateWithError {
+        PositionalAfterRestError(context, rest_option, ""),
+      };
     }
     // 2. Assign tokens to before-rest positionals
     for (std::size_t i = 0; i < rest_index; ++i) {
-      const auto& option = positionals[i];
+      const auto& option = positionals.at(i);
       DCHECK_F(option->IsPositional());
       if (positional_args.empty()) {
-        // Not enough arguments for this positional
-        return TerminateWithError { MissingRequiredOption(
-          context->active_command, option) };
+        if (!option->value_semantic()->HasDefaultValue()) {
+          return TerminateWithError {
+            MissingRequiredOption(context->active_command, option),
+          };
+        }
+        // Apply declared defaults through the shared option handling below.
+        continue;
       }
       try {
         StorePositional(option, positional_args.front());
@@ -962,7 +965,8 @@ private:
     DCHECK_NOTNULL_F(semantics);
     std::any value;
     if (semantics->Parse(value, token)) {
-      context->ovm.StoreValue(option->Key(), { value, std::move(token), true });
+      context->ovm.StoreValue(
+        option->Key(), { value, std::move(token), false });
       semantics->NotifyParsed(value);
     } else {
       throw std::runtime_error(

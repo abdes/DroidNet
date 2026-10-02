@@ -7,18 +7,19 @@
 #pragma once
 #pragma managed(push, off)
 
+#include <optional>
+#include <string>
 #include <utility>
 #include <vector>
-#include <optional>
-
-#include <Oxygen/Core/Constants.h>
-#include <Oxygen/Scene/ExposureSettings.h>
-#include <Oxygen/Core/PhaseRegistry.h>
-#include <Oxygen/Core/Types/Atmosphere.h>
-#include <Oxygen/Core/Types/PostProcess.h>
 
 #include <EditorModule/EditorCommand.h>
 #include <EditorModule/SceneAssetRequests.h>
+
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Core/Types/Atmosphere.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 
 namespace oxygen::interop::module {
 
@@ -63,6 +64,7 @@ namespace oxygen::interop::module {
     float auto_exposure_transition_distance_ev = engine::kDefaultExposureTransitionDistance;
     std::vector<scene::ExposureCompensationKey> auto_exposure_compensation_curve;
     std::optional<content::TextureResourceLocator> auto_exposure_metering_mask;
+    std::optional<std::wstring> auto_exposure_metering_mask_mount;
     float bloom_intensity = 0.0F;
     float bloom_threshold = 1.0F;
     float saturation = 1.0F;

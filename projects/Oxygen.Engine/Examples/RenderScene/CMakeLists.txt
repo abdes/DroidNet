@@ -108,10 +108,4 @@ if(OXYGEN_INSTALL)
     DESTINATION .
     COMPONENT Oxygen_runtime
   )
-  install(
-    FILES
-      "${CMAKE_CURRENT_SOURCE_DIR}/reimport-sources.schema.json"
-    DESTINATION "${OXYGEN_INSTALL_SCHEMAS}"
-    COMPONENT Oxygen_data
-  )
 endif()

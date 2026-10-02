@@ -1,0 +1,7 @@
+<Project>
+    <PropertyGroup Condition="'$(ArtifactsPivots)' == ''">
+        <ArtifactsPivots>$(Configuration)</ArtifactsPivots>
+        <ArtifactsPivots Condition="'$(TargetFramework)' != ''">$(ArtifactsPivots)_$(TargetFramework)</ArtifactsPivots>
+        <ArtifactsPivots Condition="'$(RuntimeIdentifier)' != ''">$(ArtifactsPivots)_$(RuntimeIdentifier)</ArtifactsPivots>
+    </PropertyGroup>
+</Project>

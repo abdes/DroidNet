@@ -4,10 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <filesystem>
+#include <memory>
+#include <optional>
+#include <span>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::lc {
 
@@ -80,6 +91,12 @@ auto LooseCookedIndex::FindAssetKeyByVirtualPath(
   return impl_->FindAssetKeyByVirtualPath(virtual_path);
 }
 
+auto LooseCookedIndex::FindAssetReferences(const data::AssetKey& key) const
+  -> std::optional<data::AssetReferences>
+{
+  return impl_->FindAssetReferences(key);
+}
+
 auto LooseCookedIndex::GetAllAssetKeys() const noexcept
   -> std::span<const data::AssetKey>
 {
@@ -102,6 +119,29 @@ auto LooseCookedIndex::FindFileSize(FileKind kind) const noexcept
   -> std::optional<uint64_t>
 {
   return impl_->FindFileSize(kind);
+}
+
+auto LooseCookedIndex::GetFileInventory() const -> std::vector<FileIntegrity>
+{
+  return impl_->GetFileInventory();
+}
+
+auto LooseCookedIndex::CheckContent(const std::filesystem::path& cooked_root,
+  const IntegrityCheck check) const -> std::vector<FileIntegrityIssue>
+{
+  return impl_->CheckContent(cooked_root, check);
+}
+
+auto LooseCookedIndex::ValidateContent(const std::filesystem::path& cooked_root,
+  const IntegrityCheck check) const -> void
+{
+  impl_->ValidateContent(cooked_root, check);
+}
+
+auto LooseCookedIndex::FindFileSha256(const FileKind kind) const noexcept
+  -> std::optional<std::span<const uint8_t, data::loose_cooked::kSha256Size>>
+{
+  return impl_->FindFileSha256(kind);
 }
 
 } // namespace oxygen::content::lc

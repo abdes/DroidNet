@@ -11,29 +11,37 @@
 #include <EngineContext.h>
 #include <World/EnvironmentStateManaged.h>
 
+namespace Oxygen::Interop::World {
+
 using namespace System;
 using namespace System::Numerics;
 
-namespace Oxygen::Interop::World {
+//! Wire-format entry for the property-pipeline transport (§5.3).
+/*!
+ The (ComponentId, FieldId) pair is the property-pipeline §5.3 wire
+ address. ComponentId is a stable engine-wide enum (see
+ `oxygen::interop::module::ComponentId` in PropertyKeys.h);
+ FieldId is a component-local enumerator owned by the matching
+ `IComponentPropertyApplier`. Adding a new component or property
+ never requires changing this struct.
 
-  //! Wire-format entry for the property-pipeline transport (§5.3).
-  /*!
-   The (ComponentId, FieldId) pair is the property-pipeline §5.3 wire
-   address. ComponentId is a stable engine-wide enum (see
-   `oxygen::interop::module::ComponentId` in PropertyKeys.h);
-   FieldId is a component-local enumerator owned by the matching
-   `IComponentPropertyApplier`. Adding a new component or property
-   never requires changing this struct.
+ The payload is intentionally a single `float`: vector/quaternion/
+ color values decompose into per-axis float entries so the transport
+ remains uniform. Non-scalar payloads will tag-extend later.
+*/
+public
+value struct PropertyValueEntry {
+  System::UInt16 ComponentId;
+  System::UInt16 FieldId;
+  float Value;
+};
 
-   The payload is intentionally a single `float`: vector/quaternion/
-   color values decompose into per-axis float entries so the transport
-   remains uniform. Non-scalar payloads will tag-extend later.
-  */
-  public value struct PropertyValueEntry {
-    System::UInt16 ComponentId;
-    System::UInt16 FieldId;
-    float Value;
-  };
+//! Complete-set content admission with optional project-mount identity.
+public
+value struct CookedRootBindingManaged {
+  String ^ Path;
+  String ^ ProjectMount;
+};
 
   //! Native scene background values observed at the mutation boundary.
   public value struct BackgroundStateManaged {
@@ -101,10 +109,10 @@ namespace Oxygen::Interop::World {
       Action<System::UInt64, String^>^ onFailure);
     void SetGeometry(System::Guid nodeId, String^ assetUri,
       Action<System::UInt64, String^>^ onFailure, Action<System::UInt64>^ onSuccess);
-    void SetMaterialOverride(System::Guid nodeId, int slotIndex,
-      String^ materialUri, Action<System::UInt64, String^>^ onFailure);
-    void SetMaterialOverride(System::Guid nodeId, int slotIndex,
-      String^ materialUri, Action<System::UInt64, String^>^ onFailure,
+    void SetMaterialOverride(System::Guid nodeId, String^ geometryUri,
+      System::Guid slotId, String^ layoutRevision, String^ materialUri, System::Byte intent, Action<System::UInt64, String^>^ onFailure);
+    void SetMaterialOverride(System::Guid nodeId, String^ geometryUri,
+      System::Guid slotId, String^ layoutRevision, String^ materialUri, System::Byte intent, Action<System::UInt64, String^>^ onFailure,
       Action<System::UInt64>^ onSuccess);
     //! Queues a scene-owned solid background without changing atmosphere.
     void SetBackgroundColor(System::Numerics::Vector3 color);
@@ -120,52 +128,34 @@ namespace Oxygen::Interop::World {
     System::Threading::Tasks::Task<NodeStateManaged>^
       ObserveNodeAsync(System::Guid nodeId);
 
-    void SetEnvironment(
-      bool atmosphereEnabled,
-      bool sunDiskEnabled,
-      float planetRadiusMeters,
-      float atmosphereHeightMeters,
+    void SetEnvironment(bool atmosphereEnabled, bool sunDiskEnabled,
+      float planetRadiusMeters, float atmosphereHeightMeters,
       System::Numerics::Vector3 groundAlbedoRgb,
-      float rayleighScaleHeightMeters,
-      float mieScaleHeightMeters,
-      float mieAnisotropy,
-      System::Numerics::Vector3 skyLuminanceFactorRgb,
-      float aerialPerspectiveDistanceScale,
-      float aerialScatteringStrength,
-      float aerialPerspectiveStartDepthMeters,
-      float heightFogContribution,
-      int exposureMode,
-      bool exposureEnabled,
-      float exposureKey,
-      float manualExposureEv,
-      float exposureCompensation,
-      int toneMapping,
-      int autoExposureMeteringMode,
-      float autoExposureMinEv,
-      float autoExposureMaxEv,
-      float autoExposureSpeedUp,
-      float autoExposureSpeedDown,
-      float autoExposureLowPercentile,
-      float autoExposureHighPercentile,
-      float autoExposureMinLogLuminance,
-      float autoExposureLogLuminanceRange,
-      float autoExposureTargetLuminance,
-      float autoExposureSpotMeterRadius,
-    float autoExposureBlackInfluence,
-    float autoExposureTransitionDistanceEv,
-    cli::array<ExposureCompensationKeyManaged>^ autoExposureCompensationCurve,
-    String^ exposureMaskCookedRoot, String^ exposureMaskDescriptorPath,
-      float bloomIntensity,
-      float bloomThreshold,
-      float saturation,
-      float contrast,
-      float vignetteIntensity,
-      float displayGamma,
-    Action<System::UInt64, String^>^ onFailure, Action<System::UInt64>^ onSuccess);
+      float rayleighScaleHeightMeters, float mieScaleHeightMeters,
+      float mieAnisotropy, System::Numerics::Vector3 skyLuminanceFactorRgb,
+      float aerialPerspectiveDistanceScale, float aerialScatteringStrength,
+      float aerialPerspectiveStartDepthMeters, float heightFogContribution,
+      int exposureMode, bool exposureEnabled, float exposureKey,
+      float manualExposureEv, float exposureCompensation, int toneMapping,
+      int autoExposureMeteringMode, float autoExposureMinEv,
+      float autoExposureMaxEv, float autoExposureSpeedUp,
+      float autoExposureSpeedDown, float autoExposureLowPercentile,
+      float autoExposureHighPercentile, float autoExposureMinLogLuminance,
+      float autoExposureLogLuminanceRange, float autoExposureTargetLuminance,
+      float autoExposureSpotMeterRadius, float autoExposureBlackInfluence,
+      float autoExposureTransitionDistanceEv,
+      cli::array<ExposureCompensationKeyManaged>
+        ^ autoExposureCompensationCurve,
+      String ^ exposureMaskCookedRoot, String ^ exposureMaskDescriptorPath,
+      String ^ exposureMaskProjectMount, float bloomIntensity,
+      float bloomThreshold, float saturation, float contrast,
+      float vignetteIntensity, float displayGamma,
+      Action<System::UInt64, String ^> ^ onFailure,
+      Action<System::UInt64> ^ onSuccess);
     void DetachGeometry(System::Guid nodeId);
     void AttachPerspectiveCamera(System::Guid nodeId,
       float fieldOfViewYRadians, float aspectRatio, float nearPlane,
-      float farPlane);
+      float farPlane, System::Byte aspectMode);
     void DetachCamera(System::Guid nodeId);
     void SetVisibility(System::Guid nodeId, bool visible);
     void AttachDirectionalLight(System::Guid nodeId,
@@ -202,9 +192,8 @@ namespace Oxygen::Interop::World {
     void RemoveSceneNodes(array<System::Guid>^ nodes);
 
     // Asset management
-    void AddLooseCookedRoot(String^ path);
-    void ClearCookedRoots();
-    System::Threading::Tasks::Task^ ReplaceCookedRootsAsync(array<String^>^ paths);
+    System::Threading::Tasks::Task
+      ^ ReplaceCookedRootsAsync(array<CookedRootBindingManaged> ^ bindings);
     System::Threading::Tasks::Task^ SetCookedContentPausedAsync(bool paused);
 
     // (All APIs are GUID-based; no scene names are accepted)
@@ -214,6 +203,6 @@ namespace Oxygen::Interop::World {
     ICommandFactory^ commandFactory_;
   };
 
-} // namespace Oxygen::Interop::World
+  } // namespace Oxygen::Interop::World
 
 #pragma managed(pop)

@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
+using DroidNet.Controls;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Dialogs;
@@ -138,22 +140,129 @@ public partial class ProjectLayoutViewModel
         }
     }
 
-    private async Task ReloadMountTreeAsync()
-    {
-        var previous = this.projectRoot;
-        previous?.MountRenamed -= this.OnMountRenamed;
+    private TaskCompletionSource? treeReload;
+    private long treeReloadVersion;
 
-        this.projectRoot = null;
-        this.suppressTreeSelectionEvents = true;
+    private Task ReloadMountTreeAsync()
+    {
+        this.treeReloadVersion++;
+        if (this.selectionDisposed)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (this.treeReload is { } pending)
+        {
+            return pending.Task;
+        }
+
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        this.treeReload = completion;
+        _ = this.ReloadMountTreeCoreAsync(completion);
+        return completion.Task;
+    }
+
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Background tree refresh keeps the prior usable tree and reports preparation failures.")]
+    private async Task ReloadMountTreeCoreAsync(TaskCompletionSource completion)
+    {
         try
         {
-            await this.PreloadRecentTemplatesAsync().ConfigureAwait(true);
-            await this.UpdateTreeSelectionFromStateAsync().ConfigureAwait(true);
+            while (!this.selectionDisposed && projectContextService.ActiveProject is { } context)
+            {
+                var version = this.treeReloadVersion;
+                try
+                {
+                    var projectInfo = this.GetActiveProjectInfo()!;
+                    var folder = await storage.GetFolderFromPathAsync(projectInfo.Location!).ConfigureAwait(true);
+                    if (!this.IsTreeBuildCurrent(context, version))
+                    {
+                        continue;
+                    }
+
+                    ProjectRootTreeItemAdapter? candidate = new(this.logger, storage, projectInfo, folder) { IsExpanded = true };
+                    try
+                    {
+                        await this.LoadPersistedMountsAsync(candidate, projectInfo, context).ConfigureAwait(true);
+                        await this.PrepareExpandedFoldersAsync(candidate, context, version).ConfigureAwait(true);
+                        if (!this.IsTreeBuildCurrent(context, version))
+                        {
+                            continue;
+                        }
+
+                        var previous = this.projectRoot;
+                        if (previous is not null)
+                        {
+                            previous.MountRenamed -= this.OnMountRenamed;
+                        }
+
+                        this.projectRoot = candidate;
+                        candidate = null;
+                        this.projectRoot.MountRenamed += this.OnMountRenamed;
+                        this.suppressTreeSelectionEvents = true;
+                        try
+                        {
+                            // Expanded children are ready, so installation does not interleave filesystem reads.
+                            await this.InitializeRootAsync(this.projectRoot, skipRoot: false).ConfigureAwait(true);
+                            foreach (var child in await this.projectRoot.Children.ConfigureAwait(true))
+                            {
+                                if (child is AuthoringMountPointTreeItemAdapter authoring)
+                                {
+                                    authoring.PropertyChanged += this.OnMountPointPropertyChanged;
+                                }
+                            }
+                        }
+                        finally
+                        {
+                            previous?.Dispose();
+                            this.suppressTreeSelectionEvents = false;
+                        }
+
+                        await this.UpdateTreeSelectionFromStateAsync().ConfigureAwait(true);
+                        if (this.IsTreeBuildCurrent(context, version))
+                        {
+                            return;
+                        }
+                    }
+                    finally
+                    {
+                        candidate?.Dispose();
+                    }
+                }
+                catch (Exception failure)
+                {
+                    if (this.IsTreeBuildCurrent(context, version))
+                    {
+                        this.LogPreloadingProjectFoldersError(failure);
+                        return;
+                    }
+                }
+            }
         }
         finally
         {
-            previous?.Dispose();
-            this.suppressTreeSelectionEvents = false;
+            this.treeReload = null;
+            completion.TrySetResult();
+        }
+    }
+
+    private bool IsTreeBuildCurrent(ProjectContext context, long version)
+        => !this.selectionDisposed && version == this.treeReloadVersion && ReferenceEquals(context, projectContextService.ActiveProject);
+
+    private async Task PrepareExpandedFoldersAsync(ITreeItem item, ProjectContext context, long version)
+    {
+        if (!item.IsExpanded || !this.IsTreeBuildCurrent(context, version))
+        {
+            return;
+        }
+
+        foreach (var child in await item.Children.ConfigureAwait(true))
+        {
+            if (!this.IsTreeBuildCurrent(context, version))
+            {
+                return;
+            }
+
+            await this.PrepareExpandedFoldersAsync(child, context, version).ConfigureAwait(true);
         }
     }
 

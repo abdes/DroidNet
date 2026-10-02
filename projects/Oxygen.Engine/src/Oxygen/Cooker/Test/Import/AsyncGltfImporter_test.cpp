@@ -8,32 +8,54 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <memory>
 #include <numbers>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "AsyncImporterFullTestBase.h"
-#include <glm/gtc/matrix_transform.hpp>
+#include <glm/detail/qualifier.hpp>
+#include <glm/ext/matrix_float3x3.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/geometric.hpp>
+#include <glm/gtc/matrix_access.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/matrix.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/Span.h>
+#include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Naming.h>
+#include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/Unorm16.h>
+#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Testing/GTest.h>
+
+using oxygen::base::CheckedAt;
 
 namespace {
 
@@ -199,8 +221,14 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
       const auto scene = LoadCameraScene(imported.report);
       ASSERT_TRUE(scene);
 
-      std::vector<std::string_view> names { "Parent", "Mixed", "Child", "Ortho",
-        "Mixed_Camera", "Mixed_Light" };
+      std::vector<std::string_view> names {
+        "Parent",
+        "Mixed",
+        "Child",
+        "Ortho",
+        "Mixed_Camera",
+        "Mixed_Light",
+      };
       if (keep_empty) {
         names.push_back("Empty");
       }
@@ -208,16 +236,23 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
       names.push_back("Identity");
       const auto source_count = static_cast<uint32_t>(names.size());
       names.insert(names.end(),
-        { "Mixed_Camera_1", "Mixed_Light_1", "Ortho_Camera", "Ortho_Light",
-          "IdentitySpot_Light", "Identity_Camera", "Identity_Light" });
+        {
+          "Mixed_Camera_1",
+          "Mixed_Light_1",
+          "Ortho_Camera",
+          "Ortho_Light",
+          "IdentitySpot_Light",
+          "Identity_Camera",
+          "Identity_Light",
+        });
       ASSERT_EQ(scene->GetNodes().size(), names.size());
       std::vector<AssetKey> ids;
       for (uint32_t index = 0; index < names.size(); ++index) {
         const auto& node = scene->GetNode(index);
-        EXPECT_EQ(scene->GetNodeName(node), names[index]);
+        EXPECT_EQ(scene->GetNodeName(node), names.at(index));
         EXPECT_EQ(node.node_id,
           AssetKey::FromVirtualPath(
-            std::string(scene_path) + "/" + std::string(names[index])));
+            std::string(scene_path) + "/" + std::string(names.at(index))));
         EXPECT_TRUE(world::HasCanonicalNodeFlags(node));
         if (index >= source_count) {
           EXPECT_EQ(node.node_flags, 0U);
@@ -227,8 +262,8 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
           const bool is_mesh
             = index == 1 || index == 2 || index == 4 || index == 5;
           const auto expected_flags = world::kSceneNodeFlag_Visible
-            | (names[index] == "Empty" ? 0U
-                                       : world::kSceneNodeFlag_CastsShadows)
+            | (names.at(index) == "Empty" ? 0U
+                                          : world::kSceneNodeFlag_CastsShadows)
             | (is_mesh ? world::kSceneNodeFlag_ReceivesShadows : 0U);
           EXPECT_EQ(node.node_flags, expected_flags);
         }
@@ -242,12 +277,18 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
 
       // Original local transforms and hierarchy are independent of attachments.
       const auto half_sqrt_two = std::sqrt(0.5F);
-      const std::array positions { glm::vec3(4, -6, 5), glm::vec3(1, -3, 2),
-        glm::vec3(2, 0, 0), glm::vec3(0, 0, 4) };
-      const std::array rotations { glm::quat(
-                                     half_sqrt_two, 0, -half_sqrt_two, 0),
-        glm::quat(half_sqrt_two, 0, 0, half_sqrt_two), glm::quat(1, 0, 0, 0),
-        glm::quat(half_sqrt_two, half_sqrt_two, 0, 0) };
+      const std::array positions {
+        glm::vec3(4, -6, 5),
+        glm::vec3(1, -3, 2),
+        glm::vec3(2, 0, 0),
+        glm::vec3(0, 0, 4),
+      };
+      const std::array rotations {
+        glm::quat(half_sqrt_two, 0, -half_sqrt_two, 0),
+        glm::quat(half_sqrt_two, 0, 0, half_sqrt_two),
+        glm::quat(1, 0, 0, 0),
+        glm::quat(half_sqrt_two, half_sqrt_two, 0, 0),
+      };
       for (uint32_t index = 0; index < source_count; ++index) {
         const auto& node = scene->GetNode(index);
         const auto expected_parent = index >= source_count - 2 ? index
@@ -262,8 +303,8 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
           = glm::translate(glm::mat4(1), position) * glm::mat4_cast(rotation);
         const auto actual = CameraNodeTransform(node);
         for (glm::length_t column = 0; column < 4; ++column) {
-          ExpectCameraVector(
-            glm::vec3(actual[column]), glm::vec3(expected[column]));
+          ExpectCameraVector(glm::vec3(glm::column(actual, column)),
+            glm::vec3(glm::column(expected, column)));
         }
       }
 
@@ -273,51 +314,71 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
         = scene->GetComponents<world::OrthographicCameraRecord>();
       ASSERT_EQ(perspective.size(), 2U);
       ASSERT_EQ(ortho.size(), 1U);
-      EXPECT_EQ(perspective[0].node_index, source_count);
-      EXPECT_EQ(ortho[0].node_index, source_count + 2);
-      EXPECT_EQ(perspective[1].node_index, source_count + 5);
-      EXPECT_FLOAT_EQ(perspective[0].fov_y, 1.0F);
-      EXPECT_FLOAT_EQ(perspective[0].aspect_ratio, 1.5F);
-      EXPECT_FLOAT_EQ(perspective[0].near_plane, 0.2F);
-      EXPECT_FLOAT_EQ(perspective[0].far_plane, 250.0F);
-      EXPECT_FLOAT_EQ(ortho[0].near_plane, 0.3F);
-      EXPECT_FLOAT_EQ(ortho[0].far_plane, 40.0F);
+      EXPECT_EQ(CheckedAt(perspective, 0).node_index, source_count);
+      EXPECT_EQ(CheckedAt(ortho, 0).node_index, source_count + 2);
+      EXPECT_EQ(CheckedAt(perspective, 1).node_index, source_count + 5);
+      EXPECT_FLOAT_EQ(CheckedAt(perspective, 0).fov_y, 1.0F);
+      EXPECT_FLOAT_EQ(CheckedAt(perspective, 0).aspect_ratio, 1.5F);
+      EXPECT_EQ(CheckedAt(perspective, 0).aspect_mode,
+        oxygen::CameraAspectMode::kFixed);
+      EXPECT_EQ(
+        CheckedAt(perspective, 1).aspect_mode, oxygen::CameraAspectMode::kAuto);
+      EXPECT_FLOAT_EQ(CheckedAt(perspective, 1).aspect_ratio,
+        oxygen::kDefaultCameraAspectRatio);
+      EXPECT_FLOAT_EQ(CheckedAt(perspective, 0).near_plane, 0.2F);
+      EXPECT_FLOAT_EQ(CheckedAt(perspective, 0).far_plane, 250.0F);
+      EXPECT_FLOAT_EQ(CheckedAt(ortho, 0).near_plane, 0.3F);
+      EXPECT_FLOAT_EQ(CheckedAt(ortho, 0).far_plane, 40.0F);
 
       const std::array camera_parents { 1U, 3U, source_count - 1 };
-      const std::array camera_positions { glm::vec3(2, -9, 6),
-        glm::vec3(0, -6, 5), glm::vec3(0) };
-      const std::array camera_forwards { glm::vec3(0, 0, -1),
-        glm::vec3(-1, 0, 0), glm::vec3(0, 1, 0) };
-      const std::array camera_ups { glm::vec3(-1, 0, 0), glm::vec3(0, -1, 0),
-        glm::vec3(0, 0, 1) };
+      const std::array camera_positions {
+        glm::vec3(2, -9, 6),
+        glm::vec3(0, -6, 5),
+        glm::vec3(0),
+      };
+      const std::array camera_forwards {
+        glm::vec3(0, 0, -1),
+        glm::vec3(-1, 0, 0),
+        glm::vec3(0, 1, 0),
+      };
+      const std::array camera_ups {
+        glm::vec3(-1, 0, 0),
+        glm::vec3(0, -1, 0),
+        glm::vec3(0, 0, 1),
+      };
       const std::array camera_offsets { 0U, 2U, 5U };
       for (uint32_t ordinal = 0; ordinal < camera_parents.size(); ++ordinal) {
-        const auto index = source_count + camera_offsets[ordinal];
-        SCOPED_TRACE(names[index]);
+        const auto index = source_count + camera_offsets.at(ordinal);
+        SCOPED_TRACE(names.at(index));
         const auto& node = scene->GetNode(index);
-        EXPECT_EQ(node.parent_index, camera_parents[ordinal]);
+        EXPECT_EQ(node.parent_index, camera_parents.at(ordinal));
         const auto transform = CameraWorldTransform(*scene, index);
-        ExpectCameraVector(glm::vec3(transform[3]), camera_positions[ordinal]);
         ExpectCameraVector(
-          glm::normalize(-glm::vec3(transform[2])), camera_forwards[ordinal]);
+          glm::vec3(glm::column(transform, 3)), camera_positions.at(ordinal));
         ExpectCameraVector(
-          glm::normalize(glm::vec3(transform[1])), camera_ups[ordinal]);
+          glm::normalize(-glm::vec3(glm::column(transform, 2))),
+          camera_forwards.at(ordinal));
+        ExpectCameraVector(glm::normalize(glm::vec3(glm::column(transform, 1))),
+          camera_ups.at(ordinal));
         EXPECT_NEAR(glm::determinant(glm::mat3(transform)), 1.0F, 0.0001F);
       }
 
       const auto renderables = scene->GetComponents<world::RenderableRecord>();
       ASSERT_EQ(renderables.size(), 4U);
-      EXPECT_EQ(renderables[0].node_index, 1U);
-      EXPECT_EQ(renderables[1].node_index, 2U);
-      EXPECT_EQ(renderables[2].node_index, 4U);
-      EXPECT_EQ(renderables[3].node_index, 5U);
-      EXPECT_EQ(renderables[0].geometry_key, renderables[1].geometry_key);
-      EXPECT_EQ(renderables[0].geometry_key, renderables[2].geometry_key);
-      EXPECT_EQ(renderables[0].geometry_key, renderables[3].geometry_key);
+      EXPECT_EQ(CheckedAt(renderables, 0).node_index, 1U);
+      EXPECT_EQ(CheckedAt(renderables, 1).node_index, 2U);
+      EXPECT_EQ(CheckedAt(renderables, 2).node_index, 4U);
+      EXPECT_EQ(CheckedAt(renderables, 3).node_index, 5U);
+      EXPECT_EQ(CheckedAt(renderables, 0).geometry_key,
+        CheckedAt(renderables, 1).geometry_key);
+      EXPECT_EQ(CheckedAt(renderables, 0).geometry_key,
+        CheckedAt(renderables, 2).geometry_key);
+      EXPECT_EQ(CheckedAt(renderables, 0).geometry_key,
+        CheckedAt(renderables, 3).geometry_key);
       const auto lights = scene->GetComponents<world::DirectionalLightRecord>();
       ASSERT_EQ(lights.size(), 2U);
-      EXPECT_EQ(lights[0].node_index, source_count + 1);
-      EXPECT_EQ(lights[1].node_index, source_count + 6);
+      EXPECT_EQ(CheckedAt(lights, 0).node_index, source_count + 1);
+      EXPECT_EQ(CheckedAt(lights, 1).node_index, source_count + 6);
       for (const auto& light : lights) {
         EXPECT_FLOAT_EQ(light.intensity_lux, 5000.0F);
         ExpectCameraVector(
@@ -327,53 +388,54 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
       }
       const auto spots = scene->GetComponents<world::SpotLightRecord>();
       ASSERT_EQ(spots.size(), 2U);
-      EXPECT_EQ(spots[0].node_index, source_count + 3);
-      EXPECT_EQ(spots[1].node_index, source_count + 4);
-      EXPECT_EQ(
-        scene->GetNode(spots[1].node_index).parent_index, source_count - 2);
+      EXPECT_EQ(CheckedAt(spots, 0).node_index, source_count + 3);
+      EXPECT_EQ(CheckedAt(spots, 1).node_index, source_count + 4);
+      EXPECT_EQ(scene->GetNode(CheckedAt(spots, 1).node_index).parent_index,
+        source_count - 2);
       const auto identity_spot
-        = CameraWorldTransform(*scene, spots[1].node_index);
-      ExpectCameraVector(glm::vec3(identity_spot[3]), { 0, 0, 0 });
+        = CameraWorldTransform(*scene, CheckedAt(spots, 1).node_index);
+      ExpectCameraVector(glm::vec3(glm::column(identity_spot, 3)), { 0, 0, 0 });
       ExpectCameraVector(
         glm::normalize(glm::vec3(identity_spot * glm::vec4(0, -1, 0, 0))),
         { 0, 1, 0 });
       ExpectCameraVector(
-        glm::normalize(glm::vec3(identity_spot[2])), { 0, 0, 1 });
+        glm::normalize(glm::vec3(glm::column(identity_spot, 2))), { 0, 0, 1 });
       EXPECT_NEAR(glm::determinant(glm::mat3(identity_spot)), 1.0F, 0.0001F);
-      EXPECT_FLOAT_EQ(spots[0].inner_cone_angle_radians, 0.2F);
-      EXPECT_FLOAT_EQ(spots[0].outer_cone_angle_radians, 0.5F);
-      EXPECT_NEAR(spots[0].luminous_flux_lm,
+      EXPECT_FLOAT_EQ(CheckedAt(spots, 0).inner_cone_angle_radians, 0.2F);
+      EXPECT_FLOAT_EQ(CheckedAt(spots, 0).outer_cone_angle_radians, 0.5F);
+      EXPECT_NEAR(CheckedAt(spots, 0).luminous_flux_lm,
         200.0 * std::numbers::pi
           * ((1.0 - std::cos(0.2F))
             + ((std::cos(0.2F) - std::cos(0.5F)) / 3.0)),
         0.0001);
-      ExpectCameraVector(
-        { spots[0].common.color_rgb[0], spots[0].common.color_rgb[1],
-          spots[0].common.color_rgb[2] },
+      ExpectCameraVector({ CheckedAt(spots, 0).common.color_rgb[0],
+                           CheckedAt(spots, 0).common.color_rgb[1],
+                           CheckedAt(spots, 0).common.color_rgb[2] },
         { 0.2F, 0.4F, 0.6F });
       for (uint32_t ordinal = 0; ordinal < camera_parents.size(); ++ordinal) {
-        const auto index = source_count + camera_offsets[ordinal] + 1;
-        SCOPED_TRACE(names[index]);
+        const auto index = source_count + camera_offsets.at(ordinal) + 1;
+        SCOPED_TRACE(names.at(index));
         const auto& node = scene->GetNode(index);
-        EXPECT_EQ(node.parent_index, camera_parents[ordinal]);
+        EXPECT_EQ(node.parent_index, camera_parents.at(ordinal));
         EXPECT_NE(
           node.inherited_flags & world::kSceneNodeFlag_CastsShadows, 0U);
         const auto transform = CameraWorldTransform(*scene, index);
-        ExpectCameraVector(glm::vec3(transform[3]), camera_positions[ordinal]);
+        ExpectCameraVector(
+          glm::vec3(glm::column(transform, 3)), camera_positions.at(ordinal));
         // glTF cameras and oriented lights share local -Z. Oxygen uses -Z
         // for cameras and -Y for lights; their world rays must agree.
         ExpectCameraVector(
           glm::normalize(glm::vec3(transform * glm::vec4(0, -1, 0, 0))),
-          camera_forwards[ordinal]);
-        ExpectCameraVector(
-          glm::normalize(glm::vec3(transform[2])), camera_ups[ordinal]);
+          camera_forwards.at(ordinal));
+        ExpectCameraVector(glm::normalize(glm::vec3(glm::column(transform, 2))),
+          camera_ups.at(ordinal));
         EXPECT_NEAR(glm::determinant(glm::mat3(transform)), 1.0F, 0.0001F);
       }
       const auto points = scene->GetComponents<world::PointLightRecord>();
       ASSERT_EQ(points.size(), 1U);
-      EXPECT_EQ(points[0].node_index, 0U);
-      EXPECT_NEAR(
-        points[0].luminous_flux_lm, 80.0F * std::numbers::pi_v<float>, 0.0001F);
+      EXPECT_EQ(CheckedAt(points, 0).node_index, 0U);
+      EXPECT_NEAR(CheckedAt(points, 0).luminous_flux_lm,
+        80.0F * std::numbers::pi_v<float>, 0.0001F);
       // Check the original owner's unchanged basis. Under C * Rz * Ry * C^-1,
       // its local -Y maps to +Z; the camera child has a different local basis.
       ExpectCameraVector(
@@ -381,7 +443,8 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
           glm::vec3(CameraWorldTransform(*scene, 1) * glm::vec4(0, -1, 0, 0))),
         { 0, 0, 1 });
       ExpectCameraVector(
-        glm::vec3(CameraWorldTransform(*scene, 2)[3]), { 2, -7, 6 });
+        glm::vec3(glm::column(CameraWorldTransform(*scene, 2), 3)),
+        { 2, -7, 6 });
     }
   }
 }
@@ -597,8 +660,8 @@ NOLINT_TEST_F(
       = nlohmann::json::parse(invalid_lights.at(index)).contains("range")
       ? "scene.light.range_invalid"
       : "scene.light.photometry_invalid";
-    EXPECT_TRUE(std::ranges::any_of(
-      imported.report.diagnostics, [expected_code](const auto& diagnostic) {
+    EXPECT_TRUE(std::ranges::any_of(imported.report.diagnostics,
+      [expected_code](const auto& diagnostic) -> auto {
         return diagnostic.code == expected_code;
       }));
   }
@@ -678,25 +741,27 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
     }
   }
   ASSERT_EQ(materials.size(), 2U);
-  EXPECT_NE(materials[0].key, materials[1].key);
+  EXPECT_NE(materials.at(0).key, materials.at(1).key);
 
   // Check the storage contract even on a case-sensitive test filesystem.
-  const auto fold_ascii_case = [](std::string path) {
-    std::ranges::transform(path, path.begin(), [](const char value) {
+  const auto fold_ascii_case = [](std::string path) -> std::string {
+    std::ranges::transform(path, path.begin(), [](const char value) -> char {
       return value >= 'A' && value <= 'Z'
         ? static_cast<char>(value + ('a' - 'A'))
         : value;
     });
     return path;
   };
-  EXPECT_NE(fold_ascii_case(materials[0].descriptor_relpath),
-    fold_ascii_case(materials[1].descriptor_relpath));
-  EXPECT_NE(fold_ascii_case(materials[0].virtual_path),
-    fold_ascii_case(materials[1].virtual_path));
+  EXPECT_NE(fold_ascii_case(materials.at(0).descriptor_relpath),
+    fold_ascii_case(materials.at(1).descriptor_relpath));
+  EXPECT_NE(fold_ascii_case(materials.at(0).virtual_path),
+    fold_ascii_case(materials.at(1).virtual_path));
 
   ASSERT_EQ(CountAssetsOfType(inspection, AssetType::kGeometry), 1U);
   const auto geometry_entry = FindAssetOfType(inspection, AssetType::kGeometry);
-  ASSERT_TRUE(geometry_entry.has_value());
+  if (!geometry_entry.has_value()) {
+    FAIL() << "Expected geometry_entry to contain a value";
+  }
   FileStream<> geometry_stream(run_result.report.cooked_root
       / std::filesystem::path(geometry_entry->descriptor_relpath),
     std::ios::in);
@@ -718,19 +783,23 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
     std::array { 0.1F, 0.8F, 0.3F, 1.0F },
   };
   constexpr std::array expected_roughness { 0.2F, 0.8F };
+  constexpr std::array expected_slot_names { "Paint", "paint" };
   std::array<oxygen::data::AssetKey, 2> bound_keys {};
+  std::array<oxygen::data::MaterialSlotId, 2> slot_ids {};
   for (size_t slot = 0; slot < bound_keys.size(); ++slot) {
     SCOPED_TRACE(slot);
     SubMeshDesc submesh {};
     ASSERT_TRUE(geometry_reader.ReadBlobInto(
       std::as_writable_bytes(std::span<SubMeshDesc, 1>(&submesh, 1))));
     ASSERT_EQ(submesh.mesh_view_count, 1U);
-    EXPECT_EQ(std::string(submesh.name), "mat_" + std::to_string(slot));
+    EXPECT_EQ(std::string(submesh.name), expected_slot_names.at(slot));
+    EXPECT_FALSE(submesh.slot_id.IsNil());
+    slot_ids.at(slot) = submesh.slot_id;
     MeshViewDesc view {};
     ASSERT_TRUE(geometry_reader.ReadBlobInto(
       std::as_writable_bytes(std::span<MeshViewDesc, 1>(&view, 1))));
     EXPECT_EQ(view.index_count, 3U);
-    bound_keys[slot] = submesh.material_asset_key;
+    bound_keys.at(slot) = submesh.material_asset_key;
 
     const auto material_entry = std::ranges::find(
       materials, submesh.material_asset_key, &Inspection::AssetEntry::key);
@@ -743,15 +812,16 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
     MaterialAssetDesc material {};
     ASSERT_TRUE(material_reader.ReadBlobInto(
       std::as_writable_bytes(std::span<MaterialAssetDesc, 1>(&material, 1))));
-    for (size_t channel = 0; channel < expected_colors[slot].size();
+    for (size_t channel = 0; channel < expected_colors.at(slot).size();
       ++channel) {
       EXPECT_FLOAT_EQ(
-        material.base_color[channel], expected_colors[slot][channel]);
+        material.base_color[channel], expected_colors.at(slot).at(channel));
     }
     EXPECT_EQ(
-      material.roughness, oxygen::data::Unorm16(expected_roughness[slot]));
+      material.roughness, oxygen::data::Unorm16(expected_roughness.at(slot)));
   }
-  EXPECT_NE(bound_keys[0], bound_keys[1]);
+  EXPECT_NE(bound_keys.at(0), bound_keys.at(1));
+  EXPECT_NE(slot_ids.at(0), slot_ids.at(1));
 }
 
 //! Full async import validates supported glTF content is emitted.
@@ -802,7 +872,7 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, AsyncBackendImportsFullTabuleiroScene)
   ASSERT_FALSE(scene.renderables.empty());
   for (const auto& renderable : scene.renderables) {
     ASSERT_LT(renderable.node_index, scene.nodes.size());
-    const auto node_flags = scene.nodes[renderable.node_index].node_flags;
+    const auto node_flags = scene.nodes.at(renderable.node_index).node_flags;
     EXPECT_NE(node_flags & world::kSceneNodeFlag_CastsShadows, 0U);
     EXPECT_NE(node_flags & world::kSceneNodeFlag_ReceivesShadows, 0U);
   }

@@ -46,8 +46,9 @@ public:
   explicit MaterialAsset(AssetKey asset_key,
     pak::render::MaterialAssetDesc desc,
     std::vector<ShaderReference> shader_refs = {},
-    std::vector<oxygen::content::ResourceKey> texture_resource_keys = {})
-    : Asset(asset_key)
+    std::vector<oxygen::content::ResourceKey> texture_resource_keys = {},
+    SourceOrigin source_origin = {})
+    : Asset(asset_key, source_origin)
     , desc_(std::move(desc))
     , shader_refs_(std::move(shader_refs))
     , texture_resource_keys_(std::move(texture_resource_keys))
@@ -60,7 +61,8 @@ public:
   OXYGEN_DEFAULT_MOVABLE(MaterialAsset)
 
   //! Returns the asset header metadata.
-  [[nodiscard]] auto GetHeader() const noexcept -> const pak::core::AssetHeader&
+  [[nodiscard]] auto GetHeader() const noexcept
+    -> const pak::core::AssetHeader& override
   {
     return desc_.header;
   }
@@ -104,7 +106,7 @@ public:
   //! Returns whether this material uses the procedural grid feature.
   [[nodiscard]] auto HasProceduralGrid() const noexcept -> bool
   {
-    return (GetFlags() & pak::render::kMaterialFlag_ProceduralGrid) != 0u;
+    return (GetFlags() & pak::render::kMaterialFlag_ProceduralGrid) != 0U;
   }
 
   //! Returns whether this material is double-sided.
@@ -116,21 +118,20 @@ public:
   */
   [[nodiscard]] auto IsDoubleSided() const noexcept -> bool
   {
-    return (GetFlags() & pak::render::kMaterialFlag_DoubleSided) != 0u;
+    return (GetFlags() & pak::render::kMaterialFlag_DoubleSided) != 0U;
   }
 
   //! Returns the shader references for all stages used by this material.
   [[nodiscard]] auto GetShaders() const noexcept
     -> std::span<const ShaderReference>
   {
-    return std::span<const ShaderReference>(
-      shader_refs_.data(), shader_refs_.size());
+    return { shader_refs_.data(), shader_refs_.size() };
   }
 
   //! Returns the fallback base color (RGBA).
   [[nodiscard]] auto GetBaseColor() const noexcept -> std::span<const float, 4>
   {
-    return std::span<const float, 4>(desc_.base_color);
+    return { desc_.base_color };
   }
 
   //! Returns the normal map scale.
@@ -163,37 +164,36 @@ public:
     return desc_.alpha_cutoff.ToFloat();
   }
 
-  //! Returns the index of the base color texture.
+  //! Returns the descriptor-local reference for the base color texture.
   [[nodiscard]] auto GetBaseColorTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.base_color_texture;
   }
 
-  //! Returns the index of the normal texture.
-  [[nodiscard]] auto GetNormalTexture() const noexcept
-    -> pak::core::ResourceIndexT
+  //! Returns the descriptor-local reference for the normal texture.
+  [[nodiscard]] auto GetNormalTexture() const noexcept -> ResourceReferenceIndex
   {
     return desc_.normal_texture;
   }
 
-  //! Returns the index of the metallic texture.
+  //! Returns the descriptor-local reference for the metallic texture.
   [[nodiscard]] auto GetMetallicTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.metallic_texture;
   }
 
-  //! Returns the index of the roughness texture.
+  //! Returns the descriptor-local reference for the roughness texture.
   [[nodiscard]] auto GetRoughnessTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.roughness_texture;
   }
 
-  //! Returns the index of the ambient occlusion texture.
+  //! Returns the descriptor-local reference for the ambient occlusion texture.
   [[nodiscard]] auto GetAmbientOcclusionTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.ambient_occlusion_texture;
   }
@@ -202,15 +202,15 @@ public:
   [[nodiscard]] auto GetEmissiveFactor() const noexcept -> std::array<float, 3>
   {
     return {
-      desc_.emissive_factor[0].ToFloat(),
-      desc_.emissive_factor[1].ToFloat(),
-      desc_.emissive_factor[2].ToFloat(),
+      desc_.emissive_factor[0],
+      desc_.emissive_factor[1],
+      desc_.emissive_factor[2],
     };
   }
 
-  //! Returns the index of the emissive texture.
+  //! Returns the descriptor-local reference for the emissive texture.
   [[nodiscard]] auto GetEmissiveTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.emissive_texture;
   }
@@ -245,12 +245,12 @@ public:
 
 private:
   pak::render::MaterialAssetDesc desc_ {};
-  std::vector<ShaderReference> shader_refs_ {};
+  std::vector<ShaderReference> shader_refs_;
   // Runtime-only: per-slot source-aware resource keys produced by loader.
   // Order matches getters: base_color, normal, metallic, roughness,
   // ambient_occlusion, emissive, specular, sheen_color, clearcoat,
   // clearcoat_normal, transmission, thickness.
-  std::vector<oxygen::content::ResourceKey> texture_resource_keys_ {};
+  std::vector<oxygen::content::ResourceKey> texture_resource_keys_;
 
 public:
   //! Runtime accessor for source-aware ResourceKey for base color texture.
@@ -258,7 +258,7 @@ public:
     -> oxygen::content::ResourceKey
   {
     if (texture_resource_keys_.size() > 0) {
-      return texture_resource_keys_[0];
+      return texture_resource_keys_.at(0);
     }
     return oxygen::content::ResourceKey { 0 };
   }
@@ -267,7 +267,7 @@ public:
     -> oxygen::content::ResourceKey
   {
     if (texture_resource_keys_.size() > 1) {
-      return texture_resource_keys_[1];
+      return texture_resource_keys_.at(1);
     }
     return oxygen::content::ResourceKey { 0 };
   }
@@ -276,7 +276,7 @@ public:
     -> oxygen::content::ResourceKey
   {
     if (texture_resource_keys_.size() > 2) {
-      return texture_resource_keys_[2];
+      return texture_resource_keys_.at(2);
     }
     return oxygen::content::ResourceKey { 0 };
   }
@@ -285,7 +285,7 @@ public:
     -> oxygen::content::ResourceKey
   {
     if (texture_resource_keys_.size() > 3) {
-      return texture_resource_keys_[3];
+      return texture_resource_keys_.at(3);
     }
     return oxygen::content::ResourceKey { 0 };
   }
@@ -294,7 +294,7 @@ public:
     -> oxygen::content::ResourceKey
   {
     if (texture_resource_keys_.size() > 4) {
-      return texture_resource_keys_[4];
+      return texture_resource_keys_.at(4);
     }
     return oxygen::content::ResourceKey { 0 };
   }
@@ -303,13 +303,13 @@ public:
     -> oxygen::content::ResourceKey
   {
     if (texture_resource_keys_.size() > 5) {
-      return texture_resource_keys_[5];
+      return texture_resource_keys_.at(5);
     }
     return oxygen::content::ResourceKey { 0 };
   }
 
   [[nodiscard]] auto GetSpecularTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.specular_texture;
   }
@@ -318,13 +318,13 @@ public:
     -> oxygen::content::ResourceKey
   {
     if (texture_resource_keys_.size() > 6) {
-      return texture_resource_keys_[6];
+      return texture_resource_keys_.at(6);
     }
     return oxygen::content::ResourceKey { 0 };
   }
 
   [[nodiscard]] auto GetSheenColorTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.sheen_color_texture;
   }
@@ -333,13 +333,13 @@ public:
     -> oxygen::content::ResourceKey
   {
     if (texture_resource_keys_.size() > 7) {
-      return texture_resource_keys_[7];
+      return texture_resource_keys_.at(7);
     }
     return oxygen::content::ResourceKey { 0 };
   }
 
   [[nodiscard]] auto GetClearcoatTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.clearcoat_texture;
   }
@@ -348,13 +348,13 @@ public:
     -> oxygen::content::ResourceKey
   {
     if (texture_resource_keys_.size() > 8) {
-      return texture_resource_keys_[8];
+      return texture_resource_keys_.at(8);
     }
     return oxygen::content::ResourceKey { 0 };
   }
 
   [[nodiscard]] auto GetClearcoatNormalTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.clearcoat_normal_texture;
   }
@@ -363,13 +363,13 @@ public:
     -> oxygen::content::ResourceKey
   {
     if (texture_resource_keys_.size() > 9) {
-      return texture_resource_keys_[9];
+      return texture_resource_keys_.at(9);
     }
     return oxygen::content::ResourceKey { 0 };
   }
 
   [[nodiscard]] auto GetTransmissionTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.transmission_texture;
   }
@@ -378,13 +378,13 @@ public:
     -> oxygen::content::ResourceKey
   {
     if (texture_resource_keys_.size() > 10) {
-      return texture_resource_keys_[10];
+      return texture_resource_keys_.at(10);
     }
     return oxygen::content::ResourceKey { 0 };
   }
 
   [[nodiscard]] auto GetThicknessTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.thickness_texture;
   }
@@ -393,7 +393,7 @@ public:
     -> oxygen::content::ResourceKey
   {
     if (texture_resource_keys_.size() > 11) {
-      return texture_resource_keys_[11];
+      return texture_resource_keys_.at(11);
     }
     return oxygen::content::ResourceKey { 0 };
   }
@@ -435,32 +435,52 @@ public:
 
   [[nodiscard]] auto GetGridMinorColor() const noexcept -> std::array<float, 4>
   {
-    return { desc_.grid_minor_color[0], desc_.grid_minor_color[1],
-      desc_.grid_minor_color[2], desc_.grid_minor_color[3] };
+    return {
+      desc_.grid_minor_color[0],
+      desc_.grid_minor_color[1],
+      desc_.grid_minor_color[2],
+      desc_.grid_minor_color[3],
+    };
   }
 
   [[nodiscard]] auto GetGridMajorColor() const noexcept -> std::array<float, 4>
   {
-    return { desc_.grid_major_color[0], desc_.grid_major_color[1],
-      desc_.grid_major_color[2], desc_.grid_major_color[3] };
+    return {
+      desc_.grid_major_color[0],
+      desc_.grid_major_color[1],
+      desc_.grid_major_color[2],
+      desc_.grid_major_color[3],
+    };
   }
 
   [[nodiscard]] auto GetGridAxisColorX() const noexcept -> std::array<float, 4>
   {
-    return { desc_.grid_axis_color_x[0], desc_.grid_axis_color_x[1],
-      desc_.grid_axis_color_x[2], desc_.grid_axis_color_x[3] };
+    return {
+      desc_.grid_axis_color_x[0],
+      desc_.grid_axis_color_x[1],
+      desc_.grid_axis_color_x[2],
+      desc_.grid_axis_color_x[3],
+    };
   }
 
   [[nodiscard]] auto GetGridAxisColorY() const noexcept -> std::array<float, 4>
   {
-    return { desc_.grid_axis_color_y[0], desc_.grid_axis_color_y[1],
-      desc_.grid_axis_color_y[2], desc_.grid_axis_color_y[3] };
+    return {
+      desc_.grid_axis_color_y[0],
+      desc_.grid_axis_color_y[1],
+      desc_.grid_axis_color_y[2],
+      desc_.grid_axis_color_y[3],
+    };
   }
 
   [[nodiscard]] auto GetGridOriginColor() const noexcept -> std::array<float, 4>
   {
-    return { desc_.grid_origin_color[0], desc_.grid_origin_color[1],
-      desc_.grid_origin_color[2], desc_.grid_origin_color[3] };
+    return {
+      desc_.grid_origin_color[0],
+      desc_.grid_origin_color[1],
+      desc_.grid_origin_color[2],
+      desc_.grid_origin_color[3],
+    };
   }
 };
 

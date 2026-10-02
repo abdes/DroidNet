@@ -295,14 +295,21 @@ public sealed partial class SceneEngineSync(
 
     /// <inheritdoc/>
     public Task<SyncOutcome> UpdateMaterialSlotAsync(
-        Scene scene,
-        SceneNode node,
-        int slotIndex,
-        Uri? materialUri,
-        CancellationToken cancellationToken = default)
+        Scene scene, SceneNode node, MaterialSlotTarget target, Uri? materialUri, CancellationToken cancellationToken = default)
+        => this.SyncMaterialSlotAsync(scene, node, target, materialUri, MaterialSlotAssignmentIntent.ObservedEdit, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<SyncOutcome> RestoreMaterialSlotAsync(
+        Scene scene, SceneNode node, MaterialSlotTarget target, Uri? materialUri, CancellationToken cancellationToken = default)
+        => this.SyncMaterialSlotAsync(scene, node, target, materialUri, MaterialSlotAssignmentIntent.RetainedAssignment, cancellationToken);
+
+    private Task<SyncOutcome> SyncMaterialSlotAsync(
+        Scene scene, SceneNode node, MaterialSlotTarget target, Uri? materialUri,
+        MaterialSlotAssignmentIntent intent, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(target);
 
         var scope = Scope(
             scene,
@@ -328,8 +335,10 @@ public sealed partial class SceneEngineSync(
             LiveSyncDiagnosticCodes.MaterialFailed,
             world => world.Execute(new RuntimeSetMaterialOverride(
                 node.Id,
-                slotIndex,
-                MaterialOverridePathMapper.ToEnginePath(materialUri))),
+                GeometryPathMapper.ToEnginePath(target.GeometryUri),
+                target.SlotId,
+                target.LayoutRevision,
+                MaterialOverridePathMapper.ToEnginePath(materialUri), intent)),
             cancellationToken);
     }
 
@@ -628,34 +637,6 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
-    public Task UpdateMaterialOverrideAsync(Guid nodeId, OverrideSlot slot)
-    {
-        this.LogMaterialOverrideSyncUnsupported(nodeId);
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc/>
-    public Task UpdateTargetedMaterialOverrideAsync(Guid nodeId, int lodIndex, int submeshIndex, OverrideSlot slot)
-    {
-        this.LogTargetedMaterialOverrideSyncUnsupported(nodeId, lodIndex, submeshIndex);
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc/>
-    public Task RemoveMaterialOverrideAsync(Guid nodeId, Type slotType)
-    {
-        this.LogMaterialOverrideRemovalUnsupported(nodeId, slotType.Name);
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc/>
-    public Task RemoveTargetedMaterialOverrideAsync(Guid nodeId, int lodIndex, int submeshIndex, Type slotType)
-    {
-        this.LogTargetedMaterialOverrideRemovalUnsupported(nodeId, lodIndex, submeshIndex, slotType.Name);
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc/>
     public Task UpdateLodPolicyAsync(Guid nodeId, LevelOfDetailSlot lodSlot)
     {
         this.LogLodPolicySyncUnsupported(nodeId);
@@ -729,7 +710,7 @@ public sealed partial class SceneEngineSync(
         return await revertSync(cancellationToken).ConfigureAwait(false);
     }
 
-    private static RuntimeSetEnvironment BuildEnvironmentCommand(Scene scene, SceneEnvironmentData environment)
+    private RuntimeSetEnvironment BuildEnvironmentCommand(Scene scene, SceneEnvironmentData environment)
     {
         var sky = environment.SkyAtmosphere ?? new SkyAtmosphereEnvironmentData();
         var post = environment.PostProcess ?? new PostProcessEnvironmentData();
@@ -767,7 +748,7 @@ public sealed partial class SceneEngineSync(
                 post.AutoExposureBlackInfluence,
                 post.AutoExposureTransitionDistanceEv,
                 post.AutoExposureCompensationCurve.Select(static key => new RuntimeExposureCompensationKey(key.MeteredEv, key.CompensationEv)).ToImmutableArray(),
-                CreateExposureMaskReference(scene, post.AutoExposureMeteringMask),
+                this.CreateExposureMaskReference(scene, post.AutoExposureMeteringMask),
                 post.BloomIntensity,
                 post.BloomThreshold,
                 post.Saturation,
@@ -776,7 +757,7 @@ public sealed partial class SceneEngineSync(
                 post.DisplayGamma);
     }
 
-    private static RuntimeTextureReference? CreateExposureMaskReference(Scene scene, Uri? mask)
+    private RuntimeTextureReference? CreateExposureMaskReference(Scene scene, Uri? mask)
     {
         if (mask is null)
         {
@@ -792,8 +773,9 @@ public sealed partial class SceneEngineSync(
         }
 
         return new(mask,
-            ContentPipeline.ContentPipelinePaths.GetCookedMountRoot(projectRoot, path[1..separator]),
-            path[(separator + 1)..]);
+            this.engineService.ContentStatus.Bindings.SingleOrDefault(root => string.Equals(root.ProjectMount, path[1..separator], StringComparison.OrdinalIgnoreCase))?.Path
+                ?? throw new InvalidOperationException("The exposure mask has no accepted cooked generation. Cook its content before previewing it."),
+            path[(separator + 1)..]) { ProjectMount = path[1..separator] };
     }
 
     private async Task<bool> SyncSceneCoreAsync(Scene scene, bool skipIfCurrent, CancellationToken cancellationToken)
@@ -936,7 +918,7 @@ public sealed partial class SceneEngineSync(
             return false;
         }
 
-        world.Execute(BuildEnvironmentCommand(scene, scene.Environment));
+        world.Execute(this.BuildEnvironmentCommand(scene, scene.Environment));
         world.Execute(new RuntimeSetBackgroundColor(scene.Environment.BackgroundColor));
         lock (this.documentGate)
         {
@@ -1036,7 +1018,7 @@ public sealed partial class SceneEngineSync(
             SceneOperationKinds.EditEnvironment,
             LiveSyncDiagnosticCodes.EnvironmentRejected,
             LiveSyncDiagnosticCodes.EnvironmentFailed,
-            world => world.Execute(BuildEnvironmentCommand(scene, environment)),
+            world => world.Execute(this.BuildEnvironmentCommand(scene, environment)),
             cancellationToken,
             dispatchOverride);
     }
@@ -1284,7 +1266,8 @@ public sealed partial class SceneEngineSync(
                     ToEngineFieldOfViewRadians(perspective.FieldOfView),
                     perspective.AspectRatio,
                     perspective.NearPlane,
-                    perspective.FarPlane));
+                    perspective.FarPlane,
+                    perspective.AspectMode));
                 world.Execute(new RuntimeSetProperties(node.Id,
                 [
                     new((ushort)EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.ApertureF, perspective.ApertureF),

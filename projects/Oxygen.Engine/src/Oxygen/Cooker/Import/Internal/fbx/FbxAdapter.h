@@ -13,12 +13,15 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
+#include <Oxygen/Cooker/Import/Internal/ModelGeometrySource.h>
+#include <Oxygen/Cooker/Import/Internal/ModelMaterialSource.h>
+#include <Oxygen/Cooker/Import/Internal/ModelTextureSource.h>
 #include <Oxygen/Cooker/Import/SceneSourceInspection.h>
 #include <Oxygen/Cooker/api_export.h>
 
 namespace oxygen::content::import::adapters {
 
-//! Format adapter that parses FBX once and emits pipeline work items.
+//! Loads FBX source metadata and emits pipeline work items.
 class FbxAdapter final : public std::enable_shared_from_this<FbxAdapter> {
 public:
   //! Result of parsing an FBX source.
@@ -38,26 +41,42 @@ public:
     const std::filesystem::path& source_path, const AdapterInput& input)
     -> SceneSourceInspection;
 
-  FbxAdapter();
-  ~FbxAdapter();
+  OXGN_COOK_API FbxAdapter();
+  OXGN_COOK_API ~FbxAdapter();
 
   //! Parse an FBX scene from a file path.
   OXGN_COOK_NDAPI auto Parse(const std::filesystem::path& source_path,
-    const AdapterInput& input) -> ParseResult;
+    const AdapterInput& input, ModelParseMode mode = ModelParseMode::kGeometry)
+    -> ParseResult;
 
   //! Parse an FBX scene from an in-memory buffer.
   OXGN_COOK_NDAPI auto Parse(std::span<const std::byte> source_bytes,
-    const AdapterInput& input) -> ParseResult;
+    const AdapterInput& input, ModelParseMode mode = ModelParseMode::kGeometry)
+    -> ParseResult;
+
+  //! Assign geometry identities using the same bake variants as production.
+  OXGN_COOK_NDAPI auto PrepareGeometry(const AdapterInput& input) const
+    -> ModelGeometryPreparation;
 
   //! Stream work items for the requested pipeline type.
   OXGN_COOK_NDAPI auto BuildWorkItems(
     GeometryWorkTag tag, GeometryWorkItemSink& sink, const AdapterInput& input)
     -> WorkItemStreamResult;
 
+  //! Prepare material names, values and references without loading texture
+  //! bytes. Use a fresh naming service for each analysis or import operation.
+  OXGN_COOK_NDAPI auto PrepareMaterials(const AdapterInput& input)
+    -> ModelMaterialPreparation;
+
   //! Stream material work items.
   OXGN_COOK_NDAPI auto BuildWorkItems(
     MaterialWorkTag tag, MaterialWorkItemSink& sink, const AdapterInput& input)
     -> WorkItemStreamResult;
+
+  //! Prepare texture uses, effective recipes and external paths without byte
+  //! I/O.
+  OXGN_COOK_NDAPI auto PrepareTextures(const AdapterInput& input) const
+    -> ModelTexturePreparation;
 
   //! Stream texture work items.
   OXGN_COOK_NDAPI auto BuildWorkItems(

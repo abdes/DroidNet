@@ -222,8 +222,18 @@
           "minimum": 0.0,
           "maximum": 1.0
         },
-        "emissive_factor": {
-          "$ref": "#/definitions/vec3"
+        "emissive_color": {
+          "type": "array",
+          "items": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+          "minItems": 3,
+          "maxItems": 3,
+          "default": [1.0, 1.0, 1.0]
+        },
+        "emissive_intensity": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 65504.0,
+          "default": 0.0
         },
         "alpha_cutoff": {
           "type": "number",

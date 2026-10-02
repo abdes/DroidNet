@@ -21,6 +21,7 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -145,7 +146,6 @@ auto ResourceRegistry::RegisterViewNoLock(NativeResource resource,
   RequireManualNoLock({ .object = resource, .backing = {} });
 
   // Check view cache first
-  const CacheKey cache_key { .resource = resource, .view_desc_hash = key_hash };
   if (const auto* cached = FindViewNoLock(resource, key_hash, query);
     cached != nullptr) {
     DLOG_F(2, "cache hit ({})", cached->view_object);
@@ -153,51 +153,16 @@ auto ResourceRegistry::RegisterViewNoLock(NativeResource resource,
     ABORT_F("-failed- use UpdateView() to update registered views");
   }
 
-  // Store in maps
-  auto index = view_handle.GetBindlessHandle();
+  const auto index = view_handle.GetBindlessHandle();
   auto& descriptors = resource_it->second.descriptors;
-  auto desc_it = descriptors.find(index);
-  const bool inserted = (desc_it == descriptors.end());
-  if (inserted) {
-    auto [it, _] = descriptors.emplace(index,
-      ResourceEntry::ViewEntry {
-        .view_object = view,
-        .descriptor = std::move(view_handle),
-      });
-    desc_it = it;
-  } else {
-    // Descriptor index reuse: replace the previous entry and purge any stale
-    // cache keys that still point to the old view object.
-    if (desc_it->second.descriptor.IsValid()) {
-      desc_it->second.descriptor.Release();
-    }
-    const auto old_view = desc_it->second.view_object;
-    desc_it->second.view_object = view;
-    desc_it->second.descriptor = std::move(view_handle);
-
-    [[maybe_unused]] const auto stale_count
-      = std::erase_if(view_cache_, [&](const auto& cache_pair) -> auto {
-          return cache_pair.first.resource == resource
-            && cache_pair.second.view_object == old_view;
-        });
-    DLOG_F(3,
-      "RegisterView replaced existing descriptor index {} (purged {} "
-      "stale cache entr{})",
-      index, stale_count, stale_count == 1 ? "y" : "ies");
+  if (const auto previous = descriptors.find(index);
+    previous != descriptors.end()) {
+    UnlinkViewNoLock(resource, previous->second);
+    descriptor_to_resource_.erase(index);
+    descriptors.erase(previous);
   }
-  DLOG_F(4, "updated descriptors map with index {} ({})", index,
-    inserted ? "inserted" : "replaced");
-  descriptor_to_resource_[index] = resource;
-
-  // Store in view cache
-  ViewCacheEntry cache_entry {
-    .view_object = view,
-    .view_description = std::move(view_description),
-    .descriptor_index = index,
-    .domain = std::nullopt,
-  };
-  StoreViewNoLock(cache_key, std::move(cache_entry), query);
-  DLOG_F(4, "updated cache");
+  AttachDescriptorWithView(resource, index, std::move(view_handle), view,
+    std::move(view_description), key_hash, query);
 
   // Return the view
   DLOG_F(3, "returning view {}", view, resource);
@@ -255,27 +220,10 @@ auto ResourceRegistry::FindShaderVisibleIndex(
     return std::nullopt;
   }
 
-  const NativeView view_obj = cached->view_object;
-
-  // Find the resource entry and search its descriptor map for the matching
-  // view object to obtain the descriptor handle and therefore the
-  // shader-visible index.
-  const auto res_it = resources_.find(resource);
-  if (res_it == resources_.end()) {
-    return std::nullopt;
-  }
-
-  const auto& descriptors = res_it->second.managed
-    ? res_it->second.managed->descriptors
-    : res_it->second.descriptors;
-  for (const auto& [index, ve] : descriptors) {
-    if (ve.view_object == view_obj) {
-      if (ve.descriptor.IsValid() && ve.descriptor.GetAllocator() != nullptr) {
-        return ve.descriptor.GetAllocator()->GetShaderVisibleIndex(
-          ve.descriptor);
-      }
-      return std::nullopt;
-    }
+  if (cached->descriptor.IsValid()
+    && cached->descriptor.GetAllocator() != nullptr) {
+    return cached->descriptor.GetAllocator()->GetShaderVisibleIndex(
+      cached->descriptor);
   }
 
   return std::nullopt;
@@ -312,6 +260,7 @@ auto ResourceRegistry::UnRegisterViewNoLock(
     }
 
     DLOG_F(4, "release view descriptor handle ({})", desc_it->first);
+    UnlinkViewNoLock(resource, desc_it->second);
     descriptor_to_resource_.erase(desc_it->first);
     desc_it->second.descriptor.Release();
     desc_it = descriptors.erase(desc_it);
@@ -322,17 +271,6 @@ auto ResourceRegistry::UnRegisterViewNoLock(
     DLOG_F(3, "view not found, already unregistered?");
     return; // Nothing to do
   }
-
-  DLOG_F(4, "remove cache entry");
-  // Remove all matching cache entries; duplicates may exist after descriptor
-  // index reuse with backend view-handle aliasing.
-  [[maybe_unused]] const size_t erased_count = std::erase_if(
-    view_cache_, [&resource, &view](const auto& cache_pair) -> auto {
-      return cache_pair.first.resource == resource
-        && cache_pair.second.view_object == view;
-    });
-  DCHECK_GE_F(erased_count, 1U,
-    "Cache entry not found for resource {} and view {}", resource, view);
 }
 
 auto ResourceRegistry::UnRegisterViewBatch(const NativeResource& resource,
@@ -355,14 +293,11 @@ auto ResourceRegistry::UnRegisterViewBatch(const NativeResource& resource,
       ++it;
       continue;
     }
+    UnlinkViewNoLock(resource, it->second);
     descriptor_to_resource_.erase(it->first);
     it->second.descriptor.Release();
     it = descriptors.erase(it);
   }
-  std::erase_if(view_cache_, [&](const auto& entry) -> auto {
-    return entry.first.resource == resource
-      && selected.contains(entry.second.view_object);
-  });
 }
 
 auto ResourceRegistry::Close() -> void
@@ -373,6 +308,7 @@ auto ResourceRegistry::Close() -> void
     NotifyResourceForgottenNoLock(native);
   }
   for (auto& [resource, entry] : resources_) {
+    PurgeCachedViewsForResource(resource);
     if (entry.managed) {
       entry.managed->open = false;
       entry.managed->published = false;
@@ -452,17 +388,13 @@ auto ResourceRegistry::UnRegisterResourceViewsNoLock(
 
   // Release all descriptors and remove from descriptor_to_resource_ map
   for (auto& [index, view_entry] : descriptors) {
+    UnlinkViewNoLock(resource, view_entry);
     DLOG_F(3, "view for index {}", view_entry.descriptor.GetBindlessHandle());
     if (view_entry.descriptor.IsValid()) {
       view_entry.descriptor.Release();
       descriptor_to_resource_.erase(index);
     }
   }
-
-  // Remove all relevant entries from view_cache in a single pass
-  std::erase_if(view_cache_, [&resource](const auto& cache_entry) -> auto {
-    return cache_entry.first.resource == resource;
-  });
 
   // Clear descriptors map
   descriptors.clear();
@@ -473,10 +405,15 @@ auto ResourceRegistry::UnRegisterResourceViewsNoLock(
 auto ResourceRegistry::PurgeCachedViewsForResource(
   const NativeResource& resource) -> void
 {
-  // Remove all relevant entries from view_cache_ in a single pass
-  std::erase_if(view_cache_, [&resource](const auto& cache_entry) -> auto {
-    return cache_entry.first.resource == resource;
-  });
+  const auto owner = resources_.find(resource);
+  if (owner == resources_.end()) {
+    return;
+  }
+  auto& descriptors = owner->second.managed ? owner->second.managed->descriptors
+                                            : owner->second.descriptors;
+  for (auto& [index, entry] : descriptors) {
+    UnlinkViewNoLock(resource, entry);
+  }
 }
 
 auto ResourceRegistry::NotifyResourceForgottenNoLock(
@@ -493,55 +430,113 @@ auto ResourceRegistry::AttachDescriptorWithView(
   std::any description, const std::size_t key_hash, ViewQuery query) -> void
 {
   DCHECK_F(view->IsValid(), "invalid native view object");
-  const auto it = resources_.find(dst_resource);
-  DCHECK_F(it != resources_.end(), "destination resource not registered: {}",
-    dst_resource);
-  it->second.descriptors[index] = ResourceEntry::ViewEntry {
-    .view_object = view,
-    .descriptor = std::move(descriptor_handle),
-  };
-  descriptor_to_resource_[index] = dst_resource;
-
-  // Update cache entry
-  ViewCacheEntry cache_entry {
-    .view_object = view,
-    .view_description = std::move(description),
-    .descriptor_index = index,
-    .domain = std::nullopt,
-  };
-  const CacheKey new_cache_key {
-    .resource = dst_resource,
-    .view_desc_hash = key_hash,
-  };
-  StoreViewNoLock(new_cache_key, std::move(cache_entry), query);
+  const auto owner = resources_.find(dst_resource);
+  if (owner == resources_.end()) {
+    throw std::logic_error("View destination resource is not registered");
+  }
+  auto& descriptors = owner->second.descriptors;
+  const auto [inserted, unique]
+    = descriptors.try_emplace(index, view, std::move(descriptor_handle),
+      std::move(description), key_hash, query.domain);
+  if (!unique) {
+    throw std::logic_error("View descriptor is already registered");
+  }
+  bool mapped = false;
+  bool committed = false;
+  const ScopeGuard rollback([&]() noexcept {
+    if (!committed) {
+      if (mapped) {
+        descriptor_to_resource_.erase(index);
+      }
+      descriptors.erase(inserted);
+    }
+  });
+  mapped = descriptor_to_resource_.emplace(index, dst_resource).second;
+  if (!mapped) {
+    throw std::logic_error("Descriptor identity already registered");
+  }
+  LinkViewNoLock(dst_resource, inserted->second);
+  committed = true;
 }
 
 auto ResourceRegistry::FindViewNoLock(const NativeResource& resource,
-  std::size_t key_hash, ViewQuery query) const -> const ViewCacheEntry*
+  const std::size_t key_hash, ViewQuery query) const
+  -> const ResourceEntry::ViewEntry*
 {
-  const auto [first, last] = view_cache_.equal_range(
+  const auto group = view_cache_.find(
     CacheKey { .resource = resource, .view_desc_hash = key_hash });
-  for (auto it = first; it != last; ++it) {
-    if (query.domain == it->second.domain
-      && query.matches(it->second.view_description, query.description)) {
-      return &it->second;
+  if (group == view_cache_.end()) {
+    return nullptr;
+  }
+  for (const auto* entry = group->second; entry != nullptr;
+    entry = entry->cache_next) {
+    if (query.domain == entry->domain
+      && query.matches(entry->view_description, query.description)) {
+      return entry;
     }
   }
   return nullptr;
 }
 
-auto ResourceRegistry::StoreViewNoLock(
-  const CacheKey& key, ViewCacheEntry entry, ViewQuery query) -> void
+auto ResourceRegistry::PrependViewNoLock(ResourceEntry::ViewEntry& entry,
+  ResourceEntry::ViewEntry*& head) noexcept -> void
 {
-  const auto [first, last] = view_cache_.equal_range(key);
-  for (auto it = first; it != last; ++it) {
-    if (query.domain == it->second.domain
-      && query.matches(it->second.view_description, query.description)) {
-      it->second = std::move(entry);
+  // A linked entry already belongs to this group; move it to the front.
+  if (entry.cached) {
+    if (head == &entry) {
       return;
     }
+    entry.cache_previous->cache_next = entry.cache_next;
+    if (entry.cache_next != nullptr) {
+      entry.cache_next->cache_previous = entry.cache_previous;
+    }
   }
-  view_cache_.emplace(key, std::move(entry));
+  entry.cache_previous = nullptr;
+  entry.cache_next = head;
+  if (head != nullptr) {
+    head->cache_previous = &entry;
+  }
+  head = &entry;
+  entry.cached = true;
+}
+
+auto ResourceRegistry::LinkViewNoLock(
+  const NativeResource& resource, ResourceEntry::ViewEntry& entry) -> void
+{
+  DCHECK_F(!entry.cached);
+  const auto group
+    = view_cache_
+        .try_emplace(CacheKey { .resource = resource,
+                       .view_desc_hash = entry.description_hash },
+          nullptr)
+        .first;
+  PrependViewNoLock(entry, group->second);
+}
+
+auto ResourceRegistry::UnlinkViewNoLock(const NativeResource& resource,
+  ResourceEntry::ViewEntry& entry) noexcept -> void
+{
+  if (!entry.cached) {
+    return;
+  }
+  if (entry.cache_previous != nullptr) {
+    entry.cache_previous->cache_next = entry.cache_next;
+  } else {
+    const auto group = view_cache_.find(CacheKey {
+      .resource = resource, .view_desc_hash = entry.description_hash });
+    DCHECK_F(group != view_cache_.end() && group->second == &entry);
+    if (entry.cache_next != nullptr) {
+      group->second = entry.cache_next;
+    } else {
+      view_cache_.erase(group);
+    }
+  }
+  if (entry.cache_next != nullptr) {
+    entry.cache_next->cache_previous = entry.cache_previous;
+  }
+  entry.cache_previous = nullptr;
+  entry.cache_next = nullptr;
+  entry.cached = false;
 }
 
 auto ResourceRegistry::CollectDescriptorIndicesForResource(

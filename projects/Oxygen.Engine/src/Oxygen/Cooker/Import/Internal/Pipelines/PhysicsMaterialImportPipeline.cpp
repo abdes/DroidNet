@@ -4,15 +4,29 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Cooker/Import/Internal/Pipelines/PhysicsMaterialImportPipeline.h>
-
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <optional>
 #include <span>
+#include <stop_token>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/PhysicsMaterialImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -51,10 +65,16 @@ namespace {
     DCHECK_F(
       write.has_value(), "Physics material descriptor serialization failed");
     const auto bytes = stream.Data();
-    return std::vector<std::byte>(bytes.begin(), bytes.end());
+    return { bytes.begin(), bytes.end() };
   }
 
 } // namespace
+
+PhysicsMaterialImportPipeline::PhysicsMaterialImportPipeline(
+  co::ThreadPool& thread_pool)
+  : PhysicsMaterialImportPipeline(thread_pool, Config {})
+{
+}
 
 PhysicsMaterialImportPipeline::PhysicsMaterialImportPipeline(
   co::ThreadPool& thread_pool, Config config)
@@ -84,7 +104,7 @@ auto PhysicsMaterialImportPipeline::Start(co::Nursery& nursery) -> void
 
   const auto worker_count = std::max(1U, config_.worker_count);
   for (uint32_t i = 0; i < worker_count; ++i) {
-    nursery.Start([this]() -> co::Co<> { co_await Worker(); });
+    nursery.Start([this] -> co::Co<> { co_await Worker(); });
   }
 }
 
@@ -224,7 +244,8 @@ auto PhysicsMaterialImportPipeline::ComputeContentHash(
   const auto bytes = std::span<const std::byte>(
     descriptor_bytes.data(), descriptor_bytes.size());
   const auto content_hash = co_await thread_pool_.Run(
-    [bytes, stop_token](co::ThreadPool::CancelToken canceled) noexcept {
+    [bytes, stop_token](
+      co::ThreadPool::CancelToken canceled) noexcept -> base::Sha256Digest {
       if (IsStopRequested(stop_token) || canceled) {
         return data::pak::core::ContentHashDigest {};
       }

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <Oxygen/Base/Compilers.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat_world.h>
 
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
@@ -19,6 +20,8 @@ OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
  Owns script assets/resources and scripting scene-component payload records.
 */
 namespace oxygen::data::pak::scripting {
+
+inline constexpr uint8_t kScriptAssetVersion = version::kScriptAssetVersion;
 
 // NOLINTNEXTLINE(*-enum-size)
 enum class ScriptParamType : uint32_t {
@@ -88,7 +91,7 @@ static_assert(sizeof(ScriptParamRecord) == 128);
 // NOLINTNEXTLINE(*-type-member-init) - MUST be initialized by users
 struct ScriptSlotRecord {
   AssetKey script_asset_key; // References a ScriptAssetDesc
-  core::OffsetT params_array_offset = 0; // Absolute offset in PAK
+  core::OffsetT params_array_offset = 0; // Relative to the scene descriptor
   uint32_t params_count = 0; // Number of ScriptParamRecords
   int32_t execution_order = 0; // Lower = earlier.
   ScriptSlotFlags flags = ScriptSlotFlags::kNone;
@@ -124,8 +127,8 @@ static_assert(sizeof(ScriptResourceDesc) == 23);
 #pragma pack(push, 1)
 struct ScriptAssetDesc {
   core::AssetHeader header;
-  core::ResourceIndexT bytecode_resource_index = core::kNoResourceIndex;
-  core::ResourceIndexT source_resource_index = core::kNoResourceIndex;
+  ResourceReferenceIndex bytecode_resource_index = kNoResourceReference;
+  ResourceReferenceIndex source_resource_index = kNoResourceReference;
   ScriptAssetFlags flags = ScriptAssetFlags::kNone;
   char external_source_path[120] = {}; // Null-terminated, null-padded
 };

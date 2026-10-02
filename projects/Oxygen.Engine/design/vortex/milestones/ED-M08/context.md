@@ -13,16 +13,16 @@ defined by the [rendering contract](../../lld/editor-rendering.md),
 [deferred capability record](deferred-capabilities.md).
 
 Scope includes independent directional lights and shadows, explicit atmospheric
-slots, visibility/contribution/receiver behavior, contact shadows, captured-sky
-diffuse/specular lighting, Stage 13 activation and Stage 12 ambient-bridge
-retirement, exact cameras, grading, canonical material slots/emission and
+slots, visibility/contribution/receiver behavior, contact shadows, qualification
+of delivered captured-sky lighting, exact cameras, grading, canonical material slots/emission and
 procedural defaults. Qualification tools are opt-in development targets; normal
 engine/editor Debug and Release builds contain no qualification payload.
 
-The latest closed Vortex plan remains
-[VTX-M08 static SkyLight](../VTX-M08/README.md). Its evidence
-covers static specified-cubemap diffuse lighting. It does not close the ED-M08
-extension. Preserve ordinary native demo loading, offscreen/composition behavior,
+[VTX-M08 static SkyLight](../VTX-M08/README.md) supplies the static specified-cubemap
+diffuse baseline. [VX-IBL-01](../VX-IBL-01/README.md) delivers captured diffuse/specular
+lighting, Stage 13 activation and removal of the Stage 12 ambient bridge.
+Preserve these delivered capabilities while completing ED-M08's wider field parity.
+Preserve ordinary native demo loading, offscreen/composition behavior,
 feature variants and material-sidedness/mirrored-winding correctness.
 
 Broader GI/SSR/reflection probes, cubemap blend

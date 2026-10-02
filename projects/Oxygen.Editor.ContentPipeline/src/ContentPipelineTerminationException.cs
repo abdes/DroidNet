@@ -14,7 +14,7 @@ public sealed class ContentPipelineTerminationException : Exception
 {
     /// <summary>Initializes a new instance of the <see cref="ContentPipelineTerminationException"/> class.</summary>
     /// <param name="cause">The native termination failure.</param>
-    /// <param name="drainCompletion">The retained worker's tree and reader completion.</param>
+    /// <param name="drainCompletion">The retained worker and its owner's composed cleanup completion.</param>
     internal ContentPipelineTerminationException(Exception cause, Task drainCompletion)
         : base("The content worker could not be terminated. Its operation and inputs remain retained until the worker stops.", cause)
     {
@@ -22,7 +22,7 @@ public sealed class ContentPipelineTerminationException : Exception
     }
 
     /// <summary>
-    /// Gets completion of the owned worker tree and both output readers.
+    /// Gets completion of the retained worker, output readers and composed ownership cleanup.
     /// Input cleanup and release of the project operation gate must await this task.
     /// </summary>
     public Task DrainCompletion { get; }

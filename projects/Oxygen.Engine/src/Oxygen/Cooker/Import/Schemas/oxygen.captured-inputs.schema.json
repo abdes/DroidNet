@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Oxygen captured import inputs",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "inputs"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["logical_path", "exists", "metadata", "file"],
+        "properties": {
+          "logical_path": { "type": "string", "minLength": 1 },
+          "exists": { "type": "boolean" },
+          "metadata": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "size",
+                  "is_directory",
+                  "is_symlink",
+                  "last_modified_seconds",
+                  "last_modified_nanoseconds"
+                ],
+                "properties": {
+                  "size": { "type": "integer", "minimum": 0 },
+                  "is_directory": { "type": "boolean" },
+                  "is_symlink": { "type": "boolean" },
+                  "last_modified_seconds": {
+                    "type": "integer",
+                    "minimum": -62135596800,
+                    "maximum": 253402300799
+                  },
+                  "last_modified_nanoseconds": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 999999999
+                  }
+                }
+              }
+            ]
+          },
+          "file": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["path", "size", "sha256"],
+                "properties": {
+                  "path": { "type": "string", "minLength": 1 },
+                  "size": { "type": "integer", "minimum": 0 },
+                  "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

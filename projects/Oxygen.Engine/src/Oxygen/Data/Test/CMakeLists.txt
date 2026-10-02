@@ -34,6 +34,8 @@ m_gtest_program(
   All
   SOURCES
     "AssetKey_test.cpp"
+    "AssetReferences_test.cpp"
+    "PakCatalog_test.cpp"
     "BufferResource_test.cpp"
     "BuiltinGeometry_test.cpp"
     "CanonicalPrimitives_test.cpp"
@@ -49,6 +51,7 @@ m_gtest_program(
     "MeshBuilder_test.cpp"
     "MeshView_test.cpp"
     "ProceduralMeshes_test.cpp"
+    "SceneScriptLayout_test.cpp"
     "SubMesh_test.cpp"
     "TextureResource_test.cpp"
     "ToStringConverters_test.cpp"

@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stop_token>
 #include <string>
@@ -15,25 +16,41 @@
 #include <utility>
 #include <vector>
 
-#include <glm/glm.hpp>
-
-#include <Oxygen/Testing/GTest.h>
+#include <glm/ext/vector_float3.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Cooker/Import/BufferImportTypes.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
+#include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
+#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureImportDesc.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
+#include <Oxygen/Cooker/Test/Import/SourceLayoutTestSupport.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MeshType.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
-#include <Oxygen/OxCo/asio.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen::co;
@@ -48,7 +65,7 @@ namespace {
 auto MakeAssetKey(const std::uint8_t seed) -> data::AssetKey
 {
   auto bytes = std::array<std::uint8_t, data::AssetKey::kSizeBytes> {};
-  bytes[0] = seed;
+  bytes.at(0) = seed;
   return data::AssetKey::FromBytes(bytes);
 }
 
@@ -136,9 +153,9 @@ auto MakeMaterialWorkItem() -> MaterialPipeline::WorkItem
 {
   MaterialPipeline::WorkItem item;
   item.source_id = "mat0";
-  item.material_name = "Material_0";
-  item.storage_material_name = "Material_0";
-  item.shader_requests = {
+  item.material.name = "Material_0";
+  item.material.storage_name = "Material_0";
+  item.material.shader_requests = {
     ShaderRequest {
       .shader_type = 1,
       .source_path = "Vortex/Stages/Translucency/ForwardMesh_VS.hlsl",
@@ -175,7 +192,7 @@ auto MakeGeometryWorkItem() -> MeshBuildPipeline::WorkItem
     glm::vec3 { 1.0F, 0.0F, 0.0F },
     glm::vec3 { 0.0F, 1.0F, 0.0F },
   };
-  owner->indices = { 0u, 1u, 2u };
+  owner->indices = { 0U, 1U, 2U };
   owner->ranges = {
     TriangleRange {
       .material_slot = 0,
@@ -222,7 +239,12 @@ auto MakeGeometryWorkItem() -> MeshBuildPipeline::WorkItem
   item.material_keys = { default_key };
   item.default_material_key = default_key;
   item.request.source_path = "Geometry.fbx";
+  static const auto provenance
+    = std::make_shared<const MaterialSlotProvenance>(oxygen::Uuid::Generate());
+  item.request.material_slot_provenance = provenance;
   item.stop_token = {};
+  item.source_layout_witness
+    = oxygen::content::import::test::FixtureSourceLayoutWitness(item.lods);
   return item;
 }
 
@@ -273,7 +295,7 @@ NOLINT_TEST_F(PipelineConformanceTest, BufferPipelineProgressCountersUpdate)
   ThreadPool pool(loop_, 1);
 
   // Act
-  co::Run(loop_, [&]() -> Co<> {
+  co::Run(loop_, [&] -> Co<> {
     BufferPipeline pipeline(pool);
 
     OXCO_WITH_NURSERY(n)
@@ -293,9 +315,9 @@ NOLINT_TEST_F(PipelineConformanceTest, BufferPipelineProgressCountersUpdate)
 
   // Assert
   EXPECT_TRUE(result.success);
-  EXPECT_EQ(progress.submitted, 1u);
-  EXPECT_EQ(progress.completed + progress.failed, 1u);
-  EXPECT_EQ(progress.in_flight, 0u);
+  EXPECT_EQ(progress.submitted, 1U);
+  EXPECT_EQ(progress.completed + progress.failed, 1U);
+  EXPECT_EQ(progress.in_flight, 0U);
 }
 
 //! Verify progress counters update for TexturePipeline.
@@ -306,7 +328,7 @@ NOLINT_TEST_F(PipelineConformanceTest, TexturePipelineProgressCountersUpdate)
   ThreadPool pool(loop_, 1);
 
   // Act
-  co::Run(loop_, [&]() -> Co<> {
+  co::Run(loop_, [&] -> Co<> {
     TexturePipeline pipeline(pool);
 
     OXCO_WITH_NURSERY(n)
@@ -331,7 +353,7 @@ NOLINT_TEST_F(PipelineConformanceTest, MaterialPipelineProgressCountersUpdate)
   ThreadPool pool(loop_, 1);
 
   // Act
-  co::Run(loop_, [&]() -> Co<> {
+  co::Run(loop_, [&] -> Co<> {
     MaterialPipeline pipeline(pool);
 
     OXCO_WITH_NURSERY(n)
@@ -356,7 +378,7 @@ NOLINT_TEST_F(PipelineConformanceTest, GeometryPipelineProgressCountersUpdate)
   ThreadPool pool(loop_, 1);
 
   // Act
-  co::Run(loop_, [&]() -> Co<> {
+  co::Run(loop_, [&] -> Co<> {
     MeshBuildPipeline pipeline(pool);
 
     OXCO_WITH_NURSERY(n)
@@ -384,7 +406,7 @@ NOLINT_TEST_F(PipelineConformanceTest, ScenePipelineProgressCountersUpdate)
   ThreadPool pool(loop_, 1);
 
   // Act
-  co::Run(loop_, [&]() -> Co<> {
+  co::Run(loop_, [&] -> Co<> {
     ScenePipeline pipeline(pool);
 
     OXCO_WITH_NURSERY(n)
@@ -411,7 +433,7 @@ NOLINT_TEST_F(PipelineConformanceTest, BufferPipelineStopTokenCancels)
   source.request_stop();
 
   // Act
-  co::Run(loop_, [&]() -> Co<> {
+  co::Run(loop_, [&] -> Co<> {
     BufferPipeline pipeline(pool);
 
     OXCO_WITH_NURSERY(n)
@@ -442,7 +464,7 @@ NOLINT_TEST_F(PipelineConformanceTest, TexturePipelineStopTokenCancels)
   source.request_stop();
 
   // Act
-  co::Run(loop_, [&]() -> Co<> {
+  co::Run(loop_, [&] -> Co<> {
     TexturePipeline pipeline(pool);
 
     OXCO_WITH_NURSERY(n)
@@ -474,7 +496,7 @@ NOLINT_TEST_F(PipelineConformanceTest, ScenePipelineStopTokenCancels)
   source.request_stop();
 
   // Act
-  co::Run(loop_, [&]() -> Co<> {
+  co::Run(loop_, [&] -> Co<> {
     ScenePipeline pipeline(pool);
 
     OXCO_WITH_NURSERY(n)

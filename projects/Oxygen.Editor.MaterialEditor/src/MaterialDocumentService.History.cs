@@ -6,7 +6,7 @@ using DroidNet.TimeMachine;
 using DroidNet.TimeMachine.Changes;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Schemas;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 
 namespace Oxygen.Editor.MaterialEditor;
 

@@ -9,35 +9,82 @@
 #include <cctype>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <memory>
 #include <numbers>
 #include <optional>
 #include <span>
+#include <stop_token>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/vector_float2.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/ext/vector_uint4.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/matrix.hpp>
+
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Base/Span.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedLightSemantics.h>
+#include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
+#include <Oxygen/Cooker/Import/Internal/ModelGeometrySource.h>
+#include <Oxygen/Cooker/Import/Internal/ModelMaterialSource.h>
+#include <Oxygen/Cooker/Import/Internal/ModelTextureSource.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
+#include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
-#include <Oxygen/Cooker/Import/Internal/StaticScalarSourceValidation.h>
+#include <Oxygen/Cooker/Import/Internal/SourceLayoutHash.h>
+#include <Oxygen/Cooker/Import/Internal/StaticSourceValidation.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/CoordTransform.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
+#include <Oxygen/Cooker/Import/Internal/fbx/FbxMaterialTextures.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/ufbx.h>
+#include <Oxygen/Cooker/Import/Naming.h>
+#include <Oxygen/Cooker/Import/SceneSourceInspection.h>
 #include <Oxygen/Cooker/Import/TextureImportPresets.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Core/Transforms/Decompose.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content::import::adapters {
 
+namespace {
+
+  struct FbxSceneSource final {
+    std::shared_ptr<const ufbx_scene> scene;
+    std::vector<base::Sha256Digest> source_layout_witnesses;
+  };
+
+} // namespace
+
 struct FbxAdapter::Impl final {
-  std::shared_ptr<const ufbx_scene> scene_owner;
+  FbxSceneSource source;
 };
 
 FbxAdapter::FbxAdapter()
@@ -57,7 +104,7 @@ namespace {
       return false;
     }
     return std::equal(
-      prefix.begin(), prefix.end(), str.begin(), [](char a, char b) {
+      prefix.begin(), prefix.end(), str.begin(), [](char a, char b) -> bool {
         return std::tolower(static_cast<unsigned char>(a))
           == std::tolower(static_cast<unsigned char>(b));
       });
@@ -93,7 +140,7 @@ namespace {
 
   [[nodiscard]] auto ToStringView(const ufbx_string& s) -> std::string_view
   {
-    return std::string_view(s.data, s.length);
+    return { s.data, s.length };
   }
 
   [[nodiscard]] auto ResolveFileTexture(const ufbx_texture* texture)
@@ -135,91 +182,21 @@ namespace {
     p = p.lexically_normal();
     auto out = p.generic_string();
 
-#if defined(_WIN32)
-    std::transform(out.begin(), out.end(), out.begin(), [](const char c) {
-      return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    });
+#ifdef _WIN32
+    std::transform(
+      out.begin(), out.end(), out.begin(), [](const char c) -> char {
+        return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      });
 #endif
 
     return out;
   }
 
-  [[nodiscard]] auto SelectBaseColorTexture(const ufbx_material& material)
-    -> const ufbx_texture*
-  {
-    const auto& pbr = material.pbr.base_color;
-    if (!pbr.feature_disabled && pbr.texture != nullptr) {
-      return pbr.texture;
-    }
-    const auto& fbx = material.fbx.diffuse_color;
-    if (!fbx.feature_disabled && fbx.texture != nullptr) {
-      return fbx.texture;
-    }
-    return nullptr;
-  }
-
-  [[nodiscard]] auto SelectNormalTexture(const ufbx_material& material)
-    -> const ufbx_texture*
-  {
-    const auto& pbr = material.pbr.normal_map;
-    if (!pbr.feature_disabled && pbr.texture != nullptr) {
-      return pbr.texture;
-    }
-    const auto& fbx = material.fbx.normal_map;
-    if (!fbx.feature_disabled && fbx.texture != nullptr) {
-      return fbx.texture;
-    }
-    return nullptr;
-  }
-
-  [[nodiscard]] auto SelectMetallicTexture(const ufbx_material& material)
-    -> const ufbx_texture*
-  {
-    const auto& pbr = material.pbr.metalness;
-    if (!pbr.feature_disabled && pbr.texture != nullptr) {
-      return pbr.texture;
-    }
-    return nullptr;
-  }
-
-  [[nodiscard]] auto SelectRoughnessTexture(const ufbx_material& material)
-    -> const ufbx_texture*
-  {
-    const auto& pbr = material.pbr.roughness;
-    if (!pbr.feature_disabled && pbr.texture != nullptr) {
-      return pbr.texture;
-    }
-    return nullptr;
-  }
-
-  [[nodiscard]] auto SelectAmbientOcclusionTexture(
-    const ufbx_material& material) -> const ufbx_texture*
-  {
-    const auto& pbr = material.pbr.ambient_occlusion;
-    if (!pbr.feature_disabled && pbr.texture != nullptr) {
-      return pbr.texture;
-    }
-    return nullptr;
-  }
-
-  [[nodiscard]] auto SelectEmissiveTexture(const ufbx_material& material)
-    -> const ufbx_texture*
-  {
-    const auto& pbr = material.pbr.emission_color;
-    if (!pbr.feature_disabled && pbr.texture != nullptr) {
-      return pbr.texture;
-    }
-    const auto& fbx = material.fbx.emission_color;
-    if (!fbx.feature_disabled && fbx.texture != nullptr) {
-      return fbx.texture;
-    }
-    return nullptr;
-  }
-
   [[nodiscard]] auto TryReadWholeFileBytes(const std::filesystem::path& path)
     -> std::optional<std::vector<std::byte>>
   {
-    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    std::ifstream file(
+      base::ToNativePath(path), std::ios::binary | std::ios::ate);
     if (!file) {
       return std::nullopt;
     }
@@ -249,10 +226,11 @@ namespace {
   [[nodiscard]] auto TryReadFbxBoolOverride(
     const ufbx_props* props, const std::string_view name) -> std::optional<bool>
   {
-    if (props == nullptr || ufbx_find_prop(props, name.data()) == nullptr) {
+    if (props == nullptr
+      || ufbx_find_prop_len(props, name.data(), name.size()) == nullptr) {
       return std::nullopt;
     }
-    return ufbx_find_bool(props, name.data(), false);
+    return ufbx_find_bool_len(props, name.data(), name.size(), false);
   }
 
   [[nodiscard]] auto ReadImportedLightSemantics(const ufbx_props* props)
@@ -419,13 +397,13 @@ namespace {
     const auto forward = AxisToVec(axes.front);
 
     const AxisVec cross_ru {
-      .x = right.y * up.z - right.z * up.y,
-      .y = right.z * up.x - right.x * up.z,
-      .z = right.x * up.y - right.y * up.x,
+      .x = (right.y * up.z) - (right.z * up.y),
+      .y = (right.z * up.x) - (right.x * up.z),
+      .z = (right.x * up.y) - (right.y * up.x),
     };
 
-    const int det = cross_ru.x * forward.x + cross_ru.y * forward.y
-      + cross_ru.z * forward.z;
+    const int det = (cross_ru.x * forward.x) + (cross_ru.y * forward.y)
+      + (cross_ru.z * forward.z);
     return det < 0;
   }
 
@@ -533,12 +511,11 @@ namespace {
       const auto& scene = *mesh.element.scene;
       for (size_t i = 0; i < scene.skin_deformers.count; ++i) {
         const auto* deformer = scene.skin_deformers.data[i];
-        if (deformer != nullptr) {
-          if (is_connected_to(deformer->element.connections_dst, &mesh.element)
+        if ((deformer != nullptr)
+          && (is_connected_to(deformer->element.connections_dst, &mesh.element)
             || is_connected_to(
-              deformer->element.connections_src, &mesh.element)) {
-            return deformer;
-          }
+              deformer->element.connections_src, &mesh.element))) {
+          return deformer;
         }
       }
     }
@@ -568,8 +545,8 @@ namespace {
     }
 
     for (size_t i = 0; i < weights.size(); ++i) {
-      auto w = weights[i];
-      auto j = joints[i];
+      auto w = weights.at(i);
+      auto j = joints.at(i);
 
       std::array influences = {
         std::make_pair(w.x, j.x),
@@ -579,30 +556,31 @@ namespace {
       };
 
       std::sort(influences.begin(), influences.end(),
-        [](const auto& a, const auto& b) { return a.first > b.first; });
+        [](const auto& a, const auto& b) -> auto { return a.first > b.first; });
 
       size_t kept = 0;
       for (size_t k = 0; k < influences.size(); ++k) {
-        if (influences[k].first < kMinWeight) {
-          influences[k].first = 0.0F;
+        if (influences.at(k).first < kMinWeight) {
+          influences.at(k).first = 0.0F;
         }
-        if (influences[k].first > 0.0F) {
+        if (influences.at(k).first > 0.0F) {
           ++kept;
         }
       }
 
       if (kept == 0) {
         w = glm::vec4(0.0F);
-        j = glm::uvec4(0u);
+        j = glm::uvec4(0U);
       } else {
-        w = NormalizeWeights(glm::vec4 { influences[0].first,
-          influences[1].first, influences[2].first, influences[3].first });
-        j = glm::uvec4 { influences[0].second, influences[1].second,
-          influences[2].second, influences[3].second };
+        w = NormalizeWeights(
+          glm::vec4 { influences.at(0).first, influences.at(1).first,
+            influences.at(2).first, influences.at(3).first });
+        j = glm::uvec4 { influences.at(0).second, influences.at(1).second,
+          influences.at(2).second, influences.at(3).second };
       }
 
-      weights[i] = w;
-      joints[i] = j;
+      weights.at(i) = w;
+      joints.at(i) = j;
     }
   }
 
@@ -635,7 +613,7 @@ namespace {
     out.colors.reserve(mesh.num_indices);
     const auto estimated_tris
       = mesh.num_triangles > 0 ? mesh.num_triangles : mesh.num_indices;
-    out.indices.reserve(estimated_tris * 3u);
+    out.indices.reserve(estimated_tris * 3U);
 
     struct MaterialRange {
       TriangleRange range {};
@@ -644,7 +622,7 @@ namespace {
 
     std::unordered_map<uint32_t, MaterialRange> range_map;
     std::vector<uint32_t> tri_indices;
-    tri_indices.resize(static_cast<size_t>(mesh.max_face_triangles) * 3u);
+    tri_indices.resize(static_cast<size_t>(mesh.max_face_triangles) * 3U);
     size_t triangulated_faces = 0;
 
     for (size_t idx = 0; idx < mesh.num_indices; ++idx) {
@@ -678,7 +656,7 @@ namespace {
       material_list = &material_node->materials;
     }
 
-    std::vector face_material_slots(mesh.num_faces, material_key_count);
+    std::vector face_material_slots(mesh.num_faces, UFBX_NO_INDEX);
     if (mesh.material_parts.data != nullptr && mesh.material_parts.count > 0) {
       for (size_t part_i = 0; part_i < mesh.material_parts.count; ++part_i) {
         const auto& part = mesh.material_parts.data[part_i];
@@ -690,14 +668,14 @@ namespace {
         for (size_t fi = 0; fi < face_count; ++fi) {
           const auto face_index = part.face_indices.data[fi];
           if (face_index < mesh.num_faces) {
-            face_material_slots[face_index] = slot;
+            face_material_slots.at(face_index) = slot;
           }
         }
       }
     } else if (mesh.face_material.data != nullptr
       && mesh.face_material.count >= mesh.num_faces) {
       for (size_t face_i = 0; face_i < mesh.num_faces; ++face_i) {
-        face_material_slots[face_i] = mesh.face_material.data[face_i];
+        face_material_slots.at(face_i) = mesh.face_material.data[face_i];
       }
     } else {
       diagnostics.push_back(MakeWarningDiagnostic("mesh.face_material_missing",
@@ -706,7 +684,8 @@ namespace {
     }
 
     for (size_t face_i = 0; face_i < mesh.num_faces; ++face_i) {
-      const auto face = mesh.faces[face_i];
+      const auto face
+        = base::CheckedAt(std::span(mesh.faces.data, mesh.faces.count), face_i);
       if (face.num_indices < 3) {
         diagnostics.push_back(MakeWarningDiagnostic("mesh.invalid_face",
           "FBX mesh contains face with fewer than 3 indices; skipping",
@@ -715,28 +694,26 @@ namespace {
       }
 
       uint32_t material_slot = material_key_count;
-      if (!face_material_slots.empty() && face_i < face_material_slots.size()
-        && material_list != nullptr && material_list->data != nullptr
-        && material_list->count > 0) {
-        const uint32_t slot = face_material_slots[face_i];
-        if (slot != UFBX_NO_INDEX && slot < material_list->count) {
-          const auto* material = material_list->data[slot];
-          if (material != nullptr) {
-            if (const auto it = scene_material_index_by_ptr.find(material);
-              it != scene_material_index_by_ptr.end()) {
-              material_slot = it->second;
-            }
+      const uint32_t source_slot = face_material_slots.at(face_i);
+      if (material_list != nullptr && material_list->data != nullptr
+        && source_slot != UFBX_NO_INDEX && source_slot < material_list->count) {
+        const auto* material = material_list->data[source_slot];
+        if (material != nullptr) {
+          if (const auto it = scene_material_index_by_ptr.find(material);
+            it != scene_material_index_by_ptr.end()) {
+            material_slot = it->second;
           }
         }
       }
 
-      auto it = range_map.find(material_slot);
+      auto it = range_map.find(source_slot);
       if (it == range_map.end()) {
         it = range_map
-               .emplace(material_slot,
+               .emplace(source_slot,
                  MaterialRange {
                    .range = TriangleRange {
                      .material_slot = material_slot,
+                     .source_slot = source_slot,
                      .first_index = 0,
                      .index_count = 0,
                    },
@@ -754,9 +731,9 @@ namespace {
         continue;
       }
 
-      const auto tri_index_count = static_cast<size_t>(tri_count) * 3u;
+      const auto tri_index_count = static_cast<size_t>(tri_count) * 3U;
       for (size_t i = 0; i < tri_index_count; ++i) {
-        const auto idx = tri_indices[i];
+        const auto idx = tri_indices.at(i);
         if (idx >= mesh.num_indices) {
           diagnostics.push_back(MakeErrorDiagnostic("mesh.index_oob",
             "FBX mesh contains out-of-range indices", source_id, object_path));
@@ -784,14 +761,14 @@ namespace {
 
       for (size_t i = 0; i < mesh.num_vertices; ++i) {
         if (i >= skin_deformer->vertices.count) {
-          out.joint_indices.push_back(glm::uvec4(0u));
+          out.joint_indices.push_back(glm::uvec4(0U));
           out.joint_weights.push_back(glm::vec4(0.0F));
           continue;
         }
 
         const auto vertex = skin_deformer->vertices.data[i];
-        glm::uvec4 joints(0u);
-        glm::vec4 weights(0.0F);
+        std::array<uint32_t, 4> joints {};
+        std::array<float, 4> weights {};
 
         const size_t count
           = (std::min)(static_cast<size_t>(vertex.num_weights), size_t { 4 });
@@ -802,12 +779,12 @@ namespace {
           }
           const auto weight = skin_deformer->weights.data[weight_index];
           const auto slot = static_cast<glm::uvec4::length_type>(w);
-          joints[slot] = static_cast<uint32_t>(weight.cluster_index);
-          weights[slot] = static_cast<float>(weight.weight);
+          joints.at(slot) = static_cast<uint32_t>(weight.cluster_index);
+          weights.at(slot) = static_cast<float>(weight.weight);
         }
 
-        out.joint_indices.push_back(joints);
-        out.joint_weights.push_back(weights);
+        out.joint_indices.push_back(glm::make_vec4(joints.data()));
+        out.joint_weights.push_back(glm::make_vec4(weights.data()));
       }
 
       CleanSkinWeights(out.joint_weights, out.joint_indices, diagnostics,
@@ -821,7 +798,7 @@ namespace {
     }
 
     std::sort(sorted_ranges.begin(), sorted_ranges.end(),
-      [](const auto& a, const auto& b) { return a.first < b.first; });
+      [](const auto& a, const auto& b) -> auto { return a.first < b.first; });
 
     out.ranges.reserve(sorted_ranges.size());
     for (auto& entry : sorted_ranges) {
@@ -1100,7 +1077,7 @@ namespace {
 
   struct ResolvedTextureSource final {
     TexturePipeline::SourceBytes bytes;
-    std::filesystem::path source_path;
+    std::filesystem::path source_path {};
   };
 
   [[nodiscard]] auto ResolveTextureSourceBytes(const TextureIdentity& identity,
@@ -1113,7 +1090,7 @@ namespace {
       return std::nullopt;
     }
 
-    const auto make_placeholder = []() -> ResolvedTextureSource {
+    const auto make_placeholder = [] -> ResolvedTextureSource {
       auto bytes = std::make_shared<std::vector<std::byte>>();
       return ResolvedTextureSource {
         .bytes = TexturePipeline::SourceBytes {
@@ -1199,12 +1176,7 @@ namespace {
       return false;
     }
 
-    return SelectBaseColorTexture(*material) != nullptr
-      || SelectNormalTexture(*material) != nullptr
-      || SelectMetallicTexture(*material) != nullptr
-      || SelectRoughnessTexture(*material) != nullptr
-      || SelectAmbientOcclusionTexture(*material) != nullptr
-      || SelectEmissiveTexture(*material) != nullptr;
+    return FbxMaterialTextures::From(*material).Any();
   }
 
   [[nodiscard]] auto BuildSceneSourceId(
@@ -1265,9 +1237,58 @@ namespace {
     };
   }
 
+  auto FbxSourceLayoutWitness(const ufbx_mesh& mesh) -> base::Sha256Digest
+  {
+    SourceLayoutHash hash("oxygen.fbx-source-layout/v1");
+    hash.AddCount(mesh.vertices.count);
+    for (const auto& position :
+      std::span(mesh.vertices.data, mesh.vertices.count)) {
+      hash.AddFloat(position.x);
+      hash.AddFloat(position.y);
+      hash.AddFloat(position.z);
+    }
+    hash.AddCount(mesh.vertex_indices.count);
+    for (const auto index :
+      std::span(mesh.vertex_indices.data, mesh.vertex_indices.count)) {
+      hash.Add(index);
+    }
+    hash.AddCount(mesh.faces.count);
+    for (const auto& face : std::span(mesh.faces.data, mesh.faces.count)) {
+      hash.Add(face.index_begin);
+      hash.Add(face.num_indices);
+    }
+    hash.AddCount(mesh.face_material.count);
+    for (const auto declaration :
+      std::span(mesh.face_material.data, mesh.face_material.count)) {
+      hash.Add(declaration);
+    }
+    hash.AddCount(mesh.material_parts.count);
+    for (const auto& part :
+      std::span(mesh.material_parts.data, mesh.material_parts.count)) {
+      hash.Add(part.index);
+      hash.AddCount(part.face_indices.count);
+      for (const auto face :
+        std::span(part.face_indices.data, part.face_indices.count)) {
+        hash.Add(face);
+      }
+    }
+    return hash.Finish();
+  }
+
+  auto CaptureFbxSourceLayouts(const ufbx_scene& scene)
+    -> std::vector<base::Sha256Digest>
+  {
+    std::vector<base::Sha256Digest> witnesses;
+    witnesses.reserve(scene.meshes.count);
+    for (const auto* mesh : std::span(scene.meshes.data, scene.meshes.count)) {
+      witnesses.push_back(FbxSourceLayoutWitness(*mesh));
+    }
+    return witnesses;
+  }
+
   [[nodiscard]] auto LoadSceneFromFile(const std::filesystem::path& path,
-    const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics)
-    -> std::shared_ptr<const ufbx_scene>
+    const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics,
+    const ModelParseMode mode = ModelParseMode::kGeometry) -> FbxSceneSource
   {
     if (input.stop_token.stop_requested()) {
       DLOG_F(
@@ -1288,6 +1309,7 @@ namespace {
       return {};
     }
 
+    FbxSceneSource loaded;
     ufbx_load_opts opts {};
     ufbx_error error {};
 
@@ -1308,7 +1330,7 @@ namespace {
       target_unit_meters.has_value()) {
       opts.target_unit_meters = *target_unit_meters;
     }
-    opts.generate_missing_normals = true;
+    opts.generate_missing_normals = mode == ModelParseMode::kGeometry;
     opts.skip_skin_vertices = false;
     opts.clean_skin_weights = true;
 
@@ -1320,16 +1342,22 @@ namespace {
         .front = UFBX_COORDINATE_AXIS_UNKNOWN,
       };
       probe_opts.target_camera_axes = probe_opts.target_axes;
+      probe_opts.target_unit_meters = 0.0;
+      probe_opts.generate_missing_normals = false;
       probe_opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_NONE;
       probe_opts.handedness_conversion_retain_winding = false;
       probe_opts.reverse_winding = false;
 
       ufbx_error probe_error {};
-      ufbx_scene* probe_scene
-        = ufbx_load_file(path.string().c_str(), &probe_opts, &probe_error);
+      std::unique_ptr<ufbx_scene, decltype(&ufbx_free_scene)> probe_scene(
+        ufbx_load_file(path.string().c_str(), &probe_opts, &probe_error),
+        &ufbx_free_scene);
       if (probe_scene != nullptr) {
         const auto handedness = IsLeftHandedAxes(probe_scene->settings.axes);
-        ufbx_free_scene(probe_scene);
+        if (mode == ModelParseMode::kGeometry) {
+          loaded.source_layout_witnesses
+            = CaptureFbxSourceLayouts(*probe_scene);
+        }
 
         if (!handedness.has_value()) {
           diagnostics.push_back(MakeWarningDiagnostic("fbx.axis_unknown",
@@ -1359,15 +1387,22 @@ namespace {
       return {};
     }
 
-    return std::shared_ptr<const ufbx_scene>(
-      scene, [](const ufbx_scene* value) {
-        ufbx_free_scene(const_cast<ufbx_scene*>(value));
-      });
+    loaded.scene = std::shared_ptr<const ufbx_scene>(
+      scene, [](ufbx_scene* value) -> void { ufbx_free_scene(value); });
+    if (mode == ModelParseMode::kGeometry
+      && loaded.source_layout_witnesses.size() != scene->meshes.count) {
+      diagnostics.push_back(MakeErrorDiagnostic(
+        "mesh.source_layout_unavailable",
+        "FBX source layout could not be captured before coordinate conversion",
+        input.source_id_prefix, input.object_path_prefix));
+      return {};
+    }
+    return loaded;
   }
 
   [[nodiscard]] auto LoadSceneFromMemory(const std::span<const std::byte> bytes,
-    const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics)
-    -> std::shared_ptr<const ufbx_scene>
+    const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics,
+    const ModelParseMode mode = ModelParseMode::kGeometry) -> FbxSceneSource
   {
     if (input.stop_token.stop_requested()) {
       DLOG_F(WARNING, "FBX load canceled (memory): source_id='{}'",
@@ -1388,6 +1423,7 @@ namespace {
       return {};
     }
 
+    FbxSceneSource loaded;
     ufbx_load_opts opts {};
     ufbx_error error {};
 
@@ -1408,7 +1444,7 @@ namespace {
       target_unit_meters.has_value()) {
       opts.target_unit_meters = *target_unit_meters;
     }
-    opts.generate_missing_normals = true;
+    opts.generate_missing_normals = mode == ModelParseMode::kGeometry;
     opts.skip_skin_vertices = false;
     opts.clean_skin_weights = true;
 
@@ -1420,16 +1456,22 @@ namespace {
         .front = UFBX_COORDINATE_AXIS_UNKNOWN,
       };
       probe_opts.target_camera_axes = probe_opts.target_axes;
+      probe_opts.target_unit_meters = 0.0;
+      probe_opts.generate_missing_normals = false;
       probe_opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_NONE;
       probe_opts.handedness_conversion_retain_winding = false;
       probe_opts.reverse_winding = false;
 
       ufbx_error probe_error {};
-      ufbx_scene* probe_scene = ufbx_load_memory(
-        bytes.data(), bytes.size(), &probe_opts, &probe_error);
+      std::unique_ptr<ufbx_scene, decltype(&ufbx_free_scene)> probe_scene(
+        ufbx_load_memory(bytes.data(), bytes.size(), &probe_opts, &probe_error),
+        &ufbx_free_scene);
       if (probe_scene != nullptr) {
         const auto handedness = IsLeftHandedAxes(probe_scene->settings.axes);
-        ufbx_free_scene(probe_scene);
+        if (mode == ModelParseMode::kGeometry) {
+          loaded.source_layout_witnesses
+            = CaptureFbxSourceLayouts(*probe_scene);
+        }
 
         if (!handedness.has_value()) {
           diagnostics.push_back(MakeWarningDiagnostic("fbx.axis_unknown",
@@ -1461,10 +1503,17 @@ namespace {
       return {};
     }
 
-    return std::shared_ptr<const ufbx_scene>(
-      scene, [](const ufbx_scene* value) {
-        ufbx_free_scene(const_cast<ufbx_scene*>(value));
-      });
+    loaded.scene = std::shared_ptr<const ufbx_scene>(
+      scene, [](ufbx_scene* value) -> void { ufbx_free_scene(value); });
+    if (mode == ModelParseMode::kGeometry
+      && loaded.source_layout_witnesses.size() != scene->meshes.count) {
+      diagnostics.push_back(MakeErrorDiagnostic(
+        "mesh.source_layout_unavailable",
+        "FBX source layout could not be captured before coordinate conversion",
+        input.source_id_prefix, input.object_path_prefix));
+      return {};
+    }
+    return loaded;
   }
 
   [[nodiscard]] auto BuildFbxBakePlan(const ufbx_scene& scene,
@@ -1489,14 +1538,14 @@ namespace {
       if (node == nullptr || node->mesh == nullptr) {
         continue;
       }
-      auto& input = nodes[index];
+      auto& input = nodes.at(index);
       input.mesh_index = mesh_indices.at(node->mesh);
       input.local_transform = MakeLocalTransformMatrix(node->local_transform);
       const auto& materials
         = node->materials.count != 0 ? node->materials : node->mesh->materials;
       const std::vector<const ufbx_material*> bindings(
         materials.data, materials.data + materials.count);
-      auto& groups = material_groups[input.mesh_index];
+      auto& groups = material_groups.at(input.mesh_index);
       const auto match = std::ranges::find(groups, bindings);
       input.material_binding = static_cast<size_t>(match - groups.begin());
       if (match == groups.end()) {
@@ -1514,7 +1563,67 @@ namespace {
       nodes, emit_mesh, policy.bake_transforms_into_meshes);
   }
 
+  auto PrepareGeometryNames(const ufbx_scene& scene, const AdapterInput& input)
+    -> ModelGeometryPreparation
+  {
+    auto result = ModelGeometryPreparation {};
+    if (input.stop_token.stop_requested()) {
+      result.success = false;
+      result.diagnostics.push_back(
+        MakeCancelDiagnostic(input.source_id_prefix));
+      return result;
+    }
+    CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
+    const auto scene_name = input.request.GetSceneName();
+    const auto source_path_text = input.request.source_path.string();
+    const auto bake_plan
+      = BuildFbxBakePlan(scene, input.request.options.coordinate);
+    for (size_t index = 0; index < bake_plan.retained_reasons.size(); ++index) {
+      if (!bake_plan.retained_reasons.at(index).empty()) {
+        result.diagnostics.push_back(
+          MakeWarningDiagnostic("mesh.transform_bake_retained",
+            "Retained authored node transform: "
+              + bake_plan.retained_reasons.at(index),
+            input.source_id_prefix, "/nodes/" + std::to_string(index)));
+      }
+    }
+    result.sources.reserve(bake_plan.variants.size());
+    for (size_t variant_index = 0; variant_index < bake_plan.variants.size();
+      ++variant_index) {
+      if (input.stop_token.stop_requested()) {
+        result.success = false;
+        result.diagnostics.push_back(
+          MakeCancelDiagnostic(input.source_id_prefix));
+        return result;
+      }
+      const auto& variant = bake_plan.variants.at(variant_index);
+      const auto* mesh = scene.meshes.data[variant.mesh_index];
+      if (mesh == nullptr) {
+        continue;
+      }
+      const auto authored_name
+        = std::string(ToStringView(mesh->name)) + variant.name_suffix;
+      const auto context = NamingContext {
+        .kind = ImportNameKind::kMesh,
+        .ordinal = static_cast<uint32_t>(variant.mesh_index),
+        .parent_name = {},
+        .source_id = source_path_text,
+        .scene_namespace = scene_name,
+      };
+      auto name = input.naming_service->MakeUniqueName(authored_name, context);
+      auto source_id = BuildSourceId(
+        input.source_id_prefix, name, static_cast<uint32_t>(variant_index));
+      result.sources.push_back({
+        .variant = variant,
+        .name = std::move(name),
+        .source_id = std::move(source_id),
+      });
+    }
+    return result;
+  }
+
   [[nodiscard]] auto StreamWorkItemsFromScene(const ufbx_scene& scene,
+    const std::span<const base::Sha256Digest> source_witnesses,
     const AdapterInput& input, GeometryWorkItemSink& sink)
     -> WorkItemStreamResult
   {
@@ -1541,23 +1650,17 @@ namespace {
     DLOG_F(2, "FBX scene meshes={} skin_deformers={}", scene.meshes.count,
       scene.skin_deformers.count);
 
-    const auto scene_name = input.request.GetSceneName();
-
-    const auto bake_plan
-      = BuildFbxBakePlan(scene, input.request.options.coordinate);
-    for (size_t index = 0; index < bake_plan.retained_reasons.size(); ++index) {
-      if (!bake_plan.retained_reasons[index].empty()) {
-        result.diagnostics.push_back(
-          MakeWarningDiagnostic("mesh.transform_bake_retained",
-            "Retained authored node transform: "
-              + bake_plan.retained_reasons[index],
-            input.source_id_prefix, "/nodes/" + std::to_string(index)));
-      }
+    auto prepared = PrepareGeometryNames(scene, input);
+    result.success = prepared.success;
+    result.diagnostics = std::move(prepared.diagnostics);
+    if (!result.success) {
+      return result;
     }
-    for (size_t variant_index = 0; variant_index < bake_plan.variants.size();
-      ++variant_index) {
-      const auto& variant = bake_plan.variants[variant_index];
-      const auto mesh_i = static_cast<uint32_t>(variant.mesh_index);
+    for (const auto& source : prepared.sources) {
+      const auto& variant = source.variant;
+      const auto mesh_i = variant.mesh_index;
+      const auto* mesh = scene.meshes.data[variant.mesh_index];
+      const auto& mesh_name = source.name;
       if (input.stop_token.stop_requested()) {
         result.success = false;
         result.diagnostics.push_back(
@@ -1565,34 +1668,10 @@ namespace {
         return result;
       }
 
-      const auto* mesh = scene.meshes.data[mesh_i];
-      if (mesh == nullptr) {
-        continue;
-      }
-
-      const auto authored_name
-        = std::string(ToStringView(mesh->name)) + variant.name_suffix;
-      DLOG_F(2,
-        "FBX mesh[{}] name='{}' indices={} faces={} skin_deformers={} "
-        "all_deformers={} instances={} conn_src={} conn_dst={}",
-        mesh_i, authored_name, mesh->num_indices, mesh->num_faces,
-        mesh->skin_deformers.count, mesh->all_deformers.count,
-        mesh->instances.count, mesh->element.connections_src.count,
-        mesh->element.connections_dst.count);
-
-      const NamingContext mesh_context {
-        .kind = ImportNameKind::kMesh,
-        .ordinal = mesh_i,
-        .parent_name = {},
-        .source_id = input.request.source_path.string(),
-        .scene_namespace = scene_name,
-      };
-      const auto mesh_name
-        = input.naming_service->MakeUniqueName(authored_name, mesh_context);
-
       MeshBuildPipeline::WorkItem item;
-      item.source_id = BuildSourceId(input.source_id_prefix, mesh_name,
-        static_cast<uint32_t>(variant_index));
+      item.source_layout_witness
+        = oxygen::base::CheckedAt(source_witnesses, mesh_i);
+      item.source_id = source.source_id;
       item.mesh_name = mesh_name;
       item.storage_mesh_name = mesh_name;
       item.source_key = variant.representative_node != internal::kNoBakeIndex
@@ -1628,7 +1707,7 @@ namespace {
       std::vector<ImportDiagnostic> diagnostics;
       auto buffers = BuildTriangleBuffers(*mesh, material_node,
         scene_material_index_by_ptr,
-        static_cast<uint32_t>(input.material_keys.size()), diagnostics,
+        static_cast<uint32_t>(scene_material_index_by_ptr.size()), diagnostics,
         item.source_id, item.mesh_name);
       if (!buffers.has_value()) {
         result.diagnostics.insert(
@@ -1638,6 +1717,14 @@ namespace {
       }
 
       if (!buffers->ranges.empty()) {
+        for (const auto& range : buffers->ranges) {
+          const auto* material = range.source_slot < material_list->count
+            ? material_list->data[range.source_slot]
+            : nullptr;
+          item.material_slot_names.try_emplace(range.source_slot,
+            material != nullptr ? std::string(ToStringView(material->name))
+                                : "Default");
+        }
         uint32_t max_slot = 0;
         for (const auto& range : buffers->ranges) {
           max_slot = (std::max)(max_slot, range.material_slot);
@@ -1645,12 +1732,12 @@ namespace {
 
         std::vector<uint8_t> used(max_slot + 1, 0);
         for (const auto& range : buffers->ranges) {
-          used[range.material_slot] = static_cast<uint8_t>(1);
+          used.at(range.material_slot) = static_cast<uint8_t>(1);
         }
 
         item.material_slots_used.clear();
         for (uint32_t i = 0; i < used.size(); ++i) {
-          if (used[i] != 0U) {
+          if (used.at(i) != 0U) {
             item.material_slots_used.push_back(i);
           }
         }
@@ -1720,13 +1807,17 @@ auto FbxAdapter::InspectSource(const std::filesystem::path& source_path,
   const AdapterInput& input) -> SceneSourceInspection
 {
   SceneSourceInspection result;
+  auto adapter = FbxAdapter {};
   result.format = "fbx";
-  const auto scene = LoadSceneFromFile(source_path, input, result.diagnostics);
+  adapter.impl_->source = {};
+  auto loaded = LoadSceneFromFile(
+    source_path, input, result.diagnostics, ModelParseMode::kMetadata);
+  const auto& scene = loaded.scene;
   if (!scene) {
     return result;
   }
   result.parsed = true;
-  result.supported = internal::ValidateStaticScalarSource(
+  result.supported = internal::ValidateStaticSource(
     *scene, input.source_id_prefix, result.diagnostics);
   const auto axis_name = [](const ufbx_coordinate_axis axis) -> std::string {
     switch (axis) {
@@ -1766,16 +1857,31 @@ auto FbxAdapter::InspectSource(const std::filesystem::path& source_path,
   result.mesh_count = scene->meshes.count;
   result.material_count = scene->materials.count;
   result.node_count = scene->nodes.count;
-  // Supported scalar FBX contains its geometry and materials in the primary
-  // file. External textures/caches are rejected by the policy above.
+  adapter.impl_->source = std::move(loaded);
+  if (result.supported) {
+    for (const auto& texture :
+      adapter.CollectExternalTextureSources(input, result.diagnostics)) {
+      result.external_files.push_back(
+        texture.resolved_path.lexically_relative(source_path.parent_path())
+          .generic_string());
+    }
+    result.supported
+      = std::ranges::none_of(result.diagnostics, [](const auto& diagnostic) {
+          return diagnostic.severity == ImportSeverity::kError;
+        });
+  }
+  std::ranges::sort(result.external_files);
+  const auto duplicates = std::ranges::unique(result.external_files);
+  result.external_files.erase(duplicates.begin(), duplicates.end());
   return result;
 }
 
 auto FbxAdapter::Parse(const std::filesystem::path& source_path,
-  const AdapterInput& input) -> ParseResult
+  const AdapterInput& input, const ModelParseMode mode) -> ParseResult
 {
   ParseResult result;
-  auto scene = LoadSceneFromFile(source_path, input, result.diagnostics);
+  auto loaded = LoadSceneFromFile(source_path, input, result.diagnostics, mode);
+  const auto& scene = loaded.scene;
   if (!scene) {
     DLOG_F(ERROR, "FBX parse failed: path='{}' diagnostics={}",
       source_path.string(), result.diagnostics.size());
@@ -1783,29 +1889,30 @@ auto FbxAdapter::Parse(const std::filesystem::path& source_path,
       result.diagnostics.push_back(MakeErrorDiagnostic("fbx.parse_failed",
         "FBX parse failed without diagnostics", input.source_id_prefix, ""));
     }
-    impl_->scene_owner.reset();
+    impl_->source = {};
     result.success = false;
     return result;
   }
 
-  if (input.request.options.scene_content_policy
-      == SceneContentPolicy::kStaticScalar
-    && !internal::ValidateStaticScalarSource(
+  if (input.request.options.scene_content_policy == SceneContentPolicy::kStatic
+    && !internal::ValidateStaticSource(
       *scene, input.source_id_prefix, result.diagnostics)) {
-    impl_->scene_owner.reset();
+    impl_->source = {};
     result.success = false;
     return result;
   }
 
-  impl_->scene_owner = std::move(scene);
+  impl_->source = std::move(loaded);
   return result;
 }
 
 auto FbxAdapter::Parse(const std::span<const std::byte> source_bytes,
-  const AdapterInput& input) -> ParseResult
+  const AdapterInput& input, const ModelParseMode mode) -> ParseResult
 {
   ParseResult result;
-  auto scene = LoadSceneFromMemory(source_bytes, input, result.diagnostics);
+  auto loaded
+    = LoadSceneFromMemory(source_bytes, input, result.diagnostics, mode);
+  const auto& scene = loaded.scene;
   if (!scene) {
     DLOG_F(ERROR, "FBX parse failed (memory): diagnostics={}",
       result.diagnostics.size());
@@ -1813,28 +1920,41 @@ auto FbxAdapter::Parse(const std::span<const std::byte> source_bytes,
       result.diagnostics.push_back(MakeErrorDiagnostic("fbx.parse_failed",
         "FBX parse failed without diagnostics", input.source_id_prefix, ""));
     }
-    impl_->scene_owner.reset();
+    impl_->source = {};
     result.success = false;
     return result;
   }
 
-  if (input.request.options.scene_content_policy
-      == SceneContentPolicy::kStaticScalar
-    && !internal::ValidateStaticScalarSource(
+  if (input.request.options.scene_content_policy == SceneContentPolicy::kStatic
+    && !internal::ValidateStaticSource(
       *scene, input.source_id_prefix, result.diagnostics)) {
-    impl_->scene_owner.reset();
+    impl_->source = {};
     result.success = false;
     return result;
   }
 
-  impl_->scene_owner = std::move(scene);
+  impl_->source = std::move(loaded);
   return result;
+}
+
+auto FbxAdapter::PrepareGeometry(const AdapterInput& input) const
+  -> ModelGeometryPreparation
+{
+  if (!impl_->source.scene) {
+    auto result = ModelGeometryPreparation {};
+    result.success = false;
+    result.diagnostics.push_back(MakeErrorDiagnostic("fbx.scene.not_parsed",
+      "fbx adapter has no parsed scene", input.source_id_prefix,
+      input.object_path_prefix));
+    return result;
+  }
+  return PrepareGeometryNames(*impl_->source.scene, input);
 }
 
 auto FbxAdapter::BuildWorkItems(GeometryWorkTag, GeometryWorkItemSink& sink,
   const AdapterInput& input) -> WorkItemStreamResult
 {
-  if (!impl_->scene_owner) {
+  if (!impl_->source.scene) {
     WorkItemStreamResult result;
     result.success = false;
     result.diagnostics.push_back(MakeErrorDiagnostic("fbx.scene.not_parsed",
@@ -1843,14 +1963,26 @@ auto FbxAdapter::BuildWorkItems(GeometryWorkTag, GeometryWorkItemSink& sink,
     return result;
   }
 
-  return StreamWorkItemsFromScene(*impl_->scene_owner, input, sink);
+  if (impl_->source.source_layout_witnesses.size()
+    != impl_->source.scene->meshes.count) {
+    auto result = WorkItemStreamResult {};
+    result.success = false;
+    result.diagnostics.push_back(
+      MakeErrorDiagnostic("mesh.source_layout_unavailable",
+        "Geometry production requires a geometry-mode parse",
+        input.source_id_prefix, input.object_path_prefix));
+    return result;
+  }
+
+  return StreamWorkItemsFromScene(
+    *impl_->source.scene, impl_->source.source_layout_witnesses, input, sink);
 }
 
-auto FbxAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
-  const AdapterInput& input) -> WorkItemStreamResult
+auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
+  -> ModelMaterialPreparation
 {
-  if (!impl_->scene_owner) {
-    WorkItemStreamResult result;
+  if (!impl_->source.scene) {
+    ModelMaterialPreparation result;
     result.success = false;
     result.diagnostics.push_back(MakeErrorDiagnostic("fbx.scene.not_parsed",
       "FBX adapter has no parsed scene", input.source_id_prefix,
@@ -1858,14 +1990,14 @@ auto FbxAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
     return result;
   }
 
-  WorkItemStreamResult result;
+  ModelMaterialPreparation result;
   if (input.stop_token.stop_requested()) {
     result.success = false;
     result.diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
     return result;
   }
 
-  const auto& scene = *impl_->scene_owner;
+  const auto& scene = *impl_->source.scene;
 
   std::unordered_map<const ufbx_texture*, std::string> texture_ids;
 
@@ -1891,49 +2023,49 @@ auto FbxAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
     return identity->texture_id;
   };
 
-  auto apply_binding
-    = [&](MaterialTextureBinding& binding,
-        std::optional<std::string> texture_id, const TextureUsage usage) {
-        if (!texture_id.has_value()) {
-          return;
-        }
+  auto apply_binding = [&](MaterialTextureBinding& binding,
+                         std::optional<std::string> texture_id,
+                         const TextureUsage usage) -> void {
+    if (!texture_id.has_value()) {
+      return;
+    }
 
-        binding.assigned = true;
-        binding.source_id
-          = BuildTextureSourceId(input.source_id_prefix, *texture_id, usage);
-        binding.index = 0;
-        binding.uv_set = 0;
-      };
+    binding.assigned = true;
+    binding.source_id
+      = BuildTextureSourceId(input.source_id_prefix, *texture_id, usage);
+    binding.index = 0;
+    binding.uv_set = 0;
+  };
 
   const auto material_count = static_cast<uint32_t>(scene.materials.count);
+  result.sources.reserve(material_count == 0U ? 1U : material_count);
   if (material_count == 0) {
     CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
     const auto scene_name = input.request.GetSceneName();
+    const auto source_path_text = input.request.source_path.string();
     const NamingContext material_context {
       .kind = ImportNameKind::kMaterial,
       .ordinal = 0,
       .parent_name = {},
-      .source_id = input.request.source_path.string(),
+      .source_id = source_path_text,
       .scene_namespace = scene_name,
     };
     const auto material_name
       = input.naming_service->MakeUniqueName("M_Default", material_context);
 
-    MaterialPipeline::WorkItem item;
-    item.material_name = material_name;
+    ModelMaterialSource item;
+    item.material.name = material_name;
     item.source_id
-      = BuildSourceId(input.source_id_prefix, item.material_name, 0);
-    item.storage_material_name = material_name;
-    item.material_domain = data::MaterialDomain::kOpaque;
-    item.alpha_mode = MaterialAlphaMode::kOpaque;
-    item.request = input.request;
-    item.naming_service = input.naming_service;
-    item.stop_token = input.stop_token;
+      = BuildSourceId(input.source_id_prefix, item.material.name, 0);
+    item.material.storage_name = material_name;
+    item.material.domain = data::MaterialDomain::kOpaque;
+    item.material.alpha_mode = MaterialAlphaMode::kOpaque;
 
-    if (!sink.Consume(std::move(item))) {
+    if (!item.material.Validate(item.source_id, result.diagnostics)) {
+      result.success = false;
       return result;
     }
-    ++result.emitted;
+    result.sources.push_back(std::move(item));
     return result;
   }
 
@@ -1947,6 +2079,7 @@ auto FbxAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
 
     CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
     const auto scene_name = input.request.GetSceneName();
+    const auto source_path_text = input.request.source_path.string();
 
     const auto* material = scene.materials.data[i];
     const auto authored_name = material != nullptr
@@ -1956,29 +2089,29 @@ auto FbxAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
       .kind = ImportNameKind::kMaterial,
       .ordinal = i,
       .parent_name = {},
-      .source_id = input.request.source_path.string(),
+      .source_id = source_path_text,
       .scene_namespace = scene_name,
     };
     const auto material_name
       = input.naming_service->MakeUniqueName(authored_name, material_context);
 
-    MaterialPipeline::WorkItem item;
+    ModelMaterialSource item;
     item.source_id = BuildSourceId(input.source_id_prefix, material_name, i);
-    item.material_name = material_name;
-    item.storage_material_name = material_name;
+    item.material.name = material_name;
+    item.material.storage_name = material_name;
     item.source_key = material;
-    item.material_domain = data::MaterialDomain::kOpaque;
-    item.alpha_mode = MaterialAlphaMode::kOpaque;
+    item.material.domain = data::MaterialDomain::kOpaque;
+    item.material.alpha_mode = MaterialAlphaMode::kOpaque;
 
     if (material != nullptr) {
-      ufbx_vec4 base = { 1.0, 1.0, 1.0, 1.0 };
+      ufbx_vec4 base = { { 1.0, 1.0, 1.0, 1.0 } };
       if (material->pbr.base_color.has_value
         && material->pbr.base_color.value_components >= 3) {
         base = material->pbr.base_color.value_vec4;
       } else if (material->fbx.diffuse_color.has_value
         && material->fbx.diffuse_color.value_components >= 3) {
         const auto dc = material->fbx.diffuse_color.value_vec3;
-        base = { dc.x, dc.y, dc.z, 1.0 };
+        base = { { dc.x, dc.y, dc.z, 1.0 } };
       }
 
       float base_factor = 1.0F;
@@ -1988,35 +2121,37 @@ auto FbxAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
         base_factor = Clamp01(material->fbx.diffuse_factor.value_real);
       }
 
-      item.inputs.base_color[0] = Clamp01(base.x * base_factor);
-      item.inputs.base_color[1] = Clamp01(base.y * base_factor);
-      item.inputs.base_color[2] = Clamp01(base.z * base_factor);
-      item.inputs.base_color[3] = Clamp01(base.w * base_factor);
+      item.material.inputs.base_color[0] = Clamp01(base.x * base_factor);
+      item.material.inputs.base_color[1] = Clamp01(base.y * base_factor);
+      item.material.inputs.base_color[2] = Clamp01(base.z * base_factor);
+      item.material.inputs.base_color[3] = Clamp01(base.w * base_factor);
 
       if (material->pbr.metalness.has_value) {
-        item.inputs.metalness = Clamp01(material->pbr.metalness.value_real);
+        item.material.inputs.metalness
+          = Clamp01(material->pbr.metalness.value_real);
       }
 
       if (material->pbr.roughness.has_value) {
-        item.inputs.roughness = Clamp01(material->pbr.roughness.value_real);
+        item.material.inputs.roughness
+          = Clamp01(material->pbr.roughness.value_real);
       }
-      item.inputs.roughness_as_glossiness
+      item.material.inputs.roughness_as_glossiness
         = material->features.roughness_as_glossiness.enabled;
 
       if (material->pbr.ambient_occlusion.has_value) {
-        item.inputs.ambient_occlusion
+        item.material.inputs.ambient_occlusion
           = Clamp01(material->pbr.ambient_occlusion.value_real);
       }
 
       {
-        ufbx_vec4 emission = { 0.0, 0.0, 0.0, 0.0 };
+        ufbx_vec4 emission = { { 0.0, 0.0, 0.0, 0.0 } };
         if (material->pbr.emission_color.has_value
           && material->pbr.emission_color.value_components >= 3) {
           emission = material->pbr.emission_color.value_vec4;
         } else if (material->fbx.emission_color.has_value
           && material->fbx.emission_color.value_components >= 3) {
           const auto ec = material->fbx.emission_color.value_vec3;
-          emission = { ec.x, ec.y, ec.z, 0.0 };
+          emission = { { ec.x, ec.y, ec.z, 0.0 } };
         }
 
         float emission_factor = 1.0F;
@@ -2026,16 +2161,16 @@ auto FbxAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
           emission_factor = material->fbx.emission_factor.value_real;
         }
 
-        item.inputs.emissive_factor[0] = emission.x * emission_factor;
-        item.inputs.emissive_factor[1] = emission.y * emission_factor;
-        item.inputs.emissive_factor[2] = emission.z * emission_factor;
+        item.material.inputs.emissive_factor[0] = emission.x * emission_factor;
+        item.material.inputs.emissive_factor[1] = emission.y * emission_factor;
+        item.material.inputs.emissive_factor[2] = emission.z * emission_factor;
       }
 
       if (material->pbr.normal_map.has_value) {
-        item.inputs.normal_scale
+        item.material.inputs.normal_scale
           = (std::max)(0.0F, material->pbr.normal_map.value_real);
       } else if (material->fbx.bump_factor.has_value) {
-        item.inputs.normal_scale
+        item.material.inputs.normal_scale
           = (std::max)(0.0F, material->fbx.bump_factor.value_real);
       }
 
@@ -2058,17 +2193,19 @@ auto FbxAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
         specular_factor *= intensity;
       }
 
-      item.inputs.specular_factor = Clamp01(specular_factor);
+      item.material.inputs.specular_factor = Clamp01(specular_factor);
 
-      item.inputs.double_sided = material->features.double_sided.enabled;
-      item.inputs.unlit = material->features.unlit.enabled;
+      item.material.inputs.double_sided
+        = material->features.double_sided.enabled;
+      item.material.inputs.unlit = material->features.unlit.enabled;
 
-      const auto* base_color_tex = SelectBaseColorTexture(*material);
-      const auto* normal_tex = SelectNormalTexture(*material);
-      const auto* metallic_tex = SelectMetallicTexture(*material);
-      const auto* roughness_tex = SelectRoughnessTexture(*material);
-      const auto* ao_tex = SelectAmbientOcclusionTexture(*material);
-      const auto* emissive_tex = SelectEmissiveTexture(*material);
+      const auto textures = FbxMaterialTextures::From(*material);
+      const auto* base_color_tex = textures.base_color.Texture();
+      const auto* normal_tex = textures.normal.Texture();
+      const auto* metallic_tex = textures.metallic.Texture();
+      const auto* roughness_tex = textures.roughness.Texture();
+      const auto* ao_tex = textures.occlusion.Texture();
+      const auto* emissive_tex = textures.emissive.Texture();
 
       const auto* metallic_file = ResolveFileTexture(metallic_tex);
       const auto* roughness_file = ResolveFileTexture(roughness_tex);
@@ -2081,54 +2218,55 @@ auto FbxAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
         if (texture_id.has_value()) {
           const auto source_id = BuildTextureSourceId(input.source_id_prefix,
             *texture_id, TextureUsage::kMetallicRoughness);
-          item.textures.metallic.assigned = true;
-          item.textures.metallic.source_id = source_id;
-          item.textures.metallic.index = 0;
-          item.textures.metallic.uv_set = 0;
-          item.textures.roughness.assigned = true;
-          item.textures.roughness.source_id = source_id;
-          item.textures.roughness.index = 0;
-          item.textures.roughness.uv_set = 0;
+          item.material.textures.metallic.assigned = true;
+          item.material.textures.metallic.source_id = source_id;
+          item.material.textures.metallic.index = 0;
+          item.material.textures.metallic.uv_set = 0;
+          item.material.textures.roughness.assigned = true;
+          item.material.textures.roughness.source_id = source_id;
+          item.material.textures.roughness.index = 0;
+          item.material.textures.roughness.uv_set = 0;
 
           const auto* ao_file = ResolveFileTexture(ao_tex);
           if (ao_file != nullptr && ao_file == metallic_file) {
-            item.textures.ambient_occlusion.assigned = true;
-            item.textures.ambient_occlusion.source_id = source_id;
-            item.textures.ambient_occlusion.index = 0;
-            item.textures.ambient_occlusion.uv_set = 0;
+            item.material.textures.ambient_occlusion.assigned = true;
+            item.material.textures.ambient_occlusion.source_id = source_id;
+            item.material.textures.ambient_occlusion.index = 0;
+            item.material.textures.ambient_occlusion.uv_set = 0;
           }
         }
       }
 
       if (!orm_packed) {
-        apply_binding(item.textures.metallic,
+        apply_binding(item.material.textures.metallic,
           resolve_texture_id(metallic_tex, item.source_id),
           TextureUsage::kMetallic);
-        apply_binding(item.textures.roughness,
+        apply_binding(item.material.textures.roughness,
           resolve_texture_id(roughness_tex, item.source_id),
           TextureUsage::kRoughness);
       }
 
-      apply_binding(item.textures.base_color,
+      apply_binding(item.material.textures.base_color,
         resolve_texture_id(base_color_tex, item.source_id),
         TextureUsage::kBaseColor);
-      apply_binding(item.textures.normal,
+      apply_binding(item.material.textures.normal,
         resolve_texture_id(normal_tex, item.source_id), TextureUsage::kNormal);
-      if (!orm_packed || item.textures.ambient_occlusion.source_id.empty()) {
-        apply_binding(item.textures.ambient_occlusion,
+      if (!orm_packed
+        || item.material.textures.ambient_occlusion.source_id.empty()) {
+        apply_binding(item.material.textures.ambient_occlusion,
           resolve_texture_id(ao_tex, item.source_id), TextureUsage::kOcclusion);
       }
-      apply_binding(item.textures.emissive,
+      apply_binding(item.material.textures.emissive,
         resolve_texture_id(emissive_tex, item.source_id),
         TextureUsage::kEmissive);
 
       if (material->features.specular.enabled) {
         if (material->pbr.specular_factor.has_value) {
-          item.inputs.specular_factor
+          item.material.inputs.specular_factor
             = static_cast<float>(material->pbr.specular_factor.value_real);
         }
         if (material->pbr.specular_color.texture_enabled) {
-          apply_binding(item.textures.specular,
+          apply_binding(item.material.textures.specular,
             resolve_texture_id(
               material->pbr.specular_color.texture, item.source_id),
             TextureUsage::kSpecular);
@@ -2138,21 +2276,12 @@ auto FbxAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
       if (material->features.sheen.enabled) {
         if (material->pbr.sheen_color.has_value) {
           const auto sc = material->pbr.sheen_color.value_vec3;
-          item.inputs.sheen_color_factor[0] = static_cast<float>(sc.x);
-          item.inputs.sheen_color_factor[1] = static_cast<float>(sc.y);
-          item.inputs.sheen_color_factor[2] = static_cast<float>(sc.z);
-        }
-        if (material->pbr.sheen_roughness.has_value) {
-          // We don't have sheen roughness in MaterialInputs yet?
-          // Wait, MaterialInputs has sheen_color_factor, but maybe not
-          // roughness? Checking MaterialPipeline.h Step 102 lines 95: float
-          // sheen_color_factor[3]. It does NOT have sheen_roughness. But
-          // GltfAdapter set it... NO, GltfAdapter set sheen_color_factor.
-          // cgltf_sheen has sheen_roughness_factor.
-          // I missed `sheen_roughness` in MaterialInputs check.
+          item.material.inputs.sheen_color_factor[0] = static_cast<float>(sc.x);
+          item.material.inputs.sheen_color_factor[1] = static_cast<float>(sc.y);
+          item.material.inputs.sheen_color_factor[2] = static_cast<float>(sc.z);
         }
         if (material->pbr.sheen_color.texture_enabled) {
-          apply_binding(item.textures.sheen_color,
+          apply_binding(item.material.textures.sheen_color,
             resolve_texture_id(
               material->pbr.sheen_color.texture, item.source_id),
             TextureUsage::kSheenColor);
@@ -2161,23 +2290,23 @@ auto FbxAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
 
       if (material->features.coat.enabled) {
         if (material->pbr.coat_factor.has_value) {
-          item.inputs.clearcoat_factor
+          item.material.inputs.clearcoat_factor
             = static_cast<float>(material->pbr.coat_factor.value_real);
         }
         if (material->pbr.coat_roughness.has_value) {
-          item.inputs.clearcoat_roughness
+          item.material.inputs.clearcoat_roughness
             = static_cast<float>(material->pbr.coat_roughness.value_real);
         }
         if (material->pbr.coat_color
               .texture_enabled) { // coat_color is often used for weight/factor
                                   // map
-          apply_binding(item.textures.clearcoat,
+          apply_binding(item.material.textures.clearcoat,
             resolve_texture_id(
               material->pbr.coat_factor.texture, item.source_id),
             TextureUsage::kClearcoat);
         }
         if (material->pbr.coat_normal.texture_enabled) {
-          apply_binding(item.textures.clearcoat_normal,
+          apply_binding(item.material.textures.clearcoat_normal,
             resolve_texture_id(
               material->pbr.coat_normal.texture, item.source_id),
             TextureUsage::kClearcoatNormal);
@@ -2186,56 +2315,85 @@ auto FbxAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
 
       if (material->features.transmission.enabled) {
         if (material->pbr.transmission_factor.has_value) {
-          item.inputs.transmission_factor
+          item.material.inputs.transmission_factor
             = static_cast<float>(material->pbr.transmission_factor.value_real);
         }
         if (material->pbr.transmission_color.texture_enabled) {
           const auto* tex = material->pbr.transmission_color.texture;
-          if (tex == nullptr)
+          if (tex == nullptr) {
             tex = material->pbr.transmission_factor.texture;
-          apply_binding(item.textures.transmission,
+          }
+          apply_binding(item.material.textures.transmission,
             resolve_texture_id(tex, item.source_id),
             TextureUsage::kTransmission);
         }
 
         if (material->pbr.transmission_scatter.has_value) {
           const auto sc = material->pbr.transmission_scatter.value_vec3;
-          item.inputs.attenuation_color[0] = static_cast<float>(sc.x);
-          item.inputs.attenuation_color[1] = static_cast<float>(sc.y);
-          item.inputs.attenuation_color[2] = static_cast<float>(sc.z);
+          item.material.inputs.attenuation_color[0] = static_cast<float>(sc.x);
+          item.material.inputs.attenuation_color[1] = static_cast<float>(sc.y);
+          item.material.inputs.attenuation_color[2] = static_cast<float>(sc.z);
         }
         if (material->pbr.transmission_depth.has_value) {
-          item.inputs.attenuation_distance
+          item.material.inputs.attenuation_distance
             = static_cast<float>(material->pbr.transmission_depth.value_real);
         }
       }
 
-      if (material->features.ior.enabled) {
-        if (material->pbr.specular_ior.has_value) {
-          item.inputs.ior
-            = static_cast<float>(material->pbr.specular_ior.value_real);
-        }
+      if ((material->features.ior.enabled)
+        && (material->pbr.specular_ior.has_value)) {
+        item.material.inputs.ior
+          = static_cast<float>(material->pbr.specular_ior.value_real);
       }
     }
 
-    item.request = input.request;
-    item.naming_service = input.naming_service;
-    item.stop_token = input.stop_token;
-
-    if (!sink.Consume(std::move(item))) {
+    if (!item.material.Validate(item.source_id, result.diagnostics)) {
+      result.success = false;
       return result;
     }
-    ++result.emitted;
+    result.sources.push_back(std::move(item));
   }
 
   return result;
 }
 
-auto FbxAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
+auto FbxAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
   const AdapterInput& input) -> WorkItemStreamResult
 {
-  if (!impl_->scene_owner) {
-    WorkItemStreamResult result;
+  auto prepared = PrepareMaterials(input);
+  auto result = WorkItemStreamResult {};
+  result.success = prepared.success;
+  result.diagnostics = std::move(prepared.diagnostics);
+  if (!result.success) {
+    return result;
+  }
+  for (auto& source : prepared.sources) {
+    if (input.stop_token.stop_requested()) {
+      result.success = false;
+      result.diagnostics.push_back(
+        MakeCancelDiagnostic(input.source_id_prefix));
+      return result;
+    }
+    auto item = MaterialPipeline::WorkItem {};
+    item.source_id = std::move(source.source_id);
+    item.source_key = source.source_key;
+    item.material = std::move(source.material);
+    item.request = input.request;
+    item.naming_service = input.naming_service;
+    item.stop_token = input.stop_token;
+    if (!sink.Consume(std::move(item))) {
+      return result;
+    }
+    ++result.emitted;
+  }
+  return result;
+}
+
+auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
+  -> ModelTexturePreparation
+{
+  if (!impl_->source.scene) {
+    ModelTexturePreparation result;
     result.success = false;
     result.diagnostics.push_back(MakeErrorDiagnostic("fbx.scene.not_parsed",
       "FBX adapter has no parsed scene", input.source_id_prefix,
@@ -2243,15 +2401,15 @@ auto FbxAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
     return result;
   }
 
-  WorkItemStreamResult result;
+  ModelTexturePreparation result;
   if (input.stop_token.stop_requested()) {
     result.success = false;
     result.diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
     return result;
   }
 
-  const auto& scene = *impl_->scene_owner;
-  std::unordered_map<std::string, TexturePipeline::WorkItem> work_items;
+  const auto& scene = *impl_->source.scene;
+  std::unordered_map<std::string, ModelTextureSource> work_items;
   std::unordered_map<const ufbx_texture*, TextureIdentity> identities;
 
   auto get_identity
@@ -2276,9 +2434,9 @@ auto FbxAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
     return identity;
   };
 
-  auto register_texture = [&](const ufbx_texture* texture,
-                            const TextureUsage usage,
-                            std::string_view source_id) {
+  auto register_texture
+    = [&](const ufbx_texture* texture, const TextureUsage usage,
+        std::string_view source_id) -> void {
     if (texture == nullptr) {
       return;
     }
@@ -2291,12 +2449,6 @@ auto FbxAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
     const auto tex_source_id = BuildTextureSourceId(
       input.source_id_prefix, identity->texture_id, usage);
     if (work_items.find(tex_source_id) != work_items.end()) {
-      return;
-    }
-
-    auto resolved = ResolveTextureSourceBytes(*identity, tex_source_id,
-      impl_->scene_owner, result.diagnostics, input.external_texture_bytes);
-    if (!resolved.has_value()) {
       return;
     }
 
@@ -2318,9 +2470,9 @@ auto FbxAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
                                                          : Bc7Quality::kNone;
     }
 
-    TexturePipeline::WorkItem item {};
+    ModelTextureSource item {};
     item.source_id = tex_source_id;
-    item.texture_id = tex_source_id;
+    item.external_texture_id = identity->texture_id;
     item.source_key = identity->file_texture;
     item.desc = std::move(desc);
     item.packing_policy_id
@@ -2332,9 +2484,8 @@ auto FbxAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
       = input.request.options.texture_tuning.placeholder_on_failure
       ? TexturePipeline::FailurePolicy::kPlaceholder
       : TexturePipeline::FailurePolicy::kStrict;
-    item.source = resolved->bytes;
-    item.source_path = resolved->source_path;
-    item.stop_token = input.stop_token;
+    item.source_path = identity->resolved_path;
+    item.embedded = identity->embedded;
 
     work_items.emplace(tex_source_id, std::move(item));
   };
@@ -2360,12 +2511,13 @@ auto FbxAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
     const auto material_source_id
       = BuildSourceId(input.source_id_prefix, material_name, i);
 
-    const auto* base_color_tex = SelectBaseColorTexture(*material);
-    const auto* normal_tex = SelectNormalTexture(*material);
-    const auto* metallic_tex = SelectMetallicTexture(*material);
-    const auto* roughness_tex = SelectRoughnessTexture(*material);
-    const auto* ao_tex = SelectAmbientOcclusionTexture(*material);
-    const auto* emissive_tex = SelectEmissiveTexture(*material);
+    const auto textures = FbxMaterialTextures::From(*material);
+    const auto* base_color_tex = textures.base_color.Texture();
+    const auto* normal_tex = textures.normal.Texture();
+    const auto* metallic_tex = textures.metallic.Texture();
+    const auto* roughness_tex = textures.roughness.Texture();
+    const auto* ao_tex = textures.occlusion.Texture();
+    const auto* emissive_tex = textures.emissive.Texture();
 
     const auto* metallic_file = ResolveFileTexture(metallic_tex);
     const auto* roughness_file = ResolveFileTexture(roughness_tex);
@@ -2393,13 +2545,57 @@ auto FbxAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
     }
   }
 
+  result.sources.reserve(work_items.size());
   for (auto& [_, item] : work_items) {
+    result.sources.push_back(std::move(item));
+  }
+  return result;
+}
+
+auto FbxAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
+  const AdapterInput& input) -> WorkItemStreamResult
+{
+  auto prepared = PrepareTextures(input);
+  auto result = WorkItemStreamResult {};
+  result.success = prepared.success;
+  result.diagnostics = std::move(prepared.diagnostics);
+  if (!result.success) {
+    return result;
+  }
+  for (auto& source : prepared.sources) {
+    if (input.stop_token.stop_requested()) {
+      result.success = false;
+      result.diagnostics.push_back(
+        MakeCancelDiagnostic(input.source_id_prefix));
+      return result;
+    }
+    const auto identity = TextureIdentity {
+      .texture_id = source.external_texture_id,
+      .file_texture = static_cast<const ufbx_texture*>(source.source_key),
+      .resolved_path = source.source_path,
+      .embedded = source.embedded,
+    };
+    auto resolved = ResolveTextureSourceBytes(identity, source.source_id,
+      impl_->source.scene, result.diagnostics, input.external_texture_bytes);
+    if (!resolved.has_value()) {
+      continue;
+    }
+    auto item = TexturePipeline::WorkItem {};
+    item.source_id = std::move(source.source_id);
+    item.texture_id = item.source_id;
+    item.source_key = source.source_key;
+    item.desc = std::move(source.desc);
+    item.packing_policy_id = std::move(source.packing_policy_id);
+    item.output_format_policy = source.output_format_policy;
+    item.failure_policy = source.failure_policy;
+    item.source = resolved->bytes;
+    item.source_path = std::move(resolved->source_path);
+    item.stop_token = input.stop_token;
     if (!sink.Consume(std::move(item))) {
       return result;
     }
     ++result.emitted;
   }
-
   return result;
 }
 
@@ -2407,118 +2603,21 @@ auto FbxAdapter::CollectExternalTextureSources(
   const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics) const
   -> std::vector<ExternalTextureSource>
 {
-  std::vector<ExternalTextureSource> sources;
-  if (!impl_->scene_owner) {
-    diagnostics.push_back(MakeErrorDiagnostic("fbx.scene.not_parsed",
-      "FBX adapter has no parsed scene", input.source_id_prefix,
-      input.object_path_prefix));
-    return sources;
+  auto prepared = PrepareTextures(input);
+  for (auto& diagnostic : prepared.diagnostics) {
+    diagnostics.push_back(std::move(diagnostic));
   }
-
-  if (input.stop_token.stop_requested()) {
-    diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
-    return sources;
-  }
-
-  const auto& scene = *impl_->scene_owner;
-  std::unordered_map<const ufbx_texture*, TextureIdentity> identities;
-  std::unordered_set<std::string> seen_ids;
-
-  auto get_identity
-    = [&](const ufbx_texture* texture,
-        std::string_view source_id) -> std::optional<TextureIdentity> {
-    const auto* file_tex = ResolveFileTexture(texture);
-    if (file_tex == nullptr) {
-      return std::nullopt;
-    }
-
-    if (const auto it = identities.find(file_tex); it != identities.end()) {
-      return it->second;
-    }
-
-    auto identity
-      = ResolveTextureIdentity(texture, input.request, source_id, diagnostics);
-    if (!identity.has_value()) {
-      return std::nullopt;
-    }
-
-    identities.emplace(file_tex, *identity);
-    return identity;
-  };
-
-  auto register_texture
-    = [&](const ufbx_texture* texture, std::string_view source_id) {
-        if (texture == nullptr) {
-          return;
-        }
-
-        auto identity = get_identity(texture, source_id);
-        if (!identity.has_value()) {
-          return;
-        }
-
-        if (identity->embedded || identity->resolved_path.empty()) {
-          return;
-        }
-
-        if (!seen_ids.insert(identity->texture_id).second) {
-          return;
-        }
-
-        sources.push_back(ExternalTextureSource {
-          .texture_id = identity->texture_id,
-          .resolved_path = identity->resolved_path,
-        });
-      };
-
-  const auto material_count = static_cast<uint32_t>(scene.materials.count);
-  for (uint32_t i = 0; i < material_count; ++i) {
-    if (input.stop_token.stop_requested()) {
-      diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
-      return sources;
-    }
-
-    const auto* material = scene.materials.data[i];
-    if (material == nullptr) {
-      continue;
-    }
-
-    const auto authored_name = ToStringView(material->name);
-    const std::string material_name = !authored_name.empty()
-      ? std::string(authored_name)
-      : ("Material_" + std::to_string(i));
-    const auto material_source_id
-      = BuildSourceId(input.source_id_prefix, material_name, i);
-
-    const auto* base_color_tex = SelectBaseColorTexture(*material);
-    const auto* normal_tex = SelectNormalTexture(*material);
-    const auto* metallic_tex = SelectMetallicTexture(*material);
-    const auto* roughness_tex = SelectRoughnessTexture(*material);
-    const auto* ao_tex = SelectAmbientOcclusionTexture(*material);
-    const auto* emissive_tex = SelectEmissiveTexture(*material);
-
-    const auto* metallic_file = ResolveFileTexture(metallic_tex);
-    const auto* roughness_file = ResolveFileTexture(roughness_tex);
-    const bool orm_packed
-      = metallic_file != nullptr && metallic_file == roughness_file;
-
-    register_texture(base_color_tex, material_source_id);
-    register_texture(normal_tex, material_source_id);
-    register_texture(emissive_tex, material_source_id);
-
-    if (orm_packed) {
-      register_texture(metallic_tex, material_source_id);
-      const auto* ao_file = ResolveFileTexture(ao_tex);
-      if (ao_file == nullptr || ao_file != metallic_file) {
-        register_texture(ao_tex, material_source_id);
-      }
-    } else {
-      register_texture(metallic_tex, material_source_id);
-      register_texture(roughness_tex, material_source_id);
-      register_texture(ao_tex, material_source_id);
+  auto sources = std::vector<ExternalTextureSource> {};
+  auto seen_ids = std::unordered_set<std::string> {};
+  for (auto& source : prepared.sources) {
+    if (!source.embedded && !source.source_path.empty()
+      && seen_ids.insert(source.external_texture_id).second) {
+      sources.push_back({
+        .texture_id = std::move(source.external_texture_id),
+        .resolved_path = std::move(source.source_path),
+      });
     }
   }
-
   return sources;
 }
 
@@ -2531,7 +2630,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     return result;
   }
 
-  if (!impl_->scene_owner) {
+  if (!impl_->source.scene) {
     diagnostics.push_back(MakeErrorDiagnostic("fbx.scene.not_parsed",
       "FBX adapter has no parsed scene", input.source_id, {}));
     return result;
@@ -2543,10 +2642,11 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     return result;
   }
 
-  const auto& scene = *impl_->scene_owner;
+  const auto& scene = *impl_->source.scene;
   const auto& request = *input.request;
 
   const auto bake_plan = BuildFbxBakePlan(scene, request.options.coordinate);
+  const auto source_path_text = request.source_path.string();
   std::unordered_map<const ufbx_node*, size_t> source_node_indices;
   source_node_indices.reserve(scene.nodes.count);
   for (size_t index = 0; index < scene.nodes.count; ++index) {
@@ -2560,7 +2660,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
   }
 
   std::vector<NodeInput> nodes;
-  nodes.reserve(scene.nodes.count > 0 ? scene.nodes.count : 1u);
+  nodes.reserve(scene.nodes.count > 0 ? scene.nodes.count : 1U);
 
   auto traverse = [&](auto&& self, const ufbx_node* node, uint32_t parent,
                     std::string_view parent_name, uint32_t& ordinal,
@@ -2577,7 +2677,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
       .kind = ImportNameKind::kSceneNode,
       .ordinal = ordinal,
       .parent_name = parent_name,
-      .source_id = request.source_path.string(),
+      .source_id = source_path_text,
       .scene_namespace = scene_name,
     };
     const auto base_name
@@ -2585,9 +2685,9 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
 
     auto local_matrix = MakeLocalTransformMatrix(node->local_transform);
     const auto variant_index
-      = bake_plan.node_variant[source_node_indices.at(node)];
+      = bake_plan.node_variant.at(source_node_indices.at(node));
     if (variant_index < bake_plan.variants.size()
-      && bake_plan.variants[variant_index].transform.has_value()) {
+      && bake_plan.variants.at(variant_index).transform.has_value()) {
       local_matrix = glm::mat4(1.0F);
     }
     const auto world_matrix = parent_world * local_matrix;
@@ -2604,10 +2704,9 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     node_input.has_renderable = false;
     node_input.source_node = node;
 
-    if (node->mesh != nullptr) {
-      if (variant_index < input.geometry_keys.size()) {
-        node_input.has_renderable = true;
-      }
+    if ((node->mesh != nullptr)
+      && (variant_index < input.geometry_keys.size())) {
+      node_input.has_renderable = true;
     }
 
     const auto index = static_cast<uint32_t>(nodes.size());
@@ -2647,7 +2746,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
 
   if (request.options.node_pruning == NodePruningPolicy::kDropEmptyNodes) {
     for (uint32_t i = 0; i < nodes.size(); ++i) {
-      const auto& node = nodes[i];
+      const auto& node = nodes.at(i);
       if (node.has_renderable || node.has_camera || node.has_light) {
         kept_indices.push_back(i);
       }
@@ -2673,19 +2772,19 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
 
   std::vector old_to_new(nodes.size(), -1);
   for (uint32_t new_index = 0; new_index < kept_indices.size(); ++new_index) {
-    old_to_new[kept_indices[new_index]] = static_cast<int32_t>(new_index);
+    old_to_new.at(kept_indices.at(new_index)) = static_cast<int32_t>(new_index);
   }
 
   std::vector<NodeInput> pruned_nodes;
   pruned_nodes.reserve(kept_indices.size());
 
   for (uint32_t new_index = 0; new_index < kept_indices.size(); ++new_index) {
-    const auto old_index = kept_indices[new_index];
-    auto node = nodes[old_index];
+    const auto old_index = kept_indices.at(new_index);
+    auto node = nodes.at(old_index);
 
     uint32_t parent = node.parent_index;
-    while (parent < nodes.size() && old_to_new[parent] < 0) {
-      const auto next_parent = nodes[parent].parent_index;
+    while (parent < nodes.size() && old_to_new.at(parent) < 0) {
+      const auto next_parent = nodes.at(parent).parent_index;
       if (next_parent == parent) {
         break;
       }
@@ -2693,15 +2792,15 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     }
 
     uint32_t new_parent_index = new_index;
-    if (parent < nodes.size() && old_to_new[parent] >= 0) {
-      new_parent_index = static_cast<uint32_t>(old_to_new[parent]);
+    if (parent < nodes.size() && old_to_new.at(parent) >= 0) {
+      new_parent_index = static_cast<uint32_t>(old_to_new.at(parent));
     }
 
     // A retained parent needs only index remapping, never transform
     // reparenting.
     if (new_parent_index != new_index && parent != node.parent_index) {
-      const auto parent_old_index = kept_indices[new_parent_index];
-      const auto& parent_world = nodes[parent_old_index].world_matrix;
+      const auto parent_old_index = kept_indices.at(new_parent_index);
+      const auto& parent_world = nodes.at(parent_old_index).world_matrix;
 
       glm::vec3 parent_translation {};
       glm::vec3 parent_scale { 1.0F, 1.0F, 1.0F };
@@ -2745,7 +2844,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     = request.loose_cooked_layout.SceneVirtualPath(scene_name);
 
   for (uint32_t i = 0; i < pruned_nodes.size(); ++i) {
-    auto& node = pruned_nodes[i];
+    auto& node = pruned_nodes.at(i);
     const auto& name = node.base_name;
 
     glm::vec3 translation {};
@@ -2782,11 +2881,12 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     const auto* ufbx_node = static_cast<const ::ufbx_node*>(node.source_node);
     if (ufbx_node != nullptr && ufbx_node->mesh != nullptr) {
       const auto variant_index
-        = bake_plan.node_variant[source_node_indices.at(ufbx_node)];
+        = bake_plan.node_variant.at(source_node_indices.at(ufbx_node));
       if (variant_index < input.geometry_keys.size()) {
         build.renderables.push_back(RenderableRecord {
           .node_index = i,
-          .geometry_key = input.geometry_keys[variant_index],
+          .geometry_key
+          = oxygen::base::CheckedAt(input.geometry_keys, variant_index),
           .visible = 1,
         });
       }
@@ -2795,11 +2895,8 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     if (ufbx_node != nullptr && ufbx_node->camera != nullptr) {
       const auto& cam = *ufbx_node->camera;
       if (cam.projection_mode == UFBX_PROJECTION_MODE_PERSPECTIVE) {
-        float near_plane = std::abs(cam.near_plane);
-        float far_plane = std::abs(cam.far_plane);
-        if (far_plane < near_plane) {
-          std::swap(far_plane, near_plane);
-        }
+        const auto near_plane = static_cast<float>(cam.near_plane);
+        const auto far_plane = static_cast<float>(cam.far_plane);
 
         const float fov_y_rad
           = cam.field_of_view_deg.y * (std::numbers::pi_v<float> / 180.0F);
@@ -2810,6 +2907,9 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
           .aspect_ratio = cam.aspect_ratio,
           .near_plane = near_plane,
           .far_plane = far_plane,
+          .aspect_mode = cam.aspect_mode == UFBX_ASPECT_MODE_WINDOW_SIZE
+            ? CameraAspectMode::kAuto
+            : CameraAspectMode::kFixed,
         });
       } else if (cam.projection_mode == UFBX_PROJECTION_MODE_ORTHOGRAPHIC) {
         float near_plane = std::abs(cam.near_plane);
@@ -2908,7 +3008,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
 auto FbxAdapter::BuildWorkItems(SceneWorkTag, SceneWorkItemSink& sink,
   const AdapterInput& input) -> WorkItemStreamResult
 {
-  if (!impl_->scene_owner) {
+  if (!impl_->source.scene) {
     WorkItemStreamResult result;
     result.success = false;
     result.diagnostics.push_back(MakeErrorDiagnostic("fbx.scene.not_parsed",

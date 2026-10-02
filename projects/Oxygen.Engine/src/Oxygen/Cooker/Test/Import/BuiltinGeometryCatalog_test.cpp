@@ -8,14 +8,20 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
+#include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/BuiltinGeometryCatalog.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/BuiltinGeometry.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -42,7 +48,7 @@ NOLINT_TEST(BuiltinGeometryCatalogTest, ContributionsMatchSchemasAndLiveAssets)
   material_validator.set_root_schema(
     LoadSchema("oxygen.material-descriptor.schema.json"));
   const auto catalog = json::parse(ExportBuiltinGeometryCatalog("Content"));
-  EXPECT_EQ(catalog.at("schema"), "oxygen.builtin-geometry-catalog.v2");
+  EXPECT_EQ(catalog.at("schema"), "oxygen.builtin-geometry-catalog.v3");
   ASSERT_EQ(catalog.at("geometries").size(),
     oxygen::data::GetBuiltinGeometryNames().size());
   const auto& material = catalog.at("default_material").at("descriptor");
@@ -64,12 +70,24 @@ NOLINT_TEST(BuiltinGeometryCatalogTest, ContributionsMatchSchemasAndLiveAssets)
     const auto geometry = oxygen::data::ResolveBuiltinGeometry(
       entry.at("asset_uri").get<std::string>());
     ASSERT_NE(geometry, nullptr);
-    for (auto axis = 0; axis < 3; ++axis) {
-      EXPECT_FLOAT_EQ(descriptor.at("bounds").at("min").at(axis).get<float>(),
-        geometry->BoundingBoxMin()[axis]);
-      EXPECT_FLOAT_EQ(descriptor.at("bounds").at("max").at(axis).get<float>(),
-        geometry->BoundingBoxMax()[axis]);
-    }
+    const auto& inventory = geometry->MaterialSlots();
+    const auto& exported = entry.at("material_slot_inventory");
+    EXPECT_EQ(exported.at("geometry_asset_key"),
+      oxygen::data::to_string(inventory.geometry_asset_key));
+    EXPECT_EQ(exported.at("layout_revision"),
+      fmt::format("{:02x}", fmt::join(inventory.layout_revision, "")));
+    ASSERT_EQ(exported.at("slots").size(), inventory.slots.size());
+    ASSERT_FALSE(inventory.slots.empty());
+    EXPECT_EQ(exported.at("slots").front().at("slot_id"),
+      oxygen::data::to_string(inventory.slots.front().slot_id));
+    const auto minimum = geometry->BoundingBoxMin();
+    const auto maximum = geometry->BoundingBoxMax();
+    EXPECT_THAT(descriptor.at("bounds").at("min").get<std::vector<float>>(),
+      testing::ElementsAre(testing::FloatEq(minimum.x),
+        testing::FloatEq(minimum.y), testing::FloatEq(minimum.z)));
+    EXPECT_THAT(descriptor.at("bounds").at("max").get<std::vector<float>>(),
+      testing::ElementsAre(testing::FloatEq(maximum.x),
+        testing::FloatEq(maximum.y), testing::FloatEq(maximum.z)));
     const auto& submesh = descriptor.at("lods").at(0).at("submeshes").at(0);
     ASSERT_EQ(submesh.at("views").size(), 1U);
     EXPECT_EQ(submesh.at("views").at(0).at("view_ref"), "__all__");
@@ -109,7 +127,9 @@ NOLINT_TEST(BuiltinGeometryCatalogTest, MountAndAuthoringCategoriesArePreserved)
     EXPECT_EQ(entry.at("canonical_name"), entry.at("name"));
     const auto identity = oxygen::data::ResolveBuiltinGeometryIdentity(
       entry.at("asset_uri").get<std::string>());
-    ASSERT_TRUE(identity.has_value());
+    if (!identity.has_value()) {
+      FAIL() << "Expected identity to contain a value";
+    }
     using Category = oxygen::data::BuiltinGeometryAuthoringCategory;
     switch (identity->authoring_category) {
     case Category::kStandard:

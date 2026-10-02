@@ -33,24 +33,24 @@ milestone work, not polish.
 
 ## 2. PRD Traceability
 
-| ID | ED-M05 Coverage |
-| --- | --- |
-| `GOAL-002` | Geometry material assignment persists as scene authoring data. |
-| `GOAL-004` | Scalar material editor baseline is created. |
-| `GOAL-005` | Material descriptor/cook/catalog state is visible and understandable. |
-| `GOAL-006` | Material authoring, picker, save, and cook failures are visible. |
-| `REQ-010` | Users can create/open scalar material assets. |
-| `REQ-011` | Users can inspect/edit scalar material properties. |
-| `REQ-012` | Users can assign material assets to geometry. |
-| `REQ-013` | Users can select material assets through content browser/picker identity. |
-| `REQ-014` | Material values save/reopen and cook where supported. |
-| `REQ-021` | Material picker exposes asset state without raw cooked-path authoring. |
-| `REQ-022` | Save/cook/picker failures produce visible operation results. |
-| `REQ-024` | Diagnostics distinguish material authoring, document, asset identity, content pipeline, and live sync. |
-| `REQ-037` | Supported material and material-slot data round-trips without manual repair. |
-| `SUCCESS-002` | Material assignment and scene data survive save/reopen. |
-| `SUCCESS-004` | Scalar material data is available for later cook/parity milestones. |
-| `SUCCESS-007` | Material assets can be created, edited, assigned, cooked, and previewed at V0.1 baseline level. |
+| ID            | ED-M05 Coverage                                                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------------ |
+| `GOAL-002`    | Geometry material assignment persists as scene authoring data.                                         |
+| `GOAL-004`    | Scalar material editor baseline is created.                                                            |
+| `GOAL-005`    | Material descriptor/cook/catalog state is visible and understandable.                                  |
+| `GOAL-006`    | Material authoring, picker, save, and cook failures are visible.                                       |
+| `REQ-010`     | Users can create/open scalar material assets.                                                          |
+| `REQ-011`     | Users can inspect/edit scalar material properties.                                                     |
+| `REQ-012`     | Users can assign material assets to geometry.                                                          |
+| `REQ-013`     | Users can select material assets through content browser/picker identity.                              |
+| `REQ-014`     | Material values save/reopen and cook where supported.                                                  |
+| `REQ-021`     | Material picker exposes asset state without raw cooked-path authoring.                                 |
+| `REQ-022`     | Save/cook/picker failures produce visible operation results.                                           |
+| `REQ-024`     | Diagnostics distinguish material authoring, document, asset identity, content pipeline, and live sync. |
+| `REQ-037`     | Supported material and material-slot data round-trips without manual repair.                           |
+| `SUCCESS-002` | Material assignment and scene data survive save/reopen.                                                |
+| `SUCCESS-004` | Scalar material data is available for later cook/parity milestones.                                    |
+| `SUCCESS-007` | Material assets can be created, edited, assigned, cooked, and previewed at V0.1 baseline level.        |
 
 ## 3. Required LLDs
 
@@ -498,24 +498,24 @@ Likely existing files/projects:
 - `projects/Oxygen.Editor.WorldEditor/src/Inspector/Geometry/GeometryViewModel.cs`
 - `projects/Oxygen.Editor.WorldEditor/src/Inspector/Geometry/GeometryView.xaml`
 - `projects/Oxygen.Editor.WorldEditor/src/Documents/Commands/SceneDocumentCommandService.cs`
-- `projects/Oxygen.Editor.WorldEditor/tests/SceneExplorer/*`
+- `projects/Oxygen.Editor.WorldEditor/tests/Unit/*`
 - editor host composition/DI files that register the new MaterialEditor and
   ContentPipeline services.
 
 ## 8. Dependency And Migration Risks
 
-| Risk | Mitigation |
-| --- | --- |
-| Material editor invents editor-only JSON. | Use `oxygen.material.v1` and `MaterialSourceReader/Writer`; reopen LLDs before any schema divergence. |
-| Cook orchestration sneaks into `Oxygen.Editor.Projects`. | ContentPipeline owns `IMaterialCookService`; Projects provides project root/content roots only. |
-| Picker persists descriptor/cooked filesystem paths. | Scene data stores only `AssetReference<MaterialAsset>.Uri`; tests inspect persisted JSON. |
-| `MaterialDocument.Source` and `MaterialAsset.Source` drift. | `MaterialDocument.Source` is authoritative while editing; `Asset` is identity-only. |
-| Save and cook become one hidden operation. | Save writes descriptor; Cook is explicit and rejects dirty descriptor. |
-| Material cook turns into full pipeline scope. | ED-M05 cooks one material slice only; no scene manifests, dependency graph, mount refresh, or standalone. |
-| UI becomes a generic JSON form. | Build a focused material editor with grouped scalar controls, swatch preview, state strip, and advanced/raw disclosure. |
-| Missing material references get auto-cleared. | Missing URI remains persisted; picker/slot show missing state and re-pick/clear affordances. |
-| Filesystem watcher refresh is flaky. | Test service/catalog state directly; validate visible row transitions manually. |
-| Engine material preview scope leaks in. | CPU swatch only; scene preview uses the Geometry material slot override path, not a material-editor preview renderer. |
+| Risk                                                        | Mitigation                                                                                                              |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Material editor invents editor-only JSON.                   | Use `oxygen.material.v1` and `MaterialSourceReader/Writer`; reopen LLDs before any schema divergence.                   |
+| Cook orchestration sneaks into `Oxygen.Editor.Projects`.    | ContentPipeline owns `IMaterialCookService`; Projects provides project root/content roots only.                         |
+| Picker persists descriptor/cooked filesystem paths.         | Scene data stores only `AssetReference<MaterialAsset>.Uri`; tests inspect persisted JSON.                               |
+| `MaterialDocument.Source` and `MaterialAsset.Source` drift. | `MaterialDocument.Source` is authoritative while editing; `Asset` is identity-only.                                     |
+| Save and cook become one hidden operation.                  | Save writes descriptor; Cook is explicit and rejects dirty descriptor.                                                  |
+| Material cook turns into full pipeline scope.               | ED-M05 cooks one material slice only; no scene manifests, dependency graph, mount refresh, or standalone.               |
+| UI becomes a generic JSON form.                             | Build a focused material editor with grouped scalar controls, swatch preview, state strip, and advanced/raw disclosure. |
+| Missing material references get auto-cleared.               | Missing URI remains persisted; picker/slot show missing state and re-pick/clear affordances.                            |
+| Filesystem watcher refresh is flaky.                        | Test service/catalog state directly; validate visible row transitions manually.                                         |
+| Engine material preview scope leaks in.                     | CPU swatch only; scene preview uses the Geometry material slot override path, not a material-editor preview renderer.   |
 
 ## 9. Manual Validation Script
 
