@@ -1,12 +1,11 @@
 # EX07E — Implementation and comparison record
 
 **E06 implementation and S9 automated qualification are complete.**
-S1–S8 implementation and native integration tests are complete. S9 captures and
-comparisons are in the [shadow-sharing results report](validation.md);
-manual visual and numeric acceptance were approved on 2026-09-25. The final
-evidence is committed in `b8f1376e1`. The current checkpoint
-is in the [E ledger](README.md#optimization-tasks-and-outcome).
-The records below remain the accepted controls or explicitly provisional candidates;
+S1–S8 implementation and native integration tests are complete. S9 measurement
+results and comparisons are summarized below; manual visual and numeric
+acceptance were approved on 2026-09-25. The current checkpoint is in the
+[E ledger](README.md#optimization-tasks-and-outcome).
+The measurements below remain the accepted controls or explicitly provisional candidates;
 new baseline acceptance still requires manual visual validation.
 
 **EX07E is closed. The following sections preserve the earlier checkpoint history;
@@ -16,11 +15,9 @@ these application comparison records. Later changed baselines still require
 manual visual validation. The [E01–E08 ledger](README.md#optimization-tasks-and-outcome)
 owns remaining work; this result does not close the whole E stage.
 
-Initial evidence: [EX07D register](../EX07D/validation.md), renderer
-`137b681b2`, evidence `894a25e57`. New durable evidence:
-[matrix-access register](evidence/baselines/ex07e-20260924/matrix-access/register.json),
-including complete numeric records, traces, screenshots, source patch and tests.
-Frozen settings/layout bytes are reused from D. The initial baseline is retained.
+The initial D baseline and renderer `137b681b2` are the comparison point. The
+tables below summarize the matrix-access results, with the same workload
+settings and layout used for the initial measurements.
 
 ## Application results
 
@@ -137,7 +134,7 @@ promoted synthetic reference baselines. Native offscreen intervals are not
 application FPS. The initial B20/B22/B27 timing records lack CPU preflight;
 small timing changes against them are not accepted performance claims. Current
 records include preflight, complete percentiles, memory and image proof in
-[benchmark comparisons](evidence/baselines/ex07e-20260924/matrix-access/benchmark-comparisons.json).
+benchmark comparisons.
 
 | D ID  | Workload / family        | Initial mean ms | Candidate mean ms | Candidate p95 ms |
 | ----- | ------------------------ | --------------: | ----------------: | ---------------: |
@@ -243,7 +240,7 @@ interaction qualification passes: **26 rows / 40 images, all byte-identical to D
 The four endpoint images also match D exactly. Both endpoint/control sets have
 zero new buffers/textures in their measured windows. The user's 2026-09-24
 response was "Visually validated; accept and commit". Durable records are in
-[the cooperative-grid register](evidence/baselines/ex07e-20260924/cooperative-grid/register.json).
+the cooperative-grid register.
 
 ## E04/E07 discovered defect: caster normal under nonuniform transforms
 
@@ -283,7 +280,7 @@ retuned. Point/spot setup constants are renamed to remove a false UE attribution
 the [shadow-service contract](../../../../lld/shadow-service.md#23-published-shadow-contract)
 now spells out the retained local bias equation and its metric effect. The native
 reproduction, both suite results and final targeted result are versioned in the
-[caster-normal evidence register](evidence/baselines/ex07e-20260924/caster-normal/register.json).
+caster-normal evidence register.
 Both complete RenderScene targets are rebuilt so their C++ pass payloads match
 the updated shared shader archive. This is correctness evidence, not a newly
 established performance baseline.
@@ -462,7 +459,7 @@ quality. The depth/bias migration is required for correct hardware comparison;
 29 comparisons are the selected quality policy, not a shadow-correctness minimum.
 Further PCF-parameter tuning and a shadow-mask-pass redesign were not selected.
 
-The [candidate register](evidence/baselines/ex07e-20260924/point-hardware-pcf/register.json)
+The candidate register
 retains timings, in-run CPU samples and the screenshot. Final adopted baselines
 and their visual checks are recorded in the S9 results and commit sequence.
 
@@ -566,7 +563,7 @@ Local candidate evidence at
 `baselines/ex07e-20260924/cpu-submission/register.json` contains the summaries,
 preflights, reference comparisons and a source replay recipe. These baseline
 artifacts remain uncommitted pending manual visual approval. The
-[automated validation records](evidence/validation/ex07e-pre-e06/README.md) preserve the
+automated validation records preserve the
 passing tests independently. These are candidate measurements, not manually accepted
 new baselines. Broader dynamic/multi-view qualification and the final integrated
 scene captures still belong to E08.
@@ -869,12 +866,12 @@ implementation and comparison records. The three reviewer documents remain
 excluded from commits as requested. Historical candidate registers retain their
 capture-time disposition; the final accepted register owns current acceptance.
 
-Final screenshots: [Sponza](evidence/baselines/ex07e-20260925/cross-view-sharing/qualified-scenes/NewSponza_Main_glTF_003-native/scene.png)
-· [Instancing](evidence/baselines/ex07e-20260925/cross-view-sharing/qualified-scenes/InstancingTestScene-native/scene.png)
-· [Shared-map benchmark](evidence/baselines/ex07e-20260925/cross-view-sharing/qualified-native/shadow-share-static-deferred/phase-0-view-0.png)
-· [Second benchmark view](evidence/baselines/ex07e-20260925/cross-view-sharing/qualified-native/shadow-share-static-deferred/phase-0-view-1.png).
+Final screenshots: Sponza
+· Instancing
+· Shared-map benchmark
+· Second benchmark view.
 
-[Numeric records, compressed traces, images, frozen source and checksums](evidence/baselines/ex07e-20260925/cross-view-sharing/register.json)
+Numeric records, compressed traces, images, frozen source and checksums
 · [Initial D register](../EX07D/validation.md)
 · [Earlier E comparison report](validation.md)
 · [Authoritative tracker](README.md#optimization-tasks-and-outcome)

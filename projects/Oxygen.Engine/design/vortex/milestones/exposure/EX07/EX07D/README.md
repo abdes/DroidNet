@@ -122,5 +122,3 @@ EX07 exit requirements remain unchanged.
 ## Supporting records
 
 - [validation](validation.md)
-- [evidence](evidence/README.md)
-- [Captured evidence](evidence/README.md)

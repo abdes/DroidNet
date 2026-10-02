@@ -157,5 +157,3 @@ matrix. VSM is excluded from this work.
 
 - [sponza analysis](sponza-analysis.md)
 - [validation](validation.md)
-- [evidence](evidence/README.md)
-- [Captured evidence](evidence/README.md)

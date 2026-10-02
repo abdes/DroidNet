@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check Vortex documentation links, migration coverage and captured evidence."""
+"""Check Vortex documentation links and migration coverage."""
 
 from __future__ import annotations
 
@@ -108,12 +108,15 @@ from the engine directory. [Open items](OPEN_ITEMS.md) owns unfinished work.
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--migration", action="store_true", help="Also compare retained content with the pre-refactor baseline")
+    parser.add_argument("--migration", action="store_true", help="Compare retained content with the archived pre-refactor baseline")
     parser.add_argument("--write-status", action="store_true", help="Regenerate STATUS.md from milestone status blocks")
     parser.add_argument("--legacy", type=Path, help="Original vortex copy; defaults to the recorded Git revision")
     parser.add_argument("--report", type=Path, help="Write the complete JSON result")
     args = parser.parse_args()
-    manifest = json.loads((ROOT / "archive/migration-map.json").read_text(encoding="utf-8"))
+    manifest_path = ROOT / "archive/migration-map.json"
+    if args.migration and not manifest_path.is_file():
+        parser.error("--migration requires archive/migration-map.json, which is not present")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.is_file() else {}
     errors: list[str] = []
     unavailable: set[str] = set()
     documents = {p: p.read_text(encoding="utf-8-sig") for p in ROOT.rglob("*.md") if "evidence" not in p.relative_to(ROOT).parts}
@@ -218,7 +221,7 @@ def main() -> int:
                 errors.append(f"Missing milestone status: {path.relative_to(ROOT)}")
 
     artifact_count = 0
-    for item in manifest["artifacts"]:
+    for item in manifest.get("artifacts", []):
         path = ROOT / item["destination"]
         if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != item["sha256"]:
             errors.append(f"Evidence bytes: {item['destination']}")

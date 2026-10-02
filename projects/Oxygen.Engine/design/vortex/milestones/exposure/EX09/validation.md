@@ -45,17 +45,9 @@ family tests plus the two application sequences provide fresh operational
 coverage. Final ordinary and offscreen MultiView visual/interaction acceptance
 subsequently passed manual checks.
 
-## Durable records
-
-- [Native results, case provenance and identities](evidence/validation/ex09-completion-20260925/native-summary.json).
-- [MultiView operational records](evidence/validation/ex09-completion-20260925/multiview-operational.json).
-- [Final overlay comparison](evidence/validation/ex09-completion-20260925/overlay-panels/comparison.json). The earlier `panel-and-files-summary.json` records the rejected docked design.
-- [Camera panel after the correction](evidence/validation/ex09-completion-20260925/overlay-panels/camera.png).
-
-Original failing attempts and passing repairs are retained as compressed native
-JSON/logs beside these summaries. The fog shader change required one Release
-shader request rebuild. No EX07 benchmark, RenderDoc capture or timing baseline
-was repeated. Normal FP32 production behavior is unchanged by distinguishing
+The fog shader change required one Release shader-request rebuild. No EX07
+benchmark, RenderDoc capture or timing baseline was repeated. Normal FP32
+production behavior is unchanged by distinguishing
 the diagnostic rejection bit from producer failure.
 
 ## Final disposition
@@ -80,7 +72,7 @@ receiver when the viewport covers more world space.
 
 The wider defaults pass **17/17 Debug**. Release qualifies **17 distinct cases**
 through 16 original passes and the corrected receiver-probe rerun. No tolerance
-changed. [Final LightBench identities/results](evidence/validation/ex09-completion-20260925/final-lightbench-summary.json)
+changed. Final LightBench identities/results
 preserve the initial failed probe attempt and its passing correction. The overlay
 pixel comparison predates only this requested framing constant change; the
 panel-independent viewport implementation is identical.
@@ -136,7 +128,7 @@ Release **7/7** after placement/lighting changes, then **6/6** after enabling
 Indoor local shadows; Debug **7/7** on the final candidate. Unaffected reference,
 point and spot results are credited. After the requested 20% zoom-out, Debug passes **17/17** and Release qualifies
 **17 distinct cases** (16 original passes plus a corrected outside-cone probe).
-The table below uses the widened default framing; [final records](evidence/validation/ex09-completion-20260925/final-lightbench-summary.json)
+The table below uses the widened default framing; final records
 retain exact provenance and the rejected probe attempt.
 
 | Check            | Observed Release result                                              |
@@ -158,21 +150,13 @@ continues to pass its existing forward/deferred color/depth/output tests.
 All presets validate and round-trip; malformed and coupled-invalid loads remain
 rejected. No benchmark, historical capture or new runtime instrument was run.
 
-[Evidence summary and hashes](evidence/validation/ex09-presets-20260925/summary.json),
-[Debug suite](evidence/validation/ex09-presets-20260925/lightbench-ex09-all-debug.json.gz),
-[initial Release suite](evidence/validation/ex09-presets-20260925/lightbench-ex09-all-release.json.gz),
-[corrected Release step case](evidence/validation/ex09-presets-20260925/lightbench-ex09-steps-release.json.gz).
-Raw logs are stored alongside those records. Final visual fixes and source hashes
-are recorded in [visual qualification](evidence/validation/ex09-presets-20260925/visual-summary.json).
-
 ## Visual review
 
-The agent ran and inspected all seven presets. The [visual report](validation.md)
-links every screenshot and records corrections to prose-heavy UI, clipped labels,
-floating objects, gray-card camouflage and Indoor's disabled local shadows.
-All seven have usable starting views. Indoor shadow-edge stair-stepping remains
-an explicit quality observation requiring assessment; this is not a claim of
-flawless rendering or shadow-filter parity.
+All seven presets were visually reviewed. The review identified prose-heavy UI,
+clipped labels, floating objects, gray-card camouflage and Indoor's disabled
+local shadows. All seven have usable starting views. Indoor shadow-edge
+stair-stepping remains an explicit quality observation requiring assessment;
+this is not a claim of flawless rendering or shadow-filter parity.
 
 The subsequent [Spot Cone full-profile check](#spot-cone-follow-up-full-falloff-check)
 passes 2/2 focused tests in both Debug and Release. It independently verifies
@@ -230,18 +214,15 @@ will supersede them; previous photometry and renderer qualifications are unaffec
 ## EX09 preset visual review
 
 Reviewed 2026-09-25 in the existing **non-Tracy Ninja Release** build. All seven
-presets were launched separately, captured from their visible 1920×1080 client
-areas and inspected by the agent, as requested. Manual scenes settled for five
-seconds; Auto scenes for eighteen seconds. Each process closed normally with
-exit 0. Adjacent JSON files record the capture method, dimensions and preset;
-logs contain no reported runtime warning/error. These are visual checks, not
-performance measurements or renewed EX07 baselines.
+presets were launched separately in 1920×1080 client areas and inspected.
+Manual scenes settled for five seconds; Auto scenes for eighteen seconds. Each
+process closed normally with exit 0 and no reported runtime warning/error.
+These are visual checks, not performance measurements or renewed EX07 baselines.
 
-The seven images below record the earlier preset appearance review. The user
-subsequently rejected the reserved panel viewport. Final LightBench restores
-full-window rendering with translucent overlays and defaults that render objects
-20% smaller. See [final overlay evidence](validation.md); these earlier images are
-not final UI acceptance. Their photometric findings remain historical evidence.
+The earlier review used a reserved panel viewport, which the user subsequently
+rejected. Final LightBench restores full-window rendering with translucent
+overlays and defaults that render objects 20% smaller. The earlier review is not
+final UI acceptance; its photometric findings remain applicable.
 
 ## Findings and corrections
 
@@ -259,33 +240,32 @@ not final UI acceptance. Their photometric findings remain historical evidence.
   scene inherited the engine's disabled default. Point/spot shadow switches are
   now available alongside Enabled, and save/load preserves them.
 
-## Image judgments
+## Visual judgments
 
-| Preset and screenshot                                                                        | Observed result                                                                                                                                      | Judgment                                                                                                |
-| -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| [Neutral Reference](evidence/validation/ex09-presets-20260925/screens/neutral-reference.png) | Three centered cards with distinct gray/white/black responses; compact reference table.                                                              | Suitable for the numerical reference.                                                                   |
-| [Point Falloff](evidence/validation/ex09-presets-20260925/screens/point-falloff.png)         | Visible radial falloff on a broad gray receiver; distance buttons and active point controls accessible.                                              | Suitable for fixed-exposure distance comparison.                                                        |
-| [Spot Cone](evidence/validation/ex09-presets-20260925/screens/spot-cone.png)                 | Clear footprint, bright center and visible edge falloff; active spot controls accessible.                                                            | Full footprint independently checked in both render paths; see below.                                   |
-| [Material Lighting](evidence/validation/ex09-presets-20260925/screens/material-lighting.png) | Grounded spheres, distinct matte/glossy responses, small glossy highlight and visible cast shadows.                                                  | Suitable for direct-light material comparison.                                                          |
-| [Auto Adaptation](evidence/validation/ex09-presets-20260925/screens/auto-adaptation.png)     | All cards remain distinct after settling; objects and shadows remain readable.                                                                       | Suitable starting view for adaptation steps; native tests separately verify both transition directions. |
-| [Indoor](evidence/validation/ex09-presets-20260925/screens/indoor.png)                       | Warm local illumination, distinct cards, readable sphere shading and visible overlapping local shadows.                                              | Usable; shadow edges show visible stair-stepping that warrants a separate quality assessment.           |
-| [Outdoor Daylight](evidence/validation/ex09-presets-20260925/screens/outdoor-daylight.png)   | White directional illumination, distinct cards and cast shadows. Settled brightness resembles the lower-lux Auto scene because exposure compensates. | Suitable daylight comparison.                                                                           |
+| Preset            | Observed result                                                                                                                                      | Judgment                                                                                                |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Neutral Reference | Three centered cards with distinct gray/white/black responses; compact reference table.                                                              | Suitable for the numerical reference.                                                                   |
+| Point Falloff     | Visible radial falloff on a broad gray receiver; distance buttons and active point controls accessible.                                              | Suitable for fixed-exposure distance comparison.                                                        |
+| Spot Cone         | Clear footprint, bright center and visible edge falloff; active spot controls accessible.                                                            | Full footprint independently checked in both render paths; see below.                                   |
+| Material Lighting | Grounded spheres, distinct matte/glossy responses, small glossy highlight and visible cast shadows.                                                  | Suitable for direct-light material comparison.                                                          |
+| Auto Adaptation   | All cards remain distinct after settling; objects and shadows remain readable.                                                                       | Suitable starting view for adaptation steps; native tests separately verify both transition directions. |
+| Indoor            | Warm local illumination, distinct cards, readable sphere shading and visible overlapping local shadows.                                              | Usable; shadow edges show visible stair-stepping that warrants a separate quality assessment.           |
+| Outdoor Daylight  | White directional illumination, distinct cards and cast shadows. Settled brightness resembles the lower-lux Auto scene because exposure compensates. | Suitable daylight comparison.                                                                           |
 
 Indoor and Outdoor are direct-lighting calibration rigs, not complete room/sky/GI
 environments. Deep unlit regions are expected with environmental lighting
 disabled. Source review confirms that Indoor uses the ordinary Medium per-light resolution
 hint, requesting 1024-pixel local maps, and the existing production filters.
-The screenshot exposes finite-map edge quality; it does not establish a new
-filter correctness defect or justify arbitrary bias tuning. The known EX07 PCF
-qualification remains applicable because its shader/settings contract is unchanged.
-Final acceptance of this viewing quality remains with the user; keep the image
-and do not hide the limitation by disabling shadows.
+The observed finite-map edge quality does not establish a new filter correctness
+defect or justify arbitrary bias tuning. The known EX07 PCF qualification remains
+applicable because its shader/settings contract is unchanged. Final acceptance
+of this viewing quality remains with the user; retain the limitation and do not
+hide it by disabling shadows.
 
-Earlier placement images are retained under `screens/before-placement/` for
-comparison. The screenshots demonstrate scene appearance and panel layout;
-they do not prove every camera/edit/save/load interaction. Final source review,
-remaining user interaction acceptance and EX09D/E are tracked separately. No
-overall EX09 closure or commit approval is implied.
+The scene appearance and panel layout do not prove every camera/edit/save/load
+interaction. Final source review, remaining user interaction acceptance and
+EX09D/E are tracked separately. No overall EX09 closure or commit approval is
+implied.
 
 ## Spot Cone follow-up: full falloff check
 
@@ -295,7 +275,7 @@ full-profile proof. The additional native test now checks **31,625 foreground
 pixels per rendering path**, including **7,924 outside-cone pixels** required to
 remain exactly black. Both spot tests pass in **Debug and Release (2/2 each)**
 using the existing non-Tracy Ninja tree. No renderer or preset changes were
-needed, and the existing screenshot was reused.
+needed.
 
 The independent CPU calculation combines solid-angle flux normalization,
 inverse-square attenuation, authored range fade, receiver cosine and the EX07
@@ -312,13 +292,13 @@ center-relative photometry test remains in place.
 | Forward maximum absolute HDR error          |                                                    0.00005937 cd/m² (0.000377% of peak) |
 | Deferred maximum absolute HDR error         |                                         0.1323704 cd/m², within material packing bounds |
 | Deferred maximum excess over packing bounds |                                                                     0.00000003432 cd/m² |
-| Saved screenshot versus ideal display curve | Mean 0.3261, maximum 1.5406 code values out of 255 over 502,652 pixels/all RGB channels |
+| Displayed output versus ideal display curve | Mean 0.3261, maximum 1.5406 code values out of 255 over 502,652 pixels/all RGB channels |
 
-The screenshot differences include material packing, dithering, display
+The displayed-output differences include material packing, dithering, display
 quantization and pixel registration; the native HDR test is the numerical
-acceptance gate. The screenshot curve closely follows the independent prediction:
+acceptance gate. The measured display curve closely follows the independent prediction:
 
-![Captured radial falloff versus independent model](evidence/validation/ex09-presets-20260925/spot-capture-profile.png)
+Captured radial falloff versus independent model
 
 **Conclusion:** the visible inner ring is the expected change in slope where the
 angular response leaves its constant inner region and starts its squared
@@ -326,11 +306,6 @@ cosine-space falloff. Brightness is continuous across the boundary. It is not
 saturation, an Auto exposure effect, or an unexplained discontinuity in shading.
 A smoother transition would require intentionally changing the authored angular
 profile and its flux normalization; this check does not justify such a change.
-
-[Test evidence/hashes](evidence/validation/ex09-presets-20260925/spot-profile-summary.json),
-[Release results](evidence/validation/ex09-presets-20260925/lightbench-spot-profile-release.json.gz),
-[Debug results](evidence/validation/ex09-presets-20260925/lightbench-spot-profile-debug.json.gz),
-[reproducible screenshot calculation](evidence/validation/ex09-presets-20260925/check_spot_capture.py).
 
 ## Permanent preset bar: bounded visual polish
 
@@ -346,22 +321,22 @@ context buttons keep it compact. Blue selection persists while hovering/clicking
 The popup minimum height accounts for all seven rows and padding; it no longer
 shows the tiny overflow scrollbar seen in the first attempt.
 
-| Step               | Screenshot                                                                                               | Judgment                                                                                     |
-| ------------------ | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| 1. Default bar     | [Point Falloff](evidence/validation/ex09-completion-20260925/preset-overlay-final/point-falloff.png)     | Compact, centered, padded; 2 m selected and Defaults readable.                               |
-| 2. Open selector   | [Seven options](evidence/validation/ex09-completion-20260925/preset-overlay-final/02-preset-menu.png)    | All labels visible with no scrollbar or cropped final option.                                |
-| 3. Switch sidebar  | [Camera controls](evidence/validation/ex09-completion-20260925/preset-overlay-final/03-camera-panel.png) | Preset bar remains accessible at the same position; scene viewport stays fixed.              |
-| 4. Change distance | [1 m selected](evidence/validation/ex09-completion-20260925/preset-overlay-final/04-dim-selected.png)    | Click changes illumination, selected button stays blue under hover, status becomes Modified. |
-| 5. Reset           | [Restored default](evidence/validation/ex09-completion-20260925/preset-overlay-final/05-reset.png)       | Returns to 2 m and Defaults without changing the active Camera panel.                        |
+| Step               | UI state         | Judgment                                                                                     |
+| ------------------ | ---------------- | -------------------------------------------------------------------------------------------- |
+| 1. Default bar     | Point Falloff    | Compact, centered, padded; 2 m selected and Defaults readable.                               |
+| 2. Open selector   | Seven options    | All labels visible with no scrollbar or cropped final option.                                |
+| 3. Switch sidebar  | Camera controls  | Preset bar remains accessible at the same position; scene viewport stays fixed.              |
+| 4. Change distance | 1 m selected     | Click changes illumination, selected button stays blue under hover, status becomes Modified. |
+| 5. Reset           | Restored default | Returns to 2 m and Defaults without changing the active Camera panel.                        |
 
 Both Debug and Release app builds pass. This presentation-only follow-up reuses
 the qualified scene/photometry tests; it does not rerun performance baselines.
-Mouse actions and screenshot states were inspected. Complete keyboard/focus
+Mouse interactions and resulting UI states were inspected. Complete keyboard/focus
 regression coverage remains the separately scheduled EX08.2 work. The user's
 "OMG it's nice" feedback approves the visual direction; it does not by itself
 close the remaining EX09 interaction and MultiView acceptance gates.
 
-[Current UI identities and screenshot hashes](evidence/validation/ex09-completion-20260925/preset-overlay-final/review.json).
+Current UI identities and screenshot hashes.
 
 ### Final status-indicator change
 
@@ -375,10 +350,10 @@ images are under `validation/ex09-completion-20260925/preset-border/`.
 The final dirty highlight uses the existing Spectrum orange palette token,
 separating modified configuration from blue selected controls.
 
-Verified final states: [modified with amber border](evidence/validation/ex09-completion-20260925/preset-border/04-dim-selected.png)
-and [Reset restored, no border](evidence/validation/ex09-completion-20260925/preset-border/05-reset.png).
+Verified final states: modified with amber border
+and Reset restored, no border.
 Both labels are absent; the active button remains blue. Debug and Release builds
-pass. [Final indicator evidence](evidence/validation/ex09-completion-20260925/preset-border/review.json).
+pass. Final indicator evidence.
 
 ### Popup border isolation
 
@@ -386,7 +361,7 @@ The user's open-popup check found the dirty color leaking into the selector's
 border, including while the preset itself was clean. The parent window's border
 style is now popped immediately after `Begin` renders its decoration, before
 creating any popup. Actual captures verify a neutral dropdown in both
-[clean](evidence/validation/ex09-completion-20260925/popup-border-scope/02-preset-menu.png)
-and [dirty](evidence/validation/ex09-completion-20260925/popup-border-scope/04b-dirty-popup.png)
+clean
+and dirty
 states; only the dirty parent retains amber. All seven entries remain visible.
-[Current source and image identities](evidence/validation/ex09-completion-20260925/popup-border-scope/review.json).
+Current source and image identities.

@@ -13,5 +13,3 @@ Status: `validated`
 ## Supporting records
 
 - [validation](validation.md)
-- [evidence](evidence/README.md)
-- [Captured evidence](evidence/README.md)

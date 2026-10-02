@@ -19,11 +19,10 @@ since the C authoring implementation `2b61d102c`. F subsequently repaired three
 test files and the exposed C++20 result API, as qualified below. Existing E timing
 remains credited; the API repair was not timed separately.
 
-The [reuse audit](evidence/validation/ex07f-20260925/reuse-audit.json) checks 85 retained
-record hashes against E's accepted register, including 22 final benchmark rows,
-58 passing reference images, four complete application captures with normal
-exit, and 32 test-result records. This checks existing evidence; it is not a new
-test execution or a claim that old binaries have newly built identities.
+The closeout credits 22 final benchmark rows, 58 passing reference-image
+comparisons, four completed application runs, and 32 test results from the
+accepted E qualification. These are existing results, not new test executions
+or claims that old binaries have newly built identities.
 Overlapping test checkpoints are not summed as distinct tests.
 
 | Requirement                            | Credited proof and final disposition                                                                                                                                                                                                                                                          |
@@ -58,9 +57,8 @@ All three owning targets build in **Debug and Release** in the existing
 `out/build-ninja` tree. Focused execution passes **5/5 in each configuration**:
 one native allocation test, two catalog cases and two affected PakPlanBuilder
 cases. These are allocation/schema/plan tests, with no image capture or timing
-campaign. Build logs, six passing JSON results, the rejected attempt and source/
-executable hashes are preserved beside the [reuse audit](evidence/validation/ex07f-20260925/reuse-audit.json).
-Validation covered the affected targets; the full `all` build was not rerun. Repair commit: `4fd55cd8d`.
+campaign. Validation covered the affected targets; the full `all` build was not
+rerun. Repair commit: `4fd55cd8d`.
 
 ## C++20 editor SDK compatibility repair
 
@@ -85,12 +83,11 @@ SDK configurations are installed, and the exposed headers match source bytes.
 The **actual Debug Interop project builds and links with C++20 unchanged**, with
 project-reference builds disabled so other native trees are untouched. This is
 compile/link validation, not the user-owned interactive editor check. No separate
-Release Interop build is claimed. [Commands, identities and logs](evidence/validation/ex07f-20260925/editor-sdk/summary.json)
-are preserved alongside the other F evidence.
+Release Interop build is claimed.
 
 This repair does not alter shaders, scene inputs, filtering or light admission.
-Existing E performance/image evidence remains credited under the user's explicit
-instruction not to repeat captures; the API fix was not timed separately.
+Existing E performance and image-comparison results remain credited; the API fix
+was not timed separately.
 
 ## Accepted operating points
 
@@ -161,7 +158,7 @@ benchmark was repeated while the user builds and checks the editor.
 ## Final acceptance and handoff
 
 The user completed the requested editor workflow and replied **"All work"**.
-[Final acceptance record](evidence/validation/ex07f-20260925/acceptance.json) records that
+Final acceptance record records that
 confirmation alongside the credited engine evidence. EX07F, EX07-01–14 and
 EX07-GATE are closed in the tracker and package plan. No build, test, benchmark
 or capture was repeated for this documentation-only closure. Historical result

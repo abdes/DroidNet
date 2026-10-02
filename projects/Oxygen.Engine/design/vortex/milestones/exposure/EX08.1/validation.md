@@ -38,9 +38,8 @@ rebuilt and checked on 2026-09-25 in the existing non-Tracy Ninja tree.
 | LightBench preset/reset command lifetime                           |       2/2 |       2/2 |
 | **Total**                                                          | **66/66** | **66/66** |
 
-[Durable results](evidence/validation/ex081-20260925/summary.json) include raw result/log
-archives, build logs and source hashes. The new binding translation units are
-clang-tidy clean across three Debug compile contexts. The modified existing
+The new binding translation units are clang-tidy clean across three Debug
+compile contexts. The modified existing
 owners have zero diagnostics on changed lines; 127 other diagnostics remain
 in those files, so this is not a whole-file clean claim. `git diff --check` passes.
 Existing render qualification remains applicable; no renderer benchmark or

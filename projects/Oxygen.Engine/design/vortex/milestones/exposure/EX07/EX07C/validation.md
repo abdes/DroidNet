@@ -357,13 +357,13 @@ The measured quality/performance result was accepted. It is credited to D
 within its measured MultiView scope; no new capture is required to transfer that
 credit. The existing stage table records closed C–E work and closed F acceptance.
 
-# EX07C — Final validation and closure
+## EX07C — Final validation and closure
 
 **Closed on 2026-09-25.** The omitted caller builds and executions are qualified,
 the importer follow-up is reconciled, and the defect discovered during validation
 is fixed in `3fb0a8b17`. EX07F remains the final combined acceptance stage.
 
-## Fresh qualification
+### Fresh qualification
 
 Only the existing `out/build-ninja` tree was used, with Release and Debug
 configurations. No build tree was created. The exposure workload ran in Release
@@ -396,7 +396,7 @@ existing 30-second sampling minimum at 17.844 s. That rejected attempt is
 preserved. The successful rerun used the benchmark's existing automatic frame
 count; no assertion or threshold was weakened.
 
-## Defect found and repaired
+### Defect found and repaired
 
 `TexturePipelineEdgeTest.MaterialPresetsKeepCompressionAndMipChains` aborted on
 its second import. `ImportEventLoop::Stop()` released the constructor-owned ASIO
@@ -409,7 +409,7 @@ successive worker-backed runs on the same loop; the existing multi-policy textur
 checks and all four importer suites also pass in both configurations. The actual
 glTF and FBX Sponza imports ran successfully; none were skipped for missing assets.
 
-## Importer and cooked-content reconciliation
+### Importer and cooked-content reconciliation
 
 The existing policy checks verify material BC7 presets and full mip chains,
 explicit/source-format choices, and preservation of HDR radiance. Both model
@@ -432,7 +432,7 @@ Consequently the old instruction to recook the uncompressed Sponza generation
 no longer describes the active application content. Real-source import tests,
 policy regressions and current-content inspection close that follow-up.
 
-## Credited earlier C evidence
+### Credited earlier C evidence
 
 The archived results were inspected, not rerun or silently expanded:
 
@@ -450,9 +450,9 @@ The archived results were inspected, not rerun or silently expanded:
 results, with final editor acceptance now confirmed. C has no remaining
 implementation or validation item.
 
-## Durable evidence
+### Durable evidence
 
-[Qualification summary and artifact checksums](evidence/validation/ex07c-20260925/summary.json)
+Qualification summary and artifact checksums
 contains all fresh test counts, build/source/binary identity, exposure operations,
 content inspection and credited historical counts. Original test/build logs,
 JSON/TRX/XML reports, rejected attempts and exposure event records are stored

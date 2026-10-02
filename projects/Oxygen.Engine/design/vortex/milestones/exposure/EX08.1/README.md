@@ -56,5 +56,3 @@ policies; no new measurement commands or framework. See the
 ## Supporting records
 
 - [validation](validation.md)
-- [evidence](evidence/README.md)
-- [Captured evidence](evidence/README.md)

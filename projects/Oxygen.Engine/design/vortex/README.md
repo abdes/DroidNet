@@ -19,7 +19,5 @@ captured evidence live beside it. Technical contracts belong to the LLDs.
 The exposure package starts at [Exposure and LightBench](milestones/exposure/README.md).
 The next planned editor extension is [ED-M08](milestones/ED-M08/README.md).
 [Capability boundaries](milestones/capabilities.md) distinguish the delivered
-baseline from future rendering families.
-
-For the pre-refactor documents and source-to-destination map, see the
-[legacy reference](archive/README.md).
+baseline from future rendering families. Use the milestone index for current
+validation details.

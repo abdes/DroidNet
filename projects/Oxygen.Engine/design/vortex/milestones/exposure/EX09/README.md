@@ -16,7 +16,7 @@ Keep the five existing step IDs. Each closes with applicable evidence, focused
 new checks for gaps/changes, relevant user interaction and working instructions.
 Do not require a separate experiment implementation for each renderer contract.
 
-#### EX09A - Point and spot calibration presets
+### EX09A - Point and spot calibration presets
 
 **Dependency:** EX08.1. **Tracked by:** EX09-07–08, with EX09-10/12/14.
 
@@ -27,7 +27,7 @@ flux, inverse-square/range-fade, cone integration, singularity and invalid-input
 proofs when applicable. New/changed presets receive focused rendering checks
 and manual visual acceptance. No angular-sweep UI or general batch recipe engine.
 
-#### EX09B - Fixed exposure controls
+### EX09B - Fixed exposure controls
 
 **Dependency:** EX09A. **Tracked by:** EX09-04, with EX09-10/12/14.
 
@@ -38,7 +38,7 @@ fixtures retain the exact 4096-input, None/gamma-1 EV14/15/16 expectations
 invalid-input rejection. These are test values, not claimed live measurements.
 No separate Fixed Exposure experiment UI or consumed-gain probe.
 
-#### EX09C - Adaptation and lifecycle
+### EX09C - Adaptation and lifecycle
 
 **Dependency:** EX09B. **Tracked by:** EX09-05–06 and EX10-03.
 
@@ -52,7 +52,7 @@ add only focused regressions for changes/gaps. Retain 5e-4 EV equal-time toleran
 and event-generation semantics. No timeline editor, response plot, sequence
 language or UI intended solely to force device/resource failures.
 
-#### EX09D - HDR correctness coverage
+### EX09D - HDR correctness coverage
 
 **Dependency:** EX09C. **Tracked by:** EX09-09.
 
@@ -65,7 +65,7 @@ or invalidated requirements need new focused tests/inspection. No LightBench HDR
 experiment UI or new capture campaign. Record applicability instead of silently
 assuming prior results cover changed code.
 
-#### EX09E - MultiView operational acceptance
+### EX09E - MultiView operational acceptance
 
 **Dependency:** EX09D. **Tracked by:** EX09-13/15 and EX10-04–05.
 
@@ -131,5 +131,3 @@ coverage and the fog repair are qualified in the [checkpoint](validation.md).
 ## Supporting records
 
 - [validation](validation.md)
-- [evidence](evidence/README.md)
-- [Captured evidence](evidence/README.md)

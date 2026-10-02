@@ -154,5 +154,4 @@ Read: [ownership](#ownership), [C++](#c), [editor](#editor),
   `future`, `superseded` or `removed` accurately; the last three never mean delivered.
   Keep subdivision dots (`EX05.1`, `VTX-M04D.1`) and historical IDs unchanged.
   From `projects/Oxygen.Engine`, run `python tools/vortex/CheckDocumentation.py`
-  and `git diff --check`; use `--write-status` for the index and `--migration`
-  only for comparison against the recorded migration baseline.
+  and `git diff --check`; use `--write-status` for the index.

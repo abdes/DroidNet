@@ -153,7 +153,7 @@ Cone, Material Lighting and Auto Adaptation stage complete settings rather than
 inherit accidental state from a previous scenario. Reset restores the selected
 preset. Auto light steps change illumination without recreating exposure history.
 No generic controller, new runtime measurements or automatic UI testing is added.
-EX09D/E and the group closure still need their retained evidence/operational gates.
+EX09D/E and the group closure still need their acceptance and operational gates.
 
 Indoor and Outdoor Daylight were added at the user's explicit request. The
 [EX09 preset result](../EX09/validation.md) records implementation, native
@@ -182,5 +182,3 @@ after qualification and user review.
 ## Supporting records
 
 - [validation](validation.md)
-- [evidence](evidence/README.md)
-- [Captured evidence](evidence/README.md)

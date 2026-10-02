@@ -80,7 +80,7 @@ control's 65.277 ms (initial D: 62.229 ms); Instancing native is 13.677 ms
 (initial D: 27.416 ms). Native variability is retained; stable Tracy attribution
 and full identity/visual limits are in the
 [optimization report](validation.md) and
-[durable evidence](evidence/baselines/ex07e-20260924/matrix-access/register.json).
+durable evidence.
 The interrupted Instancing timing attempt is excluded and replaced. Full
 RenderScene builds now align with `oxyrun`; use full target builds before freezing
 future capture identities. Later changed baselines still need manual approval.
@@ -92,14 +92,14 @@ matrix-access-only control differs only in shaders.bin and confirms about
 15–17x faster grid construction at 4,096 lights (0.717/0.676 ms deferred/forward).
 The recorded one-light overhead is approximately 1/7 microseconds. The user
 visually validated both application scenes and approved these comparison records
-for commit on 2026-09-24; [durable proof](evidence/baselines/ex07e-20260924/cooperative-grid/register.json).
+for commit on 2026-09-24; durable proof.
 
 **E04/E07.1 repair (commit `31303c316`):** the nonuniform caster-normal defect is reproduced
 natively (0.15 depth mismatch for identical world geometry) and repaired by
 publishing/using the existing inverse-transpose normal stream. All 19 native
 image tests pass in each existing Ninja Release tree (Tracy OFF/ON), and both
 complete RenderScene targets are rebuilt. The
-[before/after evidence](evidence/baselines/ex07e-20260924/caster-normal/register.json)
+before/after evidence
 is versioned with this correctness repair. Private pass constants remain 128 bytes, with the descriptor
 at offset 124; zero slope bias avoids unnecessary normal work. The retained bias
 calibration is documented, and misleading UE constant names are corrected.
@@ -191,7 +191,7 @@ work and final E08 lifecycle checks; do not invent zero values or implement E06
 infrastructure early to satisfy a counter. Final integrated Sponza/Instancing
 captures and visual baseline acceptance follow E06.
 
-Committed [automated validation records](evidence/validation/ex07e-pre-e06/README.md)
+Committed automated validation records
 retain the passing test results separately from unapproved baseline artifacts.
 
 **Pre-E06 evidence check (2026-09-24):** all 30 files indexed by the two candidate
@@ -688,5 +688,3 @@ source changes or pointer-sharing tests alone.
 
 - [shadow memory](shadow-memory.md)
 - [validation](validation.md)
-- [evidence](evidence/README.md)
-- [Captured evidence](evidence/README.md)

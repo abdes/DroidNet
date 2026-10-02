@@ -60,13 +60,8 @@ Settings tests cover modified-state round-trip and full reset, unknown/missing
 fields, obsolete versions, invalid modes, EV/percentile/curve coupling, invalid
 geometry/camera/cones, nonfinite values and the shipped indoor settings.
 
-Durable records: [summary and hashes](evidence/validation/ex08-20260925/summary.json),
-[Debug results](evidence/validation/ex08-20260925/lightbench-ex08-debug.json.gz),
-[Release results](evidence/validation/ex08-20260925/lightbench-ex08-release.json.gz),
-[final indoor Debug](evidence/validation/ex08-20260925/lightbench-ex08-indoor-debug.json.gz),
-[final indoor Release](evidence/validation/ex08-20260925/lightbench-ex08-indoor-release.json.gz).
-Raw logs are retained alongside these results. Run commands and user checklist
-are in the [LightBench README](../../../../../Examples/LightBench/README.md).
+Run commands and the user checklist are in the
+[LightBench README](../../../../../Examples/LightBench/README.md).
 
 ## User-reported directional toggle defect
 
@@ -86,8 +81,8 @@ when disabled and restored illumination when enabled in both deferred and forwar
 paths. This one affected case passes in Debug and Release; prior unrelated checks
 are credited. Six distinct tests are now qualified in each configuration.
 
-[Toggle Debug](evidence/validation/ex08-20260925/lightbench-ex08-toggle-debug.json.gz),
-[Toggle Release](evidence/validation/ex08-20260925/lightbench-ex08-toggle-release.json.gz).
+Toggle Debug,
+Toggle Release.
 The Release app was rebuilt and reopened for a focused manual retest.
 
 ## Final acceptance
@@ -142,5 +137,4 @@ EX09B/C owns a useful explicit Auto viewing preset and operating guidance:
 appropriate scene lighting/metering plus a tone curve, while Manual/None remains
 the neutral numerical reference. A tone curve alone does not correct a meter
 that strongly favors dim background. No production exposure algorithm or
-numerical tolerance was changed. [Result](evidence/validation/ex08-20260925/lightbench-ex08-auto-release.json.gz)
-and the adjacent log retain the numerical evidence.
+numerical tolerance was changed.

@@ -71,5 +71,3 @@ rerun for this migration. See [results and raw evidence](validation.md#results).
 ## Supporting records
 
 - [validation](validation.md)
-- [evidence](evidence/README.md)
-- [Captured evidence](evidence/README.md)

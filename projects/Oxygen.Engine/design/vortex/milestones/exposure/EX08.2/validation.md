@@ -58,9 +58,8 @@ databases contain no Test Engine defines or UI test sources, and their ordinary
 LightBench/TexturedCube executables contain no test-session environment marker.
 The runner rejects an ordinary tree before creating output or launching a demo.
 
-[Durable results, source/binary identities and raw records](evidence/validation/ex082-20260925/results.json)
-preserve the successful runs and relevant failed development attempts. Runner UTC
-times are authoritative; upstream JUnit formats its monotonic clock as an epoch.
+Runner UTC times are authoritative; upstream JUnit formats its monotonic clock
+as an epoch.
 UI qualification used the instrumented Tracy tree and is not a performance claim.
 
 Integration corrections found during development were in the test harness:
@@ -105,7 +104,7 @@ did not regenerate existing trees.
 
 The updated generator passes all 26 tooling tests, including default-on and
 explicit True/False propagation across configurations, plus dependency deployment
-in both modes. [Policy-change evidence](evidence/validation/ex082-20260925/development-default/result.json)
+in both modes. Policy-change evidence
 is separate from the earlier runtime qualification records. No binaries were
 rebuilt and no capture or benchmark was repeated for this configuration change.
 
@@ -115,4 +114,4 @@ UI tests enabled in Debug, Release and RelWithDebInfo. Its compile database has
 nine UI-source entries with the required defines and matching Test Engine headers.
 VS Code's installed clangd 22.1.6 checks all three UI translation units with zero
 errors; manual checks confirmed the editor issue resolved. This repair configured
-the tree without rebuilding its binaries. [Environment evidence](evidence/validation/ex082-20260925/development-ninja/result.json).
+the tree without rebuilding its binaries.
