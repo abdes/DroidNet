@@ -26,7 +26,7 @@ public sealed class LibraryMetadataCacheTests
         using var workspace = new CookWorkspace();
         var fingerprint = new string('A', 64);
         var content = missingReport ? JsonSerializer.Serialize(new { Fingerprint = fingerprint, Digest = "invalid", Report = (string?)null }) : "{";
-        workspace.WriteText(".build/cache/cooked-dependencies-v1/" + fingerprint + ".json", content);
+        workspace.WriteText(".build/cache/cooked-dependencies-v2/" + fingerprint + ".json", content);
         _ = (await CookedDependencyCache.ReadAsync(workspace.Root, fingerprint, [], this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeNull();
     }
 }

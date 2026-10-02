@@ -26,6 +26,10 @@ public sealed class ProjectAssetKeyTests
     {
         using var workspace = new CookWorkspace();
         workspace.WriteMaterial("Content/Materials/Shared.omat.json", "Shared");
+        workspace.WriteText("Content/Scripts/Spin.oscript.json", "{}");
+        workspace.WriteText("Content/Input/Jump.oiact.json", "{}");
+        workspace.WriteText("Content/Input/Gameplay.oimap.json", "{}");
+        workspace.WriteText("Content/Physics/Body.opscene.json", "{}");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
@@ -38,6 +42,7 @@ public sealed class ProjectAssetKeyTests
         var map = CookedAssetKeyMap.Parse(cached["Report"]!.GetValue<string>());
         var key = map.PathsByKey.Single(static pair => string.Equals(pair.Value, "/Content/Materials/Shared.omat", StringComparison.Ordinal)).Key;
         _ = index.Resolve(key).Should().Be(new Uri("asset:///Content/Materials/Shared.omat"));
+        _ = map.PathsByKey.Values.Should().Contain(["/Content/Scripts/Spin.oscript", "/Content/Input/Jump.oiact", "/Content/Input/Gameplay.oimap", "/Content/Physics/Body.opscene"]);
         workspace.WriteMaterial("Content/Materials/Shared.omat.json", "Changed content");
         index = await ProjectAssetKeyIndex.ReadAsync(workspace.ProjectContext, [], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = (await index.EnsureAsync(api, workspace.Root, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeFalse();

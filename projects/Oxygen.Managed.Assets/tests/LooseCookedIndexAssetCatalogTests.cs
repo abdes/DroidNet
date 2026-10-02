@@ -8,7 +8,7 @@ using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Catalog.LooseCooked;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V2;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
 using Testably.Abstractions.Testing;
 
 namespace Oxygen.Managed.Assets.Tests;
@@ -23,7 +23,10 @@ public sealed class LooseCookedIndexAssetCatalogTests
     public async Task CapturedIndex_RemainsReadableWithoutItsFilesAndDoesNotReload()
     {
         var path = Path.Combine(Path.GetTempPath(), "oxygen-catalog-snapshot-" + Guid.NewGuid().ToString("N"));
-        var entry = new AssetEntry(new AssetKey(1, 2), "assets/material.bin", "/Content/Material.omat", 1, 0, SHA256.HashData([]));
+        var entry = new AssetEntry(new AssetKey(1, 2), "assets/material.bin", "/Content/Material.omat", 1, 0, SHA256.HashData([]))
+        {
+            References = new(42, 3, 5),
+        };
         var document = new Document(1, IndexFeatures.HasVirtualPaths, Guid.CreateVersion7(), [entry], []);
         using var catalog = new LooseCookedIndexAssetCatalog(document, path);
 
@@ -34,6 +37,7 @@ public sealed class LooseCookedIndexAssetCatalogTests
         _ = after.Should().Equal(before);
         _ = after.Should().ContainSingle();
         _ = after.Single().Cooked!.SourceIdentity.Should().Be(document.SourceGuid);
+        _ = after.Single().Cooked!.References.Should().Be(entry.References);
         _ = Directory.Exists(path).Should().BeFalse();
     }
 
@@ -94,22 +98,37 @@ public sealed class LooseCookedIndexAssetCatalogTests
     {
         var fs = new MockFileSystem();
         _ = fs.Directory.CreateDirectory(@"C:\Cooked");
-        var entry = new AssetEntry(new AssetKey(1, 2), "payloads/7.bin", "/Content/Materials/Wood.png", AssetType: 1, DescriptorSize: 17, SHA256.HashData(new byte[17]));
+        var entry = new AssetEntry(new AssetKey(1, 2), "payloads/7.bin", "/Content/Materials/Wood.png", AssetType: 1, DescriptorSize: 17, SHA256.HashData(new byte[17]))
+        {
+            References = new(0, 1, 2),
+        };
         var document = new Document(1, IndexFeatures.HasVirtualPaths, Guid.CreateVersion7(), [entry], []);
         await WriteIndexAsync(document).ConfigureAwait(false);
         using var catalog = new LooseCookedIndexAssetCatalog(new NativeStorageProvider(fs), new LooseCookedIndexAssetCatalogOptions { CookedRootFolderPath = @"C:\Cooked" });
         var original = (await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
         _ = original.Cooked!.AssetType.Should().Be(1);
         _ = original.Cooked.DescriptorRelativePath.Should().Be("payloads/7.bin");
+        _ = original.Cooked.References.ResourceCount.Should().Be(1);
+        _ = original.Cooked.References.KeyCount.Should().Be(2);
+        _ = original.Cooked.References.Offset.Should().BeGreaterThan(0);
         await catalog.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = (await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Should().Be(original);
-        var updated = entry with { DescriptorSha256 = Enumerable.Repeat((byte)1, 32).ToArray(), DescriptorSize = 18 };
+        var updated = entry with
+        {
+            DescriptorSha256 = Enumerable.Repeat((byte)1, 32).ToArray(),
+            DescriptorSize = 18,
+            References = new(0, 2, 3),
+        };
         await WriteIndexAsync(document with { Assets = [updated] }).ConfigureAwait(false);
         await catalog.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var current = (await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
         _ = current.Cooked!.DescriptorSize.Should().Be(18);
+        _ = current.Cooked.References.ResourceCount.Should().Be(2);
+        _ = current.Cooked.References.KeyCount.Should().Be(3);
+        _ = current.Cooked.References.Offset.Should().Be(original.Cooked.References.Offset);
         _ = current.Should().NotBe(original);
         _ = original.Cooked.DescriptorSize.Should().Be(17, "an already returned snapshot must remain unchanged");
+        _ = original.Cooked.References.ResourceCount.Should().Be(1, "an already returned snapshot must retain its reference metadata");
 
         async Task WriteIndexAsync(Document value)
         {

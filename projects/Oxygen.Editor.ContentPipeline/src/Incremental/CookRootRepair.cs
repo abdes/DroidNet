@@ -83,7 +83,7 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
                     .Concat(owners.SelectMany(static product => product.Outputs)
                         .Where(output => output.RootMount == mount && output.Asset.DescriptorRelativePath is not null)
                         .Select(static output => output.Asset.DescriptorRelativePath!)).ToHashSet(StringComparer.Ordinal);
-                foreach (var file in inventory.Files.Where(file => file.Value.Kind == Oxygen.Managed.Assets.Persistence.LooseCooked.V2.FileKind.Auxiliary
+                foreach (var file in inventory.Files.Where(file => file.Value.Kind == Oxygen.Managed.Assets.Persistence.LooseCooked.V3.FileKind.Auxiliary
                     && !associatedResources.Contains(file.Key)))
                 {
                     diagnostics.Add(Failure(Path.Combine(path, file.Key), "Cannot rebuild this auxiliary file: its source owner is unknown."));

@@ -4,7 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V2;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
 
 namespace Oxygen.Managed.Assets.Tests;
 

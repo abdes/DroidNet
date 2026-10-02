@@ -476,7 +476,7 @@ public sealed partial class ContentPipelineService(
         }
 
         var validated = await this.ValidateImportedOutputAsync(operationId, targetKind, scope, manifest, allDiagnostics, importResult, cancellationToken).ConfigureAwait(false);
-        var resources = validated.NativeInventory?.Files.Where(static file => file.Value.Kind == Oxygen.Managed.Assets.Persistence.LooseCooked.V2.FileKind.Auxiliary)
+        var resources = validated.NativeInventory?.Files.Where(static file => file.Value.Kind == Oxygen.Managed.Assets.Persistence.LooseCooked.V3.FileKind.Auxiliary)
             .Select(static file => file.Key).ToHashSet(StringComparer.Ordinal) ?? [];
         return validated with
         {

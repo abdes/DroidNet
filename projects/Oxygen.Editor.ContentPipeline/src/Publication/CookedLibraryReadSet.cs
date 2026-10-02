@@ -166,9 +166,17 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                 continue;
             }
 
-            foreach (var dependency in metadata.Dependencies)
+            foreach (var reference in metadata.KeyReferences.Where(static reference => reference.TargetKind == CookedKeyReferenceTargetKind.Asset))
             {
+                var dependency = reference.AssetKey;
                 var found = this.FindKey(dependency);
+                if (found.asset?.Cooked is { } target && !MatchesExpectedAssetType(reference, target))
+                {
+                    diagnostics.Add(Issue(consumer, "asset_cook.library_type_mismatch",
+                        $"Library asset key '{dependency}' has type {target.AssetType}, but the native reference expects type {reference.ExpectedAssetType}."));
+                    continue;
+                }
+
                 var candidate = found.asset is null || this.ProjectSourceWins(found.asset.Uri, found.root)
                     ? await this.ResolveProjectKeyAsync(dependency, inspector as ICookedAssetKeyProvider, operationRoot, artifacts, cancellationToken).ConfigureAwait(false) : null;
                 if (candidate is not null && (found.asset is null || this.ProjectHasPriority(found.root)))
@@ -328,6 +336,9 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
 
     private static bool HasProjectOwner(CookDependencyGraph graph, Uri uri)
         => graph.Assets.Any(input => input.OwnsOutput(uri.AbsolutePath));
+
+    internal static bool MatchesExpectedAssetType(CookedKeyReference reference, CookedAssetMetadata target)
+        => reference.ExpectedAssetType == 0 || target.AssetType == reference.ExpectedAssetType;
 
     private static DiagnosticRecord Issue(ContentCookInput consumer, string code, string message)
         => new() { OperationId = Guid.Empty, Domain = FailureDomain.AssetCook, Severity = DiagnosticSeverity.Error, Code = code, Message = message, AffectedPath = consumer.SourceAbsolutePath, AffectedVirtualPath = consumer.AssetUri.AbsolutePath };

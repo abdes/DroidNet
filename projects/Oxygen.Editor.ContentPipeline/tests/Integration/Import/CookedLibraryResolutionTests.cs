@@ -48,7 +48,7 @@ public sealed class CookedLibraryResolutionTests
         await File.WriteAllBytesAsync(descriptorPath, damaged, this.TestContext.CancellationToken).ConfigureAwait(false);
         var rejected = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = rejected.IsPublished.Should().BeFalse();
-        var dependencyCache = Path.Combine(consumer.Root, ".build/cache/cooked-dependencies-v1");
+        var dependencyCache = Path.Combine(consumer.Root, ".build/cache/cooked-dependencies-v2");
         _ = (Directory.Exists(dependencyCache) && Directory.EnumerateFiles(dependencyCache, "*", SearchOption.AllDirectories).Any()).Should().BeFalse(
             "damaged descriptor bytes must not seed a dependency cache under the unchanged index identity");
         await File.WriteAllBytesAsync(descriptorPath, original, this.TestContext.CancellationToken).ConfigureAwait(false);

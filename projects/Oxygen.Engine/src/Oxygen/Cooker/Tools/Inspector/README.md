@@ -158,7 +158,7 @@ geometry without parsing other descriptors. A missing path yields an empty repor
 Oxygen.Cooker.Inspector.exe dependencies <cooked_root> --output <report.json>
 ```
 
-Writes `oxygen.cooked-dependencies.v1` metadata using the runtime descriptor
+Writes `oxygen.cooked-dependencies.v2` metadata using the runtime descriptor
 decoders. Geometry and scene asset-key references are collected without loading
 vertex buffers, textures, or a rendering engine. Material resource indices remain
 local to their container. Each asset reports whether dependency inspection is

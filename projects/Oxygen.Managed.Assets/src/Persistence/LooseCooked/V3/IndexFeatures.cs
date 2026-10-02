@@ -4,16 +4,14 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-namespace Oxygen.Managed.Assets.Persistence.LooseCooked.V2;
+namespace Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
 
-/// <summary>
-/// Known v1 index flags. These map to <c>oxygen::data::loose_cooked::v1::IndexFeatures</c>.
-/// </summary>
+/// <summary>Known feature flags in the current loose cooked index.</summary>
 [Flags]
 [SuppressMessage(
     "Design",
     "CA1028:Enum Storage should be Int32",
-    Justification = "This enum is serialized to/from the v1 index binary format and must match the on-disk uint layout.")]
+    Justification = "This enum is serialized as an on-disk uint.")]
 public enum IndexFeatures : uint
 {
     None = 0,

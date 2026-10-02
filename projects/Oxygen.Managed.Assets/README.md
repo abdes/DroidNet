@@ -36,9 +36,10 @@ asset naming. Binary runtime formats are owned by native Data and Content.
 
 ## Cooked metadata
 
-[The v2 index reader](src/Persistence/LooseCooked/V2/README.md) supplies catalog
+[The v3 index reader](src/Persistence/LooseCooked/V3/README.md) supplies catalog
 metadata without launching a tool. It reads the current native format only;
-recook content when the format changes.
+recook content when the format changes. Catalog metadata preserves each asset's
+opaque native reference-table locator and counts without interpreting the block.
 
 Native Cooker owns binary production. Native Content and Inspector own complete
 cooked-root integrity verification. Reading an index for display does not verify

@@ -4,15 +4,13 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-namespace Oxygen.Managed.Assets.Persistence.LooseCooked.V2;
+namespace Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
 
-/// <summary>
-/// Kind of file record. These map to <c>oxygen::data::loose_cooked::v2::FileKind</c>.
-/// </summary>
+/// <summary>File-record kinds in the current loose cooked index.</summary>
 [SuppressMessage(
     "Design",
     "CA1028:Enum Storage should be Int32",
-    Justification = "This enum is serialized to/from the v2 index binary format and must match the on-disk ushort layout.")]
+    Justification = "This enum is serialized as an on-disk ushort.")]
 public enum FileKind : ushort
 {
     Unknown = 0,
@@ -24,7 +22,5 @@ public enum FileKind : ushort
     ScriptsData = 6,
     PhysicsTable = 7,
     PhysicsData = 8,
-    ScriptBindingsTable = 9,
-    ScriptBindingsData = 10,
     Auxiliary = 11,
 }

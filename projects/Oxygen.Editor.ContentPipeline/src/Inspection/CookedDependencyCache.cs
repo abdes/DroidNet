@@ -92,7 +92,7 @@ internal static class CookedDependencyCache
     }
 
     private static string CachePath(string projectRoot, string fingerprint)
-        => Path.Combine(projectRoot, ".build", "cache", "cooked-dependencies-v1", fingerprint + ".json");
+        => Path.Combine(projectRoot, ".build", "cache", "cooked-dependencies-v2", fingerprint + ".json");
 
     private sealed record CachedReport(string Fingerprint, string Digest, string Report);
 }

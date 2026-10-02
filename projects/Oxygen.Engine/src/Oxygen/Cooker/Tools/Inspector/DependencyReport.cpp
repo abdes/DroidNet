@@ -92,7 +92,7 @@ auto RunDependencyReport(const DependencyReportOptions& options) -> int
       assets.push_back(std::move(row));
     }
     const nlohmann::json report = {
-      { "schema", "oxygen.cooked-dependencies.v1" },
+      { "schema", "oxygen.cooked-dependencies.v2" },
       { "source_key", nostd::to_string(inspection.Guid()) },
       { "assets", std::move(assets) },
     };

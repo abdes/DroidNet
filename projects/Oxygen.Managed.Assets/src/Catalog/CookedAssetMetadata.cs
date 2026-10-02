@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V2;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
 
 namespace Oxygen.Managed.Assets.Catalog;
 
@@ -25,4 +25,7 @@ public sealed record CookedAssetMetadata(
 {
     /// <summary>Gets the native virtual path declared by this representation, including aliases of a shared asset key.</summary>
     public string? VirtualPath { get; init; }
+
+    /// <summary>Gets the opaque native reference-block locator and counts.</summary>
+    public AssetReferenceTable References { get; init; }
 }

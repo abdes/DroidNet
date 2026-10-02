@@ -7,7 +7,7 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using DroidNet.Storage;
 using Oxygen.Managed.Assets.Catalog.FileSystem;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V2;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Managed.Assets.Catalog.LooseCooked;
@@ -16,7 +16,7 @@ namespace Oxygen.Managed.Assets.Catalog.LooseCooked;
 /// A catalog provider backed by a runtime-compatible loose cooked index (<c>container.index.bin</c>).
 /// </summary>
 /// <remarks>
-/// This provider enumerates keyed assets from the current v2 index.
+/// This provider enumerates keyed assets from the current v3 index.
 /// It maps native <c>VirtualPath</c> values (e.g. <c>/Content/Materials/Wood.omat</c>)
 /// to canonical asset URIs (e.g. <c>asset:///Content/Materials/Wood.omat</c>).
 /// </remarks>
@@ -292,7 +292,11 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
             var uri = VirtualPathToAssetUri(entry.VirtualPath);
             var record = new AssetRecord(uri)
             {
-                Cooked = new(cookedRoot, entry.DescriptorRelativePath, document.SourceGuid, entry.AssetKey, entry.AssetType, entry.DescriptorSize, Convert.ToHexString(entry.DescriptorSha256.Span)) { VirtualPath = entry.VirtualPath },
+                Cooked = new(cookedRoot, entry.DescriptorRelativePath, document.SourceGuid, entry.AssetKey, entry.AssetType, entry.DescriptorSize, Convert.ToHexString(entry.DescriptorSha256.Span))
+                {
+                    VirtualPath = entry.VirtualPath,
+                    References = entry.References,
+                },
             };
             if (!next.TryAdd(uri, record))
             {

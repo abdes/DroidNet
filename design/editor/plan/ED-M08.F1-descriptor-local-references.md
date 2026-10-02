@@ -1,15 +1,15 @@
 # ED-M08.F1 — Descriptor-local reference format
 
-Status: **in progress — native cutover implemented; qualification and rollout remain**
+Status: **in progress — native and managed loose-index cutovers implemented; qualification and rollout remain**
 
 **Summary:** replace descriptor-specific packaging rewrites with native reference
 tables. Follow [scope](#scope), [delivery](#delivery) and [acceptance](#acceptance).
 Execute after [M08.1.9](ED-M08-runtime-parity-and-standalone-validation.md#m081-remaining-increments)
 and before M08.2. Existing M08.2–M08.8 identifiers remain unchanged.
 
-| Outcome                                                                                                               | Remaining                                                             | Evidence                                                                                                                                             |
-| --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native reference tables, scene-local scripting, generic packaging and shared current-version definitions implemented. | Complete warning cleanup, load-cost qualification and editor cutover. | Release install and 28 native test programs pass; 16 maintained scenes and four retained models recooked; RenderScene retained-library check passes. |
+| Outcome                                                                                                                                              | Remaining                                                                                                             | Evidence                                                                                                                                                                                                                        |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Native reference tables, scene-local scripting, generic packaging, managed loose-index consumers and shared current-version definitions implemented. | Complete editor scene-reference authoring, warning cleanup, load-cost qualification and editor project qualification. | Release install and 28 native test programs pass; 16 maintained scenes and four retained models recooked; RenderScene retained-library check passes. Managed changes are pending user-owned build, tests and editor validation. |
 
 ## Scope
 
@@ -29,17 +29,34 @@ container-global script binding/parameter coordination. Resource aggregation and
 placement remain necessary. No reflection framework, universal graph or general
 content-addressed database is included.
 
+### Editor reference authoring gap
+
+Native scene descriptor v10 accepts scene-level `scripts`, `input_actions`,
+`input_mapping_contexts`, `physics_sidecars`, and `extra_assets` references.
+The managed editor currently emits only `materials`; its `SceneData` model has no
+serialized collections or authoring workflow for the other reference kinds.
+`ProjectAssetKeyIndex` now discovers project descriptors for scripts, input
+actions, mapping contexts, and physics scenes, but this does not make them
+authored or emitted by a scene.
+
+Complete this editor portion of F1.4 in a follow-up: define backward-compatible
+serialized scene reference data; add assignment, validation, and save/reload
+behavior in the editor; emit all supported native v10 reference arrays; resolve
+project/library ownership and expected asset types; and add descriptor,
+round-trip, and cook-closure coverage. Until then, scene-local scripting and
+these reference kinds are native-format capabilities, not editor capabilities.
+
 Wire details belong in the existing Data packing and Cooker PAK designs before
 implementation; do not duplicate their field layouts in this plan.
 
 ## Delivery
 
-| Slice                  | State       | Work                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| ---------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| F1.1 Contract          | validated   | Owner contracts cover current asset types, scripts, dependency kinds, absent/fallback/error texture semantics, bounds and versions. Preserve successful model import with diagnostics for missing textures.                                                                                                                                                                                                               |
-| F1.2 Producers/readers | in_progress | Native emitters/readers and Inspector migrated; shared version catalog added. PakGen and its dependencies are removed; external tests use native owning boundaries. Exact reference-inventory checks and per-descriptor publication gates are implemented; frozen physics bindings and shared scene-load scopes are implemented. Complete qualification and pre-commit checks. Binding resolution stays on loading paths. |
-| F1.3 Packaging         | in_progress | Generic binding relocation implemented; descriptor rewrites and global script tables removed. Ordered composition, embedded catalogs, tombstones, exact adjacent baselines and patch-of-patch input are implemented. Complete integration qualification and pre-commit checks.                                                                                                                                            |
-| F1.4 Cutover           | in_progress | Native SDKs, maintained scenes, shared PAK and four retained model imports refreshed. RenderScene retained-library loading passes. Editor project recook/Interop checks and final qualification remain.                                                                                                                                                                                                                   |
+| Slice                  | State       | Work                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| F1.1 Contract          | validated   | Owner contracts cover current asset types, scripts, dependency kinds, absent/fallback/error texture semantics, bounds and versions. Preserve successful model import with diagnostics for missing textures.                                                                                                                                                                                                                                                                                                                                                                                            |
+| F1.2 Producers/readers | in_progress | Native emitters/readers and Inspector migrated; shared version catalog added. PakGen and its dependencies are removed; external tests use native owning boundaries. Exact reference-inventory checks and per-descriptor publication gates are implemented; frozen physics bindings and shared scene-load scopes are implemented. Complete qualification and pre-commit checks. Binding resolution stays on loading paths.                                                                                                                                                                              |
+| F1.3 Packaging         | in_progress | Generic binding relocation implemented; descriptor rewrites and global script tables removed. Ordered composition, embedded catalogs, tombstones, exact adjacent baselines and patch-of-patch input are implemented. Complete integration qualification and pre-commit checks.                                                                                                                                                                                                                                                                                                                         |
+| F1.4 Cutover           | in_progress | Native SDKs, maintained scenes, shared PAK and four retained model imports refreshed. RenderScene retained-library loading passes. Managed loose-index v3 readers retain reference-block metadata opaquely; editor dependency reports preserve typed native references, validate expected target types, and use the v2 wire/cache contract while only Asset targets enter dependency closure. Project key discovery covers current reference-target descriptor types. Editor scene-level authoring/emission for non-material references, project recook/Interop checks and final qualification remain. |
 
 Implementation boundaries:
 
@@ -87,6 +104,13 @@ in progress; approval is not validation.
   the winner; repeated identical ordered inputs remain deterministic.
 - Repacking leaves opaque descriptor bytes unchanged while referenced resources
   resolve identically in loose and PAK sources, including multi-root packaging.
+- Managed editor catalog and cook readers accept only loose-index v3 and retain
+  reference-block locators/counts without interpreting their payloads.
+- Editor dependency closure includes only native key references classified as
+  `Asset`; `PhysicsResource`, `Logical` and resource bindings are not asset edges.
+- The editor's authored scene reference lists round-trip and emit the native v10
+  material, script, input-action, input-mapping-context, physics-sidecar, and
+  extra-asset categories with project/library resolution and expected-type checks.
 - Adding a resource-bearing descriptor field needs no packaging offset walker.
 - Missing, wrong-kind, out-of-range, truncated and cyclic hard references reject
   before publication; reference/dependency inventories are complete.

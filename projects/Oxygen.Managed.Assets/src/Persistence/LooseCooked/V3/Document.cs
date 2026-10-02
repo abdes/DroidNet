@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Managed.Assets.Persistence.LooseCooked.V2;
+namespace Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
 
 public sealed record Document(
     ushort ContentVersion,

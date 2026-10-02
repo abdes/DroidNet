@@ -83,7 +83,7 @@ internal sealed class ProjectAssetKeyIndex(string cachePath, string[] paths)
             foreach (var file in Directory.EnumerateFiles(root, "*.json", options))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (Path.GetExtension(file[..^5]).ToUpperInvariant() is ".OMAT" or ".OGEO" or ".OSCENE")
+                if (Path.GetExtension(file[..^5]).ToUpperInvariant() is ".OMAT" or ".OGEO" or ".OSCENE" or ".OSCRIPT" or ".OIACT" or ".OIMAP" or ".OPSCENE")
                 {
                     yield return "/" + mount.Name + "/" + Path.GetRelativePath(root, file[..^5]).Replace('\\', '/');
                 }

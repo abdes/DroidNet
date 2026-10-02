@@ -6,7 +6,7 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using Json.Schema;
 using Oxygen.Managed.Core.Diagnostics;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V2;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
 
 namespace Oxygen.Editor.ContentPipeline.Inspection;
 

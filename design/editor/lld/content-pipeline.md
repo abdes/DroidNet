@@ -852,7 +852,7 @@ resolved from the saved project order for both cooking and preview; no library i
 copied into project authoring or claimed as a newly produced project asset.
 
 Dependency inspection uses the existing native Inspector in metadata-only mode.
-Cache its versioned report under `.build/cache/cooked-dependencies-v1`, keyed by
+Cache its versioned report under `.build/cache/cooked-dependencies-v2`, keyed by
 the verified container-file fingerprint. Validate the report schema, cached-report
 digest, container identity and indexed asset keys/types/paths before reuse.
 Missing or damaged cache entries require inspection; they cannot prove freshness.

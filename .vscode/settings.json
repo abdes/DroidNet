@@ -234,4 +234,5 @@
         "sound": "auto",
         "announcement": "auto",
     },
+    "dotnet.defaultSolution": "projects/Projects.sln",
 }
