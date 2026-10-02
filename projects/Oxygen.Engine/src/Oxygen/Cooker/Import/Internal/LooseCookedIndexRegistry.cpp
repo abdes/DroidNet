@@ -29,6 +29,23 @@
 
 namespace oxygen::content::import {
 
+auto LooseCookedIndexRegistry::LockDescriptor(std::filesystem::path cooked_root,
+  std::string virtual_path) -> co::Co<DescriptorEditGuard>
+{
+  const auto entry = GetEntry(cooked_root);
+  std::shared_ptr<co::Semaphore> semaphore;
+  {
+    const std::scoped_lock lock(entry->mutex);
+    auto& slot = entry->descriptor_locks[virtual_path];
+    if (!slot) {
+      slot = std::make_shared<co::Semaphore>(1);
+    }
+    semaphore = slot;
+  }
+  auto lock = co_await semaphore->Lock();
+  co_return DescriptorEditGuard(std::move(semaphore), std::move(lock));
+}
+
 auto LooseCookedIndexRegistry::NormalizeKey(
   const std::filesystem::path& cooked_root) const -> std::string
 {
@@ -103,6 +120,7 @@ auto LooseCookedIndexRegistry::RegisterExternalAssetDescriptor(
   const std::filesystem::path& cooked_root, const data::AssetKey& key,
   const data::AssetType asset_type, std::string_view virtual_path,
   std::string_view descriptor_relpath, const uint64_t descriptor_size,
+  const data::AssetReferences& references,
   const std::optional<base::Sha256Digest>& descriptor_sha256) -> void
 {
   const auto storage_key = NormalizeKey(cooked_root);
@@ -115,7 +133,7 @@ auto LooseCookedIndexRegistry::RegisterExternalAssetDescriptor(
   }
 
   entry.writer->RegisterExternalAssetDescriptor(key, asset_type, virtual_path,
-    descriptor_relpath, descriptor_size, descriptor_sha256);
+    descriptor_relpath, descriptor_size, references, descriptor_sha256);
   DLOG_F(INFO, "Asset '{}' type={} relpath='{}' registered for '{}'",
     data::to_string(key), static_cast<uint32_t>(asset_type),
     std::string(descriptor_relpath), storage_key);

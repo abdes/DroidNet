@@ -569,7 +569,7 @@ auto LightScene::MakeSolidColorMaterial(std::string_view name, const Vec4& rgba,
   const std::size_t n = (std::min)(maxn, name.size());
   std::memcpy(desc.header.name, name.data(), n);
   desc.header.name[n] = '\0';
-  desc.header.version = 1;
+  desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
   desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(MaterialDomain::kOpaque);
   desc.flags = pak::render::kMaterialFlag_NoTextureSampling

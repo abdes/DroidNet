@@ -39,6 +39,8 @@ public:
   //! Reserved placeholder resource key.
   OXGN_CNTT_API static const ResourceKey kFallback;
   OXGN_CNTT_API static const ResourceKey kPlaceholder;
+  //! Renderer-owned error texture; never a cooked resource lookup.
+  OXGN_CNTT_API static const ResourceKey kError;
 
   // Inherit base constructors
   using Base::Base;
@@ -51,6 +53,11 @@ public:
   [[nodiscard]] constexpr auto IsFallback() const noexcept
   {
     return *this == kFallback;
+  }
+
+  [[nodiscard]] constexpr auto IsError() const noexcept
+  {
+    return *this == kError;
   }
 };
 

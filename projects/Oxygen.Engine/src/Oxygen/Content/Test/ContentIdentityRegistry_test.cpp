@@ -10,9 +10,11 @@
 #include <cstdint>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <memory_resource>
 #include <new>
 #include <ratio>
+#include <stdexcept>
 #include <unordered_set>
 
 #include <Oxygen/Base/Macros.h>
@@ -70,6 +72,61 @@ namespace {
     data::AssetKey::ByteArray bytes {};
     bytes.back() = suffix;
     return data::AssetKey::FromBytes(bytes);
+  }
+
+  NOLINT_TEST(
+    ContentIdentityRegistry, BindingViewsSeparateGraphsAndRetainPhysicalKeys)
+  {
+    ContentIdentityRegistry registry;
+    const auto first
+      = std::make_shared<const BindingViewId>(BindingViewId { 1 });
+    const auto second
+      = std::make_shared<const BindingViewId>(BindingViewId { 2 });
+    const auto source = data::SourceInstanceId { 1 };
+    const auto key = MakeAssetKey(1);
+    const auto first_id
+      = registry.Intern(AssetIdentity { source, key, *first }, first);
+    const auto second_id
+      = registry.Intern(AssetIdentity { source, key, *second }, second);
+    EXPECT_NE(first_id, second_id);
+    EXPECT_EQ(registry.Find(AssetIdentity { source, key, *first }), first_id);
+    EXPECT_EQ(registry.Find(AssetIdentity { source, key, *second }), second_id);
+    const auto physical
+      = CookedResourceIdentity { source, ResourceKind::kTexture, 1 };
+    const auto resource = registry.Intern(physical);
+    EXPECT_EQ(registry.Intern(physical), resource);
+    EXPECT_THROW(static_cast<void>(registry.Intern(
+                   AssetIdentity { source, key, *first }, second)),
+      std::invalid_argument);
+  }
+
+  NOLINT_TEST(
+    ContentIdentityRegistry, ExpiredViewLocatorsAreReclaimedInBoundedBatches)
+  {
+    constexpr uint8_t kAssetCount = 16;
+    constexpr size_t kBudget = 3;
+    ContentIdentityRegistry registry;
+    auto view = std::make_shared<const BindingViewId>(BindingViewId { 1 });
+    const auto source = data::SourceInstanceId { 1 };
+    const auto physical
+      = CookedResourceIdentity { source, ResourceKind::kTexture, 1 };
+    const auto resource = registry.Intern(physical);
+    for (uint8_t index = 0; index < kAssetCount; ++index) {
+      static_cast<void>(registry.Intern(
+        AssetIdentity {
+          source, MakeAssetKey(static_cast<uint8_t>(index + 1U)), *view },
+        view));
+    }
+    static_cast<void>(registry.ProcessExpiredViews(kBudget));
+    EXPECT_EQ(registry.Size(), kAssetCount + 1U);
+    view.reset();
+    EXPECT_LE(registry.ProcessExpiredViews(kBudget), kBudget);
+    EXPECT_LT(registry.Size(), kAssetCount + 1U);
+    EXPECT_GT(registry.Size(), 1U);
+    static_cast<void>(
+      registry.ProcessExpiredViews(std::numeric_limits<size_t>::max()));
+    EXPECT_EQ(registry.Size(), 1U);
+    EXPECT_EQ(registry.Find(physical), resource);
   }
 
   NOLINT_TEST(ContentIdentityRegistry, FullIdentitySeparatesEqualHashes)

@@ -83,6 +83,8 @@ struct PakAssetDirectoryEntryPlan {
   uint64_t entry_offset = 0;
   uint64_t descriptor_offset = 0;
   uint32_t descriptor_size = 0;
+  data::pak::core::AssetReferenceTable references {};
+  std::vector<std::byte> reference_bytes;
 };
 
 struct PakDirectoryPlan {
@@ -109,6 +111,11 @@ struct PakFooterPlan {
   uint64_t crc32_field_absolute_offset = 0;
 };
 
+struct PakCatalogPlan {
+  uint64_t offset = 0;
+  std::vector<std::byte> bytes {};
+};
+
 struct PakPatchActionRecord {
   data::AssetKey asset_key {};
   data::AssetType asset_type = data::AssetType::kUnknown;
@@ -119,16 +126,6 @@ struct PakPatchClosureRecord {
   data::AssetKey asset_key {};
   std::string resource_kind;
   uint32_t resource_index = 0;
-};
-
-struct PakScriptSlotPlan {
-  uint32_t slot_index = 0;
-  data::AssetKey script_asset_key {};
-  uint32_t params_array_index = 0;
-  uint32_t params_count = 0;
-  int32_t execution_order = 0;
-  data::pak::scripting::ScriptSlotFlags flags
-    = data::pak::scripting::ScriptSlotFlags::kNone;
 };
 
 struct PakPayloadSourceSlicePlan {
@@ -151,11 +148,10 @@ public:
     std::vector<PakPayloadSourceSlicePlan> resource_descriptor_sources;
     PakDirectoryPlan directory {};
     PakBrowseIndexPlan browse_index {};
+    PakCatalogPlan catalog {};
     PakFooterPlan footer {};
     std::vector<PakPatchActionRecord> patch_actions;
     std::vector<PakPatchClosureRecord> patch_closure;
-    std::vector<PakScriptSlotPlan> script_slots;
-    uint32_t script_param_record_count = 0;
     uint64_t planned_file_size = 0;
   };
 
@@ -179,13 +175,11 @@ public:
   OXGN_COOK_NDAPI auto BrowseIndex() const noexcept
     -> const PakBrowseIndexPlan&;
   OXGN_COOK_NDAPI auto Footer() const noexcept -> const PakFooterPlan&;
+  OXGN_COOK_NDAPI auto Catalog() const noexcept -> const PakCatalogPlan&;
   OXGN_COOK_NDAPI auto PatchActions() const noexcept
     -> std::span<const PakPatchActionRecord>;
   OXGN_COOK_NDAPI auto PatchClosure() const noexcept
     -> std::span<const PakPatchClosureRecord>;
-  OXGN_COOK_NDAPI auto ScriptSlots() const noexcept
-    -> std::span<const PakScriptSlotPlan>;
-  OXGN_COOK_NDAPI auto ScriptParamRecordCount() const noexcept -> uint32_t;
   OXGN_COOK_NDAPI auto PlannedFileSize() const noexcept -> uint64_t;
 
 private:

@@ -164,15 +164,18 @@ NOLINT_TEST_F(StaticImportTest, NativeImportPreservesCoreTextureBindings)
     auto material = oxygen::data::pak::render::MaterialAssetDesc {};
     ASSERT_TRUE(material_reader.ReadBlobInto(
       std::as_writable_bytes(std::span(&material, 1))));
-    ASSERT_NE(
-      material.base_color_texture, oxygen::data::pak::core::kNoResourceIndex);
+    ASSERT_NE(material.base_color_texture, oxygen::data::kNoResourceReference);
+    const auto resolved = material_entry->references.ResolveResource(
+      material.base_color_texture, oxygen::data::ResourceKind::kTexture);
+    ASSERT_TRUE(resolved.has_value());
+    ASSERT_TRUE(resolved->has_value());
 
     const auto table_path = result.report.cooked_root
       / std::filesystem::path(
         oxygen::content::import::LooseCookedLayout {}.TexturesTableRelPath());
     using TextureDesc = oxygen::data::pak::core::TextureResourceDesc;
     const auto offset
-      = static_cast<size_t>(material.base_color_texture) * sizeof(TextureDesc);
+      = static_cast<size_t>((**resolved).get()) * sizeof(TextureDesc);
     ASSERT_LE(
       offset + sizeof(TextureDesc), std::filesystem::file_size(table_path));
     auto texture_stream = oxygen::serio::FileStream<>(table_path, std::ios::in);

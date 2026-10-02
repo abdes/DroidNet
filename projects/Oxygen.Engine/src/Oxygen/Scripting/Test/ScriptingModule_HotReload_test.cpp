@@ -165,10 +165,10 @@ NOLINT_TEST_F(ScriptingAdvancedTest, FirstRootWinsPrecedence)
   oxygen::data::ScriptAsset asset(MakeAssetKey(1U), desc);
 
   auto result = resolver.Resolve({ .asset = asset,
-    .load_script_resource = [](uint32_t) { return nullptr; },
-    .map_resource_origin = [](uint32_t) -> std::optional<ScriptBlobOrigin> {
-      return std::nullopt;
-    } });
+    .load_script_resource
+    = [](oxygen::data::ResourceReferenceIndex) { return nullptr; },
+    .map_resource_origin = [](oxygen::data::ResourceReferenceIndex)
+      -> std::optional<ScriptBlobOrigin> { return std::nullopt; } });
 
   ASSERT_TRUE(result.ok);
   auto& blob = std::get<ScriptSourceBlob>(*result.blob);
@@ -239,10 +239,10 @@ NOLINT_TEST_F(ScriptingAdvancedTest, ScriptingModuleExecutesResolvedSource)
   oxygen::data::ScriptAsset asset(MakeAssetKey(1U), desc);
 
   auto result = resolver.Resolve({ .asset = asset,
-    .load_script_resource = [](uint32_t) { return nullptr; },
-    .map_resource_origin = [](uint32_t) -> std::optional<ScriptBlobOrigin> {
-      return std::nullopt;
-    } });
+    .load_script_resource
+    = [](oxygen::data::ResourceReferenceIndex) { return nullptr; },
+    .map_resource_origin = [](oxygen::data::ResourceReferenceIndex)
+      -> std::optional<ScriptBlobOrigin> { return std::nullopt; } });
 
   ASSERT_TRUE(result.ok);
   auto& blob = std::get<ScriptSourceBlob>(*result.blob);

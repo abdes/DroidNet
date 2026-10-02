@@ -11,7 +11,7 @@ Current implementation status snapshot:
 
 1. Implemented: input request contracts, `InputImportJob`, `InputImportPipeline`, async routing, manifest `type: "input"` integration, and ImportTool input command wiring.
 2. Implemented: runtime `EnumerateMountedInputContexts()` + `HydrateInputContext()` APIs, including trigger hydration, slot alias normalization, and mounted-context metadata extraction.
-3. Implemented: scene-binding infrastructure removal in PakGen/tooling/runtime (`INPT` and `input_context_bindings` paths removed) and shipped input JSON schemas (`src/Oxygen/Cooker/Import/Schemas/oxygen.input*.schema.json`) with schema validation tests.
+3. Implemented: scene-binding infrastructure removal in native tooling/runtime (`INPT` and `input_context_bindings` paths removed) and shipped input JSON schemas (`src/Oxygen/Cooker/Import/Schemas/oxygen.input*.schema.json`) with schema validation tests.
 4. Verification caveat: by execution policy, no local project build was run during this implementation pass.
 
 ## 1. Scope
@@ -22,7 +22,7 @@ In scope:
 
 1. `InputAction` and `InputMappingContext` import/cook integration.
 2. Loose-cooked descriptor emission (`.oiact`, `.oimap`).
-3. PAK/runtime compatibility validation using existing tooling (read-only reference, no PakGen/PakDump code changes).
+3. PAK/runtime compatibility validation using existing tooling through native Cooker and PakDump.
 4. Runtime bootstrap for default context activation.
 5. Full removal of scene-attached input-context binding infrastructure (`InputContextBindingRecord`, `InputContextBindingFlags`, `kInputContextBinding` component type, scene `INPT` component table handling, and all associated code paths).
 
@@ -54,7 +54,6 @@ The following facts were captured before implementation started and are retained
 | Scene loading currently parses input context binding component table      | `src/Oxygen/Content/Loaders/SceneLoader.h` (`kInputContextBinding` branch)                                                                                      |
 | Scene asset dependency publication currently uses scene input bindings    | `src/Oxygen/Content/AssetLoader.cpp` (`publish_scene_input_mapping_context_dependencies`)                                                                       |
 | Demo currently hydrates contexts from scene bindings                      | `Examples/DemoShell/Services/SceneLoaderService.cpp` (`AttachInputMappings`)                                                                                    |
-| PakGen currently accepts and packs `scene.input_context_bindings`         | `src/Oxygen/Cooker/Tools/PakGen/src/pakgen/spec/validator.py`, `.../packing/packers.py`                                                                         |
 | Import stack currently has script/script-sidecar dual path, no input path | `src/Oxygen/Cooker/Import/AsyncImportService.cpp`, `ImportManifest.cpp`, `BatchCommand.cpp`, `ImportRunner.cpp`                                                 |
 | Input import job/pipeline/request-builder classes do not exist            | no matches for `InputImportJob`, `InputImportPipeline`, `InputImportKind`, `BuildInputImportRequest` under `src/Oxygen/Cooker/Import`                           |
 
@@ -190,25 +189,12 @@ Architectural split:
 13. `AssetLoader.cpp`
     - remove `publish_scene_input_mapping_context_dependencies` and all call sites.
 
-14. `PakGen packers.py` / `validator.py`
-    - remove `input_context_bindings` packing and validation.
-    - remove `pack_input_context_binding_record`.
-
-15. `PakGen test_v6_input_assets.py`
-    - remove or update tests that reference `input_context_bindings`.
-
-16. PakGen/PakDump
-    - remove scene input-context binding infrastructure from PakGen (`input_context_bindings` packing/validation, `pack_input_context_binding_record`).
-    - remove `kInputContextBinding` dump branch from PakDump `SceneAssetDumper`.
-    - read-only reference for all other existing binary contracts.
-    - no other PakGen/PakDump implementation changes in this plan.
-
-17. `IAssetLoader`
+14. `IAssetLoader`
     - add `EnumerateMountedInputContexts()` returning `std::vector<MountedInputContextEntry>`.
     - mirrors existing `EnumerateMountedScenes()` pattern.
     - file: `src/Oxygen/Content/IAssetLoader.h`.
 
-18. `InputMappingContextAsset`
+15. `InputMappingContextAsset`
     - add `GetDefaultPriority()` accessor.
     - file: `src/Oxygen/Data/InputMappingContextAsset.h`.
 
@@ -252,7 +238,7 @@ CLI-only optional flags (NOT valid in manifest job objects):
 
 These flags are consumed by the `InputCommand` CLI handler to build an `ImportRequest`. They do NOT appear in manifest `jobs[]` entries. Manifest input jobs use exactly: `id`, `type`, `source`, `depends_on`.
 
-## 7.3 Manifest Contract (`ImportManifest`, Not PakGen Spec)
+## 7.3 Manifest Contract (`ImportManifest`)
 
 This section defines manifest-mode import for input assets in ImportTool batch mode.
 
@@ -347,7 +333,7 @@ Request mapping:
 Cross-tool scope clarification:
 
 1. `ImportManifest` drives ImportTool/import pipeline only.
-2. PakGen uses its own content spec schema and is read-only for this effort.
+2. Native import schemas define authoring inputs; no parallel Python packaging schema exists.
 3. Both paths must serialize identical `InputMappingContextAssetDesc` semantics.
 
 ### 7.3.1 Dependency Scheduling Contract
@@ -1024,20 +1010,13 @@ Required diagnostics:
 16. `input.manifest.dep_wrong_type` (reserved — not emitted; kept for code stability)
 17. `input.manifest.key_not_allowed`
 
-## 12. PAK Compatibility Contract
+## 12. Current-format contract
 
-1. PakGen and PakDump are modified **only** to remove scene input-context binding infrastructure (`input_context_bindings` packing, `pack_input_context_binding_record`, `kInputContextBinding` dump branch). No other PakGen/PakDump changes.
-2. Importer-emitted descriptors must remain byte-compatible with existing runtime loaders and inspection tools for all non-removed record types.
-3. Scene component tables that previously contained `INPT` records will no longer be produced. Existing PAK files with `INPT` records are handled gracefully (unknown component types are skipped by the scene loader).
-4. Any further PakGen/PakDump changes beyond the scene-binding removal require a separate approved plan.
-
-## 13. Migration Contract
-
-1. Existing authored `scene.input_context_bindings` must migrate to:
-   - mapping-context `auto_load` / `auto_activate` / `priority` fields in `*.input.json`, or
-   - explicit gameplay/runtime activation code.
-2. Legacy scene bindings are not parsed. PAK files containing `INPT` scene component tables will have that data ignored (no crash, no load).
-3. PakGen will no longer accept `scene.input_context_bindings` — build errors force migration before shipping.
+Native Cooker, runtime loaders and inspection tools use the current versions
+from `Oxygen.Data`. There are no compatibility readers. Rebuild tools and recook
+content after a format change. Input activation belongs to mapping-context
+`auto_load`, `auto_activate` and `priority` fields or gameplay code; scene input
+binding records are not authored or emitted.
 
 ## 14. Test Strategy
 

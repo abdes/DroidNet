@@ -19,6 +19,7 @@
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::import {
@@ -125,6 +126,7 @@ struct ImportRequest final {
     std::string virtual_path;
     std::string descriptor_relpath;
     std::vector<std::byte> descriptor_bytes;
+    data::AssetReferences references;
   };
 
   //! Source file (FBX, glTF, GLB, or primary texture).

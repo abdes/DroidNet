@@ -7,12 +7,12 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
-#include <process.h>
 #include <string_view>
 
-#include <Oxygen/Testing/GTest.h>
+#include <process.h>
 
 #include <Oxygen/Cooker/Pak/PakCatalogIo.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -58,7 +58,7 @@ auto MakeEntry(const uint8_t asset_seed, const data::AssetType type,
 
 auto MakeCatalog() -> data::PakCatalog
 {
-  return data::PakCatalog {
+  auto catalog = data::PakCatalog {
     .source_key = MakeSourceKey(0x41U),
     .content_version = 42U,
     .catalog_digest = MakeDigest(0x21U),
@@ -67,6 +67,12 @@ auto MakeCatalog() -> data::PakCatalog
       MakeEntry(0xA0U, data::AssetType::kMaterial, 0x32U, 0x42U),
     },
   };
+  catalog.deleted = { MakeAssetKey(0xC0U) };
+  catalog.bases = { { .source_key = MakeSourceKey(0x51U),
+    .content_version = 1U,
+    .catalog_digest = MakeDigest(0x61U) } };
+  catalog.catalog_digest = catalog.ComputeDigest().value();
+  return catalog;
 }
 
 auto TempCatalogPath() -> std::filesystem::path
@@ -82,6 +88,8 @@ auto ExpectCatalogEqual(
   EXPECT_EQ(lhs.source_key, rhs.source_key);
   EXPECT_EQ(lhs.content_version, rhs.content_version);
   EXPECT_EQ(lhs.catalog_digest, rhs.catalog_digest);
+  EXPECT_EQ(lhs.deleted, rhs.deleted);
+  EXPECT_EQ(lhs.bases, rhs.bases);
   ASSERT_EQ(lhs.entries.size(), rhs.entries.size());
   for (size_t i = 0; i < lhs.entries.size(); ++i) {
     EXPECT_EQ(lhs.entries[i].asset_key, rhs.entries[i].asset_key);
@@ -124,7 +132,9 @@ NOLINT_TEST(PakCatalogIoTest, EquivalentCatalogsProduceIdenticalCanonicalOutput)
 NOLINT_TEST(PakCatalogIoTest, ParseRejectsDuplicateAssetKeys)
 {
   const auto text = std::string_view { R"({
-  "schema_version": 1,
+  "schema_version": 2,
+  "deleted": [],
+  "bases": [],
   "source_key": "41424344-4546-7748-894a-4b4c4d4e4f50",
   "content_version": 7,
   "catalog_digest": "2121212121212121212121212121212121212121212121212121212121212121",

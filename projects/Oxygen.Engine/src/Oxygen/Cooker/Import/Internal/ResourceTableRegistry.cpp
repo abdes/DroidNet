@@ -30,8 +30,6 @@ namespace oxygen::content::import {
 namespace {
 
   constexpr auto kScriptsTableLockSuffix = std::string_view { "|scripts" };
-  constexpr auto kScriptBindingsTableLockSuffix
-    = std::string_view { "|script-bindings" };
 
 } // namespace
 
@@ -103,14 +101,6 @@ auto ResourceTableRegistry::LockScriptsTable(
 {
   auto key = NormalizeKey(cooked_root);
   key.append(kScriptsTableLockSuffix);
-  co_return co_await AcquireSharedTableLock(std::move(key));
-}
-
-auto ResourceTableRegistry::LockScriptBindingsTable(
-  const std::filesystem::path& cooked_root) -> co::Co<SharedTableLockGuard>
-{
-  auto key = NormalizeKey(cooked_root);
-  key.append(kScriptBindingsTableLockSuffix);
   co_return co_await AcquireSharedTableLock(std::move(key));
 }
 

@@ -29,8 +29,10 @@
 #endif
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -51,6 +53,7 @@ struct AssetSpec final {
   uint64_t descriptor_size = 0U;
   std::array<uint8_t, lc::kSha256Size> descriptor_sha {};
   std::vector<std::byte> descriptor_payload {};
+  data::AssetReferences references;
 };
 
 //! A minimal current-format scene for planner tests that do not need nodes.
@@ -327,6 +330,27 @@ private:
   header.file_record_count = static_cast<uint32_t>(file_entries.size());
   header.file_record_size = file_entries.empty() ? 0U : sizeof(lc::FileRecord);
 
+  std::vector<std::byte> reference_bytes;
+  const auto references_offset
+    = header.file_records_offset + file_entries.size() * sizeof(lc::FileRecord);
+  for (size_t i = 0; i < assets.size(); ++i) {
+    const auto& references = oxygen::base::CheckedAt(assets, i).references;
+    const auto encoded = references.Encode();
+    if (!encoded) {
+      throw std::runtime_error(encoded.error());
+    }
+    if (encoded->empty()) {
+      continue;
+    }
+    asset_entries.at(i).references = {
+      .offset = references_offset + reference_bytes.size(),
+      .resource_count = static_cast<uint32_t>(references.Resources().size()),
+      .key_count = static_cast<uint32_t>(references.Keys().size()),
+    };
+    reference_bytes.insert(
+      reference_bytes.end(), encoded->begin(), encoded->end());
+  }
+
   auto index = std::ofstream(
     root / "container.index.bin", std::ios::binary | std::ios::trunc);
   if (!index.good()) {
@@ -342,6 +366,10 @@ private:
   for (const auto& file : file_entries) {
     // NOLINTNEXTLINE(*-reinterpret-cast)
     index.write(reinterpret_cast<const char*>(&file), sizeof(file));
+  }
+  if (!reference_bytes.empty()) {
+    index.write(reinterpret_cast<const char*>(reference_bytes.data()),
+      static_cast<std::streamsize>(reference_bytes.size()));
   }
   return index.good();
 }

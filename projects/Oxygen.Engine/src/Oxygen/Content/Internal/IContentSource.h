@@ -8,9 +8,11 @@
 
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
@@ -20,7 +22,10 @@
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/ResourceTable.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptResource.h>
@@ -62,14 +67,46 @@ public:
   [[nodiscard]] virtual auto GetSourceKey() const noexcept -> data::SourceKey
     = 0;
 
+  [[nodiscard]] virtual auto GetPakCatalog() const noexcept
+    -> const data::PakCatalog*
+  {
+    return nullptr;
+  }
+
+  [[nodiscard]] virtual auto GetAssetType(
+    const data::AssetKey& key) const noexcept
+    -> std::optional<data::AssetType> = 0;
+
   [[nodiscard]] virtual auto HasAsset(const data::AssetKey& key) const noexcept
     -> bool = 0;
+  [[nodiscard]] virtual auto HasKeyReferences(
+    const data::AssetKey& key) const noexcept -> bool = 0;
+  [[nodiscard]] virtual auto FindAssetKeyByVirtualPath(
+    std::string_view path) const -> std::optional<data::AssetKey> = 0;
   [[nodiscard]] virtual auto GetAssetCount() const noexcept -> size_t = 0;
   [[nodiscard]] virtual auto GetAssetKeyByIndex(uint32_t index) const noexcept
     -> std::optional<data::AssetKey> = 0;
 
   [[nodiscard]] virtual auto CreateAssetDescriptorReader(
     const data::AssetKey& key) const -> std::unique_ptr<serio::AnyReader> = 0;
+  [[nodiscard]] auto ReadAssetReferences(const data::AssetKey& key) const
+    -> data::AssetReferences
+  {
+    auto references = ReadAssetReferenceMetadata(key);
+    const auto count = [](const auto* table) -> uint64_t {
+      return table ? table->Size().get() : 0U;
+    };
+    const auto valid = references.ValidateResourceBounds({
+      .buffers = count(GetBufferTable()),
+      .textures = count(GetTextureTable()),
+      .scripts = count(GetScriptTable()),
+      .physics = count(GetPhysicsTable()),
+    });
+    if (!valid) {
+      throw std::runtime_error(valid.error());
+    }
+    return references;
+  }
 
   [[nodiscard]] virtual auto CreateBufferTableReader() const
     -> std::unique_ptr<serio::AnyReader> = 0;
@@ -92,6 +129,9 @@ public:
   [[nodiscard]] virtual auto GetScriptTable() const noexcept
     -> const ResourceTable<data::ScriptResource>* = 0;
 
+  [[nodiscard]] auto FindPhysicsResource(const data::AssetKey& key) const
+    -> std::optional<data::pak::core::ResourceIndexT>;
+
   [[nodiscard]] virtual auto GetPhysicsTable() const noexcept
     -> const ResourceTable<data::PhysicsResource>* = 0;
 
@@ -107,18 +147,15 @@ public:
   [[nodiscard]] virtual auto CreatePhysicsDataReader() const
     -> std::unique_ptr<serio::AnyReader> = 0;
 
-  [[nodiscard]] virtual auto ScriptSlotCount() const noexcept -> uint32_t = 0;
-
-  [[nodiscard]] virtual auto ReadScriptSlotRecords(
-    uint32_t start_index, uint32_t count) const
-    -> std::vector<data::pak::scripting::ScriptSlotRecord> = 0;
-
-  [[nodiscard]] virtual auto ReadScriptParamRecords(
-    data::pak::core::OffsetT absolute_offset, uint32_t count) const
-    -> std::vector<data::pak::scripting::ScriptParamRecord> = 0;
-
   [[nodiscard]] virtual auto ResolveVirtualPath(
     const data::AssetKey& key) const noexcept -> std::optional<std::string> = 0;
+
+private:
+  mutable std::once_flag physics_index_once_ {};
+  mutable std::unordered_map<data::AssetKey, data::pak::core::ResourceIndexT>
+    physics_index_ {};
+  [[nodiscard]] virtual auto ReadAssetReferenceMetadata(
+    const data::AssetKey& key) const -> data::AssetReferences = 0;
 };
 
 } // namespace oxygen::content::internal

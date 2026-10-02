@@ -329,7 +329,7 @@ public:
 
   [[nodiscard]] auto MakeTextureResourceKeyForAsset(
     const data::Asset& /*context_asset*/,
-    data::pak::core::ResourceIndexT /*resource_index*/)
+    data::ResourceReferenceIndex /*resource_index*/)
     -> std::optional<content::ResourceKey> override
   {
     return std::nullopt;
@@ -337,7 +337,7 @@ public:
 
   [[nodiscard]] auto MakeScriptResourceKeyForAsset(
     const data::Asset& /*context_asset*/,
-    data::pak::core::ResourceIndexT /*resource_index*/)
+    data::ResourceReferenceIndex /*resource_index*/)
     -> std::optional<content::ResourceKey> override
   {
     return std::nullopt;
@@ -345,7 +345,7 @@ public:
 
   [[nodiscard]] auto ReadScriptResourceForAsset(
     const data::Asset& /*context_asset*/,
-    data::pak::core::ResourceIndexT /*resource_index*/) const
+    data::ResourceReferenceIndex /*resource_index*/) const
     -> std::shared_ptr<const data::ScriptResource> override
   {
     return nullptr;
@@ -435,7 +435,8 @@ public:
   }
 
   [[nodiscard]] auto FindPhysicsSidecarAssetKeyForScene(
-    const data::Asset& /*scene_asset*/) const
+    const data::Asset& /*scene_asset*/,
+    const content::ContentLoadScope& /*scope*/)
     -> std::optional<data::AssetKey> override
   {
     return std::nullopt;

@@ -27,7 +27,7 @@ historical.
 | E    | `Oxygen.Editor.World/Components/DirectionalLightComponent.cs` and inspector commands                                                   | Stored slot/transmittance/RGB values and live authoring                                               |
 | I    | `Oxygen.Editor.Runtime/Engine/RuntimeAttachDirectionalLight.cs` and `Oxygen.Editor.Interop/Commands/DirectionalLightPropertyApplier.h` | Owned transport values and native property application                                                |
 | M    | `Oxygen.Managed.Assets/Import/Scenes/DirectionalLightSource.cs`                                                                        | Source DTO carries slot/transmittance/RGB values                                                      |
-| T    | Import adapters, PakGen and PakDump                                                                                                    | Import-unit conversion, packing and inspection of the same format                                     |
+| T    | Native import adapters and PakDump                                                                                                     | Import-unit conversion, packing and inspection of the same format                                     |
 
 The field table below uses these route codes. Preserve native-only fields through
 snapshot/save/cook even when the editor has no control for them. Broader editor
@@ -181,7 +181,7 @@ it cannot manufacture a minimum disk. RGB disk scale is finite nonnegative with
 checked resulting radiance; it never changes the underlying direct-light lux.
 The existing atmosphere-only angular-size exclusion remains.
 
-Native cooking/loading, PakGen, DemoShell, managed source generation and live
+Native cooking/loading, DemoShell, managed source generation and live
 Interop use this layout. LP16/LP17 are removed fields, not reserved bytes.
 
 ### Atomic authoring and source assignment
@@ -253,7 +253,7 @@ The corrected-content field/identity check is in
 | `Scene/Test` light/component/resolver tests                                                      | LP01-LP32 candidate validation as applicable; source identity, inactive slot conflicts, visibility/hierarchy and mutation notification.                                |
 | `Scripting/Test` scene bindings                                                                  | Every exposed row: same rejection/atomic revision as native; replace obsolete sun fields with explicit assignment.                                                     |
 | `Cooker/Test/Import/SceneDescriptor{JsonSchema,ImportJob}_test.cpp`, import adapter tests        | Complete non-default J inputs; schema-enforceable ranges/enums; semantic cross-field/derived validation; old format rejection.                                         |
-| `Content/Test/AssetLoader_scene_test.cpp`, Data serialization tests, PakGen tests                | Exact new record sizes/fields; malformed binary enums/values; no reinterpretation of old packed light records.                                                         |
+| `Content/Test/AssetLoader_scene_test.cpp`, Data serialization tests, native Cooker tests         | Exact new record sizes/fields; malformed binary enums/values; no reinterpretation of old packed light records.                                                         |
 | `Examples/DemoShell/Test/SceneLoaderService_phase4_test.cpp` and light/environment service tests | Reconstructed LP fields versus cooked records; existing explicit demo convenience semantics; no implicit production sun.                                               |
 | Editor World/Runtime/Interop/Managed.Assets owning tests                                         | Non-default E save/load, M source/cook, I live values, atomic rejection, undo/redo/dirty state and C++20 public boundary. Use prescribed MSBuild, not dotnet.          |
 | Vortex LightingService/SceneRenderer/Shadows and native lighting GPU tests                       | Every retained active field changes its declared product; independent photometry/material tests, matching identities, both families and multiview/in-flight mutations. |

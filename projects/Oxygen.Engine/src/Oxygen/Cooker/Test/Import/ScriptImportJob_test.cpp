@@ -281,6 +281,7 @@ namespace {
     data::AssetKey key {};
     std::string virtual_path;
     std::string descriptor_relpath;
+    data::AssetReferences references;
     AssetType type = AssetType::kUnknown;
   };
 
@@ -295,6 +296,7 @@ namespace {
         .key = entry.key,
         .virtual_path = entry.virtual_path,
         .descriptor_relpath = entry.descriptor_relpath,
+        .references = entry.references,
         .type = static_cast<AssetType>(entry.asset_type),
       };
     }
@@ -317,10 +319,39 @@ namespace {
         .key = asset.key,
         .virtual_path = asset.virtual_path,
         .descriptor_relpath = asset.descriptor_relpath,
+        .references = asset.references,
         .type = AssetType::kScript,
       };
     }
     return std::nullopt;
+  }
+
+  struct SceneScriptState {
+    std::vector<data::pak::scripting::ScriptSlotRecord> slots;
+    std::vector<data::pak::scripting::ScriptParamRecord> params;
+    uint64_t parameter_base = 0U;
+  };
+
+  auto ReadSceneScriptState(const std::filesystem::path& root,
+    const AssetRef& asset) -> SceneScriptState
+  {
+    const auto bytes = ReadAllBytes(root / asset.descriptor_relpath);
+    const auto scene = data::SceneAsset(asset.key, bytes);
+    uint32_t count = 0U;
+    for (const auto& component :
+      scene.GetComponents<data::pak::scripting::ScriptingComponentRecord>()) {
+      count += component.slot_count;
+    }
+    SceneScriptState result;
+    result.slots = scene.ReadScriptSlots(0U, count);
+    for (const auto& slot : result.slots) {
+      const auto params = scene.ReadScriptParameters(slot);
+      if (!params.empty() && result.params.empty()) {
+        result.parameter_base = slot.params_array_offset;
+      }
+      result.params.insert(result.params.end(), params.begin(), params.end());
+    }
+    return result;
   }
 
   auto MakeInflightSceneContext(const std::filesystem::path& cooked_root,
@@ -332,6 +363,7 @@ namespace {
       .descriptor_relpath = scene_asset.descriptor_relpath,
       .descriptor_bytes
       = ReadAllBytes(cooked_root / scene_asset.descriptor_relpath),
+      .references = scene_asset.references,
     };
   }
 
@@ -639,8 +671,8 @@ namespace {
   NOLINT_TEST_F(
     ScriptAssetImportTest, EmbeddedScriptImportWritesDescriptorAndScriptFiles)
   {
+    using data::kNoResourceReference;
     using data::loose_cooked::FileKind;
-    using data::pak::core::kNoResourceIndex;
     using data::pak::scripting::ScriptAssetFlags;
 
     const auto cooked_root
@@ -670,16 +702,16 @@ namespace {
       static_cast<AssetType>(assets.front().asset_type), AssetType::kScript);
 
     const auto desc = ReadScriptDescriptor(descriptor_path);
-    EXPECT_NE(desc.source_resource_index, kNoResourceIndex);
-    EXPECT_EQ(desc.bytecode_resource_index, kNoResourceIndex);
+    EXPECT_NE(desc.source_resource_index, kNoResourceReference);
+    EXPECT_EQ(desc.bytecode_resource_index, kNoResourceReference);
     EXPECT_EQ(desc.flags, ScriptAssetFlags::kNone);
   }
 
   NOLINT_TEST_F(ScriptAssetImportTest,
     ExternalScriptImportStoresExternalPathAndNoScriptFiles)
   {
+    using data::kNoResourceReference;
     using data::loose_cooked::FileKind;
-    using data::pak::core::kNoResourceIndex;
     using data::pak::scripting::ScriptAssetFlags;
 
     const auto cooked_root
@@ -705,8 +737,8 @@ namespace {
       [](const auto& file) { return file.kind == FileKind::kScriptsData; }));
 
     const auto desc = ReadScriptDescriptor(descriptor_path);
-    EXPECT_EQ(desc.source_resource_index, kNoResourceIndex);
-    EXPECT_EQ(desc.bytecode_resource_index, kNoResourceIndex);
+    EXPECT_EQ(desc.source_resource_index, kNoResourceReference);
+    EXPECT_EQ(desc.bytecode_resource_index, kNoResourceReference);
     EXPECT_EQ((desc.flags & ScriptAssetFlags::kAllowExternalSource),
       ScriptAssetFlags::kAllowExternalSource);
 
@@ -810,8 +842,8 @@ namespace {
   NOLINT_TEST_F(ScriptAssetImportTest,
     CompileEnabledEmbeddedWritesSourceAndBytecodeResources)
   {
+    using data::kNoResourceReference;
     using data::loose_cooked::FileKind;
-    using data::pak::core::kNoResourceIndex;
     using data::pak::scripting::ScriptEncoding;
     using data::pak::scripting::ScriptResourceDesc;
     constexpr auto kCompileSentinel = std::byte { 0xAA };
@@ -846,8 +878,8 @@ namespace {
     const auto descriptor_path = cooked_root / "Scripts" / "compile_ok.oscript";
     ASSERT_TRUE(std::filesystem::exists(descriptor_path));
     const auto desc = ReadScriptDescriptor(descriptor_path);
-    ASSERT_NE(desc.source_resource_index, kNoResourceIndex);
-    ASSERT_NE(desc.bytecode_resource_index, kNoResourceIndex);
+    ASSERT_NE(desc.source_resource_index, kNoResourceReference);
+    ASSERT_NE(desc.bytecode_resource_index, kNoResourceReference);
 
     const auto inspection = LoadInspection(cooked_root);
     const auto table_relpath
@@ -858,9 +890,17 @@ namespace {
     const auto resources
       = ReadPackedRecords<ScriptResourceDesc>(cooked_root / *table_relpath);
 
-    const auto source_index = static_cast<uint32_t>(desc.source_resource_index);
-    const auto bytecode_index
-      = static_cast<uint32_t>(desc.bytecode_resource_index);
+    const auto& references = inspection.Assets().front().references;
+    const auto source_binding = references.ResolveResource(
+      desc.source_resource_index, data::ResourceKind::kScript);
+    const auto bytecode_binding = references.ResolveResource(
+      desc.bytecode_resource_index, data::ResourceKind::kScript);
+    ASSERT_TRUE(source_binding.has_value());
+    ASSERT_TRUE(source_binding->has_value());
+    ASSERT_TRUE(bytecode_binding.has_value());
+    ASSERT_TRUE(bytecode_binding->has_value());
+    const auto source_index = (**source_binding).get();
+    const auto bytecode_index = (**bytecode_binding).get();
     ASSERT_LT(source_index, resources.size());
     ASSERT_LT(bytecode_index, resources.size());
     EXPECT_EQ(resources.at(source_index).encoding, ScriptEncoding::kSource);
@@ -1041,7 +1081,7 @@ namespace {
   }
 
   //! Sidecar success path uses external script assets so sidecar owns
-  //! script-bindings.table/script-bindings.data slot+param layout in this
+  //! Scene-local slot and parameter layout in this
   //! cooked root.
   NOLINT_TEST_F(
     ScriptingSidecarImportTest, ScriptingSidecarBindsScriptToSceneNode)
@@ -1086,11 +1126,9 @@ namespace {
 
     const auto inspection_after_sidecar = LoadInspection(cooked_root);
     const auto files = inspection_after_sidecar.Files();
-    EXPECT_TRUE(std::ranges::any_of(files, [](const auto& file) {
-      return file.kind == FileKind::kScriptBindingsTable;
-    }));
-    EXPECT_TRUE(std::ranges::any_of(files, [](const auto& file) {
-      return file.kind == FileKind::kScriptBindingsData;
+    EXPECT_FALSE(std::ranges::any_of(files, [](const auto& file) {
+      return file.relpath.ends_with("script-bindings.table")
+        || file.relpath.ends_with("script-bindings.data");
     }));
 
     const auto scene_bytes
@@ -1143,11 +1181,9 @@ namespace {
 
     const auto inspection_after_sidecar = LoadInspection(cooked_root);
     const auto files = inspection_after_sidecar.Files();
-    EXPECT_TRUE(std::ranges::any_of(files, [](const auto& file) {
-      return file.kind == FileKind::kScriptBindingsTable;
-    }));
-    EXPECT_TRUE(std::ranges::any_of(files, [](const auto& file) {
-      return file.kind == FileKind::kScriptBindingsData;
+    EXPECT_FALSE(std::ranges::any_of(files, [](const auto& file) {
+      return file.relpath.ends_with("script-bindings.table")
+        || file.relpath.ends_with("script-bindings.data");
     }));
 
     const auto scene_bytes
@@ -1712,11 +1748,9 @@ namespace {
     EXPECT_EQ(patched_scene->key, inflight_scene->key);
 
     const auto files = inspection_after.Files();
-    EXPECT_TRUE(std::ranges::any_of(files, [](const auto& file) {
-      return file.kind == FileKind::kScriptBindingsTable;
-    }));
-    EXPECT_TRUE(std::ranges::any_of(files, [](const auto& file) {
-      return file.kind == FileKind::kScriptBindingsData;
+    EXPECT_FALSE(std::ranges::any_of(files, [](const auto& file) {
+      return file.relpath.ends_with("script-bindings.table")
+        || file.relpath.ends_with("script-bindings.data");
     }));
 
     const auto scene_bytes
@@ -1913,11 +1947,9 @@ namespace {
     EXPECT_EQ(patched_scene->key, context_scene->key);
 
     const auto files = request_inspection_after.Files();
-    EXPECT_TRUE(std::ranges::any_of(files, [](const auto& file) {
-      return file.kind == FileKind::kScriptBindingsTable;
-    }));
-    EXPECT_TRUE(std::ranges::any_of(files, [](const auto& file) {
-      return file.kind == FileKind::kScriptBindingsData;
+    EXPECT_FALSE(std::ranges::any_of(files, [](const auto& file) {
+      return file.relpath.ends_with("script-bindings.table")
+        || file.relpath.ends_with("script-bindings.data");
     }));
 
     const auto scene_bytes
@@ -2010,43 +2042,12 @@ namespace {
       FAIL();
     }
 
-    const auto concurrent_table_relpath = FindFileRelPathByKind(
-      concurrent_inspection, FileKind::kScriptBindingsTable);
-    const auto standalone_table_relpath = FindFileRelPathByKind(
-      standalone_inspection, FileKind::kScriptBindingsTable);
-    const auto concurrent_data_relpath = FindFileRelPathByKind(
-      concurrent_inspection, FileKind::kScriptBindingsData);
-    const auto standalone_data_relpath = FindFileRelPathByKind(
-      standalone_inspection, FileKind::kScriptBindingsData);
-    if (!concurrent_table_relpath.has_value()) {
-      FAIL();
-    }
-    if (!standalone_table_relpath.has_value()) {
-      FAIL();
-    }
-    if (!concurrent_data_relpath.has_value()) {
-      FAIL();
-    }
-    if (!standalone_data_relpath.has_value()) {
-      FAIL();
-    }
-
     const auto concurrent_scene_bytes
       = ReadAllBytes(concurrent_root / concurrent_scene->descriptor_relpath);
     const auto standalone_scene_bytes
       = ReadAllBytes(standalone_root / standalone_scene->descriptor_relpath);
-    const auto concurrent_table_bytes
-      = ReadAllBytes(concurrent_root / *concurrent_table_relpath);
-    const auto standalone_table_bytes
-      = ReadAllBytes(standalone_root / *standalone_table_relpath);
-    const auto concurrent_data_bytes
-      = ReadAllBytes(concurrent_root / *concurrent_data_relpath);
-    const auto standalone_data_bytes
-      = ReadAllBytes(standalone_root / *standalone_data_relpath);
 
     EXPECT_EQ(concurrent_scene_bytes, standalone_scene_bytes);
-    EXPECT_EQ(concurrent_table_bytes, standalone_table_bytes);
-    EXPECT_EQ(concurrent_data_bytes, standalone_data_bytes);
   }
 
   NOLINT_TEST_F(
@@ -2135,13 +2136,8 @@ namespace {
         .success);
 
     const auto inspection_after = LoadInspection(cooked_root);
-    const auto table_relpath
-      = FindFileRelPathByKind(inspection_after, FileKind::kScriptBindingsTable);
-    if (!table_relpath.has_value()) {
-      FAIL();
-    }
-    const auto slots
-      = ReadPackedRecords<ScriptSlotRecord>(cooked_root / *table_relpath);
+    const auto script_state = ReadSceneScriptState(cooked_root, *scene_asset);
+    const auto& slots = script_state.slots;
 
     const auto patched_scene_bytes
       = ReadAllBytes(cooked_root / scene_asset->descriptor_relpath);
@@ -2219,6 +2215,7 @@ namespace {
           .key = entry.key,
           .virtual_path = entry.virtual_path,
           .descriptor_relpath = entry.descriptor_relpath,
+          .references = entry.references,
           .type = AssetType::kScene,
         };
       } else if (descriptor_name == "scene_b.oscene") {
@@ -2226,6 +2223,7 @@ namespace {
           .key = entry.key,
           .virtual_path = entry.virtual_path,
           .descriptor_relpath = entry.descriptor_relpath,
+          .references = entry.references,
           .type = AssetType::kScene,
         };
       }
@@ -2252,25 +2250,15 @@ namespace {
         .success);
 
     const auto inspection_after = LoadInspection(cooked_root);
-    const auto table_relpath
-      = FindFileRelPathByKind(inspection_after, FileKind::kScriptBindingsTable);
-    const auto data_relpath
-      = FindFileRelPathByKind(inspection_after, FileKind::kScriptBindingsData);
-    if (!table_relpath.has_value()) {
-      FAIL();
-    }
-    if (!data_relpath.has_value()) {
-      FAIL();
-    }
-
-    const auto slots
-      = ReadPackedRecords<ScriptSlotRecord>(cooked_root / *table_relpath);
-    const auto params
-      = ReadPackedRecords<ScriptParamRecord>(cooked_root / *data_relpath);
-    ASSERT_FALSE(slots.empty());
-    ASSERT_FALSE(params.empty());
 
     const auto ReadSpeedForScene = [&](const AssetRef& scene_ref) {
+      const auto script_state = ReadSceneScriptState(cooked_root, scene_ref);
+      const auto& slots = script_state.slots;
+      const auto& params = script_state.params;
+      if (slots.empty() || params.empty()) {
+        ADD_FAILURE() << "Expected script parameters in this scene";
+        return 0.0F;
+      }
       const auto scene_bytes
         = ReadAllBytes(cooked_root / scene_ref.descriptor_relpath);
       EXPECT_FALSE(scene_bytes.empty());
@@ -2291,9 +2279,12 @@ namespace {
         return 0.0F;
       }
       const auto& slot = slots.at(slot_index);
-      EXPECT_EQ(slot.params_array_offset % sizeof(ScriptParamRecord), 0U);
+      EXPECT_EQ((slot.params_array_offset - script_state.parameter_base)
+          % sizeof(ScriptParamRecord),
+        0U);
       const auto param_index = static_cast<size_t>(
-        slot.params_array_offset / sizeof(ScriptParamRecord));
+        (slot.params_array_offset - script_state.parameter_base)
+        / sizeof(ScriptParamRecord));
       EXPECT_GT(slot.params_count, 0U);
       EXPECT_LT(param_index, params.size());
       if (slot.params_count == 0U || param_index >= params.size()) {
@@ -2365,6 +2356,7 @@ namespace {
           .key = entry.key,
           .virtual_path = entry.virtual_path,
           .descriptor_relpath = entry.descriptor_relpath,
+          .references = entry.references,
           .type = AssetType::kScene,
         };
       } else if (descriptor_name == "scene_b.oscene") {
@@ -2372,6 +2364,7 @@ namespace {
           .key = entry.key,
           .virtual_path = entry.virtual_path,
           .descriptor_relpath = entry.descriptor_relpath,
+          .references = entry.references,
           .type = AssetType::kScene,
         };
       }
@@ -2419,25 +2412,15 @@ namespace {
     ASSERT_TRUE(report_b.success);
 
     const auto inspection_after = LoadInspection(cooked_root);
-    const auto table_relpath
-      = FindFileRelPathByKind(inspection_after, FileKind::kScriptBindingsTable);
-    const auto data_relpath
-      = FindFileRelPathByKind(inspection_after, FileKind::kScriptBindingsData);
-    if (!table_relpath.has_value()) {
-      FAIL();
-    }
-    if (!data_relpath.has_value()) {
-      FAIL();
-    }
-
-    const auto slots
-      = ReadPackedRecords<ScriptSlotRecord>(cooked_root / *table_relpath);
-    const auto params
-      = ReadPackedRecords<ScriptParamRecord>(cooked_root / *data_relpath);
-    ASSERT_FALSE(slots.empty());
-    ASSERT_FALSE(params.empty());
 
     const auto ReadSpeedForScene = [&](const AssetRef& scene_ref) {
+      const auto script_state = ReadSceneScriptState(cooked_root, scene_ref);
+      const auto& slots = script_state.slots;
+      const auto& params = script_state.params;
+      if (slots.empty() || params.empty()) {
+        ADD_FAILURE() << "Expected script parameters in this scene";
+        return 0.0F;
+      }
       const auto scene_bytes
         = ReadAllBytes(cooked_root / scene_ref.descriptor_relpath);
       EXPECT_FALSE(scene_bytes.empty());
@@ -2458,9 +2441,12 @@ namespace {
         return 0.0F;
       }
       const auto& slot = slots.at(slot_index);
-      EXPECT_EQ(slot.params_array_offset % sizeof(ScriptParamRecord), 0U);
+      EXPECT_EQ((slot.params_array_offset - script_state.parameter_base)
+          % sizeof(ScriptParamRecord),
+        0U);
       const auto param_index = static_cast<size_t>(
-        slot.params_array_offset / sizeof(ScriptParamRecord));
+        (slot.params_array_offset - script_state.parameter_base)
+        / sizeof(ScriptParamRecord));
       EXPECT_GT(slot.params_count, 0U);
       EXPECT_LT(param_index, params.size());
       if (slot.params_count == 0U || param_index >= params.size()) {
@@ -2540,22 +2526,9 @@ namespace {
         .success);
 
     const auto inspection_after_success = LoadInspection(cooked_root);
-    const auto table_relpath = FindFileRelPathByKind(
-      inspection_after_success, FileKind::kScriptBindingsTable);
-    const auto data_relpath = FindFileRelPathByKind(
-      inspection_after_success, FileKind::kScriptBindingsData);
-    if (!table_relpath.has_value()) {
-      FAIL();
-    }
-    if (!data_relpath.has_value()) {
-      FAIL();
-    }
 
     const auto scene_before_failure
       = ReadAllBytes(cooked_root / scene_asset->descriptor_relpath);
-    const auto table_before_failure
-      = ReadAllBytes(cooked_root / *table_relpath);
-    const auto data_before_failure = ReadAllBytes(cooked_root / *data_relpath);
 
     WriteTextFile(sidecar_source,
       MakeSidecarPayload(CanonicalScriptVirtualPath("does_not_exist")));
@@ -2567,16 +2540,12 @@ namespace {
 
     const auto scene_after_failure
       = ReadAllBytes(cooked_root / scene_asset->descriptor_relpath);
-    const auto table_after_failure = ReadAllBytes(cooked_root / *table_relpath);
-    const auto data_after_failure = ReadAllBytes(cooked_root / *data_relpath);
 
     EXPECT_EQ(scene_before_failure, scene_after_failure);
-    EXPECT_EQ(table_before_failure, table_after_failure);
-    EXPECT_EQ(data_before_failure, data_after_failure);
   }
 
   NOLINT_TEST_F(ScriptingSidecarImportTest,
-    ScriptsTableWriteFailureDoesNotMutateSceneDescriptor)
+    DescriptorWriteFailurePreservesPublishedSceneAndIndex)
   {
     using data::loose_cooked::FileKind;
 
@@ -2615,26 +2584,19 @@ namespace {
 
     auto request = MakeSidecarRequest(
       sidecar_source, cooked_root, scene_asset->virtual_path);
-    const auto scripts_table_path = cooked_root
-      / request.loose_cooked_layout.resources_dir / "script-bindings.table";
-    std::filesystem::create_directories(scripts_table_path);
+    const auto index_before = ReadAllBytes(cooked_root / "container.index.bin");
+    auto inflight = MakeInflightSceneContext(cooked_root, *scene_asset);
+    inflight.descriptor_relpath = "blocked-parent/scene.oscene";
+    request.inflight_scene_contexts.push_back(std::move(inflight));
+    WriteTextFile(cooked_root / "blocked-parent", "not a directory");
 
     const auto report = Submit(std::move(request));
     ASSERT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "script.sidecar.scripts_table_write_failed"));
-
-    const auto scene_after
-      = ReadAllBytes(cooked_root / scene_asset->descriptor_relpath);
-    EXPECT_EQ(scene_before, scene_after);
-
-    const auto inspection_after = LoadInspection(cooked_root);
-    EXPECT_FALSE(
-      FindFileRelPathByKind(inspection_after, FileKind::kScriptBindingsTable)
-        .has_value());
-    EXPECT_FALSE(
-      FindFileRelPathByKind(inspection_after, FileKind::kScriptBindingsData)
-        .has_value());
+      report.diagnostics, "script.sidecar.scene_emit_failed"));
+    EXPECT_EQ(scene_before,
+      ReadAllBytes(cooked_root / scene_asset->descriptor_relpath));
+    EXPECT_EQ(index_before, ReadAllBytes(cooked_root / "container.index.bin"));
   }
 
   NOLINT_TEST_F(
@@ -2816,27 +2778,19 @@ namespace {
     ASSERT_TRUE(report.success);
 
     const auto inspection_after = LoadInspection(cooked_root);
-    const auto table_relpath
-      = FindFileRelPathByKind(inspection_after, FileKind::kScriptBindingsTable);
-    const auto data_relpath
-      = FindFileRelPathByKind(inspection_after, FileKind::kScriptBindingsData);
-    if (!table_relpath.has_value()) {
-      FAIL();
-    }
-    if (!data_relpath.has_value()) {
-      FAIL();
-    }
 
-    const auto slots
-      = ReadPackedRecords<ScriptSlotRecord>(cooked_root / *table_relpath);
-    const auto params
-      = ReadPackedRecords<ScriptParamRecord>(cooked_root / *data_relpath);
+    const auto script_state = ReadSceneScriptState(cooked_root, *scene_asset);
+    const auto& slots = script_state.slots;
+    const auto& params = script_state.params;
     ASSERT_EQ(slots.size(), 1U);
     ASSERT_EQ(slots.at(0).params_count, 7U);
-    ASSERT_EQ(slots.at(0).params_array_offset % sizeof(ScriptParamRecord), 0U);
+    ASSERT_EQ((slots.at(0).params_array_offset - script_state.parameter_base)
+        % sizeof(ScriptParamRecord),
+      0U);
 
     const auto param_start = static_cast<size_t>(
-      slots.at(0).params_array_offset / sizeof(ScriptParamRecord));
+      (slots.at(0).params_array_offset - script_state.parameter_base)
+      / sizeof(ScriptParamRecord));
     ASSERT_LE(param_start + slots.at(0).params_count, params.size());
     const auto ParamAt = [&](const size_t i) -> const ScriptParamRecord& {
       return params.at(param_start + i);
@@ -3063,6 +3017,7 @@ namespace {
             .key = asset.key,
             .virtual_path = asset.virtual_path,
             .descriptor_relpath = asset.descriptor_relpath,
+            .references = asset.references,
             .type = AssetType::kScript,
           };
         } else if (descriptor_name == "script_b.oscript") {
@@ -3070,6 +3025,7 @@ namespace {
             .key = asset.key,
             .virtual_path = asset.virtual_path,
             .descriptor_relpath = asset.descriptor_relpath,
+            .references = asset.references,
             .type = AssetType::kScript,
           };
         }
@@ -3097,14 +3053,9 @@ namespace {
     ASSERT_TRUE(second_report.success);
 
     const auto after_inspection = LoadInspection(cooked_root);
-    const auto table_relpath
-      = FindFileRelPathByKind(after_inspection, FileKind::kScriptBindingsTable);
-    if (!table_relpath.has_value()) {
-      FAIL();
-    }
 
-    const auto slots
-      = ReadPackedRecords<ScriptSlotRecord>(cooked_root / *table_relpath);
+    const auto script_state = ReadSceneScriptState(cooked_root, *scene_asset);
+    const auto& slots = script_state.slots;
     ASSERT_EQ(slots.size(), 1U);
     EXPECT_EQ(slots.at(0).script_asset_key, script_b_asset->key);
 
@@ -3155,21 +3106,9 @@ namespace {
         .success);
 
     const auto first_inspection = LoadInspection(cooked_root);
-    const auto table_relpath
-      = FindFileRelPathByKind(first_inspection, FileKind::kScriptBindingsTable);
-    const auto data_relpath
-      = FindFileRelPathByKind(first_inspection, FileKind::kScriptBindingsData);
-    if (!table_relpath.has_value()) {
-      FAIL();
-    }
-    if (!data_relpath.has_value()) {
-      FAIL();
-    }
 
     const auto first_scene_bytes
       = ReadAllBytes(cooked_root / scene_asset->descriptor_relpath);
-    const auto first_table_bytes = ReadAllBytes(cooked_root / *table_relpath);
-    const auto first_data_bytes = ReadAllBytes(cooked_root / *data_relpath);
 
     ASSERT_TRUE(Submit(MakeSidecarRequest(sidecar_source, cooked_root,
                          scene_asset->virtual_path))
@@ -3177,12 +3116,8 @@ namespace {
 
     const auto second_scene_bytes
       = ReadAllBytes(cooked_root / scene_asset->descriptor_relpath);
-    const auto second_table_bytes = ReadAllBytes(cooked_root / *table_relpath);
-    const auto second_data_bytes = ReadAllBytes(cooked_root / *data_relpath);
 
     EXPECT_EQ(first_scene_bytes, second_scene_bytes);
-    EXPECT_EQ(first_table_bytes, second_table_bytes);
-    EXPECT_EQ(first_data_bytes, second_data_bytes);
   }
 
   NOLINT_TEST_F(
@@ -3280,7 +3215,7 @@ namespace {
   }
 
   NOLINT_TEST_F(ScriptingSidecarImportTest,
-    ReimportWithSameSlotShapeUpdatesInPlaceWithoutGrowingTables)
+    ReimportWithSameSlotShapePreservesDescriptorSize)
   {
     using data::loose_cooked::FileKind;
     using data::pak::scripting::ScriptParamRecord;
@@ -3316,20 +3251,8 @@ namespace {
                          scene_asset->virtual_path))
         .success);
 
-    const auto inspection_after_first = LoadInspection(cooked_root);
-    const auto table_relpath = FindFileRelPathByKind(
-      inspection_after_first, FileKind::kScriptBindingsTable);
-    const auto data_relpath = FindFileRelPathByKind(
-      inspection_after_first, FileKind::kScriptBindingsData);
-    if (!table_relpath.has_value()) {
-      FAIL();
-    }
-    if (!data_relpath.has_value()) {
-      FAIL();
-    }
-
-    const auto first_table_bytes = ReadAllBytes(cooked_root / *table_relpath);
-    const auto first_data_bytes = ReadAllBytes(cooked_root / *data_relpath);
+    const auto first_size = std::filesystem::file_size(
+      cooked_root / scene_asset->descriptor_relpath);
 
     WriteTextFile(sidecar_source,
       MakeSidecarPayloadWithFloatParam(script_asset->virtual_path, 9.5F));
@@ -3337,19 +3260,17 @@ namespace {
                          scene_asset->virtual_path))
         .success);
 
-    const auto second_table_bytes = ReadAllBytes(cooked_root / *table_relpath);
-    const auto second_data_bytes = ReadAllBytes(cooked_root / *data_relpath);
-    EXPECT_EQ(first_table_bytes, second_table_bytes);
-    EXPECT_EQ(first_data_bytes.size(), second_data_bytes.size());
-
-    const auto slots
-      = ReadPackedRecords<ScriptSlotRecord>(cooked_root / *table_relpath);
-    const auto params
-      = ReadPackedRecords<ScriptParamRecord>(cooked_root / *data_relpath);
+    EXPECT_EQ(
+      std::filesystem::file_size(cooked_root / scene_asset->descriptor_relpath),
+      first_size);
+    const auto script_state = ReadSceneScriptState(cooked_root, *scene_asset);
+    const auto& slots = script_state.slots;
+    const auto& params = script_state.params;
     ASSERT_EQ(slots.size(), 1U);
     ASSERT_EQ(slots.at(0).params_count, 1U);
     const auto param_index = static_cast<size_t>(
-      slots.at(0).params_array_offset / sizeof(ScriptParamRecord));
+      (slots.at(0).params_array_offset - script_state.parameter_base)
+      / sizeof(ScriptParamRecord));
     ASSERT_LT(param_index, params.size());
     EXPECT_FLOAT_EQ(params.at(param_index).value.as_float, 9.5F);
   }
@@ -3468,20 +3389,9 @@ namespace {
     EXPECT_EQ(scene_b_slot_start_before, scene_b_slot_start_after);
 
     const auto inspection_after = LoadInspection(cooked_root);
-    const auto table_relpath
-      = FindFileRelPathByKind(inspection_after, FileKind::kScriptBindingsTable);
-    const auto data_relpath
-      = FindFileRelPathByKind(inspection_after, FileKind::kScriptBindingsData);
-    if (!table_relpath.has_value()) {
-      FAIL();
-    }
-    if (!data_relpath.has_value()) {
-      FAIL();
-    }
-    const auto slots
-      = ReadPackedRecords<ScriptSlotRecord>(cooked_root / *table_relpath);
-    const auto params
-      = ReadPackedRecords<ScriptParamRecord>(cooked_root / *data_relpath);
+    const auto script_state = ReadSceneScriptState(cooked_root, *scene_b);
+    const auto& slots = script_state.slots;
+    const auto& params = script_state.params;
     ASSERT_FALSE(slots.empty());
     ASSERT_FALSE(params.empty());
 
@@ -3497,7 +3407,8 @@ namespace {
     ASSERT_LT(slot_index, slots.size());
     const auto& slot = slots.at(slot_index);
     const auto param_index = static_cast<size_t>(
-      slot.params_array_offset / sizeof(ScriptParamRecord));
+      (slot.params_array_offset - script_state.parameter_base)
+      / sizeof(ScriptParamRecord));
     ASSERT_LT(param_index, params.size());
     EXPECT_FLOAT_EQ(params.at(param_index).value.as_float, 7.5F);
   }

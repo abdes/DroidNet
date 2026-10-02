@@ -606,7 +606,7 @@ NOLINT_TEST_F(
   const auto buffers = MakeTriangleMeshBuffers();
   MeshBuildPipeline::WorkResult result;
   std::vector<ImportDiagnostic> diagnostics;
-  std::optional<std::vector<std::byte>> finalized;
+  std::optional<GeometryPipeline::FinalizedDescriptor> finalized;
   co::ThreadPool pool(loop_, 2);
 
   // Act
@@ -636,7 +636,7 @@ NOLINT_TEST_F(
         .index_buffer = data::pak::core::ResourceIndexT { 22U },
       };
 
-      finalized = co_await finalizer.FinalizeDescriptorBytes(
+      finalized = co_await finalizer.FinalizeDescriptor(
         std::span<const MeshBufferBindings>(&bindings, 1),
         result.cooked->descriptor_bytes,
         std::span<const GeometryPipeline::MaterialKeyPatch> {}, diagnostics);
@@ -650,7 +650,7 @@ NOLINT_TEST_F(
   }
   ASSERT_TRUE(diagnostics.empty());
 
-  const auto& bytes = *finalized;
+  const auto& bytes = finalized->bytes;
   const auto asset_desc
     = ReadStructAt<data::pak::geometry::GeometryAssetDesc>(bytes, 0);
   EXPECT_FALSE(base::IsAllZero(asset_desc.header.content_hash));
@@ -658,8 +658,14 @@ NOLINT_TEST_F(
   size_t offset = sizeof(data::pak::geometry::GeometryAssetDesc);
   const auto mesh_desc
     = ReadStructAt<data::pak::geometry::MeshDesc>(bytes, offset);
-  EXPECT_EQ(mesh_desc.info.standard.vertex_buffer, 11U);
-  EXPECT_EQ(mesh_desc.info.standard.index_buffer, 22U);
+  const auto vertex = finalized->references.ResolveResource(
+    mesh_desc.info.standard.vertex_buffer, data::ResourceKind::kBuffer);
+  const auto index = finalized->references.ResolveResource(
+    mesh_desc.info.standard.index_buffer, data::ResourceKind::kBuffer);
+  ASSERT_TRUE(vertex.has_value());
+  ASSERT_TRUE(index.has_value());
+  EXPECT_EQ(*vertex, std::optional { data::pak::core::ResourceIndexT { 11U } });
+  EXPECT_EQ(*index, std::optional { data::pak::core::ResourceIndexT { 22U } });
 }
 
 //! Verify missing positions produce a diagnostic and failure.

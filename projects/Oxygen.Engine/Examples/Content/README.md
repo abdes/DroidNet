@@ -176,10 +176,13 @@ locked-generation cleanup waits for its readers.
 ## Contributor notes
 
 The public entry points are `cook_scenes`, `import_models` and `pak_content`,
-each with CMD and PowerShell forms. Checkout-only staging and PakGen fixture
+each with CMD and PowerShell forms. Shared implementation and checkout staging
 helpers live under `internal/`; CMake stages public workflows and authoring
-inputs into the SDK. `internal/make_pak.py` serves PakGen YAML specifications;
-native scene packaging uses `pak_content`.
+inputs into the SDK. `pak_content` packages cooked roots through the native
+Cooker APIs. The SDK showcase uses a separate generated directory in
+the build tree. When its inputs or tools change, CMake discards that directory's
+cooked output and PAKs before recooking; authored files and the installed SDK
+remain untouched until the build and install succeed.
 
 The two GLBs in `glb/` belong to rotating-gltf. Raw FBX models and standalone
 images outside scene manifests are explicit import/runtime demonstration inputs.

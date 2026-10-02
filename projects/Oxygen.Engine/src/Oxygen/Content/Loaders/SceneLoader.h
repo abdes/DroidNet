@@ -22,6 +22,7 @@
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -136,16 +137,21 @@ namespace detail {
       const auto range_begin = record.slot_start_index;
       const auto range_end = record.slot_start_index + record.slot_count;
 
-      for (const auto [other_begin, other_end] : ranges) {
-        if (range_begin < other_end && other_begin < range_end) {
-          LOG_F(WARNING,
-            "scene asset scripting slot ranges overlap: [{}, {}) with [{}, {})",
-            range_begin, range_end, other_begin, other_end);
-          break;
-        }
+      if (range_begin != range_end) {
+        ranges.emplace_back(range_begin, range_end);
       }
-
-      ranges.emplace_back(range_begin, range_end);
+    }
+    std::ranges::sort(ranges);
+    uint32_t next_slot = 0;
+    for (const auto [begin, end] : ranges) {
+      if (begin != next_slot) {
+        throw std::runtime_error(
+          "Scene script slot ranges contain gaps or overlap");
+      }
+      next_slot = end;
+    }
+    if (next_slot != global_slot_count) {
+      throw std::runtime_error("Scene script table contains unowned slots");
     }
   }
 
@@ -309,6 +315,45 @@ inline auto LoadSceneAsset(const LoaderContext& context)
     }
   }
 
+  std::vector<data::pak::scripting::ScriptSlotRecord> script_slots;
+  if (desc.script_slots.count != 0U) {
+    if (desc.script_slots.entry_size
+        != sizeof(data::pak::scripting::ScriptSlotRecord)
+      || desc.script_slots.offset < end) {
+      throw std::runtime_error("Scene script slot table is invalid");
+    }
+    const auto slots_size = size_t { desc.script_slots.count }
+      * sizeof(data::pak::scripting::ScriptSlotRecord);
+    AddRangeEnd(end, desc.script_slots.offset, slots_size);
+    CheckLoaderResult(reader.Seek(base_pos + desc.script_slots.offset),
+      "scene asset", "Seek(script_slots)");
+    const auto slot_bytes = reader.ReadBlob(slots_size);
+    CheckLoaderResult(slot_bytes, "scene asset", "ReadBlob(script_slots)");
+    script_slots.reserve(desc.script_slots.count);
+    for (uint32_t i = 0; i < desc.script_slots.count; ++i) {
+      const auto slot
+        = detail::ReadPackedRecord<data::pak::scripting::ScriptSlotRecord>(
+          std::span(*slot_bytes)
+            .subspan(
+              size_t { i } * sizeof(data::pak::scripting::ScriptSlotRecord),
+              sizeof(data::pak::scripting::ScriptSlotRecord)),
+          "scene script slot");
+      if (slot.params_count != 0U) {
+        const auto params_size = size_t { slot.params_count }
+          * sizeof(data::pak::scripting::ScriptParamRecord);
+        if (slot.params_array_offset != end) {
+          throw std::runtime_error(
+            "Scene script parameters must follow the slot table in order");
+        }
+        AddRangeEnd(end, slot.params_array_offset, params_size);
+      } else if (slot.params_array_offset != 0U) {
+        throw std::runtime_error(
+          "Empty scene script parameters have nonzero offset");
+      }
+      script_slots.push_back(slot);
+    }
+  }
+
   // Load the full descriptor payload as bytes.
   {
     auto seek_res = reader.Seek(base_pos);
@@ -445,30 +490,18 @@ inline auto LoadSceneAsset(const LoaderContext& context)
         table_bytes, entry.table.count, entry.table.entry_size, node_count);
       has_scripting_table = true;
 
-      if (!context.parse_only) {
-        if (context.source_content == nullptr) {
-          throw std::runtime_error(
-            "scene scripting dependencies require source_content");
-        }
-
-        detail::ValidateScriptingSlotRanges(table_bytes, entry.table.count,
-          context.source_content->ScriptSlotCount());
-
-        for (uint32_t i = 0; i < entry.table.count; ++i) {
-          const auto record = detail::ReadPackedRecord<
-            oxygen::data::pak::scripting::ScriptingComponentRecord>(
-            table_bytes.subspan(static_cast<size_t>(i)
-                * sizeof(
-                  oxygen::data::pak::scripting::ScriptingComponentRecord),
-              sizeof(oxygen::data::pak::scripting::ScriptingComponentRecord)),
-            "scene scripting component record");
-
-          auto slot_records = context.source_content->ReadScriptSlotRecords(
-            record.slot_start_index, record.slot_count);
-          for (const auto& slot : slot_records) {
-            if (slot.script_asset_key == oxygen::data::AssetKey {}) {
-              continue;
-            }
+      detail::ValidateScriptingSlotRanges(
+        table_bytes, entry.table.count, desc.script_slots.count);
+      for (uint32_t i = 0; i < entry.table.count; ++i) {
+        const auto record = detail::ReadPackedRecord<
+          data::pak::scripting::ScriptingComponentRecord>(
+          table_bytes.subspan(size_t { i }
+              * sizeof(data::pak::scripting::ScriptingComponentRecord),
+            sizeof(data::pak::scripting::ScriptingComponentRecord)),
+          "scene scripting component");
+        for (const auto& slot : std::span(script_slots)
+               .subspan(record.slot_start_index, record.slot_count)) {
+          if (!slot.script_asset_key.IsNil()) {
             script_deps.insert(slot.script_asset_key);
           }
         }
@@ -502,16 +535,80 @@ inline auto LoadSceneAsset(const LoaderContext& context)
   auto asset = std::make_unique<data::SceneAsset>(context.current_asset_key,
     std::move(bytes),
     data::SourceOrigin { context.source_key, context.source_instance });
+  if (context.asset_references) {
+    std::vector<data::KeyReference> keys;
+    const auto add_asset
+      = [&keys](const data::AssetKey& key, const data::AssetType type) -> void {
+      keys.push_back({
+        .key = key,
+        .kind = data::KeyReferenceKind::kAsset,
+        .expected_type = type,
+      });
+    };
+    for (const auto& key : geometry_deps) {
+      add_asset(key, data::AssetType::kGeometry);
+    }
+    for (const auto& key : material_deps) {
+      add_asset(key, data::AssetType::kMaterial);
+    }
+    for (const auto& key : script_deps) {
+      add_asset(key, data::AssetType::kScript);
+    }
+    const auto add_logical = [&keys](const data::AssetKey& key) -> void {
+      keys.push_back({
+        .key = key,
+        .kind = data::KeyReferenceKind::kLogical,
+        .expected_type = data::AssetType::kUnknown,
+      });
+    };
+    for (const auto& environment : asset->GetEnvironmentSystemRecords()) {
+      using Environment = data::pak::world::EnvironmentComponentType;
+      switch (static_cast<Environment>(environment.header.system_type)) {
+      case Environment::kFog:
+        add_logical(
+          detail::ReadPackedRecord<data::pak::world::FogEnvironmentRecord>(
+            environment.bytes, "fog environment")
+            .inscattering_color_cubemap_asset);
+        break;
+      case Environment::kSkyLight:
+        add_logical(
+          detail::ReadPackedRecord<data::pak::world::SkyLightEnvironmentRecord>(
+            environment.bytes, "sky light environment")
+            .cubemap_asset);
+        break;
+      case Environment::kSkySphere:
+        add_logical(detail::ReadPackedRecord<
+          data::pak::world::SkySphereEnvironmentRecord>(
+          environment.bytes, "sky sphere environment")
+            .cubemap_asset);
+        break;
+      default:
+        break;
+      }
+    }
+    const auto post = asset->TryGetPostProcessVolumeEnvironment();
+    const auto use = data::ResourceReferenceUse {
+      .reference
+      = post ? post->auto_exposure_metering_mask : data::kNoResourceReference,
+      .kind = data::ResourceKind::kTexture,
+    };
+    context.ValidateReferences(std::span(&use, 1U), keys);
+  }
+
   if (const auto post = asset->TryGetPostProcessVolumeEnvironment(); post
-    && post->auto_exposure_metering_mask != data::pak::core::kNoResourceIndex
+    && post->auto_exposure_metering_mask != data::kNoResourceReference
     && !context.parse_only) {
-    const auto* table = context.source_content != nullptr
-      ? context.source_content->GetTextureTable()
-      : nullptr;
-    if (table == nullptr
-      || !table->IsValidKey(post->auto_exposure_metering_mask)) {
-      throw std::runtime_error(
-        "scene exposure mask texture index is outside its source table");
+    const auto index = context.ResolveResource(
+      post->auto_exposure_metering_mask, data::ResourceKind::kTexture);
+    if (index && *index != data::pak::core::kFallbackResourceIndex
+      && *index != data::pak::core::kErrorTextureResourceIndex) {
+      const auto* table = context.source_content
+        ? context.source_content->GetTextureTable()
+        : nullptr;
+      if (!table || !table->IsValidKey(*index)) {
+        throw std::runtime_error(
+          "Scene exposure mask binding is outside its source texture table");
+      }
     }
   }
   return asset;

@@ -20,7 +20,9 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/ResourceTable.h>
 #include <Oxygen/Content/api_export.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptResource.h>
@@ -93,6 +95,9 @@ public:
   //! Get the path to the PAK file.
   auto FilePath() const noexcept -> const auto& { return file_path_; }
 
+  //! Validated physical layer metadata, including patch deletions and bases.
+  auto Catalog() const noexcept -> const data::PakCatalog& { return catalog_; }
+
   //=== Asset Directory Access ===--------------------------------------------//
 
   //! Find a directory entry by asset key.
@@ -106,6 +111,8 @@ public:
   //! Create a Reader positioned at the asset's data.
   OXGN_CNTT_NDAPI auto CreateReader(
     const data::pak::core::AssetDirectoryEntry& entry) const -> Reader;
+  OXGN_CNTT_NDAPI auto ReadAssetReferences(const data::AssetKey& key) const
+    -> data::AssetReferences;
 
   //=== Browse Index (Virtual Paths) ===-------------------------------------//
 
@@ -212,35 +219,10 @@ public:
   //! Create a Reader for the physics data region.
   auto CreatePhysicsDataReader() const -> Reader;
 
-  //! Read one ScriptSlotRecord from the global slot table.
-  OXGN_CNTT_NDAPI auto ReadScriptSlotRecord(uint32_t index) const
-    -> data::pak::scripting::ScriptSlotRecord;
-
-  //! Read a contiguous ScriptSlotRecord range from the global slot table.
-  OXGN_CNTT_NDAPI auto ReadScriptSlotRecords(
-    uint32_t start_index, uint32_t count) const
-    -> std::vector<data::pak::scripting::ScriptSlotRecord>;
-
-  //! Read ScriptParamRecord array from an absolute PAK offset.
-  struct ScriptParamReadRequest final {
-    data::pak::core::OffsetT absolute_offset { 0 };
-    uint32_t count { 0 };
-  };
-
-  OXGN_CNTT_NDAPI auto ReadScriptParamRecords(
-    ScriptParamReadRequest request) const
-    -> std::vector<data::pak::scripting::ScriptParamRecord>;
-
   //! Read one script resource entry and payload by table index.
   OXGN_CNTT_NDAPI auto ReadScriptResource(
     data::pak::core::ResourceIndexT index) const
     -> std::shared_ptr<const data::ScriptResource>;
-
-  //! Number of entries in the global script slot table.
-  OXGN_CNTT_NDAPI auto ScriptSlotCount() const noexcept -> uint32_t
-  {
-    return footer_.script_slot_table.count;
-  }
 
   //! Create a Reader for the data region of the specified resource type.
   /*!
@@ -279,6 +261,7 @@ private:
   data::pak::core::PakHeader header_ {};
   data::SourceKey source_key_ {};
   data::pak::core::PakFooter footer_ {};
+  data::PakCatalog catalog_ {};
 
   //! Stream for reading the PAK file metadata (header, footer, directory,
   //! descriptor tables)

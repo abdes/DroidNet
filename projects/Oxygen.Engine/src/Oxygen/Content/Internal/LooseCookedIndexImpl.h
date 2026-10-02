@@ -7,6 +7,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -19,6 +20,7 @@
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Content/api_export.h> // For tests only
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
 
@@ -33,6 +35,7 @@ public:
     uint64_t descriptor_size = 0;
     uint8_t asset_type = 0;
     std::array<uint8_t, data::loose_cooked::kSha256Size> descriptor_sha256 = {};
+    data::pak::core::AssetReferenceTable references {};
   };
 
   //! Load and validate an index file.
@@ -63,6 +66,10 @@ public:
 
   OXGN_CNTT_NDAPI auto FindAssetType(const data::AssetKey& key) const noexcept
     -> std::optional<uint8_t>;
+  OXGN_CNTT_NDAPI auto HasKeyReferences(
+    const data::AssetKey& key) const noexcept -> bool;
+  OXGN_CNTT_NDAPI auto FindAssetReferences(const data::AssetKey& key) const
+    -> std::optional<data::AssetReferences>;
 
   OXGN_CNTT_NDAPI auto FindAssetKeyByVirtualPath(
     std::string_view virtual_path) const noexcept
@@ -112,6 +119,8 @@ private:
   };
 
   std::string string_storage_;
+  uint64_t reference_storage_offset_ = 0;
+  std::vector<std::byte> reference_storage_;
   std::vector<data::AssetKey> asset_keys_;
   std::unordered_map<data::AssetKey, AssetInfo> key_to_asset_info_;
   std::unordered_map<uint32_t, data::AssetKey> virtual_path_offset_to_key_;

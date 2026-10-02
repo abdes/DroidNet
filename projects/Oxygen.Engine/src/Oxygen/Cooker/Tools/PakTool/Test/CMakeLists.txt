@@ -39,6 +39,7 @@ gtest_program(
     "../RequestPreparation.cpp"
   DEPS
     oxygen::cooker
+    oxygen::content
     oxygen::testing
 )
 
@@ -53,6 +54,7 @@ gtest_program(
     "../ScriptSealing.cpp"
   DEPS
     oxygen::cooker
+    oxygen::content
     oxygen::testing
     nlohmann_json::nlohmann_json
 )
@@ -70,6 +72,7 @@ gtest_program(
     "../ScriptSealing.cpp"
   DEPS
     oxygen::cooker
+    oxygen::content
     oxygen::clap
     oxygen::testing
     nlohmann_json::nlohmann_json
@@ -97,6 +100,7 @@ gtest_program(
     "../ArtifactPublication.cpp"
   DEPS
     oxygen::cooker
+    oxygen::content
     oxygen::testing
 )
 
@@ -108,6 +112,7 @@ gtest_program(
     "../BuildReportJson.cpp"
   DEPS
     oxygen::cooker
+    oxygen::content
     oxygen::testing
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
@@ -120,5 +125,6 @@ gtest_program(
     "../ScriptSealing.cpp"
   DEPS
     oxygen::cooker
+    oxygen::content
     oxygen::testing
 )

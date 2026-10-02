@@ -29,6 +29,7 @@
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/SceneDescriptorImportJob.h>
@@ -81,6 +82,7 @@ namespace {
     SceneBuild build;
     std::vector<data::AssetKey> geometry_keys;
     std::vector<SceneEnvironmentSystem> environment_systems;
+    data::AssetReferences environment_references;
   };
 
   class SceneDescriptorAdapter final {
@@ -458,7 +460,7 @@ namespace {
 
   auto BuildPostProcessSystemRecord(SceneDescriptorExecutionContext& context,
     const internal::SceneSource::PostProcess& source,
-    const data::pak::core::ResourceIndexT mask_index)
+    const data::ResourceReferenceIndex mask_index)
     -> std::optional<SceneEnvironmentSystem>
   {
     auto record = source.record;
@@ -556,12 +558,18 @@ namespace {
     }
 
     if (source.post_process.has_value()) {
+      AssetReferenceBuilder references;
+      const auto mask_reference
+        = mask_index == data::pak::core::kNoResourceIndex
+        ? data::kNoResourceReference
+        : references.AddResource(data::ResourceKind::kTexture, mask_index);
       auto system = BuildPostProcessSystemRecord(
-        context, *source.post_process, mask_index);
+        context, *source.post_process, mask_reference);
       if (!system.has_value()) {
         return std::nullopt;
       }
       prepared.environment_systems.push_back(std::move(*system));
+      prepared.environment_references = std::move(references).Build();
     }
     if (source.background.has_value()) {
       prepared.environment_systems.push_back({
@@ -772,6 +780,7 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     Request().source_path.string(), prepared.geometry_keys,
     prepared.environment_systems, std::move(request_for_pipeline),
     observer_ptr { &GetNamingService() }, StopToken());
+  item.environment_references = std::move(prepared.environment_references);
 
   co_await pipeline.Submit(std::move(item));
   pipeline.Close();
@@ -795,9 +804,10 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   const auto emit_start = std::chrono::steady_clock::now();
-  const auto& cooked = *result.cooked;
+  auto& cooked = *result.cooked;
   session.AssetEmitter().Emit(cooked.scene_key, data::AssetType::kScene,
-    cooked.virtual_path, cooked.descriptor_relpath, cooked.descriptor_bytes);
+    cooked.virtual_path, cooked.descriptor_relpath, cooked.descriptor_bytes,
+    std::move(cooked.references));
   session.AddEmitDuration(
     MakeDuration(emit_start, std::chrono::steady_clock::now()));
 

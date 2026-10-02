@@ -145,31 +145,18 @@ Constraints:
 - Must not allocate per operation in the hot path.
 - Must not impose global locking across loads (especially once async lands).
 
-### Debugging failing Content tests (pakgen + PakDump)
+### Testing Content contracts
 
-Some Content unit tests generate a `.pak` on the fly from a YAML spec.
+Content tests do not invoke external tools or depend on Cooker. Decoder tests
+use minimal in-memory descriptors. Source, identity, ownership and reload tests
+exercise their owning APIs; loose-storage integration tests use
+`Fixtures/LooseCookedTestWriter.h`. Async tests control suspension with events
+and gates, then assert publication, cancellation and retained lifetimes.
 
-Facts and locations:
-
-- YAML specs live in `src/Oxygen/Content/Test/TestData/*.yaml`.
-- PAK generation happens in `AssetLoaderLoadingTest::GeneratePakFile(...)`.
-  - Primary invocation: `pakgen build <spec.yaml> <output.pak> --deterministic`
-  - Fallback invocation: `python -m pakgen.cli build <spec.yaml> <output.pak> --deterministic`
-- Generated PAKs are written under the system temp directory (see
-  `std::filesystem::temp_directory_path()`), in a folder named
-  `oxygen_asset_loader_tests`.
-
-Repro steps (when a test fails):
-
-1. Identify the YAML spec name used by the test (e.g. `material_with_textures`).
-2. Re-run the same `pakgen build` command manually to reproduce deterministically.
-3. Run PakDump against the generated `.pak` to inspect directory entries,
-   resource tables, and optionally asset/resource hex dumps.
-
-PakDump notes:
-
-- Build target name: `Oxygen.Cooker.PakDump`.
-- Example: `Oxygen.Cooker.PakDump <path-to.pak> --verbose --show-data`.
+PAK construction and package/load integration belong to `Cooker/Test/Pak` and
+use the native `PakBuilder` API. To inspect a failing archive, build
+`Oxygen.Cooker.PakDump` and run `Oxygen.Cooker.PakDump <path-to.pak> --verbose
+--show-data`.
 
 ## Detailed feature matrix (status snapshot)
 

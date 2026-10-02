@@ -122,7 +122,7 @@ auto ScriptHotReloadService::NotifyReloadedScript(const data::AssetKey& key,
   }
 
   const auto bytecode_index = asset->GetBytecodeResourceIndex();
-  if (bytecode_index == data::pak::core::kNoResourceIndex) {
+  if (bytecode_index == data::kNoResourceReference) {
     return;
   }
 

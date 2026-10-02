@@ -93,6 +93,7 @@ m_gtest_program(
   AsyncImportCore
   SOURCES
     "Import/AssetEmitter_test.cpp"
+    "Fixtures/DescriptorFixtures.h"
     "Import/AsyncImporter_test.cpp"
     "Import/AsyncImportService_test.cpp"
     "Import/Bc7Encoder_test.cpp"
@@ -248,6 +249,7 @@ m_gtest_program(
     "Import/ImportManifest_scene_descriptor_test.cpp"
     "Import/SceneDescriptorImportRequestBuilder_test.cpp"
     "Import/SceneDescriptorJsonSchema_test.cpp"
+    "Import/SceneDescriptorTestData.h"
 )
 target_link_libraries(
   Oxygen.Cooker.AsyncImportSceneDescriptor.Tests
@@ -430,6 +432,7 @@ m_gtest_program(
     "Loose/DummyIndex.h"
     "Loose/Inspection_test.cpp"
     "Loose/LooseCookedWriter_test.cpp"
+    "Fixtures/DescriptorFixtures.h"
     "Loose/LooseCookedLayout_test.cpp"
     "Loose/Validation_test.cpp"
 )

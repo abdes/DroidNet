@@ -256,16 +256,15 @@ auto WorkDispatcher::AddDiagnostics(
 
 auto WorkDispatcher::EmitGeometryPayload(
   const MeshBuildPipeline::CookedGeometryPayload& cooked,
-  const std::span<const std::byte> finalized_descriptor_bytes) -> bool
+  GeometryPipeline::FinalizedDescriptor descriptor) -> bool
 {
   auto& asset_emitter = session_.AssetEmitter();
 
   try {
     const auto emit_start = std::chrono::steady_clock::now();
     asset_emitter.Emit(cooked.geometry_key, data::AssetType::kGeometry,
-      cooked.virtual_path, cooked.descriptor_relpath,
-      std::vector<std::byte>(
-        finalized_descriptor_bytes.begin(), finalized_descriptor_bytes.end()));
+      cooked.virtual_path, cooked.descriptor_relpath, descriptor.bytes,
+      std::move(descriptor.references));
     const auto emit_end = std::chrono::steady_clock::now();
     session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
     return true;
@@ -317,11 +316,7 @@ auto WorkDispatcher::EmitTexturePayload(TexturePipeline::WorkResult& result)
     if (!has_diagnostics) {
       return std::nullopt;
     }
-    using data::pak::core::ResourceIndexT;
-    constexpr ResourceIndexT kErrorTextureIndex {
-      std::numeric_limits<uint32_t>::max()
-    };
-    return kErrorTextureIndex;
+    return data::pak::core::kErrorTextureResourceIndex;
   }
 
   AddDiagnostics(session_, std::move(result.diagnostics));
@@ -445,7 +440,8 @@ auto WorkDispatcher::EmitMaterialPayload(MaterialPipeline::WorkResult result)
   try {
     const auto emit_start = std::chrono::steady_clock::now();
     emitter.Emit(cooked.material_key, data::AssetType::kMaterial,
-      cooked.virtual_path, cooked.descriptor_relpath, cooked.descriptor_bytes);
+      cooked.virtual_path, cooked.descriptor_relpath, cooked.descriptor_bytes,
+      std::move(cooked.references));
     const auto emit_end = std::chrono::steady_clock::now();
     session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
     return true;
@@ -471,7 +467,8 @@ auto WorkDispatcher::EmitScenePayload(ScenePipeline::WorkResult result) -> bool
   try {
     const auto emit_start = std::chrono::steady_clock::now();
     emitter.Emit(cooked.scene_key, data::AssetType::kScene, cooked.virtual_path,
-      cooked.descriptor_relpath, cooked.descriptor_bytes);
+      cooked.descriptor_relpath, cooked.descriptor_bytes,
+      std::move(cooked.references));
     const auto emit_end = std::chrono::steady_clock::now();
     session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
     return true;
@@ -501,11 +498,7 @@ auto WorkDispatcher::UpdateMaterialBindings(
         binding.source_id));
       DLOG_F(WARNING, "Material '{}' missing texture '{}' ({})", item.source_id,
         binding.source_id, label);
-      using data::pak::core::ResourceIndexT;
-      constexpr ResourceIndexT kErrorTextureIndex {
-        std::numeric_limits<uint32_t>::max()
-      };
-      binding.index = kErrorTextureIndex;
+      binding.index = data::pak::core::kErrorTextureResourceIndex;
       binding.assigned = true;
       return;
     }
@@ -1302,14 +1295,13 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       input_queue_load, output_queue_load);
 
     if (!result.success || !result.cooked.has_value()
-      || result.finalized_descriptor_bytes.empty()) {
+      || result.descriptor.bytes.empty()) {
       AddDiagnostics(session_, std::move(result.diagnostics));
       co_return false;
     }
 
     AddDiagnostics(session_, std::move(result.diagnostics));
-    if (!EmitGeometryPayload(
-          *result.cooked, result.finalized_descriptor_bytes)) {
+    if (!EmitGeometryPayload(*result.cooked, std::move(result.descriptor))) {
       co_return false;
     }
 

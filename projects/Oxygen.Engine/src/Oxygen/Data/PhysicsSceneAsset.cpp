@@ -66,6 +66,9 @@ auto PhysicsSceneAsset::ParseAndValidate() -> void
     return offset <= total && size <= (total - offset);
   };
 
+  if (desc_.target_scene_key.IsNil()) {
+    throw std::runtime_error("PhysicsSceneAsset: target scene key is missing");
+  }
   binding_tables_.clear();
 
   if (desc_.component_table_count == 0) {
@@ -175,6 +178,10 @@ auto PhysicsSceneAsset::ParseAndValidate() -> void
       continue;
     }
 
+    if (FindBindingTableEntry(entry.binding_type) != nullptr) {
+      throw std::runtime_error(
+        "PhysicsSceneAsset: duplicate binding table kind");
+    }
     binding_tables_.push_back({
       .type = entry.binding_type,
       .offset = entry.table.offset,

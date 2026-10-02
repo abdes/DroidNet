@@ -34,6 +34,7 @@
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Content/AssetValidation.h>
 #include <Oxygen/Content/Internal/LooseCookedIndexCodec.h> // IWYU pragma: keep
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Content/VirtualPath.h>
@@ -188,6 +189,7 @@ namespace {
     std::string descriptor_relpath;
     uint64_t descriptor_size = 0;
     std::array<uint8_t, data::loose_cooked::kSha256Size> descriptor_sha256 = {};
+    data::AssetReferences references;
   };
 
   struct StoredFile final {
@@ -206,7 +208,8 @@ namespace {
       && lhs.virtual_path == rhs.virtual_path
       && lhs.descriptor_relpath == rhs.descriptor_relpath
       && lhs.descriptor_size == rhs.descriptor_size
-      && lhs.descriptor_sha256 == rhs.descriptor_sha256;
+      && lhs.descriptor_sha256 == rhs.descriptor_sha256
+      && lhs.references == rhs.references;
   }
 
   [[nodiscard]] auto IsEquivalent(const StoredFile& lhs, const StoredFile& rhs)
@@ -453,11 +456,12 @@ struct LooseCookedWriter::Impl final {
 
   auto WriteAssetDescriptor(const data::AssetKey& key,
     data::AssetType asset_type, std::string_view virtual_path,
-    std::string_view descriptor_relpath, std::span<const std::byte> bytes)
-    -> void
+    std::string_view descriptor_relpath, std::span<const std::byte> bytes,
+    const data::AssetReferences& references) -> void
   {
     ValidateVirtualPath(virtual_path);
     ValidateRelativePath(descriptor_relpath);
+    ValidateAssetDescriptor(asset_type, key, bytes, references);
 
     const auto digest = base::ComputeSha256(bytes);
 
@@ -468,6 +472,7 @@ struct LooseCookedWriter::Impl final {
       .descriptor_relpath = std::string(descriptor_relpath),
       .descriptor_size = bytes.size(),
       .descriptor_sha256 = CopyDigestOrZero(digest),
+      .references = references,
     };
 
     if (!HandleVirtualPathCollision(record, "WriteAssetDescriptor")) {
@@ -543,6 +548,7 @@ struct LooseCookedWriter::Impl final {
   auto RegisterExternalAssetDescriptor(const data::AssetKey& key,
     const data::AssetType asset_type, std::string_view virtual_path,
     std::string_view descriptor_relpath, uint64_t descriptor_size,
+    const data::AssetReferences& references,
     std::optional<base::Sha256Digest> descriptor_sha256) -> void
   {
     ValidateVirtualPath(virtual_path);
@@ -574,8 +580,19 @@ struct LooseCookedWriter::Impl final {
         + path_on_disk.string());
     }
 
+    if (descriptor_size > std::numeric_limits<size_t>::max()) {
+      throw std::runtime_error("Asset descriptor exceeds addressable size");
+    }
+    serio::FileStream<> stream(path_on_disk, std::ios::in);
+    serio::Reader reader(stream);
+    const auto bytes = reader.ReadBlob(static_cast<size_t>(descriptor_size));
+    if (!bytes) {
+      throw std::runtime_error(
+        "Could not read registered descriptor: " + path_on_disk.string());
+    }
+    ValidateAssetDescriptor(asset_type, key, *bytes, references);
     if (!descriptor_sha256.has_value()) {
-      descriptor_sha256 = base::ComputeFileSha256(path_on_disk);
+      descriptor_sha256 = base::ComputeSha256(*bytes);
     }
 
     StoredAsset record {
@@ -585,6 +602,7 @@ struct LooseCookedWriter::Impl final {
       .descriptor_relpath = std::string(descriptor_relpath),
       .descriptor_size = descriptor_size,
       .descriptor_sha256 = CopyDigestOrZero(descriptor_sha256),
+      .references = references,
     };
 
     if (!HandleVirtualPathCollision(
@@ -674,6 +692,8 @@ struct LooseCookedWriter::Impl final {
         .virtual_path = a.virtual_path,
         .descriptor_relpath = a.descriptor_relpath,
         .descriptor_size = a.descriptor_size,
+        .descriptor_sha256 = {},
+        .references = a.references,
       };
 
       if (!IsAllZeros(a.descriptor_sha256)) {
@@ -756,8 +776,9 @@ private:
         const auto type_u8 = index.FindAssetType(key);
         const auto size = index.FindDescriptorSize(key);
         const auto sha = index.FindDescriptorSha256(key);
+        auto references = index.FindAssetReferences(key);
 
-        if (!rel || !vpath || !type_u8 || !size) {
+        if (!rel || !vpath || !type_u8 || !size || !references) {
           continue;
         }
 
@@ -767,6 +788,8 @@ private:
           .virtual_path = std::string(*vpath),
           .descriptor_relpath = std::string(*rel),
           .descriptor_size = *size,
+          .descriptor_sha256 = {},
+          .references = std::move(*references),
         };
 
         if (sha.has_value()) {
@@ -831,16 +854,6 @@ private:
     if (has_physics_table != has_physics_data) {
       throw std::runtime_error(
         "Loose cooked index must provide both physics.table and physics.data");
-    }
-
-    const auto has_script_bindings_table
-      = HasFileKind_(FileKind::kScriptBindingsTable);
-    const auto has_script_bindings_data
-      = HasFileKind_(FileKind::kScriptBindingsData);
-    if (has_script_bindings_table != has_script_bindings_data) {
-      throw std::runtime_error("Loose cooked index must provide both "
-                               "script-bindings.table and "
-                               "script-bindings.data");
     }
   }
 
@@ -958,6 +971,26 @@ private:
     header.file_record_count = static_cast<uint32_t>(file_records.size());
     header.file_record_size = sizeof(FileRecord);
 
+    auto reference_cursor = header.file_records_offset
+      + (uint64_t { header.file_record_count } * sizeof(FileRecord));
+    for (size_t i = 0; i < keys.size(); ++i) {
+      const auto& references = assets_.at(keys.at(i)).references;
+      auto& table = asset_entries.at(i).references;
+      table.resource_count
+        = static_cast<uint32_t>(references.Resources().size());
+      table.key_count = static_cast<uint32_t>(references.Keys().size());
+      const auto size = data::AssetReferences::EncodedSize(
+        table.resource_count, table.key_count);
+      if (size != 0U) {
+        if (size > std::numeric_limits<uint64_t>::max() - reference_cursor) {
+          throw std::overflow_error(
+            "Loose cooked reference block offset overflow");
+        }
+        table.offset = reference_cursor;
+        reference_cursor += size;
+      }
+    }
+
     const auto guid_bytes = data::as_bytes(source_key);
     std::ranges::transform(guid_bytes, std::begin(header.source_identity),
       [](const auto byte) -> auto { return std::to_integer<uint8_t>(byte); });
@@ -979,6 +1012,15 @@ private:
     for (const auto& r : file_records) {
       ThrowOnError(writer.WriteBlob(std::as_bytes(std::span(&r, 1))),
         "Failed to write file record");
+    }
+
+    for (const auto& key : keys) {
+      const auto encoded = assets_.at(key).references.Encode();
+      if (!encoded) {
+        throw std::runtime_error(encoded.error());
+      }
+      ThrowOnError(
+        writer.WriteBlob(*encoded), "Failed to write asset references");
     }
 
     ThrowOnError(writer.Flush(), "Failed to encode index file");
@@ -1040,11 +1082,11 @@ auto LooseCookedWriter::SetCollisionPolicy(const CollisionPolicy policy) -> void
 
 auto LooseCookedWriter::WriteAssetDescriptor(const data::AssetKey& key,
   const data::AssetType asset_type, std::string_view virtual_path,
-  std::string_view descriptor_relpath, const std::span<const std::byte> bytes)
-  -> void
+  std::string_view descriptor_relpath, const std::span<const std::byte> bytes,
+  const data::AssetReferences& references) -> void
 {
   impl_->WriteAssetDescriptor(
-    key, asset_type, virtual_path, descriptor_relpath, bytes);
+    key, asset_type, virtual_path, descriptor_relpath, bytes, references);
 }
 
 auto LooseCookedWriter::WriteFile(const FileKind kind, std::string_view relpath,
@@ -1062,11 +1104,11 @@ auto LooseCookedWriter::RegisterExternalFile(
 auto LooseCookedWriter::RegisterExternalAssetDescriptor(
   const data::AssetKey& key, const data::AssetType asset_type,
   std::string_view virtual_path, std::string_view descriptor_relpath,
-  const uint64_t descriptor_size,
+  const uint64_t descriptor_size, const data::AssetReferences& references,
   std::optional<base::Sha256Digest> descriptor_sha256) -> void
 {
   impl_->RegisterExternalAssetDescriptor(key, asset_type, virtual_path,
-    descriptor_relpath, descriptor_size, descriptor_sha256);
+    descriptor_relpath, descriptor_size, references, descriptor_sha256);
 }
 
 auto LooseCookedWriter::Finish() -> LooseCookedWriteResult

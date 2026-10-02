@@ -50,9 +50,6 @@ public:
   OXGN_COOK_NDAPI auto LockScriptsTable(
     const std::filesystem::path& cooked_root) -> co::Co<SharedTableLockGuard>;
 
-  OXGN_COOK_NDAPI auto LockScriptBindingsTable(
-    const std::filesystem::path& cooked_root) -> co::Co<SharedTableLockGuard>;
-
   //! Register an active import session for a cooked root.
   OXGN_COOK_NDAPI auto BeginSession(const std::filesystem::path& cooked_root)
     -> ImportSessionToken;

@@ -193,7 +193,7 @@ See [Content ownership](deps_and_cache.md#owning-and-borrowed-access).
 
 Two workflows are expected:
 
-- **PAK-based cooking**: a tool (PakGen) can produce cooked `SceneAsset`
+- **PAK-based cooking**: the native Cooker produces cooked `SceneAsset`
   descriptors inside a `.pak`.
 - **Loose cooked iteration**: the same cooked descriptors can be emitted into a
   loose cooked root (with `container.index.bin`) for fast iteration.

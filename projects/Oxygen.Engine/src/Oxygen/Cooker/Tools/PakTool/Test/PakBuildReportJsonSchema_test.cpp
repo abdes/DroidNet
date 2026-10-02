@@ -14,6 +14,7 @@
 
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -89,14 +90,18 @@ auto LoadJsonFile(const std::filesystem::path& path) -> std::optional<json>
   }
 }
 
-auto ValidateSchema(
-  const json& schema, const json& instance, std::string& errors) -> bool
+struct SchemaInput {
+  const json* definition;
+  const json* document;
+};
+
+auto ValidateSchema(const SchemaInput input, std::string& errors) -> bool
 {
   try {
     auto validator = json_validator {};
-    validator.set_root_schema(schema);
+    validator.set_root_schema(*input.definition);
     auto handler = CollectingErrorHandler {};
-    [[maybe_unused]] auto _ = validator.validate(instance, handler);
+    [[maybe_unused]] auto _ = validator.validate(*input.document, handler);
     if (handler.HasErrors()) {
       errors = handler.ToString();
       return false;
@@ -113,7 +118,10 @@ NOLINT_TEST(PakBuildReportJsonSchemaTest, AcceptsCanonicalPatchReportDocument)
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
   const auto schema = LoadJsonFile(SchemaFile(repo_root));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    ADD_FAILURE() << "Could not read the package report schema";
+    return;
+  }
 
   const auto doc = json::parse(R"({
     "$schema": "https://oxygen-engine.dev/schemas/oxygen.pak-build-report.schema.json",
@@ -136,7 +144,8 @@ NOLINT_TEST(PakBuildReportJsonSchemaTest, AcceptsCanonicalPatchReportDocument)
           "path": "F:/Cooked/Dlc/base.pak"
         }
       ],
-      "base_catalogs": [
+      "script_source_roots": [],
+      "base_paks": [
         "F:/Cooked/Base/base.catalog.json"
       ],
       "options": {
@@ -145,12 +154,6 @@ NOLINT_TEST(PakBuildReportJsonSchemaTest, AcceptsCanonicalPatchReportDocument)
         "compute_crc32": true,
         "fail_on_warnings": false,
         "emit_manifest_in_full": false
-      },
-      "patch_compatibility": {
-        "require_exact_base_set": true,
-        "require_content_version_match": true,
-        "require_base_source_key_match": true,
-        "require_catalog_digest_match": true
       }
     },
     "artifacts": {
@@ -215,7 +218,9 @@ NOLINT_TEST(PakBuildReportJsonSchemaTest, AcceptsCanonicalPatchReportDocument)
   })");
 
   auto errors = std::string {};
-  EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
+  EXPECT_TRUE(
+    ValidateSchema({ .definition = &schema.value(), .document = &doc }, errors))
+    << errors;
 }
 
 NOLINT_TEST(PakBuildReportJsonSchemaTest,
@@ -224,7 +229,10 @@ NOLINT_TEST(PakBuildReportJsonSchemaTest,
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
   const auto schema = LoadJsonFile(SchemaFile(repo_root));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    ADD_FAILURE() << "Could not read the package report schema";
+    return;
+  }
 
   const auto doc = json::parse(R"({
     "schema_version": 1,
@@ -237,19 +245,14 @@ NOLINT_TEST(PakBuildReportJsonSchemaTest,
       "source_key": "01234567-89ab-7def-8123-456789abcdef",
       "content_version": 7,
       "sources": [],
-      "base_catalogs": [],
+      "script_source_roots": [],
+      "base_paks": [],
       "options": {
         "deterministic": true,
         "embed_browse_index": false,
         "compute_crc32": false,
         "fail_on_warnings": true,
         "emit_manifest_in_full": false
-      },
-      "patch_compatibility": {
-        "require_exact_base_set": true,
-        "require_content_version_match": true,
-        "require_base_source_key_match": true,
-        "require_catalog_digest_match": true
       }
     },
     "artifacts": {
@@ -317,7 +320,9 @@ NOLINT_TEST(PakBuildReportJsonSchemaTest,
   })");
 
   auto errors = std::string {};
-  EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
+  EXPECT_TRUE(
+    ValidateSchema({ .definition = &schema.value(), .document = &doc }, errors))
+    << errors;
 }
 
 NOLINT_TEST(PakBuildReportJsonSchemaTest,
@@ -326,7 +331,10 @@ NOLINT_TEST(PakBuildReportJsonSchemaTest,
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
   const auto schema = LoadJsonFile(SchemaFile(repo_root));
-  ASSERT_TRUE(schema.has_value());
+  if (!schema.has_value()) {
+    ADD_FAILURE() << "Could not read the package report schema";
+    return;
+  }
 
   const auto doc = json::parse(R"({
     "schema_version": 1,
@@ -344,19 +352,14 @@ NOLINT_TEST(PakBuildReportJsonSchemaTest,
           "path": "F:/Cooked/Base"
         }
       ],
-      "base_catalogs": [],
+      "script_source_roots": [],
+      "base_paks": [],
       "options": {
         "deterministic": true,
         "embed_browse_index": false,
         "compute_crc32": true,
         "fail_on_warnings": false,
         "emit_manifest_in_full": false
-      },
-      "patch_compatibility": {
-        "require_exact_base_set": true,
-        "require_content_version_match": true,
-        "require_base_source_key_match": true,
-        "require_catalog_digest_match": true
       }
     },
     "artifacts": {
@@ -412,7 +415,8 @@ NOLINT_TEST(PakBuildReportJsonSchemaTest,
   })");
 
   auto errors = std::string {};
-  EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
+  EXPECT_FALSE(ValidateSchema(
+    { .definition = &schema.value(), .document = &doc }, errors));
 }
 
 } // namespace

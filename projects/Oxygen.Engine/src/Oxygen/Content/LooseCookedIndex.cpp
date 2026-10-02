@@ -16,6 +16,7 @@
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
 
@@ -88,6 +89,12 @@ auto LooseCookedIndex::FindAssetKeyByVirtualPath(
   std::string_view virtual_path) const noexcept -> std::optional<data::AssetKey>
 {
   return impl_->FindAssetKeyByVirtualPath(virtual_path);
+}
+
+auto LooseCookedIndex::FindAssetReferences(const data::AssetKey& key) const
+  -> std::optional<data::AssetReferences>
+{
+  return impl_->FindAssetReferences(key);
 }
 
 auto LooseCookedIndex::GetAllAssetKeys() const noexcept

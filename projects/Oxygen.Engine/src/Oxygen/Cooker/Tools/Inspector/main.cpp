@@ -48,6 +48,7 @@
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
 
@@ -127,10 +128,6 @@ auto FileKindToString(const FileKind kind) -> std::string_view
     return "scripts.table";
   case FileKind::kScriptsData:
     return "scripts.data";
-  case FileKind::kScriptBindingsTable:
-    return "script-bindings.table";
-  case FileKind::kScriptBindingsData:
-    return "script-bindings.data";
   case FileKind::kPhysicsTable:
     return "physics.table";
   case FileKind::kPhysicsData:
@@ -965,130 +962,49 @@ auto RunDumpPhysicsAssets(const DumpPhysicsAssetsOptions& opts) -> int
   }
 }
 
-auto RunDumpScriptSlots(const DumpScriptOptions& opts) -> int
+enum class ScriptDumpMode : uint8_t { kSlots, kParameters };
+
+auto RunDumpSceneScripts(
+  const DumpScriptOptions& opts, const ScriptDumpMode mode) -> int
 {
   const std::filesystem::path cooked_root(opts.cooked_root);
   try {
     oxygen::content::lc::Inspection inspection;
     inspection.LoadFromRoot(cooked_root);
-
-    auto relpath = FindFileRelPathBySuffix(inspection, "script-bindings.table");
-    if (!relpath) {
-      std::cerr << "ERROR: script-bindings.table not found in index\n";
-      return 2;
-    }
-
-    const auto table_path = cooked_root / *relpath;
-    auto entries
-      = LoadPackedTable<oxygen::data::pak::scripting::ScriptSlotRecord>(
-        table_path);
-    if (entries.empty()) {
-      std::cout << "No script slots found in: '" << table_path.string()
-                << "'\n";
-      return 0;
-    }
-
-    std::cout << "Dumping " << entries.size() << " script slots in: '"
-              << table_path.string() << "'\n\n";
-    std::cout << "Idx  Script Asset Key                        ParamOffset     "
-                 "     Count  ExecOrder  Flags\n";
-    std::cout << "---- -------------------------------------- "
-                 "------------------- ------ ---------- ----------\n";
-    for (size_t i = 0; i < entries.size(); ++i) {
-      const auto& e = entries.at(i);
-      std::cout << std::right << std::setw(3) << i << "  " << std::left
-                << std::setw(38) << oxygen::data::to_string(e.script_asset_key)
-                << " " << std::left << std::setw(19)
-                << ToHex64(e.params_array_offset) << " " << std::right
-                << std::setw(6) << e.params_count << " " << std::right
-                << std::setw(10) << e.execution_order << " " << std::left
-                << std::setw(10) << static_cast<uint32_t>(e.flags) << "\n";
-    }
-    return 0;
-  } catch (const std::exception& ex) {
-    std::cerr << "ERROR: " << ex.what() << "\n";
-    return 2;
-  }
-}
-
-auto RunDumpScriptParams(const DumpScriptOptions& opts) -> int
-{
-  using oxygen::serio::FileStream;
-  using oxygen::serio::Reader;
-
-  const std::filesystem::path cooked_root(opts.cooked_root);
-  try {
-    oxygen::content::lc::Inspection inspection;
-    inspection.LoadFromRoot(cooked_root);
-
-    auto slots_relpath
-      = FindFileRelPathBySuffix(inspection, "script-bindings.table");
-    auto data_relpath
-      = FindFileRelPathBySuffix(inspection, "script-bindings.data");
-    if (!slots_relpath) {
-      std::cerr << "ERROR: script-bindings.table not found in index\n";
-      return 2;
-    }
-    if (!data_relpath) {
-      std::cerr << "ERROR: script-bindings.data not found in index\n";
-      return 2;
-    }
-
-    const auto slots_path = cooked_root / *slots_relpath;
-    const auto data_path = cooked_root / *data_relpath;
-    auto slots
-      = LoadPackedTable<oxygen::data::pak::scripting::ScriptSlotRecord>(
-        slots_path);
-    if (slots.empty()) {
-      std::cout << "(no script slots)\n";
-      return 0;
-    }
-
-    FileStream<> data_stream(data_path, std::ios::in);
-    Reader<FileStream<>> reader(data_stream);
-    auto pack = reader.ScopedAlignment(1);
-
-    for (size_t i = 0; i < slots.size(); ++i) {
-      const auto& slot = slots.at(i);
-      std::cout << "Slot[" << i
-                << "] key=" << oxygen::data::to_string(slot.script_asset_key)
-                << " params_count=" << slot.params_count
-                << " params_offset=" << ToHex64(slot.params_array_offset)
-                << "\n";
-      if (slot.params_count == 0) {
+    for (const auto& asset : inspection.Assets()) {
+      if (asset.asset_type
+        != static_cast<uint8_t>(oxygen::data::AssetType::kScene)) {
         continue;
       }
-
-      auto seek_result
-        = reader.Seek(static_cast<size_t>(slot.params_array_offset));
-      if (!seek_result) {
-        std::cout << "  ! cannot seek to params offset (skipping)\n";
-        continue;
-      }
-
-      const size_t bytes_to_read = static_cast<size_t>(slot.params_count)
-        * sizeof(oxygen::data::pak::scripting::ScriptParamRecord);
-      auto blob = reader.ReadBlob(bytes_to_read);
-      if (!blob) {
-        std::cout << "  ! failed to read params blob (skipping)\n";
-        continue;
-      }
-
-      for (uint32_t pi = 0; pi < slot.params_count; ++pi) {
-        oxygen::data::pak::scripting::ScriptParamRecord record {};
-        std::memcpy(&record,
-          blob->data() + (static_cast<size_t>(pi) * sizeof(record)),
-          sizeof(record));
-        const auto key = ReadFixedString(record.key, 64);
-        std::cout << "    [" << pi << "] "
-                  << "key='" << key << "' "
-                  << "type=" << static_cast<uint32_t>(record.type)
-                  << " value=" << FormatScriptParamValue(record) << "\n";
+      const auto bytes
+        = ReadDescriptorBytes(cooked_root / asset.descriptor_relpath);
+      const auto scene = oxygen::data::SceneAsset(asset.key, bytes);
+      std::cout << "Scene: " << asset.virtual_path << "\n";
+      for (const auto& component : scene.GetComponents<
+             oxygen::data::pak::scripting::ScriptingComponentRecord>()) {
+        const auto slots = scene.ReadScriptSlots(
+          component.slot_start_index, component.slot_count);
+        for (size_t i = 0; i < slots.size(); ++i) {
+          const auto& slot = slots.at(i);
+          std::cout << "  Node[" << component.node_index << "] Slot["
+                    << component.slot_start_index + i << "] key="
+                    << oxygen::data::to_string(slot.script_asset_key)
+                    << " parameters=" << slot.params_count
+                    << " execution_order=" << slot.execution_order
+                    << " flags=" << static_cast<uint32_t>(slot.flags) << "\n";
+          if (mode == ScriptDumpMode::kParameters) {
+            for (const auto& parameter : scene.ReadScriptParameters(slot)) {
+              std::cout << "    "
+                        << ReadFixedString(parameter.key, sizeof(parameter.key))
+                        << " = " << FormatScriptParamValue(parameter) << "\n";
+            }
+          }
+        }
       }
     }
     return 0;
-  } catch (const std::exception& ex) {
-    std::cerr << "ERROR: " << ex.what() << "\n";
+  } catch (const std::exception& error) {
+    std::cerr << "ERROR: " << error.what() << "\n";
     return 2;
   }
 }
@@ -1208,7 +1124,7 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
 
   const std::shared_ptr<Command> script_slots_cmd
     = CommandBuilder("script-slots")
-        .About("Dump script-bindings.table slot entries.")
+        .About("Dump scene-local script slots, grouped by scene and node.")
         .WithPositionalArguments(script_slots_root);
 
   auto script_params_root = Option::Positional("cooked_root")
@@ -1220,8 +1136,7 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
 
   const std::shared_ptr<Command> script_params_cmd
     = CommandBuilder("script-params")
-        .About(
-          "Dump script param arrays referenced by script-bindings.table slots.")
+        .About("Dump scene-local script slots and their parameter values.")
         .WithPositionalArguments(script_params_root);
 
   auto input_actions_root = Option::Positional("cooked_root")
@@ -1348,9 +1263,11 @@ auto main(int argc, char** argv) -> int
     } else if (command_path == "physics-table") {
       exit_code = RunDumpPhysics(physics_opts);
     } else if (command_path == "script-slots") {
-      exit_code = RunDumpScriptSlots(script_slots_opts);
+      exit_code
+        = RunDumpSceneScripts(script_slots_opts, ScriptDumpMode::kSlots);
     } else if (command_path == "script-params") {
-      exit_code = RunDumpScriptParams(script_params_opts);
+      exit_code
+        = RunDumpSceneScripts(script_params_opts, ScriptDumpMode::kParameters);
     } else if (command_path == "input-actions") {
       exit_code = RunDumpInputActions(input_actions_opts);
     } else if (command_path == "input-mappings") {

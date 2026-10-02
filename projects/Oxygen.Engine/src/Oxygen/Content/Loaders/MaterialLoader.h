@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <algorithm>
+#include <array>
 #include <bit>
 #include <cmath>
 #include <memory>
@@ -15,6 +17,7 @@
 #include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Data/TextureResource.h>
@@ -34,10 +37,10 @@ inline auto LoadMaterialAsset(LoaderContext context)
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;
 
+  using data::ResourceReferenceIndex;
   using data::ShaderReference;
   using data::Unorm16;
   using data::pak::core::kMaxNameSize;
-  using data::pak::core::ResourceIndexT;
   using data::pak::render::MaterialAssetDesc;
   using data::pak::render::ShaderReferenceDesc;
   using oxygen::ShaderType;
@@ -61,7 +64,9 @@ inline auto LoadMaterialAsset(LoaderContext context)
   {
     LOG_SCOPE_F(1, "Header");
     LoadAssetHeader(reader, desc.header);
-    if (desc.header.version != data::pak::render::kMaterialAssetVersion) {
+    if (desc.header.asset_type
+        != static_cast<uint8_t>(data::AssetType::kMaterial)
+      || desc.header.version != data::pak::render::kMaterialAssetVersion) {
       throw std::runtime_error(
         "unsupported MaterialAssetDesc descriptor version");
     }
@@ -99,56 +104,56 @@ inline auto LoadMaterialAsset(LoaderContext context)
 
   // ReadInto texture resource indices
   auto base_color_texture_result
-    = reader.ReadInto<ResourceIndexT>(desc.base_color_texture);
+    = reader.ReadInto<ResourceReferenceIndex>(desc.base_color_texture);
   check_result(
     base_color_texture_result, "MaterialAssetDesc.base_color_texture");
 
   auto normal_texture_result
-    = reader.ReadInto<ResourceIndexT>(desc.normal_texture);
+    = reader.ReadInto<ResourceReferenceIndex>(desc.normal_texture);
   check_result(normal_texture_result, "MaterialAssetDesc.normal_texture");
 
   auto metallic_texture_result
-    = reader.ReadInto<ResourceIndexT>(desc.metallic_texture);
+    = reader.ReadInto<ResourceReferenceIndex>(desc.metallic_texture);
   check_result(metallic_texture_result, "MaterialAssetDesc.metallic_texture");
 
   auto roughness_texture_result
-    = reader.ReadInto<ResourceIndexT>(desc.roughness_texture);
+    = reader.ReadInto<ResourceReferenceIndex>(desc.roughness_texture);
   check_result(roughness_texture_result, "MaterialAssetDesc.roughness_texture");
 
   auto ambient_occlusion_texture_result
-    = reader.ReadInto<ResourceIndexT>(desc.ambient_occlusion_texture);
+    = reader.ReadInto<ResourceReferenceIndex>(desc.ambient_occlusion_texture);
   check_result(ambient_occlusion_texture_result,
     "MaterialAssetDesc.ambient_occlusion_texture");
 
   auto emissive_texture_result
-    = reader.ReadInto<ResourceIndexT>(desc.emissive_texture);
+    = reader.ReadInto<ResourceReferenceIndex>(desc.emissive_texture);
   check_result(emissive_texture_result, "MaterialAssetDesc.emissive_texture");
 
   auto specular_texture_result
-    = reader.ReadInto<ResourceIndexT>(desc.specular_texture);
+    = reader.ReadInto<ResourceReferenceIndex>(desc.specular_texture);
   check_result(specular_texture_result, "MaterialAssetDesc.specular_texture");
 
   auto sheen_color_texture_result
-    = reader.ReadInto<ResourceIndexT>(desc.sheen_color_texture);
+    = reader.ReadInto<ResourceReferenceIndex>(desc.sheen_color_texture);
   check_result(
     sheen_color_texture_result, "MaterialAssetDesc.sheen_color_texture");
 
   auto clearcoat_texture_result
-    = reader.ReadInto<ResourceIndexT>(desc.clearcoat_texture);
+    = reader.ReadInto<ResourceReferenceIndex>(desc.clearcoat_texture);
   check_result(clearcoat_texture_result, "MaterialAssetDesc.clearcoat_texture");
 
   auto clearcoat_normal_texture_result
-    = reader.ReadInto<ResourceIndexT>(desc.clearcoat_normal_texture);
+    = reader.ReadInto<ResourceReferenceIndex>(desc.clearcoat_normal_texture);
   check_result(clearcoat_normal_texture_result,
     "MaterialAssetDesc.clearcoat_normal_texture");
 
   auto transmission_texture_result
-    = reader.ReadInto<ResourceIndexT>(desc.transmission_texture);
+    = reader.ReadInto<ResourceReferenceIndex>(desc.transmission_texture);
   check_result(
     transmission_texture_result, "MaterialAssetDesc.transmission_texture");
 
   auto thickness_texture_result
-    = reader.ReadInto<ResourceIndexT>(desc.thickness_texture);
+    = reader.ReadInto<ResourceReferenceIndex>(desc.thickness_texture);
   check_result(thickness_texture_result, "MaterialAssetDesc.thickness_texture");
 
   for (auto& i : desc.emissive_factor) {
@@ -345,6 +350,28 @@ inline auto LoadMaterialAsset(LoaderContext context)
     }
   }
 
+  const auto texture_references = std::array {
+    desc.base_color_texture,
+    desc.normal_texture,
+    desc.metallic_texture,
+    desc.roughness_texture,
+    desc.ambient_occlusion_texture,
+    desc.emissive_texture,
+    desc.specular_texture,
+    desc.sheen_color_texture,
+    desc.clearcoat_texture,
+    desc.clearcoat_normal_texture,
+    desc.transmission_texture,
+    desc.thickness_texture,
+  };
+  std::array<data::ResourceReferenceUse, texture_references.size()>
+    resource_uses;
+  std::ranges::transform(texture_references, resource_uses.begin(),
+    [](const ResourceReferenceIndex reference) -> data::ResourceReferenceUse {
+      return { .reference = reference, .kind = data::ResourceKind::kTexture };
+    });
+  context.ValidateReferences(resource_uses, {});
+
   if (!context.parse_only && !context.dependency_collector) {
     throw std::runtime_error(
       "MaterialAsset loader requires a dependency collector; "
@@ -354,33 +381,27 @@ inline auto LoadMaterialAsset(LoaderContext context)
   if (!context.parse_only) {
     using data::TextureResource;
     using data::pak::core::kNoResourceIndex;
-    using data::pak::core::ResourceIndexT;
 
-    auto collect_texture_ref = [&](const ResourceIndexT texture_index) -> void {
-      if (texture_index == kNoResourceIndex) {
+    auto collect_texture_ref
+      = [&](const ResourceReferenceIndex reference) -> void {
+      const auto texture_index
+        = context.ResolveResource(reference, data::ResourceKind::kTexture);
+      if (!texture_index || *texture_index == kNoResourceIndex
+        || *texture_index == data::pak::core::kErrorTextureResourceIndex) {
         return;
       }
 
       internal::ResourceRef ref {
         .source = context.source_instance,
         .resource_type_id = TextureResource::ClassTypeId(),
-        .resource_index = texture_index,
+        .resource_index = *texture_index,
       };
       context.dependency_collector->AddResourceDependency(ref);
     };
 
-    collect_texture_ref(desc.base_color_texture);
-    collect_texture_ref(desc.normal_texture);
-    collect_texture_ref(desc.metallic_texture);
-    collect_texture_ref(desc.roughness_texture);
-    collect_texture_ref(desc.ambient_occlusion_texture);
-    collect_texture_ref(desc.emissive_texture);
-    collect_texture_ref(desc.specular_texture);
-    collect_texture_ref(desc.sheen_color_texture);
-    collect_texture_ref(desc.clearcoat_texture);
-    collect_texture_ref(desc.clearcoat_normal_texture);
-    collect_texture_ref(desc.transmission_texture);
-    collect_texture_ref(desc.thickness_texture);
+    for (const auto reference : texture_references) {
+      collect_texture_ref(reference);
+    }
   }
 
   // Create the material asset with the loaded shader references and runtime

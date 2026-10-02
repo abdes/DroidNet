@@ -7,10 +7,11 @@
 #include <algorithm>
 #include <cstring>
 #include <iterator>
-#include <limits>
 #include <string>
 #include <utility>
 
+#include "DemoShell/Services/DefaultSceneLighting.h"
+#include "TexturedCube/SceneSetup.h"
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
@@ -20,37 +21,12 @@
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 
-#include "DemoShell/Services/DefaultSceneLighting.h"
-#include "TexturedCube/SceneSetup.h"
-
 namespace {
 
 using oxygen::Quat;
 using oxygen::Vec3;
 
-auto ResolveBaseColorTextureResourceIndex(
-  oxygen::examples::textured_cube::TextureIndexMode mode,
-  std::uint32_t custom_resource_index)
-  -> oxygen::data::pak::core::ResourceIndexT
-{
-  using oxygen::data::pak::core::ResourceIndexT;
-  using oxygen::examples::textured_cube::TextureIndexMode;
-
-  switch (mode) {
-  case TextureIndexMode::kFallback:
-    return oxygen::data::pak::core::kFallbackResourceIndex;
-  case TextureIndexMode::kCustom:
-    return static_cast<ResourceIndexT>(custom_resource_index);
-  case TextureIndexMode::kProceduralGrid:
-    return oxygen::data::pak::core::kFallbackResourceIndex;
-  case TextureIndexMode::kForcedError:
-  default:
-    return (std::numeric_limits<ResourceIndexT>::max)();
-  }
-}
-
 auto MakeMaterial(const char* name, const glm::vec4& rgba,
-  oxygen::data::pak::core::ResourceIndexT base_color_texture_resource_index,
   oxygen::content::ResourceKey base_color_texture_key, float metalness,
   float roughness, bool disable_texture_sampling, bool enable_procedural_grid,
   oxygen::data::MaterialDomain domain = oxygen::data::MaterialDomain::kOpaque)
@@ -69,7 +45,7 @@ auto MakeMaterial(const char* name, const glm::vec4& rgba,
   std::copy_n(name, n, std::begin(desc.header.name));
   desc.header.name[n] = '\0';
 
-  desc.header.version = 1;
+  desc.header.version = pak::render::kMaterialAssetVersion;
   desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(domain);
   desc.flags = 0U;
@@ -91,8 +67,6 @@ auto MakeMaterial(const char* name, const glm::vec4& rgba,
   desc.metalness = d::Unorm16 { std::clamp(metalness, 0.0F, 1.0F) };
   desc.roughness = d::Unorm16 { std::clamp(roughness, 0.0F, 1.0F) };
   desc.ambient_occlusion = d::Unorm16 { 1.0F };
-
-  desc.base_color_texture = base_color_texture_resource_index;
 
   if (enable_procedural_grid) {
     // UV-space grid tuned for the cube/sphere demo (0..1 UV range).
@@ -286,9 +260,6 @@ auto SceneSetup::UpdateSphere(const ObjectTextureState& sphere_texture,
     return;
   }
 
-  const auto sphere_res_index = ResolveBaseColorTextureResourceIndex(
-    sphere_texture.mode, sphere_texture.resource_index);
-
   const auto ResolveKey =
     [&](TextureIndexMode mode,
       const oxygen::content::ResourceKey key) -> oxygen::content::ResourceKey {
@@ -304,13 +275,12 @@ auto SceneSetup::UpdateSphere(const ObjectTextureState& sphere_texture,
     }
   };
 
-  auto new_sphere_material
-    = MakeMaterial("SphereMat", surface.base_color, sphere_res_index,
-      ResolveKey(sphere_texture.mode, sphere_texture.resource_key),
-      surface.metalness, surface.roughness,
-      surface.disable_texture_sampling
-        || sphere_texture.mode == TextureIndexMode::kProceduralGrid,
-      sphere_texture.mode == TextureIndexMode::kProceduralGrid);
+  auto new_sphere_material = MakeMaterial("SphereMat", surface.base_color,
+    ResolveKey(sphere_texture.mode, sphere_texture.resource_key),
+    surface.metalness, surface.roughness,
+    surface.disable_texture_sampling
+      || sphere_texture.mode == TextureIndexMode::kProceduralGrid,
+    sphere_texture.mode == TextureIndexMode::kProceduralGrid);
 
   // Ensure geometry exists (create once). Geometry holds a default material
   // but we prefer using Renderable::SetMaterialOverride for runtime swaps.
@@ -351,9 +321,6 @@ auto SceneSetup::UpdateCube(const ObjectTextureState& cube_texture,
     return;
   }
 
-  const auto cube_res_index = ResolveBaseColorTextureResourceIndex(
-    cube_texture.mode, cube_texture.resource_index);
-
   const auto ResolveKey =
     [&](TextureIndexMode mode,
       const oxygen::content::ResourceKey key) -> oxygen::content::ResourceKey {
@@ -370,8 +337,8 @@ auto SceneSetup::UpdateCube(const ObjectTextureState& cube_texture,
   };
 
   auto new_cube_material = MakeMaterial("CubeMat", surface.base_color,
-    cube_res_index, ResolveKey(cube_texture.mode, cube_texture.resource_key),
-    surface.metalness, surface.roughness,
+    ResolveKey(cube_texture.mode, cube_texture.resource_key), surface.metalness,
+    surface.roughness,
     surface.disable_texture_sampling
       || cube_texture.mode == TextureIndexMode::kProceduralGrid,
     cube_texture.mode == TextureIndexMode::kProceduralGrid);

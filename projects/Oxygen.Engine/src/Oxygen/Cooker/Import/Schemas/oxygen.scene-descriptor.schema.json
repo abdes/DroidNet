@@ -9,7 +9,7 @@
     },
     "version": {
       "type": "integer",
-      "const": 9
+      "const": 10
     },
     "name": {
       "$ref": "#/definitions/identifier"

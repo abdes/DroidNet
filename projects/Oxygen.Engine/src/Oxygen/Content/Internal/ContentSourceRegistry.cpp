@@ -24,6 +24,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/SourceOrigin.h>
 
@@ -50,17 +51,81 @@ auto ContentSourceRegistry::FindSourceKeyConflict(
   return std::nullopt;
 }
 
+namespace {
+  auto AllocateRuntimeIdentity() -> uint64_t
+  {
+    static std::atomic<uint64_t> next { 1 };
+    auto candidate = next.load(std::memory_order_relaxed);
+    for (;;) {
+      if (candidate == std::numeric_limits<uint64_t>::max()) {
+        throw std::length_error(
+          "Content source identity namespace is exhausted");
+      }
+      if (next.compare_exchange_weak(
+            candidate, candidate + 1, std::memory_order_relaxed)) {
+        return candidate;
+      }
+    }
+  }
+
+} // namespace
+
 auto ContentSourceRegistry::AllocateSourceId() -> data::SourceInstanceId
 {
-  static std::atomic<uint64_t> next { 1 };
-  auto candidate = next.load(std::memory_order_relaxed);
-  for (;;) {
-    if (candidate == std::numeric_limits<uint64_t>::max()) {
-      throw std::length_error("Content source identity namespace is exhausted");
+  return data::SourceInstanceId { AllocateRuntimeIdentity() };
+}
+
+auto ContentSourceRegistry::CopyLayers() const
+  -> std::vector<ContentSourceLayer>
+{
+  if (!current_view_) {
+    return {};
+  }
+  const auto layers = current_view_->Layers();
+  return { layers.begin(), layers.end() };
+}
+
+auto ContentSourceRegistry::ValidateMount(const IContentSource& source,
+  const std::optional<size_t> replaced_index) const -> void
+{
+  const auto insertion = replaced_index.value_or(sources_.size());
+  const auto count = sources_.size() + (replaced_index ? 0U : 1U);
+  std::vector<data::PakCatalogBase> lower_layers;
+  lower_layers.reserve(count);
+  for (size_t index = 0; index < count; ++index) {
+    const auto& candidate = index == insertion ? source : *sources_.at(index);
+    if (const auto* catalog = candidate.GetPakCatalog()) {
+      if (const auto valid = catalog->ValidateBaseLayers(lower_layers);
+        !valid) {
+        throw std::invalid_argument(valid.error());
+      }
+      lower_layers.push_back({ .source_key = catalog->source_key,
+        .content_version = catalog->content_version,
+        .catalog_digest = catalog->catalog_digest });
+    } else {
+      lower_layers.push_back({ .source_key = candidate.GetSourceKey(),
+        .content_version = 0U,
+        .catalog_digest = {} });
     }
-    if (next.compare_exchange_weak(
-          candidate, candidate + 1, std::memory_order_relaxed)) {
-      return data::SourceInstanceId { candidate };
+  }
+  if (source.GetAssetCount() > std::numeric_limits<uint32_t>::max()) {
+    throw std::invalid_argument(
+      "Content source asset inventory exceeds its limit");
+  }
+  for (uint32_t index = 0; index < source.GetAssetCount(); ++index) {
+    const auto key = source.GetAssetKeyByIndex(index);
+    if (!key) {
+      throw std::invalid_argument(
+        "Content source has an incomplete asset inventory");
+    }
+    const auto type = source.GetAssetType(*key);
+    for (const auto& existing : sources_) {
+      const auto previous = existing->GetAssetType(*key);
+      if (previous && previous != type) {
+        throw std::invalid_argument(
+          "Content layer changes the type of AssetKey "
+          + data::to_string(*key));
+      }
     }
   }
 }
@@ -71,6 +136,7 @@ auto ContentSourceRegistry::InstallSource(
   const std::optional<size_t> replaced_index, const SourceKind kind)
   -> MountResult
 {
+  ValidateMount(*source, replaced_index);
   if (kind != SourceKind::kGeneration) {
     const auto prior = source_key_to_ids_.find(source->GetSourceKey());
     if (prior != source_key_to_ids_.end()
@@ -84,6 +150,16 @@ auto ContentSourceRegistry::InstallSource(
     }
   }
   const auto index = replaced_index.value_or(sources_.size());
+  auto layers = CopyLayers();
+  ContentSourceLayer layer(source_id, source);
+  if (replaced_index) {
+    layers.at(index) = std::move(layer);
+  } else {
+    layers.push_back(std::move(layer));
+  }
+  auto next_view = std::make_shared<const ContentSourceView>(
+    BindingViewId { AllocateRuntimeIdentity() }, std::move(layers));
+
   auto conflict
     = FindSourceKeyConflict(source->GetSourceKey(), source->DebugName());
   if (conflict
@@ -106,6 +182,7 @@ auto ContentSourceRegistry::InstallSource(
   bool committed = false;
   const auto rollback = Finally([&] -> void {
     if (!committed) {
+      tombstones_by_source_id_.erase(source_id);
       source_id_to_index_.erase(source_id);
       records_.erase(source_id);
       if (auto bucket = source_key_to_ids_.find(source_key);
@@ -120,6 +197,12 @@ auto ContentSourceRegistry::InstallSource(
   source_id_to_index_.emplace(source_id, index);
   records_.emplace(source_id, std::move(record));
   source_key_to_ids_[source_key].push_back(source_id);
+  if (const auto* catalog = source->GetPakCatalog();
+    catalog != nullptr && !catalog->deleted.empty()) {
+    tombstones_by_source_id_.emplace(source_id,
+      std::unordered_set<data::AssetKey>(
+        catalog->deleted.begin(), catalog->deleted.end()));
+  }
   if (replaced_index) {
     const auto prior_id = source_ids_.at(index);
     if (records_.at(prior_id).kind != SourceKind::kGeneration) {
@@ -132,6 +215,7 @@ auto ContentSourceRegistry::InstallSource(
     sources_.push_back(std::move(source));
     source_ids_.push_back(source_id);
   }
+  current_view_.swap(next_view);
   committed = true;
   return {
     .action = replaced_index ? MountAction::kRefreshed : MountAction::kMounted,
@@ -142,10 +226,10 @@ auto ContentSourceRegistry::InstallSource(
 }
 
 auto ContentSourceRegistry::MountPak(std::filesystem::path normalized_path,
-  std::shared_ptr<IContentSource> source) -> MountResult
+  std::shared_ptr<IContentSource> source, const MountMode mode) -> MountResult
 {
   const auto existing = std::ranges::find(pak_paths_, normalized_path);
-  if (existing != pak_paths_.end()) {
+  if (mode == MountMode::kRefreshExisting && existing != pak_paths_.end()) {
     const auto pak_index
       = static_cast<size_t>(std::distance(pak_paths_.begin(), existing));
     const auto index = source_id_to_index_.at(pak_source_ids_.at(pak_index));
@@ -196,15 +280,17 @@ auto ContentSourceRegistry::Swap(ContentSourceRegistry& other) noexcept -> void
   source_key_to_ids_.swap(other.source_key_to_ids_);
   pak_paths_.swap(other.pak_paths_);
   pak_source_ids_.swap(other.pak_source_ids_);
+  current_view_.swap(other.current_view_);
 }
 
 auto ContentSourceRegistry::MountLoose(
   const std::string_view normalized_debug_name,
-  std::shared_ptr<IContentSource> source) -> MountResult
+  std::shared_ptr<IContentSource> source, const MountMode mode) -> MountResult
 {
   std::optional<size_t> replaced;
   for (size_t index = 0; index < sources_.size(); ++index) {
-    if (records_.at(source_ids_.at(index)).kind != SourceKind::kPak
+    if (mode == MountMode::kRefreshExisting
+      && records_.at(source_ids_.at(index)).kind != SourceKind::kPak
       && sources_.at(index)
       && sources_.at(index)->DebugName() == normalized_debug_name) {
       if (records_.at(source_ids_.at(index)).kind == SourceKind::kGeneration) {
@@ -277,12 +363,22 @@ auto ContentSourceRegistry::MountGeneration(
 
 auto ContentSourceRegistry::RemoveActiveSource(const size_t index) -> void
 {
+  auto layers = CopyLayers();
+  static_cast<void>(layers.at(index));
+  layers.erase(layers.begin() + static_cast<std::ptrdiff_t>(index));
+  std::shared_ptr<const ContentSourceView> next_view;
+  if (!layers.empty()) {
+    next_view = std::make_shared<const ContentSourceView>(
+      BindingViewId { AllocateRuntimeIdentity() }, std::move(layers));
+  }
+
   source_id_to_index_.erase(source_ids_.at(index));
   sources_.erase(sources_.begin() + static_cast<std::ptrdiff_t>(index));
   source_ids_.erase(source_ids_.begin() + static_cast<std::ptrdiff_t>(index));
   for (size_t current = index; current < sources_.size(); ++current) {
     source_id_to_index_.at(source_ids_.at(current)) = current;
   }
+  current_view_.swap(next_view);
 }
 
 auto ContentSourceRegistry::RetireGeneration(const data::SourceKey key) -> bool
@@ -372,6 +468,7 @@ auto ContentSourceRegistry::Clear() -> void
   source_id_to_index_.clear();
   pak_paths_.clear();
   pak_source_ids_.clear();
+  current_view_.reset();
 }
 
 auto ContentSourceRegistry::PruneExpiredSources()
@@ -401,29 +498,6 @@ auto ContentSourceRegistry::PruneExpiredSources()
     records_.erase(id);
   }
   return expired;
-}
-
-auto ContentSourceRegistry::SetSourceTombstones(
-  const data::SourceInstanceId source_id,
-  const std::span<const data::AssetKey> tombstones) -> void
-{
-  if (!source_id_to_index_.contains(source_id)) {
-    LOG_F(WARNING,
-      "Ignoring tombstone registration for unknown source_id={} "
-      "(tombstones={})",
-      source_id, tombstones.size());
-    return;
-  }
-
-  auto& source_tombstones = tombstones_by_source_id_[source_id];
-  source_tombstones.clear();
-  source_tombstones.insert(tombstones.begin(), tombstones.end());
-}
-
-auto ContentSourceRegistry::ClearSourceTombstones(
-  const data::SourceInstanceId source_id) -> void
-{
-  tombstones_by_source_id_.erase(source_id);
 }
 
 auto ContentSourceRegistry::IsSourceTombstoningAsset(

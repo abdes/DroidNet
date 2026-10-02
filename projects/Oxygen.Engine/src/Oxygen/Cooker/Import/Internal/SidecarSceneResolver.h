@@ -15,6 +15,7 @@
 
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/OxCo/Co.h>
@@ -48,6 +49,8 @@ struct ResolvedSceneState final {
   std::string scene_virtual_path;
   std::string scene_descriptor_relpath;
   std::vector<std::byte> source_scene_descriptor;
+  data::AssetReferences references;
+  size_t environment_offset = 0;
   uint32_t node_count = 0;
   std::vector<data::pak::scripting::ScriptingComponentRecord>
     existing_scripting_components;

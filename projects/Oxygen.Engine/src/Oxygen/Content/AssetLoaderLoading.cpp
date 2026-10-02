@@ -4,13 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <concepts>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <ranges>
+#include <stdexcept>
 #include <type_traits>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
+#include <vector>
+
+#include <fmt/format.h>
 
 #include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Logging.h>
@@ -20,11 +28,15 @@
 #include <Oxygen/Content/Internal/ContentBindingBundle.h>
 #include <Oxygen/Content/Internal/ContentIdentity.h>
 #include <Oxygen/Content/Internal/ContentIdentityRegistry.h>
+#include <Oxygen/Content/Internal/ContentLoadScopeState.h>
 #include <Oxygen/Content/Internal/ContentPublication.h>
 #include <Oxygen/Content/Internal/ContentReleaseQueue.h>
+#include <Oxygen/Content/Internal/ContentSourceView.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/Internal/InFlightOperationTable.h>
 #include <Oxygen/Content/Internal/ResourceLoadPipeline.h>
+#include <Oxygen/Content/LoaderContext.h>
+#include <Oxygen/Content/Loaders/PhysicsAssetLoader.h>
 #include <Oxygen/Content/OperationCancelledException.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceKey.h>
@@ -161,8 +173,7 @@ auto AssetLoader::AcquireBoundAsset(
       });
     }
   }
-  const auto source = ResolveDependencySourceId(context, key);
-  return source ? AcquireCached(type, FindAssetId(key, *source)) : nullptr;
+  return nullptr;
 }
 
 template <typename T>
@@ -173,10 +184,10 @@ auto AssetLoader::LoadAssetPublicationAsync(const data::AssetKey& key,
   BeginAcceptedLoad();
   const auto completion = Finally([this]() noexcept { EndAcceptedLoad(); });
   AssertOwningThread();
-  request = NormalizeLoadRequest(request);
+  request = AdmitAssetRequest(NormalizeLoadRequest(std::move(request)));
   constexpr auto kind = AssetKind<T>();
   RecordAssetTelemetry(kind, LoadTelemetryEvent::kRequest);
-  const auto target = PrepareAssetLoadRequest(key, source);
+  const auto target = PrepareAssetLoadRequest(key, source, request.scope);
   if (!target) {
     co_return internal::ContentAcquisition {};
   }
@@ -244,11 +255,17 @@ auto AssetLoader::DecodeAndPublishAssetAsync(data::AssetKey key,
       RecordAssetTelemetry(kind, LoadTelemetryEvent::kDecodeFailure);
       co_return internal::SharedContentResult {};
     }
+    typed->SetReferences(std::move(decoded.references));
     internal::ContentBindingBuilder builder(releases);
     co_await BindDependenciesAsync(
       *typed, *decoded.dependency_collector, builder, request);
     releases->RequireOpen();
-    const auto bindings = std::move(builder).Freeze();
+    const auto& view = request.scope.state_->view;
+    const auto token = !typed->GetReferences().Keys().empty() && view
+      ? view->IdentityOwner()
+      : std::shared_ptr<const internal::BindingViewId> {};
+    const auto bindings = std::move(builder).Freeze(
+      internal::ContentId { target.cache_key }, token);
     typed->SetRuntimeBindings(bindings);
     if (!ResolveSourceForId(target.source_id)) {
       co_return internal::SharedContentResult {};
@@ -291,13 +308,20 @@ auto AssetLoader::BindAssetAsync(const data::AssetKey& key,
   if (!bindings.TryBeginAsset(key, T::ClassTypeId())) {
     co_return bindings.FindAsset<T>(key);
   }
-  const auto source = ResolveDependencySourceId(parent, key);
+  const auto source = ResolveScopedRoot(key, std::nullopt, request.scope);
   if (!source) {
-    co_return nullptr;
+    throw std::runtime_error(
+      fmt::format("Required {} dependency {} is missing for asset {}",
+        T::ClassTypeNamePretty(), key, parent.GetAssetKey()));
   }
   auto acquired = co_await LoadAssetPublicationAsync<T>(
     key, source, request, CheckoutOwner::kInternal);
   bindings.RequireOpen();
+  if (!acquired) {
+    throw std::runtime_error(
+      fmt::format("Required {} dependency {} could not load for asset {}",
+        T::ClassTypeNamePretty(), key, parent.GetAssetKey()));
+  }
   co_return bindings.AddAsset<T>(std::move(acquired));
 }
 
@@ -307,7 +331,7 @@ auto AssetLoader::BindResourceAsync(ResourceKey key,
   -> co::Co<std::shared_ptr<T>>
 {
   bindings.RequireOpen();
-  if (key.get() == 0U) {
+  if (key.get() == 0U || key.IsError()) {
     co_return nullptr;
   }
   if (!bindings.TryBeginResource(key)) {
@@ -316,6 +340,11 @@ auto AssetLoader::BindResourceAsync(ResourceKey key,
   auto acquired = co_await resource_load_pipeline_->LoadErased(
     T::ClassTypeId(), key, request, CheckoutOwner::kInternal);
   bindings.RequireOpen();
+  if (!acquired) {
+    throw std::runtime_error(
+      fmt::format("Required {} resource {} could not load",
+        T::ClassTypeNamePretty(), key.get()));
+  }
   co_return bindings.AddResource<T>(key, std::move(acquired));
 }
 
@@ -423,22 +452,10 @@ auto AssetLoader::BindDependenciesAsync(data::SceneAsset& asset,
   }
 }
 
-auto AssetLoader::BindDependenciesAsync(data::ScriptAsset& asset,
+auto AssetLoader::BindDependenciesAsync(data::ScriptAsset&,
   const internal::DependencyCollector& collector,
   internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>
 {
-  const std::array indices { asset.GetBytecodeResourceIndex(),
-    asset.GetSourceResourceIndex() };
-  constexpr auto kScriptType = static_cast<uint16_t>(
-    IndexOf<data::ScriptResource, ResourceTypeList>::value);
-  for (const auto index : indices) {
-    if (index != data::pak::core::kNoResourceIndex) {
-      const auto key = InternResourceKey(
-        asset.GetSourceOrigin().instance, kScriptType, index);
-      static_cast<void>(co_await BindResourceAsync<data::ScriptResource>(
-        key, bindings, request));
-    }
-  }
   co_await BindCollectedResourcesAsync<data::ScriptResource>(
     collector, bindings, request);
 }
@@ -461,10 +478,114 @@ auto AssetLoader::BindDependenciesAsync(data::InputMappingContextAsset& asset,
   }
 }
 
-auto AssetLoader::BindDependenciesAsync(data::PhysicsSceneAsset&,
-  const internal::DependencyCollector&, internal::ContentBindingBuilder&,
-  LoadRequest) -> co::Co<>
+auto AssetLoader::BindDependenciesAsync(data::PhysicsSceneAsset& asset,
+  const internal::DependencyCollector&,
+  internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>
 {
+  const auto& view = request.scope.state_->view;
+  auto frozen = std::make_unique<internal::PhysicsBindings>();
+  const auto roots = asset.GetReferences().Keys();
+  std::vector<data::KeyReference> pending(roots.begin(), roots.end());
+  std::unordered_map<data::AssetKey, data::AssetType> descriptors;
+  std::unordered_set<data::AssetKey> payloads;
+  while (!pending.empty()) {
+    bindings.RequireOpen();
+    const auto reference = pending.back();
+    pending.pop_back();
+    if (reference.kind == data::KeyReferenceKind::kLogical) {
+      continue;
+    }
+    if (!view) {
+      throw std::runtime_error("Physics dependency has no content layer view");
+    }
+    if (reference.kind == data::KeyReferenceKind::kPhysicsResource) {
+      if (!payloads.insert(reference.key).second) {
+        continue;
+      }
+      bool found = false;
+      for (const auto& layer : view->Layers() | std::views::reverse) {
+        if (layer.deleted.contains(reference.key)) {
+          break;
+        }
+        const auto* table = layer.source->GetPhysicsTable();
+        if (!table || table->Size().get() == 0U) {
+          continue;
+        }
+        const auto source = ResolveSourceForId(layer.id);
+        if (!source) {
+          throw std::runtime_error(
+            "Physics payload source is no longer readable");
+        }
+        const auto index = source->FindPhysicsResource(reference.key);
+        if (!index) {
+          continue;
+        }
+        constexpr auto type_index = static_cast<uint16_t>(
+          IndexOf<data::PhysicsResource, ResourceTypeList>::value);
+        frozen->resources.push_back({ .asset_key = reference.key,
+          .key = InternResourceKey(layer.id, type_index, *index),
+          .source = layer.id,
+          .owner = source });
+        found = true;
+        break;
+      }
+      if (!found) {
+        throw std::runtime_error("Required physics payload is missing: "
+          + data::to_string(reference.key));
+      }
+      continue;
+    }
+    const auto [previous, inserted]
+      = descriptors.emplace(reference.key, reference.expected_type);
+    if (!inserted) {
+      if (previous->second != reference.expected_type) {
+        throw std::runtime_error(
+          "Physics dependency has conflicting asset types");
+      }
+      continue;
+    }
+    const auto source_id = view->ResolveAsset(reference.key);
+    const auto source = source_id ? ResolveSourceForId(*source_id) : nullptr;
+    if (!source
+      || source->GetAssetType(reference.key) != reference.expected_type) {
+      throw std::runtime_error(
+        "Required physics descriptor is missing or has the wrong type: "
+        + data::to_string(reference.key));
+    }
+    const auto references = source->ReadAssetReferences(reference.key);
+    const auto reader = source->CreateAssetDescriptorReader(reference.key);
+    if (!reader) {
+      throw std::runtime_error(
+        "Cannot read physics descriptor: " + data::to_string(reference.key));
+    }
+    const LoaderContext context { .current_asset_key = reference.key,
+      .source_instance = *source_id,
+      .desc_reader = reader.get(),
+      .asset_references = observer_ptr(&references),
+      .work_offline = true,
+      .parse_only = true };
+    switch (reference.expected_type) {
+    case data::AssetType::kCollisionShape:
+      frozen->shapes.push_back({ .key = reference.key,
+        .descriptor = loaders::LoadCollisionShapeDescriptor(context) });
+      break;
+    case data::AssetType::kPhysicsMaterial:
+      frozen->materials.push_back({ .key = reference.key,
+        .descriptor = loaders::LoadPhysicsMaterialDescriptor(context) });
+      break;
+    default:
+      throw std::runtime_error(
+        "Unsupported physics descriptor dependency type");
+    }
+    const auto children = references.Keys();
+    pending.insert(pending.end(), children.begin(), children.end());
+  }
+  std::ranges::sort(frozen->shapes, {}, &internal::BoundPhysicsShape::key);
+  std::ranges::sort(
+    frozen->materials, {}, &internal::BoundPhysicsMaterial::key);
+  std::ranges::sort(
+    frozen->resources, {}, &internal::BoundPhysicsResource::asset_key);
+  bindings.SetPhysics(std::move(frozen));
   co_return;
 }
 

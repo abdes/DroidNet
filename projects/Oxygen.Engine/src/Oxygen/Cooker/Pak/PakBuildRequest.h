@@ -33,13 +33,6 @@ struct PakBuildOptions {
   bool fail_on_warnings = false;
 };
 
-struct PatchCompatibilityPolicy {
-  bool require_exact_base_set = true;
-  bool require_content_version_match = true;
-  bool require_base_source_key_match = true;
-  bool require_catalog_digest_match = true;
-};
-
 struct PakBuildRequest {
   BuildMode mode = BuildMode::kFull;
   std::vector<data::CookedSource> sources;
@@ -51,7 +44,6 @@ struct PakBuildRequest {
   data::SourceKey source_key {};
 
   std::vector<data::PakCatalog> base_catalogs {};
-  PatchCompatibilityPolicy patch_compat {};
   PakBuildOptions options {};
 };
 

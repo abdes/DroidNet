@@ -2,7 +2,7 @@
 
 Status: **in progress — M08.1 validated**
 
-Next: **[M08.F1 descriptor-local references](ED-M08.F1-descriptor-local-references.md)**, before M08.2. M08.1's native analysis, editor cutover and maintained-project migration are validated.
+Current: **[M08.F1 descriptor-local references](ED-M08.F1-descriptor-local-references.md)**, before M08.2. M08.1's native analysis, editor cutover and maintained-project migration are validated.
 See [owners](#2-implementation-document-map), [remaining increments](#m081-remaining-increments)
 and [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);

@@ -17,6 +17,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
 
@@ -84,6 +85,9 @@ public:
     -> std::optional<std::string_view>;
   OXGN_CNTT_NDAPI auto FindAssetType(const data::AssetKey& key) const noexcept
     -> std::optional<uint8_t>;
+  //! Decode one asset's inventory without loading descriptor/resource payloads.
+  OXGN_CNTT_NDAPI auto FindAssetReferences(const data::AssetKey& key) const
+    -> std::optional<data::AssetReferences>;
   OXGN_CNTT_NDAPI auto FindAssetKeyByVirtualPath(
     std::string_view virtual_path) const noexcept
     -> std::optional<data::AssetKey>;

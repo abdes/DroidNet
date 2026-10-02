@@ -39,15 +39,14 @@
 #include <Oxygen/Core/RefCountedEviction.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/InputActionAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Data/PatchManifest.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -72,7 +71,7 @@ namespace internal {
   struct SharedContentResult;
   class EvictionRegistry;
   class InFlightOperationTable;
-  class PhysicsQueryService;
+  struct PhysicsBindings;
   class ResourceLoadPipeline;
   class SceneCatalogQueryService;
   class ScriptQueryService;
@@ -259,30 +258,9 @@ public:
   OXGN_CNTT_API auto AddPakFile(const std::filesystem::path& path)
     -> void override;
 
-  //! Mount a patch pak and register manifest tombstones.
-  /*!
-   Validates the patch manifest compatibility envelope against the mounted
-   * base
-   catalogs, then mounts the patch pak at highest precedence and
-   * registers
-   deleted-key tombstones on that mount layer.
-
-   @param path
-   * Path to the patch `.pak`.
-   @param manifest Patch manifest emitted by the
-   * cooker.
-   @param mounted_base_catalogs Catalog snapshot for the currently
-   * mounted base
-     set.
-   @throw std::runtime_error on compatibility
-   * validation failures.
-  */
-  OXGN_CNTT_API auto AddPatchPakFile(const std::filesystem::path& path,
-    const data::PatchManifest& manifest,
-    std::span<const data::PakCatalog> mounted_base_catalogs) -> void;
-
   OXGN_CNTT_API auto AddLooseCookedRoot(const std::filesystem::path& path)
     -> void override;
+  OXGN_CNTT_NDAPI auto BeginLoadScope() -> ContentLoadScope override;
 
   OXGN_CNTT_API auto MountLooseCookedGeneration(
     const std::filesystem::path& path,
@@ -372,7 +350,8 @@ public:
   auto LoadAssetAsync(data::AssetKey key, data::SourceKey source_key,
     LoadRequest request = {}) -> co::Co<std::shared_ptr<T>>
   {
-    const auto source_id = ResolveExactSourceId(key, source_key);
+    request = AdmitAssetRequest(std::move(request));
+    const auto source_id = ResolveScopedRoot(key, source_key, request.scope);
     if (!source_id) {
       co_return nullptr;
     }
@@ -896,21 +875,21 @@ public:
   }
   OXGN_CNTT_NDAPI auto MakeScriptResourceKeyForAsset(
     const data::Asset& context_asset,
-    data::pak::core::ResourceIndexT resource_index)
+    data::ResourceReferenceIndex resource_index)
     -> std::optional<ResourceKey> override;
   OXGN_CNTT_NDAPI auto MakeTextureResourceKey(
     data::SourceKey source_key, data::pak::core::ResourceIndexT resource_index)
     -> std::optional<ResourceKey> override;
   OXGN_CNTT_NDAPI auto MakeTextureResourceKeyForAsset(
     const data::Asset& context_asset,
-    data::pak::core::ResourceIndexT resource_index)
+    data::ResourceReferenceIndex resource_index)
     -> std::optional<ResourceKey> override;
   OXGN_CNTT_NDAPI auto ResolveTextureResourceKey(
     const TextureResourceLocator& locator)
     -> std::optional<ResourceKey> override;
   OXGN_CNTT_NDAPI auto ReadScriptResourceForAsset(
     const data::Asset& context_asset,
-    data::pak::core::ResourceIndexT resource_index) const
+    data::ResourceReferenceIndex resource_index) const
     -> std::shared_ptr<const data::ScriptResource> override;
 
   [[nodiscard]] auto GetPhysicsSceneAsset(const data::AssetKey& key)
@@ -950,7 +929,7 @@ public:
     const data::AssetKey& material_asset_key) const
     -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc> override;
   OXGN_CNTT_NDAPI auto FindPhysicsSidecarAssetKeyForScene(
-    const data::Asset& scene_asset) const
+    const data::Asset& scene_asset, const content::ContentLoadScope& scope)
     -> std::optional<data::AssetKey> override;
 
   [[nodiscard]] auto GetInputActionAsset(
@@ -1167,6 +1146,7 @@ private:
     data::SourceInstanceId source_id {};
     std::shared_ptr<void> asset;
     std::shared_ptr<internal::DependencyCollector> dependency_collector;
+    data::AssetReferences references;
   };
 
   OXGN_CNTT_API auto DecodeAssetAsyncErasedImpl(TypeId type_id,
@@ -1189,9 +1169,8 @@ private:
         "AssetLoader requires a thread pool for StartLoadAsset");
     }
 
-    const auto target = source_key.has_value()
-      ? ResolveExactSourceId(key, *source_key)
-      : ResolveLoadSourceId(key);
+    request = AdmitAssetRequest(std::move(request));
+    const auto target = ResolveScopedRoot(key, source_key, request.scope);
     const auto origin = target ? ResolveSourceForId(*target) : nullptr;
     if (!target || !origin) {
       on_complete(nullptr);
@@ -1225,7 +1204,7 @@ private:
     std::optional<data::SourceInstanceId> source_id, LoadRequest request)
     -> co::Co<std::shared_ptr<T>>
   {
-    request = NormalizeLoadRequest(request);
+    request = AdmitAssetRequest(NormalizeLoadRequest(std::move(request)));
     if constexpr (std::is_same_v<T, data::MaterialAsset>) {
       co_return co_await LoadMaterialAssetAsyncImpl(key, source_id, request);
     } else if constexpr (std::is_same_v<T, data::GeometryAsset>) {
@@ -1314,6 +1293,14 @@ private:
 
   OXGN_CNTT_API auto FindAssetId(const data::AssetKey& key,
     data::SourceInstanceId source_id) const noexcept -> uint64_t;
+  auto GetPhysicsBindings(const data::Asset& context) const
+    -> const internal::PhysicsBindings*;
+
+  OXGN_CNTT_NDAPI auto AdmitAssetRequest(LoadRequest request) -> LoadRequest;
+  OXGN_CNTT_NDAPI auto ResolveScopedRoot(const data::AssetKey& key,
+    std::optional<data::SourceKey> source_key,
+    const ContentLoadScope& scope) const
+    -> std::optional<data::SourceInstanceId>;
   struct AssetLoadRequest final {
     data::SourceInstanceId source_id {};
     uint64_t cache_key = 0;
@@ -1364,8 +1351,8 @@ private:
     internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>;
 
   OXGN_CNTT_API auto PrepareAssetLoadRequest(const data::AssetKey& key,
-    std::optional<data::SourceInstanceId> preferred_source_id = std::nullopt)
-    -> std::optional<AssetLoadRequest>;
+    std::optional<data::SourceInstanceId> preferred_source_id,
+    const ContentLoadScope& scope) -> std::optional<AssetLoadRequest>;
   struct ResolvedAssetIdentity final {
     uint64_t cache_key = 0;
     data::SourceInstanceId source_id {};
@@ -1489,7 +1476,6 @@ private:
   std::unique_ptr<internal::SceneCatalogQueryService>
     scene_catalog_query_service_;
   std::unique_ptr<internal::ScriptQueryService> script_query_service_;
-  std::unique_ptr<internal::PhysicsQueryService> physics_query_service_;
 
   auto MintSyntheticResourceKey(TypeId resource_type) -> ResourceKey;
   uint64_t next_synthetic_serial_ = 1;

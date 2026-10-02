@@ -31,12 +31,18 @@ mount operation.
 Active sources have registry ownership. Retired sources have weak registry
 entries; decode operations and loaded asset/resource owners retain their actual
 source and shared marker lock. Old asset objects expose their exact SourceOrigin.
-Source-qualified operations select that source exactly; they do not silently
-release or load the newer winning generation. Contextual reads and repeated dependency publication preserve a recorded direct
-dependency binding. An unbound dependency resolves within its retained origin
-first; an absent external asset may use normal source precedence. A declared local
-dependency never falls through to newer bytes, and replacing an external root
-does not silently rebind an already loaded asset.
+Source-qualified operations select that source exactly. A new logical load and
+its AssetKey dependencies resolve through one immutable view of the declared
+layers, with later layers winning and tombstones masking lower definitions.
+Physical resource indices always address the container of the selected asset.
+Contextual reads and repeated publication preserve the object's recorded bindings;
+activating another layer never silently rebinds an existing object.
+
+Cache reuse must match both the selected descriptor and its binding view. An
+unchanged base scene must acquire patched dependencies on a new load, while a
+held earlier scene keeps its old dependencies. Async graph loading retains its
+view and source owners through publication; mount changes cannot mix views inside
+a graph. Physical resource cache identities remain source-local and reusable.
 
 Dependency graph nodes are the existing source-qualified asset cache identities,
 not bare AssetKeys. Old and new generations can therefore coexist, release and
@@ -108,12 +114,12 @@ lock primitive is owned by [Serio](../../Serio/README.md#file-locks).
 
 ## Core invariants
 
-1. **Resource indices are source-local; asset dependencies retain their origin**
+1. **Resource indices are source-local; logical references follow layer order**
 
-   Table indices always address their owning cooked source. AssetKey dependencies
-   resolve in that source first; an absent external asset may resolve through
-   active source precedence. The dependency graph records the actual resolved
-   source, so release and trim never substitute a newer generation.
+   Table indices address their owning cooked source. New AssetKey dependencies
+   select the effective winner in the load's layer view. Frozen bindings record
+   exact selected objects and retain their sources, so release, contextual reads
+   and trim cannot substitute a newer generation.
 
 2. **Runtime identity includes the source opening**
 

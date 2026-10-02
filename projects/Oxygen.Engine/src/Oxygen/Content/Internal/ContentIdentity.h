@@ -19,6 +19,8 @@ namespace oxygen::content::internal {
 
 using ContentId = NamedType<uint64_t, struct ContentIdTag, DefaultInitialized,
   Comparable, Hashable, Printable>;
+using BindingViewId = NamedType<uint64_t, struct BindingViewIdTag,
+  DefaultInitialized, Comparable, Hashable, Printable>;
 
 enum class ResourceKind : uint8_t { kBuffer, kTexture, kScript, kPhysics };
 
@@ -27,6 +29,7 @@ enum class ResourceKind : uint8_t { kBuffer, kTexture, kScript, kPhysics };
 struct AssetIdentity final {
   data::SourceInstanceId source {};
   data::AssetKey asset {};
+  BindingViewId view {};
 
   auto operator==(const AssetIdentity&) const -> bool = default;
 };

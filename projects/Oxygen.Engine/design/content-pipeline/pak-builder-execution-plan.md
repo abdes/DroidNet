@@ -1,5 +1,10 @@
 # Pak Builder End-to-End Execution Plan (Spec-Locked)
 
+> Historical implementation ledger. Current format and tooling work is tracked in
+> [ED-M08.F1](../../../../design/editor/plan/ED-M08.F1-descriptor-local-references.md).
+> PakGen and its fixtures are removed; historical paths below are not build or
+> validation requirements.
+
 **Date:** 2026-02-28
 **Status:** Design / Implementation Plan
 

@@ -312,8 +312,8 @@ namespace {
     }
     data::pak::scripting::ScriptAssetDesc desc {};
     desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScript);
-    desc.bytecode_resource_index = data::pak::core::kNoResourceIndex;
-    desc.source_resource_index = data::pak::core::kNoResourceIndex;
+    desc.bytecode_resource_index = data::kNoResourceReference;
+    desc.source_resource_index = data::kNoResourceReference;
     desc.flags = data::pak::scripting::ScriptAssetFlags::kAllowExternalSource;
 
     auto path_span = std::span(desc.external_source_path);

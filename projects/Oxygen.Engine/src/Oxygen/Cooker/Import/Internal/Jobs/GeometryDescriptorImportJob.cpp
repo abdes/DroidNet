@@ -627,18 +627,16 @@ namespace {
           mesh_bindings.joint_remap_buffer
             = joint_remap_sidecar->resource_index;
 
-          mesh_desc.info.skinned.vertex_buffer
-            = data::pak::core::kNoResourceIndex;
-          mesh_desc.info.skinned.index_buffer
-            = data::pak::core::kNoResourceIndex;
+          mesh_desc.info.skinned.vertex_buffer = data::kNoResourceReference;
+          mesh_desc.info.skinned.index_buffer = data::kNoResourceReference;
           mesh_desc.info.skinned.joint_index_buffer
-            = data::pak::core::kNoResourceIndex;
+            = data::kNoResourceReference;
           mesh_desc.info.skinned.joint_weight_buffer
-            = data::pak::core::kNoResourceIndex;
+            = data::kNoResourceReference;
           mesh_desc.info.skinned.inverse_bind_buffer
-            = data::pak::core::kNoResourceIndex;
+            = data::kNoResourceReference;
           mesh_desc.info.skinned.joint_remap_buffer
-            = data::pak::core::kNoResourceIndex;
+            = data::kNoResourceReference;
           mesh_desc.info.skinned.joint_count = skinned->joint_count;
           mesh_desc.info.skinned.influences_per_vertex
             = skinned->influences_per_vertex;
@@ -662,10 +660,8 @@ namespace {
             lod_bounds.max.data(), 3, mesh_desc.info.skinned.bounding_box_max);
         } else {
           mesh_desc.mesh_type = static_cast<uint8_t>(data::MeshType::kStandard);
-          mesh_desc.info.standard.vertex_buffer
-            = data::pak::core::kNoResourceIndex;
-          mesh_desc.info.standard.index_buffer
-            = data::pak::core::kNoResourceIndex;
+          mesh_desc.info.standard.vertex_buffer = data::kNoResourceReference;
+          mesh_desc.info.standard.index_buffer = data::kNoResourceReference;
           std::copy_n(
             lod_bounds.min.data(), 3, mesh_desc.info.standard.bounding_box_min);
           std::copy_n(
@@ -926,13 +922,13 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       = EffectiveContentHashingEnabled(Request().options.with_content_hashing),
     });
   auto finalize_diagnostics = std::vector<ImportDiagnostic> {};
-  const auto finalized_bytes = co_await finalizer.FinalizeDescriptorBytes(
-    prepared.lod_bindings, prepared.descriptor_bytes,
+  auto finalized = co_await finalizer.FinalizeDescriptor(prepared.lod_bindings,
+    prepared.descriptor_bytes,
     std::span<const GeometryPipeline::MaterialKeyPatch> {},
     finalize_diagnostics);
   AddDiagnostics(session, std::move(finalize_diagnostics));
 
-  if (!finalized_bytes.has_value()) {
+  if (!finalized.has_value()) {
     ReportPhaseProgress(
       ImportPhase::kFailed, 1.0F, "Geometry descriptor finalization failed");
     co_return co_await FinalizeWithTelemetry(session);
@@ -952,7 +948,8 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   const auto emit_start = std::chrono::steady_clock::now();
   session.AssetEmitter().Emit(geometry_key, data::AssetType::kGeometry,
-    virtual_path, descriptor_relpath, *finalized_bytes);
+    virtual_path, descriptor_relpath, finalized->bytes,
+    std::move(finalized->references));
   session.AddEmitDuration(
     MakeDuration(emit_start, std::chrono::steady_clock::now()));
 

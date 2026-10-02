@@ -19,6 +19,15 @@
 
 namespace oxygen::serio {
 
+inline auto Load(AnyReader& reader, data::ResourceReferenceIndex& value)
+  -> Result<void>
+{
+  uint32_t raw_value = 0;
+  CHECK_RESULT(reader.ReadInto(raw_value));
+  value = data::ResourceReferenceIndex { raw_value };
+  return {};
+}
+
 // ResourceIndexT is a NamedType; deserialize from its packed uint32 payload.
 inline auto Load(AnyReader& reader, data::pak::core::ResourceIndexT& value)
   -> Result<void>
@@ -104,10 +113,11 @@ inline auto Load(AnyReader& reader, data::pak::core::PakFooter& footer)
   CHECK_RESULT(reader.ReadInto(footer.buffer_table));
   CHECK_RESULT(reader.ReadInto(footer.audio_table));
   CHECK_RESULT(reader.ReadInto(footer.script_resource_table));
-  CHECK_RESULT(reader.ReadInto(footer.script_slot_table));
   CHECK_RESULT(reader.ReadInto(footer.physics_resource_table));
   CHECK_RESULT(reader.ReadInto(footer.browse_index_offset));
   CHECK_RESULT(reader.ReadInto(footer.browse_index_size));
+  CHECK_RESULT(reader.ReadInto(footer.catalog_offset));
+  CHECK_RESULT(reader.ReadInto(footer.catalog_size));
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span { footer._reserved })));
   CHECK_RESULT(reader.ReadInto(footer.pak_crc32));
@@ -115,7 +125,17 @@ inline auto Load(AnyReader& reader, data::pak::core::PakFooter& footer)
     std::as_writable_bytes(std::span { footer.footer_magic })));
   return {};
 }
-// Note: v7 is the only supported schema for PakHeader/PakFooter in core.
+// Note: v8 is the only supported schema for PakHeader/PakFooter in core.
+
+inline auto Load(AnyReader& reader, data::pak::core::AssetReferenceTable& table)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(table.offset));
+  CHECK_RESULT(reader.ReadInto(table.resource_count));
+  CHECK_RESULT(reader.ReadInto(table.key_count));
+  return {};
+}
 
 inline auto Load(AnyReader& reader, data::pak::core::AssetDirectoryEntry& entry)
   -> Result<void>
@@ -126,6 +146,7 @@ inline auto Load(AnyReader& reader, data::pak::core::AssetDirectoryEntry& entry)
   CHECK_RESULT(reader.ReadInto(entry.entry_offset));
   CHECK_RESULT(reader.ReadInto(entry.desc_offset));
   CHECK_RESULT(reader.ReadInto(entry.desc_size));
+  CHECK_RESULT(reader.ReadInto(entry.references));
   CHECK_RESULT(
     reader.ReadBlobInto(std::as_writable_bytes(std::span { entry._reserved })));
   return {};
@@ -262,6 +283,7 @@ inline auto Load(AnyReader& reader, data::pak::world::SceneAssetDesc& desc)
   CHECK_RESULT(reader.ReadInto(desc.scene_strings));
   CHECK_RESULT(reader.ReadInto(desc.component_table_directory_offset));
   CHECK_RESULT(reader.ReadInto(desc.component_table_count));
+  CHECK_RESULT(reader.ReadInto(desc.script_slots));
 
   return {};
 }
@@ -407,6 +429,46 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.slot_start_index));
   CHECK_RESULT(reader.ReadInto(record.slot_count));
 
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::scripting::ScriptSlotRecord& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.script_asset_key));
+  CHECK_RESULT(reader.ReadInto(record.params_array_offset));
+  CHECK_RESULT(reader.ReadInto(record.params_count));
+  CHECK_RESULT(reader.ReadInto(record.execution_order));
+  CHECK_RESULT(reader.ReadInto(record.flags));
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::scripting::ScriptParamRecord& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span(record.key))));
+  CHECK_RESULT(reader.ReadInto(record.type));
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { &record.value, 1 })));
+  using data::pak::scripting::ScriptParamType;
+  if (record.type > ScriptParamType::kVec4
+    || std::ranges::find(record.key, '\0') == std::end(record.key)) {
+    return Err(std::errc::invalid_argument);
+  }
+  if (record.type == ScriptParamType::kBool
+    && std::to_integer<uint8_t>(
+         std::as_bytes(std::span { &record.value, 1 }).front())
+      > 1U) {
+    return Err(std::errc::invalid_argument);
+  }
+  if (record.type == ScriptParamType::kString
+    && std::ranges::find(record.value.as_string, '\0')
+      == std::end(record.value.as_string)) {
+    return Err(std::errc::invalid_argument);
+  }
   return {};
 }
 

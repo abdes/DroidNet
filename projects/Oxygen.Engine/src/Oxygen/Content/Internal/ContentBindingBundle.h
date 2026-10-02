@@ -16,7 +16,9 @@
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypedObject.h>
+#include <Oxygen/Content/Internal/ContentIdentity.h>
 #include <Oxygen/Content/Internal/ContentPublication.h>
+#include <Oxygen/Content/Internal/PhysicsBindings.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -40,11 +42,27 @@ struct BoundResource final {
 class ContentBindingBundle final : public data::AssetRuntimeBindings {
   OXYGEN_TYPED(ContentBindingBundle)
 public:
-  ContentBindingBundle(
-    std::vector<BoundAsset> assets, std::vector<BoundResource> resources);
+  ContentBindingBundle(ContentId identity,
+    std::shared_ptr<const BindingViewId> view, std::vector<BoundAsset> assets,
+    std::vector<BoundResource> resources,
+    std::unique_ptr<const PhysicsBindings> physics);
   ~ContentBindingBundle() override = default;
   OXYGEN_MAKE_NON_COPYABLE(ContentBindingBundle)
   OXYGEN_MAKE_NON_MOVABLE(ContentBindingBundle)
+
+  [[nodiscard]] auto Physics() const noexcept -> const PhysicsBindings*
+  {
+    return physics_.get();
+  }
+
+  [[nodiscard]] auto Identity() const noexcept -> ContentId
+  {
+    return identity_;
+  }
+  [[nodiscard]] auto ViewIdentity() const noexcept -> BindingViewId
+  {
+    return view_ ? *view_ : BindingViewId {};
+  }
 
   [[nodiscard]] auto FindAsset(const data::AssetKey& key) const noexcept
     -> std::shared_ptr<const data::Asset> override;
@@ -66,8 +84,11 @@ public:
   }
 
 private:
+  ContentId identity_ {};
+  std::shared_ptr<const BindingViewId> view_ {};
   std::vector<BoundAsset> assets_;
   std::vector<BoundResource> resources_;
+  std::unique_ptr<const PhysicsBindings> physics_;
 };
 
 //! Collect once during binding, then compact into the immutable Data bundle.
@@ -80,6 +101,11 @@ public:
   ~ContentBindingBuilder() = default;
   OXYGEN_MAKE_NON_COPYABLE(ContentBindingBuilder)
   OXYGEN_DEFAULT_MOVABLE(ContentBindingBuilder)
+
+  auto SetPhysics(std::unique_ptr<const PhysicsBindings> physics) -> void
+  {
+    physics_ = std::move(physics);
+  }
 
   auto RequireOpen() const -> void { epoch_->RequireOpen(); }
 
@@ -148,7 +174,9 @@ public:
     return std::static_pointer_cast<T>(found->second.owner);
   }
 
-  [[nodiscard]] auto Freeze() && -> std::shared_ptr<const ContentBindingBundle>;
+  [[nodiscard]] auto Freeze(ContentId identity,
+    std::shared_ptr<const BindingViewId>
+      view) && -> std::shared_ptr<const ContentBindingBundle>;
 
 private:
   struct AssetAttempt final {
@@ -164,6 +192,7 @@ private:
       return hash;
     }
   };
+  std::unique_ptr<const PhysicsBindings> physics_ {};
   std::shared_ptr<ContentReleaseQueue> epoch_;
   std::unordered_set<AssetAttempt, AssetAttemptHash> attempted_assets_;
   std::unordered_map<data::AssetKey, BoundAsset> assets_;

@@ -7,14 +7,18 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <stdexcept>
 #include <string>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
 
 using oxygen::content::PakFile;
@@ -86,7 +90,7 @@ auto ComputePakCrc32(const std::filesystem::path& pak_path,
         "Failed to read pak for CRC32: " + blob_result.error().message());
     }
 
-    // The PakGen tool computes the CRC32 over the entire file while *skipping*
+    // PAK writers compute the CRC32 over the entire file while *skipping*
     // the 4-byte pak_crc32 field itself (i.e., those bytes are excluded from
     // the CRC stream). Note that skipping is not equivalent to hashing four
     // zero bytes.
@@ -243,6 +247,17 @@ auto ReadPakDirectory(oxygen::serio::FileStream<>& stream,
 {
   LOG_SCOPE_FUNCTION(INFO);
 
+  const auto file_size = stream.Size();
+  constexpr auto kEntrySize = sizeof(AssetDirectoryEntry);
+  if (!file_size || *file_size < sizeof(PakFooter)
+    || footer.asset_count > footer.directory_size / kEntrySize
+    || footer.directory_size != footer.asset_count * kEntrySize
+    || footer.directory_offset > *file_size - sizeof(PakFooter)
+    || footer.directory_size
+      > *file_size - sizeof(PakFooter) - footer.directory_offset) {
+    throw std::runtime_error("PAK asset directory is out of bounds");
+  }
+
   if (auto res = stream.Seek(footer.directory_offset); !res) {
     LOG_F(
       ERROR, "Failed to seek to directory offset: {}", res.error().message());
@@ -254,16 +269,107 @@ auto ReadPakDirectory(oxygen::serio::FileStream<>& stream,
   key_to_index.clear();
   directory.reserve(footer.asset_count);
 
-  for (uint32_t i = 0; i < footer.asset_count; ++i) {
+  uint64_t metadata_begin = sizeof(PakHeader);
+  for (uint64_t i = 0; i < footer.asset_count; ++i) {
     auto entry_result = reader.Read<AssetDirectoryEntry>();
     if (!entry_result) {
       LOG_F(ERROR, "Failed to read asset directory entry: {}",
         entry_result.error().message());
       throw std::runtime_error("Failed to read asset directory entries");
     }
-    directory.push_back(*entry_result);
-    key_to_index.emplace(directory.back().asset_key, directory.size() - 1);
+    const auto& entry = *entry_result;
+    if (entry.desc_offset > footer.directory_offset
+      || entry.desc_size > footer.directory_offset - entry.desc_offset) {
+      throw std::runtime_error("PAK descriptor overlaps the directory");
+    }
+    metadata_begin
+      = std::max(metadata_begin, entry.desc_offset + entry.desc_size);
+    directory.push_back(entry);
+    if (!key_to_index.emplace(entry.asset_key, directory.size() - 1).second) {
+      throw std::runtime_error("PAK asset directory contains a duplicate key");
+    }
   }
+  for (const auto& entry : directory) {
+    const auto& references = entry.references;
+    const auto size = oxygen::data::AssetReferences::EncodedSize(
+      references.resource_count, references.key_count);
+    if (size == 0U) {
+      if (references.offset != 0U) {
+        throw std::runtime_error(
+          "Empty PAK reference inventory has a nonzero offset");
+      }
+      continue;
+    }
+    if (references.offset != metadata_begin
+      || references.offset > footer.directory_offset
+      || size > footer.directory_offset - references.offset) {
+      throw std::runtime_error(
+        "PAK reference inventories overlap or are out of bounds");
+    }
+    metadata_begin += size;
+  }
+}
+
+auto LoadPakCatalog(oxygen::serio::FileStream<>& stream,
+  const ParsedPakMetadata& metadata) -> oxygen::data::PakCatalog
+{
+  const auto& footer = metadata.footer;
+  const auto size = stream.Size();
+  if (!size || *size < sizeof(PakFooter)
+    || footer.catalog_offset < sizeof(PakHeader) || footer.catalog_size == 0U
+    || footer.catalog_offset > *size - sizeof(PakFooter)
+    || footer.catalog_size
+      > *size - sizeof(PakFooter) - footer.catalog_offset) {
+    throw std::runtime_error(
+      "Missing or invalid embedded PAK catalog; recook content");
+  }
+  const auto require_before_catalog
+    = [&](const uint64_t offset, const uint64_t length) {
+        if (length != 0U
+          && (offset > footer.catalog_offset
+            || length > footer.catalog_offset - offset)) {
+          throw std::runtime_error("PAK section overlaps the embedded catalog");
+        }
+      };
+  require_before_catalog(footer.directory_offset, footer.directory_size);
+  require_before_catalog(footer.browse_index_offset, footer.browse_index_size);
+  for (const auto& region : { footer.texture_region, footer.buffer_region,
+         footer.audio_region, footer.script_region, footer.physics_region }) {
+    require_before_catalog(region.offset, region.size);
+  }
+  for (const auto& table :
+    { footer.texture_table, footer.buffer_table, footer.audio_table,
+      footer.script_resource_table, footer.physics_resource_table }) {
+    require_before_catalog(
+      table.offset, uint64_t { table.count } * table.entry_size);
+  }
+  oxygen::serio::Reader reader(stream);
+  if (!reader.Seek(footer.catalog_offset)) {
+    throw std::runtime_error("Could not seek to embedded PAK catalog");
+  }
+  const auto bytes = reader.ReadBlob(footer.catalog_size);
+  if (!bytes) {
+    throw std::runtime_error("Could not read embedded PAK catalog");
+  }
+  auto catalog = oxygen::data::PakCatalog::Decode(*bytes);
+  if (!catalog) {
+    throw std::runtime_error(catalog.error());
+  }
+  if (catalog->source_key != metadata.source_key
+    || catalog->content_version != metadata.header.content_version
+    || catalog->entries.size() != metadata.directory.size()) {
+    throw std::runtime_error(
+      "Embedded PAK catalog disagrees with its container");
+  }
+  for (const auto& entry : catalog->entries) {
+    const auto found = metadata.key_to_index.find(entry.asset_key);
+    if (found == metadata.key_to_index.end()
+      || metadata.directory.at(found->second).asset_type != entry.asset_type) {
+      throw std::runtime_error(
+        "Embedded PAK catalog disagrees with its directory");
+    }
+  }
+  return std::move(*catalog);
 }
 
 auto LoadPakMetadata(oxygen::serio::FileStream<>& stream) -> ParsedPakMetadata
@@ -321,7 +427,7 @@ auto LoadBrowseIndex(oxygen::serio::FileStream<>& stream,
     return parsed;
   }
 
-  if (header.version != 1) {
+  if (header.version != oxygen::data::pak::core::kBrowseIndexVersion) {
     LOG_F(
       ERROR, "Unsupported browse index version {} (ignoring)", header.version);
     return parsed;
@@ -445,6 +551,7 @@ PakFile::PakFile(const std::filesystem::path& path)
   LOG_F(INFO, "file : {}", path.string());
 
   const auto metadata = LoadPakMetadata(*meta_stream_);
+  catalog_ = LoadPakCatalog(*meta_stream_, metadata);
   header_ = metadata.header;
   source_key_ = metadata.source_key;
   footer_ = metadata.footer;
@@ -583,6 +690,42 @@ auto PakFile::CreateReader(const AssetDirectoryEntry& entry) const -> Reader
     meta_stream_.get(), entry.desc_offset, "asset descriptor");
 }
 
+auto PakFile::ReadAssetReferences(const data::AssetKey& key) const
+  -> data::AssetReferences
+{
+  const auto entry = FindEntry(key);
+  if (!entry) {
+    throw std::out_of_range("Asset reference inventory is not in this PAK");
+  }
+  const auto& table = entry->references;
+  const auto byte_count
+    = data::AssetReferences::EncodedSize(table.resource_count, table.key_count);
+  if (byte_count == 0U) {
+    if (table.offset != 0U) {
+      throw std::runtime_error(
+        "Empty PAK asset reference block has nonzero offset");
+    }
+    return {};
+  }
+  std::scoped_lock lock(mutex_);
+  const auto size = meta_stream_->Size();
+  if (!size || table.offset > *size || byte_count > *size - table.offset) {
+    throw std::runtime_error("PAK asset reference block is out of bounds");
+  }
+  auto reader = CreateReaderAtOffset(
+    meta_stream_.get(), table.offset, "asset references");
+  const auto bytes = reader.ReadBlob(static_cast<size_t>(byte_count));
+  if (!bytes) {
+    throw std::runtime_error("Failed to read PAK asset reference block");
+  }
+  auto decoded = data::AssetReferences::Decode(
+    *bytes, table.resource_count, table.key_count);
+  if (!decoded) {
+    throw std::runtime_error(decoded.error());
+  }
+  return std::move(*decoded);
+}
+
 /*!
   Returns the format version number from the PAK file header.
   @return Format version number.
@@ -697,113 +840,6 @@ auto PakFile::PhysicsTable() const -> PhysicsTableT&
     throw std::runtime_error("No physics resource table present in this file");
   }
   return *physics_table_;
-}
-
-auto PakFile::ReadScriptSlotRecord(const uint32_t index) const
-  -> data::pak::scripting::ScriptSlotRecord
-{
-  std::scoped_lock lock(mutex_);
-
-  if (index >= footer_.script_slot_table.count) {
-    throw std::out_of_range("Script slot index out of bounds");
-  }
-  if (footer_.script_slot_table.entry_size
-    != sizeof(data::pak::scripting::ScriptSlotRecord)) {
-    throw std::runtime_error("Script slot table entry size mismatch");
-  }
-
-  const auto byte_offset = footer_.script_slot_table.offset
-    + (static_cast<uint64_t>(index) * footer_.script_slot_table.entry_size);
-  if (const auto seek_res
-    = meta_stream_->Seek(static_cast<size_t>(byte_offset));
-    !seek_res) {
-    throw std::runtime_error("Failed to seek script slot table");
-  }
-
-  Reader reader(*meta_stream_);
-  auto blob_res
-    = reader.ReadBlob(sizeof(data::pak::scripting::ScriptSlotRecord));
-  if (!blob_res) {
-    throw std::runtime_error("Failed to read script slot record");
-  }
-
-  data::pak::scripting::ScriptSlotRecord record {};
-  std::memcpy(&record, blob_res->data(), sizeof(record));
-  return record;
-}
-
-auto PakFile::ReadScriptSlotRecords(
-  const uint32_t start_index, const uint32_t count) const
-  -> std::vector<data::pak::scripting::ScriptSlotRecord>
-{
-  std::vector<data::pak::scripting::ScriptSlotRecord> result;
-  result.reserve(count);
-
-  if (count == 0) {
-    return result;
-  }
-  if (start_index > footer_.script_slot_table.count
-    || count > footer_.script_slot_table.count - start_index) {
-    throw std::out_of_range("Script slot range out of bounds");
-  }
-
-  for (uint32_t i = 0; i < count; ++i) {
-    result.push_back(ReadScriptSlotRecord(start_index + i));
-  }
-  return result;
-}
-
-auto PakFile::ReadScriptParamRecords(const ScriptParamReadRequest request) const
-  -> std::vector<data::pak::scripting::ScriptParamRecord>
-{
-  std::vector<data::pak::scripting::ScriptParamRecord> result;
-  if (request.count == 0) {
-    return result;
-  }
-
-  std::scoped_lock lock(mutex_);
-  constexpr auto kRecordSize
-    = static_cast<uint64_t>(sizeof(data::pak::scripting::ScriptParamRecord));
-  const auto total_bytes = static_cast<uint64_t>(request.count) * kRecordSize;
-
-  const auto stream_size_result = meta_stream_->Size();
-  if (!stream_size_result) {
-    throw std::runtime_error("Failed to query script parameter stream size");
-  }
-
-  const auto stream_size_u64
-    = static_cast<uint64_t>(stream_size_result.value());
-  if (request.absolute_offset > stream_size_u64
-    || total_bytes > stream_size_u64 - request.absolute_offset) {
-    throw std::runtime_error("Script parameter array range out of bounds");
-  }
-
-  if (total_bytes
-    > static_cast<uint64_t>((std::numeric_limits<size_t>::max)())) {
-    throw std::runtime_error("Script parameter array exceeds addressable size");
-  }
-
-  result.reserve(request.count);
-
-  if (const auto seek_res
-    = meta_stream_->Seek(static_cast<size_t>(request.absolute_offset));
-    !seek_res) {
-    throw std::runtime_error("Failed to seek script parameter array");
-  }
-
-  Reader reader(*meta_stream_);
-  auto blob_res = reader.ReadBlob(static_cast<size_t>(total_bytes));
-  if (!blob_res) {
-    throw std::runtime_error("Failed to read script parameter array");
-  }
-  if (blob_res->size() != static_cast<size_t>(total_bytes)) {
-    throw std::runtime_error("Script parameter array size mismatch");
-  }
-
-  result.resize(request.count);
-  std::memcpy(
-    result.data(), blob_res->data(), static_cast<size_t>(total_bytes));
-  return result;
 }
 
 auto PakFile::ReadScriptResource(

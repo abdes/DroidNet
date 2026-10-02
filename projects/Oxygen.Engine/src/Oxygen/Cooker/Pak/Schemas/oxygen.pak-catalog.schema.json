@@ -9,7 +9,7 @@
     },
     "schema_version": {
       "type": "integer",
-      "const": 1
+      "const": 2
     },
     "source_key": {
       "type": "string",
@@ -64,6 +64,37 @@
           "transitive_resource_digest"
         ]
       }
+    },
+    "deleted": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      }
+    },
+    "bases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "source_key": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "content_version": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "catalog_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": ["source_key", "content_version", "catalog_digest"]
+      }
     }
   },
   "required": [
@@ -71,6 +102,8 @@
     "source_key",
     "content_version",
     "catalog_digest",
-    "entries"
+    "entries",
+    "deleted",
+    "bases"
   ]
 }

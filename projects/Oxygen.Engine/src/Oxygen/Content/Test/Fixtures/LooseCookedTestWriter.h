@@ -21,6 +21,7 @@
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -69,7 +70,8 @@ public:
 
   auto WriteAssetDescriptor(const data::AssetKey& asset_key,
     const data::AssetType asset_type, std::string virtual_path,
-    std::string descriptor_relpath, std::span<const std::byte> bytes) -> void
+    std::string descriptor_relpath, std::span<const std::byte> bytes,
+    data::AssetReferences references = {}) -> void
   {
     const auto absolute_path
       = cooked_root_ / std::filesystem::path(descriptor_relpath);
@@ -93,6 +95,7 @@ public:
       .virtual_path = std::move(virtual_path),
       .descriptor_size = static_cast<uint64_t>(bytes.size()),
       .descriptor_sha256 = digest_bytes,
+      .references = std::move(references),
     });
   }
 
@@ -154,6 +157,27 @@ public:
     header.file_record_count = static_cast<uint32_t>(file_records.size());
     header.file_record_size = sizeof(FileRecord);
 
+    std::vector<std::byte> reference_bytes;
+    const auto references_offset
+      = header.file_records_offset + file_records.size() * sizeof(FileRecord);
+    for (size_t i = 0; i < assets_.size(); ++i) {
+      const auto& references = assets_.at(i).references;
+      const auto encoded = references.Encode();
+      if (!encoded) {
+        throw std::runtime_error(encoded.error());
+      }
+      if (encoded->empty()) {
+        continue;
+      }
+      asset_entries.at(i).references = {
+        .offset = references_offset + reference_bytes.size(),
+        .resource_count = static_cast<uint32_t>(references.Resources().size()),
+        .key_count = static_cast<uint32_t>(references.Keys().size()),
+      };
+      reference_bytes.insert(
+        reference_bytes.end(), encoded->begin(), encoded->end());
+    }
+
     const auto index_path = cooked_root_ / layout_.index_file_name;
     std::ofstream out(
       base::ToNativePath(index_path), std::ios::binary | std::ios::trunc);
@@ -168,6 +192,10 @@ public:
     if (!file_records.empty()) {
       out.write(reinterpret_cast<const char*>(file_records.data()),
         static_cast<std::streamsize>(file_records.size() * sizeof(FileRecord)));
+    }
+    if (!reference_bytes.empty()) {
+      out.write(reinterpret_cast<const char*>(reference_bytes.data()),
+        static_cast<std::streamsize>(reference_bytes.size()));
     }
 
     return {
@@ -185,6 +213,7 @@ private:
     std::string virtual_path;
     uint64_t descriptor_size = 0;
     std::array<uint8_t, data::loose_cooked::kSha256Size> descriptor_sha256 {};
+    data::AssetReferences references;
   };
 
   struct PendingFileRecord {

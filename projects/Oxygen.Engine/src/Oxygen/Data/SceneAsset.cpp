@@ -42,11 +42,8 @@ namespace {
   auto ReadPackedRecord(const std::span<const std::byte> bytes,
     const std::string_view what) -> RecordT
   {
-    std::vector<std::byte> buffer;
-    buffer.assign(bytes.begin(), bytes.end());
-
-    oxygen::serio::MemoryStream stream { std::span<std::byte>(buffer) };
-    oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+    oxygen::serio::ReadOnlyMemoryStream stream(bytes);
+    oxygen::serio::Reader reader(stream);
     auto packed = reader.ScopedAlignment(1);
 
     RecordT record {};
@@ -58,6 +55,49 @@ namespace {
   }
 
 } // namespace
+
+auto SceneAsset::ReadScriptSlots(const uint32_t start,
+  const uint32_t count) const -> std::vector<pak::scripting::ScriptSlotRecord>
+{
+  if (start > desc_.script_slots.count
+    || count > desc_.script_slots.count - start) {
+    throw std::out_of_range("Scene script slot range is out of bounds");
+  }
+  std::vector<pak::scripting::ScriptSlotRecord> slots;
+  slots.reserve(count);
+  for (uint32_t i = 0; i < count; ++i) {
+    const auto offset = desc_.script_slots.offset
+      + (uint64_t { start + i } * sizeof(pak::scripting::ScriptSlotRecord));
+    slots.push_back(ReadPackedRecord<pak::scripting::ScriptSlotRecord>(
+      data_.subspan(
+        static_cast<size_t>(offset), sizeof(pak::scripting::ScriptSlotRecord)),
+      "Scene script slot"));
+  }
+  return slots;
+}
+
+auto SceneAsset::ReadScriptParameters(
+  const pak::scripting::ScriptSlotRecord& slot) const
+  -> std::vector<pak::scripting::ScriptParamRecord>
+{
+  const auto size = uint64_t { slot.params_count }
+    * sizeof(pak::scripting::ScriptParamRecord);
+  if (slot.params_array_offset > data_.size()
+    || size > data_.size() - slot.params_array_offset) {
+    throw std::out_of_range("Scene script parameter range is out of bounds");
+  }
+  std::vector<pak::scripting::ScriptParamRecord> parameters;
+  parameters.reserve(slot.params_count);
+  for (uint32_t i = 0; i < slot.params_count; ++i) {
+    const auto offset = slot.params_array_offset
+      + (uint64_t { i } * sizeof(pak::scripting::ScriptParamRecord));
+    parameters.push_back(ReadPackedRecord<pak::scripting::ScriptParamRecord>(
+      data_.subspan(
+        static_cast<size_t>(offset), sizeof(pak::scripting::ScriptParamRecord)),
+      "Scene script parameter"));
+  }
+  return parameters;
+}
 
 SceneAsset::SceneAsset(
   AssetKey key, std::span<const std::byte> data, SourceOrigin source_origin)
@@ -383,6 +423,69 @@ auto SceneAsset::ParseAndValidate() -> void
     : std::bit_cast<const char*>(
         data_.subspan(desc_.scene_strings.offset).data());
 
+  if (desc_.script_slots.count != 0U) {
+    const auto slots_size = uint64_t { desc_.script_slots.count }
+      * sizeof(pak::scripting::ScriptSlotRecord);
+    if (desc_.script_slots.entry_size
+        != sizeof(pak::scripting::ScriptSlotRecord)
+      || desc_.script_slots.offset < payload_end
+      || !range_ok(desc_.script_slots.offset, slots_size, data_.size())) {
+      throw std::runtime_error("SceneAsset script slot table is invalid");
+    }
+    payload_end = desc_.script_slots.offset + slots_size;
+    for (const auto& slot : ReadScriptSlots(0U, desc_.script_slots.count)) {
+      if (slot.script_asset_key.IsNil()) {
+        throw std::runtime_error("Scene script slot has no script asset");
+      }
+      const auto params_size = uint64_t { slot.params_count }
+        * sizeof(pak::scripting::ScriptParamRecord);
+      if (params_size == 0U) {
+        if (slot.params_array_offset != 0U) {
+          throw std::runtime_error(
+            "Empty scene script parameters must have zero offset");
+        }
+        continue;
+      }
+      if (slot.params_array_offset != payload_end
+        || !range_ok(slot.params_array_offset, params_size, data_.size())) {
+        throw std::runtime_error("SceneAsset script parameters must follow "
+                                 "slots without gaps or overlap");
+      }
+      payload_end += params_size;
+    }
+  } else if (desc_.script_slots.offset != 0U
+    || desc_.script_slots.entry_size != 0U) {
+    throw std::runtime_error(
+      "Empty scene script table must use a canonical empty range");
+  }
+
+  std::vector<std::pair<uint32_t, uint32_t>> script_ranges;
+  for (const auto& component :
+    GetComponents<pak::scripting::ScriptingComponentRecord>()) {
+    if (component.slot_start_index > desc_.script_slots.count
+      || component.slot_count
+        > desc_.script_slots.count - component.slot_start_index) {
+      throw std::runtime_error(
+        "Scene scripting component slot range is out of bounds");
+    }
+    if (component.slot_count != 0U) {
+      script_ranges.emplace_back(component.slot_start_index,
+        component.slot_start_index + component.slot_count);
+    }
+  }
+  std::ranges::sort(script_ranges);
+  uint32_t next_script_slot = 0;
+  for (const auto [begin, end] : script_ranges) {
+    if (begin != next_script_slot) {
+      throw std::runtime_error(
+        "Scene script slot ownership has gaps or overlap");
+    }
+    next_script_slot = end;
+  }
+  if (next_script_slot != desc_.script_slots.count) {
+    throw std::runtime_error("Scene script table contains unowned slots");
+  }
+
   // Optional trailing environment block (v3+ scenes).
   // This block is not referenced by offsets in the descriptor; it begins at
   // the end of the scene payload.
@@ -401,7 +504,7 @@ auto SceneAsset::ParseAndValidate() -> void
     }
 
     const size_t env_end = payload_end + env_header.byte_size;
-    if (env_end > data_.size() || env_end < payload_end) {
+    if (env_end != data_.size() || env_end < payload_end) {
       throw std::runtime_error("SceneAsset environment block out of bounds");
     }
 

@@ -20,6 +20,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Content/AssetValidation.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
@@ -123,7 +124,7 @@ AssetEmitter::~AssetEmitter()
 
 auto AssetEmitter::Emit(const data::AssetKey& key, data::AssetType asset_type,
   std::string_view virtual_path, std::string_view descriptor_relpath,
-  std::span<const std::byte> bytes) -> void
+  std::span<const std::byte> bytes, data::AssetReferences references) -> void
 {
   if (finalize_started_.load(std::memory_order_acquire)) {
     throw std::runtime_error("AssetEmitter is finalized");
@@ -132,6 +133,7 @@ auto AssetEmitter::Emit(const data::AssetKey& key, data::AssetType asset_type,
   // Validate paths (must match PAK format requirements)
   ValidateVirtualPath(virtual_path);
   ValidateRelativePath(descriptor_relpath);
+  ValidateAssetDescriptor(asset_type, key, bytes, references);
 
   if (const auto it = key_by_virtual_path_.find(std::string(virtual_path));
     it != key_by_virtual_path_.end() && it->second != key) {
@@ -157,15 +159,15 @@ auto AssetEmitter::Emit(const data::AssetKey& key, data::AssetType asset_type,
     static_cast<int>(asset_type), virtual_path, descriptor_relpath,
     bytes.size());
 
-  RecordAsset(
-    key, asset_type, virtual_path, descriptor_relpath, bytes.size(), sha256);
+  RecordAsset(key, asset_type, virtual_path, descriptor_relpath, bytes.size(),
+    std::move(references), sha256);
   QueueDescriptorWrite(descriptor_path, descriptor_relpath, bytes);
 }
 
 auto AssetEmitter::EmitSync(const data::AssetKey& key,
   const data::AssetType asset_type, std::string_view virtual_path,
-  std::string_view descriptor_relpath, std::span<const std::byte> bytes)
-  -> co::Co<void>
+  std::string_view descriptor_relpath, std::span<const std::byte> bytes,
+  data::AssetReferences references) -> co::Co<void>
 {
   if (finalize_started_.load(std::memory_order_acquire)) {
     throw std::runtime_error("AssetEmitter is finalized");
@@ -173,6 +175,7 @@ auto AssetEmitter::EmitSync(const data::AssetKey& key,
 
   ValidateVirtualPath(virtual_path);
   ValidateRelativePath(descriptor_relpath);
+  ValidateAssetDescriptor(asset_type, key, bytes, references);
 
   if (const auto it = key_by_virtual_path_.find(std::string(virtual_path));
     it != key_by_virtual_path_.end() && it->second != key) {
@@ -200,8 +203,8 @@ auto AssetEmitter::EmitSync(const data::AssetKey& key,
       + "': " + write_result.error().ToString());
   }
 
-  RecordAsset(
-    key, asset_type, virtual_path, descriptor_relpath, bytes.size(), sha256);
+  RecordAsset(key, asset_type, virtual_path, descriptor_relpath, bytes.size(),
+    std::move(references), sha256);
 }
 
 auto AssetEmitter::Count() const noexcept -> size_t { return records_.size(); }
@@ -225,7 +228,8 @@ auto AssetEmitter::Records() const noexcept
 auto AssetEmitter::RecordAsset(const data::AssetKey& key,
   const data::AssetType asset_type, std::string_view virtual_path,
   std::string_view descriptor_relpath, const uint64_t descriptor_size,
-  std::optional<base::Sha256Digest> sha256) -> void
+  data::AssetReferences references, std::optional<base::Sha256Digest> sha256)
+  -> void
 {
   if (const auto it = record_index_by_key_.find(key);
     it != record_index_by_key_.end()) {
@@ -255,6 +259,7 @@ auto AssetEmitter::RecordAsset(const data::AssetKey& key,
     record.descriptor_relpath = std::string(descriptor_relpath);
     record.descriptor_size = descriptor_size;
     record.descriptor_sha256 = std::move(sha256);
+    record.references = std::move(references);
     return;
   }
 
@@ -265,6 +270,7 @@ auto AssetEmitter::RecordAsset(const data::AssetKey& key,
     .descriptor_relpath = std::string(descriptor_relpath),
     .descriptor_size = descriptor_size,
     .descriptor_sha256 = std::move(sha256),
+    .references = std::move(references),
   };
 
   const auto index = records_.size();

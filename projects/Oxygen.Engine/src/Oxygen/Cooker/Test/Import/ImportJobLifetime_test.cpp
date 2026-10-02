@@ -218,7 +218,7 @@ private:
     session.AssetEmitter().Emit(
       oxygen::data::AssetKey::FromVirtualPath("/Content/test.omat"),
       oxygen::data::AssetType::kMaterial, "/Content/test.omat", "test.omat",
-      std::as_bytes(std::span { &descriptor, 1 }));
+      std::as_bytes(std::span { &descriptor, 1 }), {});
     co_return co_await session.Finalize();
   }
   ProducerState& state_;

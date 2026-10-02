@@ -447,12 +447,6 @@ struct LooseCookedLayout final : Layout {
   //! File name for the scripts resource data.
   std::string scripts_data_file_name = "scripts.data";
 
-  //! File name for the script-bindings table.
-  std::string script_bindings_table_file_name = "script-bindings.table";
-
-  //! File name for the script-bindings data.
-  std::string script_bindings_data_file_name = "script-bindings.data";
-
   //! Optional base folder (relative to cooked root) for asset descriptors.
   /*!
    If empty, descriptors are written directly under the cooked root.
@@ -555,18 +549,6 @@ struct LooseCookedLayout final : Layout {
   [[nodiscard]] auto ScriptsDataRelPath() const -> std::string
   {
     return JoinRelPath(resources_dir, scripts_data_file_name);
-  }
-
-  //! Resolve the container-relative path for the script-bindings table.
-  [[nodiscard]] auto ScriptBindingsTableRelPath() const -> std::string
-  {
-    return JoinRelPath(resources_dir, script_bindings_table_file_name);
-  }
-
-  //! Resolve the container-relative path for the script-bindings data.
-  [[nodiscard]] auto ScriptBindingsDataRelPath() const -> std::string
-  {
-    return JoinRelPath(resources_dir, script_bindings_data_file_name);
   }
 
   //! Resolve the container-relative directory for texture resource descriptors.

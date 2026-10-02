@@ -149,12 +149,14 @@ NOLINT_TEST_F(
     artifact_fs);
   ASSERT_EQ(base_result.exit_code, PakToolExitCode::kSuccess)
     << base_result.error_code << ": " << base_result.error_message;
+  ASSERT_TRUE(std::filesystem::remove(base_options.request.catalog_output));
 
   auto patch_options = MakeOptions();
+  patch_options.request.source_key = "01234567-89ab-7def-8123-456789abcdee";
   patch_options.request.output_pak = Root() / "patch" / "patch.pak";
   patch_options.request.catalog_output
     = Root() / "patch" / "patch.pakcatalog.json";
-  patch_options.patch.base_catalogs = { base_options.request.catalog_output };
+  patch_options.patch.base_paks = { base_options.request.output_pak };
   patch_options.patch.manifest_output
     = Root() / "patch" / "patch.manifest.json";
 

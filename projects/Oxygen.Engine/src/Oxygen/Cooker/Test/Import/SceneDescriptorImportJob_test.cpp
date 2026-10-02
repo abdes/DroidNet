@@ -23,11 +23,13 @@
 #include <utility>
 #include <vector>
 
+#include "../Fixtures/DescriptorFixtures.h"
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Span.h>
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
@@ -38,6 +40,7 @@
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MeshType.h>
@@ -175,13 +178,17 @@ namespace {
       std::string descriptor_json, std::string_view job_name = "DemoScene")
       -> ImportRequest
     {
+      auto document = nlohmann::json::parse(descriptor_json);
+      if (!document.contains("version")) {
+        document["version"] = data::pak::world::kSceneAssetVersion;
+      }
       auto request = ImportRequest {};
       request.source_path = "inline://scene-descriptor";
       request.job_name = std::string(job_name);
       request.cooked_root = cooked_root;
       request.loose_cooked_layout.virtual_mount_root = "/.cooked";
       request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
-        .normalized_descriptor_json = std::move(descriptor_json),
+        .normalized_descriptor_json = document.dump(),
       };
       return request;
     }
@@ -191,9 +198,10 @@ namespace {
   {
     const auto root = MakeTempCookedRoot("empty_scene_environment");
     auto service = AsyncImportService {};
-    const auto stop = oxygen::Finally([&service] -> void { service.Stop(); });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
     const auto report = SubmitAndWait(service, MakeRequest(root, R"({
-      "version":9, "name":"EmptyScene", "nodes":[],
+      "name":"EmptyScene", "nodes":[],
       "environment": {
         "background": {"color_rgb":[0.1,0.2,0.3]},
         "post_process_volume": {"manual_exposure_ev":9.5}
@@ -227,9 +235,10 @@ namespace {
   {
     const auto root = MakeTempCookedRoot("empty_scene_invalid_camera");
     auto service = AsyncImportService {};
-    const auto stop = oxygen::Finally([&service] -> void { service.Stop(); });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
     const auto report = SubmitAndWait(service, MakeRequest(root, R"({
-      "version":9, "name":"EmptyScene", "nodes":[],
+      "name":"EmptyScene", "nodes":[],
       "cameras":{"perspective":[{"node":0,"aspect_mode":"auto"}]}
     })"));
     EXPECT_FALSE(report.success);
@@ -277,11 +286,8 @@ namespace {
     auto service = AsyncImportService {};
     const auto stop_service
       = oxygen::Finally([&service] -> void { service.Stop(); });
-    [[maybe_unused]] const auto stop
-      = oxygen::Finally([&service] -> void { service.Stop(); });
     const auto root = MakeTempCookedRoot("mask_reference");
-    constexpr auto kDescriptor
-      = R"({"version":9,"name":"MaskScene","nodes":[{}],
+    constexpr auto kDescriptor = R"({"name":"MaskScene","nodes":[{}],
       "environment":{"post_process_volume":{"auto_exposure_metering_mask":"/.cooked/Textures/Meter.otex"}}})";
     WriteMeteringMaskSidecar(root, Format::kRGBA8UNorm, 4U);
     const auto success = SubmitAndWait(service, MakeRequest(root, kDescriptor));
@@ -292,7 +298,18 @@ namespace {
     if (!exposure.has_value()) {
       FAIL() << "Expected exposure to contain a value";
     }
-    EXPECT_EQ(exposure->auto_exposure_metering_mask.get(), 4U);
+    EXPECT_EQ(exposure->auto_exposure_metering_mask.get(), 0U);
+    const auto index = lc::LooseCookedIndex::LoadFromRoot(root);
+    const auto scene_key
+      = index.FindAssetKeyByVirtualPath("/.cooked/Scenes/MaskScene.oscene");
+    ASSERT_TRUE(scene_key.has_value());
+    const auto references = index.FindAssetReferences(scene_key.value());
+    ASSERT_TRUE(references.has_value());
+    EXPECT_THAT(references.value().Resources(),
+      ::testing::ElementsAre(data::ResourceBinding {
+        .kind = data::ResourceKind::kTexture,
+        .index = ResourceIndexT { 4U },
+      }));
 
     WriteMeteringMaskSidecar(root, Format::kRGBA8UNormSRGB, 4U);
     const auto srgb = SubmitAndWait(service, MakeRequest(root, kDescriptor));
@@ -323,10 +340,8 @@ namespace {
     auto service = AsyncImportService {};
     const auto stop_service
       = oxygen::Finally([&service] -> void { service.Stop(); });
-    [[maybe_unused]] const auto stop
-      = oxygen::Finally([&service] -> void { service.Stop(); });
     const auto report = SubmitAndWait(service, MakeRequest(root, R"({
-      "version": 9, "name": "Physical", "nodes": [{}, {}, {}, {}],
+      "name": "Physical", "nodes": [{}, {}, {}, {}],
       "cameras": {
         "perspective": [
           {"node":0,"aspect_mode":"fixed","aspect_ratio":1.5,"aperture_f":2.8,"shutter_rate":250,"iso":400},
@@ -368,8 +383,6 @@ namespace {
     auto service = AsyncImportService {};
     const auto stop_service
       = oxygen::Finally([&service] -> void { service.Stop(); });
-    [[maybe_unused]] const auto stop
-      = oxygen::Finally([&service] -> void { service.Stop(); });
     const auto root = MakeTempCookedRoot("invalid_exposure");
     for (const auto& invalid : std::vector<nlohmann::json> {
            { { "auto_exposure_min_ev", 10 }, { "auto_exposure_max_ev", 5 } },
@@ -392,8 +405,8 @@ namespace {
            },
            { { "exposure_compensation_ev", 10000 } },
          }) {
-      auto document = nlohmann::json::parse(
-        R"({"version":9,"name":"Invalid","nodes":[{}]})");
+      auto document
+        = nlohmann::json::parse(R"({"name":"Invalid","nodes":[{}]})");
       document.update(
         { { "environment", { { "post_process_volume", invalid } } } });
       SCOPED_TRACE(document.dump());
@@ -414,10 +427,7 @@ namespace {
     auto service = AsyncImportService {};
     const auto stop_service
       = oxygen::Finally([&service] -> void { service.Stop(); });
-    [[maybe_unused]] const auto stop
-      = oxygen::Finally([&service] -> void { service.Stop(); });
     const auto report = SubmitAndWait(service, MakeRequest(root, R"({
-      "version": 9,
       "name": "Flags",
       "nodes": [
         {"name":"HiddenRoot", "flags":{
@@ -458,11 +468,13 @@ namespace {
     const data::AssetKey& key, const data::AssetType type) -> void
   {
     auto writer = LooseCookedWriter(root);
-    const auto bytes = std::array { std::byte { 1 } };
+    const auto fixture = type == data::AssetType::kGeometry
+      ? content::test::GeometryDescriptor("Mesh")
+      : content::test::MaterialDescriptor("Wrong");
     writer.WriteAssetDescriptor(key, type, "/Art/Geometry/Mesh.ogeo",
       type == data::AssetType::kGeometry ? "Geometry/Mesh.ogeo"
                                          : "Materials/Wrong.omat",
-      bytes);
+      fixture.bytes, fixture.references);
     static_cast<void>(writer.Finish());
   }
 
@@ -479,8 +491,7 @@ namespace {
     auto service = AsyncImportService {};
     const auto stop_service
       = oxygen::Finally([&service] -> void { service.Stop(); });
-    const auto descriptor
-      = R"({"version":9,"name":"Scene","nodes":[{"name":"Mesh"}],
+    const auto descriptor = R"({"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { false, true }) {
       auto request = MakeRequest(output, descriptor);
@@ -499,7 +510,6 @@ namespace {
       EXPECT_EQ(CheckedAt(renderables, 0).geometry_key,
         own_wins ? own_key : library_key);
     }
-    service.Stop();
   }
 
   NOLINT_TEST_F(SceneDescriptorImportJobTest,
@@ -516,8 +526,7 @@ namespace {
     auto service = AsyncImportService {};
     const auto stop_service
       = oxygen::Finally([&service] -> void { service.Stop(); });
-    const auto descriptor
-      = R"({"version":9,"name":"Scene","nodes":[{"name":"Mesh"}],
+    const auto descriptor = R"({"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { true, false }) {
       auto request = MakeRequest(output, descriptor);
@@ -537,7 +546,6 @@ namespace {
       EXPECT_EQ(CheckedAt(renderables, 0).geometry_key,
         own_wins ? own_key : library_key);
     }
-    service.Stop();
   }
 
   NOLINT_TEST_F(
@@ -554,15 +562,14 @@ namespace {
     auto service = AsyncImportService {};
     const auto stop_service
       = oxygen::Finally([&service] -> void { service.Stop(); });
-    auto request = MakeRequest(
-      output, R"({"version":9,"name":"Scene","nodes":[{"name":"Mesh"}],
+    auto request
+      = MakeRequest(output, R"({"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})");
     request.cooked_context_roots = { library };
     const auto report = SubmitAndWait(service, std::move(request));
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
       report.diagnostics, "scene.descriptor.reference_type_mismatch"));
-    service.Stop();
   }
 
   NOLINT_TEST_F(
@@ -580,9 +587,10 @@ namespace {
     auto service = AsyncImportService(AsyncImportService::Config {
       .thread_pool_size = 2U,
     });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 9,
       "name": "DemoScene",
       "nodes": [
         { "name": "Root" },
@@ -632,8 +640,6 @@ namespace {
     ASSERT_EQ(assignments.size(), 1U);
     EXPECT_EQ(assignments.front().material_key,
       oxygen::data::AssetKey::FromVirtualPath("/.cooked/Materials/cube.omat"));
-
-    service.Stop();
   }
 
   NOLINT_TEST_F(
@@ -643,9 +649,10 @@ namespace {
     auto service = AsyncImportService(AsyncImportService::Config {
       .thread_pool_size = 2U,
     });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 9,
       "name": "DemoScene",
       "nodes": [
         { "name": "Root" },
@@ -662,8 +669,6 @@ namespace {
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
       report.diagnostics, "scene.descriptor.reference_missing"));
-
-    service.Stop();
   }
 
   NOLINT_TEST_F(SceneDescriptorImportJobTest,
@@ -673,9 +678,10 @@ namespace {
     auto service = AsyncImportService(AsyncImportService::Config {
       .thread_pool_size = 2U,
     });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 9,
       "name": "DirectionalTuning",
       "nodes": [
         { "name": "Root" },
@@ -798,8 +804,6 @@ namespace {
           std::span<const std::byte>(malformed_bytes))),
         std::exception);
     }
-
-    service.Stop();
   }
 
   NOLINT_TEST_F(SceneDescriptorImportJobTest,
@@ -809,6 +813,8 @@ namespace {
     auto service = AsyncImportService(AsyncImportService::Config {
       .thread_pool_size = 2U,
     });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
       "version": 2,
@@ -819,8 +825,6 @@ namespace {
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
       report.diagnostics, "scene.descriptor.recook_required"));
-
-    service.Stop();
   }
 
   NOLINT_TEST_F(
@@ -833,9 +837,10 @@ namespace {
     auto service = AsyncImportService(AsyncImportService::Config {
       .thread_pool_size = 2U,
     });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 9,
       "name": "EnvironmentScene",
       "nodes": [
         { "name": "Root" },
@@ -957,8 +962,6 @@ namespace {
     EXPECT_EQ(CheckedAt(local_fog, 0).enabled, 1U);
     EXPECT_FLOAT_EQ(CheckedAt(local_fog, 0).radial_fog_extinction, 0.3F);
     EXPECT_EQ(CheckedAt(local_fog, 0).sort_priority, 2);
-
-    service.Stop();
   }
 
   NOLINT_TEST_F(
@@ -966,11 +969,12 @@ namespace {
   {
     auto service = AsyncImportService(
       AsyncImportService::Config { .thread_pool_size = 2U });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
     const auto root = MakeTempCookedRoot("complete_environment");
     auto document = nlohmann::json::parse(
       R"JSON(
 {
-  "version": 9,
   "name": "Environment",
   "nodes": [
     {
@@ -1062,7 +1066,8 @@ namespace {
           EXPECT_FLOAT_EQ(post->auto_exposure_black_influence, 0.4F);
           EXPECT_FLOAT_EQ(post->auto_exposure_transition_distance_ev, 2.5F);
           EXPECT_EQ(post->exposure_extension_version, 1U);
-          EXPECT_EQ(post->auto_exposure_metering_mask.get(), 0U);
+          EXPECT_EQ(
+            post->auto_exposure_metering_mask, data::kNoResourceReference);
           const auto curve = scene.GetPostProcessCompensationCurve();
           ASSERT_EQ(curve.size(), 2U);
           EXPECT_FLOAT_EQ(CheckedAt(curve, 0).metered_ev, -4.0F);
@@ -1087,7 +1092,6 @@ namespace {
         }
       }
     }
-    service.Stop();
   }
 
   NOLINT_TEST_F(SceneDescriptorImportJobTest,
@@ -1095,6 +1099,8 @@ namespace {
   {
     auto service = AsyncImportService(
       AsyncImportService::Config { .thread_pool_size = 1U });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
     const auto root = MakeTempCookedRoot("previous_scene_version");
     const auto report = SubmitAndWait(service,
       MakeRequest(
@@ -1103,7 +1109,6 @@ namespace {
     EXPECT_EQ(report.scenes_written, 0U);
     EXPECT_TRUE(HasDiagnosticCode(
       report.diagnostics, "scene.descriptor.recook_required"));
-    service.Stop();
   }
 
 } // namespace

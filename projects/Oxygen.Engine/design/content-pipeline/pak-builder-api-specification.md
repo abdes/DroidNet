@@ -3,6 +3,10 @@
 **Date:** 2026-02-28
 **Status:** Design / Specification
 
+The [current packaging contract](../../src/Oxygen/Cooker/Docs/Pak/paktool_design.md#ordered-layers-and-patch-baselines)
+owns ordered layers and embedded catalogs. Patch baselines use the catalogs
+inside current-format PAKs; external JSON is an inspection output.
+
 ## 1. Scope
 
 This specification defines the canonical C++20-minimum pipeline for building Oxygen Engine `.pak` files, including both full builds and patch workflows (generation + application contract).
@@ -178,13 +182,6 @@ struct PakBuildTelemetry {
   std::optional<std::chrono::microseconds> total_duration;
 };
 
-struct PatchCompatibilityPolicy {
-  bool require_exact_base_set = true;
-  bool require_content_version_match = true;
-  bool require_base_source_key_match = true;
-  bool require_catalog_digest_match = true;
-};
-
 struct PakBuildRequest {
   BuildMode mode = BuildMode::kFull;
   std::vector<CookedSource> sources;
@@ -196,7 +193,6 @@ struct PakBuildRequest {
   data::SourceKey source_key; // must be non-zero
 
   std::vector<PakCatalog> base_catalogs; // required for kPatch
-  PatchCompatibilityPolicy patch_compat {};
   PakBuildOptions options {};
 };
 
@@ -237,10 +233,11 @@ It contains:
 
 - Header plan (header bytes and source key bytes).
 - Region plans: texture, buffer, audio, script, physics.
-- Table plans: texture, buffer, audio, script_resource, script_slot, physics_resource.
+- Table plans: texture, buffer, audio, script_resource, physics_resource.
 - Asset descriptor placement plan (absolute offsets/sizes/alignment).
 - Asset directory plan.
 - Optional browse index plan.
+- Mandatory embedded catalog with ordered baseline identities and deletions.
 - Footer plan (latest-schema footer layout).
 - CRC patch-field absolute offset.
 - Patch action map (`Create`, `Replace`, `Delete`, `Unchanged`).
@@ -313,7 +310,7 @@ Writer phases:
 
 1. Write `pak::core::PakHeader` placeholder.
 2. Write resource regions.
-3. Write resource tables (`texture`, `buffer`, `audio`, `script_resource`, `script_slot`, `physics_resource`).
+3. Write resource tables (`texture`, `buffer`, `audio`, `script_resource`, `physics_resource`).
 4. Write asset descriptors.
 5. Write asset directory.
 6. Write optional browse index payload.
@@ -353,9 +350,7 @@ When `options.compute_crc32=false`:
 
 The builder must treat scripting sidecar data as first-class:
 
-- Populate `script_slot_table` when slots exist.
-- Enforce `script_slot_table.entry_size == sizeof(pak::scripting::ScriptSlotRecord)`.
-- Validate every `ScriptSlotRecord::params_array_offset/params_count` range.
+- Script slots and parameter arrays are scene-local descriptor data. Validate their ranges through the current SceneAsset decoder; packaging preserves their bytes.
 - Ensure param record arrays are in-bounds and non-overlapping with invalid regions.
 
 No patch/full special casing is allowed for script slots.
@@ -489,7 +484,8 @@ Planner validations:
   - replace requires base presence.
   - delete must target existing base keys.
   - compatibility envelope complete.
-  - effective compatibility policy snapshot is present in manifest.
+  - ordered base identity/version/digest triples match the contiguous layer
+    suffix immediately below each patch; lower unrelated layers are allowed.
   - browse-index virtual paths are canonical and duplicate-free.
 
 Writer validations:

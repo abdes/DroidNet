@@ -53,6 +53,13 @@ add_custom_command(
     "${OXYGEN_SHOWCASE_CONTENT}/pak/all.pak"
     "${OXYGEN_SHOWCASE_CONTENT}/pak/all.catalog.json"
     "${OXYGEN_SHOWCASE_CONTENT}/pak/all.manifest.json"
+  # This tree is a generated SDK build product. A tool/format change must
+  # rebuild it from authoring inputs, never append to an older cooked index.
+  COMMAND
+    "${CMAKE_COMMAND}" -E rm -f "${OXYGEN_SHOWCASE_STAMP}"
+  COMMAND
+    "${CMAKE_COMMAND}" -E rm -rf "${OXYGEN_SHOWCASE_CONTENT}/.cooked"
+    "${OXYGEN_SHOWCASE_CONTENT}/pak"
   COMMAND
     "${OXYGEN_SHOWCASE_LAUNCHER}" powershell.exe -NoLogo -NoProfile
     -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/cook_scenes.ps1"

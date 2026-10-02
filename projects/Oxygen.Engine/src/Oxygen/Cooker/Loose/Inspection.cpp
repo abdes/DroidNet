@@ -80,6 +80,9 @@ auto Inspection::LoadFromFile(const std::filesystem::path& index_path) -> void
     if (const auto type = index.FindAssetType(key); type) {
       out.asset_type = *type;
     }
+    if (auto references = index.FindAssetReferences(key); references) {
+      out.references = std::move(*references);
+    }
 
     if (const auto sha = index.FindDescriptorSha256(key); sha) {
       base::Sha256Digest digest = {};

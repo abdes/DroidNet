@@ -344,7 +344,7 @@ NOLINT_TEST_F(StaticLoadedValuesTest, FbxGeneratesMissingNormalMapTangents)
     [](const SceneAsset& scene, const GeometryAsset& geometry,
       const MaterialAsset& material) {
       ASSERT_NE(
-        material.GetNormalTexture(), oxygen::data::pak::core::kNoResourceIndex);
+        material.GetNormalTexture(), oxygen::data::kNoResourceReference);
       ASSERT_EQ(geometry.Meshes().size(), 1U);
       const auto vertices = geometry.Meshes().front()->Vertices();
       ASSERT_EQ(vertices.size(), 3U);

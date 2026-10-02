@@ -46,8 +46,8 @@ using oxygen::data::AssetKey;
 using oxygen::data::AssetType;
 using oxygen::data::CookedSource;
 using oxygen::data::CookedSourceKind;
+using oxygen::data::kNoResourceReference;
 using oxygen::data::SourceKey;
-using oxygen::data::pak::core::kNoResourceIndex;
 using oxygen::data::pak::scripting::ScriptAssetDesc;
 using oxygen::data::pak::scripting::ScriptAssetFlags;
 using oxygen::data::pak::scripting::ScriptEncoding;
@@ -135,6 +135,7 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
 
   auto descriptor = ScriptAssetDesc {};
   descriptor.header.asset_type = static_cast<uint8_t>(AssetType::kScript);
+  descriptor.header.version = oxygen::data::pak::scripting::kScriptAssetVersion;
   descriptor.flags = ScriptAssetFlags::kAllowExternalSource;
   const auto stored_external_path
     = std::string("scenes/proc-cubes/proc_cubes.lua");
@@ -148,7 +149,7 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
   writer.SetContentVersion(7);
   writer.WriteAssetDescriptor(script_key, AssetType::kScript,
     script_virtual_path, script_relpath,
-    std::as_bytes(std::span { &descriptor, 1 }));
+    std::as_bytes(std::span { &descriptor, 1 }), {});
   static_cast<void>(writer.Finish());
 
   auto request = PakBuildRequest {};
@@ -176,7 +177,7 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
 
   const auto staged_descriptor = ReadScriptAssetDescriptor(
     staged_root / std::filesystem::path(script_relpath));
-  EXPECT_NE(staged_descriptor.source_resource_index, kNoResourceIndex);
+  EXPECT_NE(staged_descriptor.source_resource_index, kNoResourceReference);
   EXPECT_EQ(static_cast<uint32_t>(staged_descriptor.flags), 0U);
   EXPECT_EQ(staged_descriptor.external_source_path[0], '\0');
 
@@ -201,8 +202,16 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
     table_in.read(reinterpret_cast<char*>(table_entries.data()),
       static_cast<std::streamsize>(table_size));
 
-    const auto source_index
-      = static_cast<uint32_t>(staged_descriptor.source_resource_index);
+    const auto index
+      = oxygen::content::lc::LooseCookedIndex::LoadFromRoot(staged_root);
+    const auto references = index.FindAssetReferences(script_key);
+    ASSERT_TRUE(references.has_value());
+    const auto resolved
+      = references->ResolveResource(staged_descriptor.source_resource_index,
+        oxygen::data::ResourceKind::kScript);
+    ASSERT_TRUE(resolved.has_value());
+    ASSERT_TRUE(resolved->has_value());
+    const auto source_index = (**resolved).get();
     ASSERT_EQ(source_index, 1U);
     EXPECT_EQ(table_entries.at(source_index).encoding, ScriptEncoding::kSource);
     EXPECT_GT(table_entries.at(source_index).size_bytes, 0U);
@@ -242,6 +251,8 @@ NOLINT_TEST_P(PakToolScriptSealingTest, RejectsWindowsRootedScriptPaths)
     const auto cooked = Root() / ("rooted-script-" + std::to_string(index++));
     ScriptAssetDesc descriptor {};
     descriptor.header.asset_type = static_cast<uint8_t>(AssetType::kScript);
+    descriptor.header.version
+      = oxygen::data::pak::scripting::kScriptAssetVersion;
     descriptor.flags = ScriptAssetFlags::kAllowExternalSource;
     ASSERT_LT(stored.size(), sizeof(descriptor.external_source_path));
     std::memcpy(descriptor.external_source_path, stored.data(), stored.size());
@@ -251,7 +262,7 @@ NOLINT_TEST_P(PakToolScriptSealingTest, RejectsWindowsRootedScriptPaths)
     writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(virtual_path),
       AssetType::kScript, virtual_path,
       layout.ScriptDescriptorRelPath("rooted"),
-      std::as_bytes(std::span { &descriptor, 1 }));
+      std::as_bytes(std::span { &descriptor, 1 }), {});
     static_cast<void>(writer.Finish());
     PakBuildRequest request {};
     request.mode = BuildMode::kFull;

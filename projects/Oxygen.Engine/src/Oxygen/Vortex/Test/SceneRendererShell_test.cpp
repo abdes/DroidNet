@@ -427,8 +427,6 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
   const auto texture_key = loader.PreloadCookedTexture(
     oxygen::vortex::testing::MakeCookedTexture1x1Rgba8Payload());
   auto material_description = oxygen::data::pak::render::MaterialAssetDesc {};
-  material_description.base_color_texture
-    = oxygen::data::pak::core::ResourceIndexT { 1U };
   const auto material = std::make_shared<oxygen::data::MaterialAsset>(
     oxygen::data::AssetKey::FromVirtualPath("/Test/Maintenance/Surface.omat"),
     material_description);

@@ -14,6 +14,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -24,6 +25,7 @@
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
@@ -116,7 +118,7 @@ auto GeometryPipeline::Collect() -> co::Co<WorkResult>
     co_return WorkResult {
       .source_id = {},
       .cooked = std::nullopt,
-      .finalized_descriptor_bytes = {},
+      .descriptor = {},
       .diagnostics = {},
       .success = false,
     };
@@ -158,12 +160,12 @@ auto GeometryPipeline::GetProgress() const noexcept -> PipelineProgress
   };
 }
 
-auto GeometryPipeline::FinalizeDescriptorBytes(
+auto GeometryPipeline::FinalizeDescriptor(
   const std::span<const MeshBufferBindings> bindings,
   const std::span<const std::byte> descriptor_bytes,
   const std::span<const MaterialKeyPatch> material_patches,
   std::vector<ImportDiagnostic>& diagnostics)
-  -> co::Co<std::optional<std::vector<std::byte>>>
+  -> co::Co<std::optional<GeometryPipeline::FinalizedDescriptor>>
 {
   if (descriptor_bytes.empty()) {
     diagnostics.push_back(MakeErrorDiagnostic(
@@ -208,6 +210,21 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
     co_return std::nullopt;
   }
 
+  AssetReferenceBuilder references;
+  const auto bind_buffer = [&references](const ResourceIndexT index) {
+    return index == data::pak::core::kNoResourceIndex
+      ? data::kNoResourceReference
+      : references.AddResource(data::ResourceKind::kBuffer, index);
+  };
+  std::unordered_map<uint32_t, data::AssetKey> patches;
+  for (const auto& patch : material_patches) {
+    if (!patches.emplace(patch.material_key_offset, patch.key).second) {
+      diagnostics.push_back(MakeErrorDiagnostic(
+        "mesh.finalize_failed", "Duplicate material patch offset", "", ""));
+      co_return std::nullopt;
+    }
+  }
+
   for (uint32_t lod_i = 0; lod_i < asset_desc.lod_count; ++lod_i) {
     data::pak::geometry::MeshDesc mesh_desc {};
     if (!read_pod(mesh_desc)) {
@@ -220,12 +237,17 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
 
     if (static_cast<data::MeshType>(mesh_desc.mesh_type)
       == data::MeshType::kSkinned) {
-      mesh_desc.info.skinned.vertex_buffer = binding.vertex_buffer;
-      mesh_desc.info.skinned.index_buffer = binding.index_buffer;
-      mesh_desc.info.skinned.joint_index_buffer = binding.joint_index_buffer;
-      mesh_desc.info.skinned.joint_weight_buffer = binding.joint_weight_buffer;
-      mesh_desc.info.skinned.inverse_bind_buffer = binding.inverse_bind_buffer;
-      mesh_desc.info.skinned.joint_remap_buffer = binding.joint_remap_buffer;
+      references.AddLogical(mesh_desc.info.skinned.skeleton_asset_key);
+      mesh_desc.info.skinned.vertex_buffer = bind_buffer(binding.vertex_buffer);
+      mesh_desc.info.skinned.index_buffer = bind_buffer(binding.index_buffer);
+      mesh_desc.info.skinned.joint_index_buffer
+        = bind_buffer(binding.joint_index_buffer);
+      mesh_desc.info.skinned.joint_weight_buffer
+        = bind_buffer(binding.joint_weight_buffer);
+      mesh_desc.info.skinned.inverse_bind_buffer
+        = bind_buffer(binding.inverse_bind_buffer);
+      mesh_desc.info.skinned.joint_remap_buffer
+        = bind_buffer(binding.joint_remap_buffer);
 
       if (!writer.WriteBlob(
             std::as_bytes(std::span<const data::pak::geometry::MeshDesc, 1>(
@@ -260,8 +282,9 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
         }
       }
     } else {
-      mesh_desc.info.standard.vertex_buffer = binding.vertex_buffer;
-      mesh_desc.info.standard.index_buffer = binding.index_buffer;
+      mesh_desc.info.standard.vertex_buffer
+        = bind_buffer(binding.vertex_buffer);
+      mesh_desc.info.standard.index_buffer = bind_buffer(binding.index_buffer);
 
       if (!writer.WriteBlob(
             std::as_bytes(std::span<const data::pak::geometry::MeshDesc, 1>(
@@ -279,6 +302,25 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
           "mesh.finalize_failed", "Failed to read submesh descriptor", "", ""));
         co_return std::nullopt;
       }
+
+      const auto position = writer.Position();
+      constexpr auto kMaterialOffset
+        = offsetof(data::pak::geometry::SubMeshDesc, material_asset_key);
+      if (!position
+        || *position > std::numeric_limits<uint32_t>::max() - kMaterialOffset) {
+        diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
+          "Submesh material offset exceeds descriptor bounds", "", ""));
+        co_return std::nullopt;
+      }
+      const auto material_offset
+        = static_cast<uint32_t>(*position + kMaterialOffset);
+      if (const auto patch = patches.find(material_offset);
+        patch != patches.end()) {
+        submesh_desc.material_asset_key = patch->second;
+        patches.erase(patch);
+      }
+      references.AddAsset(
+        submesh_desc.material_asset_key, data::AssetType::kMaterial);
 
       if (!writer.WriteBlob(
             std::as_bytes(std::span<const data::pak::geometry::SubMeshDesc, 1>(
@@ -312,33 +354,10 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
   const auto output_span = output_stream.Data();
   std::vector output_bytes(output_span.begin(), output_span.end());
 
-  if (!material_patches.empty()) {
-    serio::MemoryStream patch_stream(
-      std::span(output_bytes.data(), output_bytes.size()));
-    serio::Writer patch_writer(patch_stream);
-    const auto patch_pack = patch_writer.ScopedAlignment(1);
-
-    for (const auto& patch : material_patches) {
-      const auto offset = static_cast<size_t>(patch.material_key_offset);
-      if (offset + sizeof(data::AssetKey) > output_bytes.size()) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
-          "Material patch offset is outside descriptor bounds", "", ""));
-        co_return std::nullopt;
-      }
-
-      if (!patch_stream.Seek(offset)) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
-          "Failed to seek to material patch offset", "", ""));
-        co_return std::nullopt;
-      }
-
-      if (!patch_writer.WriteBlob(
-            std::as_bytes(std::span<const data::AssetKey, 1>(&patch.key, 1)))) {
-        diagnostics.push_back(MakeErrorDiagnostic(
-          "mesh.finalize_failed", "Failed to write material patch", "", ""));
-        co_return std::nullopt;
-      }
-    }
+  if (!patches.empty()) {
+    diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
+      "Material patch does not identify a submesh material field", "", ""));
+    co_return std::nullopt;
   }
 
   if (config_.with_content_hashing) {
@@ -369,7 +388,10 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
     }
   }
 
-  co_return output_bytes;
+  co_return FinalizedDescriptor {
+    .bytes = std::move(output_bytes),
+    .references = std::move(references).Build(),
+  };
 }
 
 auto GeometryPipeline::Worker() -> co::Co<>
@@ -399,7 +421,7 @@ auto GeometryPipeline::Worker() -> co::Co<>
 
     const auto cook_start = std::chrono::steady_clock::now();
     std::vector<ImportDiagnostic> diagnostics;
-    auto finalized = co_await FinalizeDescriptorBytes(item.bindings,
+    auto finalized = co_await FinalizeDescriptor(item.bindings,
       item.cooked.descriptor_bytes, item.material_patches, diagnostics);
 
     if (item.stop_token.stop_requested()) {
@@ -409,7 +431,7 @@ auto GeometryPipeline::Worker() -> co::Co<>
 
     if (finalized && item.cooked.material_slot_provenance) {
       try {
-        serio::ReadOnlyMemoryStream stream(*finalized);
+        serio::ReadOnlyMemoryStream stream(finalized->bytes);
         serio::Reader reader(stream);
         const LoaderContext context {
           .current_asset_key = item.cooked.geometry_key,
@@ -432,9 +454,9 @@ auto GeometryPipeline::Worker() -> co::Co<>
         ? std::optional<MeshBuildPipeline::CookedGeometryPayload>(
             std::move(item.cooked))
         : std::nullopt,
-      .finalized_descriptor_bytes = finalized.has_value()
+      .descriptor = finalized.has_value()
         ? std::move(*finalized)
-        : std::vector<std::byte> {},
+        : FinalizedDescriptor {},
       .diagnostics = std::move(diagnostics),
       .telemetry = ImportWorkItemTelemetry {
         .cook_duration = MakeDuration(
@@ -456,7 +478,7 @@ auto GeometryPipeline::ReportCancelled(WorkItem item) -> co::Co<>
   WorkResult canceled {
     .source_id = std::move(item.source_id),
     .cooked = std::nullopt,
-    .finalized_descriptor_bytes = {},
+    .descriptor = {},
     .diagnostics = {},
     .success = false,
   };

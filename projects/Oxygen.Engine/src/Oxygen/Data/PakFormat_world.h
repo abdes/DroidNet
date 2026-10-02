@@ -18,6 +18,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_core.h>
 
@@ -53,7 +54,7 @@ inline constexpr uint32_t kSceneNodeFlags_Known = kSceneNodeFlags_Inheritable
 //!
 //! @note Scene descriptors include a trailing SceneEnvironment block (empty
 //! allowed).
-inline constexpr uint8_t kSceneAssetVersion = 9;
+inline constexpr uint8_t kSceneAssetVersion = version::kSceneAssetVersion;
 //! Index type for scene node tables.
 using SceneNodeIndexT = uint32_t;
 
@@ -132,9 +133,11 @@ struct SceneAssetDesc {
   // Points to an array of `SceneComponentTableDesc` entries.
   core::OffsetT component_table_directory_offset = 0;
   uint32_t component_table_count = 0;
+  //! Descriptor-local script slots; each slot locates its own parameter array.
+  SceneComponentTable script_slots {};
 };
 #pragma pack(pop)
-static_assert(sizeof(SceneAssetDesc) == 139);
+static_assert(sizeof(SceneAssetDesc) == 155);
 
 //! Scene component table directory entry.
 /*!
@@ -561,7 +564,8 @@ struct SkySphereEnvironmentRecord {
 static_assert(sizeof(SkySphereEnvironmentRecord) == 64);
 
 //! Packed PostProcessVolume environment record.
-inline constexpr uint32_t kExposureExtensionVersion = 1U;
+inline constexpr uint32_t kExposureExtensionVersion
+  = version::kExposureExtensionVersion;
 
 #pragma pack(push, 1)
 struct ExposureCompensationKeyRecord {
@@ -613,7 +617,7 @@ struct PostProcessVolumeEnvironmentRecord {
   float auto_exposure_black_influence = 0.0F;
   float auto_exposure_transition_distance_ev
     = engine::kDefaultExposureTransitionDistance;
-  core::ResourceIndexT auto_exposure_metering_mask;
+  ResourceReferenceIndex auto_exposure_metering_mask = kNoResourceReference;
   std::array<uint32_t, 3> exposure_reserved {};
   uint32_t curve_key_count = 0U;
   std::array<uint32_t, 2> curve_reserved {};

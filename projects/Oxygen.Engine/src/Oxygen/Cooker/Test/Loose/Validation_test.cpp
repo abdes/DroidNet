@@ -50,7 +50,7 @@ NOLINT_TEST_F(ValidationTest, ValidateRootValidSucceeds)
   writer.WriteAssetDescriptor(
     oxygen::data::AssetKey::FromVirtualPath("/Content/test.omat"),
     oxygen::data::AssetType::kMaterial, "/Content/test.omat", "test.omat",
-    std::as_bytes(std::span { &descriptor, 1 }));
+    std::as_bytes(std::span { &descriptor, 1 }), {});
   static_cast<void>(writer.Finish());
   EXPECT_NO_THROW({ ValidateRoot(TempDir()); });
 }

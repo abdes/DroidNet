@@ -104,7 +104,7 @@ auto WriteGeometryRoot(const std::filesystem::path& root,
   oxygen::content::import::LooseCookedWriter writer(root);
   writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(virtual_path),
     oxygen::data::AssetType::kGeometry, virtual_path,
-    "Geometry/Inspection.ogeo", bytes);
+    "Geometry/Inspection.ogeo", bytes, {});
   [[maybe_unused]] const auto result = writer.Finish();
 }
 
@@ -195,7 +195,7 @@ auto WriteOverrideScene(const std::filesystem::path& root,
   oxygen::content::import::LooseCookedWriter writer(root);
   writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(virtual_path),
     oxygen::data::AssetType::kScene, virtual_path, "Scenes/Inspection.oscene",
-    bytes);
+    bytes, {});
   [[maybe_unused]] const auto result = writer.Finish();
 }
 

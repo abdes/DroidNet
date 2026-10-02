@@ -16,6 +16,7 @@
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ShaderReference.h>
@@ -56,23 +57,32 @@ auto MaterialBinderTest::MakeMaterial(const MaterialRecipe& recipe)
   -> std::shared_ptr<const data::MaterialAsset>
 {
   data::pak::render::MaterialAssetDesc desc {};
-  desc.base_color_texture = data::pak::core::ResourceIndexT {
-    recipe.raw_base_color_index,
-  };
-  desc.normal_texture = data::pak::core::ResourceIndexT {
-    recipe.raw_normal_index,
-  };
+  desc.base_color_texture = data::ResourceReferenceIndex { 0U };
+  desc.normal_texture = data::ResourceReferenceIndex { 1U };
   std::ranges::copy(recipe.base_color, std::begin(desc.base_color));
   std::ranges::copy(recipe.uv_scale, std::begin(desc.uv_scale));
   std::ranges::copy(recipe.uv_offset, std::begin(desc.uv_offset));
   desc.uv_rotation_radians = recipe.uv_rotation_radians;
   desc.uv_set = recipe.uv_set;
-  return std::make_shared<data::MaterialAsset>(data::AssetKey {}, desc,
+  auto material = std::make_shared<data::MaterialAsset>(data::AssetKey {}, desc,
     std::vector<data::ShaderReference> {},
     std::vector {
       recipe.base_color_key,
       recipe.normal_key,
     });
+  auto references = data::AssetReferences::Create(
+    {
+      { .kind = data::ResourceKind::kTexture,
+        .index = ResourceIndexT { recipe.raw_base_color_index } },
+      { .kind = data::ResourceKind::kTexture,
+        .index = ResourceIndexT { recipe.raw_normal_index } },
+    },
+    {});
+  if (!references) {
+    throw std::runtime_error(references.error());
+  }
+  material->SetReferences(std::move(*references));
+  return material;
 }
 
 auto MaterialBinderTest::SetUp() -> void

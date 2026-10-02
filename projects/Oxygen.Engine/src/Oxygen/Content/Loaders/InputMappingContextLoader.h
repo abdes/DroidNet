@@ -17,6 +17,7 @@
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -84,6 +85,12 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
     desc_blob, "input mapping context asset", "InputMappingContextAssetDesc");
   data::pak::input::InputMappingContextAssetDesc desc {};
   std::memcpy(&desc, desc_blob->data(), sizeof(desc));
+
+  if (desc.header.version
+    != data::pak::input::kInputMappingContextAssetVersion) {
+    throw std::runtime_error(
+      "Input descriptor version is not current; re-cook the asset");
+  }
 
   if (static_cast<data::AssetType>(desc.header.asset_type)
     != data::AssetType::kInputMappingContext) {
@@ -199,6 +206,30 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
         throw std::runtime_error("input combo trigger aux range out of bounds");
       }
     }
+  }
+
+  if (context.asset_references) {
+    std::vector<data::KeyReference> references;
+    references.reserve(mappings.size() + triggers.size() + trigger_aux.size());
+    const auto add_action = [&references](const data::AssetKey& key) -> void {
+      if (!key.IsNil()) {
+        references.push_back({
+          .key = key,
+          .kind = data::KeyReferenceKind::kAsset,
+          .expected_type = data::AssetType::kInputAction,
+        });
+      }
+    };
+    for (const auto& mapping : mappings) {
+      add_action(mapping.action_asset_key);
+    }
+    for (const auto& trigger : triggers) {
+      add_action(trigger.linked_action_asset_key);
+    }
+    for (const auto& auxiliary : trigger_aux) {
+      add_action(auxiliary.action_asset_key);
+    }
+    context.ValidateReferences({}, references);
   }
 
   if (!context.parse_only) {

@@ -548,10 +548,8 @@ NOLINT_TEST(
     = ReadStructAt<data::pak::geometry::MeshDesc>(descriptor_bytes, offset);
   EXPECT_EQ(
     mesh_desc.mesh_type, static_cast<uint8_t>(data::MeshType::kStandard));
-  EXPECT_NE(
-    mesh_desc.info.standard.vertex_buffer, data::pak::core::kNoResourceIndex);
-  EXPECT_NE(
-    mesh_desc.info.standard.index_buffer, data::pak::core::kNoResourceIndex);
+  EXPECT_NE(mesh_desc.info.standard.vertex_buffer, data::kNoResourceReference);
+  EXPECT_NE(mesh_desc.info.standard.index_buffer, data::kNoResourceReference);
   EXPECT_EQ(mesh_desc.submesh_count, 1U);
   EXPECT_EQ(mesh_desc.mesh_view_count, 1U);
 
@@ -924,7 +922,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   auto writer = LooseCookedWriter(library);
   const auto bytes = std::array { std::byte { 1 } };
   writer.WriteAssetDescriptor(library_key, data::AssetType::kMaterial,
-    "/.cooked/Materials/new.omat", "Materials/new.omat", bytes);
+    "/.cooked/Materials/new.omat", "Materials/new.omat", bytes, {});
   static_cast<void>(writer.Finish());
   WriteTextFile(cooked_root / "Materials/new.omat", "new material");
   for (const auto own_wins : { true, false }) {

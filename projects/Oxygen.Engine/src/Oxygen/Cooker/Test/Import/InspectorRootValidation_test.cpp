@@ -84,7 +84,7 @@ auto WriteSceneRoot(
   writer.WriteAssetDescriptor(
     oxygen::data::AssetKey::FromVirtualPath(virtual_path),
     oxygen::data::AssetType::kScene, virtual_path, "Scenes/Inspection.oscene",
-    bytes);
+    bytes, {});
   [[maybe_unused]] const auto result = writer.Finish();
 }
 
@@ -100,7 +100,7 @@ auto WriteMaterialRoot(const std::filesystem::path& root, const uint8_t version)
   writer.WriteAssetDescriptor(
     oxygen::data::AssetKey::FromVirtualPath(virtual_path),
     oxygen::data::AssetType::kMaterial, virtual_path,
-    "Materials/Inspection.omat", std::as_bytes(std::span(&descriptor, 1)));
+    "Materials/Inspection.omat", std::as_bytes(std::span(&descriptor, 1)), {});
   [[maybe_unused]] const auto result = writer.Finish();
 }
 

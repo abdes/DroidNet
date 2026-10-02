@@ -79,7 +79,7 @@ namespace {
     const std::size_t n = (std::min)(maxn, std::strlen(name));
     std::memcpy(desc.header.name, name, n);
     desc.header.name[n] = '\0';
-    desc.header.version = 1;
+    desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
     desc.header.streaming_priority = 255;
     desc.material_domain = static_cast<uint8_t>(domain);
     desc.flags = pak::render::kMaterialFlag_NoTextureSampling;

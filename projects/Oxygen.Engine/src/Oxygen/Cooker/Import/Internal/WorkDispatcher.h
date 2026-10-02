@@ -98,7 +98,7 @@ private:
 
   [[nodiscard]] auto EmitGeometryPayload(
     const MeshBuildPipeline::CookedGeometryPayload& cooked,
-    std::span<const std::byte> finalized_descriptor_bytes) -> bool;
+    GeometryPipeline::FinalizedDescriptor descriptor) -> bool;
 
   [[nodiscard]] auto EmitTexturePayload(TexturePipeline::WorkResult& result)
     -> std::optional<uint32_t>;

@@ -76,6 +76,10 @@ template <PakResource T> struct CookedResourceData final {
 */
 class IAssetLoader {
 public:
+  //! Capture one layer view for related loads. Source-invariant providers need
+  //! no state.
+  [[nodiscard]] virtual auto BeginLoadScope() -> ContentLoadScope { return {}; }
+
   enum class ContentSourceKind : uint8_t {
     kPak = 0,
     kLooseCooked = 1,
@@ -222,7 +226,7 @@ public:
   //! Resolve a nonzero texture index in a loaded asset's owning source.
   [[nodiscard]] virtual auto MakeTextureResourceKeyForAsset(
     const data::Asset& context_asset,
-    data::pak::core::ResourceIndexT resource_index)
+    data::ResourceReferenceIndex resource_index)
     -> std::optional<ResourceKey> = 0;
 
   //! Begin loading a texture resource and invoke `on_complete` on completion.
@@ -462,12 +466,12 @@ public:
   //! Build script resource key from a loaded asset's source and table index.
   [[nodiscard]] virtual auto MakeScriptResourceKeyForAsset(
     const data::Asset& context_asset,
-    data::pak::core::ResourceIndexT resource_index)
+    data::ResourceReferenceIndex resource_index)
     -> std::optional<ResourceKey> = 0;
   //! Read a script resource by table index from the context asset's source.
   [[nodiscard]] virtual auto ReadScriptResourceForAsset(
     const data::Asset& context_asset,
-    data::pak::core::ResourceIndexT resource_index) const
+    data::ResourceReferenceIndex resource_index) const
     -> std::shared_ptr<const data::ScriptResource> = 0;
 
   //! Get cached physics scene sidecar asset without triggering a load.
@@ -493,21 +497,20 @@ public:
   [[nodiscard]] virtual auto MakePhysicsResourceKeyForAsset(
     const data::Asset& context_asset, const data::AssetKey& resource_asset_key)
     -> std::optional<ResourceKey> = 0;
-  //! Read a collision shape descriptor by asset key in the context asset's
-  //! source.
+  //! Read a collision shape descriptor frozen in the context asset's bindings.
   [[nodiscard]] virtual auto ReadCollisionShapeAssetDescForAsset(
     const data::Asset& context_asset,
     const data::AssetKey& shape_asset_key) const
     -> std::optional<data::pak::physics::CollisionShapeAssetDesc> = 0;
-  //! Read a physics material descriptor by asset key in the context asset's
-  //! source.
+  //! Read a physics material descriptor frozen in the context asset's bindings.
   [[nodiscard]] virtual auto ReadPhysicsMaterialAssetDescForAsset(
     const data::Asset& context_asset,
     const data::AssetKey& material_asset_key) const
     -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc> = 0;
-  //! Find a physics scene sidecar in the same source that targets `scene_key`.
+  //! Find the effective physics sidecar in the scene load scope.
   [[nodiscard]] virtual auto FindPhysicsSidecarAssetKeyForScene(
-    const data::Asset& scene_asset) const -> std::optional<data::AssetKey> = 0;
+    const data::Asset& scene_asset, const content::ContentLoadScope& scope)
+    -> std::optional<data::AssetKey> = 0;
 
   //! Get cached input action asset without triggering a load.
   [[nodiscard]] virtual auto GetInputActionAsset(const data::AssetKey& key,

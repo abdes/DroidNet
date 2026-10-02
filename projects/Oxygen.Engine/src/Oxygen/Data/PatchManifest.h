@@ -13,21 +13,13 @@
 #include <vector>
 
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::data {
 
-struct PatchCompatibilityPolicySnapshot final {
-  bool require_exact_base_set = true;
-  bool require_content_version_match = true;
-  bool require_base_source_key_match = true;
-  bool require_catalog_digest_match = true;
-};
-
 struct PatchCompatibilityEnvelope final {
-  std::vector<SourceKey> required_base_source_keys;
-  std::vector<uint16_t> required_base_content_versions;
-  std::vector<std::array<uint8_t, 32>> required_base_catalog_digests;
+  std::vector<PakCatalogBase> required_base_layers;
   uint16_t patch_content_version = 0;
 };
 
@@ -37,7 +29,6 @@ struct PatchManifest final {
   std::vector<AssetKey> deleted;
 
   PatchCompatibilityEnvelope compatibility_envelope {};
-  PatchCompatibilityPolicySnapshot compatibility_policy_snapshot {};
 
   std::string diff_basis_identifier = "descriptor_plus_transitive_resources_v1";
 

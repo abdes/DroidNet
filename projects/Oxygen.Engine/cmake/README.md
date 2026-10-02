@@ -457,7 +457,7 @@ The root `.python-version` selects Python 3.14. See the
 
 CMake checks generator imports, environment ownership and dependency freshness.
 It tracks the lock, manifests and interpreter-version request so changes rerun
-that check before generation. Bindless and PakGen targets never install packages.
+that check before generation. Bindless targets never install packages.
 Independent Conan source builds receive hashed requirements exported from the
 same lock and provision their own environment without the developer checkout.
 

@@ -14,7 +14,6 @@
 
 #include "Fixtures/LoaderTestFixtures.h"
 
-#include <Oxygen/Content/DescriptorDependencies.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialSlotId.h>
@@ -187,11 +186,12 @@ NOLINT_TEST_F(
     WriteBlob(view);
   }
   auto context = MakeLoaderContext(true, true);
-  const auto result = oxygen::content::InspectDescriptorDependencies(
-    *context.desc_reader, {}, oxygen::data::AssetType::kGeometry);
-  EXPECT_TRUE(result.complete);
-  ASSERT_EQ(result.assets.size(), 1U);
-  EXPECT_EQ(result.assets.front(), material);
+  const auto collector
+    = std::make_shared<oxygen::content::internal::DependencyCollector>();
+  context.dependency_collector = collector;
+  const auto geometry = oxygen::content::loaders::LoadGeometryAsset(context);
+  ASSERT_NE(geometry, nullptr);
+  EXPECT_THAT(collector->AssetDependencies(), ::testing::ElementsAre(material));
 }
 
 } // namespace

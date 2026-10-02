@@ -66,6 +66,7 @@
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
@@ -237,6 +238,7 @@ namespace {
     std::string source_mesh_ref;
     data::AssetKey source_mesh_asset_key {};
     std::string source_mesh_descriptor_relpath;
+    data::AssetReferences source_mesh_references;
     std::optional<std::string> collision_mesh_ref;
     std::vector<uint32_t> pinned_vertices;
     std::vector<uint32_t> kinematic_vertices;
@@ -1262,13 +1264,8 @@ namespace {
     return parsed;
   }
 
-  struct ResolvedAssetRecord final {
-    data::AssetType type = data::AssetType::kUnknown;
-    std::string descriptor_relpath;
-  };
-
   using AssetRecordMap
-    = std::unordered_map<data::AssetKey, ResolvedAssetRecord>;
+    = std::unordered_map<data::AssetKey, const lc::AssetEntry*>;
 
   auto BuildAssetRecordMap(const lc::Inspection& inspection) -> AssetRecordMap
   {
@@ -1276,11 +1273,7 @@ namespace {
     const auto assets = inspection.Assets();
     out.reserve(assets.size());
     for (const auto& asset : assets) {
-      out.insert_or_assign(asset.key,
-        ResolvedAssetRecord {
-          .type = static_cast<data::AssetType>(asset.asset_type),
-          .descriptor_relpath = asset.descriptor_relpath,
-        });
+      out.insert_or_assign(asset.key, &asset);
     }
     return out;
   }
@@ -1345,7 +1338,8 @@ namespace {
       return std::nullopt;
     }
 
-    if (target_it->second.type != expected_type) {
+    if (static_cast<data::AssetType>(target_it->second->asset_type)
+      != expected_type) {
       AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
         std::string(wrong_type_code),
         "Resolved reference has unexpected asset type",
@@ -1598,7 +1592,7 @@ namespace {
       records.at(i).source_mesh_asset_key = *source_mesh_key;
       const auto source_mesh_entry = ctx.target_assets.find(*source_mesh_key);
       if (source_mesh_entry == ctx.target_assets.end()
-        || source_mesh_entry->second.descriptor_relpath.empty()) {
+        || source_mesh_entry->second->descriptor_relpath.empty()) {
         AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
           "physics.sidecar.source_mesh_ref_unresolved",
           "Resolved source mesh has no descriptor path in target cooked root",
@@ -1606,7 +1600,9 @@ namespace {
         continue;
       }
       records.at(i).source_mesh_descriptor_relpath
-        = source_mesh_entry->second.descriptor_relpath;
+        = source_mesh_entry->second->descriptor_relpath;
+      records.at(i).source_mesh_references
+        = source_mesh_entry->second->references;
 
       const auto& collision_mesh_ref = records.at(i).collision_mesh_ref;
       if (collision_mesh_ref) {
@@ -2139,7 +2135,8 @@ namespace {
   }
 
   auto ParseGeometryTopologyInput(std::span<const std::byte> descriptor_bytes,
-    SoftBodyGeometryTopologyInput& out, std::string& error) -> bool
+    const data::AssetReferences& references, SoftBodyGeometryTopologyInput& out,
+    std::string& error) -> bool
   {
     using data::MeshType;
     using data::pak::geometry::GeometryAssetDesc;
@@ -2168,8 +2165,16 @@ namespace {
     const auto mesh_type = static_cast<MeshType>(mesh_desc.mesh_type);
     if (mesh_type == MeshType::kStandard) {
       out.kind = SoftBodyGeometryTopologyInput::Kind::kStandard;
-      out.vertex_buffer = mesh_desc.info.standard.vertex_buffer;
-      out.index_buffer = mesh_desc.info.standard.index_buffer;
+      const auto vertex = references.ResolveResource(
+        mesh_desc.info.standard.vertex_buffer, data::ResourceKind::kBuffer);
+      const auto index = references.ResolveResource(
+        mesh_desc.info.standard.index_buffer, data::ResourceKind::kBuffer);
+      if (!vertex || !index) {
+        error = "Soft-body geometry has invalid resource references";
+        return false;
+      }
+      out.vertex_buffer = vertex->value_or(data::pak::core::kNoResourceIndex);
+      out.index_buffer = index->value_or(data::pak::core::kNoResourceIndex);
     } else if (mesh_type == MeshType::kProcedural) {
       out.kind = SoftBodyGeometryTopologyInput::Kind::kProcedural;
       out.procedural_name = DecodeFixedName(mesh_desc.name);
@@ -2601,7 +2606,8 @@ namespace {
     }
 
     auto topology = SoftBodyGeometryTopologyInput {};
-    if (!ParseGeometryTopologyInput(descriptor_bytes, topology, error)) {
+    if (!ParseGeometryTopologyInput(
+          descriptor_bytes, source.source_mesh_references, topology, error)) {
       return false;
     }
 
@@ -3475,8 +3481,8 @@ namespace {
       target_context->cooked_root, request.loose_cooked_layout);
   }
 
-  auto BuildPhysicsSidecarTables(const PhysicsSidecarDocument& parsed)
-    -> std::vector<TableBlob>
+  auto BuildPhysicsSidecarTables(const PhysicsSidecarDocument& parsed,
+    AssetReferenceBuilder& references) -> std::vector<TableBlob>
   {
     auto rigid_records = ExtractRecordVector(
       parsed.rigid_bodies, &RigidBodyBindingSource::record);
@@ -3529,6 +3535,33 @@ namespace {
       vehicle_records.push_back(record);
     }
     auto aggregate_records = parsed.aggregates;
+    for (const auto& record : rigid_records) {
+      references.AddAsset(
+        record.shape_asset_key, data::AssetType::kCollisionShape);
+      references.AddAsset(
+        record.material_asset_key, data::AssetType::kPhysicsMaterial);
+    }
+    for (const auto& record : collider_records) {
+      references.AddAsset(
+        record.shape_asset_key, data::AssetType::kCollisionShape);
+      references.AddAsset(
+        record.material_asset_key, data::AssetType::kPhysicsMaterial);
+    }
+    for (const auto& record : character_records) {
+      references.AddAsset(
+        record.shape_asset_key, data::AssetType::kCollisionShape);
+      references.AddAsset(
+        record.inner_shape_asset_key, data::AssetType::kCollisionShape);
+    }
+    for (const auto& source : soft_body_records) {
+      references.AddPhysicsResource(source.record.topology_asset_key);
+    }
+    for (const auto& record : joint_records) {
+      references.AddPhysicsResource(record.constraint_asset_key);
+    }
+    for (const auto& record : vehicle_records) {
+      references.AddPhysicsResource(record.constraint_asset_key);
+    }
 
     auto tables = std::vector<TableBlob> {};
     SortAndAppendTable(tables, phys::PhysicsBindingType::kRigidBody,
@@ -3577,7 +3610,8 @@ namespace {
 
   auto SerializeAndEmitPhysicsSidecar(
     const SidecarResolvedSceneState& scene_state, const ImportRequest& request,
-    const std::vector<TableBlob>& tables, ImportSession& session) -> bool
+    const std::vector<TableBlob>& tables, ImportSession& session,
+    data::AssetReferences references) -> bool
   {
     auto sidecar_relpath
       = ReplaceSceneExtensionWithPhysics(scene_state.scene_descriptor_relpath);
@@ -3605,7 +3639,7 @@ namespace {
     try {
       session.AssetEmitter().Emit(sidecar_key, data::AssetType::kPhysicsScene,
         sidecar_virtual_path, sidecar_relpath,
-        std::span<const std::byte>(*descriptor_bytes));
+        std::span<const std::byte>(*descriptor_bytes), std::move(references));
     } catch (const std::exception& ex) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "physics.sidecar.descriptor_emit_failed",
@@ -3815,9 +3849,12 @@ auto PhysicsSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
-  const auto tables = BuildPhysicsSidecarTables(*parsed);
-  if (!SerializeAndEmitPhysicsSidecar(
-        *resolved_scene_state, request, tables, *session)) {
+  AssetReferenceBuilder references;
+  references.AddLogical(
+    resolved_scene_state->scene_key, data::AssetType::kScene);
+  const auto tables = BuildPhysicsSidecarTables(*parsed, references);
+  if (!SerializeAndEmitPhysicsSidecar(*resolved_scene_state, request, tables,
+        *session, std::move(references).Build())) {
     co_return false;
   }
 

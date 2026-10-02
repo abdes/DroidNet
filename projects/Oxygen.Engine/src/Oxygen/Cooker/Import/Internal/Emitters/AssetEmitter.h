@@ -24,6 +24,7 @@
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/OxCo/Co.h>
 
@@ -54,6 +55,7 @@ struct EmittedAssetRecord {
 
   //! SHA-256 hash of the descriptor bytes (for index validation).
   std::optional<base::Sha256Digest> descriptor_sha256;
+  data::AssetReferences references;
 };
 
 //! Emits asset descriptors with async I/O.
@@ -149,13 +151,13 @@ public:
   */
   OXGN_COOK_API auto Emit(const data::AssetKey& key, data::AssetType asset_type,
     std::string_view virtual_path, std::string_view descriptor_relpath,
-    std::span<const std::byte> bytes) -> void;
+    std::span<const std::byte> bytes, data::AssetReferences references) -> void;
 
   //! Emit an asset descriptor file and wait for the write to complete.
   OXGN_COOK_NDAPI auto EmitSync(const data::AssetKey& key,
     data::AssetType asset_type, std::string_view virtual_path,
-    std::string_view descriptor_relpath, std::span<const std::byte> bytes)
-    -> co::Co<void>;
+    std::string_view descriptor_relpath, std::span<const std::byte> bytes,
+    data::AssetReferences references) -> co::Co<void>;
 
   //=== State Query
   //===-------------------------------------------------------//
@@ -200,7 +202,8 @@ private:
 
   auto RecordAsset(const data::AssetKey& key, data::AssetType asset_type,
     std::string_view virtual_path, std::string_view descriptor_relpath,
-    uint64_t descriptor_size, std::optional<base::Sha256Digest> sha256) -> void;
+    uint64_t descriptor_size, data::AssetReferences references,
+    std::optional<base::Sha256Digest> sha256) -> void;
 
   auto QueueDescriptorWrite(const std::filesystem::path& descriptor_path,
     std::string_view descriptor_relpath, std::span<const std::byte> bytes)

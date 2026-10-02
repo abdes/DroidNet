@@ -254,52 +254,6 @@ auto EmitScriptResourceTablePayload(
 }
 
 template <typename Sink>
-auto EmitScriptSlotTablePayload(
-  const pak::PakScriptSlotTableSerializationInput& input, Sink& sink) -> bool
-{
-  size_t slot_cursor = 0;
-  const auto write_ok = EmitFixedRecordPayload<script::ScriptSlotRecord>(
-    input.entry_count,
-    [&input, &slot_cursor](
-      const uint32_t slot_index, script::ScriptSlotRecord& record) -> bool {
-      if (slot_cursor >= input.slots.size()) {
-        return true;
-      }
-
-      const auto& slot = input.slots[slot_cursor];
-      if (slot.slot_index < slot_index) {
-        return false;
-      }
-      if (slot.slot_index > slot_index) {
-        return true;
-      }
-
-      constexpr auto kParamRecordSize
-        = uint64_t { sizeof(script::ScriptParamRecord) };
-      if (slot.params_array_index
-        > (std::numeric_limits<uint64_t>::max)() / kParamRecordSize) {
-        return false;
-      }
-      const auto relative_offset
-        = static_cast<uint64_t>(slot.params_array_index) * kParamRecordSize;
-      if (relative_offset
-        > (std::numeric_limits<uint64_t>::max)() - input.params_base_offset) {
-        return false;
-      }
-      record.script_asset_key = slot.script_asset_key;
-      record.params_array_offset = input.params_base_offset + relative_offset;
-      record.params_count = slot.params_count;
-      record.execution_order = slot.execution_order;
-      record.flags = slot.flags;
-      ++slot_cursor;
-      return true;
-    },
-    sink);
-
-  return write_ok && slot_cursor == input.slots.size();
-}
-
-template <typename Sink>
 auto EmitPhysicsTablePayload(
   const pak::PakResourceTableSerializationInput& input, Sink& sink) -> bool
 {
@@ -331,6 +285,7 @@ auto EmitAssetDirectoryPayload(
     record.entry_offset = entry.entry_offset;
     record.desc_offset = entry.descriptor_offset;
     record.desc_size = entry.descriptor_size;
+    record.references = entry.references;
     if (!sink.WriteObject(record)) {
       return false;
     }
@@ -462,22 +417,6 @@ auto StoreScriptResourceTablePayload(
   return StorePayload(
     [&input](
       auto& sink) { return EmitScriptResourceTablePayload(input, sink); },
-    out_bytes);
-}
-
-auto MeasureScriptSlotTablePayload(
-  const PakScriptSlotTableSerializationInput& input) -> std::optional<uint64_t>
-{
-  return MeasurePayload(
-    [&input](auto& sink) { return EmitScriptSlotTablePayload(input, sink); });
-}
-
-auto StoreScriptSlotTablePayload(
-  const PakScriptSlotTableSerializationInput& input,
-  std::vector<std::byte>& out_bytes) -> bool
-{
-  return StorePayload(
-    [&input](auto& sink) { return EmitScriptSlotTablePayload(input, sink); },
     out_bytes);
 }
 

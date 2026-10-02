@@ -150,7 +150,7 @@ namespace {
     }
 
     auto base_catalogs = ordered_json::array();
-    for (const auto& path : snapshot.base_catalog_paths) {
+    for (const auto& path : snapshot.base_pak_paths) {
       base_catalogs.push_back(path.string());
     }
 
@@ -164,7 +164,7 @@ namespace {
       { "source_key", data::to_string(snapshot.request.source_key) },
       { "content_version", snapshot.request.content_version },
       { "sources", std::move(sources) },
-      { "base_catalogs", std::move(base_catalogs) },
+      { "base_paks", std::move(base_catalogs) },
       { "options",
         ordered_json {
           { "deterministic", snapshot.request.options.deterministic },
@@ -174,17 +174,7 @@ namespace {
           { "emit_manifest_in_full",
             snapshot.request.options.emit_manifest_in_full },
         } },
-      { "patch_compatibility",
-        ordered_json {
-          { "require_exact_base_set",
-            snapshot.request.patch_compat.require_exact_base_set },
-          { "require_content_version_match",
-            snapshot.request.patch_compat.require_content_version_match },
-          { "require_base_source_key_match",
-            snapshot.request.patch_compat.require_base_source_key_match },
-          { "require_catalog_digest_match",
-            snapshot.request.patch_compat.require_catalog_digest_match },
-        } },
+
     };
   }
 

@@ -539,27 +539,12 @@ exit $LASTEXITCODE
             else:
                 for flag in ("--help", "-h"):
                     with self.subTest(script=source.name, flag=flag):
-                        # Isolated Python proves help does not require PakGen or
-                        # third-party modules to be installed/imported.
+                        # Help must work without importing optional third-party modules.
                         result = subprocess.run([sys.executable, "-I", str(source), flag], cwd=self.root, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15)
                         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                         self.assertIn("--help", result.stdout)
         self.assertFalse((self.root / "Examples/Content/pak").exists())
         self.assertFalse((self.root / "out").exists())
-
-    def test_make_pak_imports_current_cooker_api(self):
-        helper = ENGINE / "Examples/Content/internal/make_pak.py"
-        expected = ENGINE / "src/Oxygen/Cooker/Tools/PakGen/src/pakgen/api.py"
-        command = (
-            "import importlib.util, inspect; from pathlib import Path; "
-            f"spec=importlib.util.spec_from_file_location('example_make_pak', {str(helper)!r}); "
-            "module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); "
-            "options, build=module._import_pakgen_api(module._workspace_root_from_here()); "
-            f"assert Path(inspect.getfile(options)).resolve() == Path({str(expected)!r}).resolve(); "
-            "print('Current Cooker PakGen API imported')"
-        )
-        result = subprocess.run([sys.executable, "-c", command], cwd=self.root, capture_output=True, text=True, encoding="utf-8", errors="replace")
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_relative_tool_paths_logs_and_packaging_whatif(self):
         caller = self.root / "caller"

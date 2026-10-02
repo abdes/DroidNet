@@ -21,6 +21,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -29,6 +30,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
@@ -36,6 +38,7 @@
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Tools/PakTool/ScriptSealing.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -382,7 +385,9 @@ namespace {
     auto descriptor = ScriptAssetDesc {};
     std::memcpy(&descriptor, descriptor_bytes->data(), sizeof(ScriptAssetDesc));
     if (static_cast<AssetType>(descriptor.header.asset_type)
-      != AssetType::kScript) {
+        != AssetType::kScript
+      || descriptor.header.version
+        != data::pak::scripting::kScriptAssetVersion) {
       return std::nullopt;
     }
 
@@ -443,11 +448,12 @@ namespace {
     const std::filesystem::path& original_root,
     const std::filesystem::path& staged_root, const lc::AssetEntry& asset_entry,
     ScriptTables& tables, std::span<const std::filesystem::path> source_roots)
-    -> Result<bool, ScriptSealingError>
+    -> Result<std::optional<data::AssetReferences>, ScriptSealingError>
   {
     const auto context = ReadScriptAssetContext(staged_root, asset_entry);
     if (!context.has_value()) {
-      return Result<bool, ScriptSealingError>::Err(ScriptSealingError {
+      return Result<std::optional<data::AssetReferences>,
+        ScriptSealingError>::Err(ScriptSealingError {
         .error_code = "paktool.script_seal.script_descriptor_invalid",
         .error_message = "Failed to parse staged script descriptor.",
         .source_path = original_root,
@@ -457,18 +463,21 @@ namespace {
     }
 
     auto descriptor = context->descriptor;
+    import::AssetReferenceBuilder references(asset_entry.references);
     const auto allows_external
       = (static_cast<uint32_t>(descriptor.flags)
           & static_cast<uint32_t>(ScriptAssetFlags::kAllowExternalSource))
       != 0U;
     if (!allows_external) {
-      return Result<bool, ScriptSealingError>::Ok(false);
+      return Result<std::optional<data::AssetReferences>,
+        ScriptSealingError>::Ok(std::nullopt);
     }
 
-    if (descriptor.source_resource_index == data::pak::core::kNoResourceIndex) {
+    if (descriptor.source_resource_index == data::kNoResourceReference) {
       const auto external_source = TryGetExternalSourcePath(descriptor);
       if (!external_source.has_value()) {
-        return Result<bool, ScriptSealingError>::Err(ScriptSealingError {
+        return Result<std::optional<data::AssetReferences>,
+          ScriptSealingError>::Err(ScriptSealingError {
           .error_code = "paktool.script_seal.external_source_missing",
           .error_message
           = "Script descriptor requires external source sealing but does not "
@@ -481,7 +490,8 @@ namespace {
       const auto resolved_path
         = ResolveExternalSourcePath(source_roots, *external_source);
       if (!resolved_path.has_value()) {
-        return Result<bool, ScriptSealingError>::Err(ScriptSealingError {
+        return Result<std::optional<data::AssetReferences>,
+          ScriptSealingError>::Err(ScriptSealingError {
           .error_code = "paktool.script_seal.external_source_unresolvable",
           .error_message = "External script source was not found under the "
                            "declared script source roots.",
@@ -493,7 +503,8 @@ namespace {
 
       const auto source_bytes = ReadFileBytes(*resolved_path);
       if (!source_bytes.has_value()) {
-        return Result<bool, ScriptSealingError>::Err(ScriptSealingError {
+        return Result<std::optional<data::AssetReferences>,
+          ScriptSealingError>::Err(ScriptSealingError {
           .error_code = "paktool.script_seal.external_source_read_failed",
           .error_message = "Failed to read external script source bytes.",
           .source_path = original_root,
@@ -506,7 +517,8 @@ namespace {
       const auto source_index = AppendEmbeddedSourceResource(tables,
         std::span<const std::byte>(source_bytes->data(), source_bytes->size()));
       if (!source_index.has_value()) {
-        return Result<bool, ScriptSealingError>::Err(ScriptSealingError {
+        return Result<std::optional<data::AssetReferences>,
+          ScriptSealingError>::Err(ScriptSealingError {
           .error_code = "paktool.script_seal.script_table_append_failed",
           .error_message
           = "Failed to append sealed script source to staged scripts.table.",
@@ -516,13 +528,15 @@ namespace {
           .external_source_path = std::string(*external_source),
         });
       }
-      descriptor.source_resource_index = *source_index;
+      descriptor.source_resource_index
+        = references.AddResource(data::ResourceKind::kScript, *source_index);
     }
 
     ClearExternalSourceContract(descriptor);
     if (!WriteFileBytes(context->descriptor_path,
           std::as_bytes(std::span { &descriptor, 1 }))) {
-      return Result<bool, ScriptSealingError>::Err(ScriptSealingError {
+      return Result<std::optional<data::AssetReferences>,
+        ScriptSealingError>::Err(ScriptSealingError {
         .error_code = "paktool.script_seal.script_descriptor_write_failed",
         .error_message = "Failed to persist sealed script descriptor bytes.",
         .source_path = original_root,
@@ -530,11 +544,14 @@ namespace {
       });
     }
 
-    return Result<bool, ScriptSealingError>::Ok(true);
+    return Result<std::optional<data::AssetReferences>, ScriptSealingError>::Ok(
+      std::optional { std::move(references).Build() });
   }
 
   auto RefreshStagedLooseCookedIndex(const std::filesystem::path& staged_root,
-    const lc::Inspection& inspection) -> Result<void, ScriptSealingError>
+    const lc::Inspection& inspection,
+    const std::unordered_map<data::AssetKey, data::AssetReferences>&
+      sealed_references) -> Result<void, ScriptSealingError>
   {
     const auto index_path = staged_root / "container.index.bin";
     const auto index_header = ReadLooseCookedIndexHeader(index_path);
@@ -596,9 +613,12 @@ namespace {
         });
       }
 
+      const auto sealed = sealed_references.find(asset.key);
+      const auto& references
+        = sealed == sealed_references.end() ? asset.references : sealed->second;
       writer.RegisterExternalAssetDescriptor(asset.key,
         static_cast<AssetType>(asset.asset_type), asset.virtual_path,
-        asset.descriptor_relpath, 0, *digest);
+        asset.descriptor_relpath, 0, references, *digest);
     }
 
     for (const auto& file : inspection.Files()) {
@@ -732,18 +752,21 @@ namespace {
     }
 
     auto sealed_count = uint32_t { 0 };
+    std::unordered_map<data::AssetKey, data::AssetReferences> sealed_references;
     for (const auto& asset : inspection.Assets()) {
       if (static_cast<AssetType>(asset.asset_type) != AssetType::kScript) {
         continue;
       }
-      const auto sealed = RewriteStagedScriptDescriptor(
+      auto sealed = RewriteStagedScriptDescriptor(
         *normalized_root, staged_root, asset, *tables, source_roots);
       if (!sealed.has_value()) {
         cleanup_staged_root();
         return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
           sealed.error());
       }
-      if (*sealed) {
+      auto& references = *sealed;
+      if (references) {
+        sealed_references.emplace(asset.key, std::move(*references));
         ++sealed_count;
       }
     }
@@ -766,8 +789,8 @@ namespace {
         });
     }
 
-    if (const auto refreshed
-      = RefreshStagedLooseCookedIndex(staged_root, inspection);
+    if (const auto refreshed = RefreshStagedLooseCookedIndex(
+          staged_root, inspection, sealed_references);
       !refreshed) {
       cleanup_staged_root();
       return Result<SealedLooseSourceResult, ScriptSealingError>::Err(

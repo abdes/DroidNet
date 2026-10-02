@@ -413,7 +413,7 @@ NOLINT_TEST(ContentBindingBundleTest, FailedAttemptsRemainDeduplicated)
   EXPECT_FALSE(builder.FindAsset<oxygen::data::MaterialAsset>(key));
   EXPECT_TRUE(builder.TryBeginResource(oxygen::content::ResourceKey { 1 }));
   EXPECT_FALSE(builder.TryBeginResource(oxygen::content::ResourceKey { 1 }));
-  const auto bundle = std::move(builder).Freeze();
+  const auto bundle = std::move(builder).Freeze({}, {});
   EXPECT_TRUE(bundle->Assets().empty());
   EXPECT_TRUE(bundle->Resources().empty());
 }
@@ -471,8 +471,10 @@ NOLINT_TEST(ContentBindingBundleTest, ParentRetainsChildrenAcrossCacheClear)
   auto parent = std::make_shared<MaterialAsset>(
     oxygen::data::AssetKey {}, oxygen::data::pak::render::MaterialAssetDesc {});
   parent->SetRuntimeBindings(std::make_shared<ContentBindingBundle>(
-    std::vector<oxygen::content::internal::BoundAsset> {},
-    std::move(resources)));
+    oxygen::content::internal::ContentId {},
+    std::shared_ptr<const oxygen::content::internal::BindingViewId> {},
+    std::vector<oxygen::content::internal::BoundAsset> {}, std::move(resources),
+    nullptr));
   cache.Clear();
   result = {};
   static_cast<void>(queue->Drain(cache, kDrainAll));

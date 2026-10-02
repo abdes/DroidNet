@@ -19,6 +19,8 @@
 #include <utility>
 #include <vector>
 
+#include "../Fixtures/DescriptorFixtures.h"
+
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
@@ -672,7 +674,7 @@ NOLINT_TEST_F(ImportSessionTest, CohortPublicationPreservesParticipantFailures)
     sessions.at(index)->AssetEmitter().Emit(
       oxygen::data::AssetKey::FromVirtualPath(virtual_path),
       oxygen::data::AssetType::kMaterial, virtual_path, relative,
-      std::as_bytes(std::span { &descriptor, 1 }));
+      std::as_bytes(std::span { &descriptor, 1 }), {});
   }
   sessions.at(1)->AddDiagnostic({
     .severity = ImportSeverity::kError,
@@ -810,7 +812,7 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
       = request.loose_cooked_layout.MaterialDescriptorRelPath("Wood");
     const auto virtual_path
       = request.loose_cooked_layout.MaterialVirtualPath("Wood");
-    constexpr std::string_view kBytes = "abc";
+    const auto descriptor = oxygen::content::test::MaterialDescriptor("Wood");
 
     // Act
     const auto tex_idx
@@ -818,8 +820,8 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
     const auto buf_idx
       = session.BufferEmitter().Emit(MakeTestBufferPayload(), "test_texture");
     session.AssetEmitter().Emit(kKey, oxygen::data::AssetType::kMaterial,
-      virtual_path, descriptor_relpath,
-      std::as_bytes(std::span(kBytes.data(), kBytes.size())));
+      virtual_path, descriptor_relpath, descriptor.bytes,
+      descriptor.references);
 
     const auto& report = co_await session.Finalize();
 

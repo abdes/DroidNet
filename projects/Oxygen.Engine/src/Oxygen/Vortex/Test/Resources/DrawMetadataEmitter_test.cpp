@@ -276,12 +276,6 @@ auto ResolvedVirtualPageOverlapsBoundingSphere(
   desc.alpha_cutoff = oxygen::data::Unorm16 {
     0.5F,
   };
-  desc.base_color_texture = oxygen::data::pak::core::kFallbackResourceIndex;
-  desc.normal_texture = oxygen::data::pak::core::kFallbackResourceIndex;
-  desc.metallic_texture = oxygen::data::pak::core::kFallbackResourceIndex;
-  desc.roughness_texture = oxygen::data::pak::core::kFallbackResourceIndex;
-  desc.ambient_occlusion_texture
-    = oxygen::data::pak::core::kFallbackResourceIndex;
 
   return std::make_shared<const oxygen::data::MaterialAsset>(
     oxygen::data::AssetKey {}, desc);
@@ -303,12 +297,6 @@ auto ResolvedVirtualPageOverlapsBoundingSphere(
   desc.base_color[1] = 1.0F;
   desc.base_color[2] = 1.0F;
   desc.base_color[3] = 1.0F;
-  desc.base_color_texture = oxygen::data::pak::core::kFallbackResourceIndex;
-  desc.normal_texture = oxygen::data::pak::core::kFallbackResourceIndex;
-  desc.metallic_texture = oxygen::data::pak::core::kFallbackResourceIndex;
-  desc.roughness_texture = oxygen::data::pak::core::kFallbackResourceIndex;
-  desc.ambient_occlusion_texture
-    = oxygen::data::pak::core::kFallbackResourceIndex;
 
   return std::make_shared<const oxygen::data::MaterialAsset>(
     oxygen::data::AssetKey {}, desc);
@@ -1490,7 +1478,8 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
   EXPECT_EQ(draws.at(1).instance_count, 2U);
   EXPECT_NE(draws.at(0).primitive_flags, draws.at(1).primitive_flags);
   EXPECT_EQ((draws.at(0).primitive_flags ^ draws.at(1).primitive_flags),
-    static_cast<std::uint32_t>(oxygen::vortex::DrawPrimitiveFlagBits::kDisableShadowReception));
+    static_cast<std::uint32_t>(
+      oxygen::vortex::DrawPrimitiveFlagBits::kDisableShadowReception));
   EXPECT_TRUE(draws.at(0).flags.IsSet(PassMaskBit::kShadowCaster));
   EXPECT_TRUE(draws.at(1).flags.IsSet(PassMaskBit::kShadowCaster));
 }

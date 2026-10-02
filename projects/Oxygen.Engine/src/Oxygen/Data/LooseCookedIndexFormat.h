@@ -14,6 +14,8 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/PakFormatVersions.h>
+#include <Oxygen/Data/PakFormat_references.h>
 #include <Oxygen/Data/api_export.h>
 
 //! Oxygen loose cooked index binary format specification
@@ -54,7 +56,8 @@ constexpr std::array<char, 8> kHeaderMagic
 constexpr size_t kSha256Size = 32;
 
 //! Current loose index version. Older layouts must be recooked.
-inline constexpr uint16_t kIndexVersion = 2;
+inline constexpr uint16_t kIndexVersion
+  = pak::version::kLooseCookedIndexVersion;
 
 //! Required-section declarations in the current index.
 enum IndexFlags : uint32_t { // NOLINT(*-enum-size)
@@ -118,9 +121,10 @@ struct AssetEntry {
   // Mandatory descriptor integrity; runtime hash verification is opt-in.
   SizeT descriptor_size = 0;
   uint8_t descriptor_sha256[kSha256Size] = {};
+  pak::core::AssetReferenceTable references {};
 };
 #pragma pack(pop)
-static_assert(sizeof(AssetEntry) == 65);
+static_assert(sizeof(AssetEntry) == 81);
 
 //! Kind of a file record.
 enum class FileKind : uint16_t { // NOLINT(*-enum-size)
@@ -133,8 +137,6 @@ enum class FileKind : uint16_t { // NOLINT(*-enum-size)
   kScriptsData = 6,
   kPhysicsTable = 7,
   kPhysicsData = 8,
-  kScriptBindingsTable = 9,
-  kScriptBindingsData = 10,
   //! Explicitly emitted resource descriptors or other non-role content files.
   kAuxiliary = 11,
 };

@@ -164,37 +164,36 @@ public:
     return desc_.alpha_cutoff.ToFloat();
   }
 
-  //! Returns the index of the base color texture.
+  //! Returns the descriptor-local reference for the base color texture.
   [[nodiscard]] auto GetBaseColorTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.base_color_texture;
   }
 
-  //! Returns the index of the normal texture.
-  [[nodiscard]] auto GetNormalTexture() const noexcept
-    -> pak::core::ResourceIndexT
+  //! Returns the descriptor-local reference for the normal texture.
+  [[nodiscard]] auto GetNormalTexture() const noexcept -> ResourceReferenceIndex
   {
     return desc_.normal_texture;
   }
 
-  //! Returns the index of the metallic texture.
+  //! Returns the descriptor-local reference for the metallic texture.
   [[nodiscard]] auto GetMetallicTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.metallic_texture;
   }
 
-  //! Returns the index of the roughness texture.
+  //! Returns the descriptor-local reference for the roughness texture.
   [[nodiscard]] auto GetRoughnessTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.roughness_texture;
   }
 
-  //! Returns the index of the ambient occlusion texture.
+  //! Returns the descriptor-local reference for the ambient occlusion texture.
   [[nodiscard]] auto GetAmbientOcclusionTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.ambient_occlusion_texture;
   }
@@ -209,9 +208,9 @@ public:
     };
   }
 
-  //! Returns the index of the emissive texture.
+  //! Returns the descriptor-local reference for the emissive texture.
   [[nodiscard]] auto GetEmissiveTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.emissive_texture;
   }
@@ -310,7 +309,7 @@ public:
   }
 
   [[nodiscard]] auto GetSpecularTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.specular_texture;
   }
@@ -325,7 +324,7 @@ public:
   }
 
   [[nodiscard]] auto GetSheenColorTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.sheen_color_texture;
   }
@@ -340,7 +339,7 @@ public:
   }
 
   [[nodiscard]] auto GetClearcoatTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.clearcoat_texture;
   }
@@ -355,7 +354,7 @@ public:
   }
 
   [[nodiscard]] auto GetClearcoatNormalTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.clearcoat_normal_texture;
   }
@@ -370,7 +369,7 @@ public:
   }
 
   [[nodiscard]] auto GetTransmissionTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.transmission_texture;
   }
@@ -385,7 +384,7 @@ public:
   }
 
   [[nodiscard]] auto GetThicknessTexture() const noexcept
-    -> pak::core::ResourceIndexT
+    -> ResourceReferenceIndex
   {
     return desc_.thickness_texture;
   }

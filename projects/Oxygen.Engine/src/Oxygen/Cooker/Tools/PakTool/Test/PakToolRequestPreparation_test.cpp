@@ -4,20 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <atomic>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <optional>
+
 #include <process.h>
 
-#include <Oxygen/Cooker/Pak/PakCatalogIo.h>
+#include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/Tools/PakTool/RequestPreparation.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
 
 using oxygen::content::pak::BuildMode;
-using oxygen::content::pak::PakCatalogIo;
 using oxygen::content::pak::tool::IRequestPreparationFileSystem;
 using oxygen::content::pak::tool::PakToolCliOptions;
 using oxygen::content::pak::tool::PreparePakToolRequest;
@@ -102,19 +104,25 @@ protected:
     out << content;
   }
 
-  static auto WriteCatalogFile(
+  static auto WriteBasePak(
     const std::filesystem::path& path, const uint16_t content_version) -> void
   {
-    const auto source_key = oxygen::data::SourceKey::FromString(kSourceKey);
-    ASSERT_TRUE(source_key.has_value());
-
-    WriteTextFile(path,
-      PakCatalogIo::ToCanonicalJsonString(oxygen::data::PakCatalog {
-        .source_key = source_key.value(),
-        .content_version = content_version,
-        .catalog_digest = {},
-        .entries = {},
-      }));
+    std::filesystem::create_directories(path.parent_path());
+    std::array<uint8_t, oxygen::data::SourceKey::kSizeBytes> identity {};
+    identity.at(0) = static_cast<uint8_t>(content_version);
+    identity.at(6) = 0x70U;
+    identity.at(8) = 0x80U;
+    const auto key = oxygen::data::SourceKey::FromBytes(identity);
+    ASSERT_TRUE(key.has_value());
+    const auto result = oxygen::content::pak::PakBuilder {}.Build({
+      .mode = BuildMode::kFull,
+      .sources = {},
+      .output_pak_path = path,
+      .content_version = content_version,
+      .source_key = *key,
+    });
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(result->summary.diagnostics_error, 0U);
   }
 
   [[nodiscard]] static auto MakeOptions() -> PakToolCliOptions
@@ -228,7 +236,7 @@ NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsMissingSourcePath)
   EXPECT_EQ(prepared.error().path, Root() / "missing_source");
 }
 
-NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsInvalidBaseCatalogPayload)
+NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsInvalidBasePakPayload)
 {
   auto options = MakeOptions();
   const auto base_catalog = Root() / "catalogs" / "base.pakcatalog.json";
@@ -239,19 +247,17 @@ NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsInvalidBaseCatalogPayload)
     = Root() / "release" / "game_patch.pakcatalog.json";
   options.patch.manifest_output
     = Root() / "release" / "game_patch.manifest.json";
-  options.patch.base_catalogs = { base_catalog };
+  options.patch.base_paks = { base_catalog };
 
   auto fs = RealRequestPreparationFileSystem {};
   const auto prepared = PreparePakToolRequest(BuildMode::kPatch, options, fs);
 
   ASSERT_FALSE(prepared.has_value());
-  EXPECT_EQ(
-    prepared.error().error_code, "paktool.prepare.base_catalog_invalid");
+  EXPECT_EQ(prepared.error().error_code, "paktool.prepare.base_pak_invalid");
   EXPECT_EQ(prepared.error().path, base_catalog);
 }
 
-NOLINT_TEST_F(
-  PakToolRequestPreparationTest, RejectsPatchModeWithoutBaseCatalogs)
+NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsPatchModeWithoutBasePaks)
 {
   auto options = MakeOptions();
   options.request.output_pak = Root() / "release" / "game_patch.pak";
@@ -264,29 +270,24 @@ NOLINT_TEST_F(
   const auto prepared = PreparePakToolRequest(BuildMode::kPatch, options, fs);
 
   ASSERT_FALSE(prepared.has_value());
-  EXPECT_EQ(
-    prepared.error().error_code, "paktool.prepare.base_catalog_required");
+  EXPECT_EQ(prepared.error().error_code, "paktool.prepare.base_pak_required");
 }
 
 NOLINT_TEST_F(
-  PakToolRequestPreparationTest, PreparePatchRequestLoadsMultipleBaseCatalogs)
+  PakToolRequestPreparationTest, PreparePatchRequestLoadsOrderedBasePaks)
 {
   auto options = MakeOptions();
-  const auto base_a = Root() / "catalogs" / "base_a.pakcatalog.json";
-  const auto base_b = Root() / "catalogs" / "base_b.pakcatalog.json";
-  WriteCatalogFile(base_a, 10);
-  WriteCatalogFile(base_b, 11);
+  const auto base_a = Root() / "bases" / "base_a.pak";
+  const auto base_b = Root() / "bases" / "base_b.pak";
+  WriteBasePak(base_a, 10);
+  WriteBasePak(base_b, 11);
 
   options.request.output_pak = Root() / "release" / "game_patch.pak";
   options.request.catalog_output
     = Root() / "release" / "game_patch.pakcatalog.json";
   options.patch.manifest_output
     = Root() / "release" / "game_patch.manifest.json";
-  options.patch.base_catalogs = { base_a, base_b };
-  options.patch.allow_base_set_mismatch = true;
-  options.patch.allow_content_version_mismatch = true;
-  options.patch.allow_base_source_key_mismatch = true;
-  options.patch.allow_catalog_digest_mismatch = true;
+  options.patch.base_paks = { base_a, base_b };
 
   auto fs = RealRequestPreparationFileSystem {};
   const auto prepared = PreparePakToolRequest(BuildMode::kPatch, options, fs);
@@ -294,16 +295,9 @@ NOLINT_TEST_F(
   ASSERT_TRUE(prepared.has_value())
     << prepared.error().error_code << ": " << prepared.error().error_message;
   ASSERT_EQ(prepared->build_request.base_catalogs.size(), 2U);
-  ASSERT_EQ(prepared->request_snapshot.base_catalog_paths.size(), 2U);
-  EXPECT_EQ(prepared->request_snapshot.base_catalog_paths[0], base_a);
-  EXPECT_EQ(prepared->request_snapshot.base_catalog_paths[1], base_b);
-  EXPECT_FALSE(prepared->build_request.patch_compat.require_exact_base_set);
-  EXPECT_FALSE(
-    prepared->build_request.patch_compat.require_content_version_match);
-  EXPECT_FALSE(
-    prepared->build_request.patch_compat.require_base_source_key_match);
-  EXPECT_FALSE(
-    prepared->build_request.patch_compat.require_catalog_digest_match);
+  ASSERT_EQ(prepared->request_snapshot.base_pak_paths.size(), 2U);
+  EXPECT_EQ(prepared->request_snapshot.base_pak_paths[0], base_a);
+  EXPECT_EQ(prepared->request_snapshot.base_pak_paths[1], base_b);
 }
 
 NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsConflictingToolPaths)

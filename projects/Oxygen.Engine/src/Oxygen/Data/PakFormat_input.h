@@ -20,8 +20,10 @@ OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
 */
 namespace oxygen::data::pak::input {
 
-[[maybe_unused]] constexpr uint8_t kInputActionAssetVersion = 1;
-[[maybe_unused]] constexpr uint8_t kInputMappingContextAssetVersion = 1;
+[[maybe_unused]] constexpr uint8_t kInputActionAssetVersion
+  = version::kInputActionAssetVersion;
+[[maybe_unused]] constexpr uint8_t kInputMappingContextAssetVersion
+  = version::kInputMappingContextAssetVersion;
 
 enum class InputActionAssetFlags : uint32_t { // NOLINT(*-enum-size)
   kNone = 0,

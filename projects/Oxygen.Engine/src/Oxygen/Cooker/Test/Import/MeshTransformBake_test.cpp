@@ -213,8 +213,19 @@ protected:
           + sizeof(data::pak::geometry::GeometryAssetDesc),
         sizeof(descriptor));
       MeshBuildPipeline::CookedMeshPayload mesh;
-      mesh.vertex_buffer = read_buffer(descriptor.info.standard.vertex_buffer);
-      mesh.index_buffer = read_buffer(descriptor.info.standard.index_buffer);
+      const auto resolve_buffer
+        = [&](const data::ResourceReferenceIndex reference) {
+            const auto resolved = asset.references.ResolveResource(
+              reference, data::ResourceKind::kBuffer);
+            if (!resolved || !resolved->has_value()) {
+              throw std::runtime_error(
+                "Imported geometry has an invalid buffer reference");
+            }
+            return read_buffer(**resolved);
+          };
+      mesh.vertex_buffer
+        = resolve_buffer(descriptor.info.standard.vertex_buffer);
+      mesh.index_buffer = resolve_buffer(descriptor.info.standard.index_buffer);
       std::copy_n(
         descriptor.info.standard.bounding_box_min, 3, mesh.bounds.min.begin());
       std::copy_n(

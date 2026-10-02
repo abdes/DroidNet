@@ -54,12 +54,13 @@ namespace {
     const SidecarSceneResolverDiagnostics& diagnostics,
     const data::AssetKey scene_key, std::string scene_virtual_path,
     std::string scene_descriptor_relpath,
-    std::vector<std::byte> descriptor_bytes)
+    std::vector<std::byte> descriptor_bytes, data::AssetReferences references)
     -> std::optional<ResolvedSceneState>
   {
     auto scene_asset = std::optional<data::SceneAsset> {};
     try {
-      scene_asset.emplace(scene_key, descriptor_bytes);
+      scene_asset.emplace(
+        scene_key, std::span<const std::byte>(descriptor_bytes));
     } catch (const std::exception& ex) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         std::string(diagnostics.target_scene_invalid_code),
@@ -67,11 +68,17 @@ namespace {
       return std::nullopt;
     }
 
+    const auto* environment = scene_asset->GetEnvironmentBlockHeader();
+    const auto environment_offset = environment
+      ? descriptor_bytes.size() - environment->byte_size
+      : descriptor_bytes.size();
     auto state = ResolvedSceneState {
       .scene_key = scene_key,
       .scene_virtual_path = std::move(scene_virtual_path),
       .scene_descriptor_relpath = std::move(scene_descriptor_relpath),
       .source_scene_descriptor = std::move(descriptor_bytes),
+      .references = std::move(references),
+      .environment_offset = environment_offset,
       .node_count = static_cast<uint32_t>(scene_asset->GetNodes().size()),
       .existing_scripting_components = {},
     };
@@ -128,7 +135,7 @@ namespace {
 
     const auto state = BuildResolvedSceneStateFromDescriptor(session, request,
       diagnostics, match->scene_key, match->virtual_path,
-      match->descriptor_relpath, match->descriptor_bytes);
+      match->descriptor_relpath, match->descriptor_bytes, match->references);
     return SceneBindingContextOutcome {
       .state = state,
       .failed = !state.has_value(),
@@ -177,7 +184,7 @@ namespace {
 
     const auto state = BuildResolvedSceneStateFromDescriptor(session, request,
       diagnostics, match->scene_key, match->virtual_path,
-      match->descriptor_relpath, match->descriptor_bytes);
+      match->descriptor_relpath, match->descriptor_bytes, match->references);
     return SceneBindingContextOutcome {
       .state = state,
       .failed = !state.has_value(),
@@ -227,7 +234,8 @@ namespace {
 
       const auto state = BuildResolvedSceneStateFromDescriptor(session, request,
         diagnostics, scene_asset_entry->key, scene_asset_entry->virtual_path,
-        scene_asset_entry->descriptor_relpath, scene_read.value());
+        scene_asset_entry->descriptor_relpath, scene_read.value(),
+        scene_asset_entry->references);
       co_return SceneBindingContextOutcome {
         .state = state,
         .failed = !state.has_value(),

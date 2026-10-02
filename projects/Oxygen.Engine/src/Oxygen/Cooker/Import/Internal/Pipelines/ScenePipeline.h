@@ -30,6 +30,7 @@
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Channel.h>
 #include <Oxygen/OxCo/Co.h>
@@ -84,6 +85,7 @@ public:
     std::string virtual_path;
     std::string descriptor_relpath;
     std::vector<std::byte> descriptor_bytes;
+    data::AssetReferences references;
   };
 
   //! Work submission item.
@@ -95,6 +97,7 @@ public:
     BuildStageFn build_stage = nullptr;
     std::vector<data::AssetKey> geometry_keys;
     std::vector<SceneEnvironmentSystem> environment_systems;
+    data::AssetReferences environment_references;
 
     //! Callback fired when a worker starts processing this item.
     std::function<void()> on_started;

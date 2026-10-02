@@ -60,7 +60,7 @@ Scene source/packed version **8** removes the four-byte scheduling field;
 [`MigrateSceneV8.py`](../../../tools/content/MigrateSceneV8.py) on v7 source
 JSON, then recook with the current ImportTool. The migration changes the version, its versioned schema identifier when present,
 and the retired field. The editor descriptor generator emits the same v8
-schema. PakGen's outer PAK recipe version remains 7.
+schema.
 
 DemoShell environment settings **v6** omit the field. Loading v5 removes either
 boolean value and persists the v6 marker without rewriting saved custom controls,

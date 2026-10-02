@@ -763,7 +763,7 @@ namespace {
 
     [[nodiscard]] auto MakeTextureResourceKeyForAsset(
       const data::Asset& /*context_asset*/,
-      data::pak::core::ResourceIndexT /*resource_index*/)
+      data::ResourceReferenceIndex /*resource_index*/)
       -> std::optional<content::ResourceKey> override
     {
       return std::nullopt;
@@ -771,14 +771,14 @@ namespace {
 
     [[nodiscard]] auto MakeScriptResourceKeyForAsset(
       const data::Asset& /*context_asset*/,
-      data::pak::core::ResourceIndexT /*resource_index*/)
+      data::ResourceReferenceIndex /*resource_index*/)
       -> std::optional<content::ResourceKey> override
     {
       return std::nullopt;
     }
     [[nodiscard]] auto ReadScriptResourceForAsset(
       const data::Asset& /*context_asset*/,
-      data::pak::core::ResourceIndexT /*resource_index*/) const
+      data::ResourceReferenceIndex /*resource_index*/) const
       -> std::shared_ptr<const data::ScriptResource> override
     {
       return nullptr;
@@ -860,7 +860,8 @@ namespace {
       return {};
     }
     [[nodiscard]] auto FindPhysicsSidecarAssetKeyForScene(
-      const data::Asset& scene) const -> std::optional<data::AssetKey> override
+      const data::Asset& scene, const content::ContentLoadScope&)
+      -> std::optional<data::AssetKey> override
     {
       const auto it = sidecar_keys_by_scene_.find(scene.GetAssetKey());
       return it == sidecar_keys_by_scene_.end()
@@ -1114,7 +1115,7 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
   EXPECT_EQ(result.scene_key, scene_key);
   EXPECT_THAT(result.asset, ::testing::NotNull());
   EXPECT_THAT(result.physics_asset, ::testing::NotNull());
-  EXPECT_EQ(loader.LastPhysicsSource(), source);
+  EXPECT_TRUE(loader.LastPhysicsSource().IsNil());
 }
 
 NOLINT_TEST(SceneLoaderServicePhase4Test,

@@ -85,24 +85,6 @@ auto ToHex(const std::span<const uint8_t> bytes) -> std::string
   return out;
 }
 
-auto SortAndUniqueSourceKeys(std::vector<data::SourceKey>& values) -> void
-{
-  std::ranges::sort(values);
-  values.erase(std::ranges::unique(values).begin(), values.end());
-}
-
-auto SortAndUniqueVersions(std::vector<uint16_t>& values) -> void
-{
-  std::ranges::sort(values);
-  values.erase(std::ranges::unique(values).begin(), values.end());
-}
-
-auto SortAndUniqueDigests(std::vector<std::array<uint8_t, 32>>& values) -> void
-{
-  std::ranges::sort(values);
-  values.erase(std::ranges::unique(values).begin(), values.end());
-}
-
 auto SortAssetKeys(std::vector<data::AssetKey>& values) -> void
 {
   std::ranges::sort(values);
@@ -191,15 +173,10 @@ auto ValidateManifestByMode(const pak::PakBuildRequest& request,
   }
 
   if (request.mode == pak::BuildMode::kPatch) {
-    const auto& envelope = manifest.compatibility_envelope;
-    if (envelope.required_base_source_keys.empty()
-      || envelope.required_base_content_versions.empty()
-      || envelope.required_base_catalog_digests.empty()) {
+    if (manifest.compatibility_envelope.required_base_layers.empty()) {
       AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-        "pak.manifest.compatibility_envelope_incomplete",
-        "Patch manifest compatibility_envelope must include non-empty "
-        "'required_base_source_keys', 'required_base_content_versions', and "
-        "'required_base_catalog_digests'.");
+        "pak.manifest.base_layers_missing",
+        "Patch manifest requires ordered base layers.");
     }
   } else {
     if (!manifest.replaced.empty() || !manifest.deleted.empty()) {
@@ -208,14 +185,10 @@ auto ValidateManifestByMode(const pak::PakBuildRequest& request,
         "Full-mode manifest must keep fields 'replaced' and 'deleted' empty.");
     }
 
-    const auto& envelope = manifest.compatibility_envelope;
-    if (!envelope.required_base_source_keys.empty()
-      || !envelope.required_base_content_versions.empty()
-      || !envelope.required_base_catalog_digests.empty()) {
+    if (!manifest.compatibility_envelope.required_base_layers.empty()) {
       AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
         "pak.manifest.full_base_requirements_not_empty",
-        "Full-mode manifest compatibility_envelope base requirements must be "
-        "empty.");
+        "Full-mode manifest must not require base layers.");
     }
 
     ValidateFullManifestCreatedSet(plan, manifest, diagnostics);
@@ -275,32 +248,13 @@ auto BuildManifestModel(const pak::PakBuildRequest& request,
 
   if (request.mode == pak::BuildMode::kPatch) {
     for (const auto& base_catalog : request.base_catalogs) {
-      manifest.compatibility_envelope.required_base_source_keys.push_back(
-        base_catalog.source_key);
-      manifest.compatibility_envelope.required_base_content_versions.push_back(
-        base_catalog.content_version);
-      manifest.compatibility_envelope.required_base_catalog_digests.push_back(
-        base_catalog.catalog_digest);
+      manifest.compatibility_envelope.required_base_layers.push_back({
+        .source_key = base_catalog.source_key,
+        .content_version = base_catalog.content_version,
+        .catalog_digest = base_catalog.catalog_digest,
+      });
     }
-
-    SortAndUniqueSourceKeys(
-      manifest.compatibility_envelope.required_base_source_keys);
-    SortAndUniqueVersions(
-      manifest.compatibility_envelope.required_base_content_versions);
-    SortAndUniqueDigests(
-      manifest.compatibility_envelope.required_base_catalog_digests);
   }
-
-  manifest.compatibility_policy_snapshot
-    = data::PatchCompatibilityPolicySnapshot {
-        .require_exact_base_set = request.patch_compat.require_exact_base_set,
-        .require_content_version_match
-        = request.patch_compat.require_content_version_match,
-        .require_base_source_key_match
-        = request.patch_compat.require_base_source_key_match,
-        .require_catalog_digest_match
-        = request.patch_compat.require_catalog_digest_match,
-      };
   manifest.diff_basis_identifier = std::string(kDiffBasisIdentifier);
   manifest.patch_source_key = request.source_key;
   manifest.patch_pak_crc32 = pak_crc32;
@@ -341,22 +295,14 @@ auto SerializeManifestToJson(const data::PatchManifest& manifest) -> std::string
     deleted.push_back(data::to_string(key));
   }
 
-  auto required_base_source_keys = ordered_json::array();
-  for (const auto& source_key :
-    manifest.compatibility_envelope.required_base_source_keys) {
-    required_base_source_keys.push_back(data::to_string(source_key));
-  }
-
-  auto required_base_catalog_digests = ordered_json::array();
-  for (const auto& digest :
-    manifest.compatibility_envelope.required_base_catalog_digests) {
-    required_base_catalog_digests.push_back(ToHex(std::span { digest }));
-  }
-
-  auto required_base_content_versions = ordered_json::array();
-  for (const auto version :
-    manifest.compatibility_envelope.required_base_content_versions) {
-    required_base_content_versions.push_back(version);
+  auto required_base_layers = ordered_json::array();
+  for (const auto& base :
+    manifest.compatibility_envelope.required_base_layers) {
+    required_base_layers.push_back(ordered_json {
+      { "source_key", data::to_string(base.source_key) },
+      { "content_version", base.content_version },
+      { "catalog_digest", ToHex(std::span(base.catalog_digest)) },
+    });
   }
 
   auto document = ordered_json {
@@ -365,26 +311,9 @@ auto SerializeManifestToJson(const data::PatchManifest& manifest) -> std::string
     { "deleted", std::move(deleted) },
     { "compatibility_envelope",
       ordered_json {
-        { "required_base_source_keys", std::move(required_base_source_keys) },
-        { "required_base_content_versions",
-          std::move(required_base_content_versions) },
-        { "required_base_catalog_digests",
-          std::move(required_base_catalog_digests) },
+        { "required_base_layers", std::move(required_base_layers) },
         { "patch_content_version",
           manifest.compatibility_envelope.patch_content_version },
-      } },
-    { "compatibility_policy_snapshot",
-      ordered_json {
-        { "require_exact_base_set",
-          manifest.compatibility_policy_snapshot.require_exact_base_set },
-        { "require_content_version_match",
-          manifest.compatibility_policy_snapshot
-            .require_content_version_match },
-        { "require_base_source_key_match",
-          manifest.compatibility_policy_snapshot
-            .require_base_source_key_match },
-        { "require_catalog_digest_match",
-          manifest.compatibility_policy_snapshot.require_catalog_digest_match },
       } },
     { "diff_basis_identifier", manifest.diff_basis_identifier },
     { "patch_source_key", data::to_string(manifest.patch_source_key) },

@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -18,7 +17,6 @@
 #include "Mocks/MockStream.h"
 
 #include <Oxygen/Base/Span.h>
-#include <Oxygen/Content/DescriptorDependencies.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
@@ -39,39 +37,50 @@ using oxygen::base::CheckedAt;
 
 namespace {
 
-auto MakeSceneWithFlagRecord(const uint32_t values, const uint32_t inherited,
-  const uint8_t version = oxygen::data::pak::world::kSceneAssetVersion)
+struct SceneFlagInput {
+  uint32_t values {};
+  uint32_t inherited {};
+  uint8_t version { oxygen::data::pak::world::kSceneAssetVersion };
+};
+
+auto MakeSceneWithFlagRecord(const SceneFlagInput input)
   -> std::vector<std::byte>
 {
   namespace world = oxygen::data::pak::world;
   auto descriptor = world::SceneAssetDesc {};
   descriptor.header.asset_type
     = static_cast<uint8_t>(oxygen::data::AssetType::kScene);
-  descriptor.header.version = version;
+  descriptor.header.version = input.version;
   descriptor.nodes.offset = sizeof(descriptor);
   descriptor.nodes.count = 1U;
   descriptor.nodes.entry_size = sizeof(world::NodeRecord);
   auto node = world::NodeRecord {};
-  node.node_flags = values;
-  node.inherited_flags = inherited;
-  node.translation[0] = 3.5F;
+  node.node_flags = input.values;
+  node.inherited_flags = input.inherited;
+  constexpr float kTranslation = 3.5F;
+  node.translation[0] = kTranslation;
   node.scale[2] = 2.0F;
   auto environment = world::SceneEnvironmentBlockHeader {};
   environment.byte_size = sizeof(environment);
   auto bytes = std::vector<std::byte>(
     sizeof(descriptor) + sizeof(node) + sizeof(environment));
   std::memcpy(bytes.data(), &descriptor, sizeof(descriptor));
-  std::memcpy(bytes.data() + sizeof(descriptor), &node, sizeof(node));
-  std::memcpy(bytes.data() + sizeof(descriptor) + sizeof(node), &environment,
-    sizeof(environment));
+  std::memcpy(
+    std::span(bytes).subspan(sizeof(descriptor)).data(), &node, sizeof(node));
+  std::memcpy(
+    std::span(bytes).subspan(sizeof(descriptor) + sizeof(node)).data(),
+    &environment, sizeof(environment));
   return bytes;
 }
 
 NOLINT_TEST(SceneFlagRecordTest, LoaderPreservesFlagModesAndFollowingTransform)
 {
   namespace world = oxygen::data::pak::world;
-  auto bytes = MakeSceneWithFlagRecord(world::kSceneNodeFlag_Visible,
-    world::kSceneNodeFlag_CastsShadows | world::kSceneNodeFlag_ReceivesShadows);
+  auto bytes = MakeSceneWithFlagRecord({
+    .values = world::kSceneNodeFlag_Visible,
+    .inherited = world::kSceneNodeFlag_CastsShadows
+      | world::kSceneNodeFlag_ReceivesShadows,
+  });
   auto stream = oxygen::serio::MemoryStream(std::span<std::byte>(bytes));
   auto reader = oxygen::serio::Reader(stream);
   auto context = oxygen::content::LoaderContext {};
@@ -98,7 +107,8 @@ NOLINT_TEST(
          std::pair {
            world::kSceneNodeFlag_Visible, world::kSceneNodeFlag_Visible },
        }) {
-    auto bytes = MakeSceneWithFlagRecord(values, inherited);
+    auto bytes
+      = MakeSceneWithFlagRecord({ .values = values, .inherited = inherited });
     EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
       std::runtime_error);
     auto stream = oxygen::serio::MemoryStream(std::span<std::byte>(bytes));
@@ -115,12 +125,12 @@ NOLINT_TEST(SceneFlagRecordTest, RejectsInvalidNodeReferencesWithoutStringTable)
   namespace world = oxygen::data::pak::world;
   for (const auto [parent, name] :
     std::array { std::pair { 1U, 0U }, std::pair { 0U, 1U } }) {
-    auto bytes = MakeSceneWithFlagRecord(0U, 0U);
+    auto bytes = MakeSceneWithFlagRecord({ .values = 0U, .inherited = 0U });
     auto node = world::NodeRecord {};
     node.parent_index = parent;
     node.scene_name_offset = name;
-    std::memcpy(
-      bytes.data() + sizeof(world::SceneAssetDesc), &node, sizeof(node));
+    std::memcpy(std::span(bytes).subspan(sizeof(world::SceneAssetDesc)).data(),
+      &node, sizeof(node));
     EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
       std::runtime_error);
     auto stream = oxygen::serio::MemoryStream(std::span<std::byte>(bytes));
@@ -134,7 +144,8 @@ NOLINT_TEST(SceneFlagRecordTest, RejectsInvalidNodeReferencesWithoutStringTable)
 
 NOLINT_TEST(SceneFlagRecordTest, RejectsRetiredSceneVersionFour)
 {
-  auto bytes = MakeSceneWithFlagRecord(0U, 0U, 4U);
+  auto bytes
+    = MakeSceneWithFlagRecord({ .values = 0U, .inherited = 0U, .version = 4U });
   EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
     std::runtime_error);
   auto stream = oxygen::serio::MemoryStream(std::span<std::byte>(bytes));
@@ -156,10 +167,13 @@ auto MakeExposureScene() -> std::vector<std::byte>
   post.curve_key_count = 2U;
   post.header.record_size
     = sizeof(post) + (2U * sizeof(world::ExposureCompensationKeyRecord));
-  post.auto_exposure_black_influence = 0.35F;
-  post.auto_exposure_transition_distance_ev = 2.25F;
+  constexpr float kBlackInfluence = 0.35F;
+  post.auto_exposure_black_influence = kBlackInfluence;
+  constexpr float kTransitionEv = 2.25F;
+  post.auto_exposure_transition_distance_ev = kTransitionEv;
+  constexpr uint32_t kMeteringMaskSlot = 7U;
   post.auto_exposure_metering_mask
-    = oxygen::data::pak::core::ResourceIndexT { 7U };
+    = oxygen::data::ResourceReferenceIndex { kMeteringMaskSlot };
   const auto environment = world::SceneEnvironmentBlockHeader {
     .byte_size = static_cast<uint32_t>(
       sizeof(world::SceneEnvironmentBlockHeader) + post.header.record_size),
@@ -168,10 +182,17 @@ auto MakeExposureScene() -> std::vector<std::byte>
   oxygen::serio::MemoryStream stream;
   oxygen::serio::Writer writer(stream);
   const auto packed = writer.ScopedAlignment(1);
+  constexpr auto kLowKey = world::ExposureCompensationKeyRecord {
+    .metered_ev = -4.0F,
+    .compensation_ev = 1.0F,
+  };
+  constexpr auto kHighKey = world::ExposureCompensationKeyRecord {
+    .metered_ev = 12.0F,
+    .compensation_ev = -0.5F,
+  };
   if (!writer.Write(descriptor) || !writer.Write(environment)
-    || !writer.Write(post)
-    || !writer.Write(world::ExposureCompensationKeyRecord { -4.0F, 1.0F })
-    || !writer.Write(world::ExposureCompensationKeyRecord { 12.0F, -0.5F })) {
+    || !writer.Write(post) || !writer.Write(kLowKey)
+    || !writer.Write(kHighKey)) {
     throw std::runtime_error("Could not write scene exposure test fixture");
   }
   const auto bytes = stream.Data();
@@ -241,7 +262,9 @@ NOLINT_TEST(SceneExposureRecordTest, RejectsObsoleteAndMalformedLayouts)
 
 NOLINT_TEST(SceneExposureRecordTest, RejectsSceneVersionFive)
 {
-  auto bytes = MakeSceneWithFlagRecord(0U, 0U, 5U);
+  constexpr uint8_t kRetiredSceneVersion = 5U;
+  auto bytes = MakeSceneWithFlagRecord(
+    { .values = 0U, .inherited = 0U, .version = kRetiredSceneVersion });
   EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
     std::runtime_error);
 }
@@ -300,15 +323,21 @@ protected:
     header.byte_size = sizeof(SceneEnvironmentBlockHeader);
     header.systems_count = 0;
 
-    const auto header_write = writer_.WriteBlob(std::span<const std::byte>(
-      reinterpret_cast<const std::byte*>(&header), sizeof(header)));
+    const auto header_write
+      = writer_.WriteBlob(std::as_bytes(std::span(&header, 1U)));
     ASSERT_TRUE(header_write) << header_write.error().message();
   }
 
-  auto WriteMinimalSceneWithRenderable(
-    const oxygen::data::AssetKey geometry_key,
-    const oxygen::data::AssetKey material_key = {}) -> void
+  struct RenderableReferences {
+    oxygen::data::AssetKey geometry;
+    oxygen::data::AssetKey material;
+  };
+
+  auto WriteMinimalSceneWithRenderable(const RenderableReferences references)
+    -> void
   {
+    const auto& geometry_key = references.geometry;
+    const auto& material_key = references.material;
     using oxygen::data::pak::world::NodeRecord;
     using oxygen::data::pak::world::RenderableRecord;
     using oxygen::data::pak::world::SceneAssetDesc;
@@ -392,6 +421,7 @@ protected:
     ASSERT_TRUE(flush_res) << flush_res.error().message();
   }
 
+private:
   MockStream stream_;
   Writer writer_;
   Reader reader_;
@@ -399,7 +429,7 @@ protected:
 
 NOLINT_TEST_F(SceneLoaderTest, LoadSceneParseOnlySucceeds)
 {
-  WriteMinimalSceneWithRenderable(oxygen::data::AssetKey {});
+  WriteMinimalSceneWithRenderable({});
 
   auto asset = LoadSceneAsset(MakeContextParseOnly());
   ASSERT_NE(asset, nullptr);
@@ -409,18 +439,11 @@ NOLINT_TEST_F(SceneLoaderTest, LoadSceneParseOnlySucceeds)
 
 NOLINT_TEST_F(SceneLoaderTest, LoadSceneDecodeCollectsRenderableDependencies)
 {
-  auto geom_bytes
-    = std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
-  geom_bytes.at(0) = 0xABU;
-  geom_bytes.at(1) = 0xCDU;
-  const auto geom = oxygen::data::AssetKey::FromBytes(geom_bytes);
-  auto material_bytes
-    = std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
-  material_bytes.at(0) = 0x12U;
-  material_bytes.at(1) = 0x34U;
-  const auto material = oxygen::data::AssetKey::FromBytes(material_bytes);
+  const auto geom = oxygen::data::AssetKey::FromVirtualPath("/Test/Mesh.ogeo");
+  const auto material
+    = oxygen::data::AssetKey::FromVirtualPath("/Test/Surface.omat");
 
-  WriteMinimalSceneWithRenderable(geom, material);
+  WriteMinimalSceneWithRenderable({ .geometry = geom, .material = material });
 
   auto [context, collector] = MakeContextDecode();
   auto asset = LoadSceneAsset(context);
@@ -438,16 +461,35 @@ NOLINT_TEST_F(SceneLoaderTest, InspectDependenciesInParseOnlyMode)
     = oxygen::data::AssetKey::FromVirtualPath("/Art/Mesh.ogeo");
   const auto material
     = oxygen::data::AssetKey::FromVirtualPath("/Art/Material.omat");
-  WriteMinimalSceneWithRenderable(geometry, material);
+  WriteMinimalSceneWithRenderable(
+    { .geometry = geometry, .material = material });
   auto context = MakeContextParseOnly();
-  const auto result = oxygen::content::InspectDescriptorDependencies(
-    *context.desc_reader, {}, oxygen::data::AssetType::kScene);
-  EXPECT_TRUE(result.complete);
-  ASSERT_EQ(result.assets.size(), 2U);
-  EXPECT_NE(std::find(result.assets.begin(), result.assets.end(), geometry),
-    result.assets.end());
-  EXPECT_NE(std::find(result.assets.begin(), result.assets.end(), material),
-    result.assets.end());
+  const auto collector
+    = std::make_shared<oxygen::content::internal::DependencyCollector>();
+  context.dependency_collector = collector;
+  const auto scene = LoadSceneAsset(context);
+  ASSERT_NE(scene, nullptr);
+  EXPECT_THAT(collector->AssetDependencies(),
+    ::testing::UnorderedElementsAre(geometry, material));
+}
+
+NOLINT_TEST(
+  SceneLoaderDependencyTest, SceneWithoutComponentsCollectsNoDependencies)
+{
+  auto bytes = MakeSceneWithFlagRecord({ .values = 0U, .inherited = 0U });
+  oxygen::serio::MemoryStream stream { std::span<std::byte>(bytes) };
+  oxygen::serio::Reader reader(stream);
+  auto context = oxygen::content::LoaderContext {};
+  context.desc_reader = &reader;
+  context.parse_only = true;
+  const auto collector
+    = std::make_shared<oxygen::content::internal::DependencyCollector>();
+  context.dependency_collector = collector;
+  const auto scene = LoadSceneAsset(context);
+  ASSERT_NE(scene, nullptr);
+  EXPECT_TRUE(collector->AssetDependencies().empty());
+  EXPECT_TRUE(collector->ResourceRefDependencies().empty());
+  EXPECT_TRUE(collector->ResourceKeyDependencies().empty());
 }
 
 } // namespace

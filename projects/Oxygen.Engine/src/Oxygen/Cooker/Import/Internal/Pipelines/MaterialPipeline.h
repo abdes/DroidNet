@@ -27,6 +27,7 @@
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/OxCo/Channel.h>
 #include <Oxygen/OxCo/Co.h>
@@ -89,6 +90,7 @@ public:
     std::string virtual_path;
     std::string descriptor_relpath;
     std::vector<std::byte> descriptor_bytes;
+    data::AssetReferences references;
   };
 
   //! Work submission item.

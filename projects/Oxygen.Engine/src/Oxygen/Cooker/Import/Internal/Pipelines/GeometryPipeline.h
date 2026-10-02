@@ -24,6 +24,7 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/OxCo/Channel.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/ThreadPool.h>
@@ -50,6 +51,11 @@ public:
   struct MaterialKeyPatch {
     data::pak::core::DataBlobSizeT material_key_offset = 0;
     data::AssetKey key {};
+  };
+
+  struct FinalizedDescriptor {
+    std::vector<std::byte> bytes;
+    data::AssetReferences references;
   };
 
   //! Work submission item.
@@ -85,7 +91,7 @@ public:
     std::optional<MeshBuildPipeline::CookedGeometryPayload> cooked;
 
     //! Finalized descriptor bytes (patched + hashed).
-    std::vector<std::byte> finalized_descriptor_bytes;
+    FinalizedDescriptor descriptor;
 
     //! Any diagnostics produced during processing.
     std::vector<ImportDiagnostic> diagnostics;
@@ -154,12 +160,12 @@ public:
   }
 
   //! Patch buffer indices and compute descriptor content hash.
-  OXGN_COOK_NDAPI auto FinalizeDescriptorBytes(
+  OXGN_COOK_NDAPI auto FinalizeDescriptor(
     std::span<const MeshBufferBindings> bindings,
     std::span<const std::byte> descriptor_bytes,
     std::span<const MaterialKeyPatch> material_patches,
     std::vector<ImportDiagnostic>& diagnostics)
-    -> co::Co<std::optional<std::vector<std::byte>>>;
+    -> co::Co<std::optional<FinalizedDescriptor>>;
 
 private:
   [[nodiscard]] auto Worker() -> co::Co<>;

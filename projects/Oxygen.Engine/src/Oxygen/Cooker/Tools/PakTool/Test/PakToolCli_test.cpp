@@ -9,10 +9,9 @@
 
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/CommandLineContext.h>
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Cooker/Tools/PakTool/CliBuilder.h>
 #include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -87,12 +86,12 @@ NOLINT_TEST(PakToolCliTest, BuildCommandParsesCommonAndFullBuildOptions)
     std::filesystem::path("C:/Build/game.report.json"));
 }
 
-NOLINT_TEST(PakToolCliTest, PatchCommandParsesBaseCatalogsAndRelaxationFlags)
+NOLINT_TEST(PakToolCliTest, PatchCommandPreservesBaseCatalogOrder)
 {
   auto options = PakToolCliOptions {};
   const auto cli = BuildCli(options);
 
-  constexpr auto argc = 26;
+  constexpr auto argc = 22;
   const auto argv = std::array {
     "Oxygen.Cooker.PakTool",
     "patch",
@@ -104,16 +103,12 @@ NOLINT_TEST(PakToolCliTest, PatchCommandParsesBaseCatalogsAndRelaxationFlags)
     "77",
     "--source-key",
     kSourceKey,
-    "--base-catalog",
+    "--base-pak",
     "C:/Build/base_1.pakcatalog.json",
-    "--base-catalog",
+    "--base-pak",
     "C:/Build/base_2.pakcatalog.json",
     "--manifest-out",
     "C:/Build/game_patch.manifest.json",
-    "--allow-base-set-mismatch",
-    "--allow-content-version-mismatch",
-    "--allow-base-source-key-mismatch",
-    "--allow-catalog-digest-mismatch",
     "--quiet",
     "--no-color",
     "--loose-source",
@@ -125,17 +120,13 @@ NOLINT_TEST(PakToolCliTest, PatchCommandParsesBaseCatalogsAndRelaxationFlags)
   const auto context = cli->Parse(argc, const_cast<const char**>(argv.data()));
 
   EXPECT_EQ(context.active_command->PathAsString(), "patch");
-  ASSERT_EQ(options.patch.base_catalogs.size(), 2U);
-  EXPECT_EQ(options.patch.base_catalogs[0],
+  ASSERT_EQ(options.patch.base_paks.size(), 2U);
+  EXPECT_EQ(options.patch.base_paks[0],
     std::filesystem::path("C:/Build/base_1.pakcatalog.json"));
-  EXPECT_EQ(options.patch.base_catalogs[1],
+  EXPECT_EQ(options.patch.base_paks[1],
     std::filesystem::path("C:/Build/base_2.pakcatalog.json"));
   EXPECT_EQ(options.patch.manifest_output,
     std::filesystem::path("C:/Build/game_patch.manifest.json"));
-  EXPECT_TRUE(options.patch.allow_base_set_mismatch);
-  EXPECT_TRUE(options.patch.allow_content_version_mismatch);
-  EXPECT_TRUE(options.patch.allow_base_source_key_mismatch);
-  EXPECT_TRUE(options.patch.allow_catalog_digest_mismatch);
   EXPECT_TRUE(options.output.quiet);
   EXPECT_TRUE(options.output.no_color);
   ASSERT_EQ(options.request.sources.size(), 2U);
@@ -210,7 +201,7 @@ NOLINT_TEST(PakToolCliTest, BuildCommandRejectsPatchOnlyOptionSurface)
     "42",
     "--source-key",
     kSourceKey,
-    "--base-catalog",
+    "--base-pak",
     "C:/Build/base_1.pakcatalog.json",
     "--manifest-out",
     "C:/Build/game.manifest.json",

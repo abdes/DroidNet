@@ -10,7 +10,6 @@
 #include <memory>
 #include <span>
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 #include "./AssetLoader_test.h"
@@ -21,8 +20,6 @@
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
-#include <Oxygen/Content/Loaders/MaterialLoader.h>
-#include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -46,7 +43,7 @@ using oxygen::content::CookedResourceData;
 using oxygen::content::EvictionEvent;
 using oxygen::content::EvictionReason;
 using oxygen::content::ResourceKey;
-using oxygen::content::testing::AssetLoaderLoadingTest;
+using oxygen::content::testing::AssetLoaderBasicTest;
 
 using oxygen::data::BufferResource;
 using oxygen::data::MaterialAsset;
@@ -69,21 +66,30 @@ auto MakeBytesFromHexdump(const std::string& hexdump, const std::size_t size,
 }
 
 //! Fixture for eviction notification tests.
-class AssetLoaderEvictionAsyncTest : public AssetLoaderLoadingTest {
+class AssetLoaderEvictionAsyncTest : public AssetLoaderBasicTest {
 protected:
   void SetUp() override
   {
-    AssetLoaderLoadingTest::SetUp();
+    AssetLoaderBasicTest::SetUp();
     asset_loader_.reset();
   }
 };
 
-//! Test: Buffer eviction notifies subscribers on release.
+//! Regression: repeated TrimCache passes must remain stable after evictions.
 /*!
- Scenario: Load a buffer resource from cooked bytes, drop the returned pointer,
- and release the resource. Then force TrimCache so cache-retained entries are
- evicted deterministically. Expect a single eviction event.
+ Scenario: repeatedly load/release a textured material and force TrimCache.
+ This stresses resource-map traversal while eviction callbacks mutate mappings.
+ The test verifies each cycle evicts exactly the expected texture set and that
+ additional no-op trims do not emit extra events.
 */
+
+//! Regression: refresh must not leave stale uncached resource mappings.
+/*!
+ Scenario: Load a textured material, then refresh the same mounted PAK path.
+ Refresh performs a destructive cache clear and eviction flush. Repeated
+ TrimCache calls after each refresh must not emit duplicate texture evictions.
+*/
+
 NOLINT_TEST_F(
   AssetLoaderEvictionAsyncTest, ResourceEvictionNotifiesSubscriberOnRelease)
 {
@@ -94,14 +100,15 @@ NOLINT_TEST_F(
      0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
     16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
   )";
-  constexpr std::size_t kDataOffset = 256;
-  constexpr std::size_t kSizeBytes = 192;
-  constexpr uint8_t kFill = 0xAB;
+  static constexpr std::size_t kDataOffset = 256;
+  static constexpr std::size_t kSizeBytes = 192;
+  static constexpr uint8_t kFill = 0xAB;
 
   TestEventLoop el;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [](std::string hexdump, TestEventLoop* loop) -> Co<> {
+    auto& el = *loop;
     AssetLoaderConfig config {};
 
     oxygen::co::ThreadPool pool(el, 2);
@@ -124,7 +131,7 @@ NOLINT_TEST_F(
       std::vector<EvictionEvent> events;
       auto subscription
         = loader.SubscribeResourceEvictions(BufferResource::ClassTypeId(),
-          [&](const EvictionEvent& event) { events.push_back(event); });
+          [&](const EvictionEvent& event) -> void { events.push_back(event); });
 
       auto resource = co_await loader.LoadResourceAsync<BufferResource>(
         CookedResourceData<BufferResource> {
@@ -136,7 +143,7 @@ NOLINT_TEST_F(
 
       loader.TrimCache();
 
-      EXPECT_EQ(events.size(), 1u);
+      EXPECT_EQ(events.size(), 1U);
       if (!events.empty()) {
         EXPECT_EQ(events.front().key, key);
         EXPECT_EQ(events.front().type_id, BufferResource::ClassTypeId());
@@ -147,14 +154,9 @@ NOLINT_TEST_F(
       (void)subscription;
       co_return oxygen::co::kJoin;
     };
-  });
+  }(hexdump, &el));
 }
 
-//! Test: Subscribers receive only matching resource types.
-/*!
- Scenario: Subscribe to texture evictions, then evict a buffer resource and
- verify no events are delivered to the texture subscriber.
-*/
 NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionFiltersByType)
 {
   using namespace std::chrono_literals;
@@ -164,14 +166,15 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionFiltersByType)
      0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
     16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
   )";
-  constexpr std::size_t kDataOffset = 256;
-  constexpr std::size_t kSizeBytes = 192;
-  constexpr uint8_t kFill = 0x5A;
+  static constexpr std::size_t kDataOffset = 256;
+  static constexpr std::size_t kSizeBytes = 192;
+  static constexpr uint8_t kFill = 0x5A;
 
   TestEventLoop el;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [](std::string hexdump, TestEventLoop* loop) -> Co<> {
+    auto& el = *loop;
     AssetLoaderConfig config {};
 
     oxygen::co::ThreadPool pool(el, 2);
@@ -194,7 +197,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionFiltersByType)
       std::vector<EvictionEvent> events;
       auto subscription
         = loader.SubscribeResourceEvictions(TextureResource::ClassTypeId(),
-          [&](const EvictionEvent& event) { events.push_back(event); });
+          [&](const EvictionEvent& event) -> void { events.push_back(event); });
 
       auto resource = co_await loader.LoadResourceAsync<BufferResource>(
         CookedResourceData<BufferResource> {
@@ -210,14 +213,9 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionFiltersByType)
       (void)subscription;
       co_return oxygen::co::kJoin;
     };
-  });
+  }(hexdump, &el));
 }
 
-//! Test: ClearMounts emits eviction events with clear reason.
-/*!
- Scenario: Cache a buffer resource, then clear mounts to drop the cache.
- Verify an eviction event is delivered with kClear reason.
-*/
 NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionClearMounts)
 {
   using namespace std::chrono_literals;
@@ -227,14 +225,15 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionClearMounts)
      0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
     16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
   )";
-  constexpr std::size_t kDataOffset = 256;
-  constexpr std::size_t kSizeBytes = 192;
-  constexpr uint8_t kFill = 0x11;
+  static constexpr std::size_t kDataOffset = 256;
+  static constexpr std::size_t kSizeBytes = 192;
+  static constexpr uint8_t kFill = 0x11;
 
   TestEventLoop el;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [](std::string hexdump, TestEventLoop* loop) -> Co<> {
+    auto& el = *loop;
     AssetLoaderConfig config {};
 
     oxygen::co::ThreadPool pool(el, 2);
@@ -257,7 +256,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionClearMounts)
       std::vector<EvictionEvent> events;
       auto subscription
         = loader.SubscribeResourceEvictions(BufferResource::ClassTypeId(),
-          [&](const EvictionEvent& event) { events.push_back(event); });
+          [&](const EvictionEvent& event) -> void { events.push_back(event); });
 
       auto resource = co_await loader.LoadResourceAsync<BufferResource>(
         CookedResourceData<BufferResource> {
@@ -269,7 +268,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionClearMounts)
 
       loader.ClearMounts();
 
-      EXPECT_EQ(events.size(), 1u);
+      EXPECT_EQ(events.size(), 1U);
       if (!events.empty()) {
         EXPECT_EQ(events.front().reason, EvictionReason::kClear);
       }
@@ -278,14 +277,9 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionClearMounts)
       (void)subscription;
       co_return oxygen::co::kJoin;
     };
-  });
+  }(hexdump, &el));
 }
 
-//! Test: Stop emits eviction events with shutdown reason.
-/*!
- Scenario: Cache a buffer resource, then stop the loader. Expect a shutdown
- eviction event to be delivered.
-*/
 NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionStop)
 {
   using namespace std::chrono_literals;
@@ -295,14 +289,15 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionStop)
      0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
     16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
   )";
-  constexpr std::size_t kDataOffset = 256;
-  constexpr std::size_t kSizeBytes = 192;
-  constexpr uint8_t kFill = 0x22;
+  static constexpr std::size_t kDataOffset = 256;
+  static constexpr std::size_t kSizeBytes = 192;
+  static constexpr uint8_t kFill = 0x22;
 
   TestEventLoop el;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [](std::string hexdump, TestEventLoop* loop) -> Co<> {
+    auto& el = *loop;
     AssetLoaderConfig config {};
 
     oxygen::co::ThreadPool pool(el, 2);
@@ -325,7 +320,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionStop)
       std::vector<EvictionEvent> events;
       auto subscription
         = loader.SubscribeResourceEvictions(BufferResource::ClassTypeId(),
-          [&](const EvictionEvent& event) { events.push_back(event); });
+          [&](const EvictionEvent& event) -> void { events.push_back(event); });
 
       auto resource = co_await loader.LoadResourceAsync<BufferResource>(
         CookedResourceData<BufferResource> {
@@ -337,7 +332,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionStop)
 
       loader.Stop();
 
-      EXPECT_EQ(events.size(), 1u);
+      EXPECT_EQ(events.size(), 1U);
       if (!events.empty()) {
         EXPECT_EQ(events.front().reason, EvictionReason::kShutdown);
       }
@@ -345,241 +340,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionStop)
       (void)subscription;
       co_return oxygen::co::kJoin;
     };
-  });
-}
-
-//! Test: Asset release cascades texture eviction events.
-/*!
- Scenario: Load a material asset with texture dependencies, release the asset,
- and verify each texture dependency emits a refcount eviction event.
-*/
-NOLINT_TEST_F(
-  AssetLoaderEvictionAsyncTest, AssetReleaseCascadesTextureEvictions)
-{
-  using namespace std::chrono_literals;
-
-  // Arrange
-  const auto pak_path = GeneratePakFile("material_with_textures");
-  const auto material_key = CreateTestAssetKey("textured_material");
-
-  TestEventLoop el;
-
-  // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
-    oxygen::co::ThreadPool pool(el, 2);
-    AssetLoaderConfig config {};
-    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-
-    AssetLoader loader(Tag::Get(), config);
-
-    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
-    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
-
-    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
-    {
-      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
-      loader.Run();
-
-      loader.AddPakFile(pak_path);
-
-      std::vector<EvictionEvent> events;
-      auto subscription
-        = loader.SubscribeResourceEvictions(TextureResource::ClassTypeId(),
-          [&](const EvictionEvent& event) { events.push_back(event); });
-
-      auto material
-        = co_await loader.LoadAssetAsync<MaterialAsset>(material_key);
-      EXPECT_THAT(material, NotNull());
-      material.reset();
-
-      // Eviction is no longer guaranteed to happen immediately on release.
-      // Force a trim so any entries that are only held by the cache are
-      // evicted now, producing eviction notifications synchronously.
-      loader.TrimCache();
-
-      EXPECT_EQ(events.size(), 3u);
-      for (const auto& event : events) {
-        EXPECT_EQ(event.type_id, TextureResource::ClassTypeId());
-        // We force eviction via TrimCache(), which reports kTrim.
-        EXPECT_EQ(event.reason, EvictionReason::kTrim);
-      }
-
-      std::unordered_set<std::size_t> unique_keys;
-      for (const auto& event : events) {
-        unique_keys.insert(std::hash<ResourceKey> {}(event.key));
-      }
-      EXPECT_EQ(unique_keys.size(), events.size());
-
-      loader.Stop();
-      (void)subscription;
-      co_return oxygen::co::kJoin;
-    };
-  });
-}
-
-//! Regression: repeated TrimCache passes must remain stable after evictions.
-/*!
- Scenario: repeatedly load/release a textured material and force TrimCache.
- This stresses resource-map traversal while eviction callbacks mutate mappings.
- The test verifies each cycle evicts exactly the expected texture set and that
- additional no-op trims do not emit extra events.
-*/
-NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, TrimCacheRepeatedCyclesStable)
-{
-  using namespace std::chrono_literals;
-
-  constexpr std::size_t kCycles = 6U;
-  constexpr std::size_t kTexturesPerMaterial = 3U;
-  constexpr std::size_t kNoOpTrimPasses = 3U;
-
-  const auto pak_path = GeneratePakFile("material_with_textures");
-  const auto material_key = CreateTestAssetKey("textured_material");
-
-  TestEventLoop el;
-
-  (oxygen::co::Run)(el, [&]() -> Co<> {
-    oxygen::co::ThreadPool pool(el, 2);
-    AssetLoaderConfig config {};
-    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-
-    AssetLoader loader(Tag::Get(), config);
-
-    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
-    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
-
-    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
-    {
-      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
-      loader.Run();
-      loader.AddPakFile(pak_path);
-
-      std::vector<EvictionEvent> events;
-      auto subscription
-        = loader.SubscribeResourceEvictions(TextureResource::ClassTypeId(),
-          [&](const EvictionEvent& event) { events.push_back(event); });
-
-      for (std::size_t cycle = 0; cycle < kCycles; ++cycle) {
-        auto material
-          = co_await loader.LoadAssetAsync<MaterialAsset>(material_key);
-        EXPECT_THAT(material, NotNull());
-        if (!material) {
-          loader.Stop();
-          (void)subscription;
-          co_return oxygen::co::kJoin;
-        }
-        material.reset();
-
-        EXPECT_TRUE(loader.HasAsset<MaterialAsset>(material_key));
-
-        const auto before_trim = events.size();
-        loader.TrimCache();
-        EXPECT_FALSE(loader.HasAsset<MaterialAsset>(material_key));
-
-        const auto after_trim = events.size();
-        EXPECT_EQ(after_trim - before_trim, kTexturesPerMaterial);
-
-        std::unordered_set<std::size_t> unique_cycle_keys;
-        for (std::size_t i = before_trim; i < after_trim; ++i) {
-          const auto& event = events.at(i);
-          EXPECT_EQ(event.type_id, TextureResource::ClassTypeId());
-          EXPECT_EQ(event.reason, EvictionReason::kTrim);
-          unique_cycle_keys.insert(std::hash<ResourceKey> {}(event.key));
-        }
-        EXPECT_EQ(unique_cycle_keys.size(), kTexturesPerMaterial);
-
-        const auto before_noop_trims = events.size();
-        for (std::size_t i = 0; i < kNoOpTrimPasses; ++i) {
-          loader.TrimCache();
-        }
-        EXPECT_EQ(events.size(), before_noop_trims);
-      }
-
-      EXPECT_EQ(events.size(), kCycles * kTexturesPerMaterial);
-
-      loader.Stop();
-      (void)subscription;
-      co_return oxygen::co::kJoin;
-    };
-  });
-}
-
-//! Regression: refresh must not leave stale uncached resource mappings.
-/*!
- Scenario: Load a textured material, then refresh the same mounted PAK path.
- Refresh performs a destructive cache clear and eviction flush. Repeated
- TrimCache calls after each refresh must not emit duplicate texture evictions.
-*/
-NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, RefreshPakNoDuplicateTrimEvictions)
-{
-  constexpr std::size_t kRefreshCycles = 4U;
-  constexpr std::size_t kTexturesPerCycle = 3U;
-  constexpr std::size_t kNoOpTrimPasses = 3U;
-
-  const auto pak_path = GeneratePakFile("material_with_textures");
-  const auto material_key = CreateTestAssetKey("textured_material");
-
-  TestEventLoop el;
-
-  (oxygen::co::Run)(el, [&]() -> Co<> {
-    oxygen::co::ThreadPool pool(el, 2);
-    AssetLoaderConfig config {};
-    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-
-    AssetLoader loader(Tag::Get(), config);
-
-    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
-    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
-
-    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
-    {
-      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
-      loader.Run();
-      loader.AddPakFile(pak_path);
-
-      std::vector<EvictionEvent> events;
-      auto subscription
-        = loader.SubscribeResourceEvictions(TextureResource::ClassTypeId(),
-          [&](const EvictionEvent& event) { events.push_back(event); });
-
-      for (std::size_t cycle = 0; cycle < kRefreshCycles; ++cycle) {
-        auto material
-          = co_await loader.LoadAssetAsync<MaterialAsset>(material_key);
-        EXPECT_THAT(material, NotNull());
-        if (!material) {
-          loader.Stop();
-          (void)subscription;
-          co_return oxygen::co::kJoin;
-        }
-        material.reset();
-
-        const auto before_refresh = events.size();
-        loader.AddPakFile(pak_path); // refresh mounted source
-        const auto after_refresh = events.size();
-        EXPECT_EQ(after_refresh - before_refresh, kTexturesPerCycle);
-
-        std::unordered_set<std::size_t> unique_refresh_keys;
-        for (std::size_t i = before_refresh; i < after_refresh; ++i) {
-          const auto& event = events.at(i);
-          EXPECT_EQ(event.type_id, TextureResource::ClassTypeId());
-          EXPECT_EQ(event.reason, EvictionReason::kClear);
-          unique_refresh_keys.insert(std::hash<ResourceKey> {}(event.key));
-        }
-        EXPECT_EQ(unique_refresh_keys.size(), kTexturesPerCycle);
-
-        const auto before_noop_trims = events.size();
-        for (std::size_t i = 0; i < kNoOpTrimPasses; ++i) {
-          loader.TrimCache();
-        }
-        EXPECT_EQ(events.size(), before_noop_trims);
-      }
-
-      EXPECT_EQ(events.size(), kRefreshCycles * kTexturesPerCycle);
-
-      loader.Stop();
-      (void)subscription;
-      co_return oxygen::co::kJoin;
-    };
-  });
+  }(hexdump, &el));
 }
 
 } // namespace

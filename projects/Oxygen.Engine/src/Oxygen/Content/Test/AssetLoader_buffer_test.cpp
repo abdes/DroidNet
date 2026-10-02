@@ -5,14 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <atomic>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <limits>
 #include <memory>
-#include <mutex>
 #include <span>
 #include <string>
 #include <thread>
@@ -49,7 +46,7 @@ using oxygen::content::AssetLoader;
 using oxygen::content::AssetLoaderConfig;
 using oxygen::content::CookedResourceData;
 using oxygen::content::ResourceKey;
-using oxygen::content::testing::AssetLoaderLoadingTest;
+using oxygen::content::testing::AssetLoaderBasicTest;
 
 using oxygen::data::BufferResource;
 using oxygen::data::TextureResource;
@@ -71,13 +68,14 @@ auto MakeBytesFromHexdump(const std::string& hexdump, const std::size_t size,
 }
 
 //! Fixture for buffer-provided async load tests.
-class AssetLoaderBufferFromBufferAsyncTest : public AssetLoaderLoadingTest { };
+class AssetLoaderBufferFromBufferAsyncTest : public AssetLoaderBasicTest { };
 
 NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
   CookedResourceRejectsUnknownAndWrongKindBeforeDecode)
 {
   TestEventLoop loop;
-  oxygen::co::Run(loop, [&] -> Co<> {
+  oxygen::co::Run(loop, [](TestEventLoop* event_loop) -> Co<> {
+    auto& loop = *event_loop;
     oxygen::co::ThreadPool pool(loop, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr { &pool };
@@ -104,7 +102,7 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
       loader.Stop();
       co_return oxygen::co::kJoin;
     };
-  });
+  }(&loop));
 }
 
 //! Test: LoadResourceAsync(cooked) decodes and caches BufferResource.
@@ -117,61 +115,62 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
 NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
   LoadResourceFromBufferAsyncBufferResourceCachesDecodedResource)
 {
-  using namespace std::chrono_literals;
 
   // Arrange
   const std::string hexdump = R"(
      0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
     16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
   )";
-  constexpr std::size_t kDataOffset = 256;
-  constexpr std::size_t kSizeBytes = 192;
-  constexpr uint8_t kFill = 0xAB;
+  static constexpr std::size_t kDataOffset = 256;
+  static constexpr std::size_t kSizeBytes = 192;
+  static constexpr uint8_t kFill = 0xAB;
 
   auto bytes = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
 
   TestEventLoop el;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
-    AssetLoaderConfig config {};
+  oxygen::co::Run(
+    el, [](std::vector<uint8_t> bytes, TestEventLoop* loop) -> Co<> {
+      auto& el = *loop;
+      AssetLoaderConfig config {};
 
-    oxygen::co::ThreadPool pool(el, 2);
-    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+      oxygen::co::ThreadPool pool(el, 2);
+      config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(Tag::Get(), config);
-    const auto key = loader.MintSyntheticBufferKey();
+      AssetLoader loader(Tag::Get(), config);
+      const auto key = loader.MintSyntheticBufferKey();
 
-    loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
+      loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
-    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
-    {
-      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
-      loader.Run();
+      OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+      {
+        co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+        loader.Run();
 
-      // Act
-      std::span<const uint8_t> span(bytes.data(), bytes.size());
-      auto resource = co_await loader.LoadResourceAsync<BufferResource>(
-        CookedResourceData<BufferResource> {
-          .key = key,
-          .bytes = span,
-        });
+        // Act
+        std::span<const uint8_t> span(bytes.data(), bytes.size());
+        auto resource = co_await loader.LoadResourceAsync<BufferResource>(
+          CookedResourceData<BufferResource> {
+            .key = key,
+            .bytes = span,
+          });
 
-      // Assert
-      EXPECT_THAT(resource, NotNull());
-      EXPECT_EQ(resource->GetDataSize(), kSizeBytes);
-      EXPECT_EQ(resource->GetData().size(), kSizeBytes);
-      EXPECT_THAT(
-        resource->GetData(), ::testing::Each(static_cast<uint8_t>(kFill)));
+        // Assert
+        EXPECT_THAT(resource, NotNull());
+        EXPECT_EQ(resource->GetDataSize(), kSizeBytes);
+        EXPECT_EQ(resource->GetData().size(), kSizeBytes);
+        EXPECT_THAT(
+          resource->GetData(), ::testing::Each(static_cast<uint8_t>(kFill)));
 
-      auto cached = loader.GetResource<BufferResource>(key);
-      EXPECT_THAT(cached, NotNull());
-      EXPECT_EQ(cached.get(), resource.get());
+        auto cached = loader.GetResource<BufferResource>(key);
+        EXPECT_THAT(cached, NotNull());
+        EXPECT_EQ(cached.get(), resource.get());
 
-      loader.Stop();
-      co_return oxygen::co::kJoin;
-    };
-  });
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      };
+    }(bytes, &el));
 }
 
 //! Test: StartLoadBuffer(cooked) invokes callback on owning thread.
@@ -183,76 +182,70 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
 NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
   StartLoadResourceFromBufferBufferResourceInvokesCallback)
 {
-  using namespace std::chrono_literals;
 
   // Arrange
   const std::string hexdump = R"(
      0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
     16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
   )";
-  constexpr std::size_t kDataOffset = 256;
-  constexpr std::size_t kSizeBytes = 192;
-  constexpr uint8_t kFill = 0x5A;
+  static constexpr std::size_t kDataOffset = 256;
+  static constexpr std::size_t kSizeBytes = 192;
+  static constexpr uint8_t kFill = 0x5A;
 
   auto bytes = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
 
   TestEventLoop el;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
-    AssetLoaderConfig config {};
+  oxygen::co::Run(
+    el, [](std::vector<uint8_t> bytes, TestEventLoop* loop) -> Co<> {
+      auto& el = *loop;
+      AssetLoaderConfig config {};
 
-    oxygen::co::ThreadPool pool(el, 2);
-    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+      oxygen::co::ThreadPool pool(el, 2);
+      config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(Tag::Get(), config);
-    const auto key = loader.MintSyntheticBufferKey();
+      AssetLoader loader(Tag::Get(), config);
+      const auto key = loader.MintSyntheticBufferKey();
 
-    loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
+      loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
-    std::atomic<bool> callback_called { false };
-    std::mutex callback_mutex;
-    std::shared_ptr<BufferResource> loaded;
-    std::thread::id callback_thread;
+      unsigned int callback_count = 0U;
+      std::shared_ptr<BufferResource> loaded;
+      std::thread::id callback_thread;
 
-    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
-    {
-      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
-      loader.Run();
+      OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+      {
+        co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+        loader.Run();
 
-      const auto owning_thread = std::this_thread::get_id();
+        const auto owning_thread = std::this_thread::get_id();
 
-      std::span<const uint8_t> span(bytes.data(), bytes.size());
-      loader.StartLoadBuffer(
-        CookedResourceData<BufferResource> {
-          .key = key,
-          .bytes = span,
-        },
-        [&](std::shared_ptr<BufferResource> resource) {
-          {
-            const std::scoped_lock lock(callback_mutex);
+        std::span<const uint8_t> span(bytes.data(), bytes.size());
+        loader.StartLoadBuffer(
+          CookedResourceData<BufferResource> {
+            .key = key,
+            .bytes = span,
+          },
+          [&](std::shared_ptr<BufferResource> resource) -> void {
             loaded = std::move(resource);
             callback_thread = std::this_thread::get_id();
-          }
-          callback_called.store(true, std::memory_order_release);
-        });
+            ++callback_count;
+          });
 
-      for (int i = 0;
-        i < 1500 && !callback_called.load(std::memory_order_acquire); ++i) {
-        co_await el.Sleep(1ms);
-      }
-
-      EXPECT_TRUE(callback_called.load(std::memory_order_acquire));
-      {
-        const std::scoped_lock lock(callback_mutex);
+        co_await loader.WaitForPendingLoadsAsync();
+        EXPECT_EQ(callback_count, 1U);
         EXPECT_THAT(loaded, NotNull());
-      }
-      EXPECT_EQ(callback_thread, owning_thread);
+        if (loaded) {
+          EXPECT_EQ(loaded->GetData().size(), kSizeBytes);
+          EXPECT_THAT(loaded->GetData(), ::testing::Each(kFill));
+        }
+        EXPECT_EQ(callback_thread, owning_thread);
 
-      loader.Stop();
-      co_return oxygen::co::kJoin;
-    };
-  });
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      };
+    }(bytes, &el));
 }
 
 //! Test: LoadResourceAsync(cooked) decodes and caches TextureResource.
@@ -265,24 +258,24 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
 NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
   LoadResourceFromBufferAsyncTextureResourceCachesDecodedResource)
 {
-  using namespace std::chrono_literals;
 
   // Arrange
-  constexpr std::size_t kDataOffset = 256;
-  constexpr uint32_t kPixelBytes = 287;
-  constexpr std::byte kFill = std::byte { 0x99 };
+  static constexpr std::size_t kDataOffset = 256;
+  static constexpr uint32_t kPixelBytes = 287;
+  static constexpr auto kFill = std::byte { 0x99 };
 
   oxygen::data::pak::core::TextureResourceDesc desc {};
   desc.data_offset = static_cast<uint64_t>(kDataOffset);
   desc.texture_type = 3; // TextureType::kTexture2D
   desc.compression_type = 0;
-  desc.width = 128;
+  static constexpr uint32_t kTextureWidth = 128U;
+  desc.width = kTextureWidth;
   desc.height = 64;
   desc.depth = 1;
   desc.array_layers = 1;
   desc.mip_levels = 1;
   desc.format = 0;
-  desc.alignment = 256;
+  desc.alignment = kDataOffset;
 
   const auto payload
     = oxygen::content::testing::MakeV4TexturePayload(kPixelBytes, kFill);
@@ -291,51 +284,55 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
   TestEventLoop el;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
-    AssetLoaderConfig config {};
+  oxygen::co::Run(el,
+    [](oxygen::data::pak::core::TextureResourceDesc desc,
+      std::vector<uint8_t> payload, TestEventLoop* loop) -> Co<> {
+      auto& el = *loop;
+      AssetLoaderConfig config {};
 
-    oxygen::co::ThreadPool pool(el, 2);
-    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+      oxygen::co::ThreadPool pool(el, 2);
+      config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(Tag::Get(), config);
+      AssetLoader loader(Tag::Get(), config);
 
-    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
+      loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
 
-    const auto key = loader.MintSyntheticTextureKey();
-    std::vector<uint8_t> bytes(kDataOffset + payload.size(), 0);
-    std::memcpy(bytes.data(), &desc, sizeof(desc));
-    std::memcpy(bytes.data() + kDataOffset, payload.data(), payload.size());
+      const auto key = loader.MintSyntheticTextureKey();
+      std::vector<uint8_t> bytes(kDataOffset + payload.size(), 0);
+      std::memcpy(bytes.data(), &desc, sizeof(desc));
+      std::memcpy(std::span(bytes).subspan(kDataOffset).data(), payload.data(),
+        payload.size());
 
-    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
-    {
-      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
-      loader.Run();
+      OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+      {
+        co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+        loader.Run();
 
-      std::span<const uint8_t> span(bytes.data(), bytes.size());
-      auto resource = co_await loader.LoadResourceAsync<TextureResource>(
-        CookedResourceData<TextureResource> {
-          .key = key,
-          .bytes = span,
-        });
+        std::span<const uint8_t> span(bytes.data(), bytes.size());
+        auto resource = co_await loader.LoadResourceAsync<TextureResource>(
+          CookedResourceData<TextureResource> {
+            .key = key,
+            .bytes = span,
+          });
 
-      EXPECT_THAT(resource, NotNull());
-      EXPECT_EQ(resource->GetWidth(), 128u);
-      EXPECT_EQ(resource->GetHeight(), 64u);
-      EXPECT_EQ(resource->GetDepth(), 1u);
-      EXPECT_EQ(resource->GetArrayLayers(), 1u);
-      EXPECT_EQ(resource->GetMipCount(), 1u);
-      EXPECT_EQ(resource->GetData().size(), kPixelBytes);
-      EXPECT_THAT(
-        resource->GetData(), ::testing::Each(std::to_integer<uint8_t>(kFill)));
+        EXPECT_THAT(resource, NotNull());
+        EXPECT_EQ(resource->GetWidth(), 128U);
+        EXPECT_EQ(resource->GetHeight(), 64U);
+        EXPECT_EQ(resource->GetDepth(), 1U);
+        EXPECT_EQ(resource->GetArrayLayers(), 1U);
+        EXPECT_EQ(resource->GetMipCount(), 1U);
+        EXPECT_EQ(resource->GetData().size(), kPixelBytes);
+        EXPECT_THAT(resource->GetData(),
+          ::testing::Each(std::to_integer<uint8_t>(kFill)));
 
-      auto cached = loader.GetResource<TextureResource>(key);
-      EXPECT_THAT(cached, NotNull());
-      EXPECT_EQ(cached.get(), resource.get());
+        auto cached = loader.GetResource<TextureResource>(key);
+        EXPECT_THAT(cached, NotNull());
+        EXPECT_EQ(cached.get(), resource.get());
 
-      loader.Stop();
-      co_return oxygen::co::kJoin;
-    };
-  });
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      };
+    }(desc, payload, &el));
 }
 
 } // namespace

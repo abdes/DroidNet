@@ -20,6 +20,7 @@
 #include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ScriptAsset.h>
@@ -48,6 +49,22 @@ inline auto LoadScriptAsset(const LoaderContext& context)
     != data::AssetType::kScript) {
     throw std::runtime_error("invalid asset type for script descriptor");
   }
+  if (desc.header.version != data::pak::scripting::kScriptAssetVersion) {
+    throw std::runtime_error(
+      "Script descriptor version is not current; re-cook the script");
+  }
+
+  const auto resource_uses = std::array {
+    data::ResourceReferenceUse {
+      .reference = desc.bytecode_resource_index,
+      .kind = data::ResourceKind::kScript,
+    },
+    data::ResourceReferenceUse {
+      .reference = desc.source_resource_index,
+      .kind = data::ResourceKind::kScript,
+    },
+  };
+  context.ValidateReferences(resource_uses, {});
 
   if (!context.parse_only) {
     if (!context.dependency_collector) {
@@ -63,17 +80,22 @@ inline auto LoadScriptAsset(const LoaderContext& context)
     const auto script_indices
       = std::array { desc.bytecode_resource_index, desc.source_resource_index };
     for (size_t i = 0; i < script_indices.size(); ++i) {
-      const auto resource_index = script_indices.at(i);
-      if (resource_index == data::pak::core::kNoResourceIndex) {
+      const auto reference = script_indices.at(i);
+      if (reference == data::kNoResourceReference) {
         continue;
       }
-      if (i == 1 && resource_index == script_indices.at(0)) {
+      if (i == 1 && reference == script_indices.at(0)) {
+        continue;
+      }
+      const auto resource_index
+        = context.ResolveResource(reference, data::ResourceKind::kScript);
+      if (!resource_index) {
         continue;
       }
       internal::ResourceRef ref {
         .source = context.source_instance,
         .resource_type_id = data::ScriptResource::ClassTypeId(),
-        .resource_index = resource_index,
+        .resource_index = *resource_index,
       };
       context.dependency_collector->AddResourceDependency(ref);
     }

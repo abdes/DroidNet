@@ -12,6 +12,7 @@
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 
 namespace oxygen::content::lc {
@@ -25,6 +26,7 @@ struct AssetEntry {
   uint64_t descriptor_size = 0;
   uint8_t asset_type = 0;
   std::optional<base::Sha256Digest> descriptor_sha256;
+  data::AssetReferences references;
 };
 
 struct FileEntry {

@@ -627,8 +627,8 @@ namespace {
     mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kStandard);
     mesh.submesh_count = 1U;
     mesh.mesh_view_count = 1U;
-    mesh.info.standard.vertex_buffer = core::ResourceIndexT { 1U };
-    mesh.info.standard.index_buffer = core::ResourceIndexT { 2U };
+    mesh.info.standard.vertex_buffer = data::ResourceReferenceIndex { 0U };
+    mesh.info.standard.index_buffer = data::ResourceReferenceIndex { 1U };
     mesh.info.standard.bounding_box_min[0] = descriptor.bounding_box_min[0];
     mesh.info.standard.bounding_box_min[1] = descriptor.bounding_box_min[1];
     mesh.info.standard.bounding_box_min[2] = descriptor.bounding_box_min[2];
@@ -704,7 +704,16 @@ namespace {
 
     auto writer = LooseCookedWriter(cooked_root);
     writer.WriteAssetDescriptor(key, data::AssetType::kGeometry, virtual_path,
-      relpath, std::span<const std::byte>(descriptor_bytes));
+      relpath, std::span<const std::byte>(descriptor_bytes),
+      data::AssetReferences::Create(
+        {
+          { .kind = data::ResourceKind::kBuffer,
+            .index = oxygen::ResourceIndexT { 1U } },
+          { .kind = data::ResourceKind::kBuffer,
+            .index = oxygen::ResourceIndexT { 2U } },
+        },
+        {})
+        .value());
     (void)writer.Finish();
 
     const auto layout = LooseCookedLayout {};

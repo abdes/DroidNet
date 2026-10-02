@@ -17,6 +17,8 @@
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/AssetValidation.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
@@ -30,6 +32,7 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -62,6 +65,28 @@ auto ValidateRoot(
   std::unordered_map<data::AssetKey, std::unique_ptr<data::GeometryAsset>>
     geometries;
   std::vector<std::unique_ptr<data::SceneAsset>> scenes;
+
+  const auto entries
+    = [&index](const FileKind kind, const size_t entry_size) -> uint64_t {
+    const auto bytes = index.FindFileSize(kind);
+    if (!bytes) {
+      return 0U;
+    }
+    if (*bytes % entry_size != 0U) {
+      throw std::runtime_error("Resource table contains a partial record");
+    }
+    return *bytes / entry_size;
+  };
+  const data::ResourceTableCounts table_counts {
+    .buffers = entries(
+      FileKind::kBuffersTable, sizeof(data::pak::core::BufferResourceDesc)),
+    .textures = entries(
+      FileKind::kTexturesTable, sizeof(data::pak::core::TextureResourceDesc)),
+    .scripts = entries(FileKind::kScriptsTable,
+      sizeof(data::pak::scripting::ScriptResourceDesc)),
+    .physics = entries(
+      FileKind::kPhysicsTable, sizeof(data::pak::physics::PhysicsResourceDesc)),
+  };
 
   for (const auto& asset : inspection.Assets()) {
     if (asset.descriptor_relpath.empty()) {
@@ -106,6 +131,12 @@ auto ValidateRoot(
     }
 
     const auto asset_type = static_cast<AssetType>(asset.asset_type);
+    const auto current_version = data::pak::CurrentAssetVersion(asset_type);
+    if (!current_version || header.version != *current_version) {
+      throw std::runtime_error("Unsupported descriptor version in "
+        + descriptor_path.generic_string()
+        + "; re-cook with the current tools");
+    }
     size_t min_size = sizeof(AssetHeader);
     switch (asset_type) {
     case AssetType::kMaterial:
@@ -144,6 +175,15 @@ auto ValidateRoot(
         + descriptor_path.generic_string());
     }
 
+    const auto references = index.FindAssetReferences(asset.key);
+    if (!references.has_value()) {
+      throw std::runtime_error("Asset reference inventory is missing");
+    }
+    if (const auto valid = references->ValidateResourceBounds(table_counts);
+      !valid) {
+      throw std::runtime_error(
+        descriptor_path.generic_string() + ": " + valid.error());
+    }
     if (asset_type == AssetType::kScene || asset_type == AssetType::kMaterial
       || asset_type == AssetType::kGeometry) {
       if (!reader.Seek(0)) {
@@ -156,6 +196,7 @@ auto ValidateRoot(
         const LoaderContext context {
           .current_asset_key = asset.key,
           .desc_reader = &reader,
+          .asset_references = observer_ptr(&*references),
           .work_offline = true,
           .parse_only = true,
         };
@@ -166,10 +207,24 @@ auto ValidateRoot(
         } else {
           static_cast<void>(loaders::LoadMaterialAsset(context));
         }
+        const auto consumed = reader.Position();
+        if (!consumed || *consumed != descriptor_size) {
+          throw std::runtime_error(
+            "Asset descriptor contains unexpected trailing bytes");
+        }
       } catch (const std::exception& error) {
         throw std::runtime_error("invalid asset descriptor '"
           + descriptor_path.generic_string() + "': " + error.what());
       }
+    } else {
+      if (!reader.Seek(0)) {
+        throw std::runtime_error("Could not rewind asset descriptor");
+      }
+      const auto bytes = reader.ReadBlob(descriptor_size);
+      if (!bytes) {
+        throw std::runtime_error("Could not read complete asset descriptor");
+      }
+      ValidateAssetDescriptor(asset_type, asset.key, *bytes, *references);
     }
   }
 

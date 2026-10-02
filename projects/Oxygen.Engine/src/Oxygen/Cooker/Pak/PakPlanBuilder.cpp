@@ -16,6 +16,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -29,6 +30,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/Types.h>
@@ -84,8 +86,6 @@ constexpr uint32_t kBrowseAlignment = 16U;
 constexpr uint32_t kFooterAlignment = 16U;
 constexpr uint64_t kMaxCountAsUint64 = std::numeric_limits<uint32_t>::max();
 constexpr int kUnknownRegionOrder = std::numeric_limits<int>::max();
-constexpr std::string_view kPatchDiffBasisIdentifier
-  = "descriptor_plus_transitive_resources_v1";
 
 struct AlignmentBytes final {
   uint32_t value = 1U;
@@ -101,6 +101,7 @@ struct AggregatedAsset {
   oxygen::base::Sha256Digest transitive_resource_digest {};
   std::string virtual_path;
   size_t source_order = 0;
+  data::AssetReferences references;
 };
 
 struct PendingResource {
@@ -125,41 +126,11 @@ struct TableCounts {
   uint64_t buffer_count = 0;
   uint64_t audio_count = 0;
   uint64_t script_resource_count = 0;
-  uint64_t script_slot_count = 0;
   uint64_t physics_count = 0;
 };
 
 struct SourceContribution final {
   TableCounts table_counts {};
-  std::vector<pak::PakScriptSlotPlan> local_script_slots;
-  uint32_t script_param_record_count = 0;
-};
-
-struct OwnedScriptSlotSource final {
-  data::AssetKey asset_key;
-  size_t source_order = 0;
-  uint32_t source_slot_index = 0;
-  script::ScriptSlotRecord record {};
-};
-
-struct PatchCompatibilityEnvelopeData final {
-  std::vector<data::SourceKey> required_base_source_keys;
-  std::vector<uint16_t> required_base_content_versions;
-  std::vector<oxygen::base::Sha256Digest> required_base_catalog_digests;
-  uint16_t patch_content_version = 0;
-};
-
-struct PatchCompatibilityPolicySnapshotData final {
-  bool require_exact_base_set = true;
-  bool require_content_version_match = true;
-  bool require_base_source_key_match = true;
-  bool require_catalog_digest_match = true;
-};
-
-struct ScriptSlotReadContext final {
-  uint32_t slot_index_base = 0;
-  uint32_t params_array_index_base = 0;
-  uint32_t source_params_record_count = 0;
 };
 
 auto AddDiagnostic(std::vector<pak::PakDiagnostic>& diagnostics,
@@ -227,19 +198,6 @@ auto AggregateTransitiveDigest(
   return hasher.Finalize();
 }
 
-auto SortAndUniqueSourceKeys(std::vector<data::SourceKey>& keys) -> void
-{
-  std::ranges::sort(keys);
-  keys.erase(std::ranges::unique(keys).begin(), keys.end());
-}
-
-auto SortAndUniqueDigests(std::vector<oxygen::base::Sha256Digest>& digests)
-  -> void
-{
-  std::ranges::sort(digests);
-  digests.erase(std::ranges::unique(digests).begin(), digests.end());
-}
-
 auto ToCanonicalSourcePath(const std::filesystem::path& input)
   -> std::filesystem::path
 {
@@ -292,8 +250,6 @@ struct SourceResourceFiles final {
   std::optional<SourceFileSlice> textures_data;
   std::optional<SourceFileSlice> scripts_table;
   std::optional<SourceFileSlice> scripts_data;
-  std::optional<SourceFileSlice> script_bindings_table;
-  std::optional<SourceFileSlice> script_bindings_data;
   std::optional<SourceFileSlice> physics_table;
   std::optional<SourceFileSlice> physics_data;
   std::optional<SourceFileSlice> audio_table;
@@ -445,116 +401,6 @@ auto AppendResourcesFromTable(const SourceFileSlice& table_file,
   return static_cast<uint32_t>(records.size());
 }
 
-auto ReadScriptSlotsFromTable(const std::filesystem::path& scripts_table_path,
-  const ScriptSlotReadContext& context,
-  std::vector<pak::PakScriptSlotPlan>& slots,
-  std::vector<pak::PakDiagnostic>& diagnostics) -> uint32_t
-{
-  const auto size_opt = MeasureFileSize(scripts_table_path, diagnostics);
-  if (!size_opt.has_value()) {
-    return 0;
-  }
-
-  constexpr uint64_t kSlotSize = sizeof(script::ScriptSlotRecord);
-  constexpr uint64_t kParamRecordSize = sizeof(script::ScriptParamRecord);
-
-  if (kSlotSize == 0U || (*size_opt % kSlotSize) != 0U) {
-    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-      pak::PakBuildPhase::kPlanning, "pak.plan.script_slot_table_size_invalid",
-      "script-bindings.table size is not divisible by ScriptSlotRecord size.",
-      scripts_table_path);
-    return 0;
-  }
-
-  const auto slot_count64 = *size_opt / kSlotSize;
-  if (slot_count64 > kMaxCountAsUint64) {
-    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-      pak::PakBuildPhase::kPlanning, "pak.plan.script_slot_table_too_large",
-      "script-bindings.table has too many slot records.", scripts_table_path);
-    return 0;
-  }
-
-  serio::FileStream<> stream(scripts_table_path, std::ios::in);
-  serio::Reader<serio::FileStream<>> reader(stream);
-  auto align_guard = reader.ScopedAlignment(1);
-  (void)align_guard;
-
-  const auto blob_result = reader.ReadBlob(static_cast<size_t>(*size_opt));
-  if (!blob_result) {
-    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-      pak::PakBuildPhase::kPlanning, "pak.plan.script_slot_table_read_failed",
-      "Failed to read script-bindings.table content.", scripts_table_path);
-    return 0;
-  }
-
-  const auto slot_count = static_cast<uint32_t>(slot_count64);
-  const auto blob = std::span<const std::byte>(*blob_result);
-  for (uint32_t i = 0; i < slot_count; ++i) {
-    const auto offset
-      = static_cast<size_t>(i) * sizeof(script::ScriptSlotRecord);
-    script::ScriptSlotRecord record {};
-    std::memcpy(std::addressof(record),
-      blob.subspan(offset, sizeof(record)).data(), sizeof(record));
-
-    if ((record.params_array_offset % kParamRecordSize) != 0U) {
-      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-        pak::PakBuildPhase::kPlanning,
-        "pak.plan.script_params_offset_unaligned",
-        "ScriptSlotRecord.params_array_offset is not aligned to "
-        "ScriptParamRecord.",
-        scripts_table_path);
-      continue;
-    }
-
-    const auto local_params_array_offset
-      = static_cast<uint64_t>(record.params_array_offset / kParamRecordSize);
-    uint64_t local_params_array_end = 0;
-    if (!SafeAdd(local_params_array_offset, record.params_count,
-          local_params_array_end)
-      || local_params_array_end > context.source_params_record_count) {
-      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-        pak::PakBuildPhase::kPlanning,
-        "pak.plan.script_params_range_out_of_bounds",
-        "ScriptSlotRecord params range exceeds script-bindings.data bounds "
-        "for source.",
-        scripts_table_path);
-      continue;
-    }
-
-    uint64_t global_params_array_offset = 0;
-    if (!SafeAdd(context.params_array_index_base, local_params_array_offset,
-          global_params_array_offset)
-      || global_params_array_offset > kMaxCountAsUint64) {
-      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-        pak::PakBuildPhase::kPlanning, "pak.plan.script_params_offset_overflow",
-        "ScriptSlotRecord params offset overflowed global script param index.",
-        scripts_table_path);
-      continue;
-    }
-
-    uint64_t slot_index64 = 0;
-    if (!SafeAdd(context.slot_index_base, i, slot_index64)
-      || slot_index64 > kMaxCountAsUint64) {
-      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-        pak::PakBuildPhase::kPlanning, "pak.plan.script_slot_index_overflow",
-        "ScriptSlotRecord slot index overflowed uint32 bounds.",
-        scripts_table_path);
-      continue;
-    }
-
-    slots.push_back(pak::PakScriptSlotPlan {
-      .slot_index = static_cast<uint32_t>(slot_index64),
-      .script_asset_key = record.script_asset_key,
-      .params_array_index = static_cast<uint32_t>(global_params_array_offset),
-      .params_count = record.params_count,
-      .execution_order = record.execution_order,
-      .flags = record.flags,
-    });
-  }
-
-  return slot_count;
-}
-
 struct SourceResourceDigestState final {
   std::unordered_map<uint32_t, oxygen::base::Sha256Digest> texture_digests;
   std::unordered_map<uint32_t, oxygen::base::Sha256Digest> buffer_digests;
@@ -565,10 +411,6 @@ struct SourceResourceDigestState final {
   std::unordered_map<uint32_t, size_t> buffer_pending_positions;
   std::unordered_map<uint32_t, size_t> script_pending_positions;
   std::unordered_map<uint32_t, size_t> physics_pending_positions;
-  std::optional<std::filesystem::path> script_bindings_data_path;
-  std::vector<script::ScriptSlotRecord> raw_script_slots;
-  std::vector<std::byte> raw_script_params;
-  std::unordered_map<uint64_t, uint64_t> script_param_source_offsets;
 };
 
 template <typename MapT>
@@ -600,150 +442,6 @@ auto AddDependentAssetKey(PendingResource& pending, const data::AssetKey& key)
 {
   if (!std::ranges::contains(pending.dependent_asset_keys, key)) {
     pending.dependent_asset_keys.push_back(key);
-  }
-}
-
-auto AttachDependentAssetToPendingIndex(
-  std::vector<PendingResource>& pending_resources,
-  const std::optional<size_t> pending_index, const data::AssetKey& asset_key)
-  -> void
-{
-  if (!pending_index.has_value()
-    || *pending_index >= pending_resources.size()) {
-    return;
-  }
-  AddDependentAssetKey(pending_resources.at(*pending_index), asset_key);
-}
-
-auto FindPendingIndexByLocalIndex(
-  const std::unordered_map<uint32_t, size_t>& map, const uint32_t index)
-  -> std::optional<size_t>
-{
-  const auto it = map.find(index);
-  if (it == map.end()) {
-    return std::nullopt;
-  }
-  return it->second;
-}
-
-constexpr uint16_t kScriptSlotDigestTag = 0x1000U;
-constexpr uint16_t kScriptParameterDigestTag = 0x1001U;
-
-auto AppendSceneScriptSlotInputs(const AggregatedAsset& asset,
-  const std::vector<std::byte>& descriptor_bytes, const size_t source_order,
-  const bool capture_patch_ownership, SourceResourceDigestState& resource_state,
-  std::vector<PendingResource>& pending_resources,
-  std::vector<OwnedScriptSlotSource>& owned_script_slots,
-  std::unordered_set<size_t>& source_orders_with_owned_script_slots,
-  std::vector<std::pair<uint16_t, oxygen::base::Sha256Digest>>& inputs,
-  std::vector<pak::PakDiagnostic>& diagnostics) -> bool
-{
-  if (resource_state.raw_script_slots.empty()
-    || !resource_state.script_bindings_data_path.has_value()) {
-    return false;
-  }
-
-  try {
-    const auto scene = data::SceneAsset(asset.key,
-      std::span<const std::byte>(
-        descriptor_bytes.data(), descriptor_bytes.size()));
-    const auto components
-      = scene.GetComponents<script::ScriptingComponentRecord>();
-    if (components.empty()) {
-      return false;
-    }
-
-    if (capture_patch_ownership) {
-      source_orders_with_owned_script_slots.insert(source_order);
-    }
-    for (const auto& component : components) {
-      uint64_t end = 0;
-      if (!SafeAdd(component.slot_start_index, component.slot_count, end)
-        || end > resource_state.raw_script_slots.size()) {
-        AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-          pak::PakBuildPhase::kPlanning,
-          "pak.plan.scene_script_slot_range_invalid",
-          "Scene scripting component slot range exceeds "
-          "script-bindings.table bounds.",
-          asset.descriptor_path);
-        return false;
-      }
-
-      for (uint32_t i = 0; i < component.slot_count; ++i) {
-        const auto slot_index = component.slot_start_index + i;
-        const auto& raw_slot = resource_state.raw_script_slots.at(slot_index);
-
-        auto slot_digest_record = raw_slot;
-        slot_digest_record.params_array_offset = 0U;
-        auto slot_hasher = oxygen::base::Sha256 {};
-        slot_hasher.Update(std::as_bytes(std::span(&slot_digest_record, 1)));
-        inputs.emplace_back(kScriptSlotDigestTag, slot_hasher.Finalize());
-
-        if (raw_slot.params_count > 0U) {
-          uint64_t end_offset = 0;
-          if (!SafeAdd(raw_slot.params_array_offset,
-                static_cast<uint64_t>(raw_slot.params_count)
-                  * sizeof(script::ScriptParamRecord),
-                end_offset)
-            || end_offset > resource_state.raw_script_params.size()) {
-            AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-              pak::PakBuildPhase::kPlanning,
-              "pak.plan.scene_script_param_range_invalid",
-              "Scene scripting component params range exceeds "
-              "script-bindings.data bounds.",
-              asset.descriptor_path);
-            return false;
-          }
-
-          auto params_hasher = oxygen::base::Sha256 {};
-          params_hasher.Update(
-            std::span<const std::byte>(resource_state.raw_script_params)
-              .subspan(static_cast<size_t>(raw_slot.params_array_offset),
-                static_cast<size_t>(raw_slot.params_count)
-                  * sizeof(script::ScriptParamRecord)));
-          inputs.emplace_back(
-            kScriptParameterDigestTag, params_hasher.Finalize());
-
-          if (capture_patch_ownership) {
-            pending_resources.push_back(PendingResource {
-              .region_name = "script_region",
-              .resource_kind = "script_param",
-              .size_bytes = static_cast<uint64_t>(raw_slot.params_count)
-                * sizeof(script::ScriptParamRecord),
-              .source_offset
-              = resource_state.script_param_source_offsets.contains(
-                  raw_slot.params_array_offset)
-                ? resource_state.script_param_source_offsets.at(
-                    raw_slot.params_array_offset)
-                : raw_slot.params_array_offset,
-              .descriptor_source_offset = 0U,
-              .descriptor_size = 0U,
-              .alignment = 1U,
-              .source_order = source_order,
-              .source_sort_key = raw_slot.params_array_offset,
-              .source_local_index = slot_index,
-              .resource_asset_key = std::nullopt,
-              .dependent_asset_keys = { asset.key },
-              .path = *resource_state.script_bindings_data_path,
-              .descriptor_path = {},
-            });
-          }
-        }
-
-        if (capture_patch_ownership) {
-          owned_script_slots.push_back(OwnedScriptSlotSource {
-            .asset_key = asset.key,
-            .source_order = source_order,
-            .source_slot_index = slot_index,
-            .record = raw_slot,
-          });
-        }
-      }
-    }
-
-    return true;
-  } catch (const std::exception&) {
-    return false;
   }
 }
 
@@ -803,19 +501,6 @@ auto MakeSkeletonTables() -> std::vector<pak::PakTablePlan>
       .index_zero_forbidden = false,
     },
     pak::PakTablePlan {
-      .table_name = "script_slot_table",
-      .offset = 0,
-      .size_bytes = 0,
-      .count = 0,
-      .entry_size = static_cast<uint32_t>(sizeof(script::ScriptSlotRecord)),
-      .expected_entry_size
-      = static_cast<uint32_t>(sizeof(script::ScriptSlotRecord)),
-      .alignment = kTableAlignment,
-      .index_zero_required = false,
-      .index_zero_present = false,
-      .index_zero_forbidden = false,
-    },
-    pak::PakTablePlan {
       .table_name = "physics_resource_table",
       .offset = 0,
       .size_bytes = 0,
@@ -864,8 +549,6 @@ auto MakeSkeletonPlan(const pak::PakBuildRequest& request) -> pak::PakPlan::Data
     = footer_offset + offsetof(core::PakFooter, pak_crc32),
   };
 
-  data_plan.script_param_record_count = 0;
-  data_plan.script_slots = {};
   data_plan.patch_closure = {};
   data_plan.planned_file_size
     = footer_offset + static_cast<uint64_t>(sizeof(core::PakFooter));
@@ -956,19 +639,6 @@ auto RegionOrder(const std::string_view region_name) -> int
     return 4;
   }
   return kUnknownRegionOrder;
-}
-
-auto ResourceOrderWithinRegion(const PendingResource& resource) -> int
-{
-  if (resource.region_name == "script_region") {
-    if (resource.resource_kind == "script_param") {
-      return 0;
-    }
-    if (resource.resource_kind == "script") {
-      return 1;
-    }
-  }
-  return 0;
 }
 
 auto AccumulateTableCountFromFile(const std::filesystem::path& table_path,
@@ -1087,152 +757,6 @@ auto ReadSourceDescriptorBytes(
     "Failed to read asset descriptor bytes.");
 }
 
-auto RewriteSceneScriptingComponentRanges(
-  std::vector<std::byte>& descriptor_bytes,
-  const std::unordered_map<uint32_t, uint32_t>& rewritten_slot_indices,
-  std::vector<pak::PakDiagnostic>& diagnostics,
-  const std::filesystem::path& descriptor_path) -> bool
-{
-  if (descriptor_bytes.size() < sizeof(world::SceneAssetDesc)) {
-    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-      pak::PakBuildPhase::kPlanning, "pak.plan.patch_scene_descriptor_invalid",
-      "Patched scene descriptor is invalid or too small for scripting rewrite.",
-      descriptor_path);
-    return false;
-  }
-
-  auto header = core::AssetHeader {};
-  std::memcpy(std::addressof(header), descriptor_bytes.data(), sizeof(header));
-  if (header.asset_type != static_cast<uint8_t>(data::AssetType::kScene)
-    || header.version != world::kSceneAssetVersion) {
-    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-      pak::PakBuildPhase::kPlanning, "pak.plan.patch_scene_descriptor_invalid",
-      "Patched scene descriptor header is invalid for scripting rewrite.",
-      descriptor_path);
-    return false;
-  }
-
-  auto scene_desc = world::SceneAssetDesc {};
-  std::memcpy(
-    std::addressof(scene_desc), descriptor_bytes.data(), sizeof(scene_desc));
-
-  const auto directory_offset = scene_desc.component_table_directory_offset;
-  const auto directory_count = scene_desc.component_table_count;
-  const auto directory_size = static_cast<uint64_t>(directory_count)
-    * sizeof(world::SceneComponentTableDesc);
-  if (directory_offset > descriptor_bytes.size()
-    || directory_size > descriptor_bytes.size() - directory_offset) {
-    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-      pak::PakBuildPhase::kPlanning,
-      "pak.plan.patch_scene_component_directory_invalid",
-      "Patched scene component table directory is out of bounds.",
-      descriptor_path);
-    return false;
-  }
-
-  auto rewrote_any = false;
-  for (uint32_t i = 0; i < directory_count; ++i) {
-    const auto entry_offset = static_cast<size_t>(directory_offset)
-      + (static_cast<size_t>(i) * sizeof(world::SceneComponentTableDesc));
-    auto entry = world::SceneComponentTableDesc {};
-    std::memcpy(std::addressof(entry),
-      std::span(descriptor_bytes).subspan(entry_offset, sizeof(entry)).data(),
-      sizeof(entry));
-
-    if (entry.component_type
-      != static_cast<uint32_t>(data::ComponentType::kScripting)) {
-      continue;
-    }
-    if (entry.table.entry_size != sizeof(script::ScriptingComponentRecord)) {
-      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-        pak::PakBuildPhase::kPlanning,
-        "pak.plan.patch_scene_scripting_entry_size_invalid",
-        "Patched scene scripting component entry_size does not match the "
-        "packed scripting record size.",
-        descriptor_path);
-      return false;
-    }
-
-    const auto table_offset = entry.table.offset;
-    const auto table_size = static_cast<uint64_t>(entry.table.count)
-      * sizeof(script::ScriptingComponentRecord);
-    if (table_offset > descriptor_bytes.size()
-      || table_size > descriptor_bytes.size() - table_offset) {
-      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-        pak::PakBuildPhase::kPlanning,
-        "pak.plan.patch_scene_scripting_table_invalid",
-        "Patched scene scripting component table is out of bounds.",
-        descriptor_path);
-      return false;
-    }
-
-    for (uint32_t record_index = 0; record_index < entry.table.count;
-      ++record_index) {
-      const auto record_offset = static_cast<size_t>(table_offset)
-        + (static_cast<size_t>(record_index)
-          * sizeof(script::ScriptingComponentRecord));
-      auto record = script::ScriptingComponentRecord {};
-      std::memcpy(std::addressof(record),
-        std::span(descriptor_bytes)
-          .subspan(record_offset, sizeof(record))
-          .data(),
-        sizeof(record));
-
-      if (record.slot_count == 0U) {
-        continue;
-      }
-
-      const auto first_rewrite
-        = rewritten_slot_indices.find(record.slot_start_index);
-      if (first_rewrite == rewritten_slot_indices.end()) {
-        AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-          pak::PakBuildPhase::kPlanning,
-          "pak.plan.patch_scene_slot_rewrite_missing",
-          "Patched scene scripting component references a source slot that "
-          "was not remapped into the emitted patch slot table.",
-          descriptor_path);
-        return false;
-      }
-
-      const auto rewritten_start = first_rewrite->second;
-      for (uint32_t delta = 1; delta < record.slot_count; ++delta) {
-        const auto original_slot_index = record.slot_start_index + delta;
-        const auto rewritten_it
-          = rewritten_slot_indices.find(original_slot_index);
-        if (rewritten_it == rewritten_slot_indices.end()
-          || rewritten_it->second != rewritten_start + delta) {
-          AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-            pak::PakBuildPhase::kPlanning,
-            "pak.plan.patch_scene_slot_rewrite_noncontiguous",
-            "Patched scene scripting slots do not remap to a contiguous patch "
-            "slot range.",
-            descriptor_path);
-          return false;
-        }
-      }
-
-      record.slot_start_index = rewritten_start;
-      std::memcpy(std::span(descriptor_bytes)
-                    .subspan(record_offset, sizeof(record))
-                    .data(),
-        std::addressof(record), sizeof(record));
-      rewrote_any = true;
-    }
-  }
-
-  if (!rewrote_any) {
-    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-      pak::PakBuildPhase::kPlanning,
-      "pak.plan.patch_scene_slot_rewrite_not_applied",
-      "Patched scene descriptor expected a scripting slot remap but no "
-      "scripting component records were rewritten.",
-      descriptor_path);
-    return false;
-  }
-
-  return true;
-}
-
 auto IsValidDescriptorHeader(std::span<const std::byte> bytes,
   const data::AssetType expected_type, const uint8_t expected_version) -> bool
 {
@@ -1283,37 +807,10 @@ auto ToCatalogEntry(const AggregatedAsset& asset) -> data::PakCatalogEntry
   };
 }
 
-auto ComputeCatalogDigest(const data::SourceKey& source_key,
-  const uint16_t content_version,
-  std::span<const data::PakCatalogEntry> entries) -> oxygen::base::Sha256Digest
-{
-  auto hasher = oxygen::base::Sha256 {};
-
-  const auto version_bytes = std::array<std::byte, sizeof(content_version)> {
-    std::byte(static_cast<uint8_t>(content_version & 0xFFU)),
-    std::byte(static_cast<uint8_t>(
-      (static_cast<uint32_t>(content_version) >> 8U) & 0xFFU)),
-  };
-  hasher.Update(
-    std::span<const std::byte>(version_bytes.data(), version_bytes.size()));
-  hasher.Update(data::as_bytes(source_key));
-
-  for (const auto& entry : entries) {
-    hasher.Update(data::as_bytes(entry.asset_key));
-    const auto asset_type_byte = std::array<std::byte, 1> {
-      std::byte(static_cast<uint8_t>(entry.asset_type)),
-    };
-    hasher.Update(std::span<const std::byte>(
-      asset_type_byte.data(), asset_type_byte.size()));
-    hasher.Update(std::as_bytes(std::span(entry.descriptor_digest)));
-    hasher.Update(std::as_bytes(std::span(entry.transitive_resource_digest)));
-  }
-
-  return hasher.Finalize();
-}
-
 auto BuildOutputCatalog(const pak::PakBuildRequest& request,
-  std::span<const AggregatedAsset> assets) -> data::PakCatalog
+  std::span<const AggregatedAsset> assets,
+  std::span<const pak::PakPatchActionRecord> actions,
+  const std::unordered_set<data::AssetKey>& tombstones) -> data::PakCatalog
 {
   auto entries = std::vector<data::PakCatalogEntry> {};
   entries.reserve(assets.size());
@@ -1325,13 +822,35 @@ auto BuildOutputCatalog(const pak::PakBuildRequest& request,
     [](const data::PakCatalogEntry& lhs, const data::PakCatalogEntry& rhs)
       -> bool { return lhs.asset_key < rhs.asset_key; });
 
-  return data::PakCatalog {
+  auto catalog = data::PakCatalog {
     .source_key = request.source_key,
     .content_version = request.content_version,
-    .catalog_digest = ComputeCatalogDigest(
-      request.source_key, request.content_version, entries),
+    .catalog_digest = {},
     .entries = std::move(entries),
+    .deleted = {},
+    .bases = {},
   };
+  if (request.mode == pak::BuildMode::kPatch) {
+    for (const auto& base : request.base_catalogs) {
+      catalog.bases.push_back({ .source_key = base.source_key,
+        .content_version = base.content_version,
+        .catalog_digest = base.catalog_digest });
+    }
+    for (const auto& action : actions) {
+      if (action.action == pak::PakPatchAction::kDelete) {
+        catalog.deleted.push_back(action.asset_key);
+      }
+    }
+  } else {
+    catalog.deleted.assign(tombstones.begin(), tombstones.end());
+  }
+  std::ranges::sort(catalog.deleted);
+  const auto digest = catalog.ComputeDigest();
+  if (!digest) {
+    throw std::runtime_error(digest.error());
+  }
+  catalog.catalog_digest = *digest;
+  return catalog;
 }
 
 struct PhysicsScenePair final {
@@ -1356,26 +875,16 @@ struct PlanningState final {
   std::vector<AggregatedAsset> assets;
   std::vector<PhysicsScenePair> physics_scene_pairs;
   std::unordered_map<data::AssetKey, size_t> asset_positions;
+  std::unordered_set<data::AssetKey> tombstones;
+  std::vector<data::PakCatalogBase> layers;
   std::vector<PendingResource> pending_resources;
   std::unordered_map<size_t, SourceContribution> source_contributions;
   std::vector<size_t> included_source_orders;
   std::vector<size_t> planned_resource_source_orders;
   std::vector<std::vector<data::AssetKey>>
     planned_resource_dependent_asset_keys;
-  std::vector<pak::PakScriptSlotPlan> script_slots;
-  std::vector<OwnedScriptSlotSource> owned_script_slots;
-  std::unordered_set<size_t> source_orders_with_owned_script_slots;
-  std::unordered_map<data::AssetKey, std::vector<std::byte>>
-    rewritten_asset_payloads;
   std::unordered_map<std::string, data::AssetKey> browse_map;
   TableCounts table_counts {};
-  uint32_t script_param_record_count = 0;
-
-  PatchCompatibilityEnvelopeData patch_compatibility_envelope {};
-  PatchCompatibilityPolicySnapshotData patch_compatibility_policy_snapshot {};
-  std::string patch_diff_basis_identifier
-    = std::string(kPatchDiffBasisIdentifier);
-  bool patch_manifest_basis_ready = false;
 };
 
 auto HasPlanningErrors(const PlanningState& state) -> bool
@@ -1500,19 +1009,17 @@ auto ValidateCollectSourceDataInvariants(PlanningState& state) -> void
 // Temporary decoding state for one source. Its lifetime ends after dependency
 // ownership has been attached to the planning records.
 struct SourceCollection final {
-  data::CookedSourceKind kind;
+  data::CookedSourceKind kind { data::CookedSourceKind::kLooseCooked };
   std::filesystem::path root;
-  size_t order;
+  size_t order { 0 };
   std::vector<lc::Inspection::AssetEntry> assets;
   std::vector<lc::Inspection::FileEntry> files;
   std::unordered_map<data::AssetKey, uint64_t> descriptor_offsets;
   std::unordered_map<lc::FileKind, uint64_t> file_offsets;
   std::optional<content::PakFile> pak_file;
   core::PakFooter footer {};
-  std::vector<data::AssetKey> asset_keys;
   SourceResourceFiles resources;
   SourceResourceDigestState digests;
-  uint32_t script_param_record_count = 0U;
 };
 
 auto ProjectPakResourceFiles(SourceCollection& context) -> void
@@ -1598,8 +1105,21 @@ auto LoadSourceMetadata(PlanningState& state, SourceCollection& context) -> void
     source_assets.assign(
       inspection.Assets().begin(), inspection.Assets().end());
     source_files.assign(inspection.Files().begin(), inspection.Files().end());
+    state.layers.push_back({ .source_key = inspection.Guid(),
+      .content_version = 0U,
+      .catalog_digest = {} });
   } else {
     pak_file.emplace(source_root);
+    const auto& catalog = pak_file->Catalog();
+    if (const auto valid = catalog.ValidateBaseLayers(state.layers); !valid) {
+      throw std::runtime_error(valid.error());
+    }
+    state.layers.push_back({ .source_key = catalog.source_key,
+      .content_version = catalog.content_version,
+      .catalog_digest = catalog.catalog_digest });
+    for (const auto& key : catalog.deleted) {
+      state.tombstones.insert(key);
+    }
     const auto file_size = std::filesystem::file_size(source_root);
     serio::FileStream<> stream(source_root, std::ios::in);
     serio::Reader reader(stream);
@@ -1621,6 +1141,7 @@ auto LoadSourceMetadata(PlanningState& state, SourceCollection& context) -> void
         .descriptor_size = entry.desc_size,
         .asset_type = static_cast<uint8_t>(entry.asset_type),
         .descriptor_sha256 = *digest,
+        .references = pak_file->ReadAssetReferences(entry.asset_key),
       });
       descriptor_offsets.emplace(entry.asset_key, entry.desc_offset);
     }
@@ -1642,7 +1163,6 @@ auto CollectSourceAssets(PlanningState& state, SourceCollection& context)
   auto& source_assets = context.assets;
   auto& descriptor_offsets = context.descriptor_offsets;
   auto& pak_file = context.pak_file;
-  auto& source_asset_keys = context.asset_keys;
   auto& diagnostics = state.output.diagnostics;
 
   std::ranges::sort(source_assets,
@@ -1684,6 +1204,7 @@ auto CollectSourceAssets(PlanningState& state, SourceCollection& context)
       .transitive_resource_digest = {},
       .virtual_path = ToCanonicalVirtualPath(source_asset.virtual_path),
       .source_order = source_order,
+      .references = source_asset.references,
     };
 
     if (source_asset.descriptor_sha256.has_value()) {
@@ -1703,62 +1224,24 @@ auto CollectSourceAssets(PlanningState& state, SourceCollection& context)
       state.asset_positions.emplace(aggregated.key, state.assets.size());
       state.assets.push_back(std::move(aggregated));
     } else {
-      state.assets.at(position_it->second) = std::move(aggregated);
+      auto& previous = state.assets.at(position_it->second);
+      if (previous.source_order == source_order) {
+        AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+          PakBuildPhase::kPlanning, "pak.plan.duplicate_layer_asset",
+          "A content layer defines the same AssetKey more than once.",
+          source_root);
+        continue;
+      }
+      if (previous.asset_type != aggregated.asset_type) {
+        AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+          PakBuildPhase::kPlanning, "pak.plan.asset_override_type_mismatch",
+          "A content layer cannot change an existing AssetKey's asset type.",
+          source_root);
+        continue;
+      }
+      previous = std::move(aggregated);
     }
-    source_asset_keys.push_back(source_asset.key);
-  }
-}
-
-auto CollectLooseScriptParameters(PlanningState& state,
-  SourceCollection& context, const SourceFileSlice& file) -> void
-{
-  using pak::PakBuildPhase;
-  using pak::PakDiagnosticSeverity;
-  auto& resource_state = context.digests;
-  auto& source_script_param_record_count = context.script_param_record_count;
-  auto& diagnostics = state.output.diagnostics;
-
-  const auto& file_path = file.path;
-  const auto file_size = file.size;
-  if ((file_size % sizeof(script::ScriptParamRecord)) != 0U) {
-    AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-      PakBuildPhase::kPlanning, "pak.plan.script_params_file_size_invalid",
-      "script-bindings.data size is not divisible by "
-      "ScriptParamRecord size.",
-      file_path);
-    return;
-  }
-  {
-    const auto record_count64 = file_size / sizeof(script::ScriptParamRecord);
-    if (record_count64 > kMaxCountAsUint64) {
-      AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-        PakBuildPhase::kPlanning, "pak.plan.script_params_count_too_large",
-        "script-bindings.data contains too many ScriptParamRecord "
-        "entries.",
-        file_path);
-      return;
-    }
-
-    uint64_t source_count_sum = 0;
-    if (!SafeAdd(
-          source_script_param_record_count, record_count64, source_count_sum)
-      || source_count_sum > kMaxCountAsUint64) {
-      AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-        PakBuildPhase::kPlanning, "pak.plan.script_params_count_overflow",
-        "Combined script-bindings.data ScriptParamRecord count "
-        "overflowed uint32.",
-        file_path);
-      return;
-    }
-    source_script_param_record_count = static_cast<uint32_t>(source_count_sum);
-  }
-  resource_state.script_bindings_data_path = file_path;
-  if (auto params_bytes = ReadFileSliceBytes(file, diagnostics,
-        "pak.plan.script_params_data_read_failed",
-        "Failed to read script-bindings.data for dependency "
-        "analysis.");
-    params_bytes.has_value()) {
-    resource_state.raw_script_params = *params_bytes;
+    state.tombstones.erase(source_asset.key);
   }
 }
 
@@ -1818,15 +1301,6 @@ auto CollectSourceFiles(PlanningState& state, SourceCollection& context) -> void
         .offset = file_offset,
       };
       break;
-    case data::loose_cooked::FileKind::kScriptBindingsData:
-      resource_files.script_bindings_data = SourceFileSlice {
-        .path = file_path,
-        .size = file_size,
-        .offset = file_offset,
-      };
-      CollectLooseScriptParameters(
-        state, context, *resource_files.script_bindings_data);
-      break;
     case data::loose_cooked::FileKind::kPhysicsData:
       resource_files.physics_data = SourceFileSlice {
         .path = file_path,
@@ -1878,13 +1352,6 @@ auto CollectSourceFiles(PlanningState& state, SourceCollection& context) -> void
         source_contribution.table_counts.script_resource_count, diagnostics,
         "pak.plan.scripts_table_size_invalid");
       break;
-    case data::loose_cooked::FileKind::kScriptBindingsTable:
-      resource_files.script_bindings_table = SourceFileSlice {
-        .path = file_path,
-        .size = file_size,
-        .offset = file_offset,
-      };
-      break;
     case data::loose_cooked::FileKind::kAuxiliary:
     case data::loose_cooked::FileKind::kUnknown:
       break;
@@ -1932,78 +1399,6 @@ auto CollectPakAudioResources(PlanningState& state, SourceCollection& context)
         },
         [](uint32_t, const audio::AudioResourceDesc&,
           PendingResource&) -> void { });
-  }
-}
-
-auto CollectPakScriptBindings(PlanningState& state, SourceCollection& context)
-  -> void
-{
-  auto& source_root = context.root;
-  auto& source_order = context.order;
-  auto& pak_file = context.pak_file;
-  auto& pak_footer = context.footer;
-  auto& resource_state = context.digests;
-  auto& source_script_param_record_count = context.script_param_record_count;
-  auto& source_contribution = state.source_contributions[context.order];
-
-  if (pak_file && pak_footer.script_slot_table.count != 0U) {
-    resource_state.script_bindings_data_path = source_root;
-    resource_state.raw_script_slots
-      = pak_file->ReadScriptSlotRecords(0U, pak_footer.script_slot_table.count);
-    for (std::size_t i = 0; i < resource_state.raw_script_slots.size(); ++i) {
-      auto& slot = resource_state.raw_script_slots.at(i);
-      const auto source_offset = slot.params_array_offset;
-      const auto params = pak_file->ReadScriptParamRecords({
-        .absolute_offset = source_offset,
-        .count = slot.params_count,
-      });
-      const auto normalized_offset = resource_state.raw_script_params.size();
-      const auto params_bytes = std::as_bytes(std::span { params });
-      resource_state.raw_script_params.insert(
-        resource_state.raw_script_params.end(), params_bytes.begin(),
-        params_bytes.end());
-      slot.params_array_offset = normalized_offset;
-      const auto param_index
-        = normalized_offset / sizeof(script::ScriptParamRecord);
-      if (param_index > kMaxCountAsUint64
-        || params.size() > kMaxCountAsUint64 - param_index) {
-        throw std::runtime_error(
-          "PAK script parameter count exceeds uint32 bounds");
-      }
-      source_contribution.local_script_slots.push_back(pak::PakScriptSlotPlan {
-        .slot_index = static_cast<uint32_t>(i),
-        .script_asset_key = slot.script_asset_key,
-        .params_array_index = static_cast<uint32_t>(param_index),
-        .params_count = slot.params_count,
-        .execution_order = slot.execution_order,
-        .flags = slot.flags,
-      });
-      if (!params.empty()) {
-        resource_state.script_param_source_offsets.emplace(
-          normalized_offset, source_offset);
-        state.pending_resources.push_back(PendingResource {
-          .region_name = "script_region",
-          .resource_kind = "script_param",
-          .size_bytes = params_bytes.size(),
-          .source_offset = source_offset,
-          .descriptor_source_offset = 0U,
-          .descriptor_size = 0U,
-          .alignment = 1U,
-          .source_order = source_order,
-          .source_sort_key = normalized_offset,
-          .source_local_index = std::nullopt,
-          .resource_asset_key = std::nullopt,
-          .dependent_asset_keys = {},
-          .path = source_root,
-          .descriptor_path = {},
-        });
-      }
-    }
-    source_contribution.table_counts.script_slot_count
-      = resource_state.raw_script_slots.size();
-    source_script_param_record_count
-      = static_cast<uint32_t>(resource_state.raw_script_params.size()
-        / sizeof(script::ScriptParamRecord));
   }
 }
 
@@ -2132,8 +1527,30 @@ auto CollectPhysicsResources(PlanningState& state, SourceCollection& context)
       *resource_files.physics_table, *resource_files.physics_data,
       "physics_region", "physics", source_order, state.pending_resources,
       diagnostics, "physics_resource_table",
-      [](const physics::PhysicsResourceDesc& record,
+      [&state, &diagnostics, source_order](
+        const physics::PhysicsResourceDesc& record,
         PendingResource& pending) -> bool {
+        if (pending.source_local_index == 0U) {
+          --state.source_contributions.at(source_order)
+              .table_counts.physics_count;
+          if (!record.resource_asset_key.IsNil() || record.size_bytes != 0U) {
+            AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+              pak::PakBuildPhase::kPlanning,
+              "pak.plan.physics_sentinel_invalid",
+              "Physics resource row zero must be the absent sentinel.",
+              pending.descriptor_path);
+          }
+          // Layout emits one output sentinel for all composed physics sources.
+          return false;
+        }
+        if (record.resource_asset_key.IsNil()) {
+          AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+            pak::PakBuildPhase::kPlanning,
+            "pak.plan.physics_resource_key_missing",
+            "A live physics resource requires a stable key.",
+            pending.descriptor_path);
+          return false;
+        }
         pending.resource_asset_key = record.resource_asset_key;
         return true;
       },
@@ -2143,8 +1560,16 @@ auto CollectPhysicsResources(PlanningState& state, SourceCollection& context)
         const auto pending_index = state.pending_resources.size();
         resource_state.physics_pending_positions.emplace(
           local_index, pending_index);
-        resource_state.physics_index_by_asset_key.emplace(
-          record.resource_asset_key, local_index);
+        if (!record.resource_asset_key.IsNil()
+          && !resource_state.physics_index_by_asset_key
+            .emplace(record.resource_asset_key, local_index)
+            .second) {
+          AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+            pak::PakBuildPhase::kPlanning,
+            "pak.plan.duplicate_layer_physics_resource",
+            "A content layer defines the same physics resource key twice.",
+            pending.descriptor_path);
+        }
         if (const auto digest = ComputeNormalizedResourceDigest(
               record, pending,
               [](physics::PhysicsResourceDesc& normalized) -> void {
@@ -2158,354 +1583,133 @@ auto CollectPhysicsResources(PlanningState& state, SourceCollection& context)
   }
 }
 
-auto CollectLooseScriptBindings(PlanningState& state, SourceCollection& context)
-  -> void
+struct AssetDependencyDigest {
+  oxygen::base::Sha256Digest digest {};
+  std::vector<size_t> resources {};
+};
+
+auto ComputeAssetDependencyDigest(std::vector<pak::PakDiagnostic>& diagnostics,
+  const SourceResourceDigestState& resources,
+  std::span<const SourceResourceDigestState> sources,
+  const AggregatedAsset& asset) -> AssetDependencyDigest
 {
-  using pak::PakBuildPhase;
-  using pak::PakDiagnosticSeverity;
-  auto& resource_files = context.resources;
-  auto& resource_state = context.digests;
-  auto& source_script_param_record_count = context.script_param_record_count;
-  auto& source_contribution = state.source_contributions[context.order];
-  auto& diagnostics = state.output.diagnostics;
-
-  if (resource_files.script_bindings_table.has_value()) {
-    if (source_contribution.table_counts.script_slot_count
-      > kMaxCountAsUint64) {
-      AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-        PakBuildPhase::kPlanning, "pak.plan.script_slot_index_overflow",
-        "Combined script slot count overflowed uint32.",
-        resource_files.script_bindings_table->path);
-    } else {
-      const auto slot_context = ScriptSlotReadContext {
-        .slot_index_base = static_cast<uint32_t>(
-          source_contribution.table_counts.script_slot_count),
-        .params_array_index_base = 0U,
-        .source_params_record_count = source_script_param_record_count,
-      };
-      const auto parsed_slots
-        = ReadScriptSlotsFromTable(resource_files.script_bindings_table->path,
-          slot_context, source_contribution.local_script_slots, diagnostics);
-      uint64_t script_slot_count_sum = 0;
-      if (!SafeAdd(source_contribution.table_counts.script_slot_count,
-            parsed_slots, script_slot_count_sum)
-        || script_slot_count_sum > kMaxCountAsUint64) {
-        AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-          PakBuildPhase::kPlanning, "pak.plan.script_slot_index_overflow",
-          "Combined script slot count overflowed uint32.",
-          resource_files.script_bindings_table->path);
-      } else {
-        source_contribution.table_counts.script_slot_count
-          = script_slot_count_sum;
-      }
-    }
-
-    auto raw_slots = std::vector<script::ScriptSlotRecord> {};
-    if (ReadFixedRecordFile<script::ScriptSlotRecord>(
-          *resource_files.script_bindings_table, raw_slots, diagnostics,
-          {
-            .size_invalid = "pak.plan.script_slot_table_size_invalid",
-            .read_failed = "pak.plan.script_slot_table_read_failed",
-            .too_large = "pak.plan.script_slot_table_too_large",
-            .label = "script_slot_table",
-          })) {
-      resource_state.raw_script_slots = std::move(raw_slots);
-    }
-  }
-
-  source_contribution.script_param_record_count
-    = source_script_param_record_count;
-}
-
-template <typename AddReference>
-auto CollectMaterialResourceReferences(
-  std::span<const std::byte> bytes, const AddReference& add_texture_ref) -> void
-{
-  if (IsValidDescriptorHeader(
-        bytes, data::AssetType::kMaterial, render::kMaterialAssetVersion)
-    && bytes.size() >= sizeof(render::MaterialAssetDesc)) {
-    auto desc = render::MaterialAssetDesc {};
-    std::memcpy(std::addressof(desc), bytes.data(), sizeof(desc));
-    if ((desc.flags & render::kMaterialFlag_NoTextureSampling) == 0U) {
-      add_texture_ref(desc.base_color_texture);
-      add_texture_ref(desc.normal_texture);
-      add_texture_ref(desc.metallic_texture);
-      add_texture_ref(desc.roughness_texture);
-      add_texture_ref(desc.ambient_occlusion_texture);
-      add_texture_ref(desc.emissive_texture);
-      add_texture_ref(desc.specular_texture);
-      add_texture_ref(desc.sheen_color_texture);
-      add_texture_ref(desc.clearcoat_texture);
-      add_texture_ref(desc.clearcoat_normal_texture);
-      add_texture_ref(desc.transmission_texture);
-      add_texture_ref(desc.thickness_texture);
-    }
-  }
-}
-
-template <typename AddReference>
-auto CollectGeometryResourceReferences(
-  std::span<const std::byte> bytes, const AddReference& add_buffer_ref) -> void
-{
-  if (IsValidDescriptorHeader(
-        bytes, data::AssetType::kGeometry, geometry::kGeometryAssetVersion)
-    && bytes.size() >= sizeof(geometry::GeometryAssetDesc)) {
-    auto desc = geometry::GeometryAssetDesc {};
-    std::memcpy(std::addressof(desc), bytes.data(), sizeof(desc));
-    size_t cursor = sizeof(desc);
-    auto geometry_valid = true;
-    for (uint32_t lod = 0; lod < desc.lod_count && geometry_valid; ++lod) {
-      if ((cursor + sizeof(geometry::MeshDesc)) > bytes.size()) {
-        geometry_valid = false;
-        break;
-      }
-      auto mesh = geometry::MeshDesc {};
-      std::memcpy(
-        std::addressof(mesh), bytes.subspan(cursor).data(), sizeof(mesh));
-      cursor += sizeof(mesh);
-
-      if (mesh.IsStandard()) {
-        add_buffer_ref(mesh.info.standard.vertex_buffer);
-        add_buffer_ref(mesh.info.standard.index_buffer);
-      } else if (mesh.IsSkinned()) {
-        add_buffer_ref(mesh.info.skinned.vertex_buffer);
-        add_buffer_ref(mesh.info.skinned.index_buffer);
-        add_buffer_ref(mesh.info.skinned.joint_index_buffer);
-        add_buffer_ref(mesh.info.skinned.joint_weight_buffer);
-        add_buffer_ref(mesh.info.skinned.inverse_bind_buffer);
-        add_buffer_ref(mesh.info.skinned.joint_remap_buffer);
-      } else if (mesh.IsProcedural()) {
-        const auto params_size
-          = static_cast<size_t>(mesh.info.procedural.params_size);
-        if ((cursor + params_size) > bytes.size()) {
-          geometry_valid = false;
-          break;
-        }
-        cursor += params_size;
-      }
-
-      for (uint32_t sub = 0; sub < mesh.submesh_count && geometry_valid;
-        ++sub) {
-        if ((cursor + sizeof(geometry::SubMeshDesc)) > bytes.size()) {
-          geometry_valid = false;
-          break;
-        }
-        auto submesh = geometry::SubMeshDesc {};
-        std::memcpy(std::addressof(submesh), bytes.subspan(cursor).data(),
-          sizeof(submesh));
-        cursor += sizeof(submesh);
-        const auto views_bytes = static_cast<size_t>(submesh.mesh_view_count)
-          * sizeof(geometry::MeshViewDesc);
-        if ((cursor + views_bytes) > bytes.size()) {
-          geometry_valid = false;
-          break;
-        }
-        cursor += views_bytes;
-      }
-    }
-  }
-}
-
-template <typename AddReference>
-auto CollectScriptResourceReferences(
-  std::span<const std::byte> bytes, const AddReference& add_script_ref) -> void
-{
-  if (bytes.size() >= sizeof(script::ScriptAssetDesc)) {
-    core::AssetHeader header {};
-    std::memcpy(std::addressof(header), bytes.data(), sizeof(header));
-    if (header.asset_type != static_cast<uint8_t>(data::AssetType::kScript)) {
+  AssetDependencyDigest result;
+  std::vector<std::pair<uint16_t, oxygen::base::Sha256Digest>> inputs;
+  const auto append_resource = [&](const auto& digests, const auto& positions,
+                                 const uint32_t index, const uint16_t tag) {
+    if (!AddResourceDigestInput(digests, index, inputs, tag)) {
+      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+        pak::PakBuildPhase::kPlanning, "pak.plan.resource_binding_missing",
+        "Asset binding does not identify a resource in its source.",
+        asset.descriptor_path);
       return;
     }
-    auto desc = script::ScriptAssetDesc {};
-    std::memcpy(std::addressof(desc), bytes.data(), sizeof(desc));
-    const auto external_only
-      = (desc.flags & script::ScriptAssetFlags::kAllowExternalSource)
-        == script::ScriptAssetFlags::kAllowExternalSource
-      && desc.bytecode_resource_index == core::kNoResourceIndex
-      && desc.source_resource_index == core::kNoResourceIndex;
-    if (!external_only) {
-      add_script_ref(desc.bytecode_resource_index);
-      add_script_ref(desc.source_resource_index);
-    }
-  }
-}
-
-auto CollectAssetDependencies(PlanningState& state, SourceCollection& context,
-  AggregatedAsset& asset) -> void
-{
-  auto& source_order = context.order;
-  auto& resource_state = context.digests;
-  auto& diagnostics = state.output.diagnostics;
-
-  auto inputs = std::vector<std::pair<uint16_t, oxygen::base::Sha256Digest>> {};
-  const auto descriptor_bytes = ReadSourceDescriptorBytes(asset, diagnostics);
-  if (descriptor_bytes.has_value()) {
-    const auto bytes = std::span<const std::byte>(
-      descriptor_bytes->data(), descriptor_bytes->size());
-
-    const auto add_texture_ref = [&asset, &resource_state, &state, &inputs](
-                                   const core::ResourceIndexT index) -> void {
-      if (index == core::kNoResourceIndex) {
-        return;
-      }
-      const auto local_index = static_cast<uint32_t>(index);
-      if (AddResourceDigestInput(
-            resource_state.texture_digests, local_index, inputs, 0x0001U)) {
-        AttachDependentAssetToPendingIndex(state.pending_resources,
-          FindPendingIndexByLocalIndex(
-            resource_state.texture_pending_positions, local_index),
-          asset.key);
-      }
-    };
-    const auto add_buffer_ref = [&asset, &resource_state, &state, &inputs](
-                                  const core::ResourceIndexT index) -> void {
-      if (index == core::kNoResourceIndex) {
-        return;
-      }
-      const auto local_index = static_cast<uint32_t>(index);
-      if (AddResourceDigestInput(
-            resource_state.buffer_digests, local_index, inputs, 0x0002U)) {
-        AttachDependentAssetToPendingIndex(state.pending_resources,
-          FindPendingIndexByLocalIndex(
-            resource_state.buffer_pending_positions, local_index),
-          asset.key);
-      }
-    };
-    const auto add_script_ref = [&asset, &resource_state, &state, &inputs](
-                                  const core::ResourceIndexT index) -> void {
-      if (index == core::kNoResourceIndex) {
-        return;
-      }
-      const auto local_index = static_cast<uint32_t>(index);
-      if (AddResourceDigestInput(
-            resource_state.script_digests, local_index, inputs, 0x0003U)) {
-        AttachDependentAssetToPendingIndex(state.pending_resources,
-          FindPendingIndexByLocalIndex(
-            resource_state.script_pending_positions, local_index),
-          asset.key);
-      }
-    };
-
-    switch (asset.asset_type) {
-    case data::AssetType::kMaterial:
-      CollectMaterialResourceReferences(bytes, add_texture_ref);
-      break;
-    case data::AssetType::kGeometry:
-      CollectGeometryResourceReferences(bytes, add_buffer_ref);
-      break;
-    case data::AssetType::kScript:
-      CollectScriptResourceReferences(bytes, add_script_ref);
-      break;
-    case data::AssetType::kCollisionShape: {
-      if (IsValidDescriptorHeader(bytes, data::AssetType::kCollisionShape,
-            physics::kCollisionShapeAssetVersion)
-        && bytes.size() >= sizeof(physics::CollisionShapeAssetDesc)) {
-        auto desc = physics::CollisionShapeAssetDesc {};
-        std::memcpy(std::addressof(desc), bytes.data(), sizeof(desc));
-        if (!desc.cooked_shape_ref.payload_asset_key.IsNil()) {
-          const auto physics_it
-            = resource_state.physics_index_by_asset_key.find(
-              desc.cooked_shape_ref.payload_asset_key);
-          if (physics_it != resource_state.physics_index_by_asset_key.end()
-            && AddResourceDigestInput(resource_state.physics_digests,
-              physics_it->second, inputs, 0x0004U)) {
-            AttachDependentAssetToPendingIndex(state.pending_resources,
-              FindPendingIndexByLocalIndex(
-                resource_state.physics_pending_positions, physics_it->second),
-              asset.key);
-          }
-        }
-      }
-      break;
-    }
-    case data::AssetType::kScene: {
-      try {
-        const auto scene = data::SceneAsset(asset.key, bytes);
-        if (const auto post = scene.TryGetPostProcessVolumeEnvironment();
-          post && post->auto_exposure_metering_mask != core::kNoResourceIndex) {
-          const auto u_mask_index = post->auto_exposure_metering_mask.get();
-          if (!resource_state.texture_digests.contains(u_mask_index)) {
-            AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-              pak::PakBuildPhase::kPlanning,
-              "pak.plan.scene_mask_source_invalid",
-              "Scene exposure mask index is outside the source texture "
-              "table",
-              asset.descriptor_path);
-            break;
-          }
-          add_texture_ref(post->auto_exposure_metering_mask);
-        }
-      } catch (const std::exception& error) {
-        AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-          pak::PakBuildPhase::kPlanning, "pak.plan.scene_descriptor_invalid",
-          error.what(), asset.descriptor_path);
-        break;
-      }
-      (void)AppendSceneScriptSlotInputs(asset, *descriptor_bytes, source_order,
-        state.policy.mode == pak::PakPlanMode::kPatch, resource_state,
-        state.pending_resources, state.owned_script_slots,
-        state.source_orders_with_owned_script_slots, inputs, diagnostics);
-      break;
-    }
-    default:
-      break;
-    }
-  }
-
-  std::ranges::sort(inputs, [](const auto& lhs, const auto& rhs) -> auto {
-    if (lhs.first != rhs.first) {
-      return lhs.first < rhs.first;
-    }
-    return lhs.second < rhs.second;
-  });
-  asset.transitive_resource_digest = inputs.empty()
-    ? asset.descriptor_digest
-    : AggregateTransitiveDigest(
-        std::span<const std::pair<uint16_t, oxygen::base::Sha256Digest>>(
-          inputs.data(), inputs.size()));
-}
-
-auto CollectSourceDependencies(PlanningState& state, SourceCollection& context)
-  -> void
-{
-  auto& source_asset_keys = context.asset_keys;
-
-  for (const auto& key : source_asset_keys) {
-    const auto position_it = state.asset_positions.find(key);
-    if (position_it == state.asset_positions.end()) {
+    result.resources.push_back(positions.at(index));
+  };
+  for (const auto& binding : asset.references.Resources()) {
+    if (binding.kind == data::ResourceKind::kTexture
+      && (binding.index == core::kFallbackResourceIndex
+        || binding.index == core::kErrorTextureResourceIndex)) {
+      constexpr uint16_t kFallbackDigestTag = 0x1001U;
+      constexpr uint16_t kErrorDigestTag = 0x1002U;
+      inputs.emplace_back(binding.index == core::kFallbackResourceIndex
+          ? kFallbackDigestTag
+          : kErrorDigestTag,
+        oxygen::base::Sha256Digest {});
       continue;
     }
-
-    auto& asset = state.assets.at(position_it->second);
-    CollectAssetDependencies(state, context, asset);
+    const auto tag = static_cast<uint16_t>(binding.kind);
+    switch (binding.kind) {
+    case data::ResourceKind::kBuffer:
+      append_resource(resources.buffer_digests,
+        resources.buffer_pending_positions, binding.index.get(), tag);
+      break;
+    case data::ResourceKind::kTexture:
+      append_resource(resources.texture_digests,
+        resources.texture_pending_positions, binding.index.get(), tag);
+      break;
+    case data::ResourceKind::kScript:
+      append_resource(resources.script_digests,
+        resources.script_pending_positions, binding.index.get(), tag);
+      break;
+    case data::ResourceKind::kPhysics:
+      append_resource(resources.physics_digests,
+        resources.physics_pending_positions, binding.index.get(), tag);
+      break;
+    }
   }
+  for (const auto& reference : asset.references.Keys()) {
+    if (reference.kind != data::KeyReferenceKind::kPhysicsResource) {
+      continue;
+    }
+    const SourceResourceDigestState* selected = nullptr;
+    uint32_t index = 0;
+    for (const auto& candidate : std::views::reverse(sources)) {
+      const auto found
+        = candidate.physics_index_by_asset_key.find(reference.key);
+      if (found != candidate.physics_index_by_asset_key.end()) {
+        selected = &candidate;
+        index = found->second;
+        break;
+      }
+    }
+    if (selected == nullptr) {
+      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+        pak::PakBuildPhase::kPlanning, "pak.plan.physics_binding_missing",
+        "Asset references a missing keyed physics resource.",
+        asset.descriptor_path);
+      continue;
+    }
+    append_resource(selected->physics_digests,
+      selected->physics_pending_positions, index,
+      static_cast<uint16_t>(data::ResourceKind::kPhysics));
+  }
+  if (!asset.references.Keys().empty()) {
+    const auto key_metadata = data::AssetReferences::Create({},
+      std::vector<data::KeyReference>(
+        asset.references.Keys().begin(), asset.references.Keys().end()));
+    if (!key_metadata) {
+      throw std::runtime_error(key_metadata.error());
+    }
+    const auto encoded = key_metadata->Encode();
+    if (!encoded) {
+      throw std::runtime_error(encoded.error());
+    }
+    constexpr uint16_t kKeyMetadataDigestTag = 0x2001U;
+    inputs.emplace_back(
+      kKeyMetadataDigestTag, oxygen::base::ComputeSha256(*encoded));
+  }
+  result.digest = inputs.empty() ? asset.descriptor_digest
+                                 : AggregateTransitiveDigest(inputs);
+  return result;
 }
 
-auto AppendUnownedScriptParameters(
-  PlanningState& state, SourceCollection& context) -> void
+auto ValidatePhysicalCatalog(
+  PlanningState& state, const SourceCollection& context) -> void
 {
-  auto& source_order = context.order;
-  auto& resource_files = context.resources;
-
-  if (resource_files.script_bindings_data.has_value()
-    && (state.policy.mode != pak::PakPlanMode::kPatch
-      || !state.source_orders_with_owned_script_slots.contains(source_order))) {
-    state.pending_resources.push_back(PendingResource {
-      .region_name = "script_region",
-      .resource_kind = "script_param",
-      .size_bytes = resource_files.script_bindings_data->size,
-      .source_offset = resource_files.script_bindings_data->offset,
-      .descriptor_source_offset = 0U,
-      .descriptor_size = 0U,
-      .alignment = 1U,
-      .source_order = source_order,
-      .source_sort_key = 0U,
-      .source_local_index = std::nullopt,
-      .resource_asset_key = std::nullopt,
-      .dependent_asset_keys = {},
-      .path = resource_files.script_bindings_data->path,
-      .descriptor_path = {},
-    });
+  if (!context.pak_file) {
+    return;
+  }
+  for (const auto& entry : context.pak_file->Catalog().entries) {
+    const auto found = state.asset_positions.find(entry.asset_key);
+    if (found == state.asset_positions.end()) {
+      continue;
+    }
+    const auto& asset = state.assets.at(found->second);
+    if (asset.source_order != context.order) {
+      continue;
+    }
+    const auto measured = ComputeAssetDependencyDigest(state.output.diagnostics,
+      context.digests, std::span { &context.digests, 1U }, asset);
+    if (asset.descriptor_digest != entry.descriptor_digest
+      || measured.digest != entry.transitive_resource_digest) {
+      AddDiagnostic(state.output.diagnostics,
+        pak::PakDiagnosticSeverity::kError, pak::PakBuildPhase::kPlanning,
+        "pak.plan.catalog_content_mismatch",
+        "Embedded catalog does not match physical asset "
+          + data::to_string(entry.asset_key),
+        context.root);
+    }
   }
 }
 
@@ -2515,46 +1719,24 @@ auto CollectOneSource(PlanningState& state, SourceCollection& context) -> void
   CollectSourceAssets(state, context);
   CollectSourceFiles(state, context);
   CollectPakAudioResources(state, context);
-  CollectPakScriptBindings(state, context);
   CollectTextureResources(state, context);
   CollectBufferResources(state, context);
   CollectScriptResources(state, context);
   CollectPhysicsResources(state, context);
-  CollectLooseScriptBindings(state, context);
-  CollectSourceDependencies(state, context);
-  AppendUnownedScriptParameters(state, context);
+  ValidatePhysicalCatalog(state, context);
 }
 
 auto CollectSourceData(PlanningState& state) -> void
 {
-  auto sources = state.request->sources;
-  if (state.request->options.deterministic) {
-    std::ranges::stable_sort(sources,
-      [](const data::CookedSource& lhs, const data::CookedSource& rhs) -> bool {
-        if (lhs.kind != rhs.kind) {
-          return static_cast<uint8_t>(lhs.kind)
-            < static_cast<uint8_t>(rhs.kind);
-        }
-        return lhs.path.generic_string() < rhs.path.generic_string();
-      });
-  }
+  // Source order is semantic priority, including in deterministic builds.
+  const auto& sources = state.request->sources;
+  std::vector<SourceResourceDigestState> resource_states(sources.size());
   for (size_t order = 0; order < sources.size(); ++order) {
     const auto& source = sources.at(order);
-    auto context = SourceCollection {
-      .kind = source.kind,
-      .root = ToCanonicalSourcePath(source.path),
-      .order = order,
-      .assets = {},
-      .files = {},
-      .descriptor_offsets = {},
-      .file_offsets = {},
-      .pak_file = {},
-      .footer = {},
-      .asset_keys = {},
-      .resources = {},
-      .digests = {},
-      .script_param_record_count = 0U,
-    };
+    auto context = SourceCollection {};
+    context.kind = source.kind;
+    context.root = ToCanonicalSourcePath(source.path);
+    context.order = order;
     if (source.kind != data::CookedSourceKind::kLooseCooked
       && source.kind != data::CookedSourceKind::kPak) {
       AddDiagnostic(state.output.diagnostics,
@@ -2565,6 +1747,7 @@ auto CollectSourceData(PlanningState& state) -> void
     }
     try {
       CollectOneSource(state, context);
+      resource_states.at(order) = std::move(context.digests);
     } catch (const std::exception& error) {
       AddDiagnostic(state.output.diagnostics,
         pak::PakDiagnosticSeverity::kError, pak::PakBuildPhase::kPlanning,
@@ -2573,9 +1756,114 @@ auto CollectSourceData(PlanningState& state) -> void
         context.root);
     }
   }
+  // Resolve dependencies after every layer is known. Overridden descriptors
+  // must neither require their old dependencies nor own output resources.
+  std::erase_if(state.assets, [&](const AggregatedAsset& asset) {
+    return state.tombstones.contains(asset.key);
+  });
+  state.asset_positions.clear();
+  for (size_t index = 0; index < state.assets.size(); ++index) {
+    state.asset_positions.emplace(state.assets.at(index).key, index);
+  }
+  std::erase_if(state.browse_map,
+    [&](const auto& entry) { return state.tombstones.contains(entry.second); });
+  for (auto& asset : state.assets) {
+    const auto dependency
+      = ComputeAssetDependencyDigest(state.output.diagnostics,
+        resource_states.at(asset.source_order), resource_states, asset);
+    asset.transitive_resource_digest = dependency.digest;
+    for (const auto index : dependency.resources) {
+      AddDependentAssetKey(state.pending_resources.at(index), asset.key);
+    }
+  }
+
+  std::unordered_map<data::AssetKey, size_t> physics_winners;
+  for (const auto& resource : state.pending_resources) {
+    if (resource.resource_kind == "physics" && resource.resource_asset_key
+      && !resource.resource_asset_key->IsNil()) {
+      physics_winners.insert_or_assign(
+        *resource.resource_asset_key, resource.source_order);
+    }
+  }
+  std::erase_if(state.pending_resources, [&](const PendingResource& resource) {
+    if (resource.resource_kind != "physics" || !resource.resource_asset_key
+      || resource.resource_asset_key->IsNil()
+      || physics_winners.at(*resource.resource_asset_key)
+        == resource.source_order) {
+      return false;
+    }
+    if (!resource.dependent_asset_keys.empty()) {
+      AddDiagnostic(state.output.diagnostics,
+        pak::PakDiagnosticSeverity::kError, pak::PakBuildPhase::kPlanning,
+        "pak.plan.shadowed_physics_binding",
+        "A numeric binding addresses a shadowed keyed physics resource.",
+        resource.descriptor_path);
+    }
+    --state.source_contributions.at(resource.source_order)
+        .table_counts.physics_count;
+    return true;
+  });
 }
 
 // Check the original pair before relocation; never repair stale authored input.
+auto ValidateAssetReferences(PlanningState& state) -> void
+{
+  std::vector<size_t> dependency_counts(state.assets.size(), 0U);
+  std::vector<std::vector<size_t>> dependents(state.assets.size());
+  for (size_t owner = 0; owner < state.assets.size(); ++owner) {
+    const auto& asset = state.assets.at(owner);
+    for (const auto& reference : asset.references.Keys()) {
+      if (reference.kind != data::KeyReferenceKind::kAsset) {
+        continue;
+      }
+      const auto target = state.asset_positions.find(reference.key);
+      if (target == state.asset_positions.end()) {
+        AddDiagnostic(state.output.diagnostics,
+          pak::PakDiagnosticSeverity::kError, pak::PakBuildPhase::kPlanning,
+          "pak.plan.asset_reference_missing",
+          "Asset " + data::to_string(asset.key) + " requires missing asset "
+            + data::to_string(reference.key),
+          asset.descriptor_path);
+        continue;
+      }
+      const auto actual_type = state.assets.at(target->second).asset_type;
+      if (actual_type != reference.expected_type) {
+        AddDiagnostic(state.output.diagnostics,
+          pak::PakDiagnosticSeverity::kError, pak::PakBuildPhase::kPlanning,
+          "pak.plan.asset_reference_type_mismatch",
+          "Asset " + data::to_string(asset.key) + " requires "
+            + data::to_string(reference.expected_type) + " "
+            + data::to_string(reference.key) + "; target is "
+            + data::to_string(actual_type),
+          asset.descriptor_path);
+      }
+      ++dependency_counts.at(owner);
+      dependents.at(target->second).push_back(owner);
+    }
+  }
+
+  // Iterative traversal also handles deep graphs without consuming the stack.
+  std::vector<size_t> ready;
+  ready.reserve(state.assets.size());
+  for (size_t index = 0; index < dependency_counts.size(); ++index) {
+    if (dependency_counts.at(index) == 0U) {
+      ready.push_back(index);
+    }
+  }
+  for (size_t next = 0; next < ready.size(); ++next) {
+    for (const auto dependent : dependents.at(ready.at(next))) {
+      if (--dependency_counts.at(dependent) == 0U) {
+        ready.push_back(dependent);
+      }
+    }
+  }
+  if (ready.size() != state.assets.size()) {
+    AddDiagnostic(state.output.diagnostics, pak::PakDiagnosticSeverity::kError,
+      pak::PakBuildPhase::kPlanning, "pak.plan.asset_reference_cycle",
+      "Hard asset references contain a cycle");
+  }
+}
+
 auto ValidatePhysicsScenePairs(PlanningState& state) -> void
 {
   std::unordered_map<data::AssetKey, const AggregatedAsset*> scenes;
@@ -2656,60 +1944,6 @@ auto IncludePhysicsScenePatchPartners(
   }
 }
 
-// Embedded hashes cover a descriptor with its own hash field zeroed.
-auto PublishRewrittenDescriptor(PlanningState& state, AggregatedAsset& asset,
-  std::vector<std::byte> bytes) -> void
-{
-  if (bytes.size() < sizeof(core::AssetHeader)) {
-    throw std::runtime_error(
-      "Rewritten descriptor has no complete asset header");
-  }
-  auto header = core::AssetHeader {};
-  std::memcpy(&header, bytes.data(), sizeof(header));
-  if (!oxygen::base::IsAllZero(header.content_hash)) {
-    auto hash_field = std::span(bytes).subspan(
-      offsetof(core::AssetHeader, content_hash), sizeof(header.content_hash));
-    std::ranges::fill(hash_field, std::byte { 0 });
-    const auto digest = oxygen::base::ComputeSha256(bytes);
-    std::memcpy(hash_field.data(), digest.data(), digest.size());
-  }
-  asset.descriptor_digest = oxygen::base::ComputeSha256(bytes);
-  asset.descriptor_source_offset = 0U;
-  state.rewritten_asset_payloads.insert_or_assign(asset.key, std::move(bytes));
-}
-
-auto RewritePhysicsSceneHashes(PlanningState& state) -> void
-{
-  std::unordered_map<data::AssetKey, AggregatedAsset*> assets;
-  for (auto& asset : state.assets) {
-    assets.emplace(asset.key, &asset);
-  }
-  for (const auto& pair : state.physics_scene_pairs) {
-    const auto sidecar = assets.find(pair.sidecar_key);
-    if (sidecar == assets.end()) {
-      continue;
-    }
-    const auto rewritten = state.rewritten_asset_payloads.find(pair.scene_key);
-    if (rewritten == state.rewritten_asset_payloads.end()) {
-      continue;
-    }
-    auto bytes
-      = ReadSourceDescriptorBytes(*sidecar->second, state.output.diagnostics);
-    if (!bytes) {
-      continue;
-    }
-    const auto digest = oxygen::base::ComputeSha256(rewritten->second);
-    auto target_hash = std::span(*bytes).subspan(
-      offsetof(physics::PhysicsSceneAssetDesc, target_scene_content_hash),
-      digest.size());
-    std::memcpy(target_hash.data(), digest.data(), digest.size());
-    PublishRewrittenDescriptor(state, *sidecar->second, std::move(*bytes));
-    // Physics sidecars reference assets, with no direct resource payloads.
-    sidecar->second->transitive_resource_digest
-      = sidecar->second->descriptor_digest;
-  }
-}
-
 auto ClassifyPatchActionsAndFinalizeBrowse(PlanningState& state) -> void
 {
   using pak::PakBuildPhase;
@@ -2732,15 +1966,54 @@ auto ClassifyPatchActionsAndFinalizeBrowse(PlanningState& state) -> void
 
   std::unordered_map<data::AssetKey, data::PakCatalogEntry>
     base_catalog_entries;
+  std::unordered_map<data::AssetKey, data::AssetType> base_asset_types;
+  std::unordered_set<data::SourceKey> base_sources;
+  std::vector<data::PakCatalogBase> base_layers;
   for (const auto& catalog : state.request->base_catalogs) {
+    if (const auto valid = catalog.Validate(); !valid) {
+      AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+        PakBuildPhase::kPlanning, "pak.plan.base_catalog_invalid",
+        valid.error());
+      continue;
+    }
+    if (const auto valid = catalog.ValidateBaseLayers(base_layers); !valid) {
+      AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+        PakBuildPhase::kPlanning, "pak.plan.base_catalog_order_invalid",
+        valid.error());
+      continue;
+    }
+    base_layers.push_back({ .source_key = catalog.source_key,
+      .content_version = catalog.content_version,
+      .catalog_digest = catalog.catalog_digest });
+    if (catalog.source_key == state.request->source_key
+      || !base_sources.insert(catalog.source_key).second) {
+      AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+        PakBuildPhase::kPlanning, "pak.plan.base_catalog_identity_conflict",
+        "Base layers must have distinct identities different from the output.");
+      continue;
+    }
     for (const auto& entry : catalog.entries) {
       const auto [it, inserted]
-        = base_catalog_entries.emplace(entry.asset_key, entry);
-      if (!inserted && it->second.asset_type != entry.asset_type) {
+        = base_asset_types.emplace(entry.asset_key, entry.asset_type);
+      if (!inserted && it->second != entry.asset_type) {
         AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
           PakBuildPhase::kPlanning, "pak.plan.base_catalog_type_mismatch",
           "Same AssetKey appears in base catalogs with different asset_type.");
+        continue;
       }
+      base_catalog_entries.insert_or_assign(entry.asset_key, entry);
+    }
+    for (const auto& key : catalog.deleted) {
+      base_catalog_entries.erase(key);
+    }
+  }
+  for (const auto& [key, entry] : source_catalog_entries) {
+    const auto previous = base_asset_types.find(key);
+    if (previous != base_asset_types.end()
+      && previous->second != entry.asset_type) {
+      AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+        PakBuildPhase::kPlanning, "pak.plan.asset_override_type_mismatch",
+        "A patch cannot change an existing AssetKey's asset type.");
     }
   }
 
@@ -2875,8 +2148,16 @@ auto CollectIncludedSourceOrders(PlanningState& state) -> void
 {
   state.included_source_orders.clear();
   if (state.policy.mode == pak::PakPlanMode::kPatch) {
+    std::unordered_set<data::AssetKey> emitted;
     for (const auto& asset : state.assets) {
       state.included_source_orders.push_back(asset.source_order);
+      emitted.insert(asset.key);
+    }
+    for (const auto& resource : state.pending_resources) {
+      if (std::ranges::any_of(resource.dependent_asset_keys,
+            [&](const data::AssetKey& key) { return emitted.contains(key); })) {
+        state.included_source_orders.push_back(resource.source_order);
+      }
     }
   } else {
     state.included_source_orders.reserve(state.source_contributions.size());
@@ -2898,11 +2179,8 @@ auto RebuildPatchLocalContributions(PlanningState& state) -> void
 
   CollectIncludedSourceOrders(state);
   state.table_counts = {};
-  state.script_slots.clear();
-  state.script_param_record_count = 0;
 
   if (state.policy.mode != pak::PakPlanMode::kPatch) {
-    uint64_t slot_index_base = 0;
     for (const auto source_order : state.included_source_orders) {
       const auto contribution_it
         = state.source_contributions.find(source_order);
@@ -2920,38 +2198,18 @@ auto RebuildPatchLocalContributions(PlanningState& state) -> void
       state.table_counts.audio_count += contribution.table_counts.audio_count;
       state.table_counts.script_resource_count
         += contribution.table_counts.script_resource_count;
-      state.table_counts.script_slot_count
-        += contribution.table_counts.script_slot_count;
       state.table_counts.physics_count
         += contribution.table_counts.physics_count;
-
-      for (const auto& local_slot : contribution.local_script_slots) {
-        const auto global_slot_index
-          = static_cast<uint32_t>(slot_index_base + local_slot.slot_index);
-        const auto global_param_offset
-          = (state.script_param_record_count + local_slot.params_array_index);
-        state.script_slots.push_back(pak::PakScriptSlotPlan {
-          .slot_index = global_slot_index,
-          .script_asset_key = local_slot.script_asset_key,
-          .params_array_index = global_param_offset,
-          .params_count = local_slot.params_count,
-          .execution_order = local_slot.execution_order,
-          .flags = local_slot.flags,
-        });
-      }
-
-      slot_index_base += contribution.table_counts.script_slot_count;
-      state.script_param_record_count += contribution.script_param_record_count;
     }
     return;
   }
 
-  const auto included_source_orders = std::unordered_set<size_t>(
-    state.included_source_orders.begin(), state.included_source_orders.end());
+  std::unordered_set<size_t> descriptor_source_orders;
   auto emitted_asset_keys = std::unordered_set<data::AssetKey> {};
   emitted_asset_keys.reserve(state.assets.size());
   for (const auto& asset : state.assets) {
     emitted_asset_keys.insert(asset.key);
+    descriptor_source_orders.insert(asset.source_order);
   }
   auto explicitly_owned_resource_kinds_by_source
     = std::unordered_map<size_t, std::unordered_set<std::string>> {};
@@ -2964,13 +2222,13 @@ auto RebuildPatchLocalContributions(PlanningState& state) -> void
   }
 
   std::erase_if(state.pending_resources,
-    [&included_source_orders, &emitted_asset_keys,
+    [&descriptor_source_orders, &emitted_asset_keys,
       &explicitly_owned_resource_kinds_by_source](
       const PendingResource& resource) -> bool {
-      if (!included_source_orders.contains(resource.source_order)) {
-        return true;
-      }
       if (resource.dependent_asset_keys.empty()) {
+        if (!descriptor_source_orders.contains(resource.source_order)) {
+          return true;
+        }
         const auto owned_kinds_it
           = explicitly_owned_resource_kinds_by_source.find(
             resource.source_order);
@@ -2996,196 +2254,10 @@ auto RebuildPatchLocalContributions(PlanningState& state) -> void
       ++state.table_counts.physics_count;
     }
   }
-
-  auto owned_slots = std::vector<OwnedScriptSlotSource> {};
-  owned_slots.reserve(state.owned_script_slots.size());
-  for (const auto& slot : state.owned_script_slots) {
-    if (emitted_asset_keys.contains(slot.asset_key)) {
-      owned_slots.push_back(slot);
-    }
-  }
-  std::ranges::sort(owned_slots,
-    [](const OwnedScriptSlotSource& lhs,
-      const OwnedScriptSlotSource& rhs) -> bool {
-      if (lhs.source_order != rhs.source_order) {
-        return lhs.source_order < rhs.source_order;
-      }
-      if (lhs.asset_key != rhs.asset_key) {
-        return lhs.asset_key < rhs.asset_key;
-      }
-      return lhs.source_slot_index < rhs.source_slot_index;
-    });
-
-  auto source_orders_with_owned_slots = std::unordered_set<size_t> {};
-  for (const auto& owned_slot : owned_slots) {
-    source_orders_with_owned_slots.insert(owned_slot.source_order);
-    state.script_slots.push_back(pak::PakScriptSlotPlan {
-      .slot_index = static_cast<uint32_t>(state.script_slots.size()),
-      .script_asset_key = owned_slot.record.script_asset_key,
-      .params_array_index = state.script_param_record_count,
-      .params_count = owned_slot.record.params_count,
-      .execution_order = owned_slot.record.execution_order,
-      .flags = owned_slot.record.flags,
-    });
-    state.script_param_record_count += owned_slot.record.params_count;
-  }
-
-  uint64_t slot_index_base = state.script_slots.size();
-  for (const auto source_order : state.included_source_orders) {
-    if (source_orders_with_owned_slots.contains(source_order)) {
-      continue;
-    }
-
-    const auto contribution_it = state.source_contributions.find(source_order);
-    if (!CheckStageInvariant(state,
-          contribution_it != state.source_contributions.end(),
-          "pak.plan.stage.patch.missing_source_contribution",
-          "Included source order has no source contribution record.")) {
-      continue;
-    }
-
-    const auto& contribution = contribution_it->second;
-    for (const auto& local_slot : contribution.local_script_slots) {
-      uint64_t global_slot_index = 0;
-      if (!SafeAdd(slot_index_base, local_slot.slot_index, global_slot_index)
-        || global_slot_index > kMaxCountAsUint64) {
-        AddDiagnostic(state.output.diagnostics, PakDiagnosticSeverity::kError,
-          PakBuildPhase::kPlanning, "pak.plan.script_slot_index_overflow",
-          "Patch-local script slot index overflowed uint32 bounds.");
-        continue;
-      }
-
-      uint64_t global_param_offset = 0;
-      if (!SafeAdd(state.script_param_record_count,
-            local_slot.params_array_index, global_param_offset)
-        || global_param_offset > kMaxCountAsUint64) {
-        AddDiagnostic(state.output.diagnostics, PakDiagnosticSeverity::kError,
-          PakBuildPhase::kPlanning, "pak.plan.script_params_offset_overflow",
-          "Patch-local script param offset overflowed uint32 bounds.");
-        continue;
-      }
-
-      state.script_slots.push_back(pak::PakScriptSlotPlan {
-        .slot_index = static_cast<uint32_t>(global_slot_index),
-        .script_asset_key = local_slot.script_asset_key,
-        .params_array_index = static_cast<uint32_t>(global_param_offset),
-        .params_count = local_slot.params_count,
-        .execution_order = local_slot.execution_order,
-        .flags = local_slot.flags,
-      });
-    }
-
-    slot_index_base += contribution.table_counts.script_slot_count;
-    state.script_param_record_count += contribution.script_param_record_count;
-  }
-
-  state.table_counts.script_slot_count
-    = static_cast<uint64_t>(state.script_slots.size());
-}
-
-auto PreparePatchCompatibilityEnvelope(PlanningState& state) -> void
-{
-  using pak::PakBuildPhase;
-  using pak::PakDiagnosticSeverity;
-
-  state.patch_manifest_basis_ready = false;
-  state.patch_compatibility_envelope = {};
-  state.patch_compatibility_envelope.patch_content_version
-    = state.request->content_version;
-  state.patch_compatibility_policy_snapshot
-    = PatchCompatibilityPolicySnapshotData {
-        .require_exact_base_set
-        = state.request->patch_compat.require_exact_base_set,
-        .require_content_version_match
-        = state.request->patch_compat.require_content_version_match,
-        .require_base_source_key_match
-        = state.request->patch_compat.require_base_source_key_match,
-        .require_catalog_digest_match
-        = state.request->patch_compat.require_catalog_digest_match,
-      };
-  state.patch_diff_basis_identifier = std::string(kPatchDiffBasisIdentifier);
-
-  if (!state.policy.emits_manifest) {
-    return;
-  }
-
-  if (state.policy.mode == pak::PakPlanMode::kPatch) {
-    for (const auto& base_catalog : state.request->base_catalogs) {
-      state.patch_compatibility_envelope.required_base_source_keys.push_back(
-        base_catalog.source_key);
-      state.patch_compatibility_envelope.required_base_content_versions
-        .push_back(base_catalog.content_version);
-      state.patch_compatibility_envelope.required_base_catalog_digests
-        .push_back(base_catalog.catalog_digest);
-    }
-
-    SortAndUniqueSourceKeys(
-      state.patch_compatibility_envelope.required_base_source_keys);
-    std::ranges::sort(
-      state.patch_compatibility_envelope.required_base_content_versions);
-    state.patch_compatibility_envelope.required_base_content_versions.erase(
-      std::ranges::unique(
-        state.patch_compatibility_envelope.required_base_content_versions)
-        .begin(),
-      state.patch_compatibility_envelope.required_base_content_versions.end());
-    SortAndUniqueDigests(
-      state.patch_compatibility_envelope.required_base_catalog_digests);
-
-    if (state.patch_compatibility_envelope.required_base_source_keys.empty()
-      || state.patch_compatibility_envelope.required_base_content_versions
-        .empty()
-      || state.patch_compatibility_envelope.required_base_catalog_digests
-        .empty()) {
-      AddDiagnostic(state.output.diagnostics, PakDiagnosticSeverity::kError,
-        PakBuildPhase::kPlanning, "pak.patch.compatibility_envelope_incomplete",
-        "Patch compatibility envelope requires non-empty base source/content/"
-        "catalog requirements.");
-      return;
-    }
-  }
-
-  if (state.policy.mode == pak::PakPlanMode::kFull) {
-    state.patch_compatibility_envelope.required_base_source_keys.clear();
-    state.patch_compatibility_envelope.required_base_content_versions.clear();
-    state.patch_compatibility_envelope.required_base_catalog_digests.clear();
-  }
-
-  state.patch_manifest_basis_ready = true;
 }
 
 auto ValidatePatchContributionInvariants(PlanningState& state) -> void
 {
-  EnforceStageInvariant(state,
-    state.patch_diff_basis_identifier == kPatchDiffBasisIdentifier,
-    "pak.plan.stage.patch.diff_basis_identifier_mismatch",
-    "Patch diff basis identifier must match the required "
-    "descriptor_plus_transitive_resources_v1 value.");
-
-  if (!CheckStageInvariant(state,
-        !state.policy.emits_manifest || state.patch_manifest_basis_ready,
-        "pak.plan.stage.patch.compatibility_basis_missing",
-        "Patch/full-manifest build must prepare compatibility envelope "
-        "basis.")) {
-    return;
-  }
-
-  EnforceStageInvariant(state,
-    state.patch_compatibility_envelope.patch_content_version
-      == state.request->content_version,
-    "pak.plan.stage.patch.patch_content_version_mismatch",
-    "Patch compatibility envelope patch_content_version must match request.");
-  EnforceStageInvariant(state,
-    state.patch_compatibility_policy_snapshot.require_exact_base_set
-        == state.request->patch_compat.require_exact_base_set
-      && state.patch_compatibility_policy_snapshot.require_content_version_match
-        == state.request->patch_compat.require_content_version_match
-      && state.patch_compatibility_policy_snapshot.require_base_source_key_match
-        == state.request->patch_compat.require_base_source_key_match
-      && state.patch_compatibility_policy_snapshot.require_catalog_digest_match
-        == state.request->patch_compat.require_catalog_digest_match,
-    "pak.plan.stage.patch.policy_snapshot_mismatch",
-    "Patch compatibility policy snapshot must match the request policy.");
-
   if (state.policy.mode != pak::PakPlanMode::kPatch) {
     return;
   }
@@ -3195,41 +2267,16 @@ auto ValidatePatchContributionInvariants(PlanningState& state) -> void
       std::ranges::find(state.included_source_orders, resource.source_order)
         != state.included_source_orders.end(),
       "pak.plan.stage.patch.resource_not_patch_local",
-      "Patch-local resource filtering retained a resource from a non-emitted "
-      "source.");
+      "Patch resource owner is missing from source contributions.");
   }
 }
 
-auto FinalizeScriptAndTables(PlanningState& state) -> void
+auto FinalizeResourceTables(PlanningState& state) -> void
 {
   using pak::PakBuildPhase;
   using pak::PakDiagnosticSeverity;
 
   auto& diagnostics = state.output.diagnostics;
-
-  std::ranges::sort(state.script_slots,
-    [](const pak::PakScriptSlotPlan& lhs, const pak::PakScriptSlotPlan& rhs)
-      -> bool { return lhs.slot_index < rhs.slot_index; });
-
-  for (const auto& slot : state.script_slots) {
-    uint64_t end = 0;
-    if (!SafeAdd(slot.params_array_index, slot.params_count, end)
-      || end > kMaxCountAsUint64) {
-      AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-        PakBuildPhase::kPlanning, "pak.plan.script_param_count_overflow",
-        "Script param range overflows uint32 bounds.");
-      continue;
-    }
-
-    if (end > state.script_param_record_count) {
-      AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-        PakBuildPhase::kPlanning, "pak.plan.script_param_out_of_bounds",
-        "Script param range exceeds available ScriptParamRecord count.");
-    }
-  }
-
-  state.data_plan.script_param_record_count = state.script_param_record_count;
-  state.data_plan.script_slots = std::move(state.script_slots);
 
   SetTableCount(state.data_plan.tables, "texture_table",
     state.table_counts.texture_count, diagnostics);
@@ -3239,154 +2286,14 @@ auto FinalizeScriptAndTables(PlanningState& state) -> void
     state.table_counts.audio_count, diagnostics);
   SetTableCount(state.data_plan.tables, "script_resource_table",
     state.table_counts.script_resource_count, diagnostics);
-  SetTableCount(state.data_plan.tables, "script_slot_table",
-    state.table_counts.script_slot_count, diagnostics);
   SetTableCount(state.data_plan.tables, "physics_resource_table",
     state.table_counts.physics_count, diagnostics);
   ApplyIndexZeroPolicy(state.data_plan.tables);
 }
 
-auto RewriteSceneScriptBindings(PlanningState& state) -> void
+auto ValidateResourceTableInvariants(PlanningState& state) -> void
 {
-  if (state.policy.mode != pak::PakPlanMode::kPatch) {
-    auto source_bases = std::unordered_map<size_t, uint64_t> {};
-    uint64_t base = 0U;
-    for (const auto source_order : state.included_source_orders) {
-      source_bases.emplace(source_order, base);
-      const auto count = state.source_contributions.at(source_order)
-                           .table_counts.script_slot_count;
-      if (!SafeAdd(base, count, base) || base > kMaxCountAsUint64) {
-        throw std::runtime_error(
-          "Combined script slot count exceeds uint32 bounds");
-      }
-    }
-    for (auto& asset : state.assets) {
-      if (asset.asset_type != data::AssetType::kScene) {
-        continue;
-      }
-      auto bytes = ReadSourceDescriptorBytes(asset, state.output.diagnostics);
-      if (!bytes) {
-        continue;
-      }
-      const auto scene
-        = data::SceneAsset(asset.key, std::span<const std::byte>(*bytes));
-      const auto slots
-        = scene.GetComponents<script::ScriptingComponentRecord>();
-      const auto source_base = source_bases.at(asset.source_order);
-      const auto source_count
-        = state.source_contributions.at(asset.source_order)
-            .table_counts.script_slot_count;
-      auto remaps = std::unordered_map<uint32_t, uint32_t> {};
-      for (const auto& binding : slots) {
-        uint64_t end = 0U;
-        if (!SafeAdd(binding.slot_start_index, binding.slot_count, end)
-          || end > source_count) {
-          throw std::runtime_error(
-            "Scene script binding exceeds its source slot table");
-        }
-        if (source_base == 0U) {
-          continue;
-        }
-        for (uint64_t local = binding.slot_start_index; local < end; ++local) {
-          remaps.emplace(static_cast<uint32_t>(local),
-            static_cast<uint32_t>(source_base + local));
-        }
-      }
-      if (remaps.empty()) {
-        continue;
-      }
-      if (!RewriteSceneScriptingComponentRanges(
-            *bytes, remaps, state.output.diagnostics, asset.descriptor_path)) {
-        continue;
-      }
-      PublishRewrittenDescriptor(state, asset, std::move(*bytes));
-    }
-    return;
-  }
-  if (state.owned_script_slots.empty()) {
-    return;
-  }
-
-  auto emitted_asset_keys = std::unordered_set<data::AssetKey> {};
-  emitted_asset_keys.reserve(state.assets.size());
-  for (const auto& asset : state.assets) {
-    emitted_asset_keys.insert(asset.key);
-  }
-
-  auto owned_slots = std::vector<OwnedScriptSlotSource> {};
-  owned_slots.reserve(state.owned_script_slots.size());
-  for (const auto& slot : state.owned_script_slots) {
-    if (emitted_asset_keys.contains(slot.asset_key)) {
-      owned_slots.push_back(slot);
-    }
-  }
-  if (owned_slots.empty()) {
-    return;
-  }
-
-  std::ranges::sort(owned_slots,
-    [](const OwnedScriptSlotSource& lhs,
-      const OwnedScriptSlotSource& rhs) -> bool {
-      if (lhs.source_order != rhs.source_order) {
-        return lhs.source_order < rhs.source_order;
-      }
-      if (lhs.asset_key != rhs.asset_key) {
-        return lhs.asset_key < rhs.asset_key;
-      }
-      return lhs.source_slot_index < rhs.source_slot_index;
-    });
-
-  auto rewritten_slot_indices = std::unordered_map<data::AssetKey,
-    std::unordered_map<uint32_t, uint32_t>> {};
-  auto next_slot_index = uint32_t { 0U };
-  for (const auto& owned_slot : owned_slots) {
-    rewritten_slot_indices[owned_slot.asset_key].emplace(
-      owned_slot.source_slot_index, next_slot_index++);
-  }
-
-  for (auto& asset : state.assets) {
-    if (asset.asset_type != data::AssetType::kScene) {
-      continue;
-    }
-
-    const auto rewritten_it = rewritten_slot_indices.find(asset.key);
-    if (rewritten_it == rewritten_slot_indices.end()) {
-      continue;
-    }
-
-    auto descriptor_bytes
-      = ReadSourceDescriptorBytes(asset, state.output.diagnostics);
-    if (!descriptor_bytes.has_value()) {
-      AddDiagnostic(state.output.diagnostics,
-        pak::PakDiagnosticSeverity::kError, pak::PakBuildPhase::kPlanning,
-        "pak.plan.patch_scene_descriptor_read_failed",
-        "Failed to read scene descriptor bytes for patch-local script slot "
-        "rewrite.",
-        asset.descriptor_path);
-      continue;
-    }
-
-    if (!RewriteSceneScriptingComponentRanges(*descriptor_bytes,
-          rewritten_it->second, state.output.diagnostics,
-          asset.descriptor_path)) {
-      continue;
-    }
-
-    PublishRewrittenDescriptor(state, asset, std::move(*descriptor_bytes));
-  }
-}
-
-auto ValidateScriptAndTableInvariants(PlanningState& state) -> void
-{
-  const auto& slots = state.data_plan.script_slots;
-  for (size_t i = 1; i < slots.size(); ++i) {
-    const auto sorted = slots.at(i - 1).slot_index <= slots.at(i).slot_index;
-    EnforceStageInvariant(state, sorted,
-      "pak.plan.stage.script.slot_ranges_unsorted",
-      "Script param ranges are not sorted by slot_index.");
-  }
-
-  const auto has_core_table_count = state.data_plan.tables.size() >= 6U;
+  const auto has_core_table_count = state.data_plan.tables.size() == 5U;
   EnforceStageInvariant(state, has_core_table_count,
     "pak.plan.stage.tables.core_tables_missing",
     "Planner table set is missing one or more core tables.");
@@ -3396,226 +2303,69 @@ using SourceIndexRemaps
   = std::unordered_map<size_t, std::unordered_map<uint32_t, uint32_t>>;
 using ResourceIndexRemaps = std::unordered_map<std::string, SourceIndexRemaps>;
 
-// Every active source-local reference follows the same final placement map.
-[[nodiscard]] auto RewriteResourceReferences(PlanningState& state,
-  AggregatedAsset& asset, const ResourceIndexRemaps& remaps) -> bool
+auto RelocateResourceBindings(
+  AggregatedAsset& asset, const ResourceIndexRemaps& remaps) -> void
 {
-  if (asset.asset_type != data::AssetType::kScene
-    && asset.asset_type != data::AssetType::kMaterial
-    && asset.asset_type != data::AssetType::kGeometry
-    && asset.asset_type != data::AssetType::kScript) {
-    return true;
-  }
-  auto bytes = std::optional<std::vector<std::byte>> {};
-  if (const auto rewritten = state.rewritten_asset_payloads.find(asset.key);
-    rewritten != state.rewritten_asset_payloads.end()) {
-    bytes = rewritten->second;
-  } else {
-    bytes = ReadSourceDescriptorBytes(asset, state.output.diagnostics);
-  }
-  if (!bytes) {
-    return false;
-  }
-  try {
-    bool changed = false;
-    const auto remap = [&](const core::ResourceIndexT index,
-                         const std::string& kind) -> core::ResourceIndexT {
-      if (index == core::kNoResourceIndex) {
-        return index;
-      }
-      const auto domain = remaps.find(kind);
-      if (domain == remaps.end() || !domain->second.contains(asset.source_order)
-        || !domain->second.at(asset.source_order).contains(index.get())) {
-        throw std::runtime_error(
-          "Asset references an unplanned " + kind + " resource");
-      }
-      const auto mapped = domain->second.at(asset.source_order).at(index.get());
-      if (mapped == core::kNoResourceIndex.get()) {
-        throw std::runtime_error(
-          "A resource reference cannot map to the null entry");
-      }
-      changed |= mapped != index.get();
-      return core::ResourceIndexT { mapped };
-    };
-    serio::MemoryStream stream { std::span<std::byte>(*bytes) };
-    serio::Writer writer(stream);
-    const auto packed = writer.ScopedAlignment(1);
-    const auto read = [&]<typename Record>(const size_t offset) -> Record {
-      if (offset > bytes->size() || sizeof(Record) > bytes->size() - offset) {
-        throw std::runtime_error("Asset record exceeds its descriptor bounds");
-      }
-      auto record = Record {};
-      std::memcpy(std::addressof(record),
-        std::span<const std::byte>(*bytes)
-          .subspan(offset, sizeof(Record))
-          .data(),
-        sizeof(Record));
-      return record;
-    };
-    const auto write = [&](const size_t offset, const uint32_t record) -> void {
-      if (!stream.Seek(offset) || !writer.Write(record)) {
-        throw std::runtime_error(
-          "Asset resource reference could not be serialized");
-      }
-    };
-    const auto remap_at
-      = [&](const size_t offset, const std::string& kind) -> void {
-      const auto index = read.template operator()<uint32_t>(offset);
-      write(offset, remap(core::ResourceIndexT { index }, kind).get());
-    };
-    const auto view = std::span<const std::byte>(*bytes);
-    if (asset.asset_type == data::AssetType::kScene) {
-      const auto scene = data::SceneAsset(asset.key, view);
-      if (const auto post = scene.TryGetPostProcessVolumeEnvironment(); post) {
-        const auto records = scene.GetEnvironmentSystemRecords();
-        const auto record
-          = std::ranges::find_if(records, [](const auto& entry) -> auto {
-              return entry.header.system_type
-                == static_cast<uint32_t>(
-                  world::EnvironmentComponentType::kPostProcessVolume);
-            });
-        if (record == records.end()) {
-          throw std::runtime_error("Scene exposure record is missing");
-        }
-        write(record->record_offset
-            + offsetof(world::PostProcessVolumeEnvironmentRecord,
-              auto_exposure_metering_mask),
-          remap(post->auto_exposure_metering_mask, "texture").get());
-      }
-    } else if (asset.asset_type == data::AssetType::kMaterial
-      && IsValidDescriptorHeader(
-        view, data::AssetType::kMaterial, render::kMaterialAssetVersion)
-      && view.size() >= sizeof(render::MaterialAssetDesc)) {
-      auto material = read.template operator()<render::MaterialAssetDesc>(0U);
-      if ((material.flags & render::kMaterialFlag_NoTextureSampling) == 0U) {
-        constexpr auto kTextureOffsets = std::array {
-          offsetof(render::MaterialAssetDesc, base_color_texture),
-          offsetof(render::MaterialAssetDesc, normal_texture),
-          offsetof(render::MaterialAssetDesc, metallic_texture),
-          offsetof(render::MaterialAssetDesc, roughness_texture),
-          offsetof(render::MaterialAssetDesc, ambient_occlusion_texture),
-          offsetof(render::MaterialAssetDesc, emissive_texture),
-          offsetof(render::MaterialAssetDesc, specular_texture),
-          offsetof(render::MaterialAssetDesc, sheen_color_texture),
-          offsetof(render::MaterialAssetDesc, clearcoat_texture),
-          offsetof(render::MaterialAssetDesc, clearcoat_normal_texture),
-          offsetof(render::MaterialAssetDesc, transmission_texture),
-          offsetof(render::MaterialAssetDesc, thickness_texture),
-        };
-        for (const auto offset : kTextureOffsets) {
-          remap_at(offset, "texture");
-        }
-      }
-    } else if (asset.asset_type == data::AssetType::kScript
-      && view.size() >= sizeof(script::ScriptAssetDesc)
-      && read.template operator()<core::AssetHeader>(0U).asset_type
-        == static_cast<uint8_t>(data::AssetType::kScript)) {
-      remap_at(
-        offsetof(script::ScriptAssetDesc, bytecode_resource_index), "script");
-      remap_at(
-        offsetof(script::ScriptAssetDesc, source_resource_index), "script");
-    } else if (asset.asset_type == data::AssetType::kGeometry
-      && IsValidDescriptorHeader(
-        view, data::AssetType::kGeometry, geometry::kGeometryAssetVersion)
-      && view.size() >= sizeof(geometry::GeometryAssetDesc)) {
-      const auto geometry_asset
-        = read.template operator()<geometry::GeometryAssetDesc>(0U);
-      size_t cursor = sizeof(geometry_asset);
-      const auto advance = [&](const size_t amount) -> void {
-        if (cursor > view.size() || amount > view.size() - cursor) {
-          throw std::runtime_error("Geometry range exceeds descriptor bounds");
-        }
-        cursor += amount;
-      };
-      for (uint32_t lod = 0; lod < geometry_asset.lod_count; ++lod) {
-        auto mesh = read.template operator()<geometry::MeshDesc>(cursor);
-        if (mesh.IsStandard()) {
-          remap_at(
-            cursor + offsetof(geometry::MeshDesc, info.standard.vertex_buffer),
-            "buffer");
-          remap_at(
-            cursor + offsetof(geometry::MeshDesc, info.standard.index_buffer),
-            "buffer");
-        } else if (mesh.IsSkinned()) {
-          remap_at(
-            cursor + offsetof(geometry::MeshDesc, info.skinned.vertex_buffer),
-            "buffer");
-          remap_at(
-            cursor + offsetof(geometry::MeshDesc, info.skinned.index_buffer),
-            "buffer");
-          remap_at(cursor
-              + offsetof(geometry::MeshDesc, info.skinned.joint_index_buffer),
-            "buffer");
-          remap_at(cursor
-              + offsetof(geometry::MeshDesc, info.skinned.joint_weight_buffer),
-            "buffer");
-          remap_at(cursor
-              + offsetof(geometry::MeshDesc, info.skinned.inverse_bind_buffer),
-            "buffer");
-          remap_at(cursor
-              + offsetof(geometry::MeshDesc, info.skinned.joint_remap_buffer),
-            "buffer");
-        }
-        advance(sizeof(mesh));
-        if (mesh.IsProcedural()) {
-          advance(mesh.info.procedural.params_size);
-        }
-        for (uint32_t sub = 0; sub < mesh.submesh_count; ++sub) {
-          const auto submesh
-            = read.template operator()<geometry::SubMeshDesc>(cursor);
-          advance(sizeof(submesh));
-          advance(static_cast<size_t>(submesh.mesh_view_count)
-            * sizeof(geometry::MeshViewDesc));
-        }
-      }
+  std::vector<data::ResourceBinding> bindings(
+    asset.references.Resources().begin(), asset.references.Resources().end());
+  for (auto& binding : bindings) {
+    if (binding.kind == data::ResourceKind::kTexture
+      && (binding.index == core::kFallbackResourceIndex
+        || binding.index == core::kErrorTextureResourceIndex)) {
+      continue;
     }
-    if (changed) {
-      PublishRewrittenDescriptor(state, asset, std::move(*bytes));
+    std::string kind;
+    switch (binding.kind) {
+    case data::ResourceKind::kBuffer:
+      kind = "buffer";
+      break;
+    case data::ResourceKind::kTexture:
+      kind = "texture";
+      break;
+    case data::ResourceKind::kScript:
+      kind = "script";
+      break;
+    case data::ResourceKind::kPhysics:
+      kind = "physics";
+      break;
     }
-    return true;
-  } catch (const std::exception& error) {
-    AddDiagnostic(state.output.diagnostics, pak::PakDiagnosticSeverity::kError,
-      pak::PakBuildPhase::kPlanning,
-      "pak.plan.resource_reference_rewrite_failed", error.what(),
-      asset.descriptor_path);
-    return false;
+    const auto domain = remaps.find(kind);
+    if (domain == remaps.end()) {
+      throw std::runtime_error(
+        "Asset binding resource kind has no planned table");
+    }
+    const auto source = domain->second.find(asset.source_order);
+    if (source == domain->second.end()) {
+      throw std::runtime_error(
+        "Asset binding source has no planned resource remap");
+    }
+    const auto target = source->second.find(binding.index.get());
+    if (target == source->second.end()) {
+      throw std::runtime_error(
+        "Asset binding target was not included in packaging");
+    }
+    binding.index = core::ResourceIndexT { target->second };
   }
+  auto relocated = data::AssetReferences::Create(std::move(bindings),
+    std::vector<data::KeyReference>(
+      asset.references.Keys().begin(), asset.references.Keys().end()));
+  if (!relocated) {
+    throw std::runtime_error(relocated.error());
+  }
+  asset.references = std::move(*relocated);
 }
 
 auto PlanFileLayout(PlanningState& state) -> void
 {
   std::ranges::stable_sort(state.pending_resources,
-    [patch = state.policy.mode == pak::PakPlanMode::kPatch](
-      const PendingResource& lhs, const PendingResource& rhs) -> bool {
+    [](const PendingResource& lhs, const PendingResource& rhs) -> bool {
       const auto lhs_order = RegionOrder(lhs.region_name);
       const auto rhs_order = RegionOrder(rhs.region_name);
       if (lhs_order != rhs_order) {
         return lhs_order < rhs_order;
       }
-      const auto lhs_resource_order = ResourceOrderWithinRegion(lhs);
-      const auto rhs_resource_order = ResourceOrderWithinRegion(rhs);
-      if (lhs_resource_order != rhs_resource_order) {
-        return lhs_resource_order < rhs_resource_order;
-      }
-      // Patch slots are emitted by owner and slot index, followed by any
-      // unowned source tables. Their parameter payloads must use that same
-      // order, regardless of the original physical parameter offsets.
-      const auto owned_params = patch && lhs.resource_kind == "script_param";
-      if (owned_params
-        && lhs.dependent_asset_keys.empty()
-          != rhs.dependent_asset_keys.empty()) {
-        return !lhs.dependent_asset_keys.empty();
-      }
       if (lhs.source_order != rhs.source_order) {
         return lhs.source_order < rhs.source_order;
-      }
-      if (owned_params && !lhs.dependent_asset_keys.empty()) {
-        if (lhs.dependent_asset_keys.front()
-          != rhs.dependent_asset_keys.front()) {
-          return lhs.dependent_asset_keys.front()
-            < rhs.dependent_asset_keys.front();
-        }
-        return lhs.source_local_index < rhs.source_local_index;
       }
       if (lhs.source_sort_key != rhs.source_sort_key) {
         return lhs.source_sort_key < rhs.source_sort_key;
@@ -3737,9 +2487,8 @@ auto PlanFileLayout(PlanningState& state) -> void
   state.data_plan.asset_payload_sources.clear();
   state.data_plan.directory.entries.clear();
   for (auto& asset : state.assets) {
-    static_cast<void>(RewriteResourceReferences(state, asset, resource_remaps));
+    RelocateResourceBindings(asset, resource_remaps);
   }
-  RewritePhysicsSceneHashes(state);
   for (const auto& asset : state.assets) {
     cursor = AlignUp(cursor, AlignmentBytes { kAssetAlignment });
 
@@ -3765,14 +2514,11 @@ auto PlanFileLayout(PlanningState& state) -> void
       .size_bytes = asset.descriptor_size,
       .inline_bytes = {},
     };
-    if (const auto rewritten_it
-      = state.rewritten_asset_payloads.find(asset.key);
-      rewritten_it != state.rewritten_asset_payloads.end()) {
-      payload_source.source_offset = 0U;
-      payload_source.size_bytes = rewritten_it->second.size();
-      payload_source.inline_bytes = rewritten_it->second;
-    }
     state.data_plan.asset_payload_sources.push_back(std::move(payload_source));
+    auto reference_bytes = asset.references.Encode();
+    if (!reference_bytes) {
+      throw std::runtime_error(reference_bytes.error());
+    }
     state.data_plan.directory.entries.push_back(
       pak::PakAssetDirectoryEntryPlan {
         .asset_key = asset.key,
@@ -3780,8 +2526,21 @@ auto PlanFileLayout(PlanningState& state) -> void
         .entry_offset = 0,
         .descriptor_offset = cursor,
         .descriptor_size = static_cast<uint32_t>(asset.descriptor_size),
+        .references = { .offset = 0,
+          .resource_count = static_cast<uint32_t>(asset.references.Resources().size()),
+          .key_count = static_cast<uint32_t>(asset.references.Keys().size()), },
+        .reference_bytes = std::move(*reference_bytes),
       });
     cursor += asset.descriptor_size;
+  }
+
+  for (auto& entry : state.data_plan.directory.entries) {
+    if (!entry.reference_bytes.empty()) {
+      entry.references.offset = cursor;
+      if (!SafeAdd(cursor, entry.reference_bytes.size(), cursor)) {
+        throw std::overflow_error("Asset reference metadata layout overflow");
+      }
+    }
   }
 
   cursor = AlignUp(cursor, AlignmentBytes { kDirectoryAlignment });
@@ -3834,6 +2593,18 @@ auto PlanFileLayout(PlanningState& state) -> void
       .entries = std::move(browse_entries),
     };
     cursor += *browse_payload_size;
+  }
+
+  state.output.output_catalog = BuildOutputCatalog(*state.request, state.assets,
+    state.data_plan.patch_actions, state.tombstones);
+  auto catalog_bytes = state.output.output_catalog.Encode();
+  if (!catalog_bytes) {
+    throw std::runtime_error(catalog_bytes.error());
+  }
+  state.data_plan.catalog
+    = { .offset = cursor, .bytes = std::move(*catalog_bytes) };
+  if (!SafeAdd(cursor, state.data_plan.catalog.bytes.size(), cursor)) {
+    throw std::overflow_error("PAK catalog layout overflow");
   }
 
   cursor = AlignUp(cursor, AlignmentBytes { kFooterAlignment });
@@ -4067,8 +2838,6 @@ auto ValidateAndFinalizeResult(PlanningState& state) -> void
     return;
   }
 
-  state.output.output_catalog
-    = BuildOutputCatalog(*state.request, state.assets);
   state.output.plan = pak::PakPlan(std::move(state.data_plan));
   state.output.summary.assets_processed
     = static_cast<uint32_t>(state.output.plan->Assets().size());
@@ -4119,6 +2888,9 @@ auto PakPlanBuilder::Build(const PakBuildRequest& request) const -> BuildResult
   RunStage(state, "ValidateCollectSourceDataInvariants",
     "pak.plan.stage.collect_invariants_exception",
     [&state] -> void { ValidateCollectSourceDataInvariants(state); });
+  RunStage(state, "ValidateAssetReferences",
+    "pak.plan.stage.references_exception",
+    [&state] -> void { ValidateAssetReferences(state); });
   RunStage(state, "ValidatePhysicsScenePairs",
     "pak.plan.stage.physics_scene_pairs_exception",
     [&state] -> void { ValidatePhysicsScenePairs(state); });
@@ -4131,21 +2903,15 @@ auto PakPlanBuilder::Build(const PakBuildRequest& request) const -> BuildResult
   RunStage(state, "RebuildPatchLocalContributions",
     "pak.plan.stage.patch_local_rebuild_exception",
     [&state] -> void { RebuildPatchLocalContributions(state); });
-  RunStage(state, "PreparePatchCompatibilityEnvelope",
-    "pak.plan.stage.patch_compatibility_exception",
-    [&state] -> void { PreparePatchCompatibilityEnvelope(state); });
   RunStage(state, "ValidatePatchContributionInvariants",
     "pak.plan.stage.patch_local_invariants_exception",
     [&state] -> void { ValidatePatchContributionInvariants(state); });
-  RunStage(state, "FinalizeScriptAndTables",
+  RunStage(state, "FinalizeResourceTables",
     "pak.plan.stage.script_tables_exception",
-    [&state] -> void { FinalizeScriptAndTables(state); });
-  RunStage(state, "RewriteSceneScriptBindings",
-    "pak.plan.stage.patch_scene_rewrite_exception",
-    [&state] -> void { RewriteSceneScriptBindings(state); });
-  RunStage(state, "ValidateScriptAndTableInvariants",
+    [&state] -> void { FinalizeResourceTables(state); });
+  RunStage(state, "ValidateResourceTableInvariants",
     "pak.plan.stage.script_tables_invariants_exception",
-    [&state] -> void { ValidateScriptAndTableInvariants(state); });
+    [&state] -> void { ValidateResourceTableInvariants(state); });
   RunStage(state, "PlanFileLayout", "pak.plan.stage.layout_exception",
     [&state] -> void { PlanFileLayout(state); });
   RunStage(state, "BuildPatchClosure", "pak.plan.stage.patch_closure_exception",

@@ -6,23 +6,16 @@
 
 #pragma once
 
-#include <array>
 #include <filesystem>
-#include <functional>
 #include <memory>
-#include <string>
 
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Testing/GTest.h>
 
-namespace oxygen::co::testing {
-class TestEventLoop;
-}
-
 namespace oxygen::content::testing {
 
-//! Base test fixture for AssetLoader tests using real PAK files
+//! AssetLoader fixture with isolated temporary storage.
 class AssetLoaderBasicTest : public ::testing::Test {
 protected:
   using Tag = oxygen::engine::internal::EngineTagFactory;
@@ -32,28 +25,6 @@ protected:
 
   std::filesystem::path temp_dir_;
   std::unique_ptr<AssetLoader> asset_loader_;
-};
-
-//! Advanced loading test cases fixture, using real PAK files.
-/*!
- Creates test PAK files from YAML specs through the shared content-test
- * helper.
- This provides realistic coverage without complex mocking
- * infrastructure.
-*/
-class AssetLoaderLoadingTest : public AssetLoaderBasicTest {
-protected:
-  //! Get path to test data directory
-  [[nodiscard]] static auto GetTestDataDir() -> std::filesystem::path;
-
-  //! Generate a PAK file from a YAML spec.
-  auto GeneratePakFile(const std::string& spec_name) -> std::filesystem::path;
-
-  //! Create a simple test asset key
-  [[nodiscard]] static auto CreateTestAssetKey(const std::string& name)
-    -> data::AssetKey;
-
-  std::vector<std::filesystem::path> generated_paks_;
 };
 
 } // namespace oxygen::content::testing

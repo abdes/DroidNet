@@ -23,12 +23,16 @@ def check(source: Path, requirements: Path, tests: bool) -> dict:
             workspace = directory
             inputs.extend((manifest, directory / ".python-version"))
             for member in metadata["tool"]["uv"]["workspace"]["members"]:
-                inputs.extend(p / "pyproject.toml" for p in directory.glob(member))
+                inputs.extend(
+                    p / "pyproject.toml" for p in directory.glob(member)
+                )
             break
     if workspace:
         environment = workspace / ".venv"
         if Path(sys.prefix).resolve() != environment.resolve():
-            raise ValueError(f"Python must come from {environment}, not {sys.prefix}")
+            raise ValueError(
+                f"Python must come from {environment}, not {sys.prefix}"
+            )
         subprocess.run(
             [
                 "uv",
@@ -53,7 +57,9 @@ def check(source: Path, requirements: Path, tests: bool) -> dict:
             )
         )
         receipt = json.loads(
-            (Path(sys.prefix) / "oxygen-build-tools.json").read_text(encoding="utf-8")
+            (Path(sys.prefix) / "oxygen-build-tools.json").read_text(
+                encoding="utf-8"
+            )
         )
         if (
             receipt["requirements_sha256"]
@@ -67,28 +73,35 @@ def check(source: Path, requirements: Path, tests: bool) -> dict:
             )
         for relative, digest in receipt["pyprojects"].items():
             inputs.append(source / relative)
-            if digest != hashlib.sha256((source / relative).read_bytes()).hexdigest():
+            if (
+                digest
+                != hashlib.sha256((source / relative).read_bytes()).hexdigest()
+            ):
                 raise ValueError(
                     f"Python tool metadata changed since provisioning: {relative}"
                 )
-        version = (source / ".python-version").read_text(encoding="utf-8").strip()
+        version = (
+            (source / ".python-version").read_text(encoding="utf-8").strip()
+        )
         if version != f"{sys.version_info.major}.{sys.version_info.minor}":
             raise ValueError(
                 f"Exported build tools require Python {version}, not {sys.version.split()[0]}"
             )
     for name, relative in (
         ("bindless_codegen", "src/Oxygen/Core/Tools/BindlessCodeGen"),
-        ("pakgen", "src/Oxygen/Cooker/Tools/PakGen"),
     ):
         module = importlib.import_module(name)
-        if (
-            not Path(module.__file__)
-            .resolve()
-            .is_relative_to((source / relative).resolve())
-        ):
+        if module.__file__ is None:
+            raise ValueError(
+                f"{name} has no __file__ attribute; cannot verify checkout"
+            )
+
+        module_path = Path(module.__file__).resolve()
+        if not module_path.is_relative_to((source / relative).resolve()):
             raise ValueError(
                 f"{name} belongs to a different checkout: {module.__file__}"
             )
+
         importlib.import_module(f"{name}.cli")
     for name in ("yaml", "jsonschema", *(("pytest",) if tests else ())):
         importlib.import_module(name)

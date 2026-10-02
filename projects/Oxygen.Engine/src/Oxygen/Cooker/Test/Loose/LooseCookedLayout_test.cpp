@@ -54,8 +54,6 @@ NOLINT_TEST(LooseCookedLayoutTest, DefaultSettingsAreCorrect)
   EXPECT_EQ(layout.physics_data_file_name, "physics.data");
   EXPECT_EQ(layout.scripts_table_file_name, "scripts.table");
   EXPECT_EQ(layout.scripts_data_file_name, "scripts.data");
-  EXPECT_EQ(layout.script_bindings_table_file_name, "script-bindings.table");
-  EXPECT_EQ(layout.script_bindings_data_file_name, "script-bindings.data");
   EXPECT_EQ(layout.descriptors_dir, "");
   EXPECT_EQ(layout.scenes_subdir, "Scenes");
   EXPECT_EQ(layout.geometry_subdir, "Geometry");
@@ -177,10 +175,6 @@ NOLINT_TEST(LooseCookedLayoutTest, ResourcePathsAreCorrect)
   EXPECT_EQ(layout.PhysicsDataRelPath(), "Physics/Resources/physics.data");
   EXPECT_EQ(layout.ScriptsTableRelPath(), "Resources/scripts.table");
   EXPECT_EQ(layout.ScriptsDataRelPath(), "Resources/scripts.data");
-  EXPECT_EQ(
-    layout.ScriptBindingsTableRelPath(), "Resources/script-bindings.table");
-  EXPECT_EQ(
-    layout.ScriptBindingsDataRelPath(), "Resources/script-bindings.data");
 
   layout.resources_dir = "";
   EXPECT_EQ(layout.BuffersTableRelPath(), "buffers.table");

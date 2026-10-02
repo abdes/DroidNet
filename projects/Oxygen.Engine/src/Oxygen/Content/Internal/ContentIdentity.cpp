@@ -43,6 +43,7 @@ auto ContentIdentityHash::operator()(
       if constexpr (std::is_same_v<T, AssetIdentity>) {
         HashCombine(seed, value.source);
         HashCombine(seed, value.asset);
+        HashCombine(seed, value.view);
       } else if constexpr (std::is_same_v<T, CookedResourceIdentity>) {
         HashCombine(seed, value.source);
         HashCombine(seed, value.kind);

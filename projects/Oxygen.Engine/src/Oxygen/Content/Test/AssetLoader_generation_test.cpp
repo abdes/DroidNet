@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -12,11 +13,13 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
+#include <iterator>
 #include <latch>
 #include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
+#include <string_view>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -38,6 +41,7 @@
 #include <Oxygen/Content/OperationCancelledException.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/GeometryAsset.h>
@@ -45,8 +49,10 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MaterialSlotInventory.h>
+#include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
@@ -121,9 +127,8 @@ namespace {
         = tables.at(0).table.offset + sizeof(renderable);
       tables.at(1).table.count = 1U;
       tables.at(1).table.entry_size = sizeof(assignment);
-      // An unresolved geometry isolates the scene's external material binding.
       renderable.geometry_key
-        = data::AssetKey::FromVirtualPath("/Test/missing.ogeo");
+        = data::AssetKey::FromVirtualPath("/Test/bound-cube.ogeo");
       assignment.material_key = material;
       assignment.slot_id
         = data::MaterialSlotId::FromStableIdentity("generation-test-slot");
@@ -179,8 +184,71 @@ namespace {
     LooseCookedTestWriter writer(root);
     writer.SetSourceKey(source);
     const auto scene = SceneBytes(recipe.scene_material);
+    std::vector<data::KeyReference> scene_keys;
+    if (!recipe.scene_material.IsNil()) {
+      const auto geometry_key
+        = data::AssetKey::FromVirtualPath("/Test/bound-cube.ogeo");
+      scene_keys = {
+        {
+          .key = geometry_key,
+          .kind = data::KeyReferenceKind::kAsset,
+          .expected_type = data::AssetType::kGeometry,
+        },
+        {
+          .key = recipe.scene_material,
+          .kind = data::KeyReferenceKind::kAsset,
+          .expected_type = data::AssetType::kMaterial,
+        },
+      };
+      data::pak::geometry::GeometryAssetDesc geometry {};
+      geometry.header.asset_type
+        = static_cast<uint8_t>(data::AssetType::kGeometry);
+      geometry.header.version = data::pak::geometry::kGeometryAssetVersion;
+      geometry.lod_count = 1U;
+      data::pak::geometry::MeshDesc mesh {};
+      std::ranges::copy(
+        std::string_view { "Cube/Mesh" }, std::begin(mesh.name));
+      mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kProcedural);
+      mesh.info.procedural = {};
+      mesh.submesh_count = 1U;
+      mesh.mesh_view_count = 1U;
+      data::pak::geometry::SubMeshDesc submesh {};
+      std::ranges::copy(
+        std::string_view { "fixture" }, std::begin(submesh.name));
+      submesh.slot_id
+        = data::MaterialSlotId::FromStableIdentity("generation-test-slot");
+      submesh.material_asset_key = recipe.scene_material;
+      submesh.mesh_view_count = 1U;
+      constexpr data::pak::geometry::MeshViewDesc view {
+        .first_index = 0U,
+        .index_count = 36U,
+        .first_vertex = 0U,
+        .vertex_count = 24U,
+      };
+      std::vector<std::byte> geometry_bytes;
+      const auto append = [&geometry_bytes](const auto& record) -> void {
+        const auto bytes = std::as_bytes(std::span(&record, 1U));
+        geometry_bytes.insert(geometry_bytes.end(), bytes.begin(), bytes.end());
+      };
+      append(geometry);
+      append(mesh);
+      append(submesh);
+      append(view);
+      writer.WriteAssetDescriptor(geometry_key, data::AssetType::kGeometry,
+        "/Test/bound-cube.ogeo", "bound-cube.ogeo", geometry_bytes,
+        data::AssetReferences::Create({},
+          {
+            {
+              .key = recipe.scene_material,
+              .kind = data::KeyReferenceKind::kAsset,
+              .expected_type = data::AssetType::kMaterial,
+            },
+          })
+          .value());
+    }
     writer.WriteAssetDescriptor(SceneKey(), data::AssetType::kScene,
-      "/Test/generation.oscene", "scene.oscene", scene);
+      "/Test/generation.oscene", "scene.oscene", scene,
+      data::AssetReferences::Create({}, std::move(scene_keys)).value());
     if (!recipe.material.IsNil()) {
       data::pak::render::MaterialAssetDesc material {};
       material.header.asset_type
@@ -191,16 +259,25 @@ namespace {
         "/Test/material.omat", "material.omat",
         std::as_bytes(std::span { &material, 1U }));
     }
-    if (!recipe.script.IsNil()) {
+    {
+      const auto script_key = recipe.script.IsNil()
+        ? data::AssetKey::FromVirtualPath("/Test/generation.oscript")
+        : recipe.script;
       data::pak::scripting::ScriptAssetDesc descriptor {};
       descriptor.header.asset_type
         = static_cast<uint8_t>(data::AssetType::kScript);
-      descriptor.header.version = 1;
-      descriptor.bytecode_resource_index
-        = data::pak::core::ResourceIndexT { 1U };
-      writer.WriteAssetDescriptor(recipe.script, data::AssetType::kScript,
+      descriptor.header.version = data::pak::scripting::kScriptAssetVersion;
+      descriptor.bytecode_resource_index = data::ResourceReferenceIndex { 0U };
+      writer.WriteAssetDescriptor(script_key, data::AssetType::kScript,
         "/Test/reload.oscript", "reload.oscript",
-        std::as_bytes(std::span { &descriptor, 1U }));
+        std::as_bytes(std::span { &descriptor, 1U }),
+        data::AssetReferences::Create(
+          {
+            { .kind = data::ResourceKind::kScript,
+              .index = ResourceIndexT { 1U } },
+          },
+          {})
+          .value());
     }
     data::pak::scripting::ScriptResourceDesc script {};
     script.size_bytes = 1U;
@@ -257,6 +334,7 @@ namespace {
     loader.RegisterLoader(loaders::LoadSceneAsset);
     loader.RegisterLoader(loaders::LoadMaterialAsset);
     loader.RegisterLoader(loaders::LoadScriptResource);
+    loader.RegisterLoader(loaders::LoadScriptAsset);
     OXCO_WITH_NURSERY(nursery)
     {
       co_await nursery.Start(&AssetLoader::ActivateAsync, &loader);
@@ -292,10 +370,28 @@ namespace {
       EXPECT_NE(old_scene, new_scene);
       EXPECT_FLOAT_EQ(old_material->GetEmissiveFactor().at(0), 1.0F);
       EXPECT_FLOAT_EQ(new_material->GetEmissiveFactor().at(0), 2.0F);
+      auto old_script = co_await loader.LoadAssetAsync<data::ScriptAsset>(
+        data::AssetKey::FromVirtualPath("/Test/generation.oscript"),
+        old_scene->GetSourceKey());
+      if (!old_script) {
+        ADD_FAILURE() << "Generation script must load";
+        loader.Stop();
+        co_return co::kJoin;
+      }
       const auto old_key = loader.MakeScriptResourceKeyForAsset(
-        *old_scene, data::pak::core::ResourceIndexT { 1U });
+        *old_script, data::ResourceReferenceIndex { 0U });
+      auto new_script = co_await loader.LoadAssetAsync<data::ScriptAsset>(
+        data::AssetKey::FromVirtualPath("/Test/generation.oscript"),
+        new_scene->GetSourceKey());
+      if (!new_script) {
+        ADD_FAILURE() << "Replacement script must load";
+        loader.Stop();
+        co_return co::kJoin;
+      }
       const auto new_key = loader.MakeScriptResourceKeyForAsset(
-        *new_scene, data::pak::core::ResourceIndexT { 1U });
+        *new_script, data::ResourceReferenceIndex { 0U });
+      old_script.reset();
+      new_script.reset();
       if (!old_key || !new_key) {
         ADD_FAILURE() << "Both script tables must remain addressable";
         loader.Stop();
@@ -339,10 +435,12 @@ namespace {
         serio::FileLockMode::kExclusive));
       EXPECT_TRUE(loader.RetireLooseCookedGeneration(new_source));
       EXPECT_FALSE(loader.GetAsset<data::SceneAsset>(SceneKey()));
+      // Reference-free scenes retain their physical cache identity.
       const auto retained_new_scene
         = co_await loader.LoadAssetAsync<data::SceneAsset>(
           SceneKey(), new_source);
       EXPECT_EQ(retained_new_scene, new_scene);
+      EXPECT_FALSE(loader.GetMaterialAsset(material_key, *new_scene));
       ExpectLeased(new_root);
       loader.Stop();
       co_return co::kJoin;
@@ -361,6 +459,7 @@ namespace {
     AssetLoader loader(engine::internal::EngineTagFactory::Get(), config);
     loader.RegisterLoader(loaders::LoadSceneAsset);
     loader.RegisterLoader(loaders::LoadScriptResource);
+    loader.RegisterLoader(loaders::LoadScriptAsset);
     OXCO_WITH_NURSERY(nursery)
     {
       co_await nursery.Start(&AssetLoader::ActivateAsync, &loader);
@@ -373,8 +472,16 @@ namespace {
         loader.Stop();
         co_return co::kJoin;
       }
+      auto old_script = co_await loader.LoadAssetAsync<data::ScriptAsset>(
+        data::AssetKey::FromVirtualPath("/Test/generation.oscript"),
+        old_scene->GetSourceKey());
+      if (!old_script) {
+        ADD_FAILURE() << "Generation script must load";
+        loader.Stop();
+        co_return co::kJoin;
+      }
       const auto old_key = loader.MakeScriptResourceKeyForAsset(
-        *old_scene, data::pak::core::ResourceIndexT { 1U });
+        *old_script, data::ResourceReferenceIndex { 0U });
       if (!old_key) {
         ADD_FAILURE() << "Initial payload must resolve";
         loader.Stop();
@@ -409,7 +516,7 @@ namespace {
       EXPECT_NE(old_scene->GetSourceOrigin().instance,
         new_scene->GetSourceOrigin().instance);
       EXPECT_FALSE(loader.MakeScriptResourceKeyForAsset(
-        *old_scene, data::pak::core::ResourceIndexT { 1U }));
+        *old_script, data::ResourceReferenceIndex { 0U }));
       EXPECT_EQ(co_await loader.LoadScriptResourceAsync(*old_key), nullptr);
       EXPECT_EQ(co_await loader.LoadResourceAsync<data::ScriptResource>(
                   CookedResourceData<data::ScriptResource> {
@@ -432,8 +539,18 @@ namespace {
           .key = synthetic_key, .bytes = injected });
       EXPECT_TRUE(synthetic);
 
+      auto new_script = co_await loader.LoadAssetAsync<data::ScriptAsset>(
+        data::AssetKey::FromVirtualPath("/Test/generation.oscript"),
+        new_scene->GetSourceKey());
+      if (!new_script) {
+        ADD_FAILURE() << "Replacement script must load";
+        loader.Stop();
+        co_return co::kJoin;
+      }
       const auto new_key = loader.MakeScriptResourceKeyForAsset(
-        *new_scene, data::pak::core::ResourceIndexT { 1U });
+        *new_script, data::ResourceReferenceIndex { 0U });
+      old_script.reset();
+      new_script.reset();
       if (!new_key) {
         ADD_FAILURE() << "Refreshed payload must resolve";
         loader.Stop();
@@ -479,8 +596,9 @@ namespace {
       loader.Run();
       static_cast<void>(loader.MountLooseCookedGeneration(first_root));
       static_cast<void>(loader.MountLooseCookedGeneration(owner_root));
+      const auto original_scope = loader.BeginLoadScope();
       const auto owner = co_await loader.LoadAssetAsync<data::SceneAsset>(
-        SceneKey(), owner_source);
+        SceneKey(), owner_source, LoadRequest { .scope = original_scope });
       const auto first
         = co_await loader.LoadAssetAsync<data::MaterialAsset>(material_key);
       if (!owner || !first) {
@@ -502,8 +620,17 @@ namespace {
       EXPECT_FALSE(exact_missing);
       const auto repeated = co_await loader.LoadAssetAsync<data::SceneAsset>(
         SceneKey(), owner_source);
-      EXPECT_EQ(repeated, owner);
-      EXPECT_EQ(loader.GetMaterialAsset(material_key, *repeated), first);
+      if (!repeated) {
+        ADD_FAILURE() << "Updated binding view failed to load";
+        loader.Stop();
+        co_return co::kJoin;
+      }
+      EXPECT_NE(repeated, owner);
+      EXPECT_EQ(loader.GetMaterialAsset(material_key, *repeated), second);
+      const auto scoped = co_await loader.LoadAssetAsync<data::SceneAsset>(
+        SceneKey(), owner_source, LoadRequest { .scope = original_scope });
+      EXPECT_EQ(scoped, owner);
+      EXPECT_EQ(loader.GetMaterialAsset(material_key, *owner), first);
       ExpectLeased(first_root);
       loader.Stop();
       co_return co::kJoin;
@@ -905,6 +1032,48 @@ namespace {
     EXPECT_EQ(notifications, 1U);
     EXPECT_EQ(loader, nullptr);
     retirement.Finish();
+  }
+
+  NOLINT_TEST_F(AssetLoaderBasicTest, SidecarDiscoveryUsesCapturedLayerView)
+  {
+    const auto sidecar_key
+      = data::AssetKey::FromVirtualPath("/Test/scene.opscene");
+    const auto unrelated_scene
+      = data::AssetKey::FromVirtualPath("/Test/other.oscene");
+    const auto write_sidecar = [&](const std::filesystem::path& root,
+                                 const data::AssetKey& target) {
+      LooseCookedTestWriter writer(root);
+      writer.SetSourceKey(data::SourceKey { Uuid::Generate() });
+      data::pak::physics::PhysicsSceneAssetDesc descriptor {};
+      descriptor.header.asset_type
+        = static_cast<uint8_t>(data::AssetType::kPhysicsScene);
+      descriptor.header.version = data::pak::physics::kPhysicsSceneAssetVersion;
+      descriptor.target_scene_key = target;
+      writer.WriteAssetDescriptor(sidecar_key, data::AssetType::kPhysicsScene,
+        "/Test/scene.opscene", "scene.opscene",
+        std::as_bytes(std::span { &descriptor, 1U }));
+      static_cast<void>(writer.Finish());
+    };
+    const auto base = temp_dir_ / "base";
+    const auto replacement = temp_dir_ / "replacement";
+    write_sidecar(base, SceneKey());
+    write_sidecar(replacement, unrelated_scene);
+    AssetLoader loader(engine::internal::EngineTagFactory::Get());
+    loader.AddLooseCookedRoot(base);
+    const auto original = loader.BeginLoadScope();
+    const auto scene_bytes = SceneBytes({});
+    data::SceneAsset scene(SceneKey(), scene_bytes);
+    EXPECT_EQ(
+      loader.FindPhysicsSidecarAssetKeyForScene(scene, original), sidecar_key);
+    loader.AddLooseCookedRoot(replacement);
+    EXPECT_FALSE(loader.FindPhysicsSidecarAssetKeyForScene(
+      scene, loader.BeginLoadScope()));
+    EXPECT_EQ(
+      loader.FindPhysicsSidecarAssetKeyForScene(scene, original), sidecar_key);
+    AssetLoader foreign(engine::internal::EngineTagFactory::Get());
+    EXPECT_THROW(static_cast<void>(
+                   foreign.FindPhysicsSidecarAssetKeyForScene(scene, original)),
+      std::invalid_argument);
   }
 
   NOLINT_TEST_F(AssetLoaderBasicTest,

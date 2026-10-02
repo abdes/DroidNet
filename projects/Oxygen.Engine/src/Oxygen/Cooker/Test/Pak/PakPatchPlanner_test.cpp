@@ -22,6 +22,7 @@
 #include "PakTestSupport.h"
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
@@ -42,6 +43,7 @@
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -89,8 +91,8 @@ auto ToLooseSha(const base::Sha256Digest& digest)
   return out;
 }
 
-auto BuildMaterialDescriptor(const std::string_view name,
-  const uint32_t texture_index) -> std::vector<std::byte>
+auto BuildMaterialDescriptor(const std::string_view name)
+  -> std::vector<std::byte>
 {
   auto desc = render::MaterialAssetDesc {};
   desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
@@ -99,7 +101,7 @@ auto BuildMaterialDescriptor(const std::string_view name,
   const auto name_bytes = std::min(name.size(), max_name_bytes);
   std::memcpy(desc.header.name, name.data(), name_bytes);
   desc.header.name[name_bytes] = '\0';
-  desc.base_color_texture = core::ResourceIndexT { texture_index };
+  desc.base_color_texture = data::ResourceReferenceIndex { 0U };
 
   auto bytes = std::vector<std::byte>(sizeof(desc));
   std::memcpy(bytes.data(), std::addressof(desc), sizeof(desc));
@@ -170,97 +172,104 @@ auto EmptyDigest() -> base::Sha256Digest
   return kEmptyDigest;
 }
 
-auto BuildSceneDescriptorWithScriptingSlots(const std::string_view name,
-  const uint32_t first_slot, const uint32_t second_slot)
+auto BuildSceneDescriptorWithScriptingSlots(const uint8_t seed)
   -> std::vector<std::byte>
 {
   auto desc = world::SceneAssetDesc {};
   desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
   desc.header.version = world::kSceneAssetVersion;
-  const auto max_name_bytes = sizeof(desc.header.name) - 1U;
-  const auto name_bytes = std::min(name.size(), max_name_bytes);
-  std::memcpy(desc.header.name, name.data(), name_bytes);
-  desc.header.name[name_bytes] = '\0';
-
-  const auto nodes_offset
-    = static_cast<uint64_t>(sizeof(world::SceneAssetDesc));
-  desc.nodes.offset = nodes_offset;
-  desc.nodes.count = 1U;
-  desc.nodes.entry_size = sizeof(world::NodeRecord);
-
-  const auto strings_offset = nodes_offset + sizeof(world::NodeRecord);
-  desc.scene_strings.offset = static_cast<uint32_t>(strings_offset);
+  std::array<world::NodeRecord, 2> nodes {};
+  nodes.front().node_id = MakeAssetKey(seed);
+  nodes.back().node_id = MakeAssetKey(static_cast<uint8_t>(seed + 2U));
+  nodes.front().parent_index = 0U;
+  nodes.back().parent_index = 0U;
+  desc.nodes = {
+    .offset = sizeof(desc), .count = 2U, .entry_size = sizeof(world::NodeRecord)
+  };
+  desc.scene_strings.offset = sizeof(desc) + sizeof(nodes);
   desc.scene_strings.size = 1U;
-
-  const auto component_dir_offset = strings_offset + desc.scene_strings.size;
-  desc.component_table_directory_offset = component_dir_offset;
+  desc.component_table_directory_offset = desc.scene_strings.offset + 1U;
   desc.component_table_count = 1U;
-
-  auto node = world::NodeRecord {};
-  node.parent_index = 0U;
-  node.node_flags = world::kSceneNodeFlag_Visible;
-
-  auto component = world::SceneComponentTableDesc {};
-  component.component_type
-    = static_cast<uint32_t>(data::ComponentType::kScripting);
-  component.table.offset
-    = component_dir_offset + sizeof(world::SceneComponentTableDesc);
-  component.table.count = 2U;
-  component.table.entry_size = sizeof(script::ScriptingComponentRecord);
-
-  auto slot_a = script::ScriptingComponentRecord {};
-  slot_a.node_index = 0U;
-  slot_a.slot_start_index = first_slot;
-  slot_a.slot_count = 1U;
-
-  auto slot_b = script::ScriptingComponentRecord {};
-  slot_b.node_index = 0U;
-  slot_b.slot_start_index = second_slot;
-  slot_b.slot_count = 1U;
-
-  auto env = world::SceneEnvironmentBlockHeader {};
-  env.byte_size = sizeof(world::SceneEnvironmentBlockHeader);
-  env.systems_count = 0U;
-
-  auto bytes = std::vector<std::byte> {};
-  bytes.resize(sizeof(desc) + sizeof(node) + desc.scene_strings.size
-    + sizeof(component) + sizeof(slot_a) + sizeof(slot_b) + sizeof(env));
-
-  auto* cursor = bytes.data();
-  std::memcpy(cursor, std::addressof(desc), sizeof(desc));
-  cursor += sizeof(desc);
-  std::memcpy(cursor, std::addressof(node), sizeof(node));
-  cursor += sizeof(node);
-  *cursor++ = std::byte { 0 };
-  std::memcpy(cursor, std::addressof(component), sizeof(component));
-  cursor += sizeof(component);
-  std::memcpy(cursor, std::addressof(slot_a), sizeof(slot_a));
-  cursor += sizeof(slot_a);
-  std::memcpy(cursor, std::addressof(slot_b), sizeof(slot_b));
-  cursor += sizeof(slot_b);
-  std::memcpy(cursor, std::addressof(env), sizeof(env));
+  auto table = world::SceneComponentTableDesc {};
+  table.component_type = static_cast<uint32_t>(data::ComponentType::kScripting);
+  table.table
+    = { .offset = desc.component_table_directory_offset + sizeof(table),
+        .count = 2U,
+        .entry_size = sizeof(script::ScriptingComponentRecord) };
+  std::array<script::ScriptingComponentRecord, 2> components {};
+  std::array<script::ScriptSlotRecord, 2> slots {};
+  std::array<script::ScriptParamRecord, 2> parameters {};
+  desc.script_slots = { .offset = table.table.offset + sizeof(components),
+    .count = 2U,
+    .entry_size = sizeof(script::ScriptSlotRecord) };
+  for (size_t i = 0; i < slots.size(); ++i) {
+    auto& component = components.at(i);
+    component.node_index = static_cast<uint32_t>(i);
+    component.slot_start_index = static_cast<uint32_t>(i);
+    component.slot_count = 1U;
+    auto& slot = slots.at(i);
+    slot.script_asset_key = MakeAssetKey(static_cast<uint8_t>(seed * 10U + i));
+    slot.params_array_offset = desc.script_slots.offset + sizeof(slots)
+      + i * sizeof(script::ScriptParamRecord);
+    slot.params_count = 1U;
+    auto& parameter = parameters.at(i);
+    parameter.key[0] = 'v';
+    parameter.type = script::ScriptParamType::kInt32;
+    parameter.value.as_int32 = seed * 100 + static_cast<int32_t>(i);
+  }
+  world::SceneEnvironmentBlockHeader environment {};
+  environment.byte_size = sizeof(environment);
+  std::vector<std::byte> bytes;
+  const auto append = [&bytes](const auto& record) {
+    const auto packed = std::as_bytes(std::span(&record, 1U));
+    bytes.insert(bytes.end(), packed.begin(), packed.end());
+  };
+  append(desc);
+  append(nodes);
+  bytes.push_back(std::byte { 0 });
+  append(table);
+  append(components);
+  append(slots);
+  append(parameters);
+  append(environment);
   return bytes;
 }
 
-auto ReadScriptingComponentSlots(std::span<const std::byte> bytes)
-  -> std::vector<script::ScriptingComponentRecord>
+auto MakeSceneScriptAssets(const uint8_t seed) -> std::vector<AssetSpec>
 {
-  auto desc = world::SceneAssetDesc {};
-  std::memcpy(std::addressof(desc), bytes.data(), sizeof(desc));
-  auto entry = world::SceneComponentTableDesc {};
-  std::memcpy(std::addressof(entry),
-    bytes.data() + static_cast<size_t>(desc.component_table_directory_offset),
-    sizeof(entry));
-
-  auto records = std::vector<script::ScriptingComponentRecord> {};
-  records.resize(entry.table.count);
-  for (size_t i = 0; i < records.size(); ++i) {
-    const auto offset = static_cast<size_t>(entry.table.offset)
-      + (i * sizeof(script::ScriptingComponentRecord));
-    std::memcpy(std::addressof(records[i]), bytes.data() + offset,
-      sizeof(script::ScriptingComponentRecord));
+  const auto scene_bytes = BuildSceneDescriptorWithScriptingSlots(seed);
+  std::vector<AssetSpec> assets;
+  std::vector<data::KeyReference> keys;
+  for (uint8_t i = 0U; i < 2U; ++i) {
+    const auto key = MakeAssetKey(static_cast<uint8_t>(seed * 10U + i));
+    keys.push_back({ .key = key,
+      .kind = data::KeyReferenceKind::kAsset,
+      .expected_type = data::AssetType::kScript });
+    script::ScriptAssetDesc script_desc {};
+    script_desc.header.asset_type
+      = static_cast<uint8_t>(data::AssetType::kScript);
+    script_desc.header.version = script::kScriptAssetVersion;
+    const auto bytes = std::as_bytes(std::span(&script_desc, 1U));
+    const auto name
+      = "Logic" + std::to_string(seed) + "-" + std::to_string(i) + ".oscript";
+    assets.push_back({ .key = key,
+      .asset_type = data::AssetType::kScript,
+      .descriptor_relpath = name,
+      .virtual_path = "/Game/" + name,
+      .descriptor_size = bytes.size(),
+      .descriptor_sha = {},
+      .descriptor_payload = { bytes.begin(), bytes.end() },
+      .references = {} });
   }
-  return records;
+  assets.push_back({ .key = MakeAssetKey(seed),
+    .asset_type = data::AssetType::kScene,
+    .descriptor_relpath = "Scene.oscene",
+    .virtual_path = "/Game/Scene" + std::to_string(seed) + ".oscene",
+    .descriptor_size = scene_bytes.size(),
+    .descriptor_sha = {},
+    .descriptor_payload = scene_bytes,
+    .references = data::AssetReferences::Create({}, std::move(keys)).value() });
+  return assets;
 }
 
 auto HasError(std::span<const pak::PakDiagnostic> diagnostics) -> bool
@@ -320,8 +329,6 @@ auto ShouldContributeToTransitiveDigest(const lc::FileKind kind) -> bool
   case lc::FileKind::kBuffersData:
   case lc::FileKind::kScriptsTable:
   case lc::FileKind::kScriptsData:
-  case lc::FileKind::kScriptBindingsTable:
-  case lc::FileKind::kScriptBindingsData:
   case lc::FileKind::kPhysicsTable:
   case lc::FileKind::kPhysicsData:
     return true;
@@ -381,15 +388,16 @@ auto MakeBaseCatalog(std::span<const data::PakCatalogEntry> entries)
 {
   constexpr auto kBaseCatalogSourceSeed = uint8_t { 0xC1U };
   constexpr auto kBaseCatalogContentVersion = uint16_t { 9U };
-  constexpr auto kBaseCatalogDigestSeed = uint8_t { 0x77U };
 
-  return data::PakCatalog {
+  auto catalog = data::PakCatalog {
     .source_key = MakeSourceKey(kBaseCatalogSourceSeed),
     .content_version = kBaseCatalogContentVersion,
-    .catalog_digest = MakeDigest(kBaseCatalogDigestSeed),
+    .catalog_digest = {},
     .entries
     = std::vector<data::PakCatalogEntry>(entries.begin(), entries.end()),
   };
+  catalog.catalog_digest = catalog.ComputeDigest().value();
+  return catalog;
 }
 
 auto MakePatchRequest(const std::filesystem::path& pak_path,
@@ -411,7 +419,7 @@ auto MakePatchRequest(const std::filesystem::path& pak_path,
     .source_key = MakeSourceKey(kPatchSourceSeed),
     .base_catalogs = std::vector<data::PakCatalog>(
       base_catalogs.begin(), base_catalogs.end()),
-    .patch_compat = {},
+
     .options = {
       .deterministic = true,
       .embed_browse_index = false,
@@ -812,8 +820,8 @@ NOLINT_TEST_F(PakPatchPlannerTest,
   const auto asset_a_key = MakeAssetKey(0x61U);
   const auto asset_b_key = MakeAssetKey(0x62U);
 
-  const auto material_a_bytes = BuildMaterialDescriptor("MatA", 1U);
-  const auto material_b_bytes = BuildMaterialDescriptor("MatB", 2U);
+  const auto material_a_bytes = BuildMaterialDescriptor("MatA");
+  const auto material_b_bytes = BuildMaterialDescriptor("MatB");
 
   const auto material_a_sha
     = ToLooseSha(base::ComputeSha256(std::span<const std::byte>(
@@ -870,6 +878,13 @@ NOLINT_TEST_F(PakPatchPlannerTest,
       .descriptor_size = material_a_bytes.size(),
       .descriptor_sha = material_a_sha,
       .descriptor_payload = material_a_bytes,
+      .references = data::AssetReferences::Create(
+        {
+          { .kind = data::ResourceKind::kTexture,
+            .index = oxygen::ResourceIndexT { 1U } },
+        },
+        {})
+        .value(),
     },
     AssetSpec {
       .key = asset_b_key,
@@ -879,6 +894,13 @@ NOLINT_TEST_F(PakPatchPlannerTest,
       .descriptor_size = material_b_bytes.size(),
       .descriptor_sha = material_b_sha,
       .descriptor_payload = material_b_bytes,
+      .references = data::AssetReferences::Create(
+        {
+          { .kind = data::ResourceKind::kTexture,
+            .index = oxygen::ResourceIndexT { 2U } },
+        },
+        {})
+        .value(),
     },
   };
 
@@ -912,14 +934,14 @@ NOLINT_TEST_F(PakPatchPlannerTest,
     std::span<const FileSpec>(patch_files.data(), patch_files.size()), 0x92U));
   const auto asset_a_transitive = AggregateTaggedDigests(
     std::array<std::pair<uint16_t, base::Sha256Digest>, 1> {
-      std::pair<uint16_t, base::Sha256Digest> { 0x0001U,
+      std::pair<uint16_t, base::Sha256Digest> { 0x0002U,
         ComputeNormalizedTextureDigest(texture_record_a,
           std::span<const std::byte>(
             texture_a_payload.data(), texture_a_payload.size())) },
     });
   const auto asset_b_base_transitive = AggregateTaggedDigests(
     std::array<std::pair<uint16_t, base::Sha256Digest>, 1> {
-      std::pair<uint16_t, base::Sha256Digest> { 0x0001U,
+      std::pair<uint16_t, base::Sha256Digest> { 0x0002U,
         ComputeNormalizedTextureDigest(texture_record_b,
           std::span<const std::byte>(
             texture_b_payload_base.data(), texture_b_payload_base.size())) },
@@ -976,90 +998,28 @@ NOLINT_TEST_F(PakPatchPlannerTest,
   EXPECT_EQ(patch_result.summary.patch_unchanged, 1U);
 }
 
-NOLINT_TEST_F(PakPatchPlannerTest,
-  PatchModeRewritesSceneScriptingSlotRangesToPatchLocalTable)
+NOLINT_TEST_F(PakPatchPlannerTest, PatchPreservesSceneLocalScriptDescriptor)
 {
-  using data::CookedSource;
-  using data::CookedSourceKind;
-
-  const auto patch_source = Root() / "patch_scene_source";
-  const auto scene_key = MakeAssetKey(0x31U);
-  const auto script_a = MakeAssetKey(0x41U);
-  const auto script_b = MakeAssetKey(0x42U);
-
-  auto scene_bytes
-    = BuildSceneDescriptorWithScriptingSlots("PatchScene", 6U, 7U);
-  const auto scene_sha = ToLooseSha(base::ComputeSha256(
-    std::span<const std::byte>(scene_bytes.data(), scene_bytes.size())));
-
-  auto slot_records = std::array<script::ScriptSlotRecord, 8> {};
-  slot_records[6].script_asset_key = script_a;
-  slot_records[7].script_asset_key = script_b;
-  auto slot_bytes = std::vector<std::byte>(sizeof(slot_records));
-  std::memcpy(slot_bytes.data(), slot_records.data(), sizeof(slot_records));
-
-  const auto assets = std::array<AssetSpec, 1> {
-    AssetSpec {
-      .key = scene_key,
-      .asset_type = data::AssetType::kScene,
-      .descriptor_relpath = "Scenes/PatchScene.oscene",
-      .virtual_path = "/Game/PatchScene.oscene",
-      .descriptor_size = scene_bytes.size(),
-      .descriptor_sha = scene_sha,
-      .descriptor_payload = scene_bytes,
-    },
-  };
-  const auto files = std::array<FileSpec, 2> {
-    FileSpec {
-      .kind = lc::FileKind::kScriptBindingsTable,
-      .relpath = "Resources/script-bindings.table",
-      .payload = slot_bytes,
-    },
-    FileSpec {
-      .kind = lc::FileKind::kScriptBindingsData,
-      .relpath = "Resources/script-bindings.data",
-      .payload = {},
-    },
-  };
-  ASSERT_TRUE(paktest::WriteLooseIndex(patch_source,
-    std::span<const AssetSpec>(assets.data(), assets.size()),
-    std::span<const FileSpec>(files.data(), files.size()), 0x83U));
-
-  const auto base_catalog
-    = MakeBaseCatalog(std::span<const data::PakCatalogEntry> {});
-  const auto request = MakePatchRequest(Root() / "scene_patch.pak",
-    {
-      CookedSource {
-        .kind = CookedSourceKind::kLooseCooked,
-        .path = patch_source,
-      },
-    },
-    std::span<const data::PakCatalog>(&base_catalog, 1U));
-
+  const auto source = Root() / "scene";
+  const auto assets = MakeSceneScriptAssets(1U);
+  ASSERT_TRUE(paktest::WriteLooseIndex(source, assets, {}, 1U));
+  const auto base = MakeBaseCatalog({});
+  const auto request = MakePatchRequest(Root() / "scene-patch.pak",
+    { { .kind = data::CookedSourceKind::kLooseCooked, .path = source } },
+    std::span(&base, 1U));
   const auto result = pak::PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(result.diagnostics))
     << DiagnosticSummary(result.diagnostics);
   ASSERT_TRUE(result.plan.has_value());
-
-  const auto assets_plan = result.plan->Assets();
-  const auto sources = result.plan->AssetPayloadSources();
-  ASSERT_EQ(assets_plan.size(), 1U);
-  ASSERT_EQ(sources.size(), 1U);
-  ASSERT_EQ(assets_plan[0].asset_key, scene_key);
-
-  auto stored_bytes = std::vector<std::byte> {};
-  ASSERT_TRUE(pak::StorePayloadSourceSlice(sources[0], stored_bytes));
-
-  const auto rewritten_slots = ReadScriptingComponentSlots(
-    std::span<const std::byte>(stored_bytes.data(), stored_bytes.size()));
-  ASSERT_EQ(rewritten_slots.size(), 2U);
-  EXPECT_EQ(rewritten_slots[0].slot_start_index, 0U);
-  EXPECT_EQ(rewritten_slots[0].slot_count, 1U);
-  EXPECT_EQ(rewritten_slots[1].slot_start_index, 1U);
-  EXPECT_EQ(rewritten_slots[1].slot_count, 1U);
-  ASSERT_EQ(result.plan->ScriptSlots().size(), 2U);
-  EXPECT_EQ(result.plan->ScriptSlots()[0].slot_index, 0U);
-  EXPECT_EQ(result.plan->ScriptSlots()[1].slot_index, 1U);
+  ASSERT_FALSE(
+    HasError(pak::PakWriter {}.Write(request, *result.plan).diagnostics));
+  auto archive = oxygen::content::PakFile(request.output_pak_path);
+  const auto entry = archive.FindEntry(MakeAssetKey(1U));
+  ASSERT_TRUE(entry.has_value());
+  auto reader = archive.CreateReader(*entry);
+  const auto bytes = reader.ReadBlob(entry->desc_size);
+  ASSERT_TRUE(bytes.has_value());
+  EXPECT_EQ(*bytes, BuildSceneDescriptorWithScriptingSlots(1U));
 }
 
 NOLINT_TEST_F(
@@ -1070,50 +1030,8 @@ NOLINT_TEST_F(
   auto sources = std::vector<data::CookedSource> {};
   for (const auto seed : { uint8_t { 1U }, uint8_t { 2U } }) {
     const auto root = Root() / std::to_string(seed);
-    const auto scene_bytes
-      = BuildSceneDescriptorWithScriptingSlots("Scene", 0U, 1U);
-    const auto assets = std::array {
-      AssetSpec {
-        .key = MakeAssetKey(seed),
-        .asset_type = data::AssetType::kScene,
-        .descriptor_relpath = "Scenes/Scene.oscene",
-        .virtual_path = "/Game/Scene" + std::to_string(seed) + ".oscene",
-        .descriptor_size = scene_bytes.size(),
-        .descriptor_sha = ToLooseSha(base::ComputeSha256(scene_bytes)),
-        .descriptor_payload = scene_bytes,
-      },
-    };
-    auto slots = std::array<script::ScriptSlotRecord, 2> {};
-    auto params = std::array<script::ScriptParamRecord, 2> {};
-    for (size_t index = 0U; index < slots.size(); ++index) {
-      slots.at(index).script_asset_key = MakeAssetKey(
-        static_cast<uint8_t>((static_cast<uint32_t>(seed) * kScriptKeyStride)
-          + static_cast<uint32_t>(index)));
-      // Deliberately reverse physical parameter order relative to slot order.
-      slots.at(index).params_array_offset
-        = (1U - index) * sizeof(script::ScriptParamRecord);
-      slots.at(index).params_count = 1U;
-      auto& parameter = params.at(1U - index);
-      parameter.key[0] = 'v';
-      parameter.type = script::ScriptParamType::kInt32;
-      parameter.value.as_int32
-        = (seed * kParameterValueStride) + static_cast<int32_t>(index);
-    }
-    const auto slot_bytes = std::as_bytes(std::span(slots));
-    const auto param_bytes = std::as_bytes(std::span(params));
-    const auto files = std::array {
-      FileSpec {
-        .kind = lc::FileKind::kScriptBindingsTable,
-        .relpath = "Resources/script-bindings.table",
-        .payload = { slot_bytes.begin(), slot_bytes.end() },
-      },
-      FileSpec {
-        .kind = lc::FileKind::kScriptBindingsData,
-        .relpath = "Resources/script-bindings.data",
-        .payload = { param_bytes.begin(), param_bytes.end() },
-      },
-    };
-    ASSERT_TRUE(paktest::WriteLooseIndex(root, assets, files, seed));
+    const auto assets = MakeSceneScriptAssets(seed);
+    ASSERT_TRUE(paktest::WriteLooseIndex(root, assets, {}, seed));
     sources.push_back(
       { .kind = data::CookedSourceKind::kLooseCooked, .path = root });
   }
@@ -1125,7 +1043,7 @@ NOLINT_TEST_F(
     .content_version = 1U,
     .source_key = MakeSourceKey(3U),
     .base_catalogs = {},
-    .patch_compat = {},
+
     .options = {},
   };
   const auto verify = [](const std::filesystem::path& path) -> void {
@@ -1138,22 +1056,22 @@ NOLINT_TEST_F(
       auto reader = archive.CreateReader(*entry);
       const auto bytes = reader.ReadBlob(entry->desc_size);
       ASSERT_TRUE(bytes.has_value());
-      const auto bindings = ReadScriptingComponentSlots(*bytes);
+      EXPECT_EQ(*bytes, BuildSceneDescriptorWithScriptingSlots(seed));
+      const auto scene = data::SceneAsset(entry->asset_key, *bytes);
+      const auto bindings
+        = scene.GetComponents<script::ScriptingComponentRecord>();
       ASSERT_EQ(bindings.size(), 2U);
       for (uint32_t index = 0U; index < bindings.size(); ++index) {
         EXPECT_EQ(
-          bindings.at(index).slot_start_index, ((seed - 1U) * 2U) + index);
-        const auto slots = archive.ReadScriptSlotRecords(
-          bindings.at(index).slot_start_index, 1U);
+          oxygen::base::CheckedAt(bindings, index).slot_start_index, index);
+        const auto slots = scene.ReadScriptSlots(
+          oxygen::base::CheckedAt(bindings, index).slot_start_index, 1U);
         ASSERT_EQ(slots.size(), 1U);
         EXPECT_EQ(slots.at(0).script_asset_key,
           MakeAssetKey(static_cast<uint8_t>(
             (static_cast<uint32_t>(seed) * kScriptKeyStride)
             + static_cast<uint32_t>(index))));
-        const auto params = archive.ReadScriptParamRecords({
-          .absolute_offset = slots.at(0).params_array_offset,
-          .count = slots.at(0).params_count,
-        });
+        const auto params = scene.ReadScriptParameters(slots.front());
         ASSERT_EQ(params.size(), 1U);
         EXPECT_EQ(params.at(0).value.as_int32,
           (seed * kParameterValueStride) + static_cast<int32_t>(index));
@@ -1209,8 +1127,8 @@ NOLINT_TEST_F(PakPatchPlannerTest, BufferAndScriptReferencesSurvivePakRepacking)
     geometry_desc.lod_count = 1U;
     auto mesh = geometry::MeshDesc {};
     mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kStandard);
-    mesh.info.standard.vertex_buffer = core::ResourceIndexT { 1U };
-    mesh.info.standard.index_buffer = core::ResourceIndexT { 1U };
+    mesh.info.standard.vertex_buffer = data::ResourceReferenceIndex { 0U };
+    mesh.info.standard.index_buffer = data::ResourceReferenceIndex { 0U };
     const auto descriptor_bytes
       = std::as_bytes(std::span { &geometry_desc, 1U });
     const auto mesh_bytes = std::as_bytes(std::span { &mesh, 1U });
@@ -1221,8 +1139,8 @@ NOLINT_TEST_F(PakPatchPlannerTest, BufferAndScriptReferencesSurvivePakRepacking)
     auto script_desc = script::ScriptAssetDesc {};
     script_desc.header.asset_type
       = static_cast<uint8_t>(data::AssetType::kScript);
-    script_desc.header.version = 1U;
-    script_desc.bytecode_resource_index = core::ResourceIndexT { 1U };
+    script_desc.header.version = script::kScriptAssetVersion;
+    script_desc.bytecode_resource_index = data::ResourceReferenceIndex { 0U };
     const auto script_bytes = std::as_bytes(std::span { &script_desc, 1U });
     constexpr uint8_t kScriptKeyOffset = 10U;
     const auto assets = std::array {
@@ -1234,6 +1152,13 @@ NOLINT_TEST_F(PakPatchPlannerTest, BufferAndScriptReferencesSurvivePakRepacking)
         .descriptor_size = geometry_bytes.size(),
         .descriptor_sha = ToLooseSha(base::ComputeSha256(geometry_bytes)),
         .descriptor_payload = geometry_bytes,
+        .references = data::AssetReferences::Create(
+          {
+            { .kind = data::ResourceKind::kBuffer,
+              .index = oxygen::ResourceIndexT { 1U } },
+          },
+          {})
+          .value(),
       },
       AssetSpec {
         .key = MakeAssetKey(static_cast<uint8_t>(seed + kScriptKeyOffset)),
@@ -1243,6 +1168,13 @@ NOLINT_TEST_F(PakPatchPlannerTest, BufferAndScriptReferencesSurvivePakRepacking)
         .descriptor_size = script_bytes.size(),
         .descriptor_sha = ToLooseSha(base::ComputeSha256(script_bytes)),
         .descriptor_payload = { script_bytes.begin(), script_bytes.end() },
+        .references = data::AssetReferences::Create(
+          {
+            { .kind = data::ResourceKind::kScript,
+              .index = oxygen::ResourceIndexT { 1U } },
+          },
+          {})
+          .value(),
       },
     };
     auto buffers = std::array<core::BufferResourceDesc, 2> {};
@@ -1287,7 +1219,7 @@ NOLINT_TEST_F(PakPatchPlannerTest, BufferAndScriptReferencesSurvivePakRepacking)
     .content_version = 1U,
     .source_key = MakeSourceKey(3U),
     .base_catalogs = {},
-    .patch_compat = {},
+
     .options = {},
   };
   const auto initial = pak::PakPlanBuilder {}.Build(request);
@@ -1320,8 +1252,15 @@ NOLINT_TEST_F(PakPatchPlannerTest, BufferAndScriptReferencesSurvivePakRepacking)
       ASSERT_TRUE(mesh_bytes);
       auto mesh = geometry::MeshDesc {};
       std::memcpy(&mesh, mesh_bytes->data(), sizeof(mesh));
-      EXPECT_EQ(mesh.info.standard.vertex_buffer.get(), expected);
-      EXPECT_EQ(mesh.info.standard.index_buffer.get(), expected);
+      EXPECT_EQ(mesh.info.standard.vertex_buffer.get(), 0U);
+      EXPECT_EQ(mesh.info.standard.index_buffer.get(), 0U);
+      const auto geometry_references
+        = archive.ReadAssetReferences(entry->asset_key);
+      const auto buffer_binding = geometry_references.ResolveResource(
+        mesh.info.standard.vertex_buffer, data::ResourceKind::kBuffer);
+      ASSERT_TRUE(buffer_binding.has_value());
+      ASSERT_TRUE(buffer_binding->has_value());
+      EXPECT_EQ((**buffer_binding).get(), expected);
       constexpr uint8_t kScriptKeyOffset = 10U;
       const auto script_entry = archive.FindEntry(
         MakeAssetKey(static_cast<uint8_t>(seed + kScriptKeyOffset)));
@@ -1332,11 +1271,18 @@ NOLINT_TEST_F(PakPatchPlannerTest, BufferAndScriptReferencesSurvivePakRepacking)
       ASSERT_TRUE(script_bytes);
       auto script_desc = script::ScriptAssetDesc {};
       std::memcpy(&script_desc, script_bytes->data(), sizeof(script_desc));
-      EXPECT_EQ(script_desc.bytecode_resource_index.get(), expected);
+      EXPECT_EQ(script_desc.bytecode_resource_index.get(), 0U);
+      const auto script_references
+        = archive.ReadAssetReferences(script_entry->asset_key);
+      const auto script_binding = script_references.ResolveResource(
+        script_desc.bytecode_resource_index, data::ResourceKind::kScript);
+      ASSERT_TRUE(script_binding.has_value());
+      ASSERT_TRUE(script_binding->has_value());
+      EXPECT_EQ((**script_binding).get(), expected);
       oxygen::serio::FileStream<> stream(request.output_pak_path, std::ios::in);
       oxygen::serio::Reader payload_reader(stream);
-      const auto buffer_offset = archive.BuffersTable().GetResourceOffset(
-        mesh.info.standard.vertex_buffer);
+      const auto buffer_offset
+        = archive.BuffersTable().GetResourceOffset(**buffer_binding);
       ASSERT_TRUE(buffer_offset);
       ASSERT_TRUE(payload_reader.Seek(*buffer_offset));
       auto buffer = core::BufferResourceDesc {};

@@ -123,6 +123,21 @@ NOLINT_TEST_F(TextureBinderBasicTest, PlaceholderKey_NoAllocation)
   EXPECT_EQ(GetTextureDebugName(texture), "FallbackTexture");
 }
 
+NOLINT_TEST_F(
+  TextureBinderBasicTest, ErrorKeyUsesExistingCheckerboardWithoutAllocation)
+{
+  const auto before = AllocatedSrvCount();
+  const auto first = TexBinder().GetOrAllocate(ResourceKey::kError);
+  const auto second = TexBinder().GetOrAllocate(ResourceKey::kError);
+  EXPECT_EQ(first, second);
+  EXPECT_EQ(AllocatedSrvCount(), before);
+  EXPECT_TRUE(TexBinder().HasResourceFailed(ResourceKey::kError));
+  EXPECT_FALSE(TexBinder().IsResourceReady(ResourceKey::kError));
+  const auto* texture = LastSrvViewTextureForIndex(Gfx(), first.get());
+  ASSERT_NE(texture, nullptr);
+  EXPECT_EQ(GetTextureDebugName(texture), "ErrorTexture");
+}
+
 //! Reserved fallback key must not allocate per-entry descriptors.
 /*! ResourceKey::kFallback is a fast-path sentinel; it must not allocate
     per-entry descriptors and must not return the shared error-texture index. */

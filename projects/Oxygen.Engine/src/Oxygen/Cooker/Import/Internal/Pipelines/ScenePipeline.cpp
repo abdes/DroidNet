@@ -24,6 +24,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
@@ -61,6 +62,7 @@ namespace {
   using data::pak::world::SpotLightRecord;
 
   struct BuildOutcome {
+    data::AssetReferences references;
     std::vector<std::byte> bytes;
     std::vector<ImportDiagnostic> diagnostics;
     bool canceled = false;
@@ -179,10 +181,18 @@ namespace {
   [[nodiscard]] auto SerializeScene(const std::string_view scene_name,
     const AssetKey scene_key, const SceneBuild& build,
     std::span<const SceneEnvironmentSystem> environment_systems,
+    const data::AssetReferences& environment_references,
     std::vector<ImportDiagnostic>& diagnostics, std::string_view source_id)
     -> BuildOutcome
   {
     BuildOutcome outcome;
+    AssetReferenceBuilder references(environment_references);
+    for (const auto& renderable : build.renderables) {
+      references.AddAsset(renderable.geometry_key, data::AssetType::kGeometry);
+    }
+    for (const auto& assignment : build.material_overrides) {
+      references.AddAsset(assignment.material_key, data::AssetType::kMaterial);
+    }
 
     for (size_t index = 0; index < build.nodes.size(); ++index) {
       if (!data::pak::world::HasCanonicalNodeFlags(build.nodes.at(index))) {
@@ -414,6 +424,37 @@ namespace {
         return outcome;
       }
 
+      if (!data::pak::world::IsValidEnvironmentRecordSize(
+            header.system_type, header.record_size)) {
+        diagnostics.push_back(
+          MakeErrorDiagnostic("scene.environment.record_size_mismatch",
+            "Environment record does not match its declared type", source_id,
+            {}));
+        return outcome;
+      }
+      using EnvironmentKind = data::pak::world::EnvironmentComponentType;
+      switch (static_cast<EnvironmentKind>(header.system_type)) {
+      case EnvironmentKind::kFog: {
+        data::pak::world::FogEnvironmentRecord record {};
+        std::memcpy(&record, system.record_bytes.data(), sizeof(record));
+        references.AddLogical(record.inscattering_color_cubemap_asset);
+        break;
+      }
+      case EnvironmentKind::kSkyLight: {
+        data::pak::world::SkyLightEnvironmentRecord record {};
+        std::memcpy(&record, system.record_bytes.data(), sizeof(record));
+        references.AddLogical(record.cubemap_asset);
+        break;
+      }
+      case EnvironmentKind::kSkySphere: {
+        data::pak::world::SkySphereEnvironmentRecord record {};
+        std::memcpy(&record, system.record_bytes.data(), sizeof(record));
+        references.AddLogical(record.cubemap_asset);
+        break;
+      }
+      default:
+        break;
+      }
       env_header.byte_size += header.record_size;
       ++env_header.systems_count;
     }
@@ -441,6 +482,7 @@ namespace {
 
     const auto bytes = stream.Data();
     outcome.bytes.assign(bytes.begin(), bytes.end());
+    outcome.references = std::move(references).Build();
     outcome.success = true;
     return outcome;
   }
@@ -631,9 +673,9 @@ auto ScenePipeline::Worker() -> co::Co<>
           = item.request.loose_cooked_layout.SceneVirtualPath(scene_name);
         const auto scene_key = BuildSceneAssetKey(virtual_path);
 
-        outcome
-          = SerializeScene(scene_name, scene_key, stage_outcome.result.build,
-            item.environment_systems, diagnostics, item.source_id);
+        outcome = SerializeScene(scene_name, scene_key,
+          stage_outcome.result.build, item.environment_systems,
+          item.environment_references, diagnostics, item.source_id);
       } else if (diagnostics.empty()) {
         diagnostics.push_back(MakeErrorDiagnostic("scene.stage_failed",
           "Scene adapter stage failed without diagnostics", item.source_id,
@@ -686,6 +728,7 @@ auto ScenePipeline::Worker() -> co::Co<>
         .virtual_path = virtual_path,
         .descriptor_relpath = relpath,
         .descriptor_bytes = std::move(outcome.bytes),
+        .references = std::move(outcome.references),
       };
     }
     if (item.on_finished) {

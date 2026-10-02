@@ -24,6 +24,8 @@ ContentIdentityRegistry::ContentIdentityRegistry(
   std::pmr::memory_resource& memory, const HashFunction hash)
   : identities_(0, hash, &memory)
   , identities_by_id_(&memory)
+  , view_buckets_(&memory)
+  , view_order_(&memory)
 {
   if (hash == nullptr) {
     throw std::invalid_argument("Content identity hashing must be callable");
@@ -36,9 +38,15 @@ auto ContentIdentityRegistry::HashIdentity(
   return ContentIdentityHash {}(identity);
 }
 
-auto ContentIdentityRegistry::Intern(const ContentIdentity& identity)
-  -> ContentId
+auto ContentIdentityRegistry::Intern(const ContentIdentity& identity,
+  const std::shared_ptr<const BindingViewId>& view) -> ContentId
 {
+  const auto* asset = std::get_if<AssetIdentity>(&identity);
+  const auto scoped = asset != nullptr && asset->view != BindingViewId {};
+  if (scoped && (!view || *view != asset->view)) {
+    throw std::invalid_argument(
+      "Asset binding view requires its lifetime token");
+  }
   if (const auto found = identities_.find(identity);
     found != identities_.end()) {
     return found->second;
@@ -54,12 +62,72 @@ auto ContentIdentityRegistry::Intern(const ContentIdentity& identity)
   }
   try {
     identities_by_id_.emplace(id, &entry->first);
+    if (scoped) {
+      RegisterViewIdentity(id, view);
+    }
   } catch (...) {
+    identities_by_id_.erase(id);
     identities_.erase(entry);
     throw;
   }
   ++next_id_;
   return id;
+}
+
+auto ContentIdentityRegistry::RegisterViewIdentity(
+  const ContentId id, const std::shared_ptr<const BindingViewId>& view) -> void
+{
+  const auto [bucket, inserted] = view_buckets_.try_emplace(*view,
+    ViewBucket { .lifetime = view,
+      .identities
+      = std::pmr::vector<ContentId>(identities_.get_allocator().resource()) });
+  bool ordered = false;
+  try {
+    if (inserted) {
+      view_order_.push_back(*view);
+      ordered = true;
+    }
+    bucket->second.identities.push_back(id);
+  } catch (...) {
+    if (inserted) {
+      if (ordered) {
+        view_order_.pop_back();
+      }
+      view_buckets_.erase(bucket);
+    }
+    throw;
+  }
+}
+
+auto ContentIdentityRegistry::ProcessExpiredViews(const size_t max_work)
+  -> size_t
+{
+  size_t live_views = 0;
+  size_t work = 0;
+  while (work < max_work && live_views < view_order_.size()) {
+    if (view_cursor_ >= view_order_.size()) {
+      view_cursor_ = 0;
+    }
+    const auto view = view_order_.at(view_cursor_);
+    auto& bucket = view_buckets_.at(view);
+    ++work;
+    if (!bucket.lifetime.expired()) {
+      ++view_cursor_;
+      ++live_views;
+      continue;
+    }
+    live_views = 0;
+    if (!bucket.identities.empty()) {
+      Erase(bucket.identities.at(bucket.identities.size() - 1U));
+      bucket.identities.pop_back();
+    }
+    if (bucket.identities.empty()) {
+      view_buckets_.erase(view);
+      view_order_.at(view_cursor_) = view_order_.at(view_order_.size() - 1U);
+      view_order_.pop_back();
+    }
+  }
+  return work;
 }
 
 auto ContentIdentityRegistry::Find(
@@ -122,6 +190,9 @@ auto ContentIdentityRegistry::Clear() noexcept -> void
 {
   identities_by_id_.clear();
   identities_.clear();
+  view_buckets_.clear();
+  view_order_.clear();
+  view_cursor_ = 0;
 }
 
 auto ContentIdentityRegistry::EraseSources(

@@ -5,18 +5,19 @@
 
 ## 0. Status Tracking
 
-This is the target architecture/spec contract for replacing PakGen with the C++ import + pak pipeline.
+This describes the native descriptor import and PAK pipeline. Python PakGen has been removed.
 
 Live implementation status, evidence, and remaining work are tracked in:
 
-1. `design/content-pipeline/pakgen-supersession-implementation-plan.md`
+1. [ED-M08.F1](../../../../design/editor/plan/ED-M08.F1-descriptor-local-references.md) owns the current format and tooling cutover.
+2. The adjacent supersession implementation plan is a historical ledger.
 
 Current baseline snapshot (2026-03-01):
 
 1. Import domains already integrated: `texture` (image-driven), `fbx`, `gltf`, `script`, `script-sidecar`, `physics-sidecar`, `input`, `buffer-container`.
 2. Import manifest + schema and C++ schema embedding infrastructure already exist.
 3. C++ Pak builder/planner/writer exists (`PakBuilder`, `PakPlanBuilder`, `PakWriter`).
-4. Missing supersession piece: first-class JSON descriptor import domains for `texture`, `material`, `geometry`, `scene` (with container-owned buffer descriptors inside geometry), then hard cutover of tooling/workflows away from PakGen.
+4. JSON descriptor import domains for `texture`, `material`, `geometry` and `scene` are native Cooker responsibilities; geometry owns its buffer descriptors.
 
 ## 1. Objective and Scope
 
@@ -38,7 +39,7 @@ In scope:
 3. Manifest orchestration with explicit DAG dependencies (`id`, `depends_on`) across all descriptor and existing job types.
 4. Systematic JSON schema validation for descriptor/manifest ingress.
 5. C++ Pak build flow integration (manifest/import outputs -> `PakBuilder`).
-6. PakGen deprecation and eventual removal gates.
+6. A single native packaging path; no Python packer or compatibility translator.
 
 Out of scope:
 
@@ -66,7 +67,6 @@ Out of scope:
 | Manifest parser recognizes current job types (`texture`, `texture-descriptor`, `material-descriptor`, `buffer-container`, `fbx`, `gltf`, `script`, `script-sidecar`, `physics-sidecar`, `input`) | `src/Oxygen/Cooker/Import/ImportManifest.cpp`                                                                       |
 | ImportTool commands currently mirror those job types                                                                                                                                             | `src/Oxygen/Cooker/Tools/ImportTool/main.cpp`                                                                       |
 | C++ Pak path exists and is callable                                                                                                                                                              | `src/Oxygen/Cooker/Pak/PakBuilder.h`, `src/Oxygen/Cooker/Pak/PakPlanBuilder.h`, `src/Oxygen/Cooker/Pak/PakWriter.h` |
-| PakGen still exists as tool target                                                                                                                                                               | `src/Oxygen/Cooker/Tools/PakGen/CMakeLists.txt`                                                                     |
 | Schema embedding/install infra exists                                                                                                                                                            | `cmake/JsonSchemaHelpers.cmake`, `cmake/GenerateEmbeddedJsonSchemas.cmake`, `src/Oxygen/Cooker/CMakeLists.txt`      |
 | Shared schema validation utility exists                                                                                                                                                          | `src/Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h`                                                    |
 
@@ -76,7 +76,7 @@ PakGen supersession is done by introducing descriptor-first import domains as pe
 
 1. Descriptor import produces loose cooked descriptors/resources with deterministic keys and explicit diagnostics.
 2. `PakBuilder` consumes loose cooked outputs for final `.pak` creation.
-3. PakGen transitions to non-default, then removed after parity gates pass.
+3. Python packaging and its fixtures are removed. External tests exercise current component contracts.
 
 ## 5. Descriptor Domain Model (First-Class Peers)
 
@@ -195,24 +195,13 @@ For descriptor jobs:
 
 The manifest remains the orchestration layer, not a data payload for descriptor internals.
 
-## 10. PakGen Cutover Strategy
+## 10. Native-only packaging
 
-## 10.1 Cutover Stages
-
-1. Stage A: descriptor domains integrated with tests; PakGen still available.
-2. Stage B: C++ `PakBuilder` workflow exposed as first-class tool path and used by official examples/docs.
-3. Stage C: parity gates pass (functional, diagnostics, determinism, install/schema).
-4. Stage D: PakGen removed from default build and CI required path.
-5. Stage E: PakGen code removed after one full release-cycle-equivalent confidence window (or explicit approval for immediate removal).
-
-## 10.2 Parity Gates (Must Pass Before Stage D)
-
-1. All descriptor domains have schema + request builder + job/pipeline + tests.
-   - descriptor domains: `texture-descriptor`, `material-descriptor`, `geometry-descriptor`, `scene-descriptor`
-   - geometry coverage includes container-owned buffer descriptor subdocuments (`buffers[]`/`views[]`) with virtual-path-based references and emitted `.obuf` metadata
-2. Cross-domain manifest DAG scenarios are covered in tests.
-3. C++ pak flow covers same asset/resource composition needed by current content sets.
-4. No unresolved PakGen-only dependency remains in examples or docs.
+`PakBuilder` is the sole packaging implementation. PakGen, its Python suite and
+fixtures are removed; no compatibility layer or frozen generated archives remain.
+Content tests use in-memory inputs or minimal loose sources. Real package-build
+integration belongs to native Cooker tests. Build setup provisions unrelated
+Python tools independently of content packaging.
 
 ## 11. Definition of Done
 
@@ -222,5 +211,5 @@ Supersession is complete only when all are true:
    - container-owned buffer descriptors are implemented and tested inside `geometry-descriptor`, including `.obuf` metadata emission and virtual-path-based resolution semantics
 2. Import manifest + schema fully describe and validate descriptor orchestration.
 3. C++ `PakBuilder` is the authoritative pack path in docs/CI.
-4. PakGen is no longer required for standard workflows and is removed or explicitly quarantined behind non-default tooling.
-5. `design/content-pipeline/pakgen-supersession-implementation-plan.md` reports 100% with evidence for every phase.
+4. PakGen and all active dependencies are removed.
+5. Current qualification and rollout are tracked in ED-M08.F1.

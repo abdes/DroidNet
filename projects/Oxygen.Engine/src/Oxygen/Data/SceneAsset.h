@@ -158,6 +158,13 @@ public:
 
   //=== Node Access ===-------------------------------------------------------//
 
+  //! Script slots and parameters belong to this immutable scene generation.
+  OXGN_DATA_NDAPI auto ReadScriptSlots(uint32_t start, uint32_t count) const
+    -> std::vector<pak::scripting::ScriptSlotRecord>;
+  OXGN_DATA_NDAPI auto ReadScriptParameters(
+    const pak::scripting::ScriptSlotRecord& slot) const
+    -> std::vector<pak::scripting::ScriptParamRecord>;
+
   //! Returns a view of all nodes in the scene.
   OXGN_DATA_NDAPI auto GetNodes() const noexcept
     -> std::span<const pak::world::NodeRecord>;

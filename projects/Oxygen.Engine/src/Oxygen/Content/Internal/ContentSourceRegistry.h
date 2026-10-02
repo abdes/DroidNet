@@ -18,6 +18,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include <Oxygen/Content/Internal/ContentSourceView.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/SourceOrigin.h>
@@ -28,10 +29,22 @@ class ContentSourceRegistry final {
 public:
   [[nodiscard]] static auto AllocateSourceId() -> data::SourceInstanceId;
 
+  [[nodiscard]] auto CaptureView() const noexcept
+    -> std::shared_ptr<const ContentSourceView>
+  {
+    return current_view_;
+  }
+  [[nodiscard]] auto CurrentViewId() const noexcept -> BindingViewId
+  {
+    return current_view_ ? current_view_->Identity() : BindingViewId {};
+  }
+
   enum class MountAction : uint8_t {
     kMounted,
     kRefreshed,
   };
+
+  enum class MountMode : uint8_t { kRefreshExisting, kAppend };
 
   struct MountResult final {
     struct SourceKeyConflict final {
@@ -57,10 +70,12 @@ public:
   auto Swap(ContentSourceRegistry& other) noexcept -> void;
 
   auto MountPak(std::filesystem::path normalized_path,
-    std::shared_ptr<IContentSource> source) -> MountResult;
+    std::shared_ptr<IContentSource> source,
+    MountMode mode = MountMode::kRefreshExisting) -> MountResult;
 
   auto MountLoose(std::string_view normalized_debug_name,
-    std::shared_ptr<IContentSource> source) -> MountResult;
+    std::shared_ptr<IContentSource> source,
+    MountMode mode = MountMode::kRefreshExisting) -> MountResult;
 
   auto MountGeneration(std::shared_ptr<IContentSource> source,
     std::optional<data::SourceKey> replaces) -> MountResult;
@@ -81,9 +96,6 @@ public:
   [[nodiscard]] auto PruneExpiredSources()
     -> std::unordered_set<data::SourceInstanceId>;
 
-  auto SetSourceTombstones(data::SourceInstanceId source_id,
-    std::span<const data::AssetKey> tombstones) -> void;
-  auto ClearSourceTombstones(data::SourceInstanceId source_id) -> void;
   [[nodiscard]] auto IsSourceTombstoningAsset(
     data::SourceInstanceId source_id, const data::AssetKey& key) const -> bool;
 
@@ -126,10 +138,13 @@ private:
   auto InstallSource(std::shared_ptr<IContentSource> source,
     data::SourceInstanceId source_id, std::optional<size_t> replaced_index,
     SourceKind kind) -> MountResult;
+  auto ValidateMount(const IContentSource& source,
+    std::optional<size_t> replaced_index) const -> void;
   [[nodiscard]] auto FindSourceKeyConflict(
     data::SourceKey source_key, std::string_view mount_identity) const
     -> std::optional<MountResult::SourceKeyConflict>;
   auto RemoveActiveSource(size_t index) -> void;
+  [[nodiscard]] auto CopyLayers() const -> std::vector<ContentSourceLayer>;
 
   std::vector<std::shared_ptr<IContentSource>> sources_;
   std::vector<data::SourceInstanceId> source_ids_;
@@ -141,6 +156,7 @@ private:
     source_key_to_ids_;
   std::vector<std::filesystem::path> pak_paths_;
   std::vector<data::SourceInstanceId> pak_source_ids_;
+  std::shared_ptr<const ContentSourceView> current_view_ {};
 };
 
 } // namespace oxygen::content::internal

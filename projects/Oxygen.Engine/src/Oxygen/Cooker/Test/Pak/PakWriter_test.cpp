@@ -18,9 +18,11 @@
 
 #include "PakTestSupport.h"
 
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/Pak/PakWriter.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h>
 #include <Oxygen/Data/PakFormat_audio.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -49,8 +51,6 @@ constexpr auto kAudioEntrySize
   = uint32_t { sizeof(oxygen::data::pak::audio::AudioResourceDesc) };
 constexpr auto kScriptResourceEntrySize
   = uint32_t { sizeof(oxygen::data::pak::scripting::ScriptResourceDesc) };
-constexpr auto kScriptSlotEntrySize
-  = uint32_t { sizeof(oxygen::data::pak::scripting::ScriptSlotRecord) };
 constexpr auto kPhysicsEntrySize
   = uint32_t { sizeof(oxygen::data::pak::physics::PhysicsResourceDesc) };
 
@@ -68,6 +68,29 @@ auto HasDiagnosticCode(std::span<const pak::PakDiagnostic> diagnostics,
   const std::string_view code) -> bool
 {
   return paktest::HasDiagnosticCode(diagnostics, code);
+}
+
+auto AddCatalog(pak::PakPlan::Data& plan) -> void
+{
+  data::PakCatalog catalog { .source_key = plan.header.source_key,
+    .content_version = plan.header.content_version,
+    .catalog_digest = {},
+    .entries = {},
+    .deleted = {},
+    .bases = {} };
+  for (size_t index = 0; index < plan.assets.size(); ++index) {
+    const auto& asset = plan.assets.at(index);
+    catalog.entries.push_back({ .asset_key = asset.asset_key,
+      .asset_type = asset.asset_type,
+      .descriptor_digest = oxygen::base::ComputeFileSha256(
+        plan.asset_payload_sources.at(index).source_path),
+      .transitive_resource_digest = {} });
+  }
+  catalog.catalog_digest = catalog.ComputeDigest().value();
+  plan.catalog = { .offset = plan.directory.offset + plan.directory.size_bytes,
+    .bytes = catalog.Encode().value() };
+  ASSERT_LE(
+    plan.catalog.offset + plan.catalog.bytes.size(), plan.footer.offset);
 }
 
 auto ReadFooter(const std::filesystem::path& path) -> core::PakFooter
@@ -263,13 +286,6 @@ auto MakeCanonicalTables(const CanonicalTableSpec spec)
       .entry_size = kScriptResourceEntrySize,
     }),
     MakeTablePlan(TablePlanSpec {
-      .table_name = "script_slot_table",
-      .offset = trailing_offset,
-      .size_bytes = 0U,
-      .count = 0U,
-      .entry_size = kScriptSlotEntrySize,
-    }),
-    MakeTablePlan(TablePlanSpec {
       .table_name = "physics_resource_table",
       .offset = trailing_offset,
       .size_bytes = 0U,
@@ -296,7 +312,7 @@ NOLINT_TEST_F(PakWriterTest, CrcEnabledWritesValidPakAndPatchesFooterCrc)
     .content_version = 3U,
     .source_key = MakeSourceKey(),
     .base_catalogs = {},
-    .patch_compat = {},
+
     .options = {
       .deterministic = true,
       .embed_browse_index = false,
@@ -340,7 +356,7 @@ NOLINT_TEST_F(PakWriterTest, CrcDisabledLeavesFooterFieldAtZero)
     .content_version = 4U,
     .source_key = MakeSourceKey(),
     .base_catalogs = {},
-    .patch_compat = {},
+
     .options = {
       .deterministic = true,
       .embed_browse_index = false,
@@ -443,7 +459,7 @@ NOLINT_TEST_F(
     .content_version = 1U,
     .source_key = MakeSourceKey(),
     .base_catalogs = {},
-    .patch_compat = {},
+
     .options = {
       .deterministic = true,
       .embed_browse_index = true,
@@ -519,22 +535,47 @@ NOLINT_TEST_F(
   const auto output_path = Root() / "physics_assets_output.pak";
 
   const auto physics_desc_rel = std::string { "Scenes/Main.opscene" };
-  const auto physics_desc_bytes = MakePatternBytes(0x71U, 56U);
+  const auto scene_key = MakeAssetKey(0xA2U);
+  const auto scene_bytes = paktest::MakeEmptySceneDescriptor();
+  data::pak::physics::PhysicsSceneAssetDesc physics_desc {};
+  physics_desc.header.asset_type
+    = static_cast<uint8_t>(data::AssetType::kPhysicsScene);
+  physics_desc.header.version = 1U;
+  physics_desc.target_scene_key = scene_key;
+  const auto hash = oxygen::base::ComputeSha256(scene_bytes);
+  std::ranges::copy(hash, std::begin(physics_desc.target_scene_content_hash));
+  const auto physics_desc_bytes = std::as_bytes(std::span(&physics_desc, 1U));
 
   ASSERT_TRUE(paktest::WriteFileBytes(source / physics_desc_rel,
     std::span<const std::byte>(
       physics_desc_bytes.data(), physics_desc_bytes.size())));
 
   const auto physics_key = MakeAssetKey(0xA1U);
-  const auto assets = std::array<paktest::AssetSpec, 1> {
+  const auto assets = std::array<paktest::AssetSpec, 2> {
     paktest::AssetSpec {
       .key = physics_key,
       .asset_type = data::AssetType::kPhysicsScene,
       .descriptor_relpath = physics_desc_rel,
       .virtual_path = "/Game/Scenes/Main.opscene",
       .descriptor_size = static_cast<uint64_t>(physics_desc_bytes.size()),
-      .descriptor_sha = paktest::MakeDigest(0xA1U),
-      .descriptor_payload = physics_desc_bytes,
+      .descriptor_sha = oxygen::base::ComputeSha256(physics_desc_bytes),
+      .descriptor_payload
+      = { physics_desc_bytes.begin(), physics_desc_bytes.end() },
+      .references = data::AssetReferences::Create({},
+        { { .key = scene_key,
+          .kind = data::KeyReferenceKind::kLogical,
+          .expected_type = data::AssetType::kScene } })
+        .value(),
+    },
+    paktest::AssetSpec {
+      .key = scene_key,
+      .asset_type = data::AssetType::kScene,
+      .descriptor_relpath = "Scenes/Main.oscene",
+      .virtual_path = "/Game/Main.oscene",
+      .descriptor_size = scene_bytes.size(),
+      .descriptor_sha = {},
+      .descriptor_payload = scene_bytes,
+      .references = {},
     },
   };
   ASSERT_TRUE(paktest::WriteLooseIndex(source,
@@ -550,7 +591,7 @@ NOLINT_TEST_F(
     .content_version = 1U,
     .source_key = MakeSourceKey(),
     .base_catalogs = {},
-    .patch_compat = {},
+
     .options = {
       .deterministic = true,
       .embed_browse_index = true,
@@ -572,7 +613,9 @@ NOLINT_TEST_F(
   const auto directory = pak_file.Directory();
   ASSERT_EQ(directory.size(), assets.size());
 
-  const auto& entry = directory.front();
+  const auto found = pak_file.FindEntry(physics_key);
+  ASSERT_TRUE(found.has_value());
+  const auto& entry = *found;
   EXPECT_EQ(entry.asset_key, physics_key);
   EXPECT_EQ(static_cast<data::AssetType>(entry.asset_type),
     data::AssetType::kPhysicsScene);
@@ -647,13 +690,6 @@ NOLINT_TEST_F(PakWriterTest, OffsetMismatchEmitsActionableDiagnostic)
       .entry_size = kScriptResourceEntrySize,
     }),
     MakeTablePlan(TablePlanSpec {
-      .table_name = "script_slot_table",
-      .offset = kMismatchedOffset,
-      .size_bytes = 0U,
-      .count = 0U,
-      .entry_size = kScriptSlotEntrySize,
-    }),
-    MakeTablePlan(TablePlanSpec {
       .table_name = "physics_resource_table",
       .offset = kMismatchedOffset,
       .size_bytes = 0U,
@@ -683,7 +719,7 @@ NOLINT_TEST_F(PakWriterTest, OffsetMismatchEmitsActionableDiagnostic)
     .content_version = 1U,
     .source_key = MakeSourceKey(),
     .base_catalogs = {},
-    .patch_compat = {},
+
     .options = {},
   };
 
@@ -754,13 +790,6 @@ NOLINT_TEST_F(PakWriterTest, InvalidCrcPatchOffsetEmitsDiagnostic)
       .entry_size = kScriptResourceEntrySize,
     }),
     MakeTablePlan(TablePlanSpec {
-      .table_name = "script_slot_table",
-      .offset = kBaseOffset,
-      .size_bytes = 0U,
-      .count = 0U,
-      .entry_size = kScriptSlotEntrySize,
-    }),
-    MakeTablePlan(TablePlanSpec {
       .table_name = "physics_resource_table",
       .offset = kBaseOffset,
       .size_bytes = 0U,
@@ -795,7 +824,7 @@ NOLINT_TEST_F(PakWriterTest, InvalidCrcPatchOffsetEmitsDiagnostic)
     .content_version = 5U,
     .source_key = MakeSourceKey(),
     .base_catalogs = {},
-    .patch_compat = {},
+
     .options = {},
   };
 
@@ -869,7 +898,7 @@ NOLINT_TEST_F(PakWriterTest, ResourcePayloadSourceCountMismatchIsRejected)
     .content_version = kContentVersion,
     .source_key = MakeSourceKey(),
     .base_catalogs = {},
-    .patch_compat = {},
+
     .options = {},
   };
 
@@ -953,7 +982,7 @@ NOLINT_TEST_F(PakWriterTest, AssetPayloadSourceCountMismatchIsRejected)
     .content_version = kContentVersion,
     .source_key = MakeSourceKey(),
     .base_catalogs = {},
-    .patch_compat = {},
+
     .options = {},
   };
 
@@ -1048,7 +1077,7 @@ NOLINT_TEST_F(PakWriterTest, MissingResourceSourceFileEmitsStoreDiagnostic)
     .content_version = kContentVersion,
     .source_key = MakeSourceKey(),
     .base_catalogs = {},
-    .patch_compat = {},
+
     .options = {},
   };
 
@@ -1140,7 +1169,7 @@ NOLINT_TEST_F(
     .content_version = kContentVersion,
     .source_key = MakeSourceKey(),
     .base_catalogs = {},
-    .patch_compat = {},
+
     .options = {},
   };
 
@@ -1212,13 +1241,6 @@ NOLINT_TEST_F(PakWriterTest, TablePayloadSizeMismatchEmitsDiagnostic)
       .entry_size = kScriptResourceEntrySize,
     }),
     MakeTablePlan(TablePlanSpec {
-      .table_name = "script_slot_table",
-      .offset = kBaseOffset,
-      .size_bytes = 0U,
-      .count = 0U,
-      .entry_size = kScriptSlotEntrySize,
-    }),
-    MakeTablePlan(TablePlanSpec {
       .table_name = "physics_resource_table",
       .offset = kBaseOffset,
       .size_bytes = 0U,
@@ -1253,7 +1275,7 @@ NOLINT_TEST_F(PakWriterTest, TablePayloadSizeMismatchEmitsDiagnostic)
     .content_version = 7U,
     .source_key = MakeSourceKey(),
     .base_catalogs = {},
-    .patch_compat = {},
+
     .options = {},
   };
 
@@ -1383,13 +1405,6 @@ NOLINT_TEST_F(PakWriterTest, StoresResourceAndDescriptorPayloadBytesFromSources)
       .entry_size = kScriptResourceEntrySize,
     }),
     MakeTablePlan(TablePlanSpec {
-      .table_name = "script_slot_table",
-      .offset = kTextureTableOffset + sizeof(core::TextureResourceDesc),
-      .size_bytes = 0U,
-      .count = 0U,
-      .entry_size = kScriptSlotEntrySize,
-    }),
-    MakeTablePlan(TablePlanSpec {
       .table_name = "physics_resource_table",
       .offset = kTextureTableOffset + sizeof(core::TextureResourceDesc),
       .size_bytes = 0U,
@@ -1449,7 +1464,7 @@ NOLINT_TEST_F(PakWriterTest, StoresResourceAndDescriptorPayloadBytesFromSources)
     .content_version = 8U,
     .source_key = MakeSourceKey(),
     .base_catalogs = {},
-    .patch_compat = {},
+
     .options = {
       .deterministic = true,
       .embed_browse_index = false,
@@ -1458,6 +1473,8 @@ NOLINT_TEST_F(PakWriterTest, StoresResourceAndDescriptorPayloadBytesFromSources)
       .fail_on_warnings = false,
     },
   };
+
+  AddCatalog(plan_data);
 
   const auto write_result
     = PakWriter {}.Write(request, pak::PakPlan(std::move(plan_data)));
@@ -1576,13 +1593,6 @@ NOLINT_TEST_F(PakWriterTest, WriterZeroFillsPlannedPaddingAndTrailingGaps)
       .entry_size = kScriptResourceEntrySize,
     }),
     MakeTablePlan(TablePlanSpec {
-      .table_name = "script_slot_table",
-      .offset = kTableOffset + sizeof(core::TextureResourceDesc),
-      .size_bytes = 0U,
-      .count = 0U,
-      .entry_size = kScriptSlotEntrySize,
-    }),
-    MakeTablePlan(TablePlanSpec {
       .table_name = "physics_resource_table",
       .offset = kTableOffset + sizeof(core::TextureResourceDesc),
       .size_bytes = 0U,
@@ -1612,9 +1622,11 @@ NOLINT_TEST_F(PakWriterTest, WriterZeroFillsPlannedPaddingAndTrailingGaps)
     .content_version = 2U,
     .source_key = MakeSourceKey(),
     .base_catalogs = {},
-    .patch_compat = {},
+
     .options = {},
   };
+
+  AddCatalog(plan_data);
 
   const auto write_result
     = PakWriter {}.Write(request, pak::PakPlan(std::move(plan_data)));
@@ -1648,7 +1660,7 @@ NOLINT_TEST_F(PakWriterTest, DeterministicModeProducesBitExactOutputs)
     .content_version = 9U,
     .source_key = MakeSourceKey(),
     .base_catalogs = {},
-    .patch_compat = {},
+
     .options = {
       .deterministic = true,
       .embed_browse_index = true,
@@ -1675,133 +1687,6 @@ NOLINT_TEST_F(PakWriterTest, DeterministicModeProducesBitExactOutputs)
   EXPECT_EQ(first.pak_crc32, second.pak_crc32);
   EXPECT_EQ(first.file_size, second.file_size);
   EXPECT_EQ(first_bytes, second_bytes);
-}
-
-NOLINT_TEST_F(PakWriterTest, ScriptSlotSerializerInvariantViolationFailsWriting)
-{
-  using pak::BuildMode;
-  using pak::PakWriter;
-
-  constexpr auto kTableOffset = uint64_t { 256U };
-  constexpr auto kScriptSlotCount = uint32_t { 1U };
-  constexpr auto kScriptSlotSize
-    = static_cast<uint64_t>(kScriptSlotCount) * kScriptSlotEntrySize;
-  constexpr auto kFooterOffset = kTableOffset + kScriptSlotSize;
-
-  auto plan_data = pak::PakPlan::Data {};
-  plan_data.header = pak::PakHeaderPlan {
-    .offset = 0U,
-    .size_bytes = kHeaderSize,
-    .content_version = 6U,
-    .source_key = MakeSourceKey(),
-  };
-  plan_data.regions = {
-    MakeRegionPlan(RegionPlanSpec { .region_name = "texture_region",
-      .offset = kTableOffset,
-      .size_bytes = 0U }),
-    MakeRegionPlan(RegionPlanSpec { .region_name = "buffer_region",
-      .offset = kTableOffset,
-      .size_bytes = 0U }),
-    MakeRegionPlan(RegionPlanSpec { .region_name = "audio_region",
-      .offset = kTableOffset,
-      .size_bytes = 0U }),
-    MakeRegionPlan(RegionPlanSpec { .region_name = "script_region",
-      .offset = kTableOffset,
-      .size_bytes = 0U }),
-    MakeRegionPlan(RegionPlanSpec { .region_name = "physics_region",
-      .offset = kTableOffset,
-      .size_bytes = 0U }),
-  };
-  plan_data.tables = {
-    MakeTablePlan(TablePlanSpec {
-      .table_name = "texture_table",
-      .offset = kTableOffset,
-      .size_bytes = 0U,
-      .count = 0U,
-      .entry_size = static_cast<uint32_t>(sizeof(core::TextureResourceDesc)),
-    }),
-    MakeTablePlan(TablePlanSpec {
-      .table_name = "buffer_table",
-      .offset = kTableOffset,
-      .size_bytes = 0U,
-      .count = 0U,
-      .entry_size = static_cast<uint32_t>(sizeof(core::BufferResourceDesc)),
-    }),
-    MakeTablePlan(TablePlanSpec {
-      .table_name = "audio_table",
-      .offset = kTableOffset,
-      .size_bytes = 0U,
-      .count = 0U,
-      .entry_size = kAudioEntrySize,
-    }),
-    MakeTablePlan(TablePlanSpec {
-      .table_name = "script_resource_table",
-      .offset = kTableOffset,
-      .size_bytes = 0U,
-      .count = 0U,
-      .entry_size = kScriptResourceEntrySize,
-    }),
-    MakeTablePlan(TablePlanSpec {
-      .table_name = "script_slot_table",
-      .offset = kTableOffset,
-      .size_bytes = kScriptSlotSize,
-      .count = kScriptSlotCount,
-      .entry_size = kScriptSlotEntrySize,
-    }),
-    MakeTablePlan(TablePlanSpec {
-      .table_name = "physics_resource_table",
-      .offset = kTableOffset + kScriptSlotSize,
-      .size_bytes = 0U,
-      .count = 0U,
-      .entry_size = kPhysicsEntrySize,
-    }),
-  };
-  plan_data.script_slots = {
-    pak::PakScriptSlotPlan {
-      .slot_index = 2U,
-      .script_asset_key = paktest::MakeAssetKey(0x55U),
-      .params_array_index = 0U,
-      .params_count = 0U,
-      .execution_order = 7,
-      .flags = oxygen::data::pak::scripting::ScriptSlotFlags::kNone,
-    },
-  };
-  plan_data.directory = pak::PakDirectoryPlan {
-    .offset = kFooterOffset,
-    .size_bytes = 0U,
-    .entries = {},
-  };
-  plan_data.browse_index = pak::PakBrowseIndexPlan {
-    .enabled = false,
-    .offset = 0U,
-    .size_bytes = 0U,
-    .entries = {},
-  };
-  plan_data.footer = pak::PakFooterPlan {
-    .offset = kFooterOffset,
-    .size_bytes = kFooterSize,
-    .crc32_field_absolute_offset
-    = kFooterOffset + offsetof(core::PakFooter, pak_crc32),
-  };
-  plan_data.planned_file_size = kFooterOffset + kFooterSize;
-
-  const auto request = pak::PakBuildRequest {
-    .mode = BuildMode::kFull,
-    .sources = {},
-    .output_pak_path = Root() / "script_slot_invariant.pak",
-    .output_manifest_path = {},
-    .content_version = 6U,
-    .source_key = MakeSourceKey(),
-    .base_catalogs = {},
-    .patch_compat = {},
-    .options = {},
-  };
-
-  const auto write_result
-    = PakWriter {}.Write(request, pak::PakPlan(std::move(plan_data)));
-  EXPECT_TRUE(HasError(write_result.diagnostics));
-  EXPECT_TRUE(HasDiagnosticCode(
-    write_result.diagnostics, "pak.write.table_store_failed"));
 }
 
 } // namespace

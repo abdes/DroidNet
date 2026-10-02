@@ -31,6 +31,7 @@
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
@@ -931,6 +932,13 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       = EffectiveContentHashingEnabled(Request().options.with_content_hashing),
     });
 
+  AssetReferenceBuilder references;
+  references.AddAsset(
+    descriptor.material_asset_key, data::AssetType::kPhysicsMaterial);
+  references.AddPhysicsResource(descriptor.cooked_shape_ref.payload_asset_key);
+  for (const auto& child : compound_children) {
+    references.AddPhysicsResource(child.payload_asset_key);
+  }
   auto item = CollisionShapeImportPipeline::WorkItem {
     .source_id = target->virtual_path,
     .descriptor = descriptor,
@@ -958,7 +966,8 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   const auto emit_start = std::chrono::steady_clock::now();
   session.AssetEmitter().Emit(shape_key, data::AssetType::kCollisionShape,
-    target->virtual_path, target->relpath, result.descriptor_bytes);
+    target->virtual_path, target->relpath, result.descriptor_bytes,
+    std::move(references).Build());
   session.AddEmitDuration(
     MakeDuration(emit_start, std::chrono::steady_clock::now()));
 

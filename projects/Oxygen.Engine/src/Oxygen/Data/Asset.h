@@ -14,6 +14,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetRuntimeBindings.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -63,6 +64,20 @@ public:
   [[nodiscard]] auto GetSourceOrigin() const noexcept -> SourceOrigin
   {
     return source_origin_;
+  }
+
+  //! Install decoded metadata before dependency binding publishes this asset.
+  auto SetReferences(AssetReferences references) -> void
+  {
+    if (runtime_bindings_) {
+      throw std::logic_error("Published asset references are immutable");
+    }
+    references_ = std::move(references);
+  }
+
+  [[nodiscard]] auto GetReferences() const noexcept -> const AssetReferences&
+  {
+    return references_;
   }
 
   //! Bind once during loading, before the asset becomes visible to consumers.
@@ -135,6 +150,7 @@ protected:
 private:
   AssetKey asset_key_;
   SourceOrigin source_origin_ {};
+  AssetReferences references_;
   std::shared_ptr<const AssetRuntimeBindings> runtime_bindings_ {};
 };
 

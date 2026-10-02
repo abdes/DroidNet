@@ -212,15 +212,15 @@ namespace {
   {
     auto group = std::make_shared<Options>("Patch Options");
 
-    group->Add(Option::WithKey("base-catalog")
-        .About("Base pak catalog input for patch planning")
-        .Long("base-catalog")
+    group->Add(Option::WithKey("base-pak")
+        .About("Base PAK input in increasing layer priority")
+        .Long("base-pak")
         .Required()
         .WithValue<std::filesystem::path>()
         .UserFriendlyName("PATH")
         .Repeatable()
         .CallOnEachValue([&options](const std::filesystem::path& path) {
-          options.base_catalogs.push_back(path);
+          options.base_paks.push_back(path);
         })
         .Build());
 
@@ -231,42 +231,6 @@ namespace {
         .WithValue<std::filesystem::path>()
         .UserFriendlyName("PATH")
         .StoreTo(&options.manifest_output)
-        .Build());
-
-    group->Add(Option::WithKey("allow-base-set-mismatch")
-        .About("Allow base set mismatch during patch compatibility checks")
-        .Long("allow-base-set-mismatch")
-        .WithValue<bool>()
-        .DefaultValue(false, "false")
-        .ImplicitValue(true, "true")
-        .StoreTo(&options.allow_base_set_mismatch)
-        .Build());
-
-    group->Add(Option::WithKey("allow-content-version-mismatch")
-        .About("Allow base content version mismatch during patch checks")
-        .Long("allow-content-version-mismatch")
-        .WithValue<bool>()
-        .DefaultValue(false, "false")
-        .ImplicitValue(true, "true")
-        .StoreTo(&options.allow_content_version_mismatch)
-        .Build());
-
-    group->Add(Option::WithKey("allow-base-source-key-mismatch")
-        .About("Allow base source key mismatch during patch checks")
-        .Long("allow-base-source-key-mismatch")
-        .WithValue<bool>()
-        .DefaultValue(false, "false")
-        .ImplicitValue(true, "true")
-        .StoreTo(&options.allow_base_source_key_mismatch)
-        .Build());
-
-    group->Add(Option::WithKey("allow-catalog-digest-mismatch")
-        .About("Allow catalog digest mismatch during patch checks")
-        .Long("allow-catalog-digest-mismatch")
-        .WithValue<bool>()
-        .DefaultValue(false, "false")
-        .ImplicitValue(true, "true")
-        .StoreTo(&options.allow_catalog_digest_mismatch)
         .Build());
 
     return group;

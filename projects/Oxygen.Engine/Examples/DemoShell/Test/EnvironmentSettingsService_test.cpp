@@ -1785,7 +1785,7 @@ NOLINT_TEST_F(
   post.auto_exposure_spot_meter_radius = 0.35F;
   post.auto_exposure_black_influence = 0.4F;
   post.auto_exposure_transition_distance_ev = 2.5F;
-  post.auto_exposure_metering_mask = data::pak::core::ResourceIndexT { 4U };
+  post.auto_exposure_metering_mask = data::ResourceReferenceIndex { 4U };
   const auto keys = std::array {
     world::ExposureCompensationKeyRecord {
       .metered_ev = -4.0F,

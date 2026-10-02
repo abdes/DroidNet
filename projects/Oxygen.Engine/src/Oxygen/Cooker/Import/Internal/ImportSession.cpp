@@ -157,37 +157,6 @@ namespace {
     return summary;
   }
 
-  auto BuildScriptBindingsTableRelPath(const ImportRequest& request)
-    -> std::string
-  {
-    return request.loose_cooked_layout.ScriptBindingsTableRelPath();
-  }
-
-  auto BuildScriptBindingsDataRelPath(const ImportRequest& request)
-    -> std::string
-  {
-    return request.loose_cooked_layout.ScriptBindingsDataRelPath();
-  }
-
-  template <typename RecordT>
-  auto CountPackedRecords(const std::filesystem::path& file_path) -> uint32_t
-  {
-    static_assert(std::is_trivially_copyable_v<RecordT>);
-
-    std::error_code ec;
-    const auto size
-      = std::filesystem::file_size(base::ToNativePath(file_path), ec);
-    if (ec || size == 0U || (size % sizeof(RecordT)) != 0U) {
-      return 0U;
-    }
-
-    const auto count = size / sizeof(RecordT);
-    if (count > std::numeric_limits<uint32_t>::max()) {
-      return std::numeric_limits<uint32_t>::max();
-    }
-    return static_cast<uint32_t>(count);
-  }
-
   auto ReadBinaryFile(const std::filesystem::path& path)
     -> std::vector<std::byte>
   {
@@ -212,26 +181,36 @@ namespace {
     return bytes;
   }
 
-  auto CountScriptingComponentsInSceneDescriptor(
-    const std::filesystem::path& descriptor_path, const data::AssetKey& key)
-    -> uint32_t
+  struct SceneScriptingCounts {
+    uint32_t components = 0;
+    uint32_t slots = 0;
+    uint32_t parameters = 0;
+  };
+
+  auto ReadSceneScriptingCounts(const std::filesystem::path& descriptor_path,
+    const data::AssetKey& key) -> SceneScriptingCounts
   {
     const auto bytes = ReadBinaryFile(descriptor_path);
     if (bytes.empty()) {
-      return 0U;
+      return {};
     }
 
     try {
       auto scene = data::SceneAsset(key, bytes);
       const auto components
         = scene.GetComponents<data::pak::scripting::ScriptingComponentRecord>();
-      const auto count = components.size();
-      if (count > std::numeric_limits<uint32_t>::max()) {
-        return std::numeric_limits<uint32_t>::max();
+      SceneScriptingCounts result;
+      result.components = static_cast<uint32_t>(components.size());
+      for (const auto& component : components) {
+        result.slots += component.slot_count;
+        for (const auto& slot : scene.ReadScriptSlots(
+               component.slot_start_index, component.slot_count)) {
+          result.parameters += slot.params_count;
+        }
       }
-      return static_cast<uint32_t>(count);
+      return result;
     } catch (...) {
-      return 0U;
+      return {};
     }
   }
 
@@ -825,7 +804,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       for (const auto& rec : records) {
         index_registry_->RegisterExternalAssetDescriptor(cooked_root_, rec.key,
           rec.asset_type, rec.virtual_path, rec.descriptor_relpath,
-          rec.descriptor_size, rec.descriptor_sha256);
+          rec.descriptor_size, rec.references, rec.descriptor_sha256);
         report.outputs.push_back({
           .path = rec.descriptor_relpath,
           .size_bytes = rec.descriptor_size,
@@ -883,22 +862,18 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
 
     if (request_.options.scripting.import_kind
       == ScriptingImportKind::kScriptingSidecar) {
-      report.script_slots_written
-        = CountPackedRecords<data::pak::scripting::ScriptSlotRecord>(
-          cooked_root_ / BuildScriptBindingsTableRelPath(request_));
-      report.script_params_written
-        = CountPackedRecords<data::pak::scripting::ScriptParamRecord>(
-          cooked_root_ / BuildScriptBindingsDataRelPath(request_));
-
       auto component_count = uint64_t { 0 };
       if (asset_emitter_.has_value()) {
         for (const auto& rec : (*asset_emitter_)->Records()) {
           if (rec.asset_type != data::AssetType::kScene) {
             continue;
           }
-          component_count += CountScriptingComponentsInSceneDescriptor(
+          const auto counts = ReadSceneScriptingCounts(
             cooked_root_ / std::filesystem::path(rec.descriptor_relpath),
             rec.key);
+          component_count += counts.components;
+          report.script_slots_written += counts.slots;
+          report.script_params_written += counts.parameters;
         }
       }
       if (component_count > std::numeric_limits<uint32_t>::max()) {

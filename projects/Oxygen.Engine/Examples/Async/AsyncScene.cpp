@@ -98,7 +98,7 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   auto destination = std::span(desc.header.name);
   const auto name_size = std::min(destination.size() - 1U, name_view.size());
   std::ranges::copy(name_view.substr(0, name_size), destination.begin());
-  desc.header.version = 1;
+  desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
   desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(domain);
   desc.flags = pak::render::kMaterialFlag_NoTextureSampling

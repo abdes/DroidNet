@@ -118,7 +118,9 @@ NOLINT_TEST(PakCatalogJsonSchemaTest, AcceptsCanonicalCatalogDocument)
 
   const auto doc = json::parse(R"({
     "$schema": "./src/Oxygen/Cooker/Pak/Schemas/oxygen.pak-catalog.schema.json",
-    "schema_version": 1,
+    "schema_version": 2,
+    "deleted": [],
+    "bases": [],
     "source_key": "01234567-89ab-7def-8123-456789abcdef",
     "content_version": 42,
     "catalog_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
@@ -150,7 +152,9 @@ NOLINT_TEST(PakCatalogJsonSchemaTest, RejectsUnknownAssetTypeAndUnknownFields)
   ASSERT_TRUE(schema.has_value());
 
   const auto doc = json::parse(R"({
-    "schema_version": 1,
+    "schema_version": 2,
+    "deleted": [],
+    "bases": [],
     "source_key": "01234567-89ab-7def-8123-456789abcdef",
     "content_version": 7,
     "catalog_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
@@ -177,7 +181,9 @@ NOLINT_TEST(PakCatalogJsonSchemaTest, RejectsNonCanonicalKeyAndDigestFormats)
   ASSERT_TRUE(schema.has_value());
 
   const auto doc = json::parse(R"({
-    "schema_version": 1,
+    "schema_version": 2,
+    "deleted": [],
+    "bases": [],
     "source_key": "01234567-89ab-6def-8123-456789abcdef",
     "content_version": 7,
     "catalog_digest": "XYZ",

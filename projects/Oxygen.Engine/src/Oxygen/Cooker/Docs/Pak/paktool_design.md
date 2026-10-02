@@ -19,7 +19,7 @@ toolset.
 `PakTool` must provide one authoritative native entry point for:
 
 - full pak builds from cooked sources,
-- patch pak builds from cooked sources plus persisted base catalogs,
+- patch pak builds from cooked sources plus ordered base PAKs,
 - deterministic diagnostics and exit behavior for CI,
 - durable sidecar artifacts for later patch, audit, and publishing stages.
 
@@ -55,7 +55,6 @@ Current request/result contracts:
   - `content_version`
   - `source_key`
   - `base_catalogs`
-  - `PatchCompatibilityPolicy`
   - `PakBuildOptions`
 - `PakBuildResult` already exposes:
   - `output_catalog`
@@ -356,18 +355,13 @@ Rules:
 
 ### 7.3 `patch` Options
 
-- `--base-catalog <path>` repeatable, required
+- `--base-pak <path>` repeatable, required
 - `--manifest-out <path>` required
-- `--allow-base-set-mismatch`
-- `--allow-content-version-mismatch`
-- `--allow-base-source-key-mismatch`
-- `--allow-catalog-digest-mismatch`
 
 Rules:
 
-- Each `--base-catalog` path is loaded through pak-domain catalog IO helpers.
-- The compatibility flags relax the default strict `PatchCompatibilityPolicy`
-  settings by flipping the corresponding `require_*` field to `false`.
+- Each `--base-pak` supplies its validated embedded catalog, in command-line order.
+  Base identity, version, digest and order checks are mandatory.
 
 ### 7.4 Input Rules
 
@@ -388,7 +382,7 @@ Before the builder runs, the tool must:
 
 - validate that parent directories for requested outputs exist or can be
   created,
-- validate that source/base-catalog inputs exist and are readable,
+- validate that source/base-PAK inputs exist and are readable,
 - allocate temporary sibling paths for staged outputs.
 
 ### 7.6 Exit Codes
@@ -416,17 +410,17 @@ Oxygen.Cooker.PakTool build ^
   --source-key 018f8f8f-1234-7abc-8def-0123456789ab
 ```
 
-Patch build against a previously published base catalog:
+Patch build against a previously published base PAK:
 
 ```text
 Oxygen.Cooker.PakTool patch ^
   --loose-source Examples/Content/.cooked ^
-  --base-catalog Examples/Content/pak/all-base.catalog.json ^
+  --base-pak Examples/Content/pak/all-base.pak ^
   --out Examples/Content/pak/all-patch-1.pak ^
   --catalog-out Examples/Content/pak/all-patch-1.catalog.json ^
   --manifest-out Examples/Content/pak/all-patch-1.manifest.json ^
   --content-version 1 ^
-  --source-key 018f8f8f-1234-7abc-8def-0123456789ab
+  --source-key 018f8f8f-1234-7abc-8def-0123456789ac
 ```
 
 Behavioral note:
@@ -441,8 +435,9 @@ Behavioral note:
 
 ### 8.1 Pak Catalog Sidecar
 
-The pak catalog sidecar is a first-class content artifact required by patch
-workflows. It must not be treated as an implementation detail of `PakTool`.
+The canonical catalog is embedded in every PAK. The JSON sidecar is its
+inspection representation; mounting, composition and patch baselines consume
+the archive directly.
 
 Canonical contract:
 
@@ -578,7 +573,7 @@ Minimum console output:
 
 - command and mode
 - source counts by kind
-- base-catalog count for patch mode
+- base-layer count for patch mode
 - final requested artifact paths
 - warning/error diagnostics with code and phase
 - summary counters
@@ -620,9 +615,8 @@ artifact publication.
 - staged pak/manifest paths -> `output_pak_path`, `output_manifest_path`
 - `content-version` -> `content_version`
 - `source-key` -> `source_key`
-- patch compatibility relaxation flags -> inverted `patch_compat`
 - build flags -> `PakBuildOptions`
-- loaded base catalogs -> `base_catalogs`
+- catalogs read from base PAKs -> `base_catalogs`
 
 ### 11.2 Result Handling
 
@@ -691,7 +685,7 @@ Before the task can be called complete:
 
 1. Run `PakTool build` on representative cooked input.
 2. Inspect the emitted pak with `Oxygen.Cooker.PakDump`.
-3. Run `PakTool patch` using persisted base catalog inputs.
+3. Run `PakTool patch` using the ordered base PAK inputs.
 4. Verify the emitted catalog and manifest are reusable by subsequent patch
    runs.
 5. Verify failed runs do not publish misleading final sidecars.
@@ -727,21 +721,117 @@ separately approved:
 - batch orchestration across multiple pak jobs
 - future pak format evolution
 
-## Planned reference-table packaging (M08.F1)
+## Reference-table packaging (M08.F1)
 
-Status: planned after M08.1.9. Data owns the
-[descriptor-local reference contract](../../../Data/Docs/binary_packing_discipline.md#planned-descriptor-local-references-m08f1).
+Native packaging uses descriptor-local bindings. Data owns the
+[descriptor-local reference contract](../../../Data/Docs/binary_packing_discipline.md#descriptor-local-references-m08f1).
 The [format milestone](../../../../../../../design/editor/plan/ED-M08.F1-descriptor-local-references.md)
 owns migration and qualification.
 
-PakPlanBuilder remaps generic per-asset resource bindings into destination resource
-tables. It preserves opaque descriptor bytes and stable AssetKeys. Remove
-`RewriteResourceReferences`' asset/field dispatch and the scene scripting range/
-binding rewrites once scripts are descriptor-local. Resource aggregation, placement,
-deduplication and bounds validation remain native Cooker responsibilities.
+### Producer and packaging boundary
 
-Qualify multi-root repacking, fallback/absent references, every supported reference
-kind, script payloads, metering masks and physics-sidecar scene hashes. Adding a
-resource-bearing field must require no packaging byte-offset walker. Reject malformed
-bindings before publication; include the complete reference inventory in native
-inspection. Version bumps and full recooking replace legacy readers.
+Typed producers build local references while serializing descriptors. `AssetEmitter`
+and `LooseCookedWriter` accept descriptor bytes and their reference metadata as one
+asset record. `LooseCookedIndexRegistry` preserves both across concurrent sessions,
+replacement and incremental imports. A producer cannot publish a descriptor with
+metadata left over from its previous generation.
+
+`PakPlanBuilder` consumes those records without decoding asset fields:
+
+1. Resolve the selected asset-key dependency graph and keyed physics resources
+   against the same ordered inputs used for packaging. Validate target kind and
+   hard cycles, including base sources in patch mode.
+2. Associate resource bindings with their source's typed resource table. Compute
+   dependency digests in local binding order, including each kind and payload
+   identity, plus canonical key-reference metadata. Do not sort payload hashes:
+   swapping two textures between slots must change the digest even when opaque
+   descriptor bytes and the set of texture payloads are unchanged. Conversely,
+   relocation alone must not change it.
+3. Perform existing aggregation, deduplication and placement. Relocate each
+   `(source, resource kind, container index)` binding to its output table entry.
+   Preserve the explicit fallback/error texture markers without looking up or
+   copying a resource payload; include each marker in the dependency digest.
+4. Write descriptors unchanged, followed by the generic reference blocks and
+   directory. Preserve local binding order: descriptor indices cannot move.
+
+Fallback is an explicit binding, not an absent field. It selects the renderer's
+existing neutral white texture in every source. Error selects its shared
+magenta/black checkerboard. Neither marker is a missing hard dependency or a
+payload relocation request.
+
+Stable key references need no relocation. Keyed physics references participate in
+resource closure/digests through the resource table's existing key inventory.
+Logical references appear in inspection but do not force inclusion or ownership.
+The source's typed validation establishes descriptor/inventory agreement before
+publication; packaging performs generic graph/table checks rather than introducing
+another descriptor decoder.
+
+### Ordered layers and patch baselines
+
+Sources are supplied in increasing priority: the last definition of an AssetKey
+wins. Deterministic mode preserves this order and canonicalizes output, never
+input priority. Reject duplicate definitions within a layer and incompatible
+asset-type replacements. Resolve logical asset and keyed physics dependencies
+against the effective layers; relocate numeric resource bindings only within the
+selected descriptor's source. Keep descriptors opaque and unchanged.
+
+Every current-format PAK embeds its catalog, including empty and deletion-only
+archives. The footer records its offset and size; the 256-byte footer and CRC
+field position remain unchanged. The catalog follows directory/browse metadata
+and precedes the footer. Missing catalogs require recooking, with no legacy path.
+
+`Data::PakCatalog` owns physical entries, deletions and ordered base records
+`{SourceKey, content_version, catalog_digest}`. Its native codec and external JSON
+represent the same object. Readers validate the catalog digest, PAK identity,
+entry/directory agreement and non-overlapping bounded storage before mounting;
+this metadata check does not hash every resource payload. Packaging verifies
+entry digests using its existing source measurements. Runtime mounting and
+repacking require no companion metadata files.
+
+A patch catalog describes its layer, including deletions. Compose baseline
+catalogs in declared order: replacements overwrite earlier definitions, deletions
+mask them, and a later explicit definition can recreate a deleted asset. Compare
+the complete desired content against that effective baseline. An incremental P2
+therefore compares against B + P1; a cumulative P2 compares against B and replaces
+earlier cumulative patches at deployment. A change back to B's bytes must still
+be emitted when P1 supplied different bytes.
+
+Validate base identities, content versions, catalog digests and order before
+patch activation. Declared bases must form the contiguous suffix immediately
+below the patch. Additional lower-priority layers are allowed: Engine → Game →
+P1 accepts P1 built against Game. Game → Mod → P1 does not; intentional overrides
+belong above the patch. A cumulative P2 built against Game replaces P1 instead of
+being appended above it. There are no source/version/digest bypass switches.
+Catalog digests cover deletion metadata as well as entries. Resource payloads
+remain container-local: a changed descriptor may bring unchanged payloads it
+needs. This is asset-level patching, not binary-delta compression.
+
+This policy follows [UE5.7 patch priority](https://dev.epicgames.com/documentation/en-us/unreal-engine/how-to-create-a-patch-in-unreal-engine?application_version=5.7)
+and [Godot ordered packs and incremental chains](https://docs.godotengine.org/en/stable/tutorials/export/exporting_pcks.html).
+Runtime objects retain bindings until reload, as required by the
+[Content lifetime contract](../../../Content/Docs/loose_cooked_content.md#published-generations).
+
+### Removal and validation
+
+Remove `CollectMaterialResourceReferences`, `CollectGeometryResourceReferences`,
+`CollectScriptResourceReferences` and their asset-type dispatch. Replace
+`RewriteResourceReferences` with binding relocation. Remove global script-slot/
+parameter aggregation, `RewriteSceneScriptingComponentRanges`,
+`RewriteSceneScriptBindings` and packaging-time physics scene-hash rewriting:
+scene bytes and hashes now survive packaging unchanged. Keep authored scripting
+sidecar inputs, script resource emission and normal resource payload placement.
+
+Tests compare descriptor bytes before/after multi-root full and patch packaging,
+then load the result through Content. Cover all reference-bearing asset types,
+fallback/error markers across roots, absent references, swapping textures between slots,
+AO, metering masks, scripts and physics-sidecar hashes. Also package a model with
+a missing texture, verify its existing error-texture behavior, then repair and
+reimport the source and verify the real texture replaces it. Rejection cases cover
+invalid tables, undeclared/wrong-kind
+references, missing targets, owning cycles and stale versions. Use shared typed
+fixture producers; hand-crafted bytes belong only in malformed-format tests.
+
+Measure reference metadata size and planning/loading cost on the maintained small
+scene and Sponza. Preserve the source-qualified runtime identity and IBL contracts.
+PAK/index version changes, native SDK refresh and full recooking replace legacy
+readers; no packaging conversion of retired descriptors is provided.

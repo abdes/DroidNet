@@ -7,6 +7,7 @@
 #pragma once
 
 #include <Oxygen/Base/Compilers.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat_core.h>
 
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
@@ -25,9 +26,7 @@ namespace oxygen::data::pak::render {
 //! When set, the renderer/shaders must ignore all texture references for the
 //! material and use scalar fallbacks only.
 //!
-//! This flag exists because texture resource index `0` is reserved for the
-//! fallback texture when a fallback exists (textures do). Therefore, a texture
-//! index of `0` cannot unambiguously mean "no texture" for materials.
+//! Per-slot absent references remain distinct; this flag disables every slot.
 [[maybe_unused]] constexpr uint32_t kMaterialFlag_NoTextureSampling = (1U << 0);
 
 //! Material flag indicating that the material should be treated as
@@ -65,7 +64,8 @@ namespace oxygen::data::pak::render {
 inline constexpr uint32_t kMaterialFlag_AmbientOcclusionStrength = (1U << 6);
 
 //! Material asset descriptor version for current PAK schema.
-[[maybe_unused]] constexpr uint8_t kMaterialAssetVersion = 3;
+[[maybe_unused]] constexpr uint8_t kMaterialAssetVersion
+  = version::kMaterialAssetVersion;
 
 //! Maximum finite channel value accepted for material emission.
 inline constexpr float kMaxMaterialEmissiveFactor = 65504.0F;
@@ -120,22 +120,22 @@ struct MaterialAssetDesc {
 
   // --- Core texture references (Index into TextureResourceTable,
   // core::kNoResourceIndex = invalid/none) ---
-  core::ResourceIndexT base_color_texture = core::kNoResourceIndex;
-  core::ResourceIndexT normal_texture = core::kNoResourceIndex;
-  core::ResourceIndexT metallic_texture = core::kNoResourceIndex;
-  core::ResourceIndexT roughness_texture = core::kNoResourceIndex;
-  core::ResourceIndexT ambient_occlusion_texture = core::kNoResourceIndex;
+  ResourceReferenceIndex base_color_texture = kNoResourceReference;
+  ResourceReferenceIndex normal_texture = kNoResourceReference;
+  ResourceReferenceIndex metallic_texture = kNoResourceReference;
+  ResourceReferenceIndex roughness_texture = kNoResourceReference;
+  ResourceReferenceIndex ambient_occlusion_texture = kNoResourceReference;
 
   static_assert(core::kNoResourceIndex == 0);
 
   // --- Additional texture references (optional, Tier 1/2) ---
-  core::ResourceIndexT emissive_texture = core::kNoResourceIndex;
-  core::ResourceIndexT specular_texture = core::kNoResourceIndex;
-  core::ResourceIndexT sheen_color_texture = core::kNoResourceIndex;
-  core::ResourceIndexT clearcoat_texture = core::kNoResourceIndex;
-  core::ResourceIndexT clearcoat_normal_texture = core::kNoResourceIndex;
-  core::ResourceIndexT transmission_texture = core::kNoResourceIndex;
-  core::ResourceIndexT thickness_texture = core::kNoResourceIndex;
+  ResourceReferenceIndex emissive_texture = kNoResourceReference;
+  ResourceReferenceIndex specular_texture = kNoResourceReference;
+  ResourceReferenceIndex sheen_color_texture = kNoResourceReference;
+  ResourceReferenceIndex clearcoat_texture = kNoResourceReference;
+  ResourceReferenceIndex clearcoat_normal_texture = kNoResourceReference;
+  ResourceReferenceIndex transmission_texture = kNoResourceReference;
+  ResourceReferenceIndex thickness_texture = kNoResourceReference;
 
   // --- Additional scalar parameters (Tier 1/2) ---
   // Emissive

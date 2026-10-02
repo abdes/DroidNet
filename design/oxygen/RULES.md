@@ -22,6 +22,10 @@ Read: [ownership](#ownership), [C++](#c), [editor](#editor),
 - Research non-obvious decisions, present concise alternatives and tradeoffs, and
   obtain approval before changing an accepted contract. Correct affected designs
   and plans before implementing changed scope.
+- Before public release, tools and runtime readers accept only the current cooked
+  formats defined by `Oxygen.Data`. Share those definitions; do not add private
+  version pins, compatibility readers or legacy-format fallback paths. Recook
+  maintained content when formats change.
 - Validate data with schemas first; use manual checks only for constraints the
   schema cannot express.
 

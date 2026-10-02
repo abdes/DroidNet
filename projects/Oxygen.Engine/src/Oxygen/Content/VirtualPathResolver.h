@@ -15,8 +15,6 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
-#include <Oxygen/Data/PakCatalog.h>
-#include <Oxygen/Data/PatchManifest.h>
 
 namespace oxygen::content {
 
@@ -71,28 +69,10 @@ public:
 
    @param pak_path Path to the `.pak` file.
    @throw std::runtime_error If the pak cannot be opened.
+   @throw std::invalid_argument If its layer dependencies or asset types
+   conflict.
   */
   OXGN_CNTT_API auto AddPakFile(const std::filesystem::path& pak_path) -> void;
-
-  //! Add a patch pak file and register manifest tombstones.
-  /*!
-   Validates patch/base compatibility, mounts the patch pak at highest
-
-   * precedence, and applies manifest `deleted` keys as tombstones.
-
-   @param
-   * pak_path Path to the patch `.pak` file.
-   @param manifest Patch manifest
-   * emitted by the cooker.
-   @param mounted_base_catalogs Catalog snapshot for
-   * the currently mounted base
-     set.
-   @throw std::runtime_error if
-   * compatibility validation fails.
-  */
-  OXGN_CNTT_API auto AddPatchPakFile(const std::filesystem::path& pak_path,
-    const data::PatchManifest& manifest,
-    std::span<const data::PakCatalog> mounted_base_catalogs) -> void;
 
   //! Clear all mounted roots and pak files.
   OXGN_CNTT_API auto ClearMounts() -> void;

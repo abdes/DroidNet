@@ -1,6 +1,6 @@
 {
   "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
-  "version": 9,
+  "version": 10,
   "name": "SdkMaterials",
   "nodes": [
     {

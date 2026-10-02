@@ -841,7 +841,7 @@ auto TextureBinder::GetOrAllocate(const content::ResourceKey& resource_key)
 auto TextureBinder::Impl::IsResourceReady(
   const content::ResourceKey& resource_key) const noexcept -> bool
 {
-  if (resource_key.IsPlaceholder()) {
+  if (resource_key.IsPlaceholder() || resource_key.IsError()) {
     return false;
   }
 
@@ -865,6 +865,9 @@ auto TextureBinder::Impl::IsResourceReady(
 auto TextureBinder::Impl::HasResourceFailed(
   const content::ResourceKey& key) const noexcept -> bool
 {
+  if (key.IsError()) {
+    return true;
+  }
   const auto it = texture_map_.find(key);
   return it != texture_map_.end() && it->second.load_failed;
 }
@@ -891,6 +894,11 @@ auto TextureBinder::Impl::TryGetMipLevels(
   const content::ResourceKey& resource_key) const noexcept
   -> std::optional<std::uint32_t>
 {
+  if (resource_key.IsError()) {
+    return error_texture_
+      ? std::optional { error_texture_->GetDescriptor().mip_levels }
+      : std::nullopt;
+  }
   if (resource_key.IsFallback()) {
     if (placeholder_texture_) {
       return placeholder_texture_->GetDescriptor().mip_levels;
@@ -925,6 +933,9 @@ auto TextureBinder::Impl::GetOrAllocate(
     // Keep the trace available, but only at very high verbosity.
     DLOG_F(6, "GetOrAllocate: fallback sentinel -> placeholder");
     return placeholder_tex_svi_;
+  }
+  if (resource_key.IsError()) {
+    return error_text_svi_;
   }
 
   AcceptEvictions();

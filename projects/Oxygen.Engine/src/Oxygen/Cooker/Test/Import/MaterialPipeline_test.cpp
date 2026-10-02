@@ -322,9 +322,23 @@ NOLINT_TEST_F(MaterialPipelineOrmTest, CollectAutoOrmPackedSetsFlags)
     EXPECT_NE(desc.flags & data::pak::render::kMaterialFlag_GltfOrmPacked, 0U);
     EXPECT_EQ(
       desc.flags & data::pak::render::kMaterialFlag_NoTextureSampling, 0U);
-    EXPECT_EQ(desc.metallic_texture, 7U);
-    EXPECT_EQ(desc.roughness_texture, 7U);
-    EXPECT_EQ(desc.ambient_occlusion_texture, ao_index);
+    const auto& references = result.cooked->references;
+    for (const auto reference :
+      { desc.metallic_texture, desc.roughness_texture }) {
+      const auto resolved
+        = references.ResolveResource(reference, data::ResourceKind::kTexture);
+      ASSERT_TRUE(resolved.has_value());
+      EXPECT_EQ(*resolved, std::optional { oxygen::ResourceIndexT { 7U } });
+    }
+    const auto resolved_ao = references.ResolveResource(
+      desc.ambient_occlusion_texture, data::ResourceKind::kTexture);
+    ASSERT_TRUE(resolved_ao.has_value());
+    if (ao_index == data::pak::core::kNoResourceIndex.get()) {
+      EXPECT_FALSE(resolved_ao->has_value());
+    } else {
+      EXPECT_EQ(
+        *resolved_ao, std::optional { oxygen::ResourceIndexT { ao_index } });
+    }
     EXPECT_NE(
       desc.flags & data::pak::render::kMaterialFlag_AmbientOcclusionStrength,
       0U);

@@ -183,7 +183,8 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   const auto emit_start = std::chrono::steady_clock::now();
   auto& cooked = *result.cooked;
   session.AssetEmitter().Emit(cooked.material_key, data::AssetType::kMaterial,
-    cooked.virtual_path, cooked.descriptor_relpath, cooked.descriptor_bytes);
+    cooked.virtual_path, cooked.descriptor_relpath, cooked.descriptor_bytes,
+    std::move(cooked.references));
   session.AddEmitDuration(
     MakeDuration(emit_start, std::chrono::steady_clock::now()));
 

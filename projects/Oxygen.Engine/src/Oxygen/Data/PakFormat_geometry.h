@@ -7,6 +7,7 @@
 #pragma once
 
 #include <Oxygen/Base/Compilers.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_core.h>
 
@@ -22,7 +23,8 @@ OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
 namespace oxygen::data::pak::geometry {
 
 //! Geometry asset descriptor version for current PAK schema.
-[[maybe_unused]] constexpr uint8_t kGeometryAssetVersion = 2;
+[[maybe_unused]] constexpr uint8_t kGeometryAssetVersion
+  = version::kGeometryAssetVersion;
 
 //! Geometry asset descriptor
 /*!
@@ -66,9 +68,9 @@ static_assert(sizeof(GeometryAssetDesc) == 131);
 #pragma pack(push, 1)
 struct StandardMeshInfo {
   //!< Reference to vertex buffer
-  core::ResourceIndexT vertex_buffer = core::kNoResourceIndex;
+  ResourceReferenceIndex vertex_buffer = kNoResourceReference;
   //!< Reference to index buffer
-  core::ResourceIndexT index_buffer = core::kNoResourceIndex;
+  ResourceReferenceIndex index_buffer = kNoResourceReference;
   float bounding_box_min[3] = {}; //!< AABB min coordinates
   float bounding_box_max[3] = {}; //!< AABB max coordinates
   uint8_t _reserved[40] = {}; //!< Union arm tail padding to 72 bytes
@@ -83,17 +85,17 @@ static_assert(sizeof(StandardMeshInfo) == 72);
 #pragma pack(push, 1)
 struct SkinnedMeshInfo {
   //!< Reference to vertex buffer
-  core::ResourceIndexT vertex_buffer = core::kNoResourceIndex;
+  ResourceReferenceIndex vertex_buffer = kNoResourceReference;
   //!< Reference to index buffer
-  core::ResourceIndexT index_buffer = core::kNoResourceIndex;
+  ResourceReferenceIndex index_buffer = kNoResourceReference;
   //!< Joint indices buffer
-  core::ResourceIndexT joint_index_buffer = core::kNoResourceIndex;
+  ResourceReferenceIndex joint_index_buffer = kNoResourceReference;
   //!< Joint weights buffer
-  core::ResourceIndexT joint_weight_buffer = core::kNoResourceIndex;
+  ResourceReferenceIndex joint_weight_buffer = kNoResourceReference;
   //!< Inverse bind matrices buffer
-  core::ResourceIndexT inverse_bind_buffer = core::kNoResourceIndex;
+  ResourceReferenceIndex inverse_bind_buffer = kNoResourceReference;
   //!< Mesh-to-skeleton remap buffer
-  core::ResourceIndexT joint_remap_buffer = core::kNoResourceIndex;
+  ResourceReferenceIndex joint_remap_buffer = kNoResourceReference;
   //!< Skeleton asset reference - TODO: future
   AssetKey skeleton_asset_key;
   //!< Number of joints referenced by this mesh

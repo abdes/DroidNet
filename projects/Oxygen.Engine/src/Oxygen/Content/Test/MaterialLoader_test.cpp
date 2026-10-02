@@ -4,25 +4,30 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <span>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "Fixtures/LoaderTestFixtures.h"
 #include "Utils/PakUtils.h"
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
@@ -45,17 +50,12 @@ using oxygen::base::CheckedAt;
 
 namespace {
 
-//=== Test Resource Loaders ===----------------------------------------------//
-
-//! Test loader function for TextureResource
-auto LoadTestTextureResource(const oxygen::content::LoaderContext& /*context*/)
-  -> std::unique_ptr<oxygen::data::TextureResource>
+auto CopyTerminated(
+  const std::string_view text, const std::span<char> destination) -> void
 {
-  // Create a minimal TextureResource for testing
-  oxygen::data::pak::core::TextureResourceDesc desc {};
-  std::vector<uint8_t> data {};
-  return std::make_unique<oxygen::data::TextureResource>(
-    std::move(desc), std::move(data));
+  std::ranges::fill(destination, '\0');
+  std::ranges::copy(
+    text.substr(0, destination.size() - 1U), destination.begin());
 }
 
 //=== MaterialLoader Basic Functionality Tests ===----------------------------//
@@ -80,62 +80,34 @@ protected:
     EXPECT_TRUE(desc_stream_.Seek(0));
   }
 
-  static auto MakeMaterialDescriptor(const char* name) -> MaterialAssetDesc
+  static auto MakeMaterialDescriptor(const std::string_view name)
+    -> MaterialAssetDesc
   {
     MaterialAssetDesc desc {};
     desc.header.asset_type
       = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
-    std::memset(desc.header.name, 0, sizeof(desc.header.name));
-    if (name != nullptr) {
-      const auto src_len = std::strlen(name);
-      const auto copy_len = (src_len < (sizeof(desc.header.name) - 1))
-        ? src_len
-        : (sizeof(desc.header.name) - 1);
-      std::memcpy(desc.header.name, name, copy_len);
-      desc.header.name[copy_len] = '\0';
-    }
+    CopyTerminated(name, desc.header.name);
     desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
     desc.material_domain
       = static_cast<uint8_t>(oxygen::data::MaterialDomain::kOpaque);
     return desc;
   }
 
+  struct ShaderSource {
+    std::string_view path;
+    std::string_view entry_point;
+    std::string_view defines;
+  };
+
   static auto MakeShaderReferenceDesc(oxygen::ShaderType shader_type,
-    const char* source_path, const char* entry_point, const char* defines,
-    uint64_t hash) -> ShaderReferenceDesc
+    const ShaderSource source, uint64_t hash) -> ShaderReferenceDesc
   {
     ShaderReferenceDesc desc {};
     desc.shader_type = static_cast<uint8_t>(shader_type);
 
-    std::memset(desc.source_path, 0, sizeof(desc.source_path));
-    if (source_path != nullptr) {
-      const auto src_len = std::strlen(source_path);
-      const auto copy_len = (src_len < (sizeof(desc.source_path) - 1))
-        ? src_len
-        : (sizeof(desc.source_path) - 1);
-      std::memcpy(desc.source_path, source_path, copy_len);
-      desc.source_path[copy_len] = '\0';
-    }
-
-    std::memset(desc.entry_point, 0, sizeof(desc.entry_point));
-    if (entry_point != nullptr) {
-      const auto src_len = std::strlen(entry_point);
-      const auto copy_len = (src_len < (sizeof(desc.entry_point) - 1))
-        ? src_len
-        : (sizeof(desc.entry_point) - 1);
-      std::memcpy(desc.entry_point, entry_point, copy_len);
-      desc.entry_point[copy_len] = '\0';
-    }
-
-    std::memset(desc.defines, 0, sizeof(desc.defines));
-    if (defines != nullptr) {
-      const auto src_len = std::strlen(defines);
-      const auto copy_len = (src_len < (sizeof(desc.defines) - 1))
-        ? src_len
-        : (sizeof(desc.defines) - 1);
-      std::memcpy(desc.defines, defines, copy_len);
-      desc.defines[copy_len] = '\0';
-    }
+    CopyTerminated(source.path, desc.source_path);
+    CopyTerminated(source.entry_point, desc.entry_point);
+    CopyTerminated(source.defines, desc.defines);
 
     desc.shader_hash = hash;
     return desc;
@@ -161,17 +133,20 @@ protected:
 NOLINT_TEST_F(MaterialLoaderBasicTest, PreservesFloat32Emission)
 {
   auto desc = MakeMaterialDescriptor("HDR material");
-  desc.emissive_factor[0] = 9.7F;
-  desc.emissive_factor[1] = 0.00001F;
-  desc.emissive_factor[2]
-    = oxygen::data::pak::render::kMaxMaterialEmissiveFactor;
+  constexpr auto kEmission = std::array {
+    9.7F,
+    0.00001F,
+    oxygen::data::pak::render::kMaxMaterialEmissiveFactor,
+  };
+  std::ranges::copy(kEmission, std::begin(desc.emissive_factor));
   WriteMaterialDescriptor(desc);
 
   const auto material = LoadMaterialAsset(CreateLoaderContext());
   ASSERT_NE(material, nullptr);
   const auto emission = material->GetEmissiveFactor();
   for (size_t channel = 0; channel < emission.size(); ++channel) {
-    EXPECT_EQ(emission.at(channel), desc.emissive_factor[channel]);
+    EXPECT_EQ(emission.at(channel),
+      CheckedAt(std::span(desc.emissive_factor), channel));
   }
 }
 
@@ -214,33 +189,53 @@ NOLINT_TEST_F(
 
   // Arrange
   auto desc = MakeMaterialDescriptor("Test Material");
-  desc.flags = 0xAABBCCDDU;
-  desc.shader_stages = 0x88U;
-  desc.base_color[0] = 0.1F;
-  desc.base_color[1] = 0.2F;
-  desc.base_color[2] = 0.3F;
-  desc.base_color[3] = 0.4F;
-  desc.normal_scale = 1.5F;
-  desc.metalness = oxygen::data::Unorm16(0.7F);
-  desc.roughness = oxygen::data::Unorm16(0.2F);
-  desc.ambient_occlusion = oxygen::data::Unorm16(0.9F);
-  desc.base_color_texture = oxygen::data::pak::core::ResourceIndexT { 42U };
-  desc.normal_texture = oxygen::data::pak::core::ResourceIndexT { 43U };
-  desc.metallic_texture = oxygen::data::pak::core::ResourceIndexT { 44U };
-  desc.roughness_texture = oxygen::data::pak::core::ResourceIndexT { 45U };
+  constexpr uint32_t kFlags = 0xAABBCCDDU;
+  constexpr uint32_t kShaderStages = 0x88U;
+  constexpr auto kBaseColor = std::array { 0.1F, 0.2F, 0.3F, 0.4F };
+  constexpr float kNormalScale = 1.5F;
+  constexpr float kMetalness = 0.7F;
+  constexpr float kRoughness = 0.2F;
+  constexpr float kOcclusion = 0.9F;
+  constexpr auto kTextureSlots = std::array { 42U, 43U, 44U, 45U, 46U };
+  constexpr auto kUvScale = std::array { 2.0F, 3.0F };
+  constexpr auto kUvOffset = std::array { 0.25F, 0.75F };
+  desc.flags = kFlags;
+  desc.shader_stages = kShaderStages;
+  std::ranges::copy(kBaseColor, std::begin(desc.base_color));
+  desc.normal_scale = kNormalScale;
+  desc.metalness = oxygen::data::Unorm16(kMetalness);
+  desc.roughness = oxygen::data::Unorm16(kRoughness);
+  desc.ambient_occlusion = oxygen::data::Unorm16(kOcclusion);
+  desc.base_color_texture
+    = oxygen::data::ResourceReferenceIndex { kTextureSlots.at(0) };
+  desc.normal_texture
+    = oxygen::data::ResourceReferenceIndex { kTextureSlots.at(1) };
+  desc.metallic_texture
+    = oxygen::data::ResourceReferenceIndex { kTextureSlots.at(2) };
+  desc.roughness_texture
+    = oxygen::data::ResourceReferenceIndex { kTextureSlots.at(3) };
   desc.ambient_occlusion_texture
-    = oxygen::data::pak::core::ResourceIndexT { 46U };
-  desc.uv_scale[0] = 2.0F;
-  desc.uv_scale[1] = 3.0F;
-  desc.uv_offset[0] = 0.25F;
-  desc.uv_offset[1] = 0.75F;
+    = oxygen::data::ResourceReferenceIndex { kTextureSlots.at(4) };
+  std::ranges::copy(kUvScale, std::begin(desc.uv_scale));
+  std::ranges::copy(kUvOffset, std::begin(desc.uv_offset));
   desc.uv_rotation_radians = 0.5F;
   desc.uv_set = 1U;
 
   const std::array<ShaderReferenceDesc, 2> shader_descs {
-    MakeShaderReferenceDesc(
-      ShaderType::kVertex, "main.vert", "VS", "", 0x1111U),
-    MakeShaderReferenceDesc(ShaderType::kPixel, "main.frag", "PS", "", 0x2222U),
+    MakeShaderReferenceDesc(ShaderType::kVertex,
+      {
+        .path = "main.vert",
+        .entry_point = "VS",
+        .defines = "",
+      },
+      0x1111U),
+    MakeShaderReferenceDesc(ShaderType::kPixel,
+      {
+        .path = "main.frag",
+        .entry_point = "PS",
+        .defines = "",
+      },
+      0x2222U),
   };
   WriteMaterialDescriptor(desc, shader_descs);
 
@@ -270,11 +265,11 @@ NOLINT_TEST_F(
     ::testing::Pointwise(
       ::testing::FloatEq(), std::array<float, 4> { 0.1F, 0.2F, 0.3F, 0.4F }));
   EXPECT_THAT((std::array<unsigned, 5> {
-                static_cast<unsigned>(asset->GetBaseColorTexture()),
-                static_cast<unsigned>(asset->GetNormalTexture()),
-                static_cast<unsigned>(asset->GetMetallicTexture()),
-                static_cast<unsigned>(asset->GetRoughnessTexture()),
-                static_cast<unsigned>(asset->GetAmbientOcclusionTexture()),
+                asset->GetBaseColorTexture().get(),
+                asset->GetNormalTexture().get(),
+                asset->GetMetallicTexture().get(),
+                asset->GetRoughnessTexture().get(),
+                asset->GetAmbientOcclusionTexture().get(),
               }),
     ElementsAre(42U, 43U, 44U, 45U, 46U));
 
@@ -359,26 +354,35 @@ NOLINT_TEST_F(
   desc.metalness = oxygen::data::Unorm16(1.0F);
   desc.roughness = oxygen::data::Unorm16(1.0F);
   desc.ambient_occlusion = oxygen::data::Unorm16(1.0F);
-  desc.base_color_texture = oxygen::data::pak::core::ResourceIndexT { 0U };
-  desc.normal_texture = oxygen::data::pak::core::ResourceIndexT { 0U };
-  desc.metallic_texture = oxygen::data::pak::core::ResourceIndexT { 0U };
-  desc.roughness_texture = oxygen::data::pak::core::ResourceIndexT { 0U };
-  desc.ambient_occlusion_texture
-    = oxygen::data::pak::core::ResourceIndexT { 0U };
+  desc.base_color_texture = oxygen::data::ResourceReferenceIndex { 0U };
+  desc.normal_texture = oxygen::data::ResourceReferenceIndex { 0U };
+  desc.metallic_texture = oxygen::data::ResourceReferenceIndex { 0U };
+  desc.roughness_texture = oxygen::data::ResourceReferenceIndex { 0U };
+  desc.ambient_occlusion_texture = oxygen::data::ResourceReferenceIndex { 0U };
   WriteMaterialDescriptor(desc);
 
   // Act
+  const auto references = oxygen::data::AssetReferences::Create(
+    {
+      {
+        .kind = oxygen::data::ResourceKind::kTexture,
+        .index = oxygen::ResourceIndexT { 0U },
+      },
+    },
+    {});
+  ASSERT_TRUE(references.has_value());
   auto [context, collector] = CreateDecodeLoaderContext();
+  context.asset_references = oxygen::observer_ptr(&*references);
   auto asset = LoadMaterialAsset(std::move(context));
 
   // Assert
   ASSERT_THAT(asset, NotNull());
   EXPECT_EQ(asset->GetAssetType(), AssetType::kMaterial);
-  EXPECT_EQ(asset->GetBaseColorTexture(), 0U);
-  EXPECT_EQ(asset->GetNormalTexture(), 0U);
-  EXPECT_EQ(asset->GetMetallicTexture(), 0U);
-  EXPECT_EQ(asset->GetRoughnessTexture(), 0U);
-  EXPECT_EQ(asset->GetAmbientOcclusionTexture(), 0U);
+  EXPECT_EQ(asset->GetBaseColorTexture().get(), 0U);
+  EXPECT_EQ(asset->GetNormalTexture().get(), 0U);
+  EXPECT_EQ(asset->GetMetallicTexture().get(), 0U);
+  EXPECT_EQ(asset->GetRoughnessTexture().get(), 0U);
+  EXPECT_EQ(asset->GetAmbientOcclusionTexture().get(), 0U);
   EXPECT_THAT(asset->GetShaders(), SizeIs(0)); // No shaders
 
   EXPECT_THAT(collector->ResourceRefDependencies(), SizeIs(0));
@@ -414,8 +418,13 @@ NOLINT_TEST_F(MaterialLoaderBasicTest, LoadMaterialSingleShaderStageWorks)
   auto desc = MakeMaterialDescriptor("Test Material");
   desc.shader_stages = 0x8U;
   const std::array<ShaderReferenceDesc, 1> shader_descs {
-    MakeShaderReferenceDesc(
-      ShaderType::kVertex, "VertexShader", "VS", "", 0xBBAAU),
+    MakeShaderReferenceDesc(ShaderType::kVertex,
+      {
+        .path = "VertexShader",
+        .entry_point = "VS",
+        .defines = "",
+      },
+      0xBBAAU),
   };
   WriteMaterialDescriptor(desc, shader_descs);
 
@@ -463,7 +472,9 @@ NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterialShaderReadFailureThrows)
     auto pack = desc_writer_.ScopedAlignment(1);
     ASSERT_TRUE(desc_writer_.WriteBlob(
       std::as_bytes(std::span<const MaterialAssetDesc, 1>(&desc, 1))));
-    auto sh_buf = ParseHexDumpWithOffset(partial_shader_hexdump, 50);
+    constexpr size_t kTruncatedShaderSize = 50U;
+    auto sh_buf
+      = ParseHexDumpWithOffset(partial_shader_hexdump, kTruncatedShaderSize);
     ASSERT_TRUE(desc_writer_.WriteBlob(sh_buf));
   }
   EXPECT_TRUE(desc_stream_.Seek(0));
@@ -473,28 +484,41 @@ NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterialShaderReadFailureThrows)
   EXPECT_THROW({ (void)LoadMaterialAsset(context); }, std::runtime_error);
 }
 
-//! Test: Non-zero texture indices are collected as ResourceRef dependencies.
+//! Repeated local texture bindings collect one exact source-qualified
+//! dependency.
 NOLINT_TEST_F(
-  MaterialLoaderBasicTest, LoadMaterialNonZeroTextureCollectsDependency)
+  MaterialLoaderBasicTest, RepeatedTextureBindingCollectsOneExactDependency)
 {
   using oxygen::content::internal::ResourceRef;
   using oxygen::data::TextureResource;
 
   // Arrange
   auto desc = MakeMaterialDescriptor("Test Material");
-  desc.base_color_texture = oxygen::data::pak::core::ResourceIndexT { 42U };
+  desc.base_color_texture = oxygen::data::ResourceReferenceIndex { 0U };
+  desc.normal_texture = oxygen::data::ResourceReferenceIndex { 0U };
   WriteMaterialDescriptor(desc);
 
+  const auto references = oxygen::data::AssetReferences::Create(
+    {
+      {
+        .kind = oxygen::data::ResourceKind::kTexture,
+        .index = oxygen::ResourceIndexT { 42U },
+      },
+    },
+    {});
+  ASSERT_TRUE(references.has_value());
   auto [context, collector] = CreateDecodeLoaderContext();
+  context.asset_references = oxygen::observer_ptr(&*references);
   (void)LoadMaterialAsset(std::move(context));
 
   const ResourceRef expected {
     .source = oxygen::data::SourceInstanceId { 7 },
     .resource_type_id = TextureResource::ClassTypeId(),
-    .resource_index = oxygen::data::pak::core::ResourceIndexT { 42U },
+    .resource_index = oxygen::ResourceIndexT { 42U },
   };
 
-  EXPECT_THAT(collector->ResourceRefDependencies(), IsSupersetOf({ expected }));
+  EXPECT_THAT(
+    collector->ResourceRefDependencies(), ::testing::ElementsAre(expected));
 }
 
 } // namespace

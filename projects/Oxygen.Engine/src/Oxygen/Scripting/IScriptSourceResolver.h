@@ -26,9 +26,11 @@ class IScriptSourceResolver {
 public:
   struct ResolveRequest {
     using LoadScriptResourceFn
-      = std::function<std::shared_ptr<const data::ScriptResource>(uint32_t)>;
+      = std::function<std::shared_ptr<const data::ScriptResource>(
+        data::ResourceReferenceIndex)>;
     using ResourceOriginMapperFn
-      = std::function<std::optional<ScriptBlobOrigin>(uint32_t)>;
+      = std::function<std::optional<ScriptBlobOrigin>(
+        data::ResourceReferenceIndex)>;
 
     std::reference_wrapper<const data::ScriptAsset> asset;
     LoadScriptResourceFn load_script_resource;

@@ -12,6 +12,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 
@@ -116,9 +117,63 @@ inline auto LoadPhysicsSceneAsset(const LoaderContext& context)
   LOG_F(1, "physics scene asset payload: {} bytes", bytes.size());
 
   // Construct the in-memory asset (validates all ranges internally).
-  return std::make_unique<data::PhysicsSceneAsset>(context.current_asset_key,
-    std::move(bytes),
+  auto asset = std::make_unique<data::PhysicsSceneAsset>(
+    context.current_asset_key, std::move(bytes),
     data::SourceOrigin { context.source_key, context.source_instance });
+  if (context.asset_references) {
+    namespace physics = data::pak::physics;
+    std::vector<data::KeyReference> keys;
+    const auto asset_key
+      = [&keys](const data::AssetKey& key, const data::AssetType type) -> void {
+      keys.push_back({
+        .key = key,
+        .kind = data::KeyReferenceKind::kAsset,
+        .expected_type = type,
+      });
+    };
+    const auto payload_key = [&keys](const data::AssetKey& key) -> void {
+      keys.push_back({
+        .key = key,
+        .kind = data::KeyReferenceKind::kPhysicsResource,
+        .expected_type = data::AssetType::kUnknown,
+      });
+    };
+    keys.push_back({
+      .key = asset->GetTargetSceneKey(),
+      .kind = data::KeyReferenceKind::kLogical,
+      .expected_type = data::AssetType::kScene,
+    });
+    for (const auto& body :
+      asset->GetBindings<physics::RigidBodyBindingRecord>()) {
+      asset_key(body.shape_asset_key, data::AssetType::kCollisionShape);
+      asset_key(body.material_asset_key, data::AssetType::kPhysicsMaterial);
+    }
+    for (const auto& collider :
+      asset->GetBindings<physics::ColliderBindingRecord>()) {
+      asset_key(collider.shape_asset_key, data::AssetType::kCollisionShape);
+      asset_key(collider.material_asset_key, data::AssetType::kPhysicsMaterial);
+    }
+    for (const auto& character :
+      asset->GetBindings<physics::CharacterBindingRecord>()) {
+      asset_key(character.shape_asset_key, data::AssetType::kCollisionShape);
+      asset_key(
+        character.inner_shape_asset_key, data::AssetType::kCollisionShape);
+    }
+    for (const auto& soft_body :
+      asset->GetBindings<physics::SoftBodyBindingRecord>()) {
+      payload_key(soft_body.topology_asset_key);
+    }
+    for (const auto& joint :
+      asset->GetBindings<physics::JointBindingRecord>()) {
+      payload_key(joint.constraint_asset_key);
+    }
+    for (const auto& vehicle :
+      asset->GetBindings<physics::VehicleBindingRecord>()) {
+      payload_key(vehicle.constraint_asset_key);
+    }
+    context.ValidateReferences({}, keys);
+  }
+  return asset;
 }
 
 } // namespace oxygen::content::loaders

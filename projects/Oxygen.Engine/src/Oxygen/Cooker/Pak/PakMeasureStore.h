@@ -22,12 +22,6 @@ struct PakResourceTableSerializationInput final {
   std::span<const PakResourcePlacementPlan> resources {};
 };
 
-struct PakScriptSlotTableSerializationInput final {
-  uint32_t entry_count = 0;
-  std::span<const PakScriptSlotPlan> slots {};
-  uint64_t params_base_offset = 0;
-};
-
 OXGN_COOK_NDAPI auto MeasurePayloadSourceSlice(
   const PakPayloadSourceSlicePlan& input) -> std::optional<uint64_t>;
 
@@ -61,13 +55,6 @@ OXGN_COOK_NDAPI auto MeasureScriptResourceTablePayload(
 
 OXGN_COOK_NDAPI auto StoreScriptResourceTablePayload(
   const PakResourceTableSerializationInput& input,
-  std::vector<std::byte>& out_bytes) -> bool;
-
-OXGN_COOK_NDAPI auto MeasureScriptSlotTablePayload(
-  const PakScriptSlotTableSerializationInput& input) -> std::optional<uint64_t>;
-
-OXGN_COOK_NDAPI auto StoreScriptSlotTablePayload(
-  const PakScriptSlotTableSerializationInput& input,
   std::vector<std::byte>& out_bytes) -> bool;
 
 OXGN_COOK_NDAPI auto MeasurePhysicsTablePayload(

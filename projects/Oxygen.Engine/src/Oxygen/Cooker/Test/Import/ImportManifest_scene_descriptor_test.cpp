@@ -14,6 +14,7 @@
 #include <system_error>
 #include <vector>
 
+#include "SceneDescriptorTestData.h"
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
@@ -26,6 +27,7 @@ namespace {
 using nlohmann::json;
 using oxygen::content::import::EffectiveContentHashingEnabled;
 using oxygen::content::import::ImportManifest;
+using oxygen::content::import::test::MakeCurrentSceneDescriptor;
 
 auto MakeManifestPath(const std::string_view stem) -> std::filesystem::path
 {
@@ -53,7 +55,8 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   const auto path = MakeManifestPath("context_roots");
   const auto root = path.parent_path();
   WriteTextFile(root / "scene.json",
-    R"({"version":9,"name":"Scene","nodes":[{"name":"Root"}]})");
+    MakeCurrentSceneDescriptor(R"({"name":"Scene","nodes":[{"name":"Root"}]})")
+      .dump());
   WriteTextFile(path, R"({
     "version":1,"output":"out",
     "defaults":{"scene_descriptor":{"cooked_context_roots":["Libraries/Low"]}},
@@ -116,8 +119,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   const auto root = manifest_path.parent_path();
   const auto descriptor_path = root / "Scenes" / "demo.scene.json";
   WriteTextFile(descriptor_path,
-    R"({
-      "version": 9,
+    MakeCurrentSceneDescriptor(R"({
       "name": "DemoScene",
       "content_hashing": false,
       "nodes": [
@@ -127,7 +129,8 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
       "renderables": [
         { "node": 1, "geometry_ref": "/.cooked/Geometry/cube.ogeo" }
       ]
-    })");
+    })")
+      .dump());
 
   const auto cooked_root = (root / ".cooked").generic_string();
   const auto manifest_json = std::string { R"({
@@ -188,11 +191,11 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   const auto root = manifest_path.parent_path();
   const auto descriptor_path = root / "Scenes" / "demo.scene.json";
   WriteTextFile(descriptor_path,
-    R"({
-      "version": 9,
+    MakeCurrentSceneDescriptor(R"({
       "name": "DemoScene",
       "nodes": [ { "name": "Root" } ]
-    })");
+    })")
+      .dump());
 
   WriteTextFile(manifest_path,
     R"({

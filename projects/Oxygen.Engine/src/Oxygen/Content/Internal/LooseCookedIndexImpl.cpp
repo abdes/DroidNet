@@ -17,6 +17,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_set>
+#include <utility>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
@@ -25,6 +26,7 @@
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/FileStream.h>
@@ -203,8 +205,6 @@ auto ValidateFileKind(const FileKind kind) -> void
   case FileKind::kScriptsData:
   case FileKind::kPhysicsTable:
   case FileKind::kPhysicsData:
-  case FileKind::kScriptBindingsTable:
-  case FileKind::kScriptBindingsData:
   case FileKind::kAuxiliary:
     return;
   case FileKind::kUnknown:
@@ -266,6 +266,7 @@ namespace oxygen::content::internal {
 struct LooseCookedIndexImpl::IndexLoadContext {
   oxygen::observer_ptr<serio::Reader<serio::FileStream<>>> reader;
   uint64_t file_size;
+  uint64_t next_reference_offset = 0;
   IndexHeader header;
   oxygen::observer_ptr<LooseCookedIndexImpl> index;
   std::string_view stored_table {}; // NOLINT
@@ -298,15 +299,34 @@ auto LooseCookedIndexImpl::LoadFromFile(const std::filesystem::path& index_path)
   IndexLoadContext context {
     .reader = oxygen::make_observer(&reader),
     .file_size = file_size,
+    .next_reference_offset = 0,
     .header = {},
     .index = oxygen::make_observer(&out),
   };
 
   LoadAndValidateHeader(context);
+  const auto reference_start = context.header.file_records_offset
+    + (uint64_t { context.header.file_record_count } * sizeof(FileRecord));
+  ValidateSectionRange(file_size, reference_start, 0, "reference block start");
+  context.next_reference_offset = reference_start;
   ReadStringTable(context);
   ReadAssetEntries(context);
+  if (context.next_reference_offset != file_size) {
+    throw std::runtime_error(
+      "Loose cooked reference blocks do not cover the index tail");
+  }
   ReadFileRecords(context);
   ValidateFilePairs(out);
+
+  out.reference_storage_offset_ = reference_start;
+  if (!reader.Seek(reference_start)) {
+    throw std::runtime_error("Failed to seek loose cooked reference blocks");
+  }
+  auto reference_bytes = reader.ReadBlob(file_size - reference_start);
+  if (!reference_bytes) {
+    throw std::runtime_error("Failed to read loose cooked reference blocks");
+  }
+  out.reference_storage_ = std::move(*reference_bytes);
 
   return out;
 }
@@ -406,6 +426,22 @@ auto LooseCookedIndexImpl::ReadAssetEntries(IndexLoadContext& context) -> void
         "Failed to read asset entry: " + entry_result.error().message());
     }
     const auto& entry = entry_result.value();
+    const auto reference_size = data::AssetReferences::EncodedSize(
+      entry.references.resource_count, entry.references.key_count);
+    if (reference_size == 0U) {
+      if (entry.references.offset != 0U) {
+        throw std::runtime_error(
+          "Empty asset reference block must have zero offset");
+      }
+    } else {
+      if (entry.references.offset != context.next_reference_offset) {
+        throw std::runtime_error("Asset reference blocks must follow directory "
+                                 "order without gaps or overlap");
+      }
+      ValidateSectionRange(context.file_size, entry.references.offset,
+        reference_size, "asset references");
+      context.next_reference_offset += reference_size;
+    }
 
     ValidateStringOffset(context.header, entry.descriptor_relpath_offset);
     ValidateStringOffset(context.header, entry.virtual_path_offset);
@@ -445,6 +481,8 @@ auto LooseCookedIndexImpl::ReadAssetEntries(IndexLoadContext& context) -> void
       .virtual_path_offset = entry.virtual_path_offset,
       .descriptor_size = entry.descriptor_size,
       .asset_type = entry.asset_type,
+      .descriptor_sha256 = {},
+      .references = entry.references,
     };
     static_assert(
       sizeof(info.descriptor_sha256) == sizeof(entry.descriptor_sha256));
@@ -456,6 +494,37 @@ auto LooseCookedIndexImpl::ReadAssetEntries(IndexLoadContext& context) -> void
     context.index->virtual_path_offset_to_key_.insert_or_assign(
       entry.virtual_path_offset, entry.asset_key);
   }
+}
+
+auto LooseCookedIndexImpl::HasKeyReferences(
+  const data::AssetKey& key) const noexcept -> bool
+{
+  const auto found = key_to_asset_info_.find(key);
+  return found != key_to_asset_info_.end()
+    && found->second.references.key_count != 0U;
+}
+
+auto LooseCookedIndexImpl::FindAssetReferences(const data::AssetKey& key) const
+  -> std::optional<data::AssetReferences>
+{
+  const auto found = key_to_asset_info_.find(key);
+  if (found == key_to_asset_info_.end()) {
+    return std::nullopt;
+  }
+  const auto& table = found->second.references;
+  const auto size
+    = data::AssetReferences::EncodedSize(table.resource_count, table.key_count);
+  const auto offset
+    = size == 0U ? 0U : table.offset - reference_storage_offset_;
+  const auto bytes
+    = std::span(reference_storage_)
+        .subspan(static_cast<size_t>(offset), static_cast<size_t>(size));
+  auto decoded = data::AssetReferences::Decode(
+    bytes, table.resource_count, table.key_count);
+  if (!decoded) {
+    throw std::runtime_error(decoded.error());
+  }
+  return std::move(*decoded);
 }
 
 auto LooseCookedIndexImpl::ReadFileRecords(IndexLoadContext& context) -> void
@@ -548,15 +617,6 @@ auto LooseCookedIndexImpl::ValidateFilePairs(const LooseCookedIndexImpl& index)
   if (has_physics_table != has_physics_data) {
     throw std::runtime_error(
       "Loose cooked index must provide both physics.table and physics.data");
-  }
-
-  const auto has_script_bindings_table
-    = index.kind_to_file_.contains(FileKind::kScriptBindingsTable);
-  const auto has_script_bindings_data
-    = index.kind_to_file_.contains(FileKind::kScriptBindingsData);
-  if (has_script_bindings_table != has_script_bindings_data) {
-    throw std::runtime_error("Loose cooked index must provide both "
-                             "script-bindings.table and script-bindings.data");
   }
 }
 

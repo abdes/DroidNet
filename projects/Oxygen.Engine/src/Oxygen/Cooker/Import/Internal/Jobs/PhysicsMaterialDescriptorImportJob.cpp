@@ -323,7 +323,7 @@ auto PhysicsMaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   const auto emit_start = std::chrono::steady_clock::now();
   const auto material_key = ResolveAssetKey(Request(), target->virtual_path);
   session.AssetEmitter().Emit(material_key, data::AssetType::kPhysicsMaterial,
-    target->virtual_path, target->relpath, result.descriptor_bytes);
+    target->virtual_path, target->relpath, result.descriptor_bytes, {});
   session.AddEmitDuration(
     MakeDuration(emit_start, std::chrono::steady_clock::now()));
 

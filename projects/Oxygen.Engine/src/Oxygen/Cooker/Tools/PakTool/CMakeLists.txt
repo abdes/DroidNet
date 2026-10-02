@@ -85,6 +85,7 @@ target_link_libraries(
   PRIVATE
     oxygen::base
     oxygen::cooker
+    oxygen::content
     oxygen::clap
     nlohmann_json::nlohmann_json
 )

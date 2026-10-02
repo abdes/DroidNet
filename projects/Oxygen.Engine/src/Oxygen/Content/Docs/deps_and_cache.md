@@ -13,10 +13,14 @@ residency and fence retirement; returning a Content usage never waits for the GP
 | Identity           | Fields                                                             |
 | ------------------ | ------------------------------------------------------------------ |
 | SourceOrigin       | Persistent SourceKey and runtime SourceInstanceId.                 |
-| Asset              | SourceInstanceId and AssetKey.                                     |
+| Asset              | SourceInstanceId, AssetKey and binding-view identity.              |
 | Cooked resource    | SourceInstanceId, ResourceKind and resource index.                 |
 | Synthetic resource | ResourceKind and producer-owned serial.                            |
 | ContentId          | Nonzero monotonic uint64, never reused within the loader lifetime. |
+
+An asset with key references includes the captured layer view in its identity: the
+same descriptor can bind different children after a patch. Reference-free assets
+use view zero and keep their cache identity across unrelated mount changes.
 
 Full identity equality determines interning; hashes select buckets. One owning
 identity map and a nonowning ID index serve assets and resources. Base NamedType
@@ -75,28 +79,47 @@ Decoder registrations and scheduling inputs are copied on the owner thread befor
 work is queued. Workers do not mutate loader/cache state, start nested loads, or retain LoaderContext
 readers and spans beyond the decode call.
 
+`BeginLoadScope()` captures the ordered layer view for a logical load operation.
+Ordinary root loads create a scope automatically; dependent loads inherit it.
+DemoShell shares one scope across scene loading, sidecar discovery and sidecar
+loading. Discovery respects the captured overrides and tombstones. Publishing a
+new layer never waits for a scope. Scopes retain sources during loading; published
+bundles retain only the view token and their actual bound owners. A scope cannot
+be used with another loader or after its release epoch closes.
+
 After decode, typed owner-thread binders load dependencies and freeze the complete
 binding bundle before cache publication:
 
-| Parent                       | Bound children                                                                   |
-| ---------------------------- | -------------------------------------------------------------------------------- |
-| Material                     | Descriptor texture slots and additional collector texture references.            |
-| Geometry                     | Buffers and materials; mesh/submesh pointers share those controls.               |
-| Scene                        | Collected textures/buffers, renderable geometry, material overrides and scripts. |
-| Script                       | Source/bytecode resources and additional collector script references.            |
-| Input mapping context        | Mapping, linked-trigger and auxiliary input actions.                             |
-| Physics scene / input action | Leaves in this loading pipeline.                                                 |
+| Parent                | Bound children                                                                   |
+| --------------------- | -------------------------------------------------------------------------------- |
+| Material              | Descriptor texture slots and additional collector texture references.            |
+| Geometry              | Buffers and materials; mesh/submesh pointers share those controls.               |
+| Scene                 | Collected textures/buffers, renderable geometry, material overrides and scripts. |
+| Script                | Source/bytecode resources and additional collector script references.            |
+| Input mapping context | Mapping, linked-trigger and auxiliary input actions.                             |
+| Physics scene         | Validated shape/material values and exact deferred physics payload locations.    |
+| Input action          | Leaf.                                                                            |
 
 Each binder records attempted keys before awaiting, including failed loads. Repeated
 references to one missing or malformed dependency therefore make one attempt per
 parent. The supported dependency types form an acyclic hierarchy. New dependency
 kinds must preserve that contract; published bindings are immutable.
 
+Physics sidecars capture their descriptor closure before publication. Shape and
+material queries read sorted frozen records; keyed payload queries return the
+captured resource location. Payload bytes remain deferred. Each source builds its
+physics-key index once on first demand, reading the descriptor table only. Duplicate
+keys and malformed metadata fail loading; they cannot silently select a lower layer.
+Copied descriptor values need no source lease, while deferred payloads retain their
+actual source owners. Nonanalytic shape cooking/hydration gaps are tracked under
+[Physics P2.1](../../../../design/physics/softbody-vehicle-remediation-plan.md#p21-add-end-to-end-acceptance-tests-for-hydration--control-behavior).
+
 Data::Asset retains the read-only AssetRuntimeBindings interface. Content's compact
 bundle stores child controls and exact publication metadata. It contains no back
 reference to its parent. Shared parents and extracted children keep their dependencies
 alive independently; clearing the cache does not dismantle a retained parent.
-Contextual getters use these exact bindings before resolving unbound references.
+Contextual getters search the frozen direct and transitive bindings. An unbound
+key returns no result; a later mount cannot redirect a contextual lookup.
 There is no duplicate mutable dependency graph. Debug graph queries build snapshots
 from current cached parents; evicted parents retain their data but leave that snapshot.
 
@@ -123,7 +146,10 @@ parents and their child controls.
 At engine frame start, including frames without views, ProcessPendingReleases handles
 up to 128 records. Detaching a batch is constant-time; processing neither reverses nor
 scans the backlog. An unfinished batch completes before newer arrivals, preventing
-starvation. A record may destroy a large payload, so the count limit bounds bookkeeping,
+starvation. The same maintenance point incrementally reclaims expired binding-view
+locators with a bounded cursor, rather than scanning the entire identity map.
+Published bundles keep their view token alive until their bindings are released.
+A record may destroy a large payload, so the count limit bounds bookkeeping,
 not elapsed time. Measure the largest payload destruction separately.
 
 Explicit trim and memory-pressure recovery drain pending returns fully. Trim removes

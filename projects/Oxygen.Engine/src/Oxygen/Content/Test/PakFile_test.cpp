@@ -4,25 +4,33 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
-#include <gtest/gtest.h>
-
 #include <filesystem>
 #include <fstream>
+#include <ios>
+#include <iterator>
+#include <span>
+#include <stdexcept>
 #include <system_error>
+#include <tuple>
+#include <vector>
+
+#include <gtest/gtest.h>
 
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PhysicsResource.h>
+#include <Oxygen/Data/ScriptResource.h>
+#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::content::testing {
-
-inline auto MakeTestAssetKey(const uint8_t id) -> oxygen::data::AssetKey
-{
-  auto bytes = std::array<uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
-  bytes.fill(id);
-  return oxygen::data::AssetKey::FromBytes(bytes);
-}
 
 class PakFileTest : public ::testing::Test {
 protected:
@@ -41,22 +49,37 @@ protected:
     std::filesystem::remove_all(temp_dir_, ec);
   }
 
-  // Helper macro-like configuration for custom pak generation
+  // Minimal native envelope for header/footer validation.
   struct PakConfig {
     data::pak::core::PakHeader header {};
     data::pak::core::PakFooter footer {};
-    std::vector<data::pak::core::AssetDirectoryEntry> directory;
-    std::vector<PakFile::BrowseEntry> browse_index;
+    std::vector<data::pak::core::BufferResourceDesc> buffers {};
 
     PakConfig()
     {
       const std::span<const char> header_magic(
         data::pak::core::kPakHeaderMagic);
       std::ranges::copy(header_magic, std::ranges::begin(header.magic));
-      // I'll use the default format version for the tests.
       header.version = data::pak::core::kCurrentPakFormatVersion;
-      header.source_identity = { 0x41U, 0x42U, 0x43U, 0x44U, 0x45U, 0x46U,
-        0x77U, 0x48U, 0x89U, 0x4AU, 0x4BU, 0x4CU, 0x4DU, 0x4EU, 0x4FU, 0x50U };
+      constexpr std::array<uint8_t, 16> kSourceIdentity {
+        0x41U,
+        0x42U,
+        0x43U,
+        0x44U,
+        0x45U,
+        0x46U,
+        0x77U,
+        0x48U,
+        0x89U,
+        0x4AU,
+        0x4BU,
+        0x4CU,
+        0x4DU,
+        0x4EU,
+        0x4FU,
+        0x50U,
+      };
+      header.source_identity = kSourceIdentity;
 
       const std::span<const char> footer_magic(
         data::pak::core::kPakFooterMagic);
@@ -66,35 +89,39 @@ protected:
 
   auto WritePak(const PakConfig& config) -> void
   {
-    std::ofstream out(test_pak_path_, std::ios::binary);
-
-    // Write Header
-    // NOLINTBEGIN(*-reinterpret-cast)
-    out.write(
-      reinterpret_cast<const char*>(&config.header), sizeof(config.header));
-
-    // Wait, directory needs to be at footer.directory_offset.
-    // For simplicity, we just put directory immediately after header.
-    auto current_offset = out.tellp();
-
-    // Write Directory
-    auto dir_offset = current_offset;
-    for (const auto& entry : config.directory) {
-      out.write(reinterpret_cast<const char*>(&entry), sizeof(entry));
-    }
-    auto dir_size = out.tellp() - dir_offset;
-
-    // Update Footer with directory info
+    auto catalog = data::PakCatalog {
+      .source_key
+      = data::SourceKey::FromBytes(PakConfig {}.header.source_identity).value(),
+      .content_version = config.header.content_version,
+      .catalog_digest = {},
+      .entries = {},
+      .deleted = {},
+      .bases = {},
+    };
+    catalog.catalog_digest = catalog.ComputeDigest().value();
+    const auto bytes = catalog.Encode().value();
+    serio::FileStream<> stream(test_pak_path_, std::ios::out | std::ios::trunc);
+    serio::Writer writer(stream);
+    const auto packed = writer.ScopedAlignment(1U);
+    ASSERT_TRUE(
+      writer.WriteBlob(std::as_bytes(std::span { &config.header, 1U })));
     auto footer = config.footer;
-    footer.directory_offset = static_cast<uint64_t>(dir_offset);
-    footer.directory_size = static_cast<uint64_t>(dir_size);
-    footer.asset_count = config.directory.size();
-
-    // Write Browse Index if needed (mocking skipped for brevity unless tested)
-    // Write Footer
-    out.write(reinterpret_cast<const char*>(&footer), sizeof(footer));
-    // NOLINTEND(*-reinterpret-cast)
-    out.close();
+    auto offset = uint64_t { sizeof(config.header) };
+    if (!config.buffers.empty()) {
+      footer.buffer_table = { .offset = offset,
+        .count = static_cast<uint32_t>(config.buffers.size()),
+        .entry_size = sizeof(data::pak::core::BufferResourceDesc) };
+      const auto buffer_bytes = std::as_bytes(std::span(config.buffers));
+      ASSERT_TRUE(writer.WriteBlob(buffer_bytes));
+      offset += buffer_bytes.size();
+    }
+    ASSERT_TRUE(writer.WriteBlob(bytes));
+    footer.directory_offset = offset;
+    footer.directory_size = 0U;
+    footer.asset_count = 0U;
+    footer.catalog_offset = offset;
+    footer.catalog_size = bytes.size();
+    ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span { &footer, 1U })));
   }
 
   // NOLINTBEGIN(*-non-private-member-variables-in-classes)
@@ -138,6 +165,32 @@ TEST_F(PakFileTest, FailsOnUnsupportedVersion)
   EXPECT_THROW(PakFile pak(test_pak_path_), std::runtime_error);
 }
 
+TEST_F(PakFileTest, FailsOnMissingEmbeddedCatalog)
+{
+  PakConfig config;
+  WritePak(config);
+  const auto file_size = std::filesystem::file_size(test_pak_path_);
+  ASSERT_GE(file_size, sizeof(config.footer));
+  {
+    serio::FileStream<> stream(test_pak_path_, std::ios::in | std::ios::out);
+    ASSERT_TRUE(stream.Seek(file_size - sizeof(config.footer)));
+    serio::Writer writer(stream);
+    config.footer.directory_offset = sizeof(config.header);
+    ASSERT_TRUE(
+      writer.WriteBlob(std::as_bytes(std::span { &config.footer, 1U })));
+  }
+  EXPECT_THROW(PakFile pak(test_pak_path_), std::runtime_error);
+}
+
+TEST_F(PakFileTest, FailsWhenCatalogIdentityDisagreesWithHeader)
+{
+  PakConfig config;
+  // The fixture catalog has its own valid default source identity.
+  config.header.source_identity.at(0) ^= 1U;
+  WritePak(config);
+  EXPECT_THROW(PakFile pak(test_pak_path_), std::runtime_error);
+}
+
 TEST_F(PakFileTest, FailsOnInvalidFooterMagic)
 {
   PakConfig config;
@@ -150,43 +203,6 @@ TEST_F(PakFileTest, FailsOnInvalidFooterMagic)
 TEST_F(PakFileTest, MissingFileThrows)
 {
   EXPECT_THROW(PakFile pak(temp_dir_ / "nonexistent.pak"), std::system_error);
-}
-
-TEST_F(PakFileTest, AssetDirectoryLookup)
-{
-  PakConfig config;
-  data::pak::core::AssetDirectoryEntry entry1;
-  constexpr auto kAssetType1 = data::AssetType::kMaterial;
-  constexpr uint64_t kDescOffset1 = 512;
-  entry1.asset_key = MakeTestAssetKey(1);
-  entry1.asset_type = kAssetType1;
-  entry1.desc_offset = kDescOffset1;
-
-  data::pak::core::AssetDirectoryEntry entry2;
-  constexpr auto kAssetType2 = data::AssetType::kGeometry;
-  constexpr uint64_t kDescOffset2 = 1024;
-  entry2.asset_key = MakeTestAssetKey(2);
-  entry2.asset_type = kAssetType2;
-  entry2.desc_offset = kDescOffset2;
-
-  config.directory.push_back(entry1);
-  config.directory.push_back(entry2);
-  WritePak(config);
-
-  PakFile pak(test_pak_path_);
-  EXPECT_EQ(pak.Directory().size(), 2);
-
-  auto found1 = pak.FindEntry(entry1.asset_key);
-  ASSERT_TRUE(found1.has_value());
-  EXPECT_EQ(found1->desc_offset, kDescOffset1);
-
-  auto found2 = pak.FindEntry(entry2.asset_key);
-  ASSERT_TRUE(found2.has_value());
-  EXPECT_EQ(found2->desc_offset, kDescOffset2);
-
-  constexpr uint8_t kMissingKeyId = 9;
-  auto not_found = pak.FindEntry(MakeTestAssetKey(kMissingKeyId));
-  EXPECT_FALSE(not_found.has_value());
 }
 
 TEST_F(PakFileTest, Crc32ValidationSkippedIfZero)
@@ -213,12 +229,7 @@ TEST_F(PakFileTest, Crc32ValidationFailsIfMismatch)
 TEST_F(PakFileTest, ResourceTablesPresence)
 {
   PakConfig config;
-  constexpr uint32_t kBufferCount = 10;
-  constexpr uint32_t kBufferEntrySize
-    = sizeof(oxygen::data::pak::core::BufferResourceDesc);
-  config.footer.buffer_table.count = kBufferCount;
-  config.footer.buffer_table.entry_size = kBufferEntrySize;
-  config.footer.texture_table.count = 0; // No textures
+  config.buffers.emplace_back();
   WritePak(config);
 
   PakFile pak(test_pak_path_);
@@ -233,27 +244,6 @@ TEST_F(PakFileTest, ResourceTablesPresence)
 
   EXPECT_NE(pak.GetResourceTable<oxygen::data::BufferResource>(), nullptr);
   EXPECT_EQ(pak.GetResourceTable<oxygen::data::TextureResource>(), nullptr);
-}
-
-TEST_F(PakFileTest, ScriptParamReadRequests)
-{
-  PakConfig config;
-  WritePak(config);
-
-  PakFile pak(test_pak_path_);
-  // Ensure empty returns empty and not out of bounds
-  PakFile::ScriptParamReadRequest req;
-  req.absolute_offset = 0;
-  req.count = 0;
-  auto res = pak.ReadScriptParamRecords(req);
-  EXPECT_TRUE(res.empty());
-
-  constexpr uint64_t kOffsetOutOfBounds = 1000000;
-  constexpr uint32_t kCountReq = 10;
-  req.absolute_offset = kOffsetOutOfBounds;
-  req.count = kCountReq;
-  EXPECT_THROW(
-    std::ignore = pak.ReadScriptParamRecords(req), std::runtime_error);
 }
 
 } // namespace oxygen::content::testing

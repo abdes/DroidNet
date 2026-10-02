@@ -8,6 +8,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Span.h>
+#include <Oxygen/Content/Internal/ContentFileReader.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
 
 namespace oxygen::content::internal {
@@ -54,6 +55,32 @@ public:
     return pak_.FindEntry(key).has_value();
   }
 
+  [[nodiscard]] auto GetPakCatalog() const noexcept
+    -> const data::PakCatalog* override
+  {
+    return &pak_.Catalog();
+  }
+
+  [[nodiscard]] auto HasKeyReferences(const data::AssetKey& key) const noexcept
+    -> bool override
+  {
+    const auto entry = pak_.FindEntry(key);
+    return entry && entry->references.key_count != 0U;
+  }
+
+  [[nodiscard]] auto FindAssetKeyByVirtualPath(
+    const std::string_view path) const -> std::optional<data::AssetKey> override
+  {
+    return pak_.ResolveAssetKeyByVirtualPath(path);
+  }
+
+  [[nodiscard]] auto GetAssetType(const data::AssetKey& key) const noexcept
+    -> std::optional<data::AssetType> override
+  {
+    const auto entry = pak_.FindEntry(key);
+    return entry ? std::optional { entry->asset_type } : std::nullopt;
+  }
+
   [[nodiscard]] auto GetAssetCount() const noexcept -> size_t override
   {
     return pak_.Directory().size();
@@ -78,8 +105,8 @@ public:
       return nullptr;
     }
 
-    return std::make_unique<OwningPakSectionReader>(
-      pak_.FilePath(), static_cast<size_t>(entry->desc_offset));
+    return std::make_unique<ContentFileReader>(pak_.FilePath(),
+      static_cast<size_t>(entry->desc_offset), entry->desc_size);
   }
 
   [[nodiscard]] auto CreateBufferTableReader() const
@@ -88,7 +115,13 @@ public:
     if (pak_.GetResourceTable<data::BufferResource>() == nullptr) {
       return nullptr;
     }
-    return std::make_unique<OwningPakSectionReader>(pak_.FilePath(), 0);
+    return std::make_unique<ContentFileReader>(pak_.FilePath(), 0);
+  }
+
+  [[nodiscard]] auto ReadAssetReferenceMetadata(const data::AssetKey& key) const
+    -> data::AssetReferences override
+  {
+    return pak_.ReadAssetReferences(key);
   }
 
   [[nodiscard]] auto CreateTextureTableReader() const
@@ -97,7 +130,7 @@ public:
     if (pak_.GetResourceTable<data::TextureResource>() == nullptr) {
       return nullptr;
     }
-    return std::make_unique<OwningPakSectionReader>(pak_.FilePath(), 0);
+    return std::make_unique<ContentFileReader>(pak_.FilePath(), 0);
   }
 
   [[nodiscard]] auto CreateScriptTableReader() const
@@ -106,7 +139,7 @@ public:
     if (pak_.GetResourceTable<data::ScriptResource>() == nullptr) {
       return nullptr;
     }
-    return std::make_unique<OwningPakSectionReader>(pak_.FilePath(), 0);
+    return std::make_unique<ContentFileReader>(pak_.FilePath(), 0);
   }
 
   [[nodiscard]] auto CreatePhysicsTableReader() const
@@ -115,7 +148,7 @@ public:
     if (pak_.GetResourceTable<data::PhysicsResource>() == nullptr) {
       return nullptr;
     }
-    return std::make_unique<OwningPakSectionReader>(pak_.FilePath(), 0);
+    return std::make_unique<ContentFileReader>(pak_.FilePath(), 0);
   }
 
   [[nodiscard]] auto GetBufferTable() const noexcept
@@ -148,7 +181,7 @@ public:
     if (!footer_ || pak_.GetResourceTable<data::BufferResource>() == nullptr) {
       return nullptr;
     }
-    return std::make_unique<OwningPakSectionReader>(
+    return std::make_unique<ContentFileReader>(
       pak_.FilePath(), static_cast<size_t>(footer_->buffer_region.offset));
   }
 
@@ -158,7 +191,7 @@ public:
     if (!footer_ || pak_.GetResourceTable<data::TextureResource>() == nullptr) {
       return nullptr;
     }
-    return std::make_unique<OwningPakSectionReader>(
+    return std::make_unique<ContentFileReader>(
       pak_.FilePath(), static_cast<size_t>(footer_->texture_region.offset));
   }
 
@@ -168,7 +201,7 @@ public:
     if (!footer_ || pak_.GetResourceTable<data::ScriptResource>() == nullptr) {
       return nullptr;
     }
-    return std::make_unique<OwningPakSectionReader>(
+    return std::make_unique<ContentFileReader>(
       pak_.FilePath(), static_cast<size_t>(footer_->script_region.offset));
   }
 
@@ -178,30 +211,8 @@ public:
     if (!footer_ || pak_.GetResourceTable<data::PhysicsResource>() == nullptr) {
       return nullptr;
     }
-    return std::make_unique<OwningPakSectionReader>(
+    return std::make_unique<ContentFileReader>(
       pak_.FilePath(), static_cast<size_t>(footer_->physics_region.offset));
-  }
-
-  [[nodiscard]] auto ScriptSlotCount() const noexcept -> uint32_t override
-  {
-    return pak_.ScriptSlotCount();
-  }
-
-  [[nodiscard]] auto ReadScriptSlotRecords(
-    uint32_t start_index, uint32_t count) const
-    -> std::vector<data::pak::scripting::ScriptSlotRecord> override
-  {
-    return pak_.ReadScriptSlotRecords(start_index, count);
-  }
-
-  [[nodiscard]] auto ReadScriptParamRecords(
-    data::pak::core::OffsetT absolute_offset, uint32_t count) const
-    -> std::vector<data::pak::scripting::ScriptParamRecord> override
-  {
-    return pak_.ReadScriptParamRecords(PakFile::ScriptParamReadRequest {
-      .absolute_offset = absolute_offset,
-      .count = count,
-    });
   }
 
   [[nodiscard]] auto ResolveVirtualPath(
@@ -222,66 +233,6 @@ public:
   [[nodiscard]] auto Pak() const noexcept -> const PakFile& { return pak_; }
 
 private:
-  class OwningPakSectionReader final : public serio::AnyReader {
-  public:
-    OwningPakSectionReader(const std::filesystem::path& path, size_t offset)
-      : stream_(path, std::ios::in)
-      , reader_(stream_)
-    {
-      (void)reader_.Seek(offset);
-    }
-
-    ~OwningPakSectionReader() override = default;
-
-    OXYGEN_MAKE_NON_COPYABLE(OwningPakSectionReader)
-    OXYGEN_MAKE_NON_MOVABLE(OwningPakSectionReader)
-
-    [[nodiscard]] auto ReadBlob(size_t size) noexcept
-      -> oxygen::Result<std::vector<std::byte>> override
-    {
-      return reader_.ReadBlob(size);
-    }
-
-    [[nodiscard]] auto ReadBlobInto(std::span<std::byte> buffer) noexcept
-      -> oxygen::Result<void> override
-    {
-      return reader_.ReadBlobInto(buffer);
-    }
-
-    [[nodiscard]] auto Position() noexcept -> oxygen::Result<size_t> override
-    {
-      return reader_.Position();
-    }
-
-    [[nodiscard]] auto AlignTo(size_t alignment) noexcept
-      -> oxygen::Result<void> override
-    {
-      return reader_.AlignTo(alignment);
-    }
-
-    [[nodiscard]] auto ScopedAlignment(uint16_t alignment) noexcept(false)
-      -> serio::AlignmentGuard override
-    {
-      return reader_.ScopedAlignment(alignment);
-    }
-
-    [[nodiscard]] auto Forward(size_t num_bytes) noexcept
-      -> oxygen::Result<void> override
-    {
-      return reader_.Forward(num_bytes);
-    }
-
-    [[nodiscard]] auto Seek(size_t pos) noexcept
-      -> oxygen::Result<void> override
-    {
-      return reader_.Seek(pos);
-    }
-
-  private:
-    serio::FileStream<> stream_;
-    PakFile::Reader reader_;
-  };
-
   [[nodiscard]] static auto ReadFooter(const std::filesystem::path& pak_path)
     -> std::optional<data::pak::core::PakFooter>
   {

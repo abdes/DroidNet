@@ -73,13 +73,13 @@ public:
     return desc_.flags;
   }
 
-  //! Returns the bytecode ScriptResource index (0 means not assigned).
+  //! Returns the bytecode descriptor-local ScriptResource reference.
   [[nodiscard]] auto GetBytecodeResourceIndex() const noexcept
   {
     return desc_.bytecode_resource_index;
   }
 
-  //! Returns the source ScriptResource index (0 means not assigned).
+  //! Returns the source descriptor-local ScriptResource reference.
   [[nodiscard]] auto GetSourceResourceIndex() const noexcept
   {
     return desc_.source_resource_index;
@@ -105,8 +105,8 @@ public:
   //! Returns true if any embedded script payload is assigned.
   [[nodiscard]] auto HasEmbeddedResource() const noexcept -> bool
   {
-    return GetBytecodeResourceIndex() != pak::core::kNoResourceIndex
-      || GetSourceResourceIndex() != pak::core::kNoResourceIndex;
+    return GetBytecodeResourceIndex() != kNoResourceReference
+      || GetSourceResourceIndex() != kNoResourceReference;
   }
 
   //! Returns the number of default parameters defined for this script.

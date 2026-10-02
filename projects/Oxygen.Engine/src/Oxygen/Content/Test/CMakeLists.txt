@@ -9,8 +9,6 @@
 # ------------------------------------------------------------------------------
 
 find_package(GTest REQUIRED CONFIG)
-# Reuse the configured interpreter used by PakGen's editable installation.
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -53,11 +51,13 @@ m_gtest_program(
   AssetLoader
   SOURCES
     "AssetLoader_async_test.cpp"
+    "AssetLoader_publication_test.cpp"
+    "Fixtures/AssetLoaderSources.h"
+    "Fixtures/AssetLoaderSources.cpp"
     "AssetLoader_generation_test.cpp"
+    "AssetLoader_physics_test.cpp"
     "AssetLoader_basic_test.cpp"
     "AssetLoader_buffer_test.cpp"
-    "AssetLoader_cancellation_test.cpp"
-    "AssetLoader_deps_test.cpp"
     "AssetLoader_eviction_test.cpp"
     "AssetLoader_eviction_reentrancy_test.cpp"
     "AssetLoader_autotrim_test.cpp"
@@ -67,7 +67,6 @@ m_gtest_program(
     "AssetLoader_texture_locator_test.cpp"
     "AssetLoader_scripting_test.cpp"
     "AssetLoader_test_fixture.cpp"
-    "AssetLoader_test_helpers.cpp"
     "AssetLoader_test.h"
     "Fixtures/LooseCookedTestLayout.h"
     "Utils/PakUtils.h"
@@ -76,17 +75,6 @@ target_link_libraries(
   "${META_MODULE_NAME}.AssetLoader.Tests"
   PRIVATE
     oxygen::input
-)
-cmake_path(
-  CONVERT
-  "${Python3_EXECUTABLE}"
-  TO_CMAKE_PATH_LIST _content_test_python
-  NORMALIZE
-)
-target_compile_definitions(
-  "${META_MODULE_NAME}.AssetLoader.Tests"
-  PRIVATE
-    OXYGEN_CONTENT_TEST_PYTHON_EXECUTABLE="${_content_test_python}"
 )
 
 m_gtest_program(
@@ -131,8 +119,6 @@ m_gtest_program(
 )
 
 m_gtest_program(LoadersScripting SOURCES "SceneScriptingLoader_test.cpp")
-
-# PakGen is provisioned during setup and checked during configuration.
 
 m_gtest_program(
   SourceRegistry

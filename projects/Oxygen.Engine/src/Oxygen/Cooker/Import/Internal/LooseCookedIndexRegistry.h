@@ -13,6 +13,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSessionToken.h>
@@ -21,6 +22,7 @@
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
+#include <Oxygen/OxCo/Semaphore.h>
 
 namespace oxygen::content::import {
 
@@ -35,6 +37,7 @@ namespace oxygen::content::import {
 */
 class LooseCookedIndexRegistry final {
 public:
+  class DescriptorEditGuard;
   struct Publication {
     data::SourceKey source_key {};
     std::optional<LooseCookedWriteResult> write_result {};
@@ -44,6 +47,10 @@ public:
 
   OXYGEN_MAKE_NON_COPYABLE(LooseCookedIndexRegistry)
   OXYGEN_MAKE_NON_MOVABLE(LooseCookedIndexRegistry)
+
+  //! Serialize read/modify/write of one descriptor across import sessions.
+  OXGN_COOK_NDAPI auto LockDescriptor(std::filesystem::path cooked_root,
+    std::string virtual_path) -> co::Co<DescriptorEditGuard>;
 
   //! Register a new session for the cooked root.
   OXGN_COOK_NDAPI auto BeginSession(const std::filesystem::path& cooked_root,
@@ -59,6 +66,7 @@ public:
     const std::filesystem::path& cooked_root, const data::AssetKey& key,
     data::AssetType asset_type, std::string_view virtual_path,
     std::string_view descriptor_relpath, uint64_t descriptor_size,
+    const data::AssetReferences& references,
     const std::optional<base::Sha256Digest>& descriptor_sha256 = std::nullopt)
     -> void;
 
@@ -86,6 +94,8 @@ private:
     bool aborted = false;
     std::optional<data::SourceKey> source_key {};
     std::shared_ptr<Completion> completion {};
+    std::unordered_map<std::string, std::shared_ptr<co::Semaphore>>
+      descriptor_locks;
   };
 
   auto NormalizeKey(const std::filesystem::path& cooked_root) const
@@ -96,6 +106,26 @@ private:
 
   std::mutex mutex_;
   std::unordered_map<std::string, std::shared_ptr<Entry>> entries_;
+};
+
+class [[nodiscard]] LooseCookedIndexRegistry::DescriptorEditGuard final {
+public:
+  ~DescriptorEditGuard() = default;
+  OXYGEN_MAKE_NON_COPYABLE(DescriptorEditGuard)
+  DescriptorEditGuard(DescriptorEditGuard&&) noexcept = default;
+  auto operator=(DescriptorEditGuard&&) -> DescriptorEditGuard& = delete;
+
+private:
+  friend class LooseCookedIndexRegistry;
+  DescriptorEditGuard(std::shared_ptr<co::Semaphore> owner,
+    co::Semaphore::LockGuard lock) noexcept
+    : owner_(std::move(owner))
+    , lock_(std::move(lock))
+  {
+  }
+
+  std::shared_ptr<co::Semaphore> owner_;
+  co::Semaphore::LockGuard lock_;
 };
 
 } // namespace oxygen::content::import

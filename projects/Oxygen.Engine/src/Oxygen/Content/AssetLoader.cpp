@@ -52,8 +52,10 @@
 #include <Oxygen/Content/Internal/ContentBindingBundle.h>
 #include <Oxygen/Content/Internal/ContentIdentity.h>
 #include <Oxygen/Content/Internal/ContentIdentityRegistry.h>
+#include <Oxygen/Content/Internal/ContentLoadScopeState.h>
 #include <Oxygen/Content/Internal/ContentReleaseQueue.h>
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
+#include <Oxygen/Content/Internal/ContentSourceView.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/Internal/EvictionRegistry.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
@@ -61,7 +63,7 @@
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Content/Internal/PakFileSource.h>
 #include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
-#include <Oxygen/Content/Internal/PhysicsQueryService.h>
+#include <Oxygen/Content/Internal/PhysicsBindings.h>
 #include <Oxygen/Content/Internal/ResourceLoadPipeline.h>
 #include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/Internal/SceneCatalogQueryService.h>
@@ -162,6 +164,7 @@ auto AssetLoader::InternResourceKey(const data::SourceInstanceId source,
 struct AssetLoader::Impl final {
   internal::ContentSourceRegistry source_registry {};
   uint64_t mount_revision = 0;
+  std::weak_ptr<const internal::ContentLoadScopeState> load_scope {};
   std::optional<internal::ContentReleaseQueue::Cache::EvictionNotificationScope>
     cache_notifications;
 
@@ -353,7 +356,6 @@ AssetLoader::AssetLoader(
   scene_catalog_query_service_
     = std::make_unique<internal::SceneCatalogQueryService>();
   script_query_service_ = std::make_unique<internal::ScriptQueryService>();
-  physics_query_service_ = std::make_unique<internal::PhysicsQueryService>();
 
   resource_load_pipeline_ = std::make_unique<internal::ResourceLoadPipeline>(
     impl_->source_registry, *identities_, resource_loaders_, content_cache_,
@@ -874,39 +876,71 @@ void AssetLoader::Stop()
 
 auto AssetLoader::IsRunning() const -> bool { return nursery_ != nullptr; }
 
+auto AssetLoader::BeginLoadScope() -> ContentLoadScope
+{
+  AssertOwningThread();
+  releases_->RequireOpen();
+  const auto view = impl_->source_registry.CaptureView();
+  auto state = impl_->load_scope.lock();
+  if (!state || state->view != view || state->epoch.lock() != releases_) {
+    state = std::make_shared<const internal::ContentLoadScopeState>(
+      internal::ContentLoadScopeState { .view = view, .epoch = releases_ });
+    impl_->load_scope = state;
+  }
+  ContentLoadScope scope;
+  scope.state_ = std::move(state);
+  return scope;
+}
+
+auto AssetLoader::AdmitAssetRequest(LoadRequest request) -> LoadRequest
+{
+  AssertOwningThread();
+  if (!request.scope.state_) {
+    request.scope = BeginLoadScope();
+  }
+  const auto epoch = request.scope.state_->epoch.lock();
+  if (!epoch || epoch != releases_) {
+    throw std::invalid_argument(
+      "Content load scope belongs to another loader or stopped lifetime");
+  }
+  epoch->RequireOpen();
+  return request;
+}
+
+auto AssetLoader::ResolveScopedRoot(const data::AssetKey& key,
+  const std::optional<data::SourceKey> source_key,
+  const ContentLoadScope& scope) const -> std::optional<data::SourceInstanceId>
+{
+  const auto& view = scope.state_->view;
+  std::optional<data::SourceInstanceId> selected;
+  if (source_key) {
+    bool present = false;
+    if (view) {
+      for (const auto& layer : view->Layers()) {
+        if (layer.source->GetSourceKey() != *source_key) {
+          continue;
+        }
+        if (present) {
+          return std::nullopt;
+        }
+        present = true;
+        if (layer.source->HasAsset(key)) {
+          selected = layer.id;
+        }
+      }
+    }
+    if (!present) {
+      selected = ResolveExactSourceId(key, *source_key);
+    }
+  } else if (view) {
+    selected = view->ResolveAsset(key);
+  }
+  return selected && ResolveSourceForId(*selected) ? selected : std::nullopt;
+}
+
 auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
 {
   (void)MountPakFile(path);
-}
-
-auto AssetLoader::AddPatchPakFile(const std::filesystem::path& path,
-  const data::PatchManifest& manifest,
-  const std::span<const data::PakCatalog> mounted_base_catalogs) -> void
-{
-  AssertOwningThread();
-
-  std::vector<data::SourceKey> mounted_source_keys;
-  mounted_source_keys.reserve(impl_->source_registry.Sources().size());
-  for (const auto& source : impl_->source_registry.Sources()) {
-    if (!source) {
-      continue;
-    }
-    mounted_source_keys.push_back(source->GetSourceKey());
-  }
-
-  const auto compatibility = internal::ValidatePatchCompatibility(
-    mounted_source_keys, mounted_base_catalogs, manifest);
-  if (!compatibility.compatible) {
-    for (const auto& diagnostic : compatibility.diagnostics) {
-      LOG_F(ERROR, "Patch compatibility violation [{}]: {}",
-        internal::to_string(diagnostic.code), diagnostic.message);
-    }
-    throw std::runtime_error(
-      "Patch compatibility validation failed against mounted base set");
-  }
-
-  const auto patch_source_id = MountPakFile(path);
-  impl_->source_registry.SetSourceTombstones(patch_source_id, manifest.deleted);
 }
 
 auto AssetLoader::MountPakFile(const std::filesystem::path& path)
@@ -1001,8 +1035,10 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
     std::filesystem::weakly_canonical(base::ToNativePath(path)));
   const auto normalized_s = normalized.string();
 
-  auto new_source = std::make_unique<internal::LooseCookedSource>(
-    normalized, verify_content_hashes_);
+  auto new_source = std::make_unique<internal::LooseCookedSource>(normalized,
+    verify_content_hashes_
+      ? internal::LooseCookedSource::OpenMode::kVerifyContent
+      : internal::LooseCookedSource::OpenMode::kValidateMetadata);
   const auto source_key = new_source->GetSourceKey();
 
   auto clear_content_caches = [this] -> void {
@@ -1082,8 +1118,11 @@ auto AssetLoader::MountLooseCookedGeneration(const std::filesystem::path& path,
   if (!lock) {
     throw std::system_error(lock.error(), "Acquire cooked generation lease");
   }
-  auto source = std::make_shared<internal::LooseCookedSource>(
-    normalized, verify_content_hashes_, std::move(lock).value());
+  auto source = std::make_shared<internal::LooseCookedSource>(normalized,
+    verify_content_hashes_
+      ? internal::LooseCookedSource::OpenMode::kVerifyContent
+      : internal::LooseCookedSource::OpenMode::kValidateMetadata,
+    std::move(lock).value());
   const auto key = source->GetSourceKey();
   static_cast<void>(
     impl_->source_registry.MountGeneration(std::move(source), replaces));
@@ -1136,34 +1175,38 @@ auto AssetLoader::PrepareMountSetAsync(
     throw OperationCancelledException(
       "Content mounts changed before preparation began");
   }
-  auto sources = co_await pool->Run(
-    [paths = std::move(roots), verify = verify_content] {
-      std::vector<internal::ContentSourceRegistry::PreparedSource> prepared;
-      prepared.reserve(paths.size());
-      for (const auto& path : paths) {
-        const auto normalized = base::ToLogicalPath(
-          std::filesystem::weakly_canonical(base::ToNativePath(path)));
-        const auto marker
-          = normalized / data::loose_cooked::kGenerationLeaseFileName;
-        if (std::filesystem::exists(base::ToNativePath(marker))) {
-          auto lease
-            = serio::FileLock::TryAcquire(marker, serio::FileLockMode::kShared);
-          if (!lease) {
-            throw std::system_error(
-              lease.error(), "Acquire candidate generation lease");
-          }
-          prepared.push_back(
-            { .source = std::make_shared<internal::LooseCookedSource>(
-                normalized, verify, std::move(lease).value()),
-              .generation = true });
-        } else {
-          prepared.push_back({ .source
-            = std::make_shared<internal::LooseCookedSource>(normalized, verify),
-            .generation = false });
+  auto sources = co_await pool->Run([paths = std::move(roots),
+                                      verify = verify_content] {
+    std::vector<internal::ContentSourceRegistry::PreparedSource> prepared;
+    prepared.reserve(paths.size());
+    for (const auto& path : paths) {
+      const auto normalized = base::ToLogicalPath(
+        std::filesystem::weakly_canonical(base::ToNativePath(path)));
+      const auto marker
+        = normalized / data::loose_cooked::kGenerationLeaseFileName;
+      if (std::filesystem::exists(base::ToNativePath(marker))) {
+        auto lease
+          = serio::FileLock::TryAcquire(marker, serio::FileLockMode::kShared);
+        if (!lease) {
+          throw std::system_error(
+            lease.error(), "Acquire candidate generation lease");
         }
+        prepared.push_back(
+          { .source = std::make_shared<internal::LooseCookedSource>(normalized,
+              verify ? internal::LooseCookedSource::OpenMode::kVerifyContent
+                     : internal::LooseCookedSource::OpenMode::kValidateMetadata,
+              std::move(lease).value()),
+            .generation = true });
+      } else {
+        prepared.push_back({ .source
+          = std::make_shared<internal::LooseCookedSource>(normalized,
+            verify ? internal::LooseCookedSource::OpenMode::kVerifyContent
+                   : internal::LooseCookedSource::OpenMode::kValidateMetadata),
+          .generation = false });
       }
-      return prepared;
-    });
+    }
+    return prepared;
+  });
   if (state->lifetime.expired() || state->epoch->IsClosed()) {
     throw OperationCancelledException(
       "Loader stopped during mount preparation");
@@ -1504,9 +1547,14 @@ auto AssetLoader::MaybeAutoTrimOnBudgetPressure(
 auto AssetLoader::ProcessPendingReleases() -> void
 {
   AssertOwningThread();
+  const OperationLifetime operation(*this);
   constexpr std::size_t kReleaseRecordsPerFrame = 128;
   const auto releases = releases_;
   static_cast<void>(releases->Drain(content_cache_, kReleaseRecordsPerFrame));
+  if (!operation || releases != releases_) {
+    return;
+  }
+  static_cast<void>(identities_->ProcessExpiredViews(kReleaseRecordsPerFrame));
 }
 
 auto AssetLoader::TrimCache() -> void { ExecuteTrimPass("manual_trim", false); }
@@ -1524,10 +1572,13 @@ auto AssetLoader::EnumerateMountedInputContexts() const
 {
   AssertOwningThread();
   std::vector<IAssetLoader::MountedInputContextEntry> contexts;
-  const auto& sources = impl_->source_registry.Sources();
-  contexts.reserve(sources.size() * 4U);
-
-  for (const auto& source : sources) {
+  const auto view = impl_->source_registry.CaptureView();
+  if (!view) {
+    return contexts;
+  }
+  contexts.reserve(view->Layers().size());
+  for (const auto& layer : view->Layers()) {
+    const auto source = ResolveSourceForId(layer.id);
     if (!source) {
       continue;
     }
@@ -1537,7 +1588,10 @@ auto AssetLoader::EnumerateMountedInputContexts() const
     for (size_t i = 0; i < asset_count; ++i) {
       const auto asset_key_opt
         = source->GetAssetKeyByIndex(static_cast<uint32_t>(i));
-      if (!asset_key_opt.has_value() || !source->HasAsset(*asset_key_opt)) {
+      if (!asset_key_opt
+        || source->GetAssetType(*asset_key_opt)
+          != data::AssetType::kInputMappingContext
+        || view->ResolveAsset(*asset_key_opt) != layer.id) {
         continue;
       }
 
@@ -1550,9 +1604,8 @@ auto AssetLoader::EnumerateMountedInputContexts() const
       IAssetLoader::MountedInputContextEntry entry {};
       entry.asset_key = *asset_key_opt;
       entry.source_key = source_key;
-      entry.name = desc_opt->header.name[0] == '\0'
-        ? std::string {}
-        : std::string(desc_opt->header.name);
+      const auto name = std::span(desc_opt->header.name);
+      entry.name.assign(name.begin(), std::ranges::find(name, '\0'));
       entry.flags = desc_opt->flags;
       entry.default_priority = desc_opt->default_priority;
       contexts.push_back(std::move(entry));
@@ -1817,27 +1870,9 @@ auto AssetLoader::GetHydratedScriptSlots(const data::SceneAsset& scene_asset,
   AssertOwningThread();
 
   std::vector<IAssetLoader::HydratedScriptSlot> hydrated_slots;
-  const auto source_id = ResolveAssetSourceId(scene_asset);
-  const auto source_owner
-    = source_id ? ResolveSourceForId(*source_id) : nullptr;
-  if (!source_owner) {
-    LOG_F(ERROR, "Script slot hydration requires the scene's retained source");
-    return hydrated_slots;
-  }
-  const auto& source = *source_owner;
   std::vector<data::pak::scripting::ScriptSlotRecord> slot_records;
-  auto read_params
-    = [&](const data::pak::scripting::ScriptSlotRecord& slot_record)
-    -> std::vector<data::pak::scripting::ScriptParamRecord> {
-    if (slot_record.params_count == 0) {
-      return {};
-    }
-    return source.ReadScriptParamRecords(
-      slot_record.params_array_offset, slot_record.params_count);
-  };
-
   try {
-    slot_records = source.ReadScriptSlotRecords(
+    slot_records = scene_asset.ReadScriptSlots(
       component.slot_start_index, component.slot_count);
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "failed to read script slots: {}", ex.what());
@@ -1851,7 +1886,7 @@ auto AssetLoader::GetHydratedScriptSlots(const data::SceneAsset& scene_asset,
       .flags = slot_record.flags,
     };
     try {
-      hydrated.params = read_params(slot_record);
+      hydrated.params = scene_asset.ReadScriptParameters(slot_record);
     } catch (const std::exception& ex) {
       LOG_F(ERROR, "failed to read script parameters: {}", ex.what());
     }
@@ -1966,12 +2001,20 @@ auto AssetLoader::PinAsset(const data::AssetKey& key) -> ResidencyPin
 
 auto AssetLoader::AssetCacheKey(const data::Asset& asset) const -> uint64_t
 {
-  const auto id
-    = FindAssetId(asset.GetAssetKey(), asset.GetSourceOrigin().instance);
-  if (id == 0) {
-    throw std::invalid_argument("Asset has no identity in this loader");
+  const auto& retained = asset.GetRuntimeBindings();
+  if (retained
+    && retained->GetTypeId() == internal::ContentBindingBundle::ClassTypeId()) {
+    const auto bindings
+      = std::static_pointer_cast<const internal::ContentBindingBundle>(
+        retained);
+    const auto* identity = identities_->FindAsset(bindings->Identity());
+    if (identity && identity->source == asset.GetSourceOrigin().instance
+      && identity->asset == asset.GetAssetKey()
+      && identity->view == bindings->ViewIdentity()) {
+      return bindings->Identity().get();
+    }
   }
-  return id;
+  throw std::invalid_argument("Asset has no identity in this loader");
 }
 
 //=== Asset Loading Implementations ==========================================//
@@ -2015,10 +2058,16 @@ auto AssetLoader::InvalidateAssetTree(const data::AssetKey& key) -> void
       IndexOf<data::ScriptResource, ResourceTypeList>::value);
 
     auto invalidate_resource
-      = [&](const pak::core::ResourceIndexT index) -> void {
-      if (index != data::pak::core::kNoResourceIndex) {
+      = [&](const data::ResourceReferenceIndex reference) -> void {
+      const auto resolved = asset->GetReferences().ResolveResource(
+        reference, data::ResourceKind::kScript);
+      if (!resolved) {
+        throw std::runtime_error(resolved.error());
+      }
+      const auto& index = *resolved;
+      if (index) {
         const auto rkey
-          = InternResourceKey(source_id, resource_type_index, index);
+          = InternResourceKey(source_id, resource_type_index, *index);
         static_cast<void>(content_cache_.Invalidate(rkey.get()));
       }
     };
@@ -2121,11 +2170,19 @@ auto AssetLoader::AcquireScriptBytecode(const data::ScriptAsset& asset)
     || retained->GetTypeId() != internal::ContentBindingBundle::ClassTypeId()) {
     return {};
   }
-  const auto index = asset.GetBytecodeResourceIndex();
+  const auto resolved = asset.GetReferences().ResolveResource(
+    asset.GetBytecodeResourceIndex(), data::ResourceKind::kScript);
+  if (!resolved) {
+    throw std::runtime_error(resolved.error());
+  }
+  const auto& index = *resolved;
+  if (!index) {
+    return {};
+  }
   const auto id = identities_->Find(internal::CookedResourceIdentity {
     .source = asset.GetSourceOrigin().instance,
     .kind = internal::ResourceKind::kScript,
-    .index = index.get() });
+    .index = index->get() });
   const auto bundle
     = std::static_pointer_cast<const internal::ContentBindingBundle>(retained);
   const auto* binding = bundle->FindResourceBinding(ResourceKey { id.get() });
@@ -2173,6 +2230,7 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
       .source_id = {},
       .asset = nullptr,
       .dependency_collector = nullptr,
+      .references = {},
     };
   }
   const auto source_id = *resolved_id;
@@ -2203,11 +2261,14 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
       tex_reader = std::move(tex_reader),
       script_reader = std::move(script_reader),
       phys_reader = std::move(phys_reader),
-      source_instance] mutable -> std::shared_ptr<void> {
+      source_instance] mutable -> DecodedAssetAsyncResult {
+      auto references = source_content->ReadAssetReferences(key);
       LoaderContext context {
         .current_asset_key = key,
         .source_instance = source_instance,
         .desc_reader = desc_reader.get(),
+        .asset_references
+        = observer_ptr<const data::AssetReferences> { &references },
         .data_readers = std::make_tuple(buf_reader.get(), tex_reader.get(),
           script_reader.get(), phys_reader.get()),
         .work_offline = offline,
@@ -2220,18 +2281,19 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
         .parse_only = false,
       };
 
-      return decoder(context);
+      return {
+        .source_id = source_instance,
+        .asset = decoder(context),
+        .dependency_collector = collector,
+        .references = std::move(references),
+      };
     });
 
   AssertOwningThread();
   if (!impl_->source_registry.AcquireSource(source_id)) {
-    decoded.reset();
+    decoded.asset.reset();
   }
-  co_return {
-    .source_id = source_id,
-    .asset = std::move(decoded),
-    .dependency_collector = std::move(collector),
-  };
+  co_return decoded;
 }
 
 auto AssetLoader::ResolveDependencySourceId(
@@ -2276,20 +2338,34 @@ auto AssetLoader::ResolveExactSourceId(
 }
 
 auto AssetLoader::PrepareAssetLoadRequest(const data::AssetKey& key,
-  std::optional<data::SourceInstanceId> preferred_source_id)
-  -> std::optional<AssetLoadRequest>
+  std::optional<data::SourceInstanceId> preferred_source_id,
+  const ContentLoadScope& scope) -> std::optional<AssetLoadRequest>
 {
-  const auto source_id_opt = ResolveLoadSourceId(key, preferred_source_id);
-  if (!source_id_opt.has_value()) {
+  const auto source_id = preferred_source_id
+    ? preferred_source_id
+    : ResolveScopedRoot(key, std::nullopt, scope);
+  if (!source_id) {
     return std::nullopt;
   }
-
+  auto source = ResolveSourceForId(*source_id);
+  if (!source || !source->HasAsset(key)) {
+    return std::nullopt;
+  }
+  const auto& view = scope.state_->view;
+  const auto token = source->HasKeyReferences(key) && view
+    ? view->IdentityOwner()
+    : std::shared_ptr<const internal::BindingViewId> {};
+  const auto id = identities_->Intern(
+    internal::AssetIdentity {
+      .source = *source_id,
+      .asset = key,
+      .view = token ? *token : internal::BindingViewId {},
+    },
+    token);
   return AssetLoadRequest {
-    .source_id = *source_id_opt,
-    .cache_key
-    = identities_->Intern(internal::AssetIdentity { *source_id_opt, key })
-      .get(),
-    .source = impl_->source_registry.AcquireSource(*source_id_opt),
+    .source_id = *source_id,
+    .cache_key = id.get(),
+    .source = std::move(source),
   };
 }
 
@@ -2314,10 +2390,20 @@ auto AssetLoader::BindMaterialTextureKeys(
   keys.reserve(indices.size());
   constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
     IndexOf<data::TextureResource, ResourceTypeList>::value);
-  for (const auto index : indices) {
-    keys.push_back(index == data::pak::core::kNoResourceIndex
+  for (const auto reference : indices) {
+    const auto resolved = material.GetReferences().ResolveResource(
+      reference, data::ResourceKind::kTexture);
+    if (!resolved) {
+      throw std::runtime_error(resolved.error());
+    }
+    const auto& index = *resolved;
+    if (index && *index == data::pak::core::kErrorTextureResourceIndex) {
+      keys.push_back(ResourceKey::kError);
+      continue;
+    }
+    keys.push_back(!index || *index == data::pak::core::kFallbackResourceIndex
         ? ResourceKey {}
-        : InternResourceKey(source, kTextureTypeIndex, index));
+        : InternResourceKey(source, kTextureTypeIndex, *index));
   }
   material.SetTextureResourceKeys(std::move(keys));
 }
@@ -2332,6 +2418,22 @@ auto AssetLoader::BindGeometryRuntimePointers(data::GeometryAsset& asset,
   using data::MaterialAsset;
   using data::MeshType;
 
+  const auto find_buffer
+    = [&asset, &buffers_by_index](const data::ResourceReferenceIndex reference)
+    -> std::shared_ptr<BufferResource> {
+    const auto resolved = asset.GetReferences().ResolveResource(
+      reference, data::ResourceKind::kBuffer);
+    if (!resolved) {
+      throw std::runtime_error(resolved.error());
+    }
+    const auto& index = *resolved;
+    if (!index) {
+      return {};
+    }
+    const auto found = buffers_by_index.find(index->get());
+    return found == buffers_by_index.end() ? nullptr : found->second.resource;
+  };
+
   for (const auto& mesh_ptr : asset.Meshes()) {
     if (!mesh_ptr) {
       continue;
@@ -2344,69 +2446,17 @@ auto AssetLoader::BindGeometryRuntimePointers(data::GeometryAsset& asset,
         == static_cast<uint8_t>(MeshType::kStandard)) {
       const auto& info = mesh_desc_opt->info.standard;
 
-      const auto vb_it = buffers_by_index.find(info.vertex_buffer);
-      const auto ib_it = buffers_by_index.find(info.index_buffer);
-
-      std::shared_ptr<BufferResource> vb;
-      if (vb_it != buffers_by_index.end()) {
-        vb = vb_it->second.resource;
-      }
-
-      std::shared_ptr<BufferResource> ib;
-      if (ib_it != buffers_by_index.end()) {
-        ib = ib_it->second.resource;
-      }
-
-      mesh.SetBufferResources(std::move(vb), std::move(ib));
+      mesh.SetBufferResources(
+        find_buffer(info.vertex_buffer), find_buffer(info.index_buffer));
     } else if (mesh_desc_opt && mesh_desc_opt->IsSkinned()) {
       const auto& info = mesh_desc_opt->info.skinned;
-
-      const auto vb_it = buffers_by_index.find(info.vertex_buffer);
-      const auto ib_it = buffers_by_index.find(info.index_buffer);
-      const auto joint_index_it
-        = buffers_by_index.find(info.joint_index_buffer);
-      const auto joint_weight_it
-        = buffers_by_index.find(info.joint_weight_buffer);
-      const auto inverse_bind_it
-        = buffers_by_index.find(info.inverse_bind_buffer);
-      const auto joint_remap_it
-        = buffers_by_index.find(info.joint_remap_buffer);
-
-      std::shared_ptr<BufferResource> vb;
-      if (vb_it != buffers_by_index.end()) {
-        vb = vb_it->second.resource;
-      }
-
-      std::shared_ptr<BufferResource> ib;
-      if (ib_it != buffers_by_index.end()) {
-        ib = ib_it->second.resource;
-      }
-
-      std::shared_ptr<BufferResource> joint_index;
-      if (joint_index_it != buffers_by_index.end()) {
-        joint_index = joint_index_it->second.resource;
-      }
-
-      std::shared_ptr<BufferResource> joint_weight;
-      if (joint_weight_it != buffers_by_index.end()) {
-        joint_weight = joint_weight_it->second.resource;
-      }
-
-      std::shared_ptr<BufferResource> inverse_bind;
-      if (inverse_bind_it != buffers_by_index.end()) {
-        inverse_bind = inverse_bind_it->second.resource;
-      }
-
-      std::shared_ptr<BufferResource> joint_remap;
-      if (joint_remap_it != buffers_by_index.end()) {
-        joint_remap = joint_remap_it->second.resource;
-      }
-
-      mesh.SetBufferResources(std::move(vb), std::move(ib));
+      mesh.SetBufferResources(
+        find_buffer(info.vertex_buffer), find_buffer(info.index_buffer));
       if (mesh.IsSkinned()) {
-        mesh.SetSkiningBufferResources(std::move(joint_index),
-          std::move(joint_weight), std::move(inverse_bind),
-          std::move(joint_remap));
+        mesh.SetSkiningBufferResources(find_buffer(info.joint_index_buffer),
+          find_buffer(info.joint_weight_buffer),
+          find_buffer(info.inverse_bind_buffer),
+          find_buffer(info.joint_remap_buffer));
       }
     }
 
@@ -2425,12 +2475,9 @@ auto AssetLoader::BindGeometryRuntimePointers(data::GeometryAsset& asset,
 
       auto mat_it = materials_by_key.find(mat_key);
       if (mat_it == materials_by_key.end() || !mat_it->second) {
-        LOG_F(WARNING,
-          "AssetLoader: Material asset not found for submesh {} (key={}), "
-          "using default material.",
-          i, mat_key);
-        mesh.SetSubMeshMaterial(i, MaterialAsset::CreateDefault());
-        continue;
+        throw std::runtime_error(fmt::format(
+          "Required submesh material {} was not bound for geometry {}", mat_key,
+          asset.GetAssetKey()));
       }
 
       mesh.SetSubMeshMaterial(i, mat_it->second);
@@ -2691,31 +2738,13 @@ auto AssetLoader::MakePhysicsResourceKey(const data::SourceKey source_key,
   -> std::optional<ResourceKey>
 {
   AssertOwningThread();
-  const internal::PhysicsQueryService::Callbacks callbacks {
-    .resolve_source_id_for_asset
-    = [this](
-        const data::AssetKey& key) -> std::optional<data::SourceInstanceId> {
-      return ResolveSourceIdForAsset(key);
-    },
-    .resolve_source_for_id = [this](const data::SourceInstanceId source_id)
-      -> std::shared_ptr<const internal::IContentSource> {
-      return ResolveSourceForId(source_id);
-    },
-    .resolve_source_id_for_source_key
-    = [this](
-        const data::SourceKey key) -> std::optional<data::SourceInstanceId> {
-      return impl_->source_registry.FindSourceIdByKey(key);
-    },
-    .make_physics_resource_key
-    = [this](const data::SourceInstanceId source_id,
-        const data::pak::core::ResourceIndexT index) -> ResourceKey {
-      const auto resource_type_index = static_cast<uint16_t>(
-        IndexOf<data::PhysicsResource, ResourceTypeList>::value);
-      return InternResourceKey(source_id, resource_type_index, index);
-    },
-  };
-  return physics_query_service_->MakePhysicsResourceKey(
-    source_key, resource_index, callbacks);
+  const auto source_id = impl_->source_registry.FindSourceIdByKey(source_key);
+  if (!source_id || resource_index == data::pak::core::kNoResourceIndex) {
+    return std::nullopt;
+  }
+  constexpr auto type_index = static_cast<uint16_t>(
+    IndexOf<data::PhysicsResource, ResourceTypeList>::value);
+  return InternResourceKey(*source_id, type_index, resource_index);
 }
 
 auto AssetLoader::MakeTextureResourceKey(const data::SourceKey source_key,
@@ -2820,12 +2849,25 @@ auto AssetLoader::ResolveTextureResourceKey(
 
 auto AssetLoader::MakeTextureResourceKeyForAsset(
   const data::Asset& context_asset,
-  const data::pak::core::ResourceIndexT resource_index)
-  -> std::optional<ResourceKey>
+  const data::ResourceReferenceIndex reference) -> std::optional<ResourceKey>
 {
   AssertOwningThread();
+  const auto resolved = context_asset.GetReferences().ResolveResource(
+    reference, data::ResourceKind::kTexture);
+  if (!resolved) {
+    return {};
+  }
+  const auto& index = *resolved;
+  if (!index) {
+    return {};
+  }
+  const auto resource_index = *index;
+
   if (resource_index == data::pak::core::kNoResourceIndex) {
     return std::nullopt;
+  }
+  if (resource_index == data::pak::core::kErrorTextureResourceIndex) {
+    return ResourceKey::kError;
   }
   const auto source_id = ResolveAssetSourceId(context_asset);
   if (!source_id) {
@@ -2843,10 +2885,20 @@ auto AssetLoader::MakeTextureResourceKeyForAsset(
 
 auto AssetLoader::MakeScriptResourceKeyForAsset(
   const data::Asset& context_asset,
-  const data::pak::core::ResourceIndexT resource_index)
-  -> std::optional<ResourceKey>
+  const data::ResourceReferenceIndex reference) -> std::optional<ResourceKey>
 {
   AssertOwningThread();
+  const auto resolved = context_asset.GetReferences().ResolveResource(
+    reference, data::ResourceKind::kScript);
+  if (!resolved) {
+    return {};
+  }
+  const auto& index = *resolved;
+  if (!index) {
+    return {};
+  }
+  const auto resource_index = *index;
+
   const internal::ScriptQueryService::Callbacks callbacks {
     .resolve_source_id_for_asset
     = [this, &context_asset](
@@ -2870,9 +2922,20 @@ auto AssetLoader::MakeScriptResourceKeyForAsset(
 }
 
 auto AssetLoader::ReadScriptResourceForAsset(const data::Asset& context_asset,
-  const data::pak::core::ResourceIndexT resource_index) const
+  const data::ResourceReferenceIndex reference) const
   -> std::shared_ptr<const data::ScriptResource>
 {
+  const auto resolved = context_asset.GetReferences().ResolveResource(
+    reference, data::ResourceKind::kScript);
+  if (!resolved) {
+    return {};
+  }
+  const auto& index = *resolved;
+  if (!index) {
+    return {};
+  }
+  const auto resource_index = *index;
+
   const internal::ScriptQueryService::Callbacks callbacks {
     .resolve_source_id_for_asset
     = [this, &context_asset](
@@ -2895,88 +2958,61 @@ auto AssetLoader::MakePhysicsResourceKeyForAsset(
   -> std::optional<ResourceKey>
 {
   AssertOwningThread();
-  const internal::PhysicsQueryService::Callbacks callbacks {
-    .resolve_source_id_for_asset
-    = [this, &context_asset](
-        const data::AssetKey&) -> std::optional<data::SourceInstanceId> {
-      return ResolveAssetSourceId(context_asset);
-    },
-    .resolve_source_for_id = [this](const data::SourceInstanceId source_id)
-      -> std::shared_ptr<const internal::IContentSource> {
-      return ResolveSourceForId(source_id);
-    },
-    .resolve_source_id_for_source_key
-    = [this](
-        const data::SourceKey key) -> std::optional<data::SourceInstanceId> {
-      return impl_->source_registry.FindSourceIdByKey(key);
-    },
-    .make_physics_resource_key
-    = [this](const data::SourceInstanceId source_id,
-        const data::pak::core::ResourceIndexT index) -> ResourceKey {
-      const auto resource_type_index = static_cast<uint16_t>(
-        IndexOf<data::PhysicsResource, ResourceTypeList>::value);
-      return InternResourceKey(source_id, resource_type_index, index);
-    },
-  };
-  return physics_query_service_->MakePhysicsResourceKeyForAsset(
-    context_asset.GetAssetKey(), resource_index, callbacks);
+  const auto source_id = ResolveAssetSourceId(context_asset);
+  if (!source_id || resource_index == data::pak::core::kNoResourceIndex) {
+    return std::nullopt;
+  }
+  constexpr auto type_index = static_cast<uint16_t>(
+    IndexOf<data::PhysicsResource, ResourceTypeList>::value);
+  return InternResourceKey(*source_id, type_index, resource_index);
+}
+
+auto AssetLoader::GetPhysicsBindings(const data::Asset& context) const
+  -> const internal::PhysicsBindings*
+{
+  AssertOwningThread();
+  static_cast<void>(AssetCacheKey(context));
+  const auto& bindings = context.GetRuntimeBindings();
+  if (!bindings
+    || bindings->GetTypeId() != internal::ContentBindingBundle::ClassTypeId()) {
+    return nullptr;
+  }
+  return std::static_pointer_cast<const internal::ContentBindingBundle>(
+    bindings)
+    ->Physics();
 }
 
 auto AssetLoader::MakePhysicsResourceKeyForAsset(
   const data::Asset& context_asset, const data::AssetKey& resource_asset_key)
   -> std::optional<ResourceKey>
 {
-  AssertOwningThread();
-  const internal::PhysicsQueryService::Callbacks callbacks {
-    .resolve_source_id_for_asset
-    = [this, &context_asset](
-        const data::AssetKey&) -> std::optional<data::SourceInstanceId> {
-      return ResolveAssetSourceId(context_asset);
-    },
-    .resolve_source_for_id = [this](const data::SourceInstanceId source_id)
-      -> std::shared_ptr<const internal::IContentSource> {
-      return ResolveSourceForId(source_id);
-    },
-    .resolve_source_id_for_source_key
-    = [this](
-        const data::SourceKey key) -> std::optional<data::SourceInstanceId> {
-      return impl_->source_registry.FindSourceIdByKey(key);
-    },
-    .make_physics_resource_key
-    = [this](const data::SourceInstanceId source_id,
-        const data::pak::core::ResourceIndexT index) -> ResourceKey {
-      const auto resource_type_index = static_cast<uint16_t>(
-        IndexOf<data::PhysicsResource, ResourceTypeList>::value);
-      return InternResourceKey(source_id, resource_type_index, index);
-    },
-  };
-  return physics_query_service_->MakePhysicsResourceKeyForAsset(
-    context_asset.GetAssetKey(), resource_asset_key, callbacks);
+  const auto* bindings = GetPhysicsBindings(context_asset);
+  if (!bindings) {
+    return std::nullopt;
+  }
+  const auto found = std::ranges::lower_bound(bindings->resources,
+    resource_asset_key, {}, &internal::BoundPhysicsResource::asset_key);
+  if (found == bindings->resources.end()
+    || found->asset_key != resource_asset_key
+    || !ResolveSourceForId(found->source)) {
+    return std::nullopt;
+  }
+  return found->key;
 }
 
 auto AssetLoader::ReadCollisionShapeAssetDescForAsset(
   const data::Asset& context_asset, const data::AssetKey& shape_asset_key) const
   -> std::optional<data::pak::physics::CollisionShapeAssetDesc>
 {
-  const internal::PhysicsQueryService::Callbacks callbacks {
-    .resolve_source_id_for_asset
-    = [this, &context_asset](
-        const data::AssetKey&) -> std::optional<data::SourceInstanceId> {
-      return ResolveAssetSourceId(context_asset);
-    },
-    .resolve_source_for_id = [this](const data::SourceInstanceId source_id)
-      -> std::shared_ptr<const internal::IContentSource> {
-      return ResolveSourceForId(source_id);
-    },
-    .resolve_source_id_for_source_key
-    = [this](
-        const data::SourceKey key) -> std::optional<data::SourceInstanceId> {
-      return impl_->source_registry.FindSourceIdByKey(key);
-    },
-    .make_physics_resource_key = {},
-  };
-  return physics_query_service_->ReadCollisionShapeAssetDescForAsset(
-    context_asset.GetAssetKey(), shape_asset_key, callbacks);
+  const auto* bindings = GetPhysicsBindings(context_asset);
+  if (!bindings) {
+    return std::nullopt;
+  }
+  const auto found = std::ranges::lower_bound(
+    bindings->shapes, shape_asset_key, {}, &internal::BoundPhysicsShape::key);
+  return found != bindings->shapes.end() && found->key == shape_asset_key
+    ? std::optional(found->descriptor)
+    : std::nullopt;
 }
 
 auto AssetLoader::ReadPhysicsMaterialAssetDescForAsset(
@@ -2984,49 +3020,71 @@ auto AssetLoader::ReadPhysicsMaterialAssetDescForAsset(
   const data::AssetKey& material_asset_key) const
   -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc>
 {
-  const internal::PhysicsQueryService::Callbacks callbacks {
-    .resolve_source_id_for_asset
-    = [this, &context_asset](
-        const data::AssetKey&) -> std::optional<data::SourceInstanceId> {
-      return ResolveAssetSourceId(context_asset);
-    },
-    .resolve_source_for_id = [this](const data::SourceInstanceId source_id)
-      -> std::shared_ptr<const internal::IContentSource> {
-      return ResolveSourceForId(source_id);
-    },
-    .resolve_source_id_for_source_key
-    = [this](
-        const data::SourceKey key) -> std::optional<data::SourceInstanceId> {
-      return impl_->source_registry.FindSourceIdByKey(key);
-    },
-    .make_physics_resource_key = {},
-  };
-  return physics_query_service_->ReadPhysicsMaterialAssetDescForAsset(
-    context_asset.GetAssetKey(), material_asset_key, callbacks);
+  const auto* bindings = GetPhysicsBindings(context_asset);
+  if (!bindings) {
+    return std::nullopt;
+  }
+  const auto found = std::ranges::lower_bound(bindings->materials,
+    material_asset_key, {}, &internal::BoundPhysicsMaterial::key);
+  return found != bindings->materials.end() && found->key == material_asset_key
+    ? std::optional(found->descriptor)
+    : std::nullopt;
 }
 
 auto AssetLoader::FindPhysicsSidecarAssetKeyForScene(
-  const data::Asset& scene_asset) const -> std::optional<data::AssetKey>
+  const data::Asset& scene_asset, const ContentLoadScope& scope)
+  -> std::optional<data::AssetKey>
 {
-  const internal::PhysicsQueryService::Callbacks callbacks {
-    .resolve_source_id_for_asset
-    = [this, &scene_asset](
-        const data::AssetKey&) -> std::optional<data::SourceInstanceId> {
-      return ResolveAssetSourceId(scene_asset);
-    },
-    .resolve_source_for_id = [this](const data::SourceInstanceId source_id)
-      -> std::shared_ptr<const internal::IContentSource> {
-      return ResolveSourceForId(source_id);
-    },
-    .resolve_source_id_for_source_key
-    = [this](
-        const data::SourceKey key) -> std::optional<data::SourceInstanceId> {
-      return impl_->source_registry.FindSourceIdByKey(key);
-    },
-    .make_physics_resource_key = {},
-  };
-  return physics_query_service_->FindPhysicsSidecarAssetKeyForScene(
-    scene_asset.GetAssetKey(), callbacks);
+  const auto request = AdmitAssetRequest(LoadRequest { .scope = scope });
+  const auto& view = request.scope.state_->view;
+  if (!view) {
+    return std::nullopt;
+  }
+  std::optional<data::AssetKey> matched;
+  for (const auto& layer : view->Layers()) {
+    for (size_t i = 0; i < layer.source->GetAssetCount(); ++i) {
+      const auto key
+        = layer.source->GetAssetKeyByIndex(static_cast<uint32_t>(i));
+      if (!key
+        || layer.source->GetAssetType(*key) != data::AssetType::kPhysicsScene
+        || view->ResolveAsset(*key) != layer.id) {
+        continue;
+      }
+      const auto source = ResolveSourceForId(layer.id);
+      if (!source) {
+        throw std::runtime_error(
+          "Physics sidecar source is no longer readable");
+      }
+      const auto reader = source->CreateAssetDescriptorReader(*key);
+      if (!reader) {
+        throw std::runtime_error("Cannot read physics sidecar descriptor");
+      }
+      const auto bytes
+        = reader->ReadBlob(sizeof(data::pak::physics::PhysicsSceneAssetDesc));
+      if (!bytes) {
+        throw std::runtime_error("Cannot read physics sidecar descriptor");
+      }
+      data::pak::physics::PhysicsSceneAssetDesc descriptor {};
+      std::memcpy(&descriptor, bytes->data(), sizeof(descriptor));
+      if (descriptor.header.asset_type
+          != static_cast<uint8_t>(data::AssetType::kPhysicsScene)
+        || descriptor.header.version
+          != data::pak::physics::kPhysicsSceneAssetVersion) {
+        throw std::runtime_error(
+          "Invalid physics sidecar descriptor type/version");
+      }
+      if (descriptor.target_scene_key != scene_asset.GetAssetKey()) {
+        continue;
+      }
+      if (matched) {
+        throw std::runtime_error(
+          "Multiple effective physics sidecars target scene "
+          + data::to_string(scene_asset.GetAssetKey()));
+      }
+      matched = *key;
+    }
+  }
+  return matched;
 }
 
 auto AssetLoader::ResolveAssetIdentityForKey(const data::AssetKey& key,
@@ -3204,8 +3262,7 @@ auto AssetLoader::GetDebugAssetDependencyMap() const -> DebugAssetDependencyMap
       = std::static_pointer_cast<const internal::ContentBindingBundle>(
         retained);
     for (const auto& child : bundle->Assets()) {
-      const auto id
-        = FindAssetId(child.key, child.owner->GetSourceOrigin().instance);
+      const auto id = AssetCacheKey(*child.owner);
       if (id != 0U) {
         result.try_emplace(key).first->second.insert(id);
       }
@@ -3265,7 +3322,20 @@ template OXGN_CNTT_API auto
 auto AssetLoader::FindAssetId(const data::AssetKey& key,
   const data::SourceInstanceId source_id) const noexcept -> uint64_t
 {
-  return identities_->Find(internal::AssetIdentity { source_id, key }).get();
+  const auto source = ResolveSourceForId(source_id);
+  if (!source) {
+    return 0;
+  }
+  const auto view = source->HasKeyReferences(key)
+    ? impl_->source_registry.CurrentViewId()
+    : internal::BindingViewId {};
+  return identities_
+    ->Find(internal::AssetIdentity {
+      .source = source_id,
+      .asset = key,
+      .view = view,
+    })
+    .get();
 }
 
 auto AssetLoader::AssertSourceKeyConsistency(std::string_view context) const

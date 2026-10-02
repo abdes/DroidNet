@@ -4,23 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "DependencyReport.h"
-
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
 
+#include "DependencyReport.h"
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
-#include <Oxygen/Content/DescriptorDependencies.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Serio/FileStream.h>
-#include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/PakFormat_core.h>
 
 namespace oxygen::content::inspection {
 
@@ -61,29 +59,35 @@ auto RunDependencyReport(const DependencyReportOptions& options) -> int
         { "asset_type", entry.asset_type },
         { "virtual_path", entry.virtual_path },
         { "dependencies", nlohmann::json::array() },
-        { "complete", false },
+        { "complete", true },
       };
-      try {
-        const auto relative
-          = std::filesystem::path(entry.descriptor_relpath).lexically_normal();
-        if (relative.empty() || relative.has_root_path()
-          || *relative.begin() == "..") {
-          throw std::runtime_error(
-            "Descriptor path must stay within its cooked root.");
+      row["key_references"] = nlohmann::json::array();
+      row["resource_bindings"] = nlohmann::json::array();
+      for (const auto& reference : entry.references.Keys()) {
+        row["key_references"].push_back({
+          { "asset_key", nostd::to_string(reference.key) },
+          { "target_kind", nostd::to_underlying(reference.kind) },
+          { "expected_asset_type",
+            nostd::to_underlying(reference.expected_type) },
+        });
+        if (reference.kind == data::KeyReferenceKind::kAsset) {
+          row["dependencies"].push_back(nostd::to_string(reference.key));
         }
-        serio::FileStream<> stream(root / relative, std::ios::in);
-        serio::Reader<serio::FileStream<>> reader(stream);
-        const auto result = InspectDescriptorDependencies(
-          reader, entry.key, static_cast<data::AssetType>(entry.asset_type));
-        row["complete"] = result.complete;
-        if (!result.explanation.empty()) {
-          row["diagnostic"] = result.explanation;
+      }
+      for (const auto& binding : entry.references.Resources()) {
+        const char* state = "resource";
+        if (binding.kind == data::ResourceKind::kTexture) {
+          if (binding.index == data::pak::core::kErrorTextureResourceIndex) {
+            state = "error";
+          } else if (binding.index == data::pak::core::kFallbackResourceIndex) {
+            state = "fallback";
+          }
         }
-        for (const auto& dependency : result.assets) {
-          row["dependencies"].push_back(nostd::to_string(dependency));
-        }
-      } catch (const std::exception& error) {
-        row["diagnostic"] = error.what();
+        row["resource_bindings"].push_back({
+          { "kind", nostd::to_underlying(binding.kind) },
+          { "index", binding.index.get() },
+          { "state", state },
+        });
       }
       assets.push_back(std::move(row));
     }

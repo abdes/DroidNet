@@ -22,6 +22,10 @@
 #include <unordered_map>
 #include <vector>
 
+#include "AssetDumpers.h"
+#include "DumpContext.h"
+#include "PakFileDumper.h"
+#include "PrintUtils.h"
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
@@ -37,11 +41,6 @@
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
-
-#include "AssetDumpers.h"
-#include "DumpContext.h"
-#include "PakFileDumper.h"
-#include "PrintUtils.h"
 
 using PrintUtils::Field;
 using PrintUtils::HexDump;
@@ -609,14 +608,27 @@ private:
 //=== PakFileDumper Class ===================================================//
 
 auto PakFileDumper::DumpAsync(const PakFile& pak, AssetLoader& asset_loader)
-  -> oxygen::co::Co<>
+  -> oxygen::co::Co<bool>
 {
   try {
-    constexpr auto kSupportedPakVersion = 7;
-    if (pak.FormatVersion() != kSupportedPakVersion) {
-      throw std::runtime_error(
-        fmt::format("PakDump supports PAK v{} only; found version {}",
-          kSupportedPakVersion, pak.FormatVersion()));
+    for (const auto& entry : pak.Directory()) {
+      const auto expected
+        = oxygen::data::pak::CurrentAssetVersion(entry.asset_type);
+      if (!expected
+        || entry.desc_size < sizeof(oxygen::data::pak::core::AssetHeader)) {
+        throw std::runtime_error("Unsupported or truncated asset descriptor: "
+          + to_string(entry.asset_key));
+      }
+      auto reader = pak.CreateReader(entry);
+      const auto header = reader.Read<oxygen::data::pak::core::AssetHeader>();
+      if (!header
+        || header->asset_type != static_cast<uint8_t>(entry.asset_type)
+        || header->version != *expected) {
+        throw std::runtime_error(fmt::format(
+          "Asset {} requires the current {} descriptor version {}; re-cook the "
+          "content",
+          to_string(entry.asset_key), to_string(entry.asset_type), *expected));
+      }
     }
     Separator("PAK FILE ANALYSIS: " + ctx_.pak_path.filename().string());
     Field("File Path", ctx_.pak_path.string());
@@ -632,13 +644,13 @@ auto PakFileDumper::DumpAsync(const PakFile& pak, AssetLoader& asset_loader)
     oxygen::content::pakdump::AssetDirectoryDumper dir_dumper(registry);
     co_await dir_dumper.DumpAsync(pak, ctx_, asset_loader);
     Separator("ANALYSIS COMPLETE");
-    co_return;
+    co_return true;
   } catch (const std::exception& ex) {
     std::cerr << "ERROR: PakDump failed: " << ex.what() << "\n";
-    co_return;
+    co_return false;
   } catch (...) {
     std::cerr << "ERROR: PakDump failed: unknown exception\n";
-    co_return;
+    co_return false;
   }
 }
 
@@ -699,8 +711,6 @@ void PakFileDumper::PrintPakFooter(const PakFile& pak)
     f.audio_table.entry_size);
   PrintResourceTable("Script Resource Table", f.script_resource_table.offset,
     f.script_resource_table.count, f.script_resource_table.entry_size);
-  PrintResourceTable("Script Slot Table", f.script_slot_table.offset,
-    f.script_slot_table.count, f.script_slot_table.entry_size);
   PrintResourceTable("Physics Resource Table", f.physics_resource_table.offset,
     f.physics_resource_table.count, f.physics_resource_table.entry_size);
   Field("Index-0 Sentinel",
@@ -711,6 +721,17 @@ void PakFileDumper::PrintPakFooter(const PakFile& pak)
   Field("Browse Index Present", pak.HasBrowseIndex() ? "yes" : "no");
   if (pak.HasBrowseIndex()) {
     Field("Browse Index Entries", std::to_string(pak.BrowseIndex().size()));
+  }
+
+  Field("Catalog Offset", ToHexString(f.catalog_offset));
+  Field("Catalog Size", std::to_string(f.catalog_size));
+  const auto& catalog = pak.Catalog();
+  Field("Catalog Assets", std::to_string(catalog.entries.size()));
+  Field("Deleted Assets", std::to_string(catalog.deleted.size()));
+  Field("Required Base Layers", std::to_string(catalog.bases.size()));
+  for (const auto& base : catalog.bases) {
+    Field("Base Source", oxygen::data::to_string(base.source_key), 4);
+    Field("Base Content Version", std::to_string(base.content_version), 4);
   }
 
   Field("PAK CRC32", fmt::format("0x{:08x}", f.pak_crc32));

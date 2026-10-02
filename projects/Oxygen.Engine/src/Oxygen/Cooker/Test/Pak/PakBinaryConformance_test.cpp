@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -19,10 +17,11 @@
 #include <string>
 #include <vector>
 
+#include "PakTestSupport.h"
+
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Data/PakFormat_core.h>
-
-#include "PakTestSupport.h"
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 namespace core = oxygen::data::pak::core;
@@ -125,7 +124,7 @@ protected:
       .content_version = kContentVersion,
       .source_key = paktest::MakeSourceKey(kSourceKeySeed),
       .base_catalogs = {},
-      .patch_compat = {},
+
       .options = pak::PakBuildOptions {
         .deterministic = true,
         .embed_browse_index = false,

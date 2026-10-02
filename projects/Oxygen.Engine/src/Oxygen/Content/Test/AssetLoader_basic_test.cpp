@@ -5,14 +5,16 @@
 //===----------------------------------------------------------------------===//
 
 #include <fstream>
+#include <ios>
+#include <stdexcept>
+#include <system_error>
 
-#include <Oxygen/Testing/GTest.h>
+#include "./AssetLoader_test.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
-
-#include "./AssetLoader_test.h"
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::content::testing::AssetLoaderBasicTest;
 
@@ -20,44 +22,31 @@ using oxygen::content::testing::AssetLoaderBasicTest;
 
 namespace {
 
-//! Test: AssetLoader handles corrupted PAK file gracefully
-/*!
- Scenario: Attempts to load assets from a corrupted PAK file and verifies
- graceful error handling by catching the expected exception.
-*/
-NOLINT_TEST_F(AssetLoaderBasicTest, LoadAssetCorruptedPakHandlesGracefully)
+NOLINT_TEST_F(AssetLoaderBasicTest, TruncatedPakLeavesMountsUnchanged)
 {
-  // Arrange - Create a corrupted PAK file
-  auto corrupted_pak = temp_dir_ / "corrupted.pak";
+  const auto path = temp_dir_ / "truncated.pak";
   {
-    std::ofstream file(corrupted_pak, std::ios::binary);
-    file << "CORRUPTED_DATA_NOT_A_VALID_PAK_FILE";
+    std::ofstream file(path, std::ios::binary);
+    file << "NOT_A_PAK";
   }
-
-  // Act & Assert - Should throw exception for corrupted file
-  NOLINT_EXPECT_THROW(
-    { asset_loader_->AddPakFile(corrupted_pak); }, std::exception);
+  try {
+    asset_loader_->AddPakFile(path);
+    FAIL() << "Truncated header was accepted";
+  } catch (const std::runtime_error& error) {
+    EXPECT_STREQ(error.what(), "Failed to read pak header");
+  }
+  EXPECT_TRUE(asset_loader_->EnumerateMountedSources().empty());
 }
 
-//! Test: AssetLoader handles missing PAK file gracefully
-/*!
- Scenario: Attempts to add a non-existent PAK file and verifies
- graceful error handling.
-*/
-NOLINT_TEST_F(AssetLoaderBasicTest, AddPakFileNonExistentHandlesGracefully)
+NOLINT_TEST_F(AssetLoaderBasicTest, MissingPakLeavesMountsUnchanged)
 {
-  // Arrange
-  const auto non_existent_pak = temp_dir_ / "non_existent.pak";
-
-  // Act & Assert - Should handle gracefully (may throw or return gracefully)
-  // Implementation-dependent behavior
-  NOLINT_EXPECT_NO_THROW({
-    try {
-      asset_loader_->AddPakFile(non_existent_pak);
-    } catch (const std::exception&) {
-      // Expected behavior for missing file
-    }
-  });
+  try {
+    asset_loader_->AddPakFile(temp_dir_ / "missing.pak");
+    FAIL() << "Missing source was mounted";
+  } catch (const std::system_error& error) {
+    EXPECT_EQ(error.code(), std::errc::no_such_file_or_directory);
+  }
+  EXPECT_TRUE(asset_loader_->EnumerateMountedSources().empty());
 }
 
 NOLINT_TEST_F(AssetLoaderBasicTest, ConsoleTelemetryBindingsExpectedToRoundTrip)

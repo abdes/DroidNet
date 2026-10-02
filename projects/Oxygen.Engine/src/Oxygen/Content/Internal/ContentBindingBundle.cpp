@@ -17,8 +17,9 @@
 
 namespace oxygen::content::internal {
 
-auto ContentBindingBuilder::Freeze() && -> std::shared_ptr<
-  const ContentBindingBundle>
+auto ContentBindingBuilder::Freeze(ContentId identity,
+  std::shared_ptr<const BindingViewId>
+    view) && -> std::shared_ptr<const ContentBindingBundle>
 {
   std::vector<BoundAsset> assets;
   std::vector<BoundResource> resources;
@@ -36,14 +37,19 @@ auto ContentBindingBuilder::Freeze() && -> std::shared_ptr<
       resources.push_back(std::move(binding));
     }
   }
-  return std::make_shared<const ContentBindingBundle>(
-    std::move(assets), std::move(resources));
+  return std::make_shared<const ContentBindingBundle>(identity, std::move(view),
+    std::move(assets), std::move(resources), std::move(physics_));
 }
 
-ContentBindingBundle::ContentBindingBundle(
-  std::vector<BoundAsset> assets, std::vector<BoundResource> resources)
-  : assets_(std::move(assets))
+ContentBindingBundle::ContentBindingBundle(ContentId identity,
+  std::shared_ptr<const BindingViewId> view, std::vector<BoundAsset> assets,
+  std::vector<BoundResource> resources,
+  std::unique_ptr<const PhysicsBindings> physics)
+  : identity_(identity)
+  , view_(std::move(view))
+  , assets_(std::move(assets))
   , resources_(std::move(resources))
+  , physics_(std::move(physics))
 {
   std::ranges::sort(assets_, {}, &BoundAsset::key);
   std::ranges::sort(resources_, {}, &BoundResource::key);
@@ -54,7 +60,20 @@ auto ContentBindingBundle::FindAssetBinding(
 {
   const auto found
     = std::ranges::lower_bound(assets_, key, {}, &BoundAsset::key);
-  return found != assets_.end() && found->key == key ? &*found : nullptr;
+  if (found != assets_.end() && found->key == key) {
+    return &*found;
+  }
+  for (const auto& asset : assets_) {
+    const auto& retained = asset.owner->GetRuntimeBindings();
+    if (retained && retained->GetTypeId() == ClassTypeId()) {
+      const auto child
+        = std::static_pointer_cast<const ContentBindingBundle>(retained);
+      if (const auto* binding = child->FindAssetBinding(key)) {
+        return binding;
+      }
+    }
+  }
+  return nullptr;
 }
 
 auto ContentBindingBundle::FindResourceBinding(ResourceKey key) const noexcept

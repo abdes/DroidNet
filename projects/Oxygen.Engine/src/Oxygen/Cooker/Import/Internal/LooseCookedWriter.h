@@ -21,6 +21,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -36,6 +37,7 @@ struct LooseCookedAssetRecord final {
 
   uint64_t descriptor_size = 0;
   std::optional<base::Sha256Digest> descriptor_sha256 {};
+  data::AssetReferences references;
 };
 
 //! Summary of one cooked file record written to disk.
@@ -142,8 +144,8 @@ public:
   */
   OXGN_COOK_API auto WriteAssetDescriptor(const data::AssetKey& key,
     data::AssetType asset_type, std::string_view virtual_path,
-    std::string_view descriptor_relpath, std::span<const std::byte> bytes)
-    -> void;
+    std::string_view descriptor_relpath, std::span<const std::byte> bytes,
+    const data::AssetReferences& references) -> void;
 
   //! Write an arbitrary file and update its index record.
   /*!
@@ -208,6 +210,7 @@ public:
   OXGN_COOK_API auto RegisterExternalAssetDescriptor(const data::AssetKey& key,
     data::AssetType asset_type, std::string_view virtual_path,
     std::string_view descriptor_relpath, uint64_t descriptor_size,
+    const data::AssetReferences& references,
     std::optional<base::Sha256Digest> descriptor_sha256 = std::nullopt) -> void;
 
   //! Finalize and write the loose cooked index.

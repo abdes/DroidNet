@@ -16,5 +16,8 @@
 
 OXDAT_RESOURCE_INDEX_CONSTANT(kFallbackResourceIndex, 0u)
 OXDAT_RESOURCE_INDEX_CONSTANT(kNoResourceIndex, 0u)
+// Texture-only marker for the renderer's shared error checkerboard. It has no
+// container payload and must survive cooking and packaging unchanged.
+OXDAT_RESOURCE_INDEX_CONSTANT(kErrorTextureResourceIndex, 0xFFFFFFFFu)
 
 #undef OXDAT_RESOURCE_INDEX_CONSTANT

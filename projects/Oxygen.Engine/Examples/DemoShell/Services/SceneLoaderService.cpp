@@ -41,6 +41,7 @@
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Config/PathFinder.h>
+#include <Oxygen/Content/ContentLoadScope.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
@@ -690,11 +691,12 @@ void SceneLoaderService::StartLoad(const data::AssetKey& key)
   failed_ = false;
   consumed_ = false;
   // Start loading the scene asset
-  loader_.StartLoadScene(key,
-    [weak_self = weak_from_this()](
+  const auto scope = loader_.BeginLoadScope();
+  loader_.StartLoadScene(key, content::LoadRequest { .scope = scope },
+    [weak_self = weak_from_this(), scope](
       std::shared_ptr<data::SceneAsset> asset) -> void {
       if (auto self = weak_self.lock()) {
-        self->OnSceneLoaded(std::move(asset));
+        self->OnSceneLoaded(std::move(asset), scope);
       }
     });
 }
@@ -726,7 +728,8 @@ auto SceneLoaderService::Tick() -> bool
   return false;
 }
 
-void SceneLoaderService::OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset)
+void SceneLoaderService::OnSceneLoaded(
+  std::shared_ptr<data::SceneAsset> asset, content::ContentLoadScope scope)
 {
   try {
     if (!asset) {
@@ -743,7 +746,8 @@ void SceneLoaderService::OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset)
     ready_geometry_keys_.clear();
 
     const auto scene_asset = std::move(asset);
-    const auto sidecar_key_opt = ResolvePhysicsSidecarKey(*scene_asset);
+    const auto sidecar_key_opt
+      = loader_.FindPhysicsSidecarAssetKeyForScene(*scene_asset, scope);
 
     if (!sidecar_key_opt.has_value()) {
       LOG_F(INFO,
@@ -758,8 +762,8 @@ void SceneLoaderService::OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset)
     }
 
     const auto sidecar_key = *sidecar_key_opt;
-    loader_.StartLoadPhysicsSceneAsset(sidecar_key, scene_asset->GetSourceKey(),
-      {},
+    loader_.StartLoadPhysicsSceneAsset(sidecar_key,
+      content::LoadRequest { .scope = std::move(scope) },
       [weak_self = weak_from_this(), scene_asset, sidecar_key](
         std::shared_ptr<data::PhysicsSceneAsset> physics_asset) -> void {
         if (const auto self = weak_self.lock()) {
@@ -825,12 +829,6 @@ void SceneLoaderService::OnPhysicsSceneLoaded(
     ready_ = false;
     failed_ = true;
   }
-}
-
-auto SceneLoaderService::ResolvePhysicsSidecarKey(
-  const data::SceneAsset& scene_asset) const -> std::optional<data::AssetKey>
-{
-  return loader_.FindPhysicsSidecarAssetKeyForScene(scene_asset);
 }
 
 void SceneLoaderService::ValidatePhysicsSidecarIdentity(
@@ -1204,7 +1202,7 @@ auto SceneLoaderService::ResolveCookedShapePayload(
       + data::to_string(cooked_ref.payload_asset_key) + ")");
   }
 
-  auto resource = loader_.GetPhysicsResource(*resource_key_opt);
+  auto resource = FindHydrationPayload(*resource_key_opt);
   if (!resource) {
     throw std::runtime_error(
       std::string("OXY-SHAPE-007: physics payload resource not loaded in ")
@@ -1291,8 +1289,7 @@ void SceneLoaderService::HydrateJointBindings(
           + " node_index_b=" + std::to_string(record.node_index_b)
           + " asset_key=" + data::to_string(record.constraint_asset_key) + ")");
       }
-      const auto constraint_resource
-        = loader_.GetPhysicsResource(*resource_key_opt);
+      const auto constraint_resource = FindHydrationPayload(*resource_key_opt);
       if (!constraint_resource) {
         throw std::runtime_error(
           std::string("joint constraint resource is not loaded ")
@@ -1751,7 +1748,7 @@ void SceneLoaderService::HydrateSoftBodyBindings(
         + " backend=" + selected_backend_name + ")");
     }
     const auto settings_resource
-      = loader_.GetPhysicsResource(*settings_resource_key_opt);
+      = FindHydrationPayload(*settings_resource_key_opt);
     if (!settings_resource) {
       throw std::runtime_error(
         std::string("soft-body settings resource is not loaded ")
@@ -1932,8 +1929,7 @@ void SceneLoaderService::HydrateVehicleBindings(
         + "(node_index=" + std::to_string(record.node_index)
         + " asset_key=" + data::to_string(record.constraint_asset_key) + ")");
     }
-    const auto constraint_resource
-      = loader_.GetPhysicsResource(*resource_key_opt);
+    const auto constraint_resource = FindHydrationPayload(*resource_key_opt);
     if (!constraint_resource) {
       throw std::runtime_error(
         std::string("vehicle constraint resource is not loaded ")
@@ -2478,8 +2474,18 @@ auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
   co_return std::move(active_camera_);
 }
 
+auto SceneLoaderService::FindHydrationPayload(
+  const content::ResourceKey key) const noexcept
+  -> observer_ptr<const data::PhysicsResource>
+{
+  const auto found = hydration_payloads_.find(key);
+  return observer_ptr<const data::PhysicsResource> {
+    found == hydration_payloads_.end() ? nullptr : found->second.get()
+  };
+}
+
 auto SceneLoaderService::PreloadPhysicsDependencyResources(
-  const data::PhysicsSceneAsset& physics_asset) -> co::Co<>
+  const data::PhysicsSceneAsset& physics_asset) -> co::Co<PhysicsPayloads>
 {
   std::unordered_set<data::AssetKey> payload_asset_keys {};
   auto collect_payload_ref = [&](const data::AssetKey& shape_asset_key,
@@ -2506,6 +2512,10 @@ auto SceneLoaderService::PreloadPhysicsDependencyResources(
   for (const auto& record :
     physics_asset.GetBindings<data::pak::physics::CharacterBindingRecord>()) {
     collect_payload_ref(record.shape_asset_key, "character", record.node_index);
+    if (!record.inner_shape_asset_key.IsNil()) {
+      collect_payload_ref(record.inner_shape_asset_key, "character inner shape",
+        record.node_index);
+    }
   }
   for (const auto& record :
     physics_asset.GetBindings<data::pak::physics::ColliderBindingRecord>()) {
@@ -2524,6 +2534,8 @@ auto SceneLoaderService::PreloadPhysicsDependencyResources(
     collect_constraint_asset_key(record.topology_asset_key);
   }
 
+  PhysicsPayloads owners;
+  owners.reserve(payload_asset_keys.size());
   for (const auto& payload_asset_key : payload_asset_keys) {
     const auto resource_key_opt = loader_.MakePhysicsResourceKeyForAsset(
       physics_asset, payload_asset_key);
@@ -2540,20 +2552,24 @@ auto SceneLoaderService::PreloadPhysicsDependencyResources(
           "OXY-SHAPE-007: failed to preload physics payload resource ")
         + data::to_string(payload_asset_key));
     }
+    owners.emplace(*resource_key_opt, std::move(payload));
   }
+  co_return owners;
 }
 
 auto SceneLoaderService::HydratePhysicsSidecar(
   const data::PhysicsSceneAsset& physics_asset) -> co::Co<>
 {
-  current_physics_context_ = observer_ptr { &physics_asset };
   BeginHydrationWindow();
+  current_physics_context_ = observer_ptr { &physics_asset };
   ScopeGuard clear_context([this] noexcept -> void {
+    hydration_payloads_.clear();
     EndHydrationWindow();
     current_physics_context_.reset();
   });
   ResolveHydrationTransforms();
-  co_await PreloadPhysicsDependencyResources(physics_asset);
+  hydration_payloads_
+    = co_await PreloadPhysicsDependencyResources(physics_asset);
   HydratePhysicsBindings(physics_asset);
   co_return;
 }
@@ -2562,8 +2578,8 @@ auto SceneLoaderService::BuildEnvironment(const data::SceneAsset& asset)
   -> std::unique_ptr<scene::SceneEnvironment>
 {
   auto metering_mask = content::ResourceKey {};
-  if (const auto post = asset.TryGetPostProcessVolumeEnvironment(); post
-    && post->auto_exposure_metering_mask != data::pak::core::kNoResourceIndex) {
+  if (const auto post = asset.TryGetPostProcessVolumeEnvironment();
+    post && post->auto_exposure_metering_mask != data::kNoResourceReference) {
     const auto key = loader_.MakeTextureResourceKeyForAsset(
       asset, post->auto_exposure_metering_mask);
     if (!key) {
@@ -2999,14 +3015,14 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
   }
 
   auto load_script_resource
-    = [this, script_asset](
-        const uint32_t index) -> std::shared_ptr<const data::ScriptResource> {
+    = [this, script_asset](const data::ResourceReferenceIndex index)
+    -> std::shared_ptr<const data::ScriptResource> {
     return ReadScriptResource(index, *script_asset);
   };
 
   auto map_origin
-    = [this, script_asset](
-        const uint32_t index) -> std::optional<scripting::ScriptBlobOrigin> {
+    = [this, script_asset](const data::ResourceReferenceIndex index)
+    -> std::optional<scripting::ScriptBlobOrigin> {
     if (auto res = ReadScriptResource(index, *script_asset)) {
       return scripting::ScriptBlobOrigin::kEmbeddedResource;
     }
@@ -3304,12 +3320,12 @@ void SceneLoaderService::LogSceneHierarchy(const scene::Scene& scene)
   }
 }
 
-auto SceneLoaderService::ReadScriptResource(
-  uint32_t index, const data::ScriptAsset& context_asset) const
+auto SceneLoaderService::ReadScriptResource(data::ResourceReferenceIndex index,
+  const data::ScriptAsset& context_asset) const
   -> std::shared_ptr<const data::ScriptResource>
 {
-  const auto resource_key_opt = loader_.MakeScriptResourceKeyForAsset(
-    context_asset, data::pak::core::ResourceIndexT { index });
+  const auto resource_key_opt
+    = loader_.MakeScriptResourceKeyForAsset(context_asset, index);
   if (!resource_key_opt.has_value()) {
     LOG_F(WARNING,
       "failed to resolve script resource key (context_asset={} index={})",
@@ -3320,8 +3336,7 @@ auto SceneLoaderService::ReadScriptResource(
   auto resource = loader_.GetScriptResource(*resource_key_opt);
   if (!resource) {
     resource = std::const_pointer_cast<data::ScriptResource>(
-      loader_.ReadScriptResourceForAsset(
-        context_asset, data::pak::core::ResourceIndexT { index }));
+      loader_.ReadScriptResourceForAsset(context_asset, index));
   }
   if (!resource) {
     LOG_F(WARNING,
