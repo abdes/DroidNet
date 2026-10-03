@@ -19,6 +19,8 @@ namespace Oxygen.Editor.Controls;
 [TemplateVisualState(Name = DisabledState, GroupName = CommonStates)]
 public partial class PropertyCard : ContentControl
 {
+    private const double InlineLabelWidthRatio = 0.4;
+
     private readonly UISettings uiSettings = new();
     private Grid? layoutRoot;
     private FrameworkElement? header;
@@ -32,7 +34,7 @@ public partial class PropertyCard : ContentControl
     /// <summary>Identifies the automatic, inline or stacked layout policy.</summary>
     public static readonly DependencyProperty LayoutProperty = RegisterLayoutProperty(nameof(Layout), typeof(PropertyLayout), PropertyLayout.Auto);
 
-    /// <summary>Identifies the shared label-column width.</summary>
+    /// <summary>Identifies the minimum label-column width used for automatic stacking.</summary>
     public static readonly DependencyProperty LabelWidthProperty = RegisterLayoutProperty(nameof(LabelWidth), typeof(double), 124d);
 
     /// <summary>Identifies the minimum usable editor width, excluding annotations.</summary>
@@ -65,7 +67,7 @@ public partial class PropertyCard : ContentControl
     /// <summary>Gets or sets the row layout policy.</summary>
     public PropertyLayout Layout { get => (PropertyLayout)this.GetValue(LayoutProperty); set => this.SetValue(LayoutProperty, value); }
 
-    /// <summary>Gets or sets the shared label width in DIPs.</summary>
+    /// <summary>Gets or sets the minimum label width in DIPs used for automatic stacking.</summary>
     public double LabelWidth { get => (double)this.GetValue(LabelWidthProperty); set => this.SetValue(LabelWidthProperty, value); }
 
     /// <summary>Gets or sets the minimum usable width of the editor in DIPs.</summary>
@@ -192,7 +194,8 @@ public partial class PropertyCard : ContentControl
             var minimum = Math.Max(this.EditorMinimumWidth * scale, this.editor.DesiredSize.Width) + annotationWidth + prefixWidth + accessoryWidth;
             var width = availableSize.Width - this.Padding.Left - this.Padding.Right;
             var layout = this.Layout == PropertyLayout.Auto
-                ? (width >= this.LabelWidth * scale + 12 + minimum ? PropertyLayout.Inline : PropertyLayout.Stacked)
+                ? (width >= 12 + Math.Max(this.LabelWidth * scale / InlineLabelWidthRatio, minimum / (1 - InlineLabelWidthRatio))
+                    ? PropertyLayout.Inline : PropertyLayout.Stacked)
                 : this.Layout;
             this.ActualLayout = layout;
             this.header.Visibility = this.IsHeaderVisible ? Visibility.Visible : Visibility.Collapsed;
@@ -206,16 +209,16 @@ public partial class PropertyCard : ContentControl
                 this.leading.Visibility = this.LeadingContent is null ? Visibility.Collapsed : Visibility.Visible;
             }
 
-            if (layout != this.appliedLayout || (layout == PropertyLayout.Inline && this.layoutRoot.ColumnDefinitions[0].Width.Value != this.LabelWidth * scale))
+            if (layout != this.appliedLayout)
             {
                 this.layoutRoot.ColumnDefinitions.Clear();
                 this.layoutRoot.RowDefinitions.Clear();
                 this.layoutRoot.ColumnSpacing = layout == PropertyLayout.Inline ? 12 : 0;
                 this.layoutRoot.RowSpacing = this.IsHeaderVisible && layout == PropertyLayout.Stacked ? 4 : 0;
-                this.layoutRoot.ColumnDefinitions.Add(new ColumnDefinition { Width = layout == PropertyLayout.Inline ? new GridLength(this.LabelWidth * scale) : new GridLength(1, GridUnitType.Star) });
+                this.layoutRoot.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(layout == PropertyLayout.Inline ? InlineLabelWidthRatio : 1, GridUnitType.Star) });
                 if (layout == PropertyLayout.Inline)
                 {
-                    this.layoutRoot.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                    this.layoutRoot.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1 - InlineLabelWidthRatio, GridUnitType.Star) });
                 }
 
                 this.layoutRoot.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });

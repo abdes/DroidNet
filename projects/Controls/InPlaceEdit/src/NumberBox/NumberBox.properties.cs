@@ -20,6 +20,9 @@ public partial class NumberBox
     /// <summary>Identifies the external label-column width; NaN retains the default proportional layout.</summary>
     public static readonly DependencyProperty LabelWidthProperty = RegisterLabelLayoutProperty(nameof(LabelWidth), typeof(double), double.NaN);
 
+    /// <summary>Identifies the label's share of horizontal space, or NaN to use <see cref="LabelWidth"/>.</summary>
+    public static readonly DependencyProperty LabelWidthRatioProperty = RegisterLabelLayoutProperty(nameof(LabelWidthRatio), typeof(double), double.NaN);
+
     /// <summary>Identifies the minimum value-region width, excluding the label and annotations.</summary>
     public static readonly DependencyProperty EditorMinimumWidthProperty = RegisterLabelLayoutProperty(nameof(EditorMinimumWidth), typeof(double), 0d);
 
@@ -43,6 +46,13 @@ public partial class NumberBox
 
     /// <summary>Gets or sets the external label width in DIPs, or NaN for proportional columns.</summary>
     public double LabelWidth { get => (double)this.GetValue(LabelWidthProperty); set => this.SetValue(LabelWidthProperty, value); }
+
+    /// <summary>
+    /// Gets or sets the label's share of horizontal space after spacing, between zero and one (exclusive).
+    /// NaN retains the <see cref="LabelWidth"/> policy; a ratio uses that width only as the auto-stacking minimum.
+    /// Proportional labels stay on one line and trim with an ellipsis; value annotations share the remaining column.
+    /// </summary>
+    public double LabelWidthRatio { get => (double)this.GetValue(LabelWidthRatioProperty); set => this.SetValue(LabelWidthRatioProperty, value); }
 
     /// <summary>Gets or sets the minimum usable value-region width in DIPs.</summary>
     public double EditorMinimumWidth { get => (double)this.GetValue(EditorMinimumWidthProperty); set => this.SetValue(EditorMinimumWidthProperty, value); }

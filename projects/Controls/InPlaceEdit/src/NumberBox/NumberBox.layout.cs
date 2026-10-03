@@ -41,6 +41,9 @@ public partial class NumberBox
 
         var scale = Math.Max(this.layoutSettings.TextScaleFactor, this.FontSize / 14);
         var labelWidth = this.LabelWidth > 0 ? this.LabelWidth * scale : double.NaN;
+        var proportional = this.LabelWidthRatio is > 0 and < 1;
+        this.labelTextBlock.TextWrapping = proportional ? TextWrapping.NoWrap : TextWrapping.Wrap;
+        this.labelTextBlock.TextTrimming = proportional ? TextTrimming.CharacterEllipsis : TextTrimming.None;
         this.UpdateValueAnnotations();
         this.backgroundBorder.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var valueWidth = Math.Max(this.EditorMinimumWidth * scale, this.backgroundBorder.DesiredSize.Width);
@@ -89,6 +92,12 @@ public partial class NumberBox
             var qualifierWidth = this.MeasureAnnotation(this.qualifierTextBlock);
             var inlineMinimum = (double.IsNaN(labelWidth) ? this.labelTextBlock!.DesiredSize.Width : labelWidth)
                 + this.LabelSpacing + valueWidth + prefixWidth + qualifierWidth;
+            if (this.LabelWidthRatio is > 0 and < 1)
+            {
+                inlineMinimum = this.LabelSpacing + Math.Max(
+                    (double.IsNaN(labelWidth) ? 0 : labelWidth) / this.LabelWidthRatio,
+                    (valueWidth + prefixWidth + qualifierWidth) / (1 - this.LabelWidthRatio));
+            }
             if (availableWidth < inlineMinimum)
             {
                 return LabelPosition.Top;
@@ -130,6 +139,12 @@ public partial class NumberBox
             Width = double.IsNaN(labelWidth) ? new GridLength(1, GridUnitType.Star) : new GridLength(labelWidth),
         };
         var valueColumn = ValueColumn(valueWidth);
+        if (this.LabelWidthRatio is > 0 and < 1)
+        {
+            labelColumn.Width = new GridLength(this.LabelWidthRatio, GridUnitType.Star);
+            valueColumn.Width = new GridLength(1 - this.LabelWidthRatio, GridUnitType.Star);
+            valueColumn.MinWidth = 0;
+        }
         var labelOnLeft = position == LabelPosition.Left;
         this.rootGrid!.ColumnDefinitions.Add(labelOnLeft ? labelColumn : valueColumn);
         this.rootGrid.ColumnDefinitions.Add(labelOnLeft ? valueColumn : labelColumn);

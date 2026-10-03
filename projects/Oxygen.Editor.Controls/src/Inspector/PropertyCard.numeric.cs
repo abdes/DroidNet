@@ -103,6 +103,7 @@ public partial class PropertyCard
         this.BindEditorProperty(number, NumberBox.QualifierMinimumWidthProperty, nameof(this.QualifierMinimumWidth));
         this.BindEditorProperty(number, NumberBox.LabelForegroundProperty, nameof(this.Foreground));
         this.BindEditorProperty(number, FontSizeProperty, nameof(this.FontSize));
+        this.SetEditorProperty(number, NumberBox.LabelWidthRatioProperty, InlineLabelWidthRatio);
         this.SetEditorProperty(number, NumberBox.LabelSpacingProperty, 12d);
         this.SetEditorProperty(number, NumberBox.LabelRowSpacingProperty, 4d);
         this.SaveEditorProperty(number, NumberBox.AutoStackLabelProperty);

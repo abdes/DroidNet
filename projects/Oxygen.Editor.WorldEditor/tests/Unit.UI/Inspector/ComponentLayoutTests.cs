@@ -201,7 +201,8 @@ public sealed partial class ComponentLayoutTests : DroidNet.Tests.VisualUserInte
         }
         else
         {
-            _ = editorPoint.X.Should().BeGreaterThanOrEqualTo(card.LabelWidth + 11);
+            var rowWidth = card.ActualWidth - card.Padding.Left - card.Padding.Right;
+            _ = editorPoint.X.Should().BeApproximately(card.Padding.Left + ((rowWidth - 12) * 0.4) + 12, 1);
         }
 
         _ = ToolTipService.GetToolTip(label).Should().Be(card.PropertyName);

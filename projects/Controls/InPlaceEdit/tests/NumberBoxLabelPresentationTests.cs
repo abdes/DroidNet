@@ -67,6 +67,50 @@ public sealed class NumberBoxLabelPresentationTests : VisualUserInterfaceTests
         }
     });
 
+    [TestMethod]
+    [DataRow(LabelPosition.Left)]
+    [DataRow(LabelPosition.Right)]
+    public Task ProportionalLabelsReserveTheSameValueShareIncludingAnnotations(LabelPosition position) => EnqueueAsync(async () =>
+    {
+        var number = new NumberBox
+        {
+            Width = 480,
+            Label = "A long numeric property caption that needs an ellipsis",
+            LabelPosition = position,
+            LabelWidth = 124,
+            LabelWidthRatio = 0.4,
+            LabelSpacing = 12,
+            EditorMinimumWidth = 128,
+            Prefix = "f/",
+            Qualifier = "EV",
+            AutoStackLabel = true,
+        };
+        await LoadTestContentAsync(number).ConfigureAwait(true);
+        var label = number.FindDescendant<TextBlock>(part => part.Name == "PartLabelTextBlock")!;
+        var valueGroup = number.FindDescendant<Grid>(part => part.Name == "PartValueGroup")!;
+        foreach (var width in new[] { 480d, 760d, 340d, 480d })
+        {
+            number.Width = width;
+            number.UpdateLayout();
+            _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+            _ = number.ActualLabelPosition.Should().Be(position);
+            _ = valueGroup.ActualWidth.Should().BeApproximately((width - 12) * 0.6, 1);
+            _ = label.ActualWidth.Should().BeLessThanOrEqualTo(((width - 12) * 0.4) + 1);
+            _ = label.TextWrapping.Should().Be(TextWrapping.NoWrap);
+            _ = label.TextTrimming.Should().Be(TextTrimming.CharacterEllipsis);
+            _ = label.IsTextTrimmed.Should().BeTrue();
+        }
+
+        number.Width = 260;
+        number.UpdateLayout();
+        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+        _ = number.ActualLabelPosition.Should().Be(LabelPosition.Top);
+        number.LabelWidthRatio = double.NaN;
+        number.UpdateLayout();
+        _ = label.TextWrapping.Should().Be(TextWrapping.Wrap);
+        _ = label.TextTrimming.Should().Be(TextTrimming.None);
+    });
+
     private static Rect Bounds(FrameworkElement element, UIElement relativeTo)
         => new(element.TransformToVisual(relativeTo).TransformPoint(default), element.RenderSize);
 }

@@ -29,7 +29,8 @@
                                 x:Name="PropertyName"
                                 FontSize="{TemplateBinding FontSize}"
                                 Text="{TemplateBinding PropertyName}"
-                                TextWrapping="Wrap"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="NoWrap"
                                 ToolTipService.ToolTip="{TemplateBinding PropertyName}" />
                             <TextBlock
                                 x:Name="HeaderQualifier"

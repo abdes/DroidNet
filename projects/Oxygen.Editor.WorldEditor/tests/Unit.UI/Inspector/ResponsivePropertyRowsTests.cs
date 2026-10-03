@@ -56,9 +56,11 @@ public sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
             var field = number.FindDescendant<Border>(border => border.Name == "PartBackgroundBorder")!;
             var numberPoint = field.TransformToVisual(card).TransformPoint(default);
             var suffixPoint = suffix.TransformToVisual(card).TransformPoint(default);
-            var expected = width >= (124 + 128) * textScale + 12 + 28 ? PropertyLayout.Inline : PropertyLayout.Stacked;
+            var expected = width >= 12 + Math.Max(124 * textScale / 0.4, ((128 * textScale) + 28) / 0.6)
+                ? PropertyLayout.Inline : PropertyLayout.Stacked;
             _ = card.ActualLayout.Should().Be(expected);
-            _ = label.TextWrapping.Should().Be(TextWrapping.Wrap);
+            _ = label.TextWrapping.Should().Be(TextWrapping.NoWrap);
+            _ = label.TextTrimming.Should().Be(TextTrimming.CharacterEllipsis);
             _ = label.Text.Should().Be(card.PropertyName);
             _ = label.Visibility.Should().Be(Visibility.Visible);
             _ = card.FindDescendant<TextBlock>(text => text.Name == "PropertyName")!.ActualWidth.Should().Be(0);
@@ -72,13 +74,70 @@ public sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
             }
             else
             {
-                _ = (numberPoint.X - field.Margin.Left).Should().BeApproximately(124 * textScale + 12, 1);
+                _ = (numberPoint.X - field.Margin.Left).Should().BeApproximately(((width - 12) * 0.4) + 12, 1);
             }
 
             _ = numberPoint.X.Should().BeApproximately(inputStart ?? numberPoint.X, 1);
             _ = suffixPoint.X.Should().BeApproximately(suffixStart ?? suffixPoint.X, 1);
             inputStart = numberPoint.X;
             suffixStart = suffixPoint.X;
+        }
+    });
+
+    [TestMethod]
+    public Task MixedInlineRowsKeepTheSameProportionsAndEllipsisWhileResizing() => EnqueueAsync(async () =>
+    {
+        const string longLabel = "A very long inspector property label that must stay on a single line";
+        var number = new NumberBox { NumberValue = 26.9f, Mask = "~.###" };
+        var scalar = new PropertyCard { PropertyName = longLabel, Qualifier = "°", Content = number };
+        var toggle = new PropertyCard { PropertyName = "Enabled", Content = new ToggleSwitch() };
+        var compound = new PropertyCard
+        {
+            PropertyName = longLabel,
+            IsCompound = true,
+            Qualifier = "m",
+            Content = new VectorBox { ComponentLabelPosition = LabelPosition.Left, ComponentMask = "~.###" },
+        };
+        var rows = new StackPanel { Spacing = 4 };
+        rows.Children.Add(scalar);
+        rows.Children.Add(toggle);
+        rows.Children.Add(compound);
+        var host = CreateHost(760, rows);
+        await LoadTestContentAsync(host).ConfigureAwait(true);
+        var scalarLabel = number.FindDescendant<TextBlock>(text => text.Name == "PartLabelTextBlock")!;
+        var scalarValue = number.FindDescendant<Grid>(grid => grid.Name == "PartValueGroup")!;
+
+        foreach (var width in new[] { 760d, 620d, 900d, 760d })
+        {
+            host.Width = width;
+            host.UpdateLayout();
+            _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+            var labelWidth = (width - 12) * 0.4;
+            var valueWidth = (width - 12) * 0.6;
+            var valueStart = scalarValue.TransformToVisual(rows).TransformPoint(default).X;
+            _ = scalar.ActualLayout.Should().Be(PropertyLayout.Inline);
+            _ = scalarValue.ActualWidth.Should().BeApproximately(valueWidth, 1);
+            _ = valueStart.Should().BeApproximately(labelWidth + 12, 1);
+            _ = scalarLabel.TextWrapping.Should().Be(TextWrapping.NoWrap);
+            _ = scalarLabel.TextTrimming.Should().Be(TextTrimming.CharacterEllipsis);
+            _ = scalarLabel.IsTextTrimmed.Should().BeTrue();
+            _ = ToolTipService.GetToolTip(scalarLabel).Should().Be(longLabel);
+
+            foreach (var card in new[] { toggle, compound })
+            {
+                var label = card.FindDescendant<TextBlock>(text => text.Name == "PropertyName")!;
+                var presenter = card.FindDescendant<ContentPresenter>(part => part.Name == "PropertyEditor")!;
+                var valueGroup = (Grid)presenter.Parent;
+                _ = card.ActualLayout.Should().Be(PropertyLayout.Inline);
+                _ = valueGroup.TransformToVisual(rows).TransformPoint(default).X.Should().BeApproximately(valueStart, 1);
+                _ = valueGroup.ActualWidth.Should().BeApproximately(valueWidth, 1);
+                _ = label.TextWrapping.Should().Be(TextWrapping.NoWrap);
+                _ = label.TextTrimming.Should().Be(TextTrimming.CharacterEllipsis);
+                if (ReferenceEquals(card, compound))
+                {
+                    _ = label.IsTextTrimmed.Should().BeTrue();
+                }
+            }
         }
     });
 
@@ -328,6 +387,7 @@ public sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
         _ = original.LabelPosition.Should().Be(LabelPosition.Right);
         _ = original.FontSize.Should().Be(16);
         _ = original.Prefix.Should().Be("original");
+        _ = original.LabelWidthRatio.Should().Be(double.NaN);
         originalCaption.Text = "Rebound caption";
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         _ = original.Label.Should().Be("Rebound caption");

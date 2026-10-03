@@ -39,7 +39,8 @@ public sealed class InspectorNumberFieldTests : VisualUserInterfaceTests
         _ = number.Label.Should().Be("Near plane");
         _ = label.Visibility.Should().Be(Visibility.Visible);
         _ = label.FontSize.Should().Be(14 * textScale);
-        _ = label.TextWrapping.Should().Be(TextWrapping.Wrap);
+        _ = label.TextWrapping.Should().Be(TextWrapping.NoWrap);
+        _ = label.TextTrimming.Should().Be(TextTrimming.CharacterEllipsis);
         _ = card.FindDescendant<TextBlock>(part => part.Name == "PropertyName")!.ActualWidth.Should().Be(0);
         _ = number.Padding.Should().Be(new Thickness(6, 4, 6, 4));
         _ = number.Mask.Should().Be("~.###");
@@ -49,7 +50,7 @@ public sealed class InspectorNumberFieldTests : VisualUserInterfaceTests
         _ = (suffixPoint.X + suffix.ActualWidth).Should().BeLessThanOrEqualTo(width + 1);
         if (card.ActualLayout == PropertyLayout.Inline)
         {
-            _ = (inputPoint.X - border.Margin.Left).Should().BeApproximately(124 * textScale + 12, 1);
+            _ = (inputPoint.X - border.Margin.Left).Should().BeApproximately(((width - 12) * 0.4) + 12, 1);
         }
 
         field.IsMixed = true;
