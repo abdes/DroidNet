@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
+using System.Collections.Immutable;
 using AwesomeAssertions;
 using DroidNet.Controls;
 using Moq;
@@ -99,6 +100,39 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = scene.Environment.BackgroundColor.Should().Be(original);
         await context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = scene.Environment.BackgroundColor.Should().Be(new Vector3(1, original.Y, original.Z));
+    }
+
+    [TestMethod]
+    public async Task ProposedExposureDescriptors_EditThroughCanonicalSceneTransactionAndUndo()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var context = CreateContext(scene);
+        _ = ConfigureGestureSync(fixture, scene);
+        var before = scene.Environment.PostProcess;
+        var curve = ImmutableArray.Create(new ExposureCompensationKeyData(-4, 1), new ExposureCompensationKeyData(12, -0.5f));
+        var mask = new Uri("asset:///Content/Textures/Meter.otex.json");
+        var edit = new PropertyEdit();
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AutoExposureBlackInfluence, 0.35f);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AutoExposureTransitionDistanceEv, 2.5f);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AutoExposureMeteringMask, mask);
+        edit.Set(SceneDocumentCommandService.SceneEnvironment.AutoExposureCompensationCurve, curve);
+
+        var result = await fixture.Sut.EditSceneEnvironmentPropertiesAsync(
+            context,
+            edit,
+            "Edit auto exposure",
+            EditSessionToken.OneShot).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = scene.Environment.PostProcess.AutoExposureBlackInfluence.Should().Be(0.35f);
+        _ = scene.Environment.PostProcess.AutoExposureTransitionDistanceEv.Should().Be(2.5f);
+        _ = scene.Environment.PostProcess.AutoExposureMeteringMask.Should().Be(mask);
+        _ = scene.Environment.PostProcess.AutoExposureCompensationCurve.Should().Equal(curve);
+        _ = context.History.UndoStack.Should().ContainSingle();
+
+        await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = scene.Environment.PostProcess.Should().BeEquivalentTo(before);
     }
 
     [TestMethod]

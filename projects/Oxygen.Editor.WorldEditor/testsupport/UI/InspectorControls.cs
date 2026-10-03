@@ -56,7 +56,7 @@ internal static class InspectorControls
 
     internal static void Toggle(ToggleButton button) => ((IToggleProvider)new ToggleButtonAutomationPeer(button).GetPattern(PatternInterface.Toggle)).Toggle();
 
-    internal static async Task<FrameworkElement> FindInspectorControlAsync(ScrollViewer scroller, Func<FrameworkElement?> resolveControl, string fieldName, CancellationToken cancellationToken)
+    internal static async Task<FrameworkElement> FindInspectorControlAsync(ScrollViewer scroller, Func<FrameworkElement?> resolveControl, string fieldName, CancellationToken cancellationToken, string numberPartName = "PartValueTextBlock")
     {
         var offset = 0d;
         FrameworkElement? previous = null;
@@ -70,12 +70,14 @@ internal static class InspectorControls
                 if (control is NumberBox number)
                 {
                     _ = number.ApplyTemplate();
-                    var label = number.FindDescendant<TextBlock>(element => string.Equals(element.Name, "PartValueTextBlock", StringComparison.Ordinal));
+                    var label = number.FindDescendant<TextBlock>(element => string.Equals(element.Name, numberPartName, StringComparison.Ordinal));
                     if (label is { IsLoaded: true })
                     {
                         var center = label.TransformToVisual(scroller).TransformPoint(new Point(label.ActualWidth / 2, label.ActualHeight / 2));
                         var hostCenter = label.TransformToVisual(scroller.XamlRoot.Content).TransformPoint(new Point(label.ActualWidth / 2, label.ActualHeight / 2));
-                        if (VisualTreeHelper.FindElementsInHostCoordinates(hostCenter, scroller).Contains(label))
+                        var captionIsFullyVisible = !string.Equals(numberPartName, "PartLabelTextBlock", StringComparison.Ordinal)
+                            || (center.Y >= label.ActualHeight && center.Y <= scroller.ViewportHeight - label.ActualHeight);
+                        if (captionIsFullyVisible && VisualTreeHelper.FindElementsInHostCoordinates(hostCenter, scroller).Contains(label))
                         {
                             stableFrames = ReferenceEquals(previous, number) ? stableFrames + 1 : 0;
                             previous = number;
@@ -181,7 +183,13 @@ internal static class InspectorControls
         switch (control)
         {
             case NumberBox number:
-                await EnterTextAsync(number, ((float)value).ToString(CultureInfo.CurrentCulture)).ConfigureAwait(true);
+                var displayValue = (float)value;
+                if (Equals(number.Tag, "AngularSizeRadians"))
+                {
+                    displayValue *= 180f / MathF.PI;
+                }
+
+                await EnterTextAsync(number, displayValue.ToString(CultureInfo.CurrentCulture)).ConfigureAwait(true);
                 number.CompletePendingTextEdit();
                 break;
             case ToggleSwitch toggle:

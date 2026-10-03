@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Controls"
+    xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ms-appx:///Microsoft.UI.Xaml/DensityStyles/Compact.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.InPlaceEdit/VectorBox/VectorBox.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Inspector/ThemeResources.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Inspector/PropertyCard.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Inspector/PropertiesExpander.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+    <Thickness x:Key="PropertiesExpanderHeaderPadding">12,10</Thickness>
+    <Thickness x:Key="PropertiesExpanderHeaderIconMargin">0,0,12,0</Thickness>
+    <x:Double x:Key="PropertiesExpanderItemsSpacing">4</x:Double>
+    <ctkcvt:BoolToObjectConverter
+        x:Key="SceneDisclosureGlyph"
+        FalseValue="&#xE76C;"
+        TrueValue="&#xE70D;" />
+    <SolidColorBrush
+        x:Key="SceneScopeSelectionBrush"
+        Opacity="0.25"
+        Color="{ThemeResource SystemAccentColor}" />
+    <Style
+        x:Key="QuietInspectorToggle"
+        BasedOn="{StaticResource DefaultToggleButtonStyle}"
+        TargetType="ToggleButton">
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style
+        x:Key="QuietInspectorAction"
+        BasedOn="{StaticResource DefaultButtonStyle}"
+        TargetType="Button">
+        <Setter Property="MinWidth" Value="32" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Padding" Value="6" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="4" />
+    </Style>
+    <Style
+        x:Key="InspectorColorSwatchStyle"
+        BasedOn="{StaticResource DefaultButtonStyle}"
+        TargetType="Button">
+        <Setter Property="MinWidth" Value="28" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Padding" Value="3" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+    </Style>
+    <Style
+        x:Key="SceneNumberBoxStyle"
+        BasedOn="{StaticResource DefaultNumberBoxStyle}"
+        TargetType="controls:NumberBox">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Padding" Value="6,4" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="TrimTrailingZeros" Value="True" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalValueAlignment" Value="Right" />
+    </Style>
+    <Style BasedOn="{StaticResource SceneNumberBoxStyle}" TargetType="controls:NumberBox" />
+    <Style
+        x:Key="SceneVectorBoxStyle"
+        BasedOn="{StaticResource DefaultVectorBoxStyle}"
+        TargetType="controls:VectorBox">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="ComponentStyle" Value="{StaticResource SceneNumberBoxStyle}" />
+        <Setter Property="AutoStackComponents" Value="True" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalValueAlignment" Value="Right" />
+    </Style>
+    <Style BasedOn="{StaticResource SceneVectorBoxStyle}" TargetType="controls:VectorBox" />
+    <Style
+        x:Key="ScenePropertyCardStyle"
+        BasedOn="{StaticResource DefaultPropertyCardStyle}"
+        TargetType="editorcontrols:PropertyCard">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="UseEditorLabel" Value="True" />
+    </Style>
+    <Style BasedOn="{StaticResource ScenePropertyCardStyle}" TargetType="editorcontrols:PropertyCard" />
+    <Style
+        x:Key="ContentOnlyPropertyCard"
+        BasedOn="{StaticResource ScenePropertyCardStyle}"
+        TargetType="editorcontrols:PropertyCard">
+        <Setter Property="IsHeaderVisible" Value="False" />
+        <Setter Property="Layout" Value="Stacked" />
+    </Style>
+    <Style BasedOn="{StaticResource DefaultPropertiesExpanderStyle}" TargetType="editorcontrols:PropertiesExpander">
+        <Setter Property="Padding" Value="12" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style x:Key="SceneUnitSuffix" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+    <ctkcvt:BoolToVisibilityConverter x:Key="SceneExpandedVisibility" />
+    <ctkcvt:BoolToVisibilityConverter x:Key="InspectorDiagnosticVisibility" />
+    <Style x:Key="QuietDisclosure" TargetType="Expander">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Expander">
+                    <StackPanel Spacing="0">
+                        <ToggleButton
+                            x:Name="ExpanderHeader"
+                            MinHeight="32"
+                            Padding="1,6"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            FontSize="14"
+                            IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource Mode=TemplatedParent}}"
+                            Style="{StaticResource QuietInspectorToggle}"
+                            UseSystemFocusVisuals="True">
+                            <ToggleButton.Resources>
+                                <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="Transparent" />
+                                <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="{ThemeResource ControlFillColorSecondary}" />
+                                <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="{ThemeResource ControlFillColorTertiary}" />
+                                <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedDisabled" Color="{ThemeResource ControlFillColorDisabled}" />
+                                <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="{ThemeResource TextFillColorPrimary}" />
+                                <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="{ThemeResource TextFillColorPrimary}" />
+                                <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="{ThemeResource TextFillColorSecondary}" />
+                                <SolidColorBrush x:Key="ToggleButtonForegroundCheckedDisabled" Color="{ThemeResource TextFillColorDisabled}" />
+                            </ToggleButton.Resources>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Content="{TemplateBinding Header}" />
+                                <FontIcon
+                                    x:Name="DisclosureChevron"
+                                    Grid.Column="1"
+                                    FontSize="14"
+                                    Glyph="{Binding IsChecked, ElementName=ExpanderHeader, Converter={StaticResource SceneDisclosureGlyph}}" />
+                            </Grid>
+                        </ToggleButton>
+                        <Border x:Name="ExpanderContentClip" Visibility="{Binding IsExpanded, RelativeSource={RelativeSource Mode=TemplatedParent}, Converter={StaticResource SceneExpandedVisibility}}">
+                            <Border x:Name="ExpanderContent" Visibility="{Binding IsExpanded, RelativeSource={RelativeSource Mode=TemplatedParent}, Converter={StaticResource SceneExpandedVisibility}}">
+                                <ContentPresenter HorizontalContentAlignment="Stretch" Content="{TemplateBinding Content}" />
+                            </Border>
+                        </Border>
+                    </StackPanel>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

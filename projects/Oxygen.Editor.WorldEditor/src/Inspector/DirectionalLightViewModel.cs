@@ -4,13 +4,11 @@
 
 using System.Numerics;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Windows.UI;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -120,6 +118,13 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     [ObservableProperty]
     public partial float AngularSizeRadians { get; set; }
 
+    /// <summary>Gets or sets the source angular diameter in display degrees.</summary>
+    public float AngularDiameterDegrees
+    {
+        get => this.AngularSizeRadians * RadToDeg;
+        set => this.AngularSizeRadians = value * DegToRad;
+    }
+
     [ObservableProperty]
     public partial float ExposureCompensation { get; set; }
 
@@ -197,14 +202,9 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     public IReadOnlyList<DirectionalCsmSplitMode> SplitModeOptions { get; } = Enum.GetValues<DirectionalCsmSplitMode>();
 
     /// <summary>
-    /// Gets a brush for the light color swatch.
+    /// Gets the authored linear RGB light color.
     /// </summary>
-    public SolidColorBrush ColorBrush => new(this.ColorValue);
-
-    /// <summary>
-    /// Gets the current light color as a WinUI color.
-    /// </summary>
-    public Color ColorValue => Color.FromArgb(255, ToByte(this.ColorR), ToByte(this.ColorG), ToByte(this.ColorB));
+    public Vector3 ColorValue => new(this.ColorR, this.ColorG, this.ColorB);
 
     /// <summary>Gets current diagnostics for ColorR.</summary>
     public InspectorFieldDiagnostic ColorRDiagnostic => this.edits?.Diagnostics.Get(this.colorBinding.Id.Id) ?? this.unboundDiagnostic;
@@ -406,14 +406,14 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     }
 
     /// <summary>
-    /// Applies the selected color from the color picker.
+    /// Authors the complete linear RGB light color in one edit.
     /// </summary>
-    /// <param name="color">The selected light color.</param>
-    public void SetColor(Color color)
+    /// <param name="color">The linear RGB light color.</param>
+    public void SetColor(Vector3 color)
     {
-        var r = color.R / 255f;
-        var g = color.G / 255f;
-        var b = color.B / 255f;
+        var r = color.X;
+        var g = color.Y;
+        var b = color.Z;
         if (NearlyEqual(this.ColorR, r) && NearlyEqual(this.ColorG, g) && NearlyEqual(this.ColorB, b))
         {
             return;
@@ -504,9 +504,6 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
             : Quaternion.Identity;
     }
 
-    private static byte ToByte(float value)
-        => (byte)Math.Clamp(MathF.Round(Math.Clamp(value, 0f, 1f) * 255f), 0f, 255f);
-
     private static bool NearlyEqual(float left, float right)
         => MathF.Abs(left - right) <= 0.0001f;
 
@@ -551,7 +548,11 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
 
     partial void OnAffectsWorldChanged(bool value) => this.RequestLightValue(this.affectsWorldBinding, value);
 
-    partial void OnAngularSizeRadiansChanged(float value) => this.RequestLightValue(this.angularSizeRadiansBinding, value);
+    partial void OnAngularSizeRadiansChanged(float value)
+    {
+        this.OnPropertyChanged(nameof(this.AngularDiameterDegrees));
+        this.RequestLightValue(this.angularSizeRadiansBinding, value);
+    }
 
     partial void OnExposureCompensationChanged(float value) => this.RequestLightValue(this.exposureCompensationBinding, value);
 
@@ -759,6 +760,5 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     private void NotifyColorChanged()
     {
         this.OnPropertyChanged(nameof(this.ColorValue));
-        this.OnPropertyChanged(nameof(this.ColorBrush));
     }
 }

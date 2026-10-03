@@ -20,6 +20,7 @@ using Oxygen.Editor.WorldEditor.TestSupport;
 using Windows.Graphics.Imaging;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
+using NumberBox = DroidNet.Controls.NumberBox;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
@@ -84,11 +85,15 @@ public sealed partial class ComponentLayoutTests : DroidNet.Tests.VisualUserInte
         var header = (Border)view.FindName("CompactNodeHeader");
         var properties = (ScrollViewer)view.FindName("PropertyScroll");
         var components = (ScrollViewer)view.FindName("ComponentScroll");
-        _ = header.ActualHeight.Should().BeLessThanOrEqualTo(116);
+        var headerRows = ((StackPanel)header.Child).Children.OfType<FrameworkElement>().ToArray();
+        var expectedHeaderHeight = headerRows.Sum(row => row.ActualHeight)
+            + (((StackPanel)header.Child).Spacing * (headerRows.Length - 1))
+            + header.Padding.Top + header.Padding.Bottom;
+        _ = header.ActualHeight.Should().BeApproximately(expectedHeaderHeight, 1, "the title, selection and component rows must not reserve unused dock height");
         _ = components.ExtentHeight.Should().BeApproximately(64, 1);
-        _ = properties.ActualHeight.Should().BeGreaterThan(40);
+        _ = properties.ActualHeight.Should().BePositive("even a short dock must retain a scrollable property viewport");
         AssertAllToggle(view, multiple);
-        AssertPropertyEditorRows(view);
+        await AssertPropertyEditorRowsAsync(view, properties, this.TestContext.CancellationToken).ConfigureAwait(true);
         await AssertScaledComponentSelectionAsync(view, multiple).ConfigureAwait(true);
         _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
@@ -182,13 +187,23 @@ public sealed partial class ComponentLayoutTests : DroidNet.Tests.VisualUserInte
         _ = ToolTipService.GetToolTip(all).Should().Be("Show all component properties");
     }
 
-    private static void AssertPropertyEditorRows(SceneNodeEditorView view)
+    private static async Task AssertPropertyEditorRowsAsync(SceneNodeEditorView view, ScrollViewer properties, CancellationToken cancellationToken)
     {
-        var card = view.FindDescendant<Oxygen.Editor.Controls.PropertyCard>()!;
+        var number = await FindInspectorControlAsync(properties, () => view.FindDescendant<VectorBox>()?.FindDescendant<NumberBox>(), "Position", cancellationToken).ConfigureAwait(true);
+        var card = number.FindAscendant<Oxygen.Editor.Controls.PropertyCard>()!;
         var label = card.FindDescendant<TextBlock>(element => string.Equals(element.Name, "PropertyName", StringComparison.Ordinal))!;
-        var grid = (Grid)label.Parent;
-        _ = grid.RowDefinitions.Should().BeEmpty("property names must remain beside their values at every width");
-        _ = grid.ColumnDefinitions.Should().HaveCount(3);
+        var vector = card.FindDescendant<VectorBox>()!;
+        var labelPoint = label.TransformToVisual(card).TransformPoint(default);
+        var editorPoint = vector.TransformToVisual(card).TransformPoint(default);
+        if (card.ActualLayout == Oxygen.Editor.Controls.PropertyLayout.Stacked)
+        {
+            _ = editorPoint.Y.Should().BeGreaterThanOrEqualTo(labelPoint.Y + label.ActualHeight);
+        }
+        else
+        {
+            _ = editorPoint.X.Should().BeGreaterThanOrEqualTo(card.LabelWidth + 11);
+        }
+
         _ = ToolTipService.GetToolTip(label).Should().Be(card.PropertyName);
     }
 }

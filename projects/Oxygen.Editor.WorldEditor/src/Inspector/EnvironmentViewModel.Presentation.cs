@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -15,5 +15,7 @@ public partial class EnvironmentViewModel
     {
         this.edits?.SetInputEnabled(enabled);
         this.lightAssignments?.SetInputEnabled(enabled);
+        this.PrimaryAtmosphereSource.SetInputEnabled(enabled);
+        this.SecondaryAtmosphereSource.SetInputEnabled(enabled);
     }
 }

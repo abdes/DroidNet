@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.ComponentModel;
-using Microsoft.UI.Xaml;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -14,11 +13,11 @@ public sealed partial class InspectorFieldDiagnostic : ObservableObject
     public partial string Code { get; set; } = string.Empty;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Visibility))]
+    [NotifyPropertyChangedFor(nameof(HasError))]
     public partial string Message { get; set; } = string.Empty;
 
-    /// <summary>Gets whether inline error text should be visible.</summary>
-    public Visibility Visibility => this.Message.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+    /// <summary>Gets whether the field has an error to present.</summary>
+    public bool HasError => this.Message.Length != 0;
 
     /// <summary>Gets the originating document revision.</summary>
     public long Revision { get; internal set; }

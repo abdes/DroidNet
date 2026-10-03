@@ -113,6 +113,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.ItemMoved += this.OnItemMoved;
 
         messenger.Register<SceneNodeSelectionRequestMessage>(this, this.OnSceneNodeSelectionRequested);
+        messenger.Register<InspectSceneNodeMessage>(this, (_, message) =>
+        {
+            if (!this.isDisposed && message.WindowId == this.windowId && !message.HasReceivedResponse)
+            {
+                message.Reply(this.InspectNodeAsync(message.NodeId));
+            }
+        });
         messenger.Register<SceneNodeAddedMessage>(this, this.OnSceneNodeAdded);
         messenger.Register<SceneNodeRemovedMessage>(this, this.OnSceneNodeRemoved);
         messenger.Register<SceneReloadedMessage>(this, (_, message) =>
@@ -962,6 +969,38 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         message.Reply([.. this.selectionService.GetSelectedNodes(this.Scene.AttachedObject.Id, this.Scene.AttachedObject)]);
+    }
+
+    private async Task<bool> InspectNodeAsync(Guid nodeId)
+    {
+        if (this.Scene is null || !this.nodeAdapterIndex.TryGetValue(nodeId, out var adapter))
+        {
+            return false;
+        }
+
+        this.FilterPredicate = null;
+        var ancestorPath = new Stack<ITreeItem>();
+        for (var parent = adapter.Parent; parent is not null; parent = parent.Parent)
+        {
+            ancestorPath.Push(parent);
+        }
+
+        while (ancestorPath.TryPop(out var ancestor))
+        {
+            if (ancestor.CanAcceptChildren && !ancestor.IsExpanded)
+            {
+                await this.ExpandItemAsync(ancestor).ConfigureAwait(true);
+            }
+        }
+
+        if (!this.ShownItems.Contains(adapter))
+        {
+            return false;
+        }
+
+        this.SelectionModel?.ClearSelection();
+        this.SelectionModel?.SelectItem(adapter);
+        return this.GetSelectedItems().Contains(adapter);
     }
 
     private void OnSingleSelectionChanged(object? sender, PropertyChangedEventArgs args)

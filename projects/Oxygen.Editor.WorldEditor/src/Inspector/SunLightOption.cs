@@ -9,4 +9,5 @@ namespace Oxygen.Editor.World.Inspector;
 /// </summary>
 /// <param name="NodeId">The scene node id, or <see langword="null"/> for no sun binding.</param>
 /// <param name="DisplayName">The display name shown in the environment inspector.</param>
-public sealed record SunLightOption(Guid? NodeId, string DisplayName);
+/// <param name="IsEnabled">Whether the light is available for this atmosphere role.</param>
+public sealed record SunLightOption(Guid? NodeId, string DisplayName, bool IsEnabled = true);

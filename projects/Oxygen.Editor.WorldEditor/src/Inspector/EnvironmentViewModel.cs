@@ -2,32 +2,58 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Numerics;
+using System.Reactive.Concurrency;
+using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.UI.Xaml.Media;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Windows.UI;
+using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.World.Inspector;
 
 /// <summary>
 /// Scene-level Environment inspector view model.
 /// </summary>
+/// <remarks>
+/// Asset notifications use the supplied observer scheduler. UI composition supplies
+/// its dispatcher scheduler; standalone models deliver notifications synchronously.
+/// </remarks>
 public partial class EnvironmentViewModel(
     ISceneDocumentCommandService? commandService = null,
-    Func<SceneDocumentCommandContext?>? commandContextProvider = null) : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner
+    Func<SceneDocumentCommandContext?>? commandContextProvider = null,
+    IContentBrowserAssetProvider? assetProvider = null,
+    Func<Guid, Task>? inspectSceneNode = null,
+    IScheduler? observerScheduler = null) : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner
 {
     private readonly InspectorFieldDiagnostics fieldDiagnostics = new();
+    private readonly IContentBrowserAssetProvider? sharedAssetProvider = assetProvider;
+    private readonly Func<Guid, Task>? inspectSceneNode = inspectSceneNode;
+    private readonly IScheduler observerScheduler = observerScheduler ?? ImmediateScheduler.Instance;
 
     private InspectorEditSessionCoordinator? edits;
     private InspectorEditSessionCoordinator? lightAssignments;
+    private IDisposable? meteringMaskAssetSubscription;
     private Scene? scene;
     private bool isApplyingEditorValues;
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<Scene, Dictionary<Guid, PropertyEdit>> initialAtmosphereSources = new();
+
+    /// <summary>Gets the canonical editor for the bound primary source.</summary>
+    public DirectionalLightViewModel PrimaryAtmosphereSource { get; } = new(commandService, commandContextProvider);
+
+    /// <summary>Gets the canonical editor for the bound secondary source.</summary>
+    public DirectionalLightViewModel SecondaryAtmosphereSource { get; } = new(commandService, commandContextProvider);
+
+    /// <summary>Gets the scene identity displayed above the property search.</summary>
+    public string SceneName => this.scene?.Name ?? string.Empty;
 
     /// <summary>Occurs when explicit diagnostic navigation requests focus in this inspector.</summary>
     public event EventHandler? FieldFocusRequested;
@@ -37,6 +63,9 @@ public partial class EnvironmentViewModel(
 
     [ObservableProperty]
     public partial SunLightOption? SelectedSun { get; set; }
+
+    [ObservableProperty]
+    public partial SunLightOption? SelectedSecondarySun { get; set; }
 
     [ObservableProperty]
     public partial ExposureMode ExposureMode { get; set; }
@@ -88,6 +117,21 @@ public partial class EnvironmentViewModel(
 
     [ObservableProperty]
     public partial float AutoExposureSpotMeterRadius { get; set; }
+
+    [ObservableProperty]
+    public partial float AutoExposureBlackInfluence { get; set; }
+
+    [ObservableProperty]
+    public partial float AutoExposureTransitionDistanceEv { get; set; } = 1.5f;
+
+    [ObservableProperty]
+    public partial Uri? AutoExposureMeteringMask { get; set; }
+
+    [ObservableProperty]
+    public partial ImmutableArray<ExposureCompensationKeyData> AutoExposureCompensationCurve { get; set; } = [];
+
+    [ObservableProperty]
+    public partial string MeteringMaskSearchText { get; set; } = string.Empty;
 
     [ObservableProperty]
     public partial float BloomIntensity { get; set; }
@@ -187,20 +231,47 @@ public partial class EnvironmentViewModel(
     /// </summary>
     public ObservableCollection<SunLightOption> SunOptions { get; } = [];
 
-    /// <summary>
-    /// Gets a brush for the background swatch.
-    /// </summary>
-    public SolidColorBrush BackgroundBrush => new(this.BackgroundColor);
+    /// <summary>Gets the available secondary atmosphere light options.</summary>
+    public ObservableCollection<SunLightOption> SecondarySunOptions { get; } = [];
+
+    /// <summary>Gets whether the primary role has an inspectable source.</summary>
+    public bool HasPrimaryAtmosphereSource => this.SelectedSun?.NodeId is not null;
+
+    /// <summary>Gets whether the secondary role has an inspectable source.</summary>
+    public bool HasSecondaryAtmosphereSource => this.SelectedSecondarySun?.NodeId is not null;
+
+    /// <summary>Gets texture choices from the shared content-browser asset catalog.</summary>
+    public ObservableCollection<AssetPickerRow> MeteringMaskRows { get; } = [];
+
+    /// <summary>Gets the editable exposure compensation curve keys.</summary>
+    internal ObservableCollection<ExposureCompensationKeyViewModel> AutoExposureCurveKeys { get; } = [];
+
+    /// <summary>Gets texture picker entries matching the current search text.</summary>
+    public IReadOnlyList<AssetPickerRow> FilteredMeteringMaskRows
+        => string.IsNullOrWhiteSpace(this.MeteringMaskSearchText)
+            ? this.MeteringMaskRows.ToArray()
+            : this.MeteringMaskRows.Where(row => row.Item.Name.Contains(this.MeteringMaskSearchText, StringComparison.OrdinalIgnoreCase)
+                || row.Item.DisplayPath.Contains(this.MeteringMaskSearchText, StringComparison.OrdinalIgnoreCase)).ToArray();
+
+    /// <summary>Gets the current metering mask name or its authored URI fallback.</summary>
+    public string MeteringMaskDisplayName
+        => this.AutoExposureMeteringMask is null
+            ? "None"
+            : this.MeteringMaskRows.FirstOrDefault(row => row.Item.Uri == this.AutoExposureMeteringMask)?.Item.Name
+                ?? Path.GetFileNameWithoutExtension(this.AutoExposureMeteringMask.AbsolutePath);
 
     /// <summary>
-    /// Gets the background color as a WinUI color.
+    /// Gets the authored linear RGB background color.
     /// </summary>
-    public Color BackgroundColor => Color.FromArgb(255, ToSrgbByte(this.BackgroundR), ToSrgbByte(this.BackgroundG), ToSrgbByte(this.BackgroundB));
+    public Vector3 BackgroundColor => new(this.BackgroundR, this.BackgroundG, this.BackgroundB);
+
+    /// <summary>Gets the authored linear RGB ground albedo.</summary>
+    public Vector3 GroundAlbedoColor => new(this.GroundAlbedoR, this.GroundAlbedoG, this.GroundAlbedoB);
 
     /// <summary>
     /// Gets a value indicating whether manual exposure controls apply to the current mode.
     /// </summary>
-    public bool IsManualExposureVisible => this.ExposureMode is ExposureMode.Manual or ExposureMode.ManualCamera;
+    public bool IsManualExposureVisible => this.ExposureMode == ExposureMode.Manual;
 
     /// <summary>
     /// Gets a value indicating whether auto exposure controls apply to the current mode.
@@ -262,6 +333,18 @@ public partial class EnvironmentViewModel(
 
     /// <summary>Gets current diagnostics for AutoExposureSpotMeterRadius.</summary>
     public InspectorFieldDiagnostic AutoExposureSpotMeterRadiusDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpotMeterRadius.Id);
+
+    /// <summary>Gets current diagnostics for AutoExposureBlackInfluence.</summary>
+    public InspectorFieldDiagnostic AutoExposureBlackInfluenceDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureBlackInfluence.Id);
+
+    /// <summary>Gets current diagnostics for AutoExposureTransitionDistanceEv.</summary>
+    public InspectorFieldDiagnostic AutoExposureTransitionDistanceEvDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureTransitionDistanceEv.Id);
+
+    /// <summary>Gets current diagnostics for AutoExposureMeteringMask.</summary>
+    public InspectorFieldDiagnostic AutoExposureMeteringMaskDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureMeteringMask.Id);
+
+    /// <summary>Gets current diagnostics for AutoExposureCompensationCurve.</summary>
+    public InspectorFieldDiagnostic AutoExposureCompensationCurveDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AutoExposureCompensationCurve.Id);
 
     /// <summary>Gets current diagnostics for BloomIntensity.</summary>
     public InspectorFieldDiagnostic BloomIntensityDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.BloomIntensity.Id);
@@ -370,6 +453,19 @@ public partial class EnvironmentViewModel(
         return validation.IsValid;
     }
 
+    /// <summary>Sets the selected shared texture asset as the exposure metering mask.</summary>
+    /// <param name="textureUri">The authored texture identity, or <see langword="null"/> to clear the reference.</param>
+    public void SetMeteringMask(Uri? textureUri)
+        => this.AutoExposureMeteringMask = textureUri;
+
+    /// <summary>Requests inspection of an atmosphere source node.</summary>
+    /// <param name="source">The selected source option.</param>
+    /// <returns>The navigation task.</returns>
+    public Task InspectAtmosphereSourceAsync(SunLightOption? source)
+        => source?.NodeId is { } nodeId && this.inspectSceneNode is { } inspect
+            ? inspect(nodeId)
+            : Task.CompletedTask;
+
     /// <inheritdoc/>
     public void BeginEditSession(string field, DroidNet.Controls.NumberBoxEditInteractionKind interaction)
         => this.edits?.Begin(field, interaction);
@@ -404,17 +500,24 @@ public partial class EnvironmentViewModel(
         {
             this.edits = new(commandService, commandContextProvider, "Edit Environment", this.RefreshFromScene, environment: true, this.fieldDiagnostics);
             this.edits.SetInputEnabled(this.IsInputEnabled);
-            this.lightAssignments = new(commandService, commandContextProvider, "Assign Primary Atmosphere Light",
+            this.lightAssignments = new(commandService, commandContextProvider, "Assign Atmosphere Light",
                 this.RefreshFromScene, environment: false, this.fieldDiagnostics);
             this.lightAssignments.SetInputEnabled(this.IsInputEnabled);
             this.edits.Diagnostics.Relate(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinEv.Id, SceneDocumentCommandService.SceneEnvironment.AutoExposureMaxEv.Id);
             this.edits.Diagnostics.Relate(SceneDocumentCommandService.SceneEnvironment.AutoExposureLowPercentile.Id, SceneDocumentCommandService.SceneEnvironment.AutoExposureHighPercentile.Id);
         }
 
+        this.StartMeteringMaskAssetSubscription();
+
         this.DetachSceneObservers();
         this.edits?.Bind(value is null ? [] : [value.Id]);
         this.lightAssignments?.Bind([]);
         this.scene = value;
+        if (value is not null)
+        {
+            _ = this.initialAtmosphereSources.GetValue(value, CaptureAtmosphereSources);
+        }
+        this.OnPropertyChanged(nameof(this.SceneName));
         this.AttachSceneObservers();
         this.RefreshFromScene();
     }
@@ -432,20 +535,17 @@ public partial class EnvironmentViewModel(
     }
 
     /// <summary>
-    /// Applies the selected background color from the color picker.
+    /// Authors the complete linear RGB background color in one edit.
     /// </summary>
-    /// <param name="color">The selected background color.</param>
-    public void SetBackgroundColor(Color color)
+    /// <param name="color">The linear RGB background color.</param>
+    public void SetBackgroundColor(Vector3 color)
     {
-        var r = FromSrgbByte(color.R);
-        var g = FromSrgbByte(color.G);
-        var b = FromSrgbByte(color.B);
         this.isApplyingEditorValues = true;
         try
         {
-            this.BackgroundR = r;
-            this.BackgroundG = g;
-            this.BackgroundB = b;
+            this.BackgroundR = color.X;
+            this.BackgroundG = color.Y;
+            this.BackgroundB = color.Z;
         }
         finally
         {
@@ -453,8 +553,33 @@ public partial class EnvironmentViewModel(
         }
 
         this.NotifyBackgroundChanged();
-        this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.BackgroundColor, new Vector3(r, g, b));
+        this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.BackgroundColor, color);
     }
+
+    /// <summary>Restores the default linear background color in one undoable scene edit.</summary>
+    /// <returns>Completion of the reset transaction.</returns>
+    public async Task ResetBackgroundAsync()
+    {
+        if (!this.IsInputEnabled || this.scene is not { } targetScene || this.edits is not { } coordinator)
+        {
+            return;
+        }
+
+        coordinator.End(DroidNet.Controls.NumberBoxEditCompletionKind.Commit);
+        await coordinator.Pending.ConfigureAwait(true);
+        if (!this.IsInputEnabled || !ReferenceEquals(this.scene, targetScene) || !ReferenceEquals(this.edits, coordinator))
+        {
+            return;
+        }
+
+        this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.BackgroundColor, new SceneEnvironmentData().BackgroundColor);
+        await coordinator.Pending.ConfigureAwait(true);
+    }
+
+    /// <summary>Authors the complete linear RGB ground albedo in one edit.</summary>
+    /// <param name="color">The linear RGB ground albedo.</param>
+    public void SetGroundAlbedoColor(Vector3 color)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo, color);
 
     /// <summary>Requests focus after the field is realized.</summary>
     /// <param name="property">The stable property identifier.</param>
@@ -474,22 +599,13 @@ public partial class EnvironmentViewModel(
         if (disposing)
         {
             this.DetachSceneObservers();
+            this.meteringMaskAssetSubscription?.Dispose();
+            this.meteringMaskAssetSubscription = null;
             this.edits?.Dispose();
             this.lightAssignments?.Dispose();
+            this.PrimaryAtmosphereSource.Dispose();
+            this.SecondaryAtmosphereSource.Dispose();
         }
-    }
-
-    private static byte ToSrgbByte(float value)
-    {
-        var linear = Math.Clamp(value, 0f, 1f);
-        var encoded = linear <= 0.0031308f ? linear * 12.92f : (1.055f * MathF.Pow(linear, 1f / 2.4f)) - 0.055f;
-        return (byte)Math.Clamp(MathF.Round(encoded * 255f), 0f, 255f);
-    }
-
-    private static float FromSrgbByte(byte value)
-    {
-        var encoded = value / 255f;
-        return encoded <= 0.04045f ? encoded / 12.92f : MathF.Pow((encoded + 0.055f) / 1.055f, 2.4f);
     }
 
     [RelayCommand]
@@ -508,7 +624,26 @@ public partial class EnvironmentViewModel(
             this.isApplyingEditorValues = false;
         }
 
-        this.ApplyPrimaryAssignment(null);
+        this.ApplyAtmosphereAssignment(AtmosphereLightSlot.Primary, null);
+    }
+
+    [RelayCommand]
+    private void ClearSecondarySun()
+    {
+        this.isApplyingEditorValues = true;
+        try
+        {
+            if (this.SecondarySunOptions.FirstOrDefault(static option => option.NodeId is null) is { } none)
+            {
+                this.SelectedSecondarySun = none;
+            }
+        }
+        finally
+        {
+            this.isApplyingEditorValues = false;
+        }
+
+        this.ApplyAtmosphereAssignment(AtmosphereLightSlot.Secondary, null);
     }
 
     partial void OnAtmosphereEnabledChanged(bool value)
@@ -516,6 +651,7 @@ public partial class EnvironmentViewModel(
 
     partial void OnSelectedSunChanged(SunLightOption? value)
     {
+        this.OnPropertyChanged(nameof(this.HasPrimaryAtmosphereSource));
         if (this.isApplyingEditorValues)
         {
             return;
@@ -526,7 +662,16 @@ public partial class EnvironmentViewModel(
             return;
         }
 
-        this.ApplyPrimaryAssignment(value.NodeId);
+        this.ApplyAtmosphereAssignment(AtmosphereLightSlot.Primary, value.NodeId);
+    }
+
+    partial void OnSelectedSecondarySunChanged(SunLightOption? value)
+    {
+        this.OnPropertyChanged(nameof(this.HasSecondaryAtmosphereSource));
+        if (!this.isApplyingEditorValues && value is not null)
+        {
+            this.ApplyAtmosphereAssignment(AtmosphereLightSlot.Secondary, value.NodeId);
+        }
     }
 
     partial void OnExposureModeChanged(ExposureMode value)
@@ -587,6 +732,23 @@ public partial class EnvironmentViewModel(
     partial void OnAutoExposureSpotMeterRadiusChanged(float value)
         => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AutoExposureSpotMeterRadius, value);
 
+    partial void OnAutoExposureBlackInfluenceChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AutoExposureBlackInfluence, value);
+
+    partial void OnAutoExposureTransitionDistanceEvChanged(float value)
+        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AutoExposureTransitionDistanceEv, value);
+
+    partial void OnAutoExposureMeteringMaskChanged(Uri? value)
+    {
+        this.OnPropertyChanged(nameof(this.MeteringMaskDisplayName));
+        this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AutoExposureMeteringMask, value);
+    }
+
+    partial void OnAutoExposureCompensationCurveChanged(ImmutableArray<ExposureCompensationKeyData> value)
+    {
+        this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AutoExposureCompensationCurve, value);
+    }
+
     partial void OnBloomIntensityChanged(float value)
         => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.BloomIntensity, value);
 
@@ -618,13 +780,27 @@ public partial class EnvironmentViewModel(
         => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AtmosphereHeightMeters, value * 1000.0f);
 
     partial void OnGroundAlbedoRChanged(float value)
-        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo, new Vector3(value, this.GroundAlbedoG, this.GroundAlbedoB));
+    {
+        this.NotifyGroundAlbedoChanged();
+        this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo, new Vector3(value, this.GroundAlbedoG, this.GroundAlbedoB));
+    }
 
     partial void OnGroundAlbedoGChanged(float value)
-        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo, new Vector3(this.GroundAlbedoR, value, this.GroundAlbedoB));
+    {
+        this.NotifyGroundAlbedoChanged();
+        this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo, new Vector3(this.GroundAlbedoR, value, this.GroundAlbedoB));
+    }
 
     partial void OnGroundAlbedoBChanged(float value)
-        => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo, new Vector3(this.GroundAlbedoR, this.GroundAlbedoG, value));
+    {
+        this.NotifyGroundAlbedoChanged();
+        this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo, new Vector3(this.GroundAlbedoR, this.GroundAlbedoG, value));
+    }
+
+    private void NotifyGroundAlbedoChanged()
+    {
+        this.OnPropertyChanged(nameof(this.GroundAlbedoColor));
+    }
 
     partial void OnRayleighScaleHeightKmChanged(float value)
         => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.RayleighScaleHeightMeters, value * 1000.0f);
@@ -659,6 +835,88 @@ public partial class EnvironmentViewModel(
     partial void OnSunDiskEnabledChanged(bool value)
         => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.SunDiskEnabled, value);
 
+    private void OnExposureCurveKeyChanged(object? sender, EventArgs args)
+    {
+        if (!this.isApplyingEditorValues)
+        {
+            this.AutoExposureCompensationCurve = [.. this.AutoExposureCurveKeys.Select(static key => key.ToData())];
+        }
+    }
+
+    private void SyncExposureCurveKeys(ImmutableArray<ExposureCompensationKeyData> curve)
+    {
+        var keys = curve.IsDefault ? [] : curve;
+        while (this.AutoExposureCurveKeys.Count > keys.Length)
+        {
+            var removed = this.AutoExposureCurveKeys[^1];
+            removed.Changed -= this.OnExposureCurveKeyChanged;
+            this.AutoExposureCurveKeys.RemoveAt(this.AutoExposureCurveKeys.Count - 1);
+        }
+
+        for (var index = 0; index < keys.Length; index++)
+        {
+            if (index < this.AutoExposureCurveKeys.Count)
+            {
+                var existing = this.AutoExposureCurveKeys[index];
+                existing.Changed -= this.OnExposureCurveKeyChanged;
+                existing.MeteredEv = keys[index].MeteredEv;
+                existing.CompensationEv = keys[index].CompensationEv;
+                existing.Changed += this.OnExposureCurveKeyChanged;
+            }
+            else
+            {
+                var key = new ExposureCompensationKeyViewModel(keys[index]);
+                key.Changed += this.OnExposureCurveKeyChanged;
+                this.AutoExposureCurveKeys.Add(key);
+            }
+        }
+    }
+
+    internal bool ValidateExposureCurveKey(ExposureCompensationKeyViewModel key, bool editMeteredEv, float candidate)
+    {
+        if (!float.IsFinite(candidate))
+        {
+            return false;
+        }
+
+        if (!editMeteredEv)
+        {
+            return true;
+        }
+
+        var index = this.AutoExposureCurveKeys.IndexOf(key);
+        return index >= 0
+            && (index == 0 || candidate > this.AutoExposureCurveKeys[index - 1].MeteredEv)
+            && (index == this.AutoExposureCurveKeys.Count - 1 || candidate < this.AutoExposureCurveKeys[index + 1].MeteredEv);
+    }
+
+    [RelayCommand]
+    private void AddExposureCurveKey()
+    {
+        if (this.AutoExposureCurveKeys.Count >= 64)
+        {
+            return;
+        }
+
+        var meteredEv = this.AutoExposureCurveKeys.Count == 0 ? 0 : this.AutoExposureCurveKeys[^1].MeteredEv + 1;
+        var key = new ExposureCompensationKeyViewModel(new(meteredEv, 0));
+        key.Changed += this.OnExposureCurveKeyChanged;
+        this.AutoExposureCurveKeys.Add(key);
+        this.AutoExposureCompensationCurve = [.. this.AutoExposureCurveKeys.Select(static item => item.ToData())];
+    }
+
+    [RelayCommand]
+    private void RemoveExposureCurveKey(object? parameter)
+    {
+        if (parameter is not ExposureCompensationKeyViewModel key || !this.AutoExposureCurveKeys.Remove(key))
+        {
+            return;
+        }
+
+        key.Changed -= this.OnExposureCurveKeyChanged;
+        this.AutoExposureCompensationCurve = [.. this.AutoExposureCurveKeys.Select(static item => item.ToData())];
+    }
+
     private void ApplyBackgroundAxisEdit(float r, float g, float b)
     {
         this.NotifyBackgroundChanged();
@@ -683,7 +941,9 @@ public partial class EnvironmentViewModel(
         this.isApplyingEditorValues = true;
         try
         {
-            this.RebuildSunOptions(this.FindPrimarySource()?.Id);
+            this.RebuildSunOptions(
+                this.FindAtmosphereSource(AtmosphereLightSlot.Primary)?.Id,
+                this.FindAtmosphereSource(AtmosphereLightSlot.Secondary)?.Id);
             this.AtmosphereEnabled = environment.AtmosphereEnabled;
             this.ApplyPostProcessEditorValues(environment.PostProcess);
             this.BackgroundR = environment.BackgroundColor.X;
@@ -699,29 +959,146 @@ public partial class EnvironmentViewModel(
         this.NotifyBackgroundChanged();
     }
 
-    private SceneNode? FindPrimarySource()
+    private SceneNode? FindAtmosphereSource(AtmosphereLightSlot slot)
         => this.scene?.AllNodes.FirstOrDefault(node => node.Components.OfType<DirectionalLightComponent>()
-            .Any(light => light.AtmosphereSlot == AtmosphereLightSlot.Primary));
+            .Any(light => light.AtmosphereSlot == slot));
 
-    private void ApplyPrimaryAssignment(Guid? selected)
+    private static Dictionary<Guid, PropertyEdit> CaptureAtmosphereSources(Scene scene)
     {
-        if (this.isApplyingEditorValues || !this.IsInputEnabled) return;
-        var target = selected ?? this.FindPrimarySource()?.Id;
-        if (target is null) return;
-        this.lightAssignments?.Bind([target.Value]);
-        this.lightAssignments?.Submit(PropertyEdit.Single(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot,
-            selected.HasValue ? AtmosphereLightSlot.Primary : AtmosphereLightSlot.None));
+        var result = new Dictionary<Guid, PropertyEdit>();
+        foreach (var node in scene.AllNodes)
+        {
+            if (node.Components.OfType<DirectionalLightComponent>().FirstOrDefault() is not { AtmosphereSlot: not AtmosphereLightSlot.None } light)
+            {
+                continue;
+            }
+
+            var edit = PropertyEdit.Single(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, light.AtmosphereSlot);
+            edit.Set(SceneDocumentCommandService.DirectionalLight.AngularSizeRadians, light.AngularSizeRadians);
+            edit.Set(SceneDocumentCommandService.DirectionalLight.UsePerPixelAtmosphereTransmittance, light.UsePerPixelAtmosphereTransmittance);
+            edit.Set(SceneDocumentCommandService.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, light.AtmosphereDiskLuminanceScaleRgb);
+            var rotation = TransformConverter.QuaternionToEulerDegrees(node.Components.OfType<TransformComponent>().Single().LocalRotation);
+            edit.Set(SceneDocumentCommandService.Transform.RotationX, rotation.X);
+            edit.Set(SceneDocumentCommandService.Transform.RotationY, rotation.Y);
+            edit.Set(SceneDocumentCommandService.Transform.RotationZ, rotation.Z);
+            result.Add(node.Id, edit);
+        }
+
+        return result;
     }
 
-    private void RebuildSunOptions(Guid? selectedSunNodeId)
+    /// <summary>Restores the initial source bindings and atmosphere settings as one authored transaction.</summary>
+    /// <returns>Completion of the reset transaction.</returns>
+    public async Task ResetAtmosphereSourcesAsync()
+    {
+        if (!this.IsInputEnabled || this.scene is not { } current)
+        {
+            return;
+        }
+
+        var initial = this.initialAtmosphereSources.GetValue(current, CaptureAtmosphereSources);
+        var edits = new Dictionary<Guid, PropertyEdit>();
+        foreach (var node in current.AllNodes)
+        {
+            if (node.Components.OfType<DirectionalLightComponent>().FirstOrDefault() is not { } light)
+            {
+                continue;
+            }
+
+            if (initial.TryGetValue(node.Id, out var original))
+            {
+                edits.Add(node.Id, original.Clone());
+            }
+            else if (light.AtmosphereSlot != AtmosphereLightSlot.None)
+            {
+                edits.Add(node.Id, PropertyEdit.Single(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None));
+            }
+        }
+
+        if (this.lightAssignments is not { } assignments || commandContextProvider?.Invoke() is not { } context)
+        {
+            return;
+        }
+
+        var rotationMask = PropertyEdit.Single(SceneDocumentCommandService.Transform.RotationX, 0f);
+        rotationMask.Set(SceneDocumentCommandService.Transform.RotationY, 0f);
+        rotationMask.Set(SceneDocumentCommandService.Transform.RotationZ, 0f);
+        var lightMask = PropertyEdit.Single(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None);
+        lightMask.Set(SceneDocumentCommandService.DirectionalLight.AngularSizeRadians, 0f);
+        lightMask.Set(SceneDocumentCommandService.DirectionalLight.UsePerPixelAtmosphereTransmittance, false);
+        lightMask.Set(SceneDocumentCommandService.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, Vector3.One);
+        context.History.BeginChangeSet("Reset Atmosphere Lights");
+        try
+        {
+            assignments.Bind(edits.Keys.ToArray());
+            assignments.Submit(edits.ToDictionary(pair => pair.Key, pair => pair.Value.IntersectIds(lightMask)));
+            await assignments.Pending.ConfigureAwait(true);
+            if (!string.IsNullOrEmpty(this.SunReferenceDiagnostic.Message))
+            {
+                return;
+            }
+            var rotations = edits.Where(pair => pair.Value.Contains(SceneDocumentCommandService.Transform.RotationX.Id))
+                .ToDictionary(pair => pair.Key, pair => pair.Value.IntersectIds(rotationMask));
+            if (rotations.Count > 0)
+            {
+                assignments.Bind(rotations.Keys.ToArray());
+                assignments.Submit(rotations);
+                await assignments.Pending.ConfigureAwait(true);
+            }
+        }
+        finally
+        {
+            context.History.EndChangeSet();
+        }
+    }
+
+    private void ApplyAtmosphereAssignment(AtmosphereLightSlot slot, Guid? selected)
+    {
+        if (this.isApplyingEditorValues || !this.IsInputEnabled || this.scene is null)
+        {
+            return;
+        }
+
+        var current = this.FindAtmosphereSource(slot);
+        if (current?.Id == selected)
+        {
+            return;
+        }
+
+        var edits = new Dictionary<Guid, PropertyEdit>();
+        if (current is not null)
+        {
+            edits[current.Id] = PropertyEdit.Single(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None);
+        }
+
+        if (selected is { } selectedId)
+        {
+            edits[selectedId] = PropertyEdit.Single(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, slot);
+        }
+
+        if (edits.Count == 0)
+        {
+            return;
+        }
+
+        this.lightAssignments?.Bind(edits.Keys.ToArray());
+        this.lightAssignments?.Submit(edits);
+    }
+
+    private void RebuildSunOptions(Guid? primaryNodeId, Guid? secondaryNodeId)
     {
         this.SunOptions.Clear();
-        var none = new SunLightOption(NodeId: null, "None");
-        this.SunOptions.Add(none);
-        this.SelectedSun = none;
+        this.SecondarySunOptions.Clear();
+        var nonePrimary = new SunLightOption(NodeId: null, "None");
+        var noneSecondary = new SunLightOption(NodeId: null, "None");
+        this.SunOptions.Add(nonePrimary);
+        this.SecondarySunOptions.Add(noneSecondary);
+        this.SelectedSun = nonePrimary;
+        this.SelectedSecondarySun = noneSecondary;
 
         if (this.scene is null)
         {
+            this.RefreshAtmosphereSourceEditors();
             return;
         }
 
@@ -732,13 +1109,35 @@ public partial class EnvironmentViewModel(
                 continue;
             }
 
-            var option = new SunLightOption(node.Id, node.Name);
-            this.SunOptions.Add(option);
-            if (selectedSunNodeId == node.Id)
+            var light = node.Components.OfType<DirectionalLightComponent>().First();
+            var primaryOption = new SunLightOption(
+                node.Id,
+                light.AtmosphereSlot == AtmosphereLightSlot.Secondary ? $"{node.Name} · Secondary" : node.Name,
+                light.AtmosphereSlot != AtmosphereLightSlot.Secondary);
+            var secondaryOption = new SunLightOption(
+                node.Id,
+                light.AtmosphereSlot == AtmosphereLightSlot.Primary ? $"{node.Name} · Primary" : node.Name,
+                light.AtmosphereSlot != AtmosphereLightSlot.Primary);
+            this.SunOptions.Add(primaryOption);
+            this.SecondarySunOptions.Add(secondaryOption);
+            if (primaryNodeId == node.Id)
             {
-                this.SelectedSun = option;
+                this.SelectedSun = primaryOption;
+            }
+
+            if (secondaryNodeId == node.Id)
+            {
+                this.SelectedSecondarySun = secondaryOption;
             }
         }
+
+        this.RefreshAtmosphereSourceEditors();
+    }
+
+    private void RefreshAtmosphereSourceEditors()
+    {
+        this.PrimaryAtmosphereSource.UpdateValues(this.FindAtmosphereSource(AtmosphereLightSlot.Primary) is { } primary ? [primary] : []);
+        this.SecondaryAtmosphereSource.UpdateValues(this.FindAtmosphereSource(AtmosphereLightSlot.Secondary) is { } secondary ? [secondary] : []);
     }
 
     private void ApplyPostProcessEditorValues(PostProcessEnvironmentData? value)
@@ -761,6 +1160,11 @@ public partial class EnvironmentViewModel(
         this.AutoExposureLogLuminanceRange = value.AutoExposureLogLuminanceRange;
         this.AutoExposureTargetLuminance = value.AutoExposureTargetLuminance;
         this.AutoExposureSpotMeterRadius = value.AutoExposureSpotMeterRadius;
+            this.AutoExposureBlackInfluence = value.AutoExposureBlackInfluence;
+            this.AutoExposureTransitionDistanceEv = value.AutoExposureTransitionDistanceEv;
+            this.AutoExposureMeteringMask = value.AutoExposureMeteringMask;
+            this.AutoExposureCompensationCurve = value.AutoExposureCompensationCurve;
+            this.SyncExposureCurveKeys(value.AutoExposureCompensationCurve);
         this.BloomIntensity = value.BloomIntensity;
         this.BloomThreshold = value.BloomThreshold;
         this.Saturation = value.Saturation;
@@ -794,6 +1198,79 @@ public partial class EnvironmentViewModel(
     private void NotifyBackgroundChanged()
     {
         this.OnPropertyChanged(nameof(this.BackgroundColor));
-        this.OnPropertyChanged(nameof(this.BackgroundBrush));
     }
+
+    private void StartMeteringMaskAssetSubscription()
+    {
+        if (this.sharedAssetProvider is null || this.meteringMaskAssetSubscription is not null)
+        {
+            return;
+        }
+
+        this.meteringMaskAssetSubscription = this.sharedAssetProvider.Items
+            .ObserveOn(this.observerScheduler)
+            .Subscribe(this.UpdateMeteringMaskRows);
+        _ = this.RefreshMeteringMaskAssetsAsync();
+    }
+
+    private async Task RefreshMeteringMaskAssetsAsync()
+    {
+        try
+        {
+            if (this.sharedAssetProvider is { } provider)
+            {
+                await provider.RefreshAsync(AssetBrowserFilter.Default).ConfigureAwait(false);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or ObjectDisposedException or OperationCanceledException)
+        {
+            Debug.WriteLine($"[EnvironmentViewModel] Metering mask asset refresh failed: {exception}");
+        }
+    }
+
+    private void UpdateMeteringMaskRows(IReadOnlyList<ContentBrowserAssetItem> assets)
+    {
+        var textures = assets.Where(static asset => asset.Kind == AssetKind.Texture && !asset.IsBuiltin)
+            .OrderBy(static asset => asset.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var wanted = textures.Select(static asset => asset.IdentityUri.AbsoluteUri).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var removed in this.MeteringMaskRows.Where(row => !wanted.Contains(row.Item.Uri.AbsoluteUri)).ToArray())
+        {
+            _ = this.MeteringMaskRows.Remove(removed);
+        }
+
+        for (var index = 0; index < textures.Length; index++)
+        {
+            var asset = textures[index];
+            var item = new AssetPickerItem(
+                asset.DisplayName,
+                asset.IdentityUri,
+                "Texture · " + asset.PrimaryBadge,
+                asset.DisplayPath,
+                AssetPickerGroup.Content,
+                asset.IsSelectable,
+                "\uE7C3");
+            var row = this.MeteringMaskRows.FirstOrDefault(candidate => candidate.Item.Uri == asset.IdentityUri);
+            if (row is null)
+            {
+                row = new(item);
+                this.MeteringMaskRows.Insert(Math.Min(index, this.MeteringMaskRows.Count), row);
+            }
+            else
+            {
+                row.Update(item);
+                var currentIndex = this.MeteringMaskRows.IndexOf(row);
+                if (currentIndex != index)
+                {
+                    this.MeteringMaskRows.Move(currentIndex, Math.Min(index, this.MeteringMaskRows.Count - 1));
+                }
+            }
+        }
+
+        this.OnPropertyChanged(nameof(this.FilteredMeteringMaskRows));
+        this.OnPropertyChanged(nameof(this.MeteringMaskDisplayName));
+    }
+
+    partial void OnMeteringMaskSearchTextChanged(string value)
+        => this.OnPropertyChanged(nameof(this.FilteredMeteringMaskRows));
 }

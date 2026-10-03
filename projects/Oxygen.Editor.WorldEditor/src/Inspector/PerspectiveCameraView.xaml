@@ -6,8 +6,14 @@
     xmlns:controls="using:DroidNet.Controls"
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
     xmlns:ui="using:CommunityToolkit.WinUI">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="SceneInspectorStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
     <editorcontrols:PropertiesExpander
-        Padding="2"
         HorizontalAlignment="Stretch"
         HorizontalContentAlignment="Stretch"
         Description="{x:Bind ViewModel.Description, Mode=OneWay}"
@@ -15,85 +21,77 @@
         HeaderIcon="{ui:FontIcon Glyph='&#xE714;'}"
         IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
         <editorcontrols:PropertiesExpander.Items>
-            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Projection">
-                <Grid ColumnSpacing="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="2">
-                        <controls:NumberBox
-                            EditSessionCompleted="NumberEditCompleted"
-                            EditSessionStarted="NumberEditStarted"
-                            Label="FOV"
-                            LabelPosition="Left"
-                            Mask="~.###"
-                            NumberValue="{x:Bind ViewModel.FieldOfView, Mode=TwoWay}"
-                            Tag="FieldOfView" />
-                        <TextBlock
-                            AutomationProperties.LiveSetting="Polite"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            Text="{x:Bind ViewModel.FieldOfViewDiagnostic.Message, Mode=OneWay}"
-                            TextWrapping="Wrap"
-                            Visibility="{x:Bind ViewModel.FieldOfViewDiagnostic.Visibility, Mode=OneWay}" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="1" Spacing="2">
-                        <controls:NumberBox
-                            EditSessionCompleted="NumberEditCompleted"
-                            EditSessionStarted="NumberEditStarted"
-                            Label="Aspect"
-                            LabelPosition="Left"
-                            Mask="~.###"
-                            NumberValue="{x:Bind ViewModel.AspectRatio, Mode=TwoWay}"
-                            Tag="AspectRatio" />
-                        <TextBlock
-                            AutomationProperties.LiveSetting="Polite"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            Text="{x:Bind ViewModel.AspectRatioDiagnostic.Message, Mode=OneWay}"
-                            TextWrapping="Wrap"
-                            Visibility="{x:Bind ViewModel.AspectRatioDiagnostic.Visibility, Mode=OneWay}" />
-                    </StackPanel>
-                </Grid>
+            <editorcontrols:PropertyCard PropertyName="Field of view" Qualifier="°">
+                <StackPanel Spacing="2">
+                    <controls:NumberBox
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        IsIndeterminate="{x:Bind ViewModel.FieldOfViewIsIndeterminate, Mode=OneWay}"
+                        LabelPosition="None"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.FieldOfView, Mode=TwoWay}"
+                        Tag="FieldOfView" />
+                    <TextBlock
+                        AutomationProperties.LiveSetting="Polite"
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        Text="{x:Bind ViewModel.FieldOfViewDiagnostic.Message, Mode=OneWay}"
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind ViewModel.FieldOfViewDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
+                </StackPanel>
             </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Clipping">
-                <Grid ColumnSpacing="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Spacing="2">
-                        <controls:NumberBox
-                            EditSessionCompleted="NumberEditCompleted"
-                            EditSessionStarted="NumberEditStarted"
-                            Label="Near"
-                            LabelPosition="Left"
-                            Mask="~.###"
-                            NumberValue="{x:Bind ViewModel.NearPlane, Mode=TwoWay}"
-                            Tag="NearPlane" />
-                        <TextBlock
-                            AutomationProperties.LiveSetting="Polite"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            Text="{x:Bind ViewModel.NearPlaneDiagnostic.Message, Mode=OneWay}"
-                            TextWrapping="Wrap"
-                            Visibility="{x:Bind ViewModel.NearPlaneDiagnostic.Visibility, Mode=OneWay}" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="1" Spacing="2">
-                        <controls:NumberBox
-                            EditSessionCompleted="NumberEditCompleted"
-                            EditSessionStarted="NumberEditStarted"
-                            Label="Far"
-                            LabelPosition="Left"
-                            Mask="~.###"
-                            NumberValue="{x:Bind ViewModel.FarPlane, Mode=TwoWay}"
-                            Tag="FarPlane" />
-                        <TextBlock
-                            AutomationProperties.LiveSetting="Polite"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            Text="{x:Bind ViewModel.FarPlaneDiagnostic.Message, Mode=OneWay}"
-                            TextWrapping="Wrap"
-                            Visibility="{x:Bind ViewModel.FarPlaneDiagnostic.Visibility, Mode=OneWay}" />
-                    </StackPanel>
-                </Grid>
+            <editorcontrols:PropertyCard PropertyName="Aspect ratio" Qualifier="">
+                <StackPanel Spacing="2">
+                    <controls:NumberBox
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        IsIndeterminate="{x:Bind ViewModel.AspectRatioIsIndeterminate, Mode=OneWay}"
+                        LabelPosition="None"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.AspectRatio, Mode=TwoWay}"
+                        Tag="AspectRatio" />
+                    <TextBlock
+                        AutomationProperties.LiveSetting="Polite"
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        Text="{x:Bind ViewModel.AspectRatioDiagnostic.Message, Mode=OneWay}"
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind ViewModel.AspectRatioDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
+                </StackPanel>
+            </editorcontrols:PropertyCard>
+            <editorcontrols:PropertyCard PropertyName="Near plane" Qualifier="m">
+                <StackPanel Spacing="2">
+                    <controls:NumberBox
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        IsIndeterminate="{x:Bind ViewModel.NearPlaneIsIndeterminate, Mode=OneWay}"
+                        LabelPosition="None"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.NearPlane, Mode=TwoWay}"
+                        Tag="NearPlane" />
+                    <TextBlock
+                        AutomationProperties.LiveSetting="Polite"
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        Text="{x:Bind ViewModel.NearPlaneDiagnostic.Message, Mode=OneWay}"
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind ViewModel.NearPlaneDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
+                </StackPanel>
+            </editorcontrols:PropertyCard>
+            <editorcontrols:PropertyCard PropertyName="Far plane" Qualifier="m">
+                <StackPanel Spacing="2">
+                    <controls:NumberBox
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        IsIndeterminate="{x:Bind ViewModel.FarPlaneIsIndeterminate, Mode=OneWay}"
+                        LabelPosition="None"
+                        Mask="~.###"
+                        NumberValue="{x:Bind ViewModel.FarPlane, Mode=TwoWay}"
+                        Tag="FarPlane" />
+                    <TextBlock
+                        AutomationProperties.LiveSetting="Polite"
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        Text="{x:Bind ViewModel.FarPlaneDiagnostic.Message, Mode=OneWay}"
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind ViewModel.FarPlaneDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
+                </StackPanel>
             </editorcontrols:PropertyCard>
         </editorcontrols:PropertiesExpander.Items>
     </editorcontrols:PropertiesExpander>

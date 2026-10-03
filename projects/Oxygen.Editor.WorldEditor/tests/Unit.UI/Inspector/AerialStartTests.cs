@@ -66,10 +66,16 @@ public sealed partial class AerialStartTests : DroidNet.Tests.VisualUserInterfac
             ViewModel = model
         };
         await LoadTestContentAsync(new ScrollViewer { Content = view }).ConfigureAwait(true);
+        var scope = (CommunityToolkit.WinUI.Controls.Segmented)view.FindName("ScenePropertyScopeSelector");
+        scope.SelectedIndex = 2;
+        var search = (TextBox)view.FindName("ScenePropertySearchBox");
+        search.Text = "exposure";
         model.RequestFieldFocus(SceneEnvironmentConstraints.AerialStartPropertyPath);
         await WaitForRenderAsync().ConfigureAwait(true);
         var number = view.FindDescendant<NumberBox>(element => Equals(element.Tag, "AerialPerspectiveStartDepthMeters"))!;
         _ = FocusManager.GetFocusedElement(view.XamlRoot).Should().Be(number);
+        _ = search.Text.Should().BeEmpty();
+        _ = scope.SelectedIndex.Should().Be(0);
         _ = model.PendingFieldFocus.Should().BeNull();
     });
 }

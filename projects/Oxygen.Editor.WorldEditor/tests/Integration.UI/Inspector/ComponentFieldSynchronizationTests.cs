@@ -88,7 +88,7 @@ public sealed partial class ComponentFieldSynchronizationTests : DroidNet.Tests.
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto
         };
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
-        var control = await FindInspectorControlAsync(scroller, () => FindNodeControl(view, model, field), field.Field, timeout.Token).ConfigureAwait(true);
+        var control = await FindNodeFieldControlAsync(view, scroller, model, field, timeout.Token).ConfigureAwait(true);
         var before = SourceNodeProperties(node);
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
         await AssertNodeValuesAsync(fixture, node.Id, before, model, timeout.Token).ConfigureAwait(true);

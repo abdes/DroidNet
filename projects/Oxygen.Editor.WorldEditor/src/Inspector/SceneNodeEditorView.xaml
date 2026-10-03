@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.World.Inspector.SceneNodeEditorView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -56,10 +56,28 @@
                 x:Name="CompactNodeHeader"
                 Grid.Row="1"
                 Margin="0,0,0,4"
-                Padding="4"
-                Background="{ThemeResource LayerFillColorDefaultBrush}"
-                Visibility="{x:Bind ViewModel.HasItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}">
-                <StackPanel>
+                Padding="8,6"
+                Background="{ThemeResource LayerFillColorDefaultBrush}">
+                <StackPanel Spacing="6">
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon FontSize="18" Glyph="&#xE9E9;" />
+                        <TextBlock
+                            Grid.Column="1"
+                            FontSize="16"
+                            FontWeight="SemiBold"
+                            Text="{x:Bind ViewModel.InspectorTitle, Mode=OneWay}" />
+                        <FontIcon
+                            Grid.Column="2"
+                            FontSize="14"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Glyph="&#xE897;"
+                            ToolTipService.ToolTip="Scene and object properties" />
+                    </Grid>
                     <Grid>
                         <local:SceneNodeDetailsView
                             x:Name="NodeDetails"
@@ -105,7 +123,8 @@
                         HorizontalScrollBarVisibility="Disabled"
                         HorizontalScrollMode="Disabled"
                         PreviewKeyDown="OnComponentsKeyDown"
-                        VerticalScrollBarVisibility="Auto">
+                        VerticalScrollBarVisibility="Auto"
+                        Visibility="{x:Bind ViewModel.HasItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}">
                         <ItemsRepeater x:Name="ComponentSelector" ItemsSource="{x:Bind ViewModel.ComponentFilters}">
                             <ItemsRepeater.ItemTemplate>
                                 <DataTemplate x:DataType="local:InspectorComponentFilter">
@@ -172,7 +191,8 @@
                 Padding="4,0,4,4"
                 HorizontalScrollBarVisibility="Disabled"
                 HorizontalScrollMode="Disabled"
-                VerticalScrollBarVisibility="Auto">
+                VerticalScrollBarVisibility="Auto"
+                Visibility="{x:Bind ViewModel.HasItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}">
                 <ItemsRepeater
                     x:Name="PropertySections"
                     HorizontalAlignment="Stretch"
@@ -188,6 +208,10 @@
                     </ItemsRepeater.ItemTemplate>
                 </ItemsRepeater>
             </ScrollViewer>
+            <local:EnvironmentView
+                Grid.Row="3"
+                ViewModel="{x:Bind ViewModel.EnvironmentEditor}"
+                Visibility="{x:Bind ViewModel.HasItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=True}" />
         </Grid>
     </Grid>
 </UserControl>

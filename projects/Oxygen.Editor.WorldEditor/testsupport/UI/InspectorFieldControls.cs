@@ -17,6 +17,7 @@ using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldCases;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeEnvironmentSupport;
 using NumberBox = DroidNet.Controls.NumberBox;
+using Expander = Microsoft.UI.Xaml.Controls.Expander;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 
@@ -42,14 +43,36 @@ internal static class InspectorFieldControls
 
         return model is DirectionalLightViewModel light ? field.Field switch
         {
+            "ColorR" or "ColorG" or "ColorB" or "DiskScaleR" or "DiskScaleG" or "DiskScaleB" => FindRgbChannel(view, field.Field),
             "AtmosphereSlot" => view.FindDescendant<ComboBox>(combo => ReferenceEquals(combo.ItemsSource, light.AtmosphereSlotOptions)),
-            "UsePerPixelAtmosphereTransmittance" => view.FindDescendant<ToggleSwitch>(toggle => Equals(toggle.Header, "Per-pixel transmittance")),
-            "AffectsWorld" => view.FindDescendant<ToggleSwitch>(toggle => Equals(toggle.Header, "Affects World")),
-            "CastsShadows" => view.FindDescendant<ToggleSwitch>(toggle => Equals(toggle.Header, "Cast")),
-            "ContactShadows" => view.FindDescendant<ToggleSwitch>(toggle => Equals(toggle.Header, "Contact")),
+            "UsePerPixelAtmosphereTransmittance" => FindToggle(view, "Per-pixel transmittance"),
+            "AffectsWorld" => FindToggle(view, "Affects world"),
+            "CastsShadows" => FindToggle(view, "Cast shadows"),
+            "ContactShadows" => FindToggle(view, "Contact shadows"),
             "ShadowResolutionHint" => view.FindDescendant<ComboBox>(combo => ReferenceEquals(combo.ItemsSource, light.ShadowResolutionOptions)),
             "SplitMode" => view.FindDescendant<ComboBox>(combo => ReferenceEquals(combo.ItemsSource, light.SplitModeOptions)),
             _ => view.FindDescendant<NumberBox>(number => Equals(number.Tag, field.Field)),
         } : view.FindDescendant<NumberBox>(number => Equals(number.Tag, field.Field));
     }
+
+    internal static Task<FrameworkElement> FindNodeFieldControlAsync(UserControl view, ScrollViewer scroller, IPropertyEditor<SceneNode> model, NodeFieldCase field, CancellationToken cancellationToken)
+        => FindInspectorControlAsync(scroller, () =>
+        {
+            foreach (var disclosure in view.FindDescendants().OfType<Expander>())
+            {
+                disclosure.IsExpanded = true;
+            }
+
+            return FindNodeControl(view, model, field);
+        }, field.Field, cancellationToken);
+
+    private static NumberBox? FindRgbChannel(UserControl view, string field)
+    {
+        var component = field[^1] switch { 'R' => 'X', 'G' => 'Y', _ => 'Z' };
+        return view.FindDescendant<VectorBox>(vector => Equals(vector.Tag, field[..^1]))?
+            .FindDescendant<NumberBox>(number => string.Equals(number.Name, $"PartNumberBox{component}", StringComparison.Ordinal));
+    }
+
+    private static ToggleSwitch? FindToggle(UserControl view, string propertyName)
+        => view.FindDescendant<Oxygen.Editor.Controls.PropertyCard>(card => Equals(card.PropertyName, propertyName))?.FindDescendant<ToggleSwitch>();
 }

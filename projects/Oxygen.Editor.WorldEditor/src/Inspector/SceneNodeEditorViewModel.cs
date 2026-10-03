@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -52,6 +52,9 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private ICollection<SceneNode> items;
     private Scene? activeScene;
     private int pendingLiveSyncEditCount;
+
+    /// <summary>Gets the scene-level editor hosted outside component-property scrolling.</summary>
+    public EnvironmentViewModel EnvironmentEditor => this.environmentEditor;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SceneNodeEditorViewModel"/> class.
@@ -111,7 +114,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             materialSlots,
             projectContexts,
             loggerFactory);
-        this.environmentEditor = new EnvironmentViewModel(commandService, this.CreateCommandContext);
+        this.environmentEditor = new EnvironmentViewModel(commandService, this.CreateCommandContext, assetProvider, this.InspectAtmosphereSource, hosting.DispatcherScheduler);
 
         this.items = this.messenger.Send(new SceneNodeSelectionRequestMessage()).SelectedEntities;
         this.activeScene = this.items.FirstOrDefault()?.Scene;
@@ -151,6 +154,9 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// Gets a value indicating whether the inspector has node or scene-level content to show.
     /// </summary>
     public bool HasInspectorContent => this.HasItems || this.activeScene is not null;
+
+    /// <summary>Gets the inspector identity for the current scene or node selection.</summary>
+    public string InspectorTitle => this.HasItems ? "Component Inspector" : "Scene Inspector";
 
     /// <summary>
     /// Gets the number of scene property edits buffered until the runtime can replay them.
@@ -242,6 +248,28 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.ApplyPendingEnvironmentFocus();
     }
 
+    private async Task InspectAtmosphereSource(Guid nodeId)
+    {
+        var node = this.activeScene?.AllNodes.FirstOrDefault(candidate => candidate.Id == nodeId);
+        if (node is null)
+        {
+            return;
+        }
+
+        var request = this.messenger.Send(new InspectSceneNodeMessage(nodeId, this.windowId));
+        if (!request.HasReceivedResponse || !await request.Response.ConfigureAwait(true))
+        {
+            throw new InvalidOperationException("The atmosphere source could not be revealed in Scene Explorer.");
+        }
+
+        if (this.items.Count == 1 && ReferenceEquals(this.items.First(), node))
+        {
+            this.SetComponentFilter(typeof(DirectionalLightComponent));
+            this.RefreshPropertyEditors(refreshValues: false);
+            this.RefreshEditorInputState();
+        }
+    }
+
     /// <inheritdoc/>
     protected override void RefreshOwnProperties()
     {
@@ -258,6 +286,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.OnPropertyChanged(nameof(this.IsSingleItemSelected));
         this.OnPropertyChanged(nameof(this.SelectedNode));
         this.OnPropertyChanged(nameof(this.HasInspectorContent));
+        this.OnPropertyChanged(nameof(this.InspectorTitle));
         this.RefreshPendingLiveSyncState();
     }
 

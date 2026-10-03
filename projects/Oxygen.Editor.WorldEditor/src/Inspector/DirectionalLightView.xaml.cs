@@ -21,13 +21,15 @@ public sealed partial class DirectionalLightView
     public DirectionalLightView()
     {
         this.InitializeComponent();
+        InspectorRgbPresentation.Configure(this.ColorChannels);
+        InspectorRgbPresentation.Configure(this.DiskScaleChannels);
     }
 
     private void ColorPicker_ColorChanged(ColorPicker sender, ColorChangedEventArgs args)
     {
-        if (this.ViewModel is { } model && model.ColorValue != args.NewColor)
+        if (this.ViewModel is { } model && InspectorRgbPresentation.ToDisplayColor(model.ColorValue) != args.NewColor)
         {
-            InspectorColorGestures.Apply(sender, owner => ((DirectionalLightViewModel)owner).SetColor(args.NewColor));
+            InspectorColorGestures.Apply(sender, owner => ((DirectionalLightViewModel)owner).SetColor(InspectorRgbPresentation.ToLinearRgb(args.NewColor)));
         }
     }
 
@@ -41,6 +43,18 @@ public sealed partial class DirectionalLightView
 
     private void NumberEditCompleted(object? sender, NumberBoxEditSessionEventArgs args)
         => this.ViewModel?.CompleteEditSession(args);
+
+    private void VectorEditStarted(object? sender, VectorBoxEditSessionEventArgs args)
+    {
+        if (sender is FrameworkElement { Tag: string field })
+        {
+            var channel = args.Component switch { Component.X => "R", Component.Y => "G", _ => "B" };
+            this.ViewModel?.BeginEditSession($"{field}{channel}", args.InteractionKind);
+        }
+    }
+
+    private void VectorEditCompleted(object? sender, VectorBoxEditSessionEventArgs args)
+        => this.ViewModel?.CompleteEditSession(new(args.InteractionKind, args.CompletionKind));
 
     private void ColorPickerLoaded(object sender, RoutedEventArgs args)
     {

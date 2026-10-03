@@ -4,6 +4,7 @@
 
 using System.Collections.Specialized;
 using System.ComponentModel;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector;
@@ -13,7 +14,9 @@ public partial class EnvironmentViewModel
 {
     private readonly HashSet<SceneNode> observedNodes = [];
     private Guid? observedSunId;
+    private Guid? observedSecondarySunId;
     private readonly HashSet<DirectionalLightComponent> observedLights = [];
+    private readonly HashSet<TransformComponent> observedTransforms = [];
 
     private void AttachSceneObservers()
     {
@@ -23,7 +26,8 @@ public partial class EnvironmentViewModel
         }
 
         current.PropertyChanged += this.OnSceneModelChanged;
-        this.observedSunId = this.FindPrimarySource()?.Id;
+        this.observedSunId = this.FindAtmosphereSource(AtmosphereLightSlot.Primary)?.Id;
+        this.observedSecondarySunId = this.FindAtmosphereSource(AtmosphereLightSlot.Secondary)?.Id;
         current.RootNodes.CollectionChanged += this.OnSceneTopologyChanged;
         foreach (var node in current.RootNodes)
         {
@@ -59,6 +63,13 @@ public partial class EnvironmentViewModel
         {
             if (this.observedLights.Add(light)) light.PropertyChanged += this.OnLightAssignmentChanged;
         }
+        foreach (var transform in node.Components.OfType<TransformComponent>())
+        {
+            if (this.observedTransforms.Add(transform))
+            {
+                transform.PropertyChanged += this.OnSourceTransformChanged;
+            }
+        }
         foreach (var child in node.Children)
         {
             this.ObserveSubtree(child);
@@ -79,19 +90,34 @@ public partial class EnvironmentViewModel
         {
             if (this.observedLights.Remove(light)) light.PropertyChanged -= this.OnLightAssignmentChanged;
         }
+        foreach (var transform in node.Components.OfType<TransformComponent>())
+        {
+            if (this.observedTransforms.Remove(transform))
+            {
+                transform.PropertyChanged -= this.OnSourceTransformChanged;
+            }
+        }
         foreach (var child in node.Children)
         {
             this.UnobserveSubtree(child);
         }
     }
 
+    private void OnSourceTransformChanged(object? sender, PropertyChangedEventArgs args)
+        => this.RefreshAtmosphereSourceEditors();
+
     private void OnLightAssignmentChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (string.IsNullOrEmpty(args.PropertyName) || args.PropertyName == nameof(DirectionalLightComponent.AtmosphereSlot))
         {
-            this.observedSunId = this.FindPrimarySource()?.Id;
+            this.observedSunId = this.FindAtmosphereSource(AtmosphereLightSlot.Primary)?.Id;
+            this.observedSecondarySunId = this.FindAtmosphereSource(AtmosphereLightSlot.Secondary)?.Id;
             this.lightAssignments?.ModelChanged(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot.Id);
             this.RefreshSunDependencies();
+        }
+        else
+        {
+            this.RefreshAtmosphereSourceEditors();
         }
     }
 
@@ -101,9 +127,12 @@ public partial class EnvironmentViewModel
             && (string.IsNullOrEmpty(args.PropertyName) || string.Equals(args.PropertyName, nameof(Scene.Environment), StringComparison.Ordinal)))
         {
             this.RefreshFromScene();
-            if (this.observedSunId != this.FindPrimarySource()?.Id)
+            var primaryId = this.FindAtmosphereSource(AtmosphereLightSlot.Primary)?.Id;
+            var secondaryId = this.FindAtmosphereSource(AtmosphereLightSlot.Secondary)?.Id;
+            if (this.observedSunId != primaryId || this.observedSecondarySunId != secondaryId)
             {
-                this.observedSunId = this.FindPrimarySource()?.Id;
+                this.observedSunId = primaryId;
+                this.observedSecondarySunId = secondaryId;
                 this.lightAssignments?.ModelChanged(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot.Id);
             }
         }
@@ -150,6 +179,17 @@ public partial class EnvironmentViewModel
             added.PropertyChanged += this.OnLightAssignmentChanged;
             this.observedLights.Add(added);
         }
+        var currentTransforms = this.observedNodes.SelectMany(node => node.Components.OfType<TransformComponent>()).ToHashSet();
+        foreach (var removed in this.observedTransforms.Except(currentTransforms).ToArray())
+        {
+            removed.PropertyChanged -= this.OnSourceTransformChanged;
+            this.observedTransforms.Remove(removed);
+        }
+        foreach (var added in currentTransforms.Except(this.observedTransforms))
+        {
+            added.PropertyChanged += this.OnSourceTransformChanged;
+            this.observedTransforms.Add(added);
+        }
 
         if (this.observedNodes.Any(node => ReferenceEquals(sender, node.Components)))
         {
@@ -159,6 +199,11 @@ public partial class EnvironmentViewModel
 
     private void OnSunNodeChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (sender is SceneNode changed && this.observedNodes.Contains(changed))
+        {
+            this.RefreshAtmosphereSourceEditors();
+        }
+
         if (sender is SceneNode node && this.observedNodes.Contains(node)
             && (string.IsNullOrEmpty(args.PropertyName) || string.Equals(args.PropertyName, nameof(SceneNode.Name), StringComparison.Ordinal)))
         {
@@ -172,9 +217,13 @@ public partial class EnvironmentViewModel
         this.isApplyingEditorValues = true;
         try
         {
-            var previousTargets = this.SunOptions.Select(option => option.NodeId).ToHashSet();
-            this.RebuildSunOptions(this.FindPrimarySource()?.Id);
-            if (!previousTargets.SetEquals(this.SunOptions.Select(option => option.NodeId)))
+            var previousPrimaryTargets = this.SunOptions.Select(option => option.NodeId).ToHashSet();
+            var previousSecondaryTargets = this.SecondarySunOptions.Select(option => option.NodeId).ToHashSet();
+            var primaryId = this.FindAtmosphereSource(AtmosphereLightSlot.Primary)?.Id;
+            var secondaryId = this.FindAtmosphereSource(AtmosphereLightSlot.Secondary)?.Id;
+            this.RebuildSunOptions(primaryId, secondaryId);
+            if (!previousPrimaryTargets.SetEquals(this.SunOptions.Select(option => option.NodeId))
+                || !previousSecondaryTargets.SetEquals(this.SecondarySunOptions.Select(option => option.NodeId)))
             {
                 this.lightAssignments?.ModelChanged(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot.Id);
             }

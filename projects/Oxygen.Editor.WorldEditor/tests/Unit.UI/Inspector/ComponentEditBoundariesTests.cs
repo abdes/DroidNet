@@ -169,13 +169,13 @@ public sealed partial class ComponentEditBoundariesTests : DroidNet.Tests.Visual
         panel.Children.Add(currentPicker);
         await LoadTestContentAsync(panel).ConfigureAwait(true);
         InspectorColorGestures.Attach(oldPicker, light, "Color");
-        InspectorColorGestures.Apply(oldPicker, owner => ((DirectionalLightViewModel)owner).SetColor(Colors.Red));
+        InspectorColorGestures.Apply(oldPicker, owner => ((DirectionalLightViewModel)owner).SetColor(InspectorRgbPresentation.ToLinearRgb(Colors.Red)));
         host.SelectComponentFilter(typeof(TransformComponent));
         await light.PendingEdits.ConfigureAwait(true);
         _ = ReadSceneColor(fixture, "Light").Should().Be(original);
         host.SelectComponentFilter(typeof(DirectionalLightComponent));
         InspectorColorGestures.Attach(currentPicker, light, "Color");
-        InspectorColorGestures.Apply(currentPicker, owner => ((DirectionalLightViewModel)owner).SetColor(Colors.Lime));
+        InspectorColorGestures.Apply(currentPicker, owner => ((DirectionalLightViewModel)owner).SetColor(InspectorRgbPresentation.ToLinearRgb(Colors.Lime)));
         _ = panel.Children.Remove(oldPicker);
         await WaitForRenderAsync().ConfigureAwait(true);
         await light.PendingEdits.ConfigureAwait(true);

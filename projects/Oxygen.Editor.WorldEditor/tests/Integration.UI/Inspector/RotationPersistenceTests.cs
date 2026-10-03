@@ -60,7 +60,7 @@ public sealed partial class RotationPersistenceTests : DroidNet.Tests.VisualUser
         for (var axis = 0; axis < RotationFields.Length; axis++)
         {
             var field = NativeNodeFields.Single(value => string.Equals(value.Field, RotationFields[axis], StringComparison.Ordinal));
-            var control = await FindInspectorControlAsync(scroller, () => FindNodeControl(view, model, field), field.Field, timeout.Token).ConfigureAwait(true);
+            var control = await FindNodeFieldControlAsync(view, scroller, model, field, timeout.Token).ConfigureAwait(true);
             await SetEnvironmentControlValueAsync(control, values[axis]).ConfigureAwait(true);
             while (fixture.Context.History.UndoStack.Count < axis + 1)
             {

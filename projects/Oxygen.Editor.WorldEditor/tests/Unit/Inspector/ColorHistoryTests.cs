@@ -10,7 +10,6 @@ using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
-using Color = Windows.UI.Color;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
 
@@ -37,7 +36,7 @@ public sealed partial class ColorHistoryTests
         using var model = CreateColorModel(kind, fixture);
         if (model is EnvironmentViewModel environment)
         {
-            environment.SetBackgroundColor(Color.FromArgb(255, 255, 255, 255));
+            environment.SetBackgroundColor(Vector3.One);
             await environment.PendingEdits.ConfigureAwait(true);
         }
 
@@ -45,10 +44,10 @@ public sealed partial class ColorHistoryTests
         var before = ReadSceneColor(fixture, kind);
         var owner = (IInspectorEditSessionOwner)model;
         owner.BeginEditSession(model is EnvironmentViewModel ? "BackgroundColor" : "Color", NumberBoxEditInteractionKind.PointerDrag);
-        var preview = default(Color);
+        var preview = default(Vector3);
         for (var sample = 1; sample <= samples; sample++)
         {
-            preview = Color.FromArgb(255, (byte)(48 * sample), 80, 160);
+            preview = new Vector3(0.15f * sample, 0.25f, 0.5f);
             if (model is EnvironmentViewModel background)
             {
                 background.SetBackgroundColor(preview);
@@ -64,7 +63,7 @@ public sealed partial class ColorHistoryTests
         _ = fixture.Context.History.UndoStack.Should().BeEmpty("preview samples belong to one uncommitted edit session");
         owner.EndEditSession(cancel ? NumberBoxEditCompletionKind.Cancel : NumberBoxEditCompletionKind.Commit);
         await PendingColorEdits(model).ConfigureAwait(true);
-        var expected = cancel ? before : model is EnvironmentViewModel ? DecodeSrgb(preview) : new Vector3(preview.R / 255f, preview.G / 255f, preview.B / 255f);
+        var expected = cancel ? before : preview;
         AssertColorClose(ReadSceneColor(fixture, kind), expected);
         _ = fixture.Context.History.UndoStack.Should().HaveCount(cancel ? 0 : 1);
         if (!cancel)
@@ -74,17 +73,6 @@ public sealed partial class ColorHistoryTests
             await fixture.Context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
             AssertColorClose(ReadSceneColor(fixture, kind), expected);
         }
-    }
-
-    private static Vector3 DecodeSrgb(Color color)
-    {
-        static float Decode(byte channel)
-        {
-            var encoded = channel / 255.0;
-            return (float)(encoded <= 0.04045 ? encoded / 12.92 : Math.Pow((encoded + 0.055) / 1.055, 2.4));
-        }
-
-        return new(Decode(color.R), Decode(color.G), Decode(color.B));
     }
 
     private static Task PendingColorEdits(IDisposable model) => model is EnvironmentViewModel environment ? environment.PendingEdits : ((DirectionalLightViewModel)model).PendingEdits;

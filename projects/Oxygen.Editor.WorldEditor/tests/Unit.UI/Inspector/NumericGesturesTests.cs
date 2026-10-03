@@ -34,6 +34,94 @@ public sealed partial class NumericGesturesTests : DroidNet.Tests.VisualUserInte
 {
     public TestContext TestContext { get; set; } = null!;
 
+    [TestMethod]
+    [DataRow("SunAzimuth")]
+    [DataRow("SunElevation")]
+    public Task SunAngleAuthoringRoundTripsDisplayDegrees(string field) => EnqueueAsync(async () =>
+    {
+        using var fixture = new SceneAuthoringFixture();
+        using var inspector = fixture.CreateInspectorHost("Light");
+        var model = inspector.PropertyEditors.OfType<DirectionalLightViewModel>().Single();
+        if (field == "SunAzimuth")
+        {
+            model.SunAzimuth = 12;
+        }
+        else
+        {
+            model.SunElevation = 12;
+        }
+
+        await model.PendingEdits.ConfigureAwait(true);
+        _ = (field == "SunAzimuth" ? model.SunAzimuth : model.SunElevation).Should().BeApproximately(12, 0.001f);
+    });
+
+    [TestMethod]
+    [DataRow("Camera", "FieldOfView")]
+    [DataRow("Light", "IntensityLux")]
+    [DataRow("Light", "SunAzimuth")]
+    [DataRow("Light", "SunElevation")]
+    [DataRow("Light", "AngularSizeRadians")]
+    [DataRow("Environment", "PlanetRadiusKm")]
+    [DataRow("Environment", "AtmosphereHeightKm")]
+    public Task ActualInspectorCaptionsScrubAndCancelThroughNativePointerInput(string kind, string field) => EnqueueAsync(async () =>
+    {
+        using var fixture = new SceneAuthoringFixture();
+        using var inspector = fixture.CreateInspectorHost(kind);
+        var model = inspector.PropertyEditors.Single(editor => MatchesInspector(editor, kind));
+        var view = CreateNumericView(model);
+        var scroller = new ScrollViewer { Width = 340, Height = 480, Content = view };
+        using var scaledHost = new ScaledXamlHost();
+        await scaledHost.LoadAsync(scroller, 1, this.TestContext.CancellationToken).ConfigureAwait(true);
+        var number = (NumberBox)await FindInspectorControlAsync(scroller, () =>
+        {
+            foreach (var section in view.FindDescendants().OfType<Oxygen.Editor.Controls.PropertiesExpander>())
+            {
+                section.IsExpanded = true;
+            }
+
+            foreach (var disclosure in view.FindDescendants().OfType<Microsoft.UI.Xaml.Controls.Expander>())
+            {
+                disclosure.IsExpanded = true;
+            }
+
+            return view.FindDescendant<NumberBox>(input => Equals(input.Tag, field));
+        }, field, this.TestContext.CancellationToken, "PartLabelTextBlock").ConfigureAwait(true);
+        var label = number.FindDescendant<TextBlock>(part => part.Name == "PartLabelTextBlock")!;
+        _ = label.Text.Should().NotBeNullOrEmpty();
+        _ = label.Visibility.Should().Be(Visibility.Visible);
+        var starts = 0;
+        number.EditSessionStarted += (_, _) => starts++;
+        var before = number.NumberValue;
+        using (var pointer = await NativePointer.PressAsync(label, this.TestContext.CancellationToken).ConfigureAwait(true))
+        {
+            _ = starts.Should().Be(1, $"the real {field} caption must start its native edit session");
+            await pointer.MoveAsync(12, this.TestContext.CancellationToken).ConfigureAwait(true);
+            await pointer.ReleaseAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        }
+
+        await PendingNumericEdits(model).ConfigureAwait(true);
+        var authored = number.NumberValue;
+        _ = authored.Should().BeGreaterThan(before, $"native {field} dragging must author a value; light diagnostics: {(model as DirectionalLightViewModel)?.AngularSizeRadiansDiagnostic.Message}");
+        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Context.Metadata.IsDirty.Should().BeTrue();
+        await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        _ = number.NumberValue.Should().BeApproximately(before, 0.00001f);
+        await fixture.Context.History.RedoAsync(CancellationToken.None).ConfigureAwait(true);
+        _ = number.NumberValue.Should().BeApproximately(authored, 0.00001f);
+
+        using (var pointer = await NativePointer.PressAsync(label, this.TestContext.CancellationToken).ConfigureAwait(true))
+        {
+            await pointer.MoveAsync(12, this.TestContext.CancellationToken).ConfigureAwait(true);
+            _ = number.NumberValue.Should().BeGreaterThan(authored);
+            await pointer.EscapeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+            await pointer.ReleaseAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        }
+
+        await PendingNumericEdits(model).ConfigureAwait(true);
+        _ = number.NumberValue.Should().BeApproximately(authored, 0.00001f);
+        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+    });
+
     /// <summary>A hundred bound samples produce one history entry and throttled previews followed by a terminal sync.</summary>
     /// <param name="kind">The inspector to exercise.</param>
     /// <param name="field">Its numeric control tag.</param>
@@ -48,8 +136,7 @@ public sealed partial class NumericGesturesTests : DroidNet.Tests.VisualUserInte
         using var host = fixture.CreateInspectorHost(kind);
         var model = host.PropertyEditors.Single(editor => MatchesInspector(editor, kind));
         var view = CreateNumericView(model);
-        await LoadTestContentAsync(view).ConfigureAwait(true);
-        var number = view.FindDescendant<NumberBox>(element => Equals(element.Tag, field))!;
+        var number = await this.LoadNumericFieldAsync(view, field).ConfigureAwait(true);
         _ = number.Should().NotBeNull();
         var before = number.NumberValue;
         using var throttle = new SceneEngineSync(Mock.Of<IEngineService>());
@@ -90,8 +177,7 @@ public sealed partial class NumericGesturesTests : DroidNet.Tests.VisualUserInte
         using var host = fixture.CreateInspectorHost(kind);
         var model = host.PropertyEditors.Single(editor => MatchesInspector(editor, kind));
         var view = CreateNumericView(model);
-        await LoadTestContentAsync(view).ConfigureAwait(true);
-        var number = view.FindDescendant<NumberBox>(element => Equals(element.Tag, field))!;
+        var number = await this.LoadNumericFieldAsync(view, field).ConfigureAwait(true);
         var before = number.NumberValue;
         RaiseNumberEvent(number, "OnEditSessionStarted", NumberBoxEditInteractionKind.PointerDrag);
         number.NumberValue = before + 1;
@@ -118,8 +204,7 @@ public sealed partial class NumericGesturesTests : DroidNet.Tests.VisualUserInte
         using var host = fixture.CreateInspectorHost(kind);
         var model = host.PropertyEditors.Single(editor => MatchesInspector(editor, kind));
         var view = CreateNumericView(model);
-        await LoadTestContentAsync(view).ConfigureAwait(true);
-        var number = view.FindDescendant<NumberBox>(element => Equals(element.Tag, field))!;
+        var number = await this.LoadNumericFieldAsync(view, field).ConfigureAwait(true);
         var before = number.NumberValue;
         for (var tick = 1; tick <= 4; tick++)
         {
@@ -137,4 +222,26 @@ public sealed partial class NumericGesturesTests : DroidNet.Tests.VisualUserInte
         await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = number.NumberValue.Should().Be(before);
     });
+
+    private async Task<NumberBox> LoadNumericFieldAsync(UserControl view, string field)
+    {
+        var scroller = new ScrollViewer { Width = 340, Height = 480, Content = view, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+        var root = new Grid();
+        root.Children.Add(scroller);
+        await LoadTestContentAsync(root).ConfigureAwait(true);
+        return (NumberBox)await FindInspectorControlAsync(scroller, () =>
+        {
+            foreach (var section in view.FindDescendants().OfType<Oxygen.Editor.Controls.PropertiesExpander>())
+            {
+                section.IsExpanded = true;
+            }
+
+            foreach (var disclosure in view.FindDescendants().OfType<Microsoft.UI.Xaml.Controls.Expander>())
+            {
+                disclosure.IsExpanded = true;
+            }
+
+            return view.FindDescendant<NumberBox>(input => Equals(input.Tag, field));
+        }, field, this.TestContext.CancellationToken).ConfigureAwait(true);
+    }
 }

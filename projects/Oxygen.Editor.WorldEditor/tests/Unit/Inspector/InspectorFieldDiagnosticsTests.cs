@@ -15,6 +15,22 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
 public sealed class InspectorFieldDiagnosticsTests
 {
     [TestMethod]
+    public void ErrorStateIsUiIndependentAndNotifiesWhenTheMessageChanges()
+    {
+        var diagnostic = new InspectorFieldDiagnostic();
+        var notifications = new List<string?>();
+        diagnostic.PropertyChanged += (_, args) => notifications.Add(args.PropertyName);
+        _ = diagnostic.HasError.Should().BeFalse();
+
+        diagnostic.Message = "Invalid value";
+        _ = diagnostic.HasError.Should().BeTrue();
+        diagnostic.Message = string.Empty;
+
+        _ = diagnostic.HasError.Should().BeFalse();
+        _ = notifications.Where(name => name == nameof(InspectorFieldDiagnostic.HasError)).Should().HaveCount(2);
+    }
+
+    [TestMethod]
     public void NewerDependentEditClearsItsErrorWithoutClearingUnrelatedFields()
     {
         var near = new PropertyId("camera", "/near");
