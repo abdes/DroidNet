@@ -4,6 +4,8 @@
 
 using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
+using Microsoft.UI;
+using Microsoft.UI.Xaml.Media;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -19,6 +21,16 @@ public partial class TransformView
     public TransformView()
     {
         this.InitializeComponent();
+        ConfigureAxisLabels(this.PositionBox);
+        ConfigureAxisLabels(this.RotationBox);
+        ConfigureAxisLabels(this.ScaleBox);
+    }
+
+    private static void ConfigureAxisLabels(VectorBox vector)
+    {
+        vector.ComponentLabelForegrounds["X"] = new SolidColorBrush(Colors.Red);
+        vector.ComponentLabelForegrounds["Y"] = new SolidColorBrush(Colors.Green);
+        vector.ComponentLabelForegrounds["Z"] = new SolidColorBrush(Colors.Blue);
     }
 
     private void PositionBox_Validate(object? sender, ValidationEventArgs<float> e)

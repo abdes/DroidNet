@@ -35,6 +35,74 @@ public sealed partial class NumericGesturesTests : DroidNet.Tests.VisualUserInte
     public TestContext TestContext { get; set; } = null!;
 
     [TestMethod]
+    [DataRow("Position", "X")]
+    [DataRow("Position", "Y")]
+    [DataRow("Position", "Z")]
+    [DataRow("Rotation", "X")]
+    [DataRow("Rotation", "Y")]
+    [DataRow("Rotation", "Z")]
+    [DataRow("Scale", "X")]
+    [DataRow("Scale", "Y")]
+    [DataRow("Scale", "Z")]
+    public Task TransformAxisLabelsScrubAndCancelThroughNativePointerInput(string field, string axis) => EnqueueAsync(async () =>
+    {
+        using var fixture = new SceneAuthoringFixture();
+        using var inspector = fixture.CreateInspectorHost("Transform");
+        var model = inspector.PropertyEditors.OfType<TransformViewModel>().Single();
+        var view = new TransformView { ViewModel = model };
+        var scroller = new ScrollViewer { Width = 340, Height = 480, Content = view };
+        using var scaledHost = new ScaledXamlHost();
+        await scaledHost.LoadAsync(scroller, 1, this.TestContext.CancellationToken).ConfigureAwait(true);
+        var number = (NumberBox)await FindInspectorControlAsync(scroller, () =>
+            view.FindDescendant<Oxygen.Editor.Controls.PropertyCard>(card => card.PropertyName == field)?
+                .FindDescendant<NumberBox>(input => input.Name == $"PartNumberBox{axis}"),
+            $"{field}.{axis}", this.TestContext.CancellationToken, "PartCompactLabelTextBlock").ConfigureAwait(true);
+        var vector = number.FindAscendant<VectorBox>()!;
+        var originals = vector.GetValues();
+        var label = number.FindDescendant<TextBlock>(part => part.Name == "PartCompactLabelTextBlock")!;
+        _ = label.Text.Should().Be(axis);
+        _ = label.Visibility.Should().Be(Visibility.Visible);
+        var starts = 0;
+        number.EditSessionStarted += (_, _) => starts++;
+        var before = number.NumberValue;
+        using (var pointer = await NativePointer.PressAsync(label, this.TestContext.CancellationToken).ConfigureAwait(true))
+        {
+            _ = starts.Should().Be(1);
+            await pointer.MoveAsync(12, this.TestContext.CancellationToken).ConfigureAwait(true);
+            await pointer.ReleaseAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        }
+
+        await model.PendingEdits.ConfigureAwait(true);
+        var authored = number.NumberValue;
+        _ = authored.Should().BeGreaterThan(before);
+        var editedIndex = axis[0] - 'X';
+        for (var index = 0; index < originals.Length; index++)
+        {
+            if (index != editedIndex)
+            {
+                _ = vector.GetValues()[index].Should().BeApproximately(originals[index], 0.00001f);
+            }
+        }
+
+        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        _ = number.NumberValue.Should().BeApproximately(before, 0.00001f);
+        await fixture.Context.History.RedoAsync(CancellationToken.None).ConfigureAwait(true);
+        _ = number.NumberValue.Should().BeApproximately(authored, 0.00001f);
+        using (var pointer = await NativePointer.PressAsync(label, this.TestContext.CancellationToken).ConfigureAwait(true))
+        {
+            await pointer.MoveAsync(12, this.TestContext.CancellationToken).ConfigureAwait(true);
+            _ = number.NumberValue.Should().BeGreaterThan(authored);
+            await pointer.EscapeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+            await pointer.ReleaseAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        }
+
+        await model.PendingEdits.ConfigureAwait(true);
+        _ = number.NumberValue.Should().BeApproximately(authored, 0.00001f);
+        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+    });
+
+    [TestMethod]
     [DataRow("SunAzimuth")]
     [DataRow("SunElevation")]
     public Task SunAngleAuthoringRoundTripsDisplayDegrees(string field) => EnqueueAsync(async () =>

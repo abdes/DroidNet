@@ -51,6 +51,7 @@
                 Visibility="{x:Bind ViewModel.PositionProperty.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                 <StackPanel Spacing="2">
                     <controls:VectorBox
+                        x:Name="PositionBox"
                         AutomationProperties.Name="Position, metres"
                         ComponentLabelPosition="Left"
                         Dimension="3"
@@ -104,6 +105,7 @@
                 Visibility="{x:Bind ViewModel.RotationProperty.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                 <StackPanel Spacing="2">
                     <controls:VectorBox
+                        x:Name="RotationBox"
                         AutomationProperties.Name="Rotation, degrees"
                         ComponentLabelPosition="Left"
                         Dimension="3"
@@ -153,11 +155,12 @@
                 IsCompound="True"
                 IsEnabled="{x:Bind ViewModel.ScaleProperty.IsEnabled, Mode=OneWay}"
                 PropertyName="Scale"
-                Qualifier=""
+                Qualifier="x"
                 Visibility="{x:Bind ViewModel.ScaleProperty.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                 <StackPanel Spacing="2">
                     <controls:VectorBox
-                        AutomationProperties.Name="Scale"
+                        x:Name="ScaleBox"
+                        AutomationProperties.Name="Scale, multiplier"
                         ComponentLabelPosition="Left"
                         Dimension="3"
                         EditSessionCompleted="ScaleBox_EditSessionCompleted"
