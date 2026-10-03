@@ -1,10 +1,10 @@
 # Inspector refactoring with visual fidelity
 
-Status: `in_progress`
+Status: `landed_needs_validation` — implementation complete; reviewer in-editor validation pending.
 
-| Outcome                                                                                                                                                                                   | Remaining                                                                                                                 | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Declarative Environment layout, headless search/applicability, all 52 scalar fields, RGB/multiplier composition, curve ownership and geometry/material picker extraction are implemented. | Complete IR-V02 visual gates and IR-06–09. Keep IR-V01 assignment-contract and IR-V03 imported-content failures explicit. | Debug/x64, .NET SDK `10.0.401`, MSBuild `18.10.1`. Latest full Unit: 221/221; Unit.UI: 226/226, no skips. Targeted native Integration.UI: 103/104; all 80 component/environment field history/reopen cases pass. Editor app and owning projects build; scoped opt-in analysis succeeds. Reviewed Light comparisons: six scalar and ten RGB pairs plus geometry/material content are pixel-identical; curve geometry/typography/preview match with border-alpha antialias variation only. Full inspector visual and IR-09 qualification remain incomplete. |
+| Outcome                                                                                                                                                                                                                                             | Remaining                                                                                                     | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| IR-01–09 implementation is complete, including typed Environment sections, shared scene editing, scalar binding consolidation, Light presentation, Transform sessions, host collaborators and duplicate-control retirement. IR-V01–03 are resolved. | Reviewer validates appearance and usability inside the editor. No further screenshot/matrix work is required. | Debug/x64, .NET SDK `10.0.401`, MSBuild `18.10.1`. Full refactor Unit 224/224 and Unit.UI 226/226 passed before the final defect fixes. Pre-fix native Inspector/captured-sky 103/104; the failing role case and all four imported-content workflows now pass in the final targeted 6/6 run against the rebuilt Debug SDK. Strict dependency-report tests pass 5/5. App/test builds and scoped analysis passed; the full suites were not rerun after the last targeted fixes. |
 
 This is a scoped maintenance implementation, not a reopening of delivered ED-M04
 or a replacement for ED-M07A/07B/M08. It preserves existing authoring behavior
@@ -13,29 +13,31 @@ and does not qualify previously incomplete native capabilities.
 ### Completion ledger
 
 `validated` below closes the named work only; a slice stays open until all its
-acceptance gates are closed. No commits or native engine builds are part of this work.
+acceptance gates are closed. IR-01–05 were committed as `1a0c8976d` with reviewer
+authorization. The reviewer rebuilt/reinstalled the Debug SDK; this agent has not
+built the native engine. Manual editor appearance acceptance is reviewer-owned.
 
-| Work                                                                    | State       | Remaining / evidence                                                                                                                                                                                                                                                                                                                                                              |
-| ----------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| IR-01 field inventory and behavioral baseline                           | validated   | 42 scene cards, seven sections and nested-source identity inventory recorded; initial native Inspector UI 155/155.                                                                                                                                                                                                                                                                |
-| IR-02 declarative layout and disclosure behavior                        | validated   | Runtime reparenting removed; ordered identities, default/temporary expansion, real header toggles, chevrons and visibility pass in the full current UI suite.                                                                                                                                                                                                                     |
-| IR-03 headless search/applicability and replacement lifetime            | validated   | Explicit metadata and immutable canonical identities; matching, expansion restoration, applicability, focus and model replacement covered by headless/native UI tests.                                                                                                                                                                                                            |
-| IR-04 scalar implementation, gestures and composed-row parity           | validated   | All 52 declared scalars migrated; six reference/composed geometry/typography cases and native caption reflow/reload pass. Light scalar comparisons are pixel-identical.                                                                                                                                                                                                           |
-| IR-05 RGB, curve and geometry/material picker implementation            | validated   | Shared controls and parent-owned curve policy built; RGB UI 53/53, curve/search unit 17/17, binding UI 36/36 and picker status/focus 7/7.                                                                                                                                                                                                                                         |
-| IR-05 composed RGB geometry, curve input and picker invocation adapters | validated   | Fourteen cases cover geometry, mixed channels, live accessory metadata, stable inputs, curve rejection/correction/remove/undo and typed original-row picker invocation. Ten Light-theme RGB reference/composed images are pixel-identical; geometry/material picker images are also identical. Curve layout/typography/preview match, with only border antialias alpha variation. |
-| IR-01–05 full affected inspector visual matrix                          | in_progress | Extracted scalar/RGB/curve/picker content comparisons are closed. Finish full section/disclosure and native popup/focus comparisons; source-reconstructed rows are not historical full-inspector screenshots.                                                                                                                                                                     |
-| Full Unit and Unit.UI suites                                            | validated   | Latest production and fourteen added composition/adapter cases: Unit 221/221 and Unit.UI 226/226, no skips.                                                                                                                                                                                                                                                                       |
-| Editor app / Integration.UI builds and scoped analysis                  | validated   | Debug/x64 app and all owning projects build against existing installed-SDK references. Opt-in shared Controls and WorldEditor analysis succeeds; new controls, curve and presentation files have no reported diagnostics. Existing monolithic-model warnings remain.                                                                                                              |
-| Native field/history/persistence and captured-sky workflows             | validated   | After updating stale field navigation, 103/104 targeted Integration.UI cases pass. All field synchronization, history/reopen, lifetime, geometry/material and captured-sky cases pass; the separate occupied-scene-source expectation remains open as IR-V01.                                                                                                                     |
-| IR-06–09 implementation and final qualification                         | planned     | Environment sections/models, binding/light ownership, Transform/host collaborators, duplicate-control audit and complete final gates remain.                                                                                                                                                                                                                                      |
+| Work                                                                    | State     | Remaining / evidence                                                                                                                                                                                                                                                                                                                                                                |
+| ----------------------------------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| IR-01 field inventory and behavioral baseline                           | validated | 42 scene cards, seven sections and nested-source identity inventory recorded; initial native Inspector UI 155/155.                                                                                                                                                                                                                                                                  |
+| IR-02 declarative layout and disclosure behavior                        | validated | Runtime reparenting removed; ordered identities, default/temporary expansion, real header toggles, chevrons and visibility pass in the full current UI suite.                                                                                                                                                                                                                       |
+| IR-03 headless search/applicability and replacement lifetime            | validated | Explicit metadata and immutable canonical identities; matching, expansion restoration, applicability, focus and model replacement covered by headless/native UI tests.                                                                                                                                                                                                              |
+| IR-04 scalar implementation, gestures and composed-row parity           | validated | All 52 declared scalars migrated; six reference/composed geometry/typography cases and native caption reflow/reload pass. Light scalar comparisons are pixel-identical.                                                                                                                                                                                                             |
+| IR-05 RGB, curve and geometry/material picker implementation            | validated | Shared controls and parent-owned curve policy built; RGB UI 53/53, curve/search unit 17/17, binding UI 36/36 and picker status/focus 7/7.                                                                                                                                                                                                                                           |
+| IR-05 composed RGB geometry, curve input and picker invocation adapters | validated | Fourteen cases cover geometry, mixed channels, live accessory metadata, stable inputs, curve rejection/correction/remove/undo and typed original-row picker invocation. Ten Light-theme RGB reference/composed images are pixel-identical; geometry/material picker images are also identical. Curve layout/typography/preview match, with only border antialias alpha variation.   |
+| Screenshot/matrix implementation gate                                   | removed   | Reviewer explicitly ended capture work. Durable UI assertions remain; the reviewer will validate appearance and usability inside the editor. This is not a claim that manual validation passed.                                                                                                                                                                                     |
+| Full Unit and Unit.UI suites                                            | validated | Full coordinated refactor: Unit 224/224 and Unit.UI 226/226, no skips. These full runs preceded the final targeted defect fixes; no later full-suite run is claimed.                                                                                                                                                                                                                |
+| Editor app / Integration.UI builds and scoped analysis                  | validated | Debug/x64 app and all owning projects build against existing installed-SDK references. Opt-in shared Controls and WorldEditor analysis succeeds; new controls, curve and presentation files have no reported diagnostics. Existing monolithic-model warnings remain.                                                                                                                |
+| Native field/history/persistence and captured-sky workflows             | validated | The pre-fix targeted run passed 103/104, including all 80 component/environment field history/reopen cases. The remaining role case now passes alongside its companion and four import workflows in the final 6/6 run. IR-V01–03 are resolved.                                                                                                                                      |
+| IR-06–09 implementation                                                 | validated | Five typed sections, one shared scene edit owner, consolidated Camera/Light binding state, shadow/orientation owners, Transform controller, factory/selection observer and duplicate-control retirement are implemented. Full refactor Unit 224/224 and Unit.UI 226/226 passed; final defect scenarios pass 6/6 on the rebuilt SDK. Reviewer in-editor acceptance remains separate. |
 
-### Open qualification items
+### Resolved qualification items
 
-| ID     | State       | Next action / owner                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| ------ | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| IR-V01 | blocked     | The scene source picker clears the old role and assigns the new light in one change set; `OccupiedPrimaryRejectsInspectorAndEnvironmentPickerEdits(true)` expects rejection instead. `ApplyAtmosphereAssignment` is unchanged by this refactor, while the owning assignment rules require conflicts to change neither light. Preserve the assertion and command behavior until this pre-existing contract mismatch is resolved with the assignment owner; do not label the complete Integration.UI suite passed. |
-| IR-V02 | in_progress | Complete full affected section/disclosure and native popup/focus visual acceptance. Reviewed direct-composition references qualify the extracted rows/content, not historical full-inspector screenshots. Owner: inspector refactor.                                                                                                                                                                                                                                                                             |
-| IR-V03 | blocked     | The broader method-name integration filter also selected four imported-model cases outside the Inspector namespace. Two report unavailable material slots; two report a native dependency-report/schema mismatch. Record these separately; do not alter the installed SDK or build the engine to hide them. Owner: imported-content workflow.                                                                                                                                                                    |
+| ID     | State     | Next action / owner                                                                                                                                                                                                                                                                                                                                     |
+| ------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| IR-V01 | validated | Direct occupied-role assignment still rejects without history changes. Scene picker replacement is one atomic history entry; replay clears roles before assignments. Native replacement, undo, redo and saved reopen pass in the final targeted run.                                                                                                    |
+| IR-V02 | validated | Reviewer owns in-editor appearance/usability validation and explicitly ended screenshot/matrix completion as an implementation gate. Temporary capture code is removed; no further capture work is required from the implementer. Automated layout/interaction checks remain required.                                                                  |
+| IR-V03 | validated | The rebuilt SDK emits required dependency v2. Inspector and command validation now share the actual import pipeline's slot provider in the native fixture. All four source-backed/library-only glTF/FBX picker/history/reopen workflows pass. Schema validation remains strict, with expected/received version diagnostics; report unit tests pass 5/5. |
 
 ## 1. Goal and boundaries
 
@@ -343,20 +345,14 @@ Those references reconstruct the original direct card/number panel in the same
 native fixture; they are not historical full-inspector screenshots. Full affected
 inspector visual acceptance remains pending.
 
-Current combined verification: Debug/x64 shared Controls, WorldEditor, Unit,
-Unit.UI, Integration.UI and the editor app build against already-built installed-SDK
-references. The latest full Unit suite passes **221/221** and the expanded full
-Unit.UI suite passes **226/226**, including all fourteen new composition/adapter
-cases, with no skips. Before IR-05, the
-full suites passed 214/214 and 212/212; retain those only as historical evidence.
-Shared Controls and WorldEditor opt-in analysis run successfully; new controls,
-curve and presentation files have no reported diagnostics, while existing
-monolithic models/controls still emit analyzer warnings. Initial
-full-reference builds encountered active Visual Studio output/PDB locks; focused
-managed builds avoided rebuilding the unchanged C++/CLI bridge. Targeted native
-Integration.UI passes 103/104 after correcting test navigation for nested fields;
-IR-V01 prevents whole-suite acceptance. The remaining visual matrix, live editor
-inspection and IR-09 are not complete.
+Combined verification: Debug/x64 shared Controls, WorldEditor, Unit, Unit.UI,
+Integration.UI and editor app builds passed against installed-SDK references.
+Full refactor suites passed **224/224 Unit** and **226/226 Unit.UI** before final
+defect fixes. The final targeted native run passes **6/6**, covering both role
+assignment policies and all four source-backed/library-only glTF/FBX workflows;
+strict dependency-report unit tests pass **5/5**. Scoped inspector analysis passed.
+Full suites were not rerun after the final fixes. Earlier 214/214, 212/212 and
+221/221 results remain historical only. The reviewer owns in-editor validation.
 
 ### IR-05 — Extract RGB, curve and picker compositions
 
@@ -438,6 +434,16 @@ Exit: EnvironmentView is composition rather than a field catalog; no parent acce
 to child internals to construct layout; 42 cards remain discoverable through test
 helpers; search/reset/diagnostic navigation, scheduling and source dependencies pass.
 
+**IR-06 result — validated implementation gates.** The parent owns scene identity and five
+stable section models/views; ordinary scene edits share one explicit edit/diagnostic
+owner. Source role policy, subtree/component observation, initial snapshots and both
+canonical Light editors belong to Atmosphere Lights. Exposure owns the scheduled
+texture catalog and curve model. Each view registers its own controls; the parent
+uses the registry for browsing, not child namescopes to build layout. Sky owns
+Aerial Start realization/focus. All consumers and tests now access section-owned
+properties, with no parent property-forwarding compatibility layer. Final visual
+and native checks are recorded in IR-09.
+
 ### IR-07 — Reduce scalar binding duplication and split Light presentation
 
 Dependencies: IR-06. Files: PerspectiveCameraViewModel, DirectionalLightViewModel,
@@ -465,6 +471,16 @@ their presentation/views, existing schema binding consumers.
 Exit: ordinary field state has one source; less repeated synchronization/wiring;
 near/far, mixed fields, shadows, sun direction and color gestures retain behavior.
 No extension of arithmetic semantics to previously unsupported fields by accident.
+
+**IR-07 result — validated implementation gates.** Camera's four public typed bindings own
+Value/IsMixed directly. Generic disposable registrations route value requests and
+suppress model-refresh echoes, preserving rejection diagnostics and cancellation.
+Light's ordinary scalar adapters use their existing bindings as the sole state;
+per-target vector edits and degree/radian/count conversions remain explicit.
+Shadow/cascade composition receives the existing Light model, while pure orientation
+conversion has a focused owner. The existing `rad` qualifier is intentionally
+unchanged until its separate visual correction is reviewed; stored values and the
+degree adapter remain unchanged. Final qualification is recorded in IR-09.
 
 ### IR-08 — Extract Transform sessions and inspector-host collaborators
 
@@ -495,6 +511,14 @@ Exit: Transform VM no longer owns async session machinery; inspector host no lon
 constructs every editor or owns every subscription. Gesture and layout suites pass,
 including resizing/reflow while an edit is active.
 
+**IR-08 result — validated implementation gates.** Transform's controller owns sessions,
+original target values, relative expressions, wheel timers, the edit gate, pending
+draining and disposal. The VM retains values/mixed/source feedback. Inspector-local
+factory construction reuses scoped services and the host's cached instances. A
+disposable selected-component/material-slot observer has one typed callback and
+generation-guards queued work; host navigation/filter/input orchestration stays
+with the host. Final lifetime/native qualification is recorded in IR-09.
+
 ### IR-09 — Retire duplicates and qualify the result
 
 Dependencies: all previous slices. Files: WorldEditor local PropertyCard/
@@ -521,71 +545,33 @@ owning documentation and tests; shared resource consumers as required.
 Exit: no duplicate control authority, no unexplained visual deviations, no regression
 in the covered authoring workflows, all required evidence recorded accurately.
 
-## 6. Local-only screenshots and visual review
+**IR-09 result — implementation complete; reviewer validation pending.** Repository-wide searches found no live consumer of
+the old local PropertyCard/PropertiesExpander types or resource URIs outside their
+own templates and Generic references. The unused implementations/templates and
+local theme dictionary are removed; Generic now references the shared owner and
+retains ViewportIcons. The coordinated implementation passes the full Unit suite
+224/224 and full Unit.UI 226/226 before the final defect fixes. The final targeted
+native run passes 6/6 and strict report tests pass 5/5. Scoped analysis found no
+reported diagnostics in the modified inspector production files. No temporary
+capture code remains. The reviewer owns in-editor validation; no broader final
+suite rerun or manual acceptance is claimed.
 
-### Capture procedure
+## 6. Reviewer-owned in-editor validation
 
-1. Use the **same native fixture data**, Windows theme, dock/content dimensions,
-   font/text scale, rasterization scale, focus and expansion state for both sides.
-   Record those parameters and source revision in a local note. Capture before any
-   implementation edit; do not claim a newly generated image is the old baseline.
-2. Reuse `tests/Unit.UI/Inspector/InspectorCapture.cs` where already called. It is
-   opt-in via `OXYGEN_UI_CAPTURE_DIRECTORY`. Its RenderTargetBitmap path captures
-   the supplied element; it does not guarantee capture of a separate popup/window.
-3. For full inspector, hover/focus and flyout states absent from existing calls,
-   use local manual window captures or ad-hoc harness/capture code. Keep that code,
-   screenshots, overlays, diffs and comparison scripts **outside Git**. Before
-   delivery remove only your own temporary test edits, preserving concurrent work.
-4. Store captures under the approved local temp directory, for example
-   `C:/Users/abdes/AppData/Local/Temp/opencode/inspector-refactor/before` and `after`.
-   Do not put images in documentation, tracked test fixtures or golden-image folders.
-5. Wait for loaded templates, completed layout and composition rendering. Use
-   existing rendering waits/ScaledXamlHost; do not rely on arbitrary sleeps.
-   Bring the intended fields into view; the long Environment view needs several
-   matched viewport captures, not one image of the first screen.
-6. Compare side-by-side and with an ad-hoc overlay/difference image. Account for
-   antialiasing, caret blink and animation; do not define a global pixel threshold
-   that excuses shifted alignment. Investigate every structural/text/focus mismatch.
-7. Keep durable geometry/state/typography assertions in UI tests. Commit only a
-   concise review result: slice, tested states, pass/fail, approved deviation and
-   rationale. No screenshot attachments or paths presented as permanent evidence.
+The reviewer explicitly ended screenshot/matrix completion as an implementation
+gate. Stop capture work and deliver the implemented editor for the reviewer's own
+in-editor validation. This supersedes earlier per-slice capture and full-matrix
+requirements; it does not authorize ignoring defects or weakening behavioral tests.
 
-Example opt-in capture session, after building the UI test project:
+Implementation qualification retains automated geometry, typography, disclosure,
+search, focus, interaction, mixed/per-axis, undo/cancel, persistence and native
+synchronization checks. Fix failures and report exact causes. Manual appearance,
+OS accessibility/theme and live-editor usability acceptance belong to the reviewer.
+Do not claim those manual checks have been performed on the reviewer's behalf.
 
-```powershell
-$env:OXYGEN_UI_CAPTURE_DIRECTORY = 'C:/Users/abdes/AppData/Local/Temp/opencode/inspector-refactor/before'
-try {
-    traverse Invoke-Tests --start projects/Oxygen.Editor.WorldEditor/tests/Unit.UI --configuration Debug -- --filter FullyQualifiedName~ResponsivePropertyRowsTests
-} finally {
-    Remove-Item Env:OXYGEN_UI_CAPTURE_DIRECTORY -ErrorAction SilentlyContinue
-}
-```
-
-Use `after` for the same cases after the slice. The existing capture calls cover
-selected compound/disclosure states only; extend the local review manually for the
-rest of this matrix. Do not commit a new screenshot infrastructure or baseline set.
-
-### Required matrix
-
-Use one Light-theme capture set for the refactor comparisons, as requested by the
-reviewer. Do not duplicate screenshots for Dark; retain existing automated theme
-coverage. OS contrast/text-setting checks remain separate from simulated font-size
-and rasterization checks.
-
-| Scenario                 | Parameters/states                                                                                                                                                              | Evidence                                                                                |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| Scalar rows              | Existing test widths 260/340/420/480/760 where applicable; text 100/150/200%; inline/stacked; long labels, units, mixed/error/disabled.                                        | Geometry/typography assertions; captures of narrow/normal/enlarged representatives.     |
-| XYZ/RGB/multiplier       | Resize 760 → 480 → 420 → 340 → 280 → 760; text 100/150/200%; swatch/no swatch; untouched channel values.                                                                       | Existing row tests plus migrated field tests; before/after images and drag continuity.  |
-| Outer/nested disclosures | Light captures; closed/open; normal/hover/pressed/keyboard-focus/disabled; repeated cycles; reset action independent.                                                          | Disclosure tests; matched captures including focus and chevron.                         |
-| Scene browsing           | Both sources visible/closed; each open; all seven sections; each scope; matching/no-match search; inactive Auto/Spot search; clear restores state.                             | Search/order/count tests; matched scroll positions and screenshots.                     |
-| Compact host             | Existing ComponentLayout widths/heights including 280x320 and short multi-selection; rasterization 1/1.5/2.                                                                    | Host layout tests and representative native screenshots.                                |
-| Editing/reference UI     | Scalar drag and text mode; invalid draft/error; color flyout; geometry/material/texture choice; curve add/remove/error/undo; diagnostic focus.                                 | Gesture/assignment tests and manual native popup/focus comparison.                      |
-| Accessibility/themes     | 200% text; one Light capture set plus existing theme assertions; manual Windows contrast theme; keyboard Tab/Space/Enter/Escape; explicit channel names and focus restoration. | Automated assertions where fixture supports them; manual native review for OS settings. |
-
-Existing text-scale tests often enlarge FontSize explicitly. ScaledXamlHost changes
-rasterization, not the user's text setting. Also manually check Windows text
-scaling; do not present either simulation as proof of the other. Never rely on
-RGB colors alone to identify channels in contrast themes.
+Temporary capture code is removed, and any existing images/reference reconstructions
+remain outside Git. Reconstructed references with binding/realization differences
+are not trustworthy historical parity evidence and are not used to close defects.
 
 ## 7. Verification map and commands
 
@@ -662,17 +648,17 @@ assigned by this plan. Implementer is the developer executing a slice.
 | Screenshots look correct but behavior regressed, or tests pass but pixels drifted.   | Implementer supplies both test results and comparisons per slice; reviewer accepts both.                            |
 | Native SDK/test runner unavailable or existing suite failing.                        | Implementer records the exact blocker and unrun checks; reviewer resolves tooling/verification ownership.           |
 
-| ID    | State                   | Next action                                                                                               | Responsible role       |
-| ----- | ----------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------- |
-| IR-01 | in_progress             | Inventory/baseline recorded; visual matrix incomplete.                                                    | Implementer + reviewer |
-| IR-02 | landed_needs_validation | Behavioral gates pass; finish visual acceptance.                                                          | Implementer + reviewer |
-| IR-03 | landed_needs_validation | Search/native behavior passes; finish visual acceptance.                                                  | Implementer + reviewer |
-| IR-04 | landed_needs_validation | All 52 scalars migrated; row parity and gestures validated. Full-inspector visual gates remain in IR-V02. | Implementer            |
-| IR-05 | landed_needs_validation | RGB/curve/picker extraction and content comparisons validated; finish native popup/focus gates in IR-V02. | Implementer            |
-| IR-06 | in_progress             | Implement section models/views and shared scene edit ownership in the coordinated IR-06–09 batch.         | Implementer            |
-| IR-07 | planned                 | Consolidate scalar bindings and Light presentation.                                                       | Implementer + reviewer |
-| IR-08 | planned                 | Extract Transform sessions and host collaborators.                                                        | Implementer + reviewer |
-| IR-09 | planned                 | Audit duplicates and complete behavioral/visual qualification.                                            | Implementer + reviewer |
+| ID    | State                   | Next action                                                                                                                           | Responsible role |
+| ----- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| IR-01 | validated               | Inventory and behavioral baseline recorded; capture requirement superseded by reviewer-owned validation.                              | Implementer      |
+| IR-02 | validated               | Declarative layout, ordering and disclosure checks complete.                                                                          | Implementer      |
+| IR-03 | validated               | Headless browsing, applicability, focus and replacement lifetime checks complete.                                                     | Implementer      |
+| IR-04 | validated               | All 52 scalar compositions and gesture/row contracts implemented and checked.                                                         | Implementer      |
+| IR-05 | validated               | RGB/curve/picker ownership and adapter checks complete.                                                                               | Implementer      |
+| IR-06 | validated               | Five typed sections and shared scene edit ownership implemented; automated checks passed.                                             | Implementer      |
+| IR-07 | validated               | Scalar state consolidated; Light shadow/orientation owners extracted. Existing angular qualifier retained for reviewer consideration. | Implementer      |
+| IR-08 | validated               | Transform controller and factory/selection observer implemented; gesture/lifetime checks passed.                                      | Implementer      |
+| IR-09 | landed_needs_validation | Implementation/audit/defect fixes complete. Reviewer performs final in-editor validation; no further capture work.                    | Reviewer         |
 
 Use `in_progress`, `landed_needs_validation`, `blocked` and `validated` accurately.
 IR-06–09 are a coordinated implementation batch at the reviewer's request; do not

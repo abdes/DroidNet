@@ -18,6 +18,17 @@ Rules for this file:
    generic gaps list.
 5. Blockers and decisions are recorded only when they block a named milestone.
 
+## Inspector maintenance handoff
+
+The [inspector refactoring plan](./plan/inspector-refactoring.md) records completed
+IR-01–09 implementation and resolved IR-V01–03. Full refactor checks passed
+224 Unit / 226 Unit.UI before final defect fixes; the final six native
+role/import workflows and five strict dependency-report tests pass against the
+rebuilt Debug SDK. Broader suites were not rerun after those targeted fixes.
+The reviewer owns final in-editor appearance/usability validation; screenshot
+matrix completion is no longer an implementation gate. Historical milestone
+delivery evidence below is unchanged.
+
 ## 1. Status Vocabulary
 
 | Status      | Meaning                                                                                 |
