@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
 using DroidNet.Tests;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml;
@@ -183,11 +184,11 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = section.Description.Should().Be("Fallback color when atmosphere rendering is disabled.");
         _ = ((Button)view.FindName("ResetBackgroundButton")).IsEnabled.Should().BeTrue();
         var card = SceneCards(section).Single(property => property.PropertyName == "Color");
-        _ = section.BringItemIntoView(card);
+        _ = section.BringItemIntoView(view.FindName("BackgroundColorCard"));
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         var label = card.FindDescendant<TextBlock>(text => text.Text == "Color")!;
         var unit = card.FindDescendant<TextBlock>(text => text.Text == "Linear RGB")!;
-        var swatch = card.FindDescendant<Button>(button => button.Name == "BackgroundSwatch")!;
+        var swatch = (Button)card.LeadingContent!;
         var channels = card.FindDescendant<VectorBox>()!;
         var channelsPosition = channels.TransformToVisual(card).TransformPoint(default);
         var swatchPosition = swatch.TransformToVisual(card).TransformPoint(default);
@@ -406,12 +407,17 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = sky.BringItemIntoView(sunDisk);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         _ = sunDisk.FindDescendant<ToggleSwitch>(control => Equals(control.Tag, "SunDiskEnabled")).Should().NotBeNull();
-        _ = SceneCards(sky).Select(card => card.PropertyName).Should().Contain(["Distance scale", "Scattering strength", "Start distance", "Height fog contribution"]);
+        _ = SceneFieldLabels(sky).Should().Contain(["Distance scale", "Scattering strength", "Start distance", "Height fog contribution"]);
         var planet = sky.Items.OfType<Expander>().Single(group => Equals(group.Header, "Planet & ground"));
         planet.IsExpanded = true;
         _ = sky.BringItemIntoView(planet);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var albedo = SceneCards(sky).Single(card => card.PropertyName == "Ground Albedo");
+        var albedoField = (Oxygen.Editor.World.Inspector.Controls.InspectorRgbField)await FindInspectorControlAsync(
+            (ScrollViewer)view.FindName("ScenePropertyScroll"),
+            () => view.FindDescendant<Oxygen.Editor.World.Inspector.Controls.InspectorRgbField>(field =>
+                field.IsLoaded && Equals(field.Tag, "GroundAlbedo") && ((Oxygen.Editor.Controls.PropertyCard)field.Content).LeadingContent is Button),
+            "GroundAlbedo", this.TestContext.CancellationToken).ConfigureAwait(true);
+        var albedo = (Oxygen.Editor.Controls.PropertyCard)albedoField.Content;
         var swatch = (Button)albedo.LeadingContent!;
         _ = swatch.Flyout.Should().BeOfType<Flyout>();
         model.GroundAlbedoR = 0.21404114f;
@@ -474,15 +480,15 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         var sky = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("SkyAtmosphereSection");
         var background = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("BackgroundSection");
         exposure.IsExpanded = false;
-        var autoMinimum = SceneCards(exposure).Single(card => string.Equals(card.PropertyName, "Auto Min EV", StringComparison.Ordinal));
+        var autoMinimum = (Oxygen.Editor.Controls.PropertyCard)((Oxygen.Editor.Controls.InspectorNumberField)view.FindName("AutoExposureMinEvCard")).Content;
         _ = model.ExposureMode.Should().Be(Oxygen.Editor.World.Serialization.ExposureMode.Manual);
-        _ = autoMinimum.Visibility.Should().Be(Visibility.Collapsed);
+        _ = ((FrameworkElement)view.FindName("AutoExposureMinEvCard")).Visibility.Should().Be(Visibility.Collapsed);
 
         var search = view.FindDescendant<TextBox>(element => string.Equals(element.Name, "ScenePropertySearchBox", StringComparison.Ordinal))!;
         search.Text = "auto_exposure_min_ev";
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
 
-        _ = autoMinimum.Visibility.Should().Be(Visibility.Visible);
+        _ = ((FrameworkElement)view.FindName("AutoExposureMinEvCard")).Visibility.Should().Be(Visibility.Visible);
         _ = ((StackPanel)autoMinimum.Content).Children.OfType<TextBlock>().Should().Contain(element => element.Text.Contains("applies in Auto exposure mode", StringComparison.Ordinal));
         _ = exposure.IsExpanded.Should().BeTrue();
 
@@ -494,7 +500,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = exposure.Visibility.Should().Be(Visibility.Visible);
 
         search.Text = "manual";
-        _ = autoMinimum.Visibility.Should().Be(Visibility.Collapsed);
+        _ = ((FrameworkElement)view.FindName("AutoExposureMinEvCard")).Visibility.Should().Be(Visibility.Collapsed);
         search.Text = string.Empty;
         _ = exposure.IsExpanded.Should().BeFalse();
         _ = background.Visibility.Should().Be(Visibility.Collapsed);
@@ -513,7 +519,8 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         model.ToneMapping = Oxygen.Editor.World.Serialization.ToneMappingMode.None;
         await model.PendingEdits.ConfigureAwait(true);
         var toneMapping = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("ToneMappingSection");
-        _ = toneMapping.Items.OfType<Oxygen.Editor.Controls.PropertyCard>().Single(card => card.PropertyName == "Display Gamma").Visibility.Should().Be(Visibility.Visible);
+        _ = ((FrameworkElement)view.FindName("DisplayGammaCard")).Visibility.Should().Be(Visibility.Visible);
+        _ = ((Oxygen.Editor.Controls.InspectorNumberField)view.FindName("DisplayGammaCard")).Label.Should().Be("Display Gamma");
     });
 
     /// <summary>The seven design-order sections preserve all 42 scene cards and closed secondary groups.</summary>
@@ -524,18 +531,88 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         using var fixture = new SceneAuthoringFixture();
         using var model = (EnvironmentViewModel)CreateModel("Environment", fixture);
         var view = new EnvironmentView { ViewModel = model };
-        await LoadTestContentAsync(new ScrollViewer { Content = view }).ConfigureAwait(true);
+        var host = new Grid { Width = 420, Height = 780 };
+        host.Children.Add(view);
+        await LoadTestContentAsync(host).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
         var sections = ((StackPanel)view.FindName("SceneSections")).Children.OfType<Oxygen.Editor.Controls.PropertiesExpander>().ToArray();
         _ = sections.Select(section => section.Header).Should().Equal("Atmosphere Lights", "Sky Atmosphere", "Background", "Exposure", "Tone Mapping", "Color Grading", "Bloom");
         _ = sections.SelectMany(SceneCards).Should().HaveCount(42);
+        _ = sections.Select(section => section.IsExpanded).Should().Equal(true, true, true, true, true, false, false);
         var sky = sections[1];
-        var planet = sky.Items.OfType<Expander>().Single(group => Equals(group.Header, "Planet & ground"));
+        var skyGroups = sky.Items.OfType<Expander>().ToArray();
+        _ = skyGroups.Select(group => group.Header).Should().Equal("Planet & ground", "Scattering", "Aerial perspective");
+        _ = skyGroups.Select(group => group.IsExpanded).Should().OnlyContain(expanded => !expanded);
+        var planet = skyGroups[0];
         _ = planet.IsExpanded.Should().BeFalse();
+        AssertDisclosureCardOrder(skyGroups[0], "PlanetRadiusKm", "AtmosphereHeightKm", "GroundAlbedo");
+        AssertDisclosureCardOrder(skyGroups[1], "RayleighScaleHeightKm", "MieScaleHeightKm", "MieAnisotropy");
+        AssertDisclosureCardOrder(skyGroups[2], "AerialPerspectiveDistanceScale", "AerialScatteringStrength", "AerialPerspectiveStartDepthMeters", "HeightFogContribution");
+
+        var exposureGroups = sections[3].Items.OfType<Expander>().ToArray();
+        _ = exposureGroups.Select(group => group.Header).Should().Equal("Metering & limits", "Adaptation", "Histogram & calibration", "Exposure shaping");
+        _ = exposureGroups.Select(group => group.IsExpanded).Should().Equal(true, false, false, false);
+        AssertDisclosureCardOrder(exposureGroups[0], "AutoExposureMeteringMode", "AutoExposureMinEv", "AutoExposureMaxEv", "AutoExposureTargetLuminance", "AutoExposureSpotMeterRadius");
+        AssertDisclosureCardOrder(exposureGroups[1], "AutoExposureSpeedUp", "AutoExposureSpeedDown", "AutoExposureTransitionDistanceEv");
+        AssertDisclosureCardOrder(exposureGroups[2], "ExposureKey", "AutoExposureLowPercentile", "AutoExposureHighPercentile", "AutoExposureMinLogLuminance", "AutoExposureLogLuminanceRange", "AutoExposureBlackInfluence");
+        AssertDisclosureCardOrder(exposureGroups[3], "AutoExposureMeteringMask", "AutoExposureCompensationCurve");
+        var disclosures = new[]
+        {
+            (Owner: sky, Item: skyGroups[0], AutomationId: "Scene.Sky.PlanetGround", Query: "PlanetRadiusKm"),
+            (Owner: sky, Item: skyGroups[1], AutomationId: "Scene.Sky.Scattering", Query: "RayleighScaleHeightKm"),
+            (Owner: sky, Item: skyGroups[2], AutomationId: "Scene.Sky.AerialPerspective", Query: "AerialPerspectiveDistanceScale"),
+            (Owner: sections[3], Item: exposureGroups[0], AutomationId: "Scene.Exposure.MeteringLimits", Query: "AutoExposureMinEv"),
+            (Owner: sections[3], Item: exposureGroups[1], AutomationId: "Scene.Exposure.Adaptation", Query: "AutoExposureSpeedUp"),
+            (Owner: sections[3], Item: exposureGroups[2], AutomationId: "Scene.Exposure.HistogramCalibration", Query: "ExposureKey"),
+            (Owner: sections[3], Item: exposureGroups[3], AutomationId: "Scene.Exposure.ExposureShaping", Query: "AutoExposureCompensationCurve"),
+        };
+
         var search = (TextBox)view.FindName("ScenePropertySearchBox");
+        var scroller = (ScrollViewer)view.FindName("ScenePropertyScroll");
+        foreach (var (owner, item, automationId, query) in disclosures)
+        {
+            search.Text = query;
+            await WaitForRenderAsync().ConfigureAwait(true);
+            owner.StartBringIntoView();
+            _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(owner.UpdateLayout).ConfigureAwait(true);
+            _ = owner.BringItemIntoView(item).Should().BeTrue();
+            _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(owner.UpdateLayout).ConfigureAwait(true);
+            var group = (Expander)await FindInspectorControlAsync(scroller, () => owner.FindDescendant<Expander>(candidate =>
+                candidate.ActualHeight > 0 && string.Equals(AutomationProperties.GetAutomationId(candidate), automationId, StringComparison.Ordinal)),
+                automationId, this.TestContext.CancellationToken).ConfigureAwait(true);
+            _ = group.ApplyTemplate();
+            var header = group.FindDescendant<ToggleButton>(toggle => string.Equals(toggle.Name, "ExpanderHeader", StringComparison.Ordinal))!;
+            _ = header.ApplyTemplate();
+            var headerContent = header.Content.Should().BeOfType<Grid>().Which;
+            var chevron = headerContent.Children.OfType<FontIcon>().Single();
+            var content = group.FindDescendant<Border>(border => string.Equals(border.Name, "ExpanderContent", StringComparison.Ordinal))!;
+            var originallyExpanded = group.IsExpanded;
+            _ = header.IsTabStop.Should().BeTrue();
+            _ = header.UseSystemFocusVisuals.Should().BeTrue();
+
+            for (var cycle = 0; cycle < 3; cycle++)
+            {
+                var expectedExpanded = !group.IsExpanded;
+                Toggle(header);
+                _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+                _ = group.IsExpanded.Should().Be(expectedExpanded);
+                _ = chevron.Glyph.Should().Be(expectedExpanded ? "\uE70D" : "\uE76C");
+                _ = content.Visibility.Should().Be(expectedExpanded ? Visibility.Visible : Visibility.Collapsed);
+            }
+
+            if (group.IsExpanded != originallyExpanded)
+            {
+                Toggle(header);
+                _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+            }
+        }
+
+        search.Text = string.Empty;
+        await WaitForRenderAsync().ConfigureAwait(true);
         search.Text = "ground_albedo";
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         _ = planet.IsExpanded.Should().BeTrue();
-        _ = SceneCards(sky).Single(card => card.PropertyName == "Ground Albedo").Visibility.Should().Be(Visibility.Visible);
+        _ = ((FrameworkElement)view.FindName("GroundAlbedoCard")).Visibility.Should().Be(Visibility.Visible);
         search.Text = string.Empty;
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         _ = planet.IsExpanded.Should().BeFalse();
@@ -546,9 +623,118 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         => section.Items.SelectMany(item => item switch
         {
             Oxygen.Editor.Controls.PropertyCard card => [card],
-            Expander { Content: StackPanel content } => content.Children.OfType<Oxygen.Editor.Controls.PropertyCard>(),
+            Oxygen.Editor.Controls.InspectorNumberField { Content: Oxygen.Editor.Controls.PropertyCard card } => [card],
+            Oxygen.Editor.World.Inspector.Controls.InspectorRgbField { Content: Oxygen.Editor.Controls.PropertyCard card } => [card],
+            Expander { Content: StackPanel content } => content.Children.SelectMany(child => child switch
+            {
+                Oxygen.Editor.Controls.PropertyCard card => [card],
+                Oxygen.Editor.Controls.InspectorNumberField { Content: Oxygen.Editor.Controls.PropertyCard card } => [card],
+                Oxygen.Editor.World.Inspector.Controls.InspectorRgbField { Content: Oxygen.Editor.Controls.PropertyCard card } => [card],
+                _ => Enumerable.Empty<Oxygen.Editor.Controls.PropertyCard>(),
+            }),
             _ => Enumerable.Empty<Oxygen.Editor.Controls.PropertyCard>(),
         });
+
+    private static IEnumerable<string> SceneFieldLabels(Oxygen.Editor.Controls.PropertiesExpander section)
+        => section.Items.SelectMany(item => item switch
+        {
+            Expander { Content: StackPanel content } => content.Children.Cast<object>(),
+            _ => [item],
+        }).Select(item => item switch
+        {
+            Oxygen.Editor.Controls.InspectorNumberField number => number.Label,
+            Oxygen.Editor.World.Inspector.Controls.InspectorRgbField rgb => rgb.Label,
+            Oxygen.Editor.Controls.PropertyCard card => card.PropertyName,
+            _ => throw new InvalidOperationException($"Unexpected field composition {item.GetType().Name}."),
+        });
+
+    [TestMethod]
+    public Task SceneSearchKeepsFieldContentAndStoredValuesWhileApplicabilityChanges() => EnqueueAsync(async () =>
+    {
+        using var fixture = new SceneAuthoringFixture();
+        using var model = (EnvironmentViewModel)CreateModel("Environment", fixture);
+        var view = new EnvironmentView { ViewModel = model, Width = 420, Height = 780 };
+        await LoadTestContentAsync(view).ConfigureAwait(true);
+        var exposure = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("ExposureSection");
+        var spot = (Oxygen.Editor.Controls.PropertyCard)((Oxygen.Editor.Controls.InspectorNumberField)view.FindName("AutoExposureSpotMeterRadiusCard")).Content;
+        var originalContent = spot.Content;
+        var storedRadius = fixture.Scene.Environment.PostProcess.AutoExposureSpotMeterRadius;
+        var search = (TextBox)view.FindName("ScenePropertySearchBox");
+        search.Text = "spot radius";
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = ((FrameworkElement)view.FindName("AutoExposureSpotMeterRadiusCard")).Visibility.Should().Be(Visibility.Visible);
+        _ = ((StackPanel)spot.Content).Children.OfType<TextBlock>().Should().Contain(note =>
+            note.Text.Contains("applies in Auto exposure mode with Spot metering", StringComparison.Ordinal));
+        _ = spot.Content.Should().BeSameAs(originalContent);
+        _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+
+        model.ExposureMode = Oxygen.Editor.World.Serialization.ExposureMode.Auto;
+        model.AutoExposureMeteringMode = Oxygen.Editor.World.Serialization.MeteringMode.Spot;
+        await model.PendingEdits.ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = ((StackPanel)spot.Content).Children.OfType<TextBlock>().Should().NotContain(note =>
+            note.Visibility == Visibility.Visible && note.Text.StartsWith("Stored value", StringComparison.Ordinal));
+        search.Text = "spot radius missing-field";
+        _ = ((TextBlock)view.FindName("NoScenePropertyMatches")).Visibility.Should().Be(Visibility.Visible);
+        search.Text = string.Empty;
+        _ = spot.Content.Should().BeSameAs(originalContent);
+        _ = fixture.Scene.Environment.PostProcess.AutoExposureSpotMeterRadius.Should().Be(storedRadius);
+    });
+
+    [TestMethod]
+    public Task SceneSearchObservesReplacementModelWithoutRetainingThePreviousObserver() => EnqueueAsync(async () =>
+    {
+        using var first = new SceneAuthoringFixture();
+        using var second = new SceneAuthoringFixture();
+        using var firstModel = (EnvironmentViewModel)CreateModel("Environment", first);
+        using var secondModel = (EnvironmentViewModel)CreateModel("Environment", second);
+        var view = new EnvironmentView { ViewModel = firstModel, Width = 420, Height = 780 };
+        await LoadTestContentAsync(view).ConfigureAwait(true);
+        view.ViewModel = secondModel;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var search = (TextBox)view.FindName("ScenePropertySearchBox");
+        search.Text = "auto_exposure_min_ev";
+        secondModel.ExposureMode = Oxygen.Editor.World.Serialization.ExposureMode.Auto;
+        await secondModel.PendingEdits.ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var exposure = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("ExposureSection");
+        var minimum = (Oxygen.Editor.Controls.PropertyCard)((Oxygen.Editor.Controls.InspectorNumberField)view.FindName("AutoExposureMinEvCard")).Content;
+        _ = ((StackPanel)minimum.Content).Children.OfType<TextBlock>().Should().NotContain(note =>
+            note.Visibility == Visibility.Visible && note.Text.StartsWith("Stored value", StringComparison.Ordinal));
+        firstModel.ExposureMode = Oxygen.Editor.World.Serialization.ExposureMode.Auto;
+        await firstModel.PendingEdits.ConfigureAwait(true);
+        _ = view.ViewModel.Should().BeSameAs(secondModel);
+        _ = second.Scene.Environment.PostProcess.AutoExposureMinEv.Should().Be(-6);
+    });
+
+    private static void AssertDisclosureCardOrder(Expander disclosure, params string[] propertyIdentities)
+    {
+        var identities = ((StackPanel)disclosure.Content).Children.Select(child => child switch
+        {
+            Oxygen.Editor.Controls.InspectorNumberField numeric => (string)numeric.Tag,
+            Oxygen.Editor.World.Inspector.Controls.InspectorRgbField rgb => (string)rgb.Tag,
+            Oxygen.Editor.Controls.PropertyCard card => GetCardPropertyIdentity(card),
+            _ => throw new InvalidOperationException($"Unexpected field composition {child.GetType().Name}."),
+        }).ToArray();
+        _ = identities.Should().Equal(propertyIdentities);
+    }
+
+    private static string GetCardPropertyIdentity(Oxygen.Editor.Controls.PropertyCard card)
+    {
+        if (card.Content is FrameworkElement { Tag: string directTag })
+        {
+            return directTag.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
+        }
+
+        if (card.Content is DependencyObject content
+            && content.FindDescendant<FrameworkElement>(element => element.Tag is string) is { Tag: string nestedTag })
+        {
+            return nestedTag.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
+        }
+
+        throw new InvalidOperationException($"Card '{card.PropertyName}' has no stable tagged editor identity.");
+    }
 
     /// <summary>The realized near-plane editor rejects an invalid commit and displays current inline feedback.</summary>
     /// <returns>The test task.</returns>

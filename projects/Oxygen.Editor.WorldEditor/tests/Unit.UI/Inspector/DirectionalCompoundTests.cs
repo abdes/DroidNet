@@ -34,7 +34,10 @@ public sealed partial class InspectorBindingTests
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var display = Windows.UI.Color.FromArgb(255, 128, 64, 32);
         var section = view.FindDescendant<PropertiesExpander>()!;
-        var card = section.Items.OfType<PropertyCard>().Single(item => item.PropertyName == "Color");
+        var field = (Oxygen.Editor.World.Inspector.Controls.InspectorRgbField)view.FindName("ColorField");
+        _ = section.BringItemIntoView(field);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var card = (PropertyCard)field.Content;
         var swatch = (Button)card.LeadingContent!;
         _ = model.ColorValue.Should().Be(authored);
         _ = ((Microsoft.UI.Xaml.Media.SolidColorBrush)((Border)swatch.Content).Background).Color.Should().Be(display);
@@ -66,13 +69,16 @@ public sealed partial class InspectorBindingTests
         model.IsExpanded = true;
         var view = new DirectionalLightView { ViewModel = model };
         var scroller = new ScrollViewer { Width = 340, Height = 500, Content = view };
-        await LoadTestContentAsync(scroller).ConfigureAwait(true);
+        using var nativeHost = new ScaledXamlHost();
+        await nativeHost.LoadAsync(scroller, 1, this.TestContext.CancellationToken).ConfigureAwait(true);
         var section = view.FindDescendant<PropertiesExpander>()!;
-        var card = section.Items.OfType<PropertyCard>().Single(item => item.PropertyName == (field == "Color" ? "Color" : "Disk luminance scale"));
-        _ = section.BringItemIntoView(card);
+        var item = view.FindName(field == "Color" ? "ColorField" : "DiskScaleField");
+        _ = section.BringItemIntoView(item);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+        var card = item is Oxygen.Editor.World.Inspector.Controls.InspectorRgbField rgb ? (PropertyCard)rgb.Content : (PropertyCard)item;
         var vector = card.FindDescendant<VectorBox>()!;
-        var red = vector.FindDescendant<NumberBox>(input => input.Name == "PartNumberBoxX")!;
+        var red = (NumberBox)await FindInspectorControlAsync(scroller, () => vector.FindDescendant<NumberBox>(input => input.Name == "PartNumberBoxX"),
+            $"{field}.R", this.TestContext.CancellationToken).ConfigureAwait(true);
         var light = fixture.Node.Components.OfType<DirectionalLightComponent>().Single();
         Vector3 Read() => field == "Color" ? light.Color : light.AtmosphereDiskLuminanceScaleRgb;
         var original = Read();

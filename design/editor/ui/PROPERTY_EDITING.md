@@ -96,6 +96,36 @@ Shared field diagnostics expose `HasError`; views convert that boolean to
 visibility with the standard converter. Models do not construct UI objects
 to report validation errors.
 
+Environment browsing uses explicit `EnvironmentFieldCatalog` metadata and a
+view-owned `InspectorSearchModel`. Stable presentation keys distinguish the scene
+cards from their canonical authored `PropertyId`s. Matching, applicability and
+temporary expansion restoration are headless presentation policy; XAML declares
+the sections, disclosures and applicability notes. The view binds registered
+fields and retains focus/BringIntoView adapters; it neither searches realized
+control text nor wraps card content at runtime. Applicability notes remain
+separate from command diagnostics.
+
+Perspective Camera, Environment, Directional Light and atmosphere-source scalar
+fields use shared `InspectorNumberField` to compose the existing
+PropertyCard/NumberBox diagnostic panel. Its property card directly recognizes
+the NumberBox's native caption, and the consumer supplies its existing scoped
+card/numeric styles. The control forwards the original edit and validation event
+arguments; the owning models and edit coordinators still protect targets,
+validate related values and submit commands. Aerial Start retains its specialized
+validation/focus composition.
+
+WorldEditor's `InspectorRgbField` shares color and multiplier composition. Colors
+use the existing display conversion and captured-owner gesture helper; multipliers
+never expose a color picker. `ExposureCompensationCurveEditorViewModel` owns stable
+key rows, finite/increasing-EV validation and add/remove policy while borrowing the
+Environment model's command, gesture and diagnostic owner. Its view receives the
+parent-owned instance and creates the preview points. Geometry and material flyouts
+share `AssetPickerContent` with typed templates; catalog services, stable rows and
+captured assignment targets remain in Geometry's model. Texture picker presentation
+remains separate because its row layout differs. Refactoring qualification is tracked in
+[the inspector maintenance plan](../plan/inspector-refactoring.md), separately
+from the historical verification below.
+
 Environment asset notifications use an injected reactive `IScheduler`.
 Inspector composition supplies the existing hosting dispatcher scheduler;
 standalone models use immediate delivery without acquiring a WinUI dispatcher.

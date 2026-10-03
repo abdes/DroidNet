@@ -6,6 +6,8 @@
     xmlns:controls="using:DroidNet.Controls"
     xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:environment="using:Oxygen.Editor.World.Inspector.Environment"
+    xmlns:fields="using:Oxygen.Editor.World.Inspector.Controls"
     xmlns:local="using:Oxygen.Editor.World.Inspector"
     xmlns:seg="using:CommunityToolkit.WinUI.Controls"
     xmlns:ui="using:CommunityToolkit.WinUI">
@@ -183,292 +185,6 @@
                     TextWrapping="Wrap"
                     Visibility="Collapsed" />
                 <editorcontrols:PropertiesExpander
-                    x:Name="SkyAtmosphereSection"
-                    HorizontalAlignment="Stretch"
-                    HorizontalContentAlignment="Stretch"
-                    Description="Atmospheric sky and aerial perspective authored on the scene."
-                    Header="Sky Atmosphere"
-                    HeaderIcon="{ui:FontIcon Glyph='&#xE753;'}"
-                    IsExpanded="True"
-                    Tag="Environment">
-                    <editorcontrols:PropertiesExpander.Items>
-                        <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Enabled">
-                            <ToggleSwitch IsOn="{x:Bind ViewModel.AtmosphereEnabled, Mode=TwoWay}" Tag="AtmosphereEnabled" />
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Sun Disk">
-                            <ToggleSwitch
-                                VerticalAlignment="Center"
-                                IsOn="{x:Bind ViewModel.SunDiskEnabled, Mode=TwoWay}"
-                                Tag="SunDiskEnabled" />
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Planet Radius"
-                            Qualifier="km"
-                            Tag="planet_radius_meters">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    LabelPosition="None"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.PlanetRadiusKm, Mode=TwoWay}"
-                                    Tag="PlanetRadiusKm" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.PlanetRadiusKmDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.PlanetRadiusKmDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Atmosphere Height"
-                            Qualifier="km"
-                            Tag="atmosphere_height_meters">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    LabelPosition="None"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.AtmosphereHeightKm, Mode=TwoWay}"
-                                    Tag="AtmosphereHeightKm" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.AtmosphereHeightKmDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.AtmosphereHeightKmDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            EditorMinimumWidth="248"
-                            IsCompound="True"
-                            Layout="Stacked"
-                            PropertyName="Ground Albedo"
-                            Qualifier="Linear RGB"
-                            Tag="ground_albedo_rgb">
-                            <editorcontrols:PropertyCard.LeadingContent>
-                                <Button
-                                    x:Name="GroundAlbedoSwatch"
-                                    AutomationProperties.Name="Pick ground albedo color"
-                                    Style="{StaticResource InspectorColorSwatchStyle}"
-                                    ToolTipService.ToolTip="Pick ground albedo color">
-                                    <Button.Flyout>
-                                        <Flyout>
-                                            <ColorPicker
-                                                ColorChanged="GroundAlbedoPicker_ColorChanged"
-                                                IsAlphaEnabled="False"
-                                                Loaded="ColorPickerLoaded"
-                                                Tag="GroundAlbedo"
-                                                Color="{x:Bind local:InspectorRgbPresentation.ToDisplayColor(ViewModel.GroundAlbedoColor), Mode=OneWay}" />
-                                        </Flyout>
-                                    </Button.Flyout>
-                                    <Border
-                                        Width="20"
-                                        Height="24"
-                                        Background="{x:Bind local:InspectorRgbPresentation.ToBrush(ViewModel.GroundAlbedoColor), Mode=OneWay}"
-                                        BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="3" />
-                                </Button>
-                            </editorcontrols:PropertyCard.LeadingContent>
-                            <StackPanel Spacing="4">
-                                <controls:VectorBox
-                                    x:Name="GroundAlbedoChannels"
-                                    AutomationProperties.Name="Ground Albedo, linear RGB"
-                                    ComponentLabelPosition="Left"
-                                    Dimension="3"
-                                    EditSessionCompleted="VectorEditCompleted"
-                                    EditSessionStarted="VectorEditStarted"
-                                    Tag="GroundAlbedo"
-                                    XValue="{x:Bind ViewModel.GroundAlbedoR, Mode=TwoWay}"
-                                    YValue="{x:Bind ViewModel.GroundAlbedoG, Mode=TwoWay}"
-                                    ZValue="{x:Bind ViewModel.GroundAlbedoB, Mode=TwoWay}" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.GroundAlbedoRDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.GroundAlbedoRDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Rayleigh Height"
-                            Qualifier="km"
-                            Tag="rayleigh_scale_height_meters">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    LabelPosition="None"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.RayleighScaleHeightKm, Mode=TwoWay}"
-                                    Tag="RayleighScaleHeightKm" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.RayleighScaleHeightKmDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.RayleighScaleHeightKmDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Mie Height"
-                            Qualifier="km"
-                            Tag="mie_scale_height_meters">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    LabelPosition="None"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.MieScaleHeightKm, Mode=TwoWay}"
-                                    Tag="MieScaleHeightKm" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.MieScaleHeightKmDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.MieScaleHeightKmDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Mie Anisotropy">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.MieAnisotropy, Mode=TwoWay}"
-                                    Tag="MieAnisotropy" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.MieAnisotropyDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.MieAnisotropyDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            EditorMinimumWidth="248"
-                            IsCompound="True"
-                            Layout="Stacked"
-                            PropertyName="Sky Luminance"
-                            Qualifier="RGB ×"
-                            Tag="sky_luminance_factor_rgb">
-                            <StackPanel Spacing="2">
-                                <controls:VectorBox
-                                    x:Name="SkyLuminanceChannels"
-                                    HorizontalAlignment="Stretch"
-                                    AutomationProperties.Name="Sky luminance, RGB multiplier"
-                                    ComponentLabelPosition="Left"
-                                    ComponentMask="~.###"
-                                    Dimension="3"
-                                    EditSessionCompleted="VectorEditCompleted"
-                                    EditSessionStarted="VectorEditStarted"
-                                    LabelPosition="None"
-                                    Tag="SkyLuminance"
-                                    XValue="{x:Bind ViewModel.SkyLuminanceR, Mode=TwoWay}"
-                                    YValue="{x:Bind ViewModel.SkyLuminanceG, Mode=TwoWay}"
-                                    ZValue="{x:Bind ViewModel.SkyLuminanceB, Mode=TwoWay}" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.SkyLuminanceRDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.SkyLuminanceRDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Distance scale"
-                            Tag="Aerial Distance aerial_perspective_distance_scale">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.AerialPerspectiveDistanceScale, Mode=TwoWay}"
-                                    Tag="AerialPerspectiveDistanceScale" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.AerialPerspectiveDistanceScaleDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.AerialPerspectiveDistanceScaleDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Scattering strength"
-                            Tag="Aerial Strength aerial_scattering_strength">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.AerialScatteringStrength, Mode=TwoWay}"
-                                    Tag="AerialScatteringStrength" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.AerialScatteringStrengthDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.AerialScatteringStrengthDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            x:Name="AerialStartCard"
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Start distance"
-                            Qualifier="m"
-                            Tag="Aerial Start aerial_perspective_start_depth_meters">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    x:Name="AerialStartInput"
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    LabelPosition="None"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.AerialPerspectiveStartDepthMeters, Mode=TwoWay}"
-                                    Tag="AerialPerspectiveStartDepthMeters"
-                                    Validate="AerialStartValidate" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.AerialPerspectiveStartDepthMetersDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.AerialPerspectiveStartDepthMetersDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Height fog contribution"
-                            Tag="Height Fog height_fog_contribution">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.HeightFogContribution, Mode=TwoWay}"
-                                    Tag="HeightFogContribution" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.HeightFogContributionDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.HeightFogContributionDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                    </editorcontrols:PropertiesExpander.Items>
-                </editorcontrols:PropertiesExpander>
-                <editorcontrols:PropertiesExpander
                     x:Name="AtmosphereLightsSection"
                     HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Stretch"
@@ -489,751 +205,373 @@
                     </editorcontrols:PropertiesExpander.HeaderActions>
                     <editorcontrols:PropertiesExpander.Items>
                         <editorcontrols:PropertyCard
+                            x:Name="SourcesCard"
                             HorizontalContentAlignment="Stretch"
                             PropertyName="Sources"
                             Style="{StaticResource ContentOnlyPropertyCard}"
                             Tag="Sun Binding Sun Reference atmosphere_light_slot azimuth elevation direction angular diameter disk luminance transmittance primary secondary">
-                            <Grid ColumnSpacing="5" RowSpacing="4">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.ColumnSpan="3" Text="Primary" />
-                                <ComboBox
-                                    Grid.Row="1"
-                                    MinHeight="32"
-                                    HorizontalAlignment="Stretch"
-                                    VerticalAlignment="Center"
-                                    AutomationProperties.Name="Primary atmosphere source"
-                                    DisplayMemberPath="DisplayName"
-                                    FontSize="14"
-                                    ItemsSource="{x:Bind ViewModel.SunOptions, Mode=OneWay}"
-                                    SelectedItem="{x:Bind ViewModel.SelectedSun, Mode=TwoWay}">
-                                    <ComboBox.ItemContainerStyle>
-                                        <Style TargetType="ComboBoxItem">
-                                            <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
-                                        </Style>
-                                    </ComboBox.ItemContainerStyle>
-                                </ComboBox>
-                                <Button
-                                    Grid.Row="1"
-                                    Grid.Column="1"
-                                    AutomationProperties.Name="Inspect primary atmosphere source"
-                                    Background="Transparent"
-                                    BorderThickness="0"
-                                    Click="InspectPrimarySource_Click"
-                                    IsEnabled="{x:Bind ViewModel.HasPrimaryAtmosphereSource, Mode=OneWay}"
-                                    Style="{StaticResource SourceReferenceAction}"
-                                    ToolTipService.ToolTip="Inspect the primary atmosphere light">
-                                    <FontIcon FontSize="14" Glyph="&#xE8FD;" />
-                                </Button>
-                                <Button
-                                    Grid.Row="1"
-                                    Grid.Column="2"
-                                    Background="Transparent"
-                                    BorderThickness="0"
-                                    Command="{x:Bind ViewModel.ClearSunCommand}"
-                                    IsEnabled="{x:Bind ViewModel.HasPrimaryAtmosphereSource, Mode=OneWay}"
-                                    Style="{StaticResource SourceReferenceAction}"
-                                    ToolTipService.ToolTip="Clear Primary assignment">
-                                    <FontIcon FontSize="14" Glyph="&#xE711;" />
-                                </Button>
-                                <Expander
-                                    x:Name="PrimarySourceDisclosure"
-                                    Grid.Row="2"
-                                    Grid.ColumnSpan="3"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Stretch"
-                                    Header="Direction &amp; atmosphere"
-                                    IsExpanded="False"
-                                    Style="{StaticResource QuietDisclosure}"
-                                    Visibility="{x:Bind ViewModel.HasPrimaryAtmosphereSource, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                    <local:AtmosphereSourceView DataContext="{x:Bind ViewModel.PrimaryAtmosphereSource, Mode=OneWay}" />
-                                </Expander>
-                                <Border
-                                    x:Name="SourceSeparator"
-                                    Grid.Row="3"
-                                    Grid.ColumnSpan="3"
-                                    Height="1"
-                                    Margin="0,4"
-                                    Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                                <TextBlock
-                                    Grid.Row="4"
-                                    Grid.ColumnSpan="3"
-                                    Text="Secondary" />
-                                <ComboBox
-                                    Grid.Row="5"
-                                    MinHeight="32"
-                                    HorizontalAlignment="Stretch"
-                                    VerticalAlignment="Center"
-                                    AutomationProperties.Name="Secondary atmosphere source"
-                                    DisplayMemberPath="DisplayName"
-                                    FontSize="14"
-                                    ItemsSource="{x:Bind ViewModel.SecondarySunOptions, Mode=OneWay}"
-                                    SelectedItem="{x:Bind ViewModel.SelectedSecondarySun, Mode=TwoWay}">
-                                    <ComboBox.ItemContainerStyle>
-                                        <Style TargetType="ComboBoxItem">
-                                            <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
-                                        </Style>
-                                    </ComboBox.ItemContainerStyle>
-                                </ComboBox>
-                                <Button
-                                    Grid.Row="5"
-                                    Grid.Column="1"
-                                    AutomationProperties.Name="Inspect secondary atmosphere source"
-                                    Background="Transparent"
-                                    BorderThickness="0"
-                                    Click="InspectSecondarySource_Click"
-                                    IsEnabled="{x:Bind ViewModel.HasSecondaryAtmosphereSource, Mode=OneWay}"
-                                    Style="{StaticResource SourceReferenceAction}"
-                                    ToolTipService.ToolTip="Inspect the secondary atmosphere light">
-                                    <FontIcon FontSize="14" Glyph="&#xE8FD;" />
-                                </Button>
-                                <Button
-                                    Grid.Row="5"
-                                    Grid.Column="2"
-                                    Background="Transparent"
-                                    BorderThickness="0"
-                                    Command="{x:Bind ViewModel.ClearSecondarySunCommand}"
-                                    IsEnabled="{x:Bind ViewModel.HasSecondaryAtmosphereSource, Mode=OneWay}"
-                                    Style="{StaticResource SourceReferenceAction}"
-                                    ToolTipService.ToolTip="Clear Secondary assignment">
-                                    <FontIcon FontSize="14" Glyph="&#xE711;" />
-                                </Button>
-                                <Expander
-                                    x:Name="SecondarySourceDisclosure"
-                                    Grid.Row="6"
-                                    Grid.ColumnSpan="3"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Stretch"
-                                    Header="Direction &amp; atmosphere"
-                                    IsExpanded="False"
-                                    Style="{StaticResource QuietDisclosure}"
-                                    Visibility="{x:Bind ViewModel.HasSecondaryAtmosphereSource, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                    <local:AtmosphereSourceView DataContext="{x:Bind ViewModel.SecondaryAtmosphereSource, Mode=OneWay}" />
-                                </Expander>
-                                <TextBlock
-                                    Grid.Row="7"
-                                    Grid.ColumnSpan="3"
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.SunReferenceDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.SunReferenceDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </Grid>
-                        </editorcontrols:PropertyCard>
-                    </editorcontrols:PropertiesExpander.Items>
-                </editorcontrols:PropertiesExpander>
-                <TextBlock
-                    x:Name="PostProcessingHeading"
-                    Margin="4,10,4,2"
-                    FontWeight="SemiBold"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Text="Post-processing" />
-                <editorcontrols:PropertiesExpander
-                    x:Name="ExposureSection"
-                    HorizontalAlignment="Stretch"
-                    HorizontalContentAlignment="Stretch"
-                    Description="Exposure pipeline values from Oxygen's native PostProcessVolume."
-                    Header="Exposure"
-                    HeaderIcon="{ui:FontIcon Glyph='&#xE9CA;'}"
-                    IsExpanded="True"
-                    Tag="Post-processing">
-                    <editorcontrols:PropertiesExpander.Items>
-                        <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Enabled">
-                            <ToggleSwitch IsOn="{x:Bind ViewModel.ExposureEnabled, Mode=TwoWay}" Tag="ExposureEnabled" />
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Mode">
-                            <ComboBox
-                                ItemsSource="{x:Bind ViewModel.ExposureModes}"
-                                SelectedItem="{x:Bind ViewModel.ExposureMode, Mode=TwoWay}"
-                                Tag="ExposureMode" />
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Manual EV"
-                            Qualifier="EV100"
-                            Tag="ManualExposure">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    LabelPosition="None"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.ManualExposureEv, Mode=TwoWay}"
-                                    Tag="ManualExposureEv" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.ManualExposureEvDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.ManualExposureEvDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Compensation"
-                            Qualifier="EV">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    LabelPosition="None"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.ExposureCompensation, Mode=TwoWay}"
-                                    Tag="ExposureCompensation" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.ExposureCompensationDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.ExposureCompensationDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Key">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.ExposureKey, Mode=TwoWay}"
-                                    Tag="ExposureKey" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.ExposureKeyDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.ExposureKeyDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Metering"
-                            Tag="AutoExposure">
-                            <ComboBox
-                                ItemsSource="{x:Bind ViewModel.MeteringModes}"
-                                SelectedItem="{x:Bind ViewModel.AutoExposureMeteringMode, Mode=TwoWay}"
-                                Tag="AutoExposureMeteringMode" />
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Metering mask · Proposed"
-                            Tag="AutoExposure">
                             <StackPanel Spacing="4">
-                                <Grid ColumnSpacing="6">
+                                <Grid ColumnSpacing="5" RowSpacing="4">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Button
+                                    <TextBlock Grid.ColumnSpan="3" Text="Primary" />
+                                    <ComboBox
+                                        Grid.Row="1"
+                                        MinHeight="32"
                                         HorizontalAlignment="Stretch"
-                                        Content="{x:Bind ViewModel.MeteringMaskDisplayName, Mode=OneWay}"
-                                        Tag="AutoExposureMeteringMask"
-                                        ToolTipService.ToolTip="Choose an exposure metering mask">
-                                        <Button.Flyout>
-                                            <Flyout x:Name="MeteringMaskFlyout">
-                                                <StackPanel Width="320" Spacing="6">
-                                                    <TextBox PlaceholderText="Search textures…" Text="{x:Bind ViewModel.MeteringMaskSearchText, Mode=TwoWay}" />
-                                                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.FilteredMeteringMaskRows, Mode=OneWay}">
-                                                        <ItemsRepeater.Layout>
-                                                            <StackLayout Spacing="2" />
-                                                        </ItemsRepeater.Layout>
-                                                        <ItemsRepeater.ItemTemplate>
-                                                            <DataTemplate>
-                                                                <Button
-                                                                    HorizontalAlignment="Stretch"
-                                                                    HorizontalContentAlignment="Left"
-                                                                    Click="MeteringMaskItem_Click"
-                                                                    IsEnabled="{Binding Item.IsEnabled, Mode=OneWay}"
-                                                                    ToolTipService.ToolTip="{Binding Item.DisplayPath, Mode=OneWay}">
-                                                                    <StackPanel>
-                                                                        <TextBlock Text="{Binding Item.Name, Mode=OneWay}" />
-                                                                        <TextBlock
-                                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                            Text="{Binding Item.DisplayPath, Mode=OneWay}"
-                                                                            TextTrimming="CharacterEllipsis" />
-                                                                    </StackPanel>
-                                                                </Button>
-                                                            </DataTemplate>
-                                                        </ItemsRepeater.ItemTemplate>
-                                                    </ItemsRepeater>
-                                                </StackPanel>
-                                            </Flyout>
-                                        </Button.Flyout>
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Primary atmosphere source"
+                                        DisplayMemberPath="DisplayName"
+                                        FontSize="14"
+                                        ItemsSource="{x:Bind ViewModel.SunOptions, Mode=OneWay}"
+                                        SelectedItem="{x:Bind ViewModel.SelectedSun, Mode=TwoWay}">
+                                        <ComboBox.ItemContainerStyle>
+                                            <Style TargetType="ComboBoxItem">
+                                                <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
+                                            </Style>
+                                        </ComboBox.ItemContainerStyle>
+                                    </ComboBox>
+                                    <Button
+                                        Grid.Row="1"
+                                        Grid.Column="1"
+                                        AutomationProperties.Name="Inspect primary atmosphere source"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Click="InspectPrimarySource_Click"
+                                        IsEnabled="{x:Bind ViewModel.HasPrimaryAtmosphereSource, Mode=OneWay}"
+                                        Style="{StaticResource SourceReferenceAction}"
+                                        ToolTipService.ToolTip="Inspect the primary atmosphere light">
+                                        <FontIcon FontSize="14" Glyph="&#xE8FD;" />
                                     </Button>
                                     <Button
-                                        Grid.Column="1"
-                                        Click="ClearMeteringMask_Click"
-                                        ToolTipService.ToolTip="Clear metering mask">
-                                        <FontIcon Glyph="&#xE711;" />
+                                        Grid.Row="1"
+                                        Grid.Column="2"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Command="{x:Bind ViewModel.ClearSunCommand}"
+                                        IsEnabled="{x:Bind ViewModel.HasPrimaryAtmosphereSource, Mode=OneWay}"
+                                        Style="{StaticResource SourceReferenceAction}"
+                                        ToolTipService.ToolTip="Clear Primary assignment">
+                                        <FontIcon FontSize="14" Glyph="&#xE711;" />
                                     </Button>
+                                    <Expander
+                                        x:Name="PrimarySourceDisclosure"
+                                        Grid.Row="2"
+                                        Grid.ColumnSpan="3"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Stretch"
+                                        Header="Direction &amp; atmosphere"
+                                        IsExpanded="False"
+                                        Style="{StaticResource QuietDisclosure}"
+                                        Visibility="{x:Bind ViewModel.HasPrimaryAtmosphereSource, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <local:AtmosphereSourceView DataContext="{x:Bind ViewModel.PrimaryAtmosphereSource, Mode=OneWay}" />
+                                    </Expander>
+                                    <Border
+                                        x:Name="SourceSeparator"
+                                        Grid.Row="3"
+                                        Grid.ColumnSpan="3"
+                                        Height="1"
+                                        Margin="0,4"
+                                        Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                    <TextBlock
+                                        Grid.Row="4"
+                                        Grid.ColumnSpan="3"
+                                        Text="Secondary" />
+                                    <ComboBox
+                                        Grid.Row="5"
+                                        MinHeight="32"
+                                        HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Secondary atmosphere source"
+                                        DisplayMemberPath="DisplayName"
+                                        FontSize="14"
+                                        ItemsSource="{x:Bind ViewModel.SecondarySunOptions, Mode=OneWay}"
+                                        SelectedItem="{x:Bind ViewModel.SelectedSecondarySun, Mode=TwoWay}">
+                                        <ComboBox.ItemContainerStyle>
+                                            <Style TargetType="ComboBoxItem">
+                                                <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
+                                            </Style>
+                                        </ComboBox.ItemContainerStyle>
+                                    </ComboBox>
+                                    <Button
+                                        Grid.Row="5"
+                                        Grid.Column="1"
+                                        AutomationProperties.Name="Inspect secondary atmosphere source"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Click="InspectSecondarySource_Click"
+                                        IsEnabled="{x:Bind ViewModel.HasSecondaryAtmosphereSource, Mode=OneWay}"
+                                        Style="{StaticResource SourceReferenceAction}"
+                                        ToolTipService.ToolTip="Inspect the secondary atmosphere light">
+                                        <FontIcon FontSize="14" Glyph="&#xE8FD;" />
+                                    </Button>
+                                    <Button
+                                        Grid.Row="5"
+                                        Grid.Column="2"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Command="{x:Bind ViewModel.ClearSecondarySunCommand}"
+                                        IsEnabled="{x:Bind ViewModel.HasSecondaryAtmosphereSource, Mode=OneWay}"
+                                        Style="{StaticResource SourceReferenceAction}"
+                                        ToolTipService.ToolTip="Clear Secondary assignment">
+                                        <FontIcon FontSize="14" Glyph="&#xE711;" />
+                                    </Button>
+                                    <Expander
+                                        x:Name="SecondarySourceDisclosure"
+                                        Grid.Row="6"
+                                        Grid.ColumnSpan="3"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Stretch"
+                                        Header="Direction &amp; atmosphere"
+                                        IsExpanded="False"
+                                        Style="{StaticResource QuietDisclosure}"
+                                        Visibility="{x:Bind ViewModel.HasSecondaryAtmosphereSource, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <local:AtmosphereSourceView DataContext="{x:Bind ViewModel.SecondaryAtmosphereSource, Mode=OneWay}" />
+                                    </Expander>
+                                    <TextBlock
+                                        Grid.Row="7"
+                                        Grid.ColumnSpan="3"
+                                        AutomationProperties.LiveSetting="Polite"
+                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                        Text="{x:Bind ViewModel.SunReferenceDiagnostic.Message, Mode=OneWay}"
+                                        TextWrapping="Wrap"
+                                        Visibility="{x:Bind ViewModel.SunReferenceDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
                                 </Grid>
-                                <TextBlock
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.AutoExposureMeteringMaskDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.AutoExposureMeteringMaskDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Auto Min EV"
-                            Qualifier="EV100"
-                            Tag="AutoExposure">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    LabelPosition="None"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.AutoExposureMinEv, Mode=TwoWay}"
-                                    Tag="AutoExposureMinEv" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.AutoExposureMinEvDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.AutoExposureMinEvDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Auto Max EV"
-                            Qualifier="EV100"
-                            Tag="AutoExposure">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    LabelPosition="None"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.AutoExposureMaxEv, Mode=TwoWay}"
-                                    Tag="AutoExposureMaxEv" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.AutoExposureMaxEvDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.AutoExposureMaxEvDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Adapt Up"
-                            Qualifier="EV/s"
-                            Tag="AutoExposure">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    LabelPosition="None"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.AutoExposureSpeedUp, Mode=TwoWay}"
-                                    Tag="AutoExposureSpeedUp" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.AutoExposureSpeedUpDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.AutoExposureSpeedUpDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Adapt Down"
-                            Qualifier="EV/s"
-                            Tag="AutoExposure">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    LabelPosition="None"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.AutoExposureSpeedDown, Mode=TwoWay}"
-                                    Tag="AutoExposureSpeedDown" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.AutoExposureSpeedDownDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.AutoExposureSpeedDownDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Adaptation transition distance · Proposed"
-                            Qualifier="EV"
-                            Tag="AutoExposure">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    LabelPosition="None"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.AutoExposureTransitionDistanceEv, Mode=TwoWay}"
-                                    Tag="AutoExposureTransitionDistanceEv" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.AutoExposureTransitionDistanceEvDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.AutoExposureTransitionDistanceEvDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Low Percentile"
-                            Tag="AutoExposure">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.AutoExposureLowPercentile, Mode=TwoWay}"
-                                    Tag="AutoExposureLowPercentile" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.AutoExposureLowPercentileDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.AutoExposureLowPercentileDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="High Percentile"
-                            Tag="AutoExposure">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.AutoExposureHighPercentile, Mode=TwoWay}"
-                                    Tag="AutoExposureHighPercentile" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.AutoExposureHighPercentileDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.AutoExposureHighPercentileDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Dark-sample influence · Proposed"
-                            Qualifier="0–1"
-                            Tag="AutoExposure">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    LabelPosition="None"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.AutoExposureBlackInfluence, Mode=TwoWay}"
-                                    Tag="AutoExposureBlackInfluence" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.AutoExposureBlackInfluenceDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.AutoExposureBlackInfluenceDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Min Log Luminance"
-                            Tag="AutoExposure">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.AutoExposureMinLogLuminance, Mode=TwoWay}"
-                                    Tag="AutoExposureMinLogLuminance" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.AutoExposureMinLogLuminanceDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.AutoExposureMinLogLuminanceDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Log Luminance Range"
-                            Tag="AutoExposure">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.AutoExposureLogLuminanceRange, Mode=TwoWay}"
-                                    Tag="AutoExposureLogLuminanceRange" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.AutoExposureLogLuminanceRangeDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.AutoExposureLogLuminanceRangeDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Target Luminance"
-                            Tag="AutoExposure">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.AutoExposureTargetLuminance, Mode=TwoWay}"
-                                    Tag="AutoExposureTargetLuminance" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.AutoExposureTargetLuminanceDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.AutoExposureTargetLuminanceDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Spot Radius"
-                            Tag="AutoExposureSpot">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
-                                    EditSessionCompleted="NumberEditCompleted"
-                                    EditSessionStarted="NumberEditStarted"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.AutoExposureSpotMeterRadius, Mode=TwoWay}"
-                                    Tag="AutoExposureSpotMeterRadius" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.AutoExposureSpotMeterRadiusDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.AutoExposureSpotMeterRadiusDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard
-                            HorizontalContentAlignment="Stretch"
-                            PropertyName="Exposure-compensation curve · Proposed"
-                            Tag="AutoExposure">
-                            <StackPanel Spacing="6" Tag="AutoExposureCompensationCurve Metered EV100 Compensation EV">
-                                <Canvas
-                                    Width="160"
-                                    Height="36"
-                                    HorizontalAlignment="Left">
-                                    <Polyline
-                                        Points="{x:Bind local:InspectorCurvePresentation.CreatePoints(ViewModel.AutoExposureCompensationCurve), Mode=OneWay}"
-                                        Stroke="{ThemeResource AccentFillColorDefaultBrush}"
-                                        StrokeThickness="2" />
-                                </Canvas>
-                                <ItemsRepeater ItemsSource="{x:Bind ViewModel.AutoExposureCurveKeys, Mode=OneWay}">
-                                    <ItemsRepeater.Layout>
-                                        <StackLayout Spacing="4" />
-                                    </ItemsRepeater.Layout>
-                                    <ItemsRepeater.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid ColumnSpacing="6">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <controls:NumberBox
-                                                    EditSessionCompleted="ExposureCurveEditCompleted"
-                                                    EditSessionStarted="ExposureCurveEditStarted"
-                                                    Label="Metered EV100"
-                                                    LabelPosition="Top"
-                                                    Mask="~.###"
-                                                    NumberValue="{Binding MeteredEv, Mode=TwoWay}"
-                                                    Tag="MeteredEv"
-                                                    Validate="ExposureCurveKey_Validate" />
-                                                <controls:NumberBox
-                                                    Grid.Column="1"
-                                                    EditSessionCompleted="ExposureCurveEditCompleted"
-                                                    EditSessionStarted="ExposureCurveEditStarted"
-                                                    Label="Compensation EV"
-                                                    LabelPosition="Top"
-                                                    Mask="~.###"
-                                                    NumberValue="{Binding CompensationEv, Mode=TwoWay}"
-                                                    Tag="CompensationEv"
-                                                    Validate="ExposureCurveKey_Validate" />
-                                                <Button
-                                                    Grid.Column="2"
-                                                    Click="RemoveExposureCurveKey_Click"
-                                                    ToolTipService.ToolTip="Remove curve key">
-                                                    <FontIcon Glyph="&#xE738;" />
-                                                </Button>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsRepeater.ItemTemplate>
-                                </ItemsRepeater>
-                                <Button
-                                    HorizontalAlignment="Left"
-                                    Command="{x:Bind ViewModel.AddExposureCurveKeyCommand}"
-                                    Content="Add key" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.AutoExposureCompensationCurveDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.AutoExposureCompensationCurveDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
                             </StackPanel>
                         </editorcontrols:PropertyCard>
                     </editorcontrols:PropertiesExpander.Items>
                 </editorcontrols:PropertiesExpander>
                 <editorcontrols:PropertiesExpander
-                    x:Name="ToneMappingSection"
+                    x:Name="SkyAtmosphereSection"
                     HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Stretch"
-                    Description="Tone mapper selection and display transfer."
-                    Header="Tone Mapping"
-                    HeaderIcon="{ui:FontIcon Glyph='&#xE9A6;'}"
+                    Description="Atmospheric sky and aerial perspective authored on the scene."
+                    Header="Sky Atmosphere"
+                    HeaderIcon="{ui:FontIcon Glyph='&#xE753;'}"
                     IsExpanded="True"
-                    Tag="Post-processing">
+                    Tag="Environment">
                     <editorcontrols:PropertiesExpander.Items>
-                        <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Mapper">
-                            <ComboBox
-                                ItemsSource="{x:Bind ViewModel.ToneMappingModes}"
-                                SelectedItem="{x:Bind ViewModel.ToneMapping, Mode=TwoWay}"
-                                Tag="ToneMapper" />
+                        <editorcontrols:PropertyCard
+                            x:Name="AtmosphereEnabledCard"
+                            HorizontalContentAlignment="Stretch"
+                            PropertyName="Enabled">
+                            <ToggleSwitch IsOn="{x:Bind ViewModel.AtmosphereEnabled, Mode=TwoWay}" Tag="AtmosphereEnabled" />
                         </editorcontrols:PropertyCard>
                         <editorcontrols:PropertyCard
+                            x:Name="SunDiskEnabledCard"
                             HorizontalContentAlignment="Stretch"
-                            PropertyName="Display Gamma"
-                            Tag="DisplayGamma">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
+                            PropertyName="Sun Disk">
+                            <ToggleSwitch
+                                VerticalAlignment="Center"
+                                IsOn="{x:Bind ViewModel.SunDiskEnabled, Mode=TwoWay}"
+                                Tag="SunDiskEnabled" />
+                        </editorcontrols:PropertyCard>
+                        <fields:InspectorRgbField
+                            x:Name="SkyLuminanceCard"
+                            Blue="{x:Bind ViewModel.SkyLuminanceB, Mode=TwoWay}"
+                            ChannelAutomationName="Sky luminance, RGB multiplier"
+                            DiagnosticSpacing="2"
+                            EditSessionCompleted="VectorEditCompleted"
+                            EditSessionStarted="VectorEditStarted"
+                            ErrorText="{x:Bind ViewModel.SkyLuminanceRDiagnostic.Message, Mode=OneWay}"
+                            FontSize="14"
+                            Green="{x:Bind ViewModel.SkyLuminanceG, Mode=TwoWay}"
+                            HasError="{x:Bind ViewModel.SkyLuminanceRDiagnostic.HasError, Mode=OneWay}"
+                            IsMultiplier="True"
+                            Label="Sky Luminance"
+                            Qualifier="RGB ×"
+                            Red="{x:Bind ViewModel.SkyLuminanceR, Mode=TwoWay}"
+                            Tag="SkyLuminance" />
+                        <Expander
+                            x:Name="PlanetGroundDisclosure"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            AutomationProperties.AutomationId="Scene.Sky.PlanetGround"
+                            Header="Planet &amp; ground"
+                            IsExpanded="False"
+                            Style="{StaticResource QuietDisclosure}">
+                            <StackPanel Spacing="4">
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="PlanetRadiusKmCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
                                     EditSessionCompleted="NumberEditCompleted"
                                     EditSessionStarted="NumberEditStarted"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.DisplayGamma, Mode=TwoWay}"
-                                    Tag="DisplayGamma" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.DisplayGammaDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.DisplayGammaDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                    </editorcontrols:PropertiesExpander.Items>
-                </editorcontrols:PropertiesExpander>
-                <editorcontrols:PropertiesExpander
-                    x:Name="BloomSection"
-                    HorizontalAlignment="Stretch"
-                    HorizontalContentAlignment="Stretch"
-                    Description="Bloom thresholding and contribution."
-                    Header="Bloom"
-                    HeaderIcon="{ui:FontIcon Glyph='&#xE950;'}"
-                    IsExpanded="False"
-                    Tag="Post-processing">
-                    <editorcontrols:PropertiesExpander.Items>
-                        <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Intensity">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
+                                    ErrorText="{x:Bind ViewModel.PlanetRadiusKmDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.PlanetRadiusKmDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Planet Radius"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.PlanetRadiusKm, Mode=TwoWay}"
+                                    Qualifier="km"
+                                    Tag="PlanetRadiusKm" />
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="AtmosphereHeightKmCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
                                     EditSessionCompleted="NumberEditCompleted"
                                     EditSessionStarted="NumberEditStarted"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.BloomIntensity, Mode=TwoWay}"
-                                    Tag="BloomIntensity" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.BloomIntensityDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.BloomIntensityDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
+                                    ErrorText="{x:Bind ViewModel.AtmosphereHeightKmDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.AtmosphereHeightKmDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Atmosphere Height"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.AtmosphereHeightKm, Mode=TwoWay}"
+                                    Qualifier="km"
+                                    Tag="AtmosphereHeightKm" />
+                                <fields:InspectorRgbField
+                                    x:Name="GroundAlbedoCard"
+                                    Blue="{x:Bind ViewModel.GroundAlbedoB, Mode=TwoWay}"
+                                    ChannelAutomationName="Ground Albedo, linear RGB"
+                                    ColorPicked="OnRgbColorPicked"
+                                    ComponentMask="~.#"
+                                    EditOwner="{x:Bind ViewModel, Mode=OneWay}"
+                                    EditSessionCompleted="VectorEditCompleted"
+                                    EditSessionStarted="VectorEditStarted"
+                                    ErrorText="{x:Bind ViewModel.GroundAlbedoRDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    Green="{x:Bind ViewModel.GroundAlbedoG, Mode=TwoWay}"
+                                    HasError="{x:Bind ViewModel.GroundAlbedoRDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Ground Albedo"
+                                    PickerAutomationName="Pick ground albedo color"
+                                    Qualifier="Linear RGB"
+                                    Red="{x:Bind ViewModel.GroundAlbedoR, Mode=TwoWay}"
+                                    SwatchBorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                    SwatchCornerRadius="3"
+                                    Tag="GroundAlbedo" />
                             </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Threshold">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
+                        </Expander>
+                        <Expander
+                            x:Name="ScatteringDisclosure"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            AutomationProperties.AutomationId="Scene.Sky.Scattering"
+                            Header="Scattering"
+                            IsExpanded="False"
+                            Style="{StaticResource QuietDisclosure}">
+                            <StackPanel Spacing="4">
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="RayleighScaleHeightKmCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
                                     EditSessionCompleted="NumberEditCompleted"
                                     EditSessionStarted="NumberEditStarted"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.BloomThreshold, Mode=TwoWay}"
-                                    Tag="BloomThreshold" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.BloomThresholdDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.BloomThresholdDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                    </editorcontrols:PropertiesExpander.Items>
-                </editorcontrols:PropertiesExpander>
-                <editorcontrols:PropertiesExpander
-                    x:Name="ColorGradingSection"
-                    HorizontalAlignment="Stretch"
-                    HorizontalContentAlignment="Stretch"
-                    Description="Color and lens-style post-process adjustments."
-                    Header="Color Grading"
-                    HeaderIcon="{ui:FontIcon Glyph='&#xE790;'}"
-                    IsExpanded="False"
-                    Tag="Post-processing;ToneMapping">
-                    <editorcontrols:PropertiesExpander.Items>
-                        <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Saturation">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
+                                    ErrorText="{x:Bind ViewModel.RayleighScaleHeightKmDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.RayleighScaleHeightKmDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Rayleigh Height"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.RayleighScaleHeightKm, Mode=TwoWay}"
+                                    Qualifier="km"
+                                    Tag="RayleighScaleHeightKm" />
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="MieScaleHeightKmCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
                                     EditSessionCompleted="NumberEditCompleted"
                                     EditSessionStarted="NumberEditStarted"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.Saturation, Mode=TwoWay}"
-                                    Tag="Saturation" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.SaturationDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.SaturationDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Contrast">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
+                                    ErrorText="{x:Bind ViewModel.MieScaleHeightKmDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.MieScaleHeightKmDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Mie Height"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.MieScaleHeightKm, Mode=TwoWay}"
+                                    Qualifier="km"
+                                    Tag="MieScaleHeightKm" />
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="MieAnisotropyCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
                                     EditSessionCompleted="NumberEditCompleted"
                                     EditSessionStarted="NumberEditStarted"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.Contrast, Mode=TwoWay}"
-                                    Tag="Contrast" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.ContrastDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.ContrastDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
+                                    ErrorText="{x:Bind ViewModel.MieAnisotropyDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.MieAnisotropyDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Mie Anisotropy"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.MieAnisotropy, Mode=TwoWay}"
+                                    Tag="MieAnisotropy" />
                             </StackPanel>
-                        </editorcontrols:PropertyCard>
-                        <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Vignette">
-                            <StackPanel Spacing="2">
-                                <controls:NumberBox
+                        </Expander>
+                        <Expander
+                            x:Name="AerialPerspectiveDisclosure"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            AutomationProperties.AutomationId="Scene.Sky.AerialPerspective"
+                            Header="Aerial perspective"
+                            IsExpanded="False"
+                            Style="{StaticResource QuietDisclosure}">
+                            <StackPanel Spacing="4">
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="AerialPerspectiveDistanceScaleCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
                                     EditSessionCompleted="NumberEditCompleted"
                                     EditSessionStarted="NumberEditStarted"
-                                    Mask="~.###"
-                                    NumberValue="{x:Bind ViewModel.VignetteIntensity, Mode=TwoWay}"
-                                    Tag="VignetteIntensity" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.VignetteIntensityDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.VignetteIntensityDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
+                                    ErrorText="{x:Bind ViewModel.AerialPerspectiveDistanceScaleDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.AerialPerspectiveDistanceScaleDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Distance scale"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.AerialPerspectiveDistanceScale, Mode=TwoWay}"
+                                    Tag="AerialPerspectiveDistanceScale" />
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="AerialScatteringStrengthCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    ErrorText="{x:Bind ViewModel.AerialScatteringStrengthDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.AerialScatteringStrengthDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Scattering strength"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.AerialScatteringStrength, Mode=TwoWay}"
+                                    Tag="AerialScatteringStrength" />
+                                <editorcontrols:PropertyCard
+                                    x:Name="AerialStartCard"
+                                    HorizontalContentAlignment="Stretch"
+                                    PropertyName="Start distance"
+                                    Qualifier="m"
+                                    Tag="Aerial Start aerial_perspective_start_depth_meters">
+                                    <StackPanel Spacing="2">
+                                        <controls:NumberBox
+                                            x:Name="AerialStartInput"
+                                            EditSessionCompleted="NumberEditCompleted"
+                                            EditSessionStarted="NumberEditStarted"
+                                            LabelPosition="None"
+                                            Mask="~.###"
+                                            NumberValue="{x:Bind ViewModel.AerialPerspectiveStartDepthMeters, Mode=TwoWay}"
+                                            Tag="AerialPerspectiveStartDepthMeters"
+                                            Validate="AerialStartValidate" />
+                                        <TextBlock
+                                            AutomationProperties.LiveSetting="Polite"
+                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                            Text="{x:Bind ViewModel.AerialPerspectiveStartDepthMetersDiagnostic.Message, Mode=OneWay}"
+                                            TextWrapping="Wrap"
+                                            Visibility="{x:Bind ViewModel.AerialPerspectiveStartDepthMetersDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
+                                    </StackPanel>
+                                </editorcontrols:PropertyCard>
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="HeightFogContributionCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    ErrorText="{x:Bind ViewModel.HeightFogContributionDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.HeightFogContributionDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Height fog contribution"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.HeightFogContribution, Mode=TwoWay}"
+                                    Tag="HeightFogContribution" />
                             </StackPanel>
-                        </editorcontrols:PropertyCard>
+                        </Expander>
                     </editorcontrols:PropertiesExpander.Items>
                 </editorcontrols:PropertiesExpander>
                 <editorcontrols:PropertiesExpander
@@ -1256,65 +594,502 @@
                         </Button>
                     </editorcontrols:PropertiesExpander.HeaderActions>
                     <editorcontrols:PropertiesExpander.Items>
+                        <fields:InspectorRgbField
+                            x:Name="BackgroundColorCard"
+                            Blue="{x:Bind ViewModel.BackgroundB, Mode=TwoWay}"
+                            ChannelAutomationName="Color, linear RGB"
+                            ColorPicked="OnRgbColorPicked"
+                            EditOwner="{x:Bind ViewModel, Mode=OneWay}"
+                            EditSessionCompleted="VectorEditCompleted"
+                            EditSessionStarted="VectorEditStarted"
+                            ErrorText="{x:Bind ViewModel.BackgroundRDiagnostic.Message, Mode=OneWay}"
+                            FontSize="14"
+                            Green="{x:Bind ViewModel.BackgroundG, Mode=TwoWay}"
+                            HasError="{x:Bind ViewModel.BackgroundRDiagnostic.HasError, Mode=OneWay}"
+                            Label="Color"
+                            PickerAutomationName="Pick background color"
+                            Qualifier="Linear RGB"
+                            Red="{x:Bind ViewModel.BackgroundR, Mode=TwoWay}"
+                            Tag="BackgroundColor" />
+                    </editorcontrols:PropertiesExpander.Items>
+                </editorcontrols:PropertiesExpander>
+                <TextBlock
+                    x:Name="PostProcessingHeading"
+                    Margin="4,10,4,2"
+                    FontWeight="SemiBold"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="Post-processing" />
+                <editorcontrols:PropertiesExpander
+                    x:Name="ExposureSection"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch"
+                    Description="Exposure pipeline values from Oxygen's native PostProcessVolume."
+                    Header="Exposure"
+                    HeaderIcon="{ui:FontIcon Glyph='&#xE9CA;'}"
+                    IsExpanded="True"
+                    Tag="Post-processing">
+                    <editorcontrols:PropertiesExpander.Items>
                         <editorcontrols:PropertyCard
+                            x:Name="ExposureEnabledCard"
                             HorizontalContentAlignment="Stretch"
-                            EditorMinimumWidth="248"
-                            IsCompound="True"
-                            Layout="Stacked"
-                            PropertyName="Color"
-                            Qualifier="Linear RGB">
-                            <editorcontrols:PropertyCard.LeadingContent>
-                                <Button
-                                    x:Name="BackgroundSwatch"
-                                    AutomationProperties.Name="Pick background color"
-                                    Style="{StaticResource InspectorColorSwatchStyle}"
-                                    ToolTipService.ToolTip="Pick background color">
-                                    <Button.Flyout>
-                                        <Flyout>
-                                            <ColorPicker
-                                                ColorChanged="BackgroundPicker_ColorChanged"
-                                                IsAlphaEnabled="False"
-                                                IsColorChannelTextInputVisible="True"
-                                                IsHexInputVisible="True"
-                                                Loaded="ColorPickerLoaded"
-                                                Color="{x:Bind local:InspectorRgbPresentation.ToDisplayColor(ViewModel.BackgroundColor), Mode=OneWay}" />
-                                        </Flyout>
-                                    </Button.Flyout>
-                                    <Border
-                                        Width="20"
-                                        Height="24"
-                                        Background="{x:Bind local:InspectorRgbPresentation.ToBrush(ViewModel.BackgroundColor), Mode=OneWay}"
-                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="2" />
-                                </Button>
-                            </editorcontrols:PropertyCard.LeadingContent>
-                            <StackPanel Spacing="4">
-                                <controls:VectorBox
-                                    x:Name="BackgroundChannels"
-                                    Padding="0"
-                                    HorizontalAlignment="Stretch"
-                                    AutomationProperties.Name="Color, linear RGB"
-                                    ComponentLabelPosition="Left"
-                                    ComponentMask="~.###"
-                                    Dimension="3"
-                                    EditSessionCompleted="VectorEditCompleted"
-                                    EditSessionStarted="VectorEditStarted"
-                                    HorizontalValueAlignment="Right"
-                                    LabelPosition="None"
-                                    Style="{StaticResource SceneVectorBoxStyle}"
-                                    Tag="BackgroundColor"
-                                    XValue="{x:Bind ViewModel.BackgroundR, Mode=TwoWay}"
-                                    YValue="{x:Bind ViewModel.BackgroundG, Mode=TwoWay}"
-                                    ZValue="{x:Bind ViewModel.BackgroundB, Mode=TwoWay}" />
-                                <TextBlock
-                                    AutomationProperties.LiveSetting="Polite"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Text="{x:Bind ViewModel.BackgroundRDiagnostic.Message, Mode=OneWay}"
-                                    TextWrapping="Wrap"
-                                    Visibility="{x:Bind ViewModel.BackgroundRDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                            </StackPanel>
+                            PropertyName="Enabled">
+                            <ToggleSwitch IsOn="{x:Bind ViewModel.ExposureEnabled, Mode=TwoWay}" Tag="ExposureEnabled" />
                         </editorcontrols:PropertyCard>
+                        <editorcontrols:PropertyCard
+                            x:Name="ExposureModeCard"
+                            HorizontalContentAlignment="Stretch"
+                            PropertyName="Mode">
+                            <ComboBox
+                                ItemsSource="{x:Bind ViewModel.ExposureModes}"
+                                SelectedItem="{x:Bind ViewModel.ExposureMode, Mode=TwoWay}"
+                                Tag="ExposureMode" />
+                        </editorcontrols:PropertyCard>
+                        <editorcontrols:InspectorNumberField
+                            x:Name="ManualExposureEvCard"
+                            CardStyle="{StaticResource ScenePropertyCardStyle}"
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            ErrorText="{x:Bind ViewModel.ManualExposureEvDiagnostic.Message, Mode=OneWay}"
+                            FontSize="14"
+                            HasError="{x:Bind ViewModel.ManualExposureEvDiagnostic.HasError, Mode=OneWay}"
+                            Label="Manual EV"
+                            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                            NumberValue="{x:Bind ViewModel.ManualExposureEv, Mode=TwoWay}"
+                            Qualifier="EV100"
+                            Tag="ManualExposureEv" />
+                        <editorcontrols:InspectorNumberField
+                            x:Name="ExposureCompensationCard"
+                            CardStyle="{StaticResource ScenePropertyCardStyle}"
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            ErrorText="{x:Bind ViewModel.ExposureCompensationDiagnostic.Message, Mode=OneWay}"
+                            FontSize="14"
+                            HasError="{x:Bind ViewModel.ExposureCompensationDiagnostic.HasError, Mode=OneWay}"
+                            Label="Compensation"
+                            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                            NumberValue="{x:Bind ViewModel.ExposureCompensation, Mode=TwoWay}"
+                            Qualifier="EV"
+                            Tag="ExposureCompensation" />
+                        <Expander
+                            x:Name="MeteringLimitsDisclosure"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            AutomationProperties.AutomationId="Scene.Exposure.MeteringLimits"
+                            Header="Metering &amp; limits"
+                            IsExpanded="True"
+                            Style="{StaticResource QuietDisclosure}">
+                            <StackPanel Spacing="4">
+                                <editorcontrols:PropertyCard
+                                    x:Name="AutoExposureMeteringModeCard"
+                                    HorizontalContentAlignment="Stretch"
+                                    PropertyName="Metering"
+                                    Tag="AutoExposure">
+                                    <StackPanel Spacing="4">
+                                        <ComboBox
+                                            ItemsSource="{x:Bind ViewModel.MeteringModes}"
+                                            SelectedItem="{x:Bind ViewModel.AutoExposureMeteringMode, Mode=TwoWay}"
+                                            Tag="AutoExposureMeteringMode" />
+                                        <TextBlock
+                                            x:Name="AutoExposureMeteringModeApplicabilityNote"
+                                            FontSize="12"
+                                            TextWrapping="Wrap"
+                                            Visibility="Collapsed" />
+                                    </StackPanel>
+                                </editorcontrols:PropertyCard>
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="AutoExposureMinEvCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    ErrorText="{x:Bind ViewModel.AutoExposureMinEvDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.AutoExposureMinEvDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Auto Min EV"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.AutoExposureMinEv, Mode=TwoWay}"
+                                    Qualifier="EV100"
+                                    Tag="AutoExposureMinEv" />
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="AutoExposureMaxEvCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    ErrorText="{x:Bind ViewModel.AutoExposureMaxEvDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.AutoExposureMaxEvDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Auto Max EV"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.AutoExposureMaxEv, Mode=TwoWay}"
+                                    Qualifier="EV100"
+                                    Tag="AutoExposureMaxEv" />
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="AutoExposureTargetLuminanceCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    ErrorText="{x:Bind ViewModel.AutoExposureTargetLuminanceDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.AutoExposureTargetLuminanceDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Target Luminance"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.AutoExposureTargetLuminance, Mode=TwoWay}"
+                                    Tag="AutoExposureTargetLuminance" />
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="AutoExposureSpotMeterRadiusCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    ErrorText="{x:Bind ViewModel.AutoExposureSpotMeterRadiusDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.AutoExposureSpotMeterRadiusDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Spot Radius"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.AutoExposureSpotMeterRadius, Mode=TwoWay}"
+                                    Tag="AutoExposureSpotMeterRadius" />
+                            </StackPanel>
+                        </Expander>
+                        <Expander
+                            x:Name="AdaptationDisclosure"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            AutomationProperties.AutomationId="Scene.Exposure.Adaptation"
+                            Header="Adaptation"
+                            IsExpanded="False"
+                            Style="{StaticResource QuietDisclosure}">
+                            <StackPanel Spacing="4">
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="AutoExposureSpeedUpCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    ErrorText="{x:Bind ViewModel.AutoExposureSpeedUpDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.AutoExposureSpeedUpDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Adapt Up"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.AutoExposureSpeedUp, Mode=TwoWay}"
+                                    Qualifier="EV/s"
+                                    Tag="AutoExposureSpeedUp" />
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="AutoExposureSpeedDownCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    ErrorText="{x:Bind ViewModel.AutoExposureSpeedDownDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.AutoExposureSpeedDownDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Adapt Down"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.AutoExposureSpeedDown, Mode=TwoWay}"
+                                    Qualifier="EV/s"
+                                    Tag="AutoExposureSpeedDown" />
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="AutoExposureTransitionDistanceEvCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    ErrorText="{x:Bind ViewModel.AutoExposureTransitionDistanceEvDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.AutoExposureTransitionDistanceEvDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Adaptation transition distance · Proposed"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.AutoExposureTransitionDistanceEv, Mode=TwoWay}"
+                                    Qualifier="EV"
+                                    Tag="AutoExposureTransitionDistanceEv" />
+                            </StackPanel>
+                        </Expander>
+                        <Expander
+                            x:Name="HistogramCalibrationDisclosure"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            AutomationProperties.AutomationId="Scene.Exposure.HistogramCalibration"
+                            Header="Histogram &amp; calibration"
+                            IsExpanded="False"
+                            Style="{StaticResource QuietDisclosure}">
+                            <StackPanel Spacing="4">
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="ExposureKeyCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    ErrorText="{x:Bind ViewModel.ExposureKeyDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.ExposureKeyDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Key"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.ExposureKey, Mode=TwoWay}"
+                                    Tag="ExposureKey" />
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="AutoExposureLowPercentileCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    ErrorText="{x:Bind ViewModel.AutoExposureLowPercentileDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.AutoExposureLowPercentileDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Low Percentile"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.AutoExposureLowPercentile, Mode=TwoWay}"
+                                    Tag="AutoExposureLowPercentile" />
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="AutoExposureHighPercentileCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    ErrorText="{x:Bind ViewModel.AutoExposureHighPercentileDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.AutoExposureHighPercentileDiagnostic.HasError, Mode=OneWay}"
+                                    Label="High Percentile"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.AutoExposureHighPercentile, Mode=TwoWay}"
+                                    Tag="AutoExposureHighPercentile" />
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="AutoExposureMinLogLuminanceCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    ErrorText="{x:Bind ViewModel.AutoExposureMinLogLuminanceDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.AutoExposureMinLogLuminanceDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Min Log Luminance"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.AutoExposureMinLogLuminance, Mode=TwoWay}"
+                                    Tag="AutoExposureMinLogLuminance" />
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="AutoExposureLogLuminanceRangeCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    ErrorText="{x:Bind ViewModel.AutoExposureLogLuminanceRangeDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.AutoExposureLogLuminanceRangeDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Log Luminance Range"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.AutoExposureLogLuminanceRange, Mode=TwoWay}"
+                                    Tag="AutoExposureLogLuminanceRange" />
+                                <editorcontrols:InspectorNumberField
+                                    x:Name="AutoExposureBlackInfluenceCard"
+                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    ErrorText="{x:Bind ViewModel.AutoExposureBlackInfluenceDiagnostic.Message, Mode=OneWay}"
+                                    FontSize="14"
+                                    HasError="{x:Bind ViewModel.AutoExposureBlackInfluenceDiagnostic.HasError, Mode=OneWay}"
+                                    Label="Dark-sample influence · Proposed"
+                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                                    NumberValue="{x:Bind ViewModel.AutoExposureBlackInfluence, Mode=TwoWay}"
+                                    Qualifier="0–1"
+                                    Tag="AutoExposureBlackInfluence" />
+                            </StackPanel>
+                        </Expander>
+                        <Expander
+                            x:Name="ExposureShapingDisclosure"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            AutomationProperties.AutomationId="Scene.Exposure.ExposureShaping"
+                            Header="Exposure shaping"
+                            IsExpanded="False"
+                            Style="{StaticResource QuietDisclosure}">
+                            <StackPanel Spacing="4">
+                                <editorcontrols:PropertyCard
+                                    x:Name="AutoExposureMeteringMaskCard"
+                                    HorizontalContentAlignment="Stretch"
+                                    PropertyName="Metering mask · Proposed"
+                                    Tag="AutoExposure">
+                                    <StackPanel Spacing="4">
+                                        <Grid ColumnSpacing="6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Button
+                                                HorizontalAlignment="Stretch"
+                                                Content="{x:Bind ViewModel.MeteringMaskDisplayName, Mode=OneWay}"
+                                                Tag="AutoExposureMeteringMask"
+                                                ToolTipService.ToolTip="Choose an exposure metering mask">
+                                                <Button.Flyout>
+                                                    <Flyout x:Name="MeteringMaskFlyout">
+                                                        <StackPanel Width="320" Spacing="6">
+                                                            <TextBox PlaceholderText="Search textures…" Text="{x:Bind ViewModel.MeteringMaskSearchText, Mode=TwoWay}" />
+                                                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.FilteredMeteringMaskRows, Mode=OneWay}">
+                                                                <ItemsRepeater.Layout>
+                                                                    <StackLayout Spacing="2" />
+                                                                </ItemsRepeater.Layout>
+                                                                <ItemsRepeater.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <Button
+                                                                            HorizontalAlignment="Stretch"
+                                                                            HorizontalContentAlignment="Left"
+                                                                            Click="MeteringMaskItem_Click"
+                                                                            IsEnabled="{Binding Item.IsEnabled, Mode=OneWay}"
+                                                                            ToolTipService.ToolTip="{Binding Item.DisplayPath, Mode=OneWay}">
+                                                                            <StackPanel>
+                                                                                <TextBlock Text="{Binding Item.Name, Mode=OneWay}" />
+                                                                                <TextBlock
+                                                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                                    Text="{Binding Item.DisplayPath, Mode=OneWay}"
+                                                                                    TextTrimming="CharacterEllipsis" />
+                                                                            </StackPanel>
+                                                                        </Button>
+                                                                    </DataTemplate>
+                                                                </ItemsRepeater.ItemTemplate>
+                                                            </ItemsRepeater>
+                                                        </StackPanel>
+                                                    </Flyout>
+                                                </Button.Flyout>
+                                            </Button>
+                                            <Button
+                                                Grid.Column="1"
+                                                Click="ClearMeteringMask_Click"
+                                                ToolTipService.ToolTip="Clear metering mask">
+                                                <FontIcon Glyph="&#xE711;" />
+                                            </Button>
+                                        </Grid>
+                                        <TextBlock
+                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                            Text="{x:Bind ViewModel.AutoExposureMeteringMaskDiagnostic.Message, Mode=OneWay}"
+                                            TextWrapping="Wrap"
+                                            Visibility="{x:Bind ViewModel.AutoExposureMeteringMaskDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
+                                        <TextBlock
+                                            x:Name="AutoExposureMeteringMaskApplicabilityNote"
+                                            FontSize="12"
+                                            TextWrapping="Wrap"
+                                            Visibility="Collapsed" />
+                                    </StackPanel>
+                                </editorcontrols:PropertyCard>
+                                <editorcontrols:PropertyCard
+                                    x:Name="AutoExposureCompensationCurveCard"
+                                    HorizontalContentAlignment="Stretch"
+                                    PropertyName="Exposure-compensation curve · Proposed"
+                                    Tag="AutoExposure">
+                                    <StackPanel Spacing="6" Tag="AutoExposureCompensationCurve Metered EV100 Compensation EV">
+                                        <environment:ExposureCompensationCurveEditorView ViewModel="{x:Bind ViewModel.CurveEditor, Mode=OneWay}" />
+                                        <TextBlock
+                                            x:Name="AutoExposureCompensationCurveApplicabilityNote"
+                                            FontSize="12"
+                                            TextWrapping="Wrap"
+                                            Visibility="Collapsed" />
+                                    </StackPanel>
+                                </editorcontrols:PropertyCard>
+                            </StackPanel>
+                        </Expander>
+                    </editorcontrols:PropertiesExpander.Items>
+                </editorcontrols:PropertiesExpander>
+                <editorcontrols:PropertiesExpander
+                    x:Name="ToneMappingSection"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch"
+                    Description="Tone mapper selection and display transfer."
+                    Header="Tone Mapping"
+                    HeaderIcon="{ui:FontIcon Glyph='&#xE9A6;'}"
+                    IsExpanded="True"
+                    Tag="Post-processing">
+                    <editorcontrols:PropertiesExpander.Items>
+                        <editorcontrols:PropertyCard
+                            x:Name="ToneMapperCard"
+                            HorizontalContentAlignment="Stretch"
+                            PropertyName="Mapper">
+                            <ComboBox
+                                ItemsSource="{x:Bind ViewModel.ToneMappingModes}"
+                                SelectedItem="{x:Bind ViewModel.ToneMapping, Mode=TwoWay}"
+                                Tag="ToneMapper" />
+                        </editorcontrols:PropertyCard>
+                        <editorcontrols:InspectorNumberField
+                            x:Name="DisplayGammaCard"
+                            CardStyle="{StaticResource ScenePropertyCardStyle}"
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            ErrorText="{x:Bind ViewModel.DisplayGammaDiagnostic.Message, Mode=OneWay}"
+                            FontSize="14"
+                            HasError="{x:Bind ViewModel.DisplayGammaDiagnostic.HasError, Mode=OneWay}"
+                            Label="Display Gamma"
+                            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                            NumberValue="{x:Bind ViewModel.DisplayGamma, Mode=TwoWay}"
+                            Tag="DisplayGamma" />
+                    </editorcontrols:PropertiesExpander.Items>
+                </editorcontrols:PropertiesExpander>
+                <editorcontrols:PropertiesExpander
+                    x:Name="ColorGradingSection"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch"
+                    Description="Color and lens-style post-process adjustments."
+                    Header="Color Grading"
+                    HeaderIcon="{ui:FontIcon Glyph='&#xE790;'}"
+                    IsExpanded="False"
+                    Tag="Post-processing;ToneMapping">
+                    <editorcontrols:PropertiesExpander.Items>
+                        <editorcontrols:InspectorNumberField
+                            x:Name="SaturationCard"
+                            CardStyle="{StaticResource ScenePropertyCardStyle}"
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            ErrorText="{x:Bind ViewModel.SaturationDiagnostic.Message, Mode=OneWay}"
+                            FontSize="14"
+                            HasError="{x:Bind ViewModel.SaturationDiagnostic.HasError, Mode=OneWay}"
+                            Label="Saturation"
+                            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                            NumberValue="{x:Bind ViewModel.Saturation, Mode=TwoWay}"
+                            Tag="Saturation" />
+                        <editorcontrols:InspectorNumberField
+                            x:Name="ContrastCard"
+                            CardStyle="{StaticResource ScenePropertyCardStyle}"
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            ErrorText="{x:Bind ViewModel.ContrastDiagnostic.Message, Mode=OneWay}"
+                            FontSize="14"
+                            HasError="{x:Bind ViewModel.ContrastDiagnostic.HasError, Mode=OneWay}"
+                            Label="Contrast"
+                            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                            NumberValue="{x:Bind ViewModel.Contrast, Mode=TwoWay}"
+                            Tag="Contrast" />
+                        <editorcontrols:InspectorNumberField
+                            x:Name="VignetteIntensityCard"
+                            CardStyle="{StaticResource ScenePropertyCardStyle}"
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            ErrorText="{x:Bind ViewModel.VignetteIntensityDiagnostic.Message, Mode=OneWay}"
+                            FontSize="14"
+                            HasError="{x:Bind ViewModel.VignetteIntensityDiagnostic.HasError, Mode=OneWay}"
+                            Label="Vignette"
+                            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                            NumberValue="{x:Bind ViewModel.VignetteIntensity, Mode=TwoWay}"
+                            Tag="VignetteIntensity" />
+                    </editorcontrols:PropertiesExpander.Items>
+                </editorcontrols:PropertiesExpander>
+                <editorcontrols:PropertiesExpander
+                    x:Name="BloomSection"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch"
+                    Description="Bloom thresholding and contribution."
+                    Header="Bloom"
+                    HeaderIcon="{ui:FontIcon Glyph='&#xE950;'}"
+                    IsExpanded="False"
+                    Tag="Post-processing">
+                    <editorcontrols:PropertiesExpander.Items>
+                        <editorcontrols:InspectorNumberField
+                            x:Name="BloomIntensityCard"
+                            CardStyle="{StaticResource ScenePropertyCardStyle}"
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            ErrorText="{x:Bind ViewModel.BloomIntensityDiagnostic.Message, Mode=OneWay}"
+                            FontSize="14"
+                            HasError="{x:Bind ViewModel.BloomIntensityDiagnostic.HasError, Mode=OneWay}"
+                            Label="Intensity"
+                            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                            NumberValue="{x:Bind ViewModel.BloomIntensity, Mode=TwoWay}"
+                            Tag="BloomIntensity" />
+                        <editorcontrols:InspectorNumberField
+                            x:Name="BloomThresholdCard"
+                            CardStyle="{StaticResource ScenePropertyCardStyle}"
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            ErrorText="{x:Bind ViewModel.BloomThresholdDiagnostic.Message, Mode=OneWay}"
+                            FontSize="14"
+                            HasError="{x:Bind ViewModel.BloomThresholdDiagnostic.HasError, Mode=OneWay}"
+                            Label="Threshold"
+                            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                            NumberValue="{x:Bind ViewModel.BloomThreshold, Mode=TwoWay}"
+                            Tag="BloomThreshold" />
                     </editorcontrols:PropertiesExpander.Items>
                 </editorcontrols:PropertiesExpander>
             </StackPanel>

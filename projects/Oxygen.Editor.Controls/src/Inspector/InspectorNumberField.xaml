@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.Controls.InspectorNumberField"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Controls"
+    xmlns:local="using:Oxygen.Editor.Controls"
+    x:Name="Root">
+    <local:PropertyCard
+        x:Name="Card"
+        HorizontalContentAlignment="Stretch"
+        EditorMinimumWidth="{x:Bind EditorMinimumWidth, Mode=OneWay}"
+        FontFamily="{x:Bind FontFamily, Mode=OneWay}"
+        FontSize="{x:Bind FontSize, Mode=OneWay}"
+        FontWeight="{x:Bind FontWeight, Mode=OneWay}"
+        LabelWidth="{x:Bind LabelWidth, Mode=OneWay}"
+        Layout="{x:Bind Layout, Mode=OneWay}"
+        Prefix="{x:Bind Prefix, Mode=OneWay}"
+        PropertyName="{x:Bind Label, Mode=OneWay}"
+        Qualifier="{x:Bind Qualifier, Mode=OneWay}"
+        Style="{x:Bind CardStyle, Mode=OneWay}"
+        UseEditorLabel="True">
+        <StackPanel Spacing="2">
+            <controls:NumberBox
+                x:Name="Number"
+                EditSessionCompleted="OnEditSessionCompleted"
+                EditSessionStarted="OnEditSessionStarted"
+                FontFamily="{x:Bind FontFamily, Mode=OneWay}"
+                FontWeight="{x:Bind FontWeight, Mode=OneWay}"
+                IsIndeterminate="{x:Bind IsMixed, Mode=OneWay}"
+                LabelPosition="None"
+                Mask="{x:Bind Mask, Mode=OneWay}"
+                NumberValue="{x:Bind NumberValue, Mode=TwoWay}"
+                Style="{x:Bind NumberStyle, Mode=OneWay}"
+                Tag="{Binding Tag, ElementName=Root}"
+                Validate="OnValidate" />
+            <TextBlock
+                AutomationProperties.LiveSetting="Polite"
+                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                Text="{x:Bind ErrorText, Mode=OneWay}"
+                TextWrapping="Wrap"
+                Visibility="{x:Bind ErrorVisibility, Mode=OneWay}" />
+            <TextBlock
+                FontSize="12"
+                Text="{x:Bind ApplicabilityText, Mode=OneWay}"
+                TextWrapping="Wrap"
+                Visibility="{x:Bind ApplicabilityVisibility, Mode=OneWay}" />
+        </StackPanel>
+    </local:PropertyCard>
+</UserControl>

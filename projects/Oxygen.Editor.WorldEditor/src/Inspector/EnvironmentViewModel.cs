@@ -12,6 +12,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.World.Inspector.Environment;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
@@ -44,6 +45,7 @@ public partial class EnvironmentViewModel(
     private IDisposable? meteringMaskAssetSubscription;
     private Scene? scene;
     private bool isApplyingEditorValues;
+    private ExposureCompensationCurveEditorViewModel? curveEditor;
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<Scene, Dictionary<Guid, PropertyEdit>> initialAtmosphereSources = new();
 
     /// <summary>Gets the canonical editor for the bound primary source.</summary>
@@ -243,8 +245,8 @@ public partial class EnvironmentViewModel(
     /// <summary>Gets texture choices from the shared content-browser asset catalog.</summary>
     public ObservableCollection<AssetPickerRow> MeteringMaskRows { get; } = [];
 
-    /// <summary>Gets the editable exposure compensation curve keys.</summary>
-    internal ObservableCollection<ExposureCompensationKeyViewModel> AutoExposureCurveKeys { get; } = [];
+    /// <summary>Gets the parent-owned curve editor borrowing this scene's edit and diagnostic owner.</summary>
+    public ExposureCompensationCurveEditorViewModel CurveEditor => this.GetCurveEditor();
 
     /// <summary>Gets texture picker entries matching the current search text.</summary>
     public IReadOnlyList<AssetPickerRow> FilteredMeteringMaskRows
@@ -605,6 +607,7 @@ public partial class EnvironmentViewModel(
             this.lightAssignments?.Dispose();
             this.PrimaryAtmosphereSource.Dispose();
             this.SecondaryAtmosphereSource.Dispose();
+            this.curveEditor?.Dispose();
         }
     }
 
@@ -747,6 +750,7 @@ public partial class EnvironmentViewModel(
     partial void OnAutoExposureCompensationCurveChanged(ImmutableArray<ExposureCompensationKeyData> value)
     {
         this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.AutoExposureCompensationCurve, value);
+        this.curveEditor?.Refresh(this.AutoExposureCompensationCurve);
     }
 
     partial void OnBloomIntensityChanged(float value)
@@ -835,86 +839,19 @@ public partial class EnvironmentViewModel(
     partial void OnSunDiskEnabledChanged(bool value)
         => this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.SunDiskEnabled, value);
 
-    private void OnExposureCurveKeyChanged(object? sender, EventArgs args)
+    private ExposureCompensationCurveEditorViewModel GetCurveEditor()
     {
-        if (!this.isApplyingEditorValues)
+        if (this.curveEditor is null)
         {
-            this.AutoExposureCompensationCurve = [.. this.AutoExposureCurveKeys.Select(static key => key.ToData())];
-        }
-    }
-
-    private void SyncExposureCurveKeys(ImmutableArray<ExposureCompensationKeyData> curve)
-    {
-        var keys = curve.IsDefault ? [] : curve;
-        while (this.AutoExposureCurveKeys.Count > keys.Length)
-        {
-            var removed = this.AutoExposureCurveKeys[^1];
-            removed.Changed -= this.OnExposureCurveKeyChanged;
-            this.AutoExposureCurveKeys.RemoveAt(this.AutoExposureCurveKeys.Count - 1);
+            this.curveEditor = new(
+                value => this.AutoExposureCompensationCurve = value,
+                () => this.IsInputEnabled && this.scene is not null,
+                this,
+                this.AutoExposureCompensationCurveDiagnostic);
+            this.curveEditor.Refresh(this.AutoExposureCompensationCurve);
         }
 
-        for (var index = 0; index < keys.Length; index++)
-        {
-            if (index < this.AutoExposureCurveKeys.Count)
-            {
-                var existing = this.AutoExposureCurveKeys[index];
-                existing.Changed -= this.OnExposureCurveKeyChanged;
-                existing.MeteredEv = keys[index].MeteredEv;
-                existing.CompensationEv = keys[index].CompensationEv;
-                existing.Changed += this.OnExposureCurveKeyChanged;
-            }
-            else
-            {
-                var key = new ExposureCompensationKeyViewModel(keys[index]);
-                key.Changed += this.OnExposureCurveKeyChanged;
-                this.AutoExposureCurveKeys.Add(key);
-            }
-        }
-    }
-
-    internal bool ValidateExposureCurveKey(ExposureCompensationKeyViewModel key, bool editMeteredEv, float candidate)
-    {
-        if (!float.IsFinite(candidate))
-        {
-            return false;
-        }
-
-        if (!editMeteredEv)
-        {
-            return true;
-        }
-
-        var index = this.AutoExposureCurveKeys.IndexOf(key);
-        return index >= 0
-            && (index == 0 || candidate > this.AutoExposureCurveKeys[index - 1].MeteredEv)
-            && (index == this.AutoExposureCurveKeys.Count - 1 || candidate < this.AutoExposureCurveKeys[index + 1].MeteredEv);
-    }
-
-    [RelayCommand]
-    private void AddExposureCurveKey()
-    {
-        if (this.AutoExposureCurveKeys.Count >= 64)
-        {
-            return;
-        }
-
-        var meteredEv = this.AutoExposureCurveKeys.Count == 0 ? 0 : this.AutoExposureCurveKeys[^1].MeteredEv + 1;
-        var key = new ExposureCompensationKeyViewModel(new(meteredEv, 0));
-        key.Changed += this.OnExposureCurveKeyChanged;
-        this.AutoExposureCurveKeys.Add(key);
-        this.AutoExposureCompensationCurve = [.. this.AutoExposureCurveKeys.Select(static item => item.ToData())];
-    }
-
-    [RelayCommand]
-    private void RemoveExposureCurveKey(object? parameter)
-    {
-        if (parameter is not ExposureCompensationKeyViewModel key || !this.AutoExposureCurveKeys.Remove(key))
-        {
-            return;
-        }
-
-        key.Changed -= this.OnExposureCurveKeyChanged;
-        this.AutoExposureCompensationCurve = [.. this.AutoExposureCurveKeys.Select(static item => item.ToData())];
+        return this.curveEditor;
     }
 
     private void ApplyBackgroundAxisEdit(float r, float g, float b)
@@ -1164,7 +1101,7 @@ public partial class EnvironmentViewModel(
             this.AutoExposureTransitionDistanceEv = value.AutoExposureTransitionDistanceEv;
             this.AutoExposureMeteringMask = value.AutoExposureMeteringMask;
             this.AutoExposureCompensationCurve = value.AutoExposureCompensationCurve;
-            this.SyncExposureCurveKeys(value.AutoExposureCompensationCurve);
+        this.curveEditor?.Refresh(value.AutoExposureCompensationCurve);
         this.BloomIntensity = value.BloomIntensity;
         this.BloomThreshold = value.BloomThreshold;
         this.Saturation = value.Saturation;

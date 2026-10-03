@@ -4,7 +4,8 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:DroidNet.Controls"
-    xmlns:editorcontrols="using:Oxygen.Editor.Controls">
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:fields="using:Oxygen.Editor.World.Inspector.Controls">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -13,97 +14,58 @@
         </ResourceDictionary>
     </UserControl.Resources>
     <StackPanel Spacing="4">
-        <editorcontrols:PropertyCard
-            HorizontalContentAlignment="Stretch"
-            PropertyName="Azimuth"
-            Qualifier="°">
-            <StackPanel Spacing="2">
-                <controls:NumberBox
-                    HorizontalAlignment="Stretch"
-                    EditSessionCompleted="NumberEditCompleted"
-                    EditSessionStarted="NumberEditStarted"
-                    HorizontalValueAlignment="Right"
-                    LabelPosition="None"
-                    Mask="~.###"
-                    NumberValue="{Binding SunAzimuth, Mode=TwoWay}"
-                    Tag="SunAzimuth" />
-                <TextBlock
-                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                    Text="{Binding SunAzimuthDiagnostic.Message}"
-                    TextWrapping="Wrap"
-                    Visibility="{Binding SunAzimuthDiagnostic.HasError, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-            </StackPanel>
-        </editorcontrols:PropertyCard>
-        <editorcontrols:PropertyCard
-            HorizontalContentAlignment="Stretch"
-            PropertyName="Elevation"
-            Qualifier="°">
-            <StackPanel Spacing="2">
-                <controls:NumberBox
-                    HorizontalAlignment="Stretch"
-                    EditSessionCompleted="NumberEditCompleted"
-                    EditSessionStarted="NumberEditStarted"
-                    HorizontalValueAlignment="Right"
-                    LabelPosition="None"
-                    Mask="~.###"
-                    NumberValue="{Binding SunElevation, Mode=TwoWay}"
-                    Tag="SunElevation" />
-                <TextBlock
-                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                    Text="{Binding SunElevationDiagnostic.Message}"
-                    TextWrapping="Wrap"
-                    Visibility="{Binding SunElevationDiagnostic.HasError, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-            </StackPanel>
-        </editorcontrols:PropertyCard>
-        <editorcontrols:PropertyCard
-            HorizontalContentAlignment="Stretch"
-            PropertyName="Angular diameter"
-            Qualifier="°">
-            <StackPanel Spacing="2">
-                <controls:NumberBox
-                    HorizontalAlignment="Stretch"
-                    EditSessionCompleted="NumberEditCompleted"
-                    EditSessionStarted="NumberEditStarted"
-                    HorizontalValueAlignment="Right"
-                    LabelPosition="None"
-                    Mask="~.###"
-                    NumberValue="{Binding AngularDiameterDegrees, Mode=TwoWay}"
-                    Tag="AngularSizeRadians" />
-                <TextBlock
-                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                    Text="{Binding AngularSizeRadiansDiagnostic.Message}"
-                    TextWrapping="Wrap"
-                    Visibility="{Binding AngularSizeRadiansDiagnostic.HasError, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-            </StackPanel>
-        </editorcontrols:PropertyCard>
-        <editorcontrols:PropertyCard
-            HorizontalContentAlignment="Stretch"
-            EditorMinimumWidth="248"
-            IsCompound="True"
-            Layout="Stacked"
-            PropertyName="Disk luminance scale"
-            Qualifier="RGB ×">
-            <StackPanel Spacing="2">
-                <controls:VectorBox
-                    x:Name="DiskMultiplier"
-                    HorizontalAlignment="Stretch"
-                    AutomationProperties.Name="Disk luminance scale, RGB multiplier"
-                    ComponentLabelPosition="Left"
-                    Dimension="3"
-                    EditSessionCompleted="VectorEditCompleted"
-                    EditSessionStarted="VectorEditStarted"
-                    LabelPosition="None"
-                    Tag="DiskScale"
-                    XValue="{Binding DiskScaleR, Mode=TwoWay}"
-                    YValue="{Binding DiskScaleG, Mode=TwoWay}"
-                    ZValue="{Binding DiskScaleB, Mode=TwoWay}" />
-                <TextBlock
-                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                    Text="{Binding AtmosphereDiskLuminanceScaleRgbDiagnostic.Message}"
-                    TextWrapping="Wrap"
-                    Visibility="{Binding AtmosphereDiskLuminanceScaleRgbDiagnostic.HasError, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-            </StackPanel>
-        </editorcontrols:PropertyCard>
+        <editorcontrols:InspectorNumberField
+            CardStyle="{StaticResource ScenePropertyCardStyle}"
+            EditSessionCompleted="NumberEditCompleted"
+            EditSessionStarted="NumberEditStarted"
+            ErrorText="{Binding SunAzimuthDiagnostic.Message}"
+            FontSize="14"
+            HasError="{Binding SunAzimuthDiagnostic.HasError}"
+            Label="Azimuth"
+            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+            NumberValue="{Binding SunAzimuth, Mode=TwoWay}"
+            Qualifier="°"
+            Tag="SunAzimuth" />
+        <editorcontrols:InspectorNumberField
+            CardStyle="{StaticResource ScenePropertyCardStyle}"
+            EditSessionCompleted="NumberEditCompleted"
+            EditSessionStarted="NumberEditStarted"
+            ErrorText="{Binding SunElevationDiagnostic.Message}"
+            FontSize="14"
+            HasError="{Binding SunElevationDiagnostic.HasError}"
+            Label="Elevation"
+            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+            NumberValue="{Binding SunElevation, Mode=TwoWay}"
+            Qualifier="°"
+            Tag="SunElevation" />
+        <editorcontrols:InspectorNumberField
+            CardStyle="{StaticResource ScenePropertyCardStyle}"
+            EditSessionCompleted="NumberEditCompleted"
+            EditSessionStarted="NumberEditStarted"
+            ErrorText="{Binding AngularSizeRadiansDiagnostic.Message}"
+            FontSize="14"
+            HasError="{Binding AngularSizeRadiansDiagnostic.HasError}"
+            Label="Angular diameter"
+            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+            NumberValue="{Binding AngularDiameterDegrees, Mode=TwoWay}"
+            Qualifier="°"
+            Tag="AngularSizeRadians" />
+        <fields:InspectorRgbField
+            Blue="{Binding DiskScaleB, Mode=TwoWay}"
+            ChannelAutomationName="Disk luminance scale, RGB multiplier"
+            ComponentMask="~.#"
+            DiagnosticSpacing="2"
+            EditSessionCompleted="VectorEditCompleted"
+            EditSessionStarted="VectorEditStarted"
+            ErrorText="{Binding AtmosphereDiskLuminanceScaleRgbDiagnostic.Message}"
+            FontSize="14"
+            Green="{Binding DiskScaleG, Mode=TwoWay}"
+            HasError="{Binding AtmosphereDiskLuminanceScaleRgbDiagnostic.HasError}"
+            IsMultiplier="True"
+            Label="Disk luminance scale"
+            Qualifier="RGB ×"
+            Red="{Binding DiskScaleR, Mode=TwoWay}"
+            Tag="DiskScale" />
         <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Per-pixel transmittance">
             <ToggleSwitch IsOn="{Binding UsePerPixelAtmosphereTransmittance, Mode=TwoWay}" />
         </editorcontrols:PropertyCard>

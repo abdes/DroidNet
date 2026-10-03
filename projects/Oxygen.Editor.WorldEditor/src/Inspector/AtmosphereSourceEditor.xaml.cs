@@ -15,7 +15,6 @@ public sealed partial class AtmosphereSourceView : UserControl
     public AtmosphereSourceView()
     {
         this.InitializeComponent();
-        InspectorRgbPresentation.Configure(this.DiskMultiplier);
     }
 
     private void NumberEditStarted(object? sender, NumberBoxEditSessionEventArgs args)

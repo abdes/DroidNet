@@ -25,6 +25,8 @@ internal static class InspectorFieldControls
 {
     internal static async Task<FrameworkElement> FindEnvironmentFieldControlAsync(EnvironmentView view, ScrollViewer scroller, EnvironmentViewModel model, EnvironmentFieldCase field, CancellationToken cancellationToken)
     {
+        ((TextBox)view.FindName("ScenePropertySearchBox")).Text = field.VectorTag
+            ?? (string.Equals(field.Field, "ToneMapping", StringComparison.Ordinal) ? "tone_mapper" : field.Field);
         foreach (var section in view.FindDescendants().OfType<Oxygen.Editor.Controls.PropertiesExpander>())
         {
             section.IsExpanded = true;

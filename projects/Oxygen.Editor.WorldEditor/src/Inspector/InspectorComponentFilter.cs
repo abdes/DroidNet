@@ -23,7 +23,7 @@ public sealed partial class InspectorComponentFilter(Type componentType, string 
     public partial string UnavailableReason { get; set; } = string.Empty;
 
     /// <summary>Gets the full label and any availability explanation for the row tooltip.</summary>
-    public string ToolTip => string.Join(Environment.NewLine, new[] { this.Label, this.UnavailableReason, this.ValidationMessage }.Where(static part => part.Length != 0));
+    public string ToolTip => string.Join(System.Environment.NewLine, new[] { this.Label, this.UnavailableReason, this.ValidationMessage }.Where(static part => part.Length != 0));
 
     /// <summary>Gets or sets current field feedback, including while the section is hidden.</summary>
     [ObservableProperty]

@@ -7,6 +7,7 @@
     xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:fields="using:Oxygen.Editor.World.Inspector.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
     xmlns:ui="using:CommunityToolkit.WinUI"
@@ -63,84 +64,12 @@
                         ToolTipService.ToolTip="{x:Bind ViewModel.AssetButtonLabel, Mode=OneWay}">
                         <muxc:SplitButton.Flyout>
                             <Flyout x:Name="AssetPickerFlyout">
-                                <StackPanel Spacing="4">
-                                    <InfoBar
-                                        IsClosable="False"
-                                        IsOpen="{x:Bind ViewModel.HasBuiltinCatalogNotice, Mode=OneWay}"
-                                        Message="{x:Bind ViewModel.BuiltinCatalogNotice, Mode=OneWay}"
-                                        Severity="Warning">
-                                        <InfoBar.ActionButton>
-                                            <Button Command="{x:Bind ViewModel.RetryBuiltinCatalogCommand}" Content="Retry" />
-                                        </InfoBar.ActionButton>
-                                    </InfoBar>
-
-                                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.Groups, Mode=OneWay}">
-                                        <ItemsRepeater.Layout>
-                                            <StackLayout Spacing="0" />
-                                        </ItemsRepeater.Layout>
-                                        <ItemsRepeater.ItemTemplate>
-                                            <DataTemplate>
-                                                <StackPanel>
-                                                    <TextBlock
-                                                        Margin="8,8,8,4"
-                                                        Style="{ThemeResource CaptionTextBlockStyle}"
-                                                        Text="{Binding Key}" />
-                                                    <ItemsRepeater ItemsSource="{Binding Items}">
-                                                        <ItemsRepeater.ItemTemplate>
-                                                            <DataTemplate>
-                                                                <Button
-                                                                    Padding="8,6"
-                                                                    HorizontalAlignment="Stretch"
-                                                                    HorizontalContentAlignment="Left"
-                                                                    Background="Transparent"
-                                                                    BorderThickness="0"
-                                                                    Click="OnPickerItemClicked"
-                                                                    IsEnabled="{Binding Item.IsEnabled, Mode=OneWay}"
-                                                                    ToolTipService.ToolTip="{Binding Item.DisplayPath, Mode=OneWay}">
-                                                                    <Grid>
-                                                                        <Grid.ColumnDefinitions>
-                                                                            <ColumnDefinition Width="Auto" />
-                                                                            <ColumnDefinition Width="*" />
-                                                                        </Grid.ColumnDefinitions>
-
-                                                                        <Border
-                                                                            Width="32"
-                                                                            Height="32"
-                                                                            VerticalAlignment="Center"
-                                                                            BorderBrush="{ThemeResource PropertyCardBorderBrush}"
-                                                                            BorderThickness="1">
-                                                                            <controls:Thumbnail
-                                                                                Width="32"
-                                                                                Height="32"
-                                                                                Content="{Binding Item.ThumbnailModel, Mode=OneWay}"
-                                                                                ContentTemplate="{StaticResource AssetThumbnailTemplate}" />
-                                                                        </Border>
-
-                                                                        <StackPanel
-                                                                            Grid.Column="1"
-                                                                            Margin="8,0,0,0"
-                                                                            VerticalAlignment="Center">
-                                                                            <TextBlock
-                                                                                Style="{ThemeResource BodyTextBlockStyle}"
-                                                                                Text="{Binding Item.Name, Mode=OneWay}"
-                                                                                TextWrapping="NoWrap" />
-                                                                            <TextBlock
-                                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                                Style="{ThemeResource CaptionTextBlockStyle}"
-                                                                                Text="{Binding Item.DisplayType, Mode=OneWay}"
-                                                                                TextWrapping="NoWrap"
-                                                                                ToolTipService.ToolTip="{Binding Item.DisplayType, Mode=OneWay}" />
-                                                                        </StackPanel>
-                                                                    </Grid>
-                                                                </Button>
-                                                            </DataTemplate>
-                                                        </ItemsRepeater.ItemTemplate>
-                                                    </ItemsRepeater>
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </ItemsRepeater.ItemTemplate>
-                                    </ItemsRepeater>
-                                </StackPanel>
+                                <fields:AssetPickerContent
+                                    Groups="{x:Bind ViewModel.Groups, Mode=OneWay}"
+                                    HasNotice="{x:Bind ViewModel.HasBuiltinCatalogNotice, Mode=OneWay}"
+                                    ItemClicked="OnPickerItemClicked"
+                                    NoticeText="{x:Bind ViewModel.BuiltinCatalogNotice, Mode=OneWay}"
+                                    RetryCommand="{x:Bind ViewModel.RetryBuiltinCatalogCommand}" />
                             </Flyout>
                         </muxc:SplitButton.Flyout>
                     </muxc:SplitButton>
@@ -189,84 +118,13 @@
                         ToolTipService.ToolTip="{x:Bind ViewModel.MaterialButtonLabel, Mode=OneWay}">
                         <muxc:SplitButton.Flyout>
                             <Flyout x:Name="MaterialPickerFlyout" Opening="OnMaterialPickerOpening">
-                                <StackPanel Spacing="4">
-                                    <InfoBar
-                                        IsClosable="False"
-                                        IsOpen="{x:Bind ViewModel.HasBuiltinCatalogNotice, Mode=OneWay}"
-                                        Message="{x:Bind ViewModel.BuiltinCatalogNotice, Mode=OneWay}"
-                                        Severity="Warning">
-                                        <InfoBar.ActionButton>
-                                            <Button Command="{x:Bind ViewModel.RetryBuiltinCatalogCommand}" Content="Retry" />
-                                        </InfoBar.ActionButton>
-                                    </InfoBar>
-
-                                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.MaterialGroups, Mode=OneWay}">
-                                        <ItemsRepeater.Layout>
-                                            <StackLayout Spacing="0" />
-                                        </ItemsRepeater.Layout>
-                                        <ItemsRepeater.ItemTemplate>
-                                            <DataTemplate>
-                                                <StackPanel>
-                                                    <TextBlock
-                                                        Margin="8,8,8,4"
-                                                        Style="{ThemeResource CaptionTextBlockStyle}"
-                                                        Text="{Binding Key}" />
-                                                    <ItemsRepeater ItemsSource="{Binding Items}">
-                                                        <ItemsRepeater.ItemTemplate>
-                                                            <DataTemplate>
-                                                                <Button
-                                                                    Padding="8,6"
-                                                                    HorizontalAlignment="Stretch"
-                                                                    HorizontalContentAlignment="Left"
-                                                                    Background="Transparent"
-                                                                    BorderThickness="0"
-                                                                    Click="OnMaterialPickerItemClicked"
-                                                                    IsEnabled="{Binding Item.IsEnabled}"
-                                                                    ToolTipService.ToolTip="{Binding Item.DisplayPath}">
-                                                                    <Grid>
-                                                                        <Grid.ColumnDefinitions>
-                                                                            <ColumnDefinition Width="Auto" />
-                                                                            <ColumnDefinition Width="*" />
-                                                                        </Grid.ColumnDefinitions>
-
-                                                                        <Border
-                                                                            Width="32"
-                                                                            Height="32"
-                                                                            VerticalAlignment="Center"
-                                                                            BorderBrush="{ThemeResource PropertyCardBorderBrush}"
-                                                                            BorderThickness="1">
-                                                                            <controls:Thumbnail
-                                                                                Width="32"
-                                                                                Height="32"
-                                                                                Content="{Binding Item.ThumbnailModel}"
-                                                                                ContentTemplate="{StaticResource AssetThumbnailTemplate}" />
-                                                                        </Border>
-
-                                                                        <StackPanel
-                                                                            Grid.Column="1"
-                                                                            Margin="8,0,0,0"
-                                                                            VerticalAlignment="Center">
-                                                                            <TextBlock
-                                                                                Style="{ThemeResource BodyTextBlockStyle}"
-                                                                                Text="{Binding Item.Name}"
-                                                                                TextWrapping="NoWrap" />
-                                                                            <TextBlock
-                                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                                Style="{ThemeResource CaptionTextBlockStyle}"
-                                                                                Text="{Binding Item.DisplayType}"
-                                                                                TextWrapping="NoWrap"
-                                                                                ToolTipService.ToolTip="{Binding Item.DisplayType}" />
-                                                                        </StackPanel>
-                                                                    </Grid>
-                                                                </Button>
-                                                            </DataTemplate>
-                                                        </ItemsRepeater.ItemTemplate>
-                                                    </ItemsRepeater>
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </ItemsRepeater.ItemTemplate>
-                                    </ItemsRepeater>
-                                </StackPanel>
+                                <fields:AssetPickerContent
+                                    Groups="{x:Bind ViewModel.MaterialGroups, Mode=OneWay}"
+                                    HasNotice="{x:Bind ViewModel.HasBuiltinCatalogNotice, Mode=OneWay}"
+                                    IsMaterial="True"
+                                    ItemClicked="OnMaterialPickerItemClicked"
+                                    NoticeText="{x:Bind ViewModel.BuiltinCatalogNotice, Mode=OneWay}"
+                                    RetryCommand="{x:Bind ViewModel.RetryBuiltinCatalogCommand}" />
                             </Flyout>
                         </muxc:SplitButton.Flyout>
                     </muxc:SplitButton>

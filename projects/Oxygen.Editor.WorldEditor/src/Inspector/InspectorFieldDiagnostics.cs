@@ -20,7 +20,7 @@ internal sealed class InspectorFieldDiagnostics
     public event EventHandler? FeedbackChanged;
 
     /// <summary>Gets the distinct current errors for the component entry.</summary>
-    public string Summary => string.Join(Environment.NewLine, this.fields.Values.Select(static diagnostic => diagnostic.Message)
+    public string Summary => string.Join(System.Environment.NewLine, this.fields.Values.Select(static diagnostic => diagnostic.Message)
         .Where(static message => message.Length != 0).Distinct(StringComparer.Ordinal));
 
     /// <summary>Gets stable bindable feedback for a property.</summary>

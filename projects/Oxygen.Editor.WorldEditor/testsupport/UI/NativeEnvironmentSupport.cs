@@ -25,7 +25,7 @@ internal static class NativeEnvironmentSupport
     {
         "AtmosphereEnabled" => FindEnvironmentToggle(view, "Sky Atmosphere"),
         "ExposureEnabled" => FindEnvironmentToggle(view, "Exposure"),
-        "SunDiskEnabled" => view.FindDescendant<CheckBox>(),
+        "SunDiskEnabled" => view.FindDescendant<ToggleSwitch>(element => Equals(element.Tag, "SunDiskEnabled")),
         "ExposureMode" => view.FindDescendant<ComboBox>(element => ReferenceEquals(element.ItemsSource, model.ExposureModes)),
         "ToneMapping" => view.FindDescendant<ComboBox>(element => ReferenceEquals(element.ItemsSource, model.ToneMappingModes)),
         "AutoExposureMeteringMode" => view.FindDescendant<ComboBox>(element => ReferenceEquals(element.ItemsSource, model.MeteringModes)),

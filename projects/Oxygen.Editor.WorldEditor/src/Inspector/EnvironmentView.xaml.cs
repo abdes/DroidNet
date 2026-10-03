@@ -6,12 +6,13 @@ using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Data;
+using Oxygen.Editor.World.Inspector.Controls;
 using Oxygen.Editor.World.Inspector.Geometry;
-using Oxygen.Editor.World.Serialization;
-using NumberBox = DroidNet.Controls.NumberBox;
-using EditorPropertyCard = Oxygen.Editor.Controls.PropertyCard;
+using Oxygen.Editor.World.Inspector.Presentation;
 using EditorPropertiesExpander = Oxygen.Editor.Controls.PropertiesExpander;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
+using InspectorNumberField = Oxygen.Editor.Controls.InspectorNumberField;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -21,15 +22,12 @@ namespace Oxygen.Editor.World.Inspector;
 [ViewModel(typeof(EnvironmentViewModel))]
 public sealed partial class EnvironmentView
 {
-    private readonly Dictionary<EditorPropertiesExpander, bool> expandedBeforeSearch = [];
-    private readonly Dictionary<EditorPropertyCard, TextBlock> applicabilityNotes = [];
-    private readonly Dictionary<EditorPropertyCard, string> propertySearchText = [];
-    private readonly Dictionary<EditorPropertiesExpander, EditorPropertyCard[]> sectionCards = [];
-    private readonly Dictionary<Expander, EditorPropertyCard[]> disclosureCards = [];
-    private readonly Dictionary<Expander, bool> disclosuresBeforeSearch = [];
+    private readonly InspectorSearchModel search = EnvironmentFieldCatalog.Create();
+    private readonly Dictionary<string, FrameworkElement> fields = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, EditorPropertiesExpander> sections = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Expander> disclosures = new(StringComparer.Ordinal);
     private EnvironmentViewModel? observedModel;
-    private bool hasActiveSearch;
-    private string propertyScope = "All";
+    private InspectorPropertyScope propertyScope;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="EnvironmentView"/> class.
@@ -37,82 +35,136 @@ public sealed partial class EnvironmentView
     public EnvironmentView()
     {
         this.InitializeComponent();
-        InspectorRgbPresentation.Configure(this.GroundAlbedoChannels);
-        InspectorRgbPresentation.Configure(this.SkyLuminanceChannels);
-        InspectorRgbPresentation.Configure(this.BackgroundChannels);
-        this.OrganizeSceneSections();
+        this.RegisterPropertyCards();
         _ = this.ScenePropertySearchBox.RegisterPropertyChangedCallback(TextBox.TextProperty, (_, _) => this.ApplyScenePropertyFilter());
         this.Loaded += this.OnLoaded;
         this.Unloaded += this.OnUnloaded;
+        this.ViewModelChanged += (_, _) => this.ObserveModel();
         this.AerialStartInput.Loaded += (_, _) => this.TryFocusAerialStart();
     }
 
-    private void OrganizeSceneSections()
+    private void RegisterPropertyCards()
     {
-        var sections = new[] { this.AtmosphereLightsSection, this.SkyAtmosphereSection, this.BackgroundSection, this.ExposureSection, this.ToneMappingSection, this.ColorGradingSection, this.BloomSection };
-        foreach (var section in sections)
-        {
-            this.sectionCards[section] = section.Items.OfType<EditorPropertyCard>().ToArray();
-            this.SceneSections.Children.Remove(section);
-        }
-
-        this.SceneSections.Children.Remove(this.PostProcessingHeading);
-        foreach (var section in sections.Take(3))
-        {
-            this.SceneSections.Children.Add(section);
-        }
-
-        this.SceneSections.Children.Add(this.PostProcessingHeading);
-        foreach (var section in sections.Skip(3))
-        {
-            this.SceneSections.Children.Add(section);
-        }
-
-        this.AddDisclosure(this.SkyAtmosphereSection, "Planet & ground", "Planet Radius", "Atmosphere Height", "Ground Albedo");
-        this.AddDisclosure(this.SkyAtmosphereSection, "Scattering", "Rayleigh Height", "Mie Height", "Mie Anisotropy");
-        this.AddDisclosure(this.SkyAtmosphereSection, "Aerial perspective", "Distance scale", "Scattering strength", "Start distance", "Height fog contribution");
-        this.AddDisclosure(this.ExposureSection, "Metering & limits", ["Metering", "Auto Min EV", "Auto Max EV", "Target Luminance", "Spot Radius"], expanded: true);
-        this.AddDisclosure(this.ExposureSection, "Adaptation", "Adapt Up", "Adapt Down", "Adaptation transition distance · Proposed");
-        this.AddDisclosure(this.ExposureSection, "Histogram & calibration", "Key", "Low Percentile", "High Percentile", "Min Log Luminance", "Log Luminance Range", "Dark-sample influence · Proposed");
-        this.AddDisclosure(this.ExposureSection, "Exposure shaping", "Metering mask · Proposed", "Exposure-compensation curve · Proposed");
+        this.sections.Add("AtmosphereLights", this.AtmosphereLightsSection);
+        this.sections.Add("SkyAtmosphere", this.SkyAtmosphereSection);
+        this.sections.Add("Background", this.BackgroundSection);
+        this.sections.Add("Exposure", this.ExposureSection);
+        this.sections.Add("ToneMapping", this.ToneMappingSection);
+        this.sections.Add("ColorGrading", this.ColorGradingSection);
+        this.sections.Add("Bloom", this.BloomSection);
+        this.disclosures.Add("PlanetGround", this.PlanetGroundDisclosure);
+        this.disclosures.Add("Scattering", this.ScatteringDisclosure);
+        this.disclosures.Add("AerialPerspective", this.AerialPerspectiveDisclosure);
+        this.disclosures.Add("MeteringLimits", this.MeteringLimitsDisclosure);
+        this.disclosures.Add("Adaptation", this.AdaptationDisclosure);
+        this.disclosures.Add("HistogramCalibration", this.HistogramCalibrationDisclosure);
+        this.disclosures.Add("ExposureShaping", this.ExposureShapingDisclosure);
+        this.RegisterEnvironmentFields();
+        this.RegisterPostProcessingFields();
     }
 
-    private void GroundAlbedoPicker_ColorChanged(ColorPicker sender, ColorChangedEventArgs args)
+    private void RegisterEnvironmentFields()
     {
-        if (this.ViewModel is { } model && InspectorRgbPresentation.ToDisplayColor(model.GroundAlbedoColor) != args.NewColor)
-        {
-            InspectorColorGestures.Apply(sender, owner => ((EnvironmentViewModel)owner).SetGroundAlbedoColor(InspectorRgbPresentation.ToLinearRgb(args.NewColor)));
-        }
+        this.RegisterField(this.SourcesCard, "Sources");
+        this.RegisterField(this.AtmosphereEnabledCard, "AtmosphereEnabled");
+        this.RegisterField(this.SunDiskEnabledCard, "SunDiskEnabled");
+        this.RegisterField(this.SkyLuminanceCard, "SkyLuminance");
+        this.RegisterField(this.PlanetRadiusKmCard, "PlanetRadiusKm");
+        this.RegisterField(this.AtmosphereHeightKmCard, "AtmosphereHeightKm");
+        this.RegisterField(this.GroundAlbedoCard, "GroundAlbedo");
+        this.RegisterField(this.RayleighScaleHeightKmCard, "RayleighScaleHeightKm");
+        this.RegisterField(this.MieScaleHeightKmCard, "MieScaleHeightKm");
+        this.RegisterField(this.MieAnisotropyCard, "MieAnisotropy");
+        this.RegisterField(this.AerialPerspectiveDistanceScaleCard, "AerialPerspectiveDistanceScale");
+        this.RegisterField(this.AerialScatteringStrengthCard, "AerialScatteringStrength");
+        this.RegisterField(this.AerialStartCard, "AerialPerspectiveStartDepthMeters");
+        this.RegisterField(this.HeightFogContributionCard, "HeightFogContribution");
+        this.RegisterField(this.BackgroundColorCard, "BackgroundColor");
     }
 
-    private void AddDisclosure(EditorPropertiesExpander section, string title, params string[] properties)
-        => this.AddDisclosure(section, title, properties, expanded: false);
-
-    private void AddDisclosure(EditorPropertiesExpander section, string title, string[] properties, bool expanded)
+    private void RegisterPostProcessingFields()
     {
-        var cards = properties.Select(name => this.sectionCards[section].Single(card => string.Equals(card.PropertyName, name, StringComparison.Ordinal))).ToArray();
-        var content = new StackPanel { Spacing = 4 };
-        foreach (var card in cards)
+        this.RegisterField(this.ExposureEnabledCard, "ExposureEnabled");
+        this.RegisterField(this.ExposureModeCard, "ExposureMode");
+        this.RegisterField(this.ManualExposureEvCard, "ManualExposureEv");
+        this.RegisterField(this.ExposureCompensationCard, "ExposureCompensation");
+        this.RegisterField(this.AutoExposureMeteringModeCard, "AutoExposureMeteringMode", this.AutoExposureMeteringModeApplicabilityNote);
+        this.RegisterField(this.AutoExposureMinEvCard, "AutoExposureMinEv");
+        this.RegisterField(this.AutoExposureMaxEvCard, "AutoExposureMaxEv");
+        this.RegisterField(this.AutoExposureTargetLuminanceCard, "AutoExposureTargetLuminance");
+        this.RegisterField(this.AutoExposureSpotMeterRadiusCard, "AutoExposureSpotMeterRadius");
+        this.RegisterField(this.AutoExposureSpeedUpCard, "AutoExposureSpeedUp");
+        this.RegisterField(this.AutoExposureSpeedDownCard, "AutoExposureSpeedDown");
+        this.RegisterField(this.AutoExposureTransitionDistanceEvCard, "AutoExposureTransitionDistanceEv");
+        this.RegisterField(this.ExposureKeyCard, "ExposureKey");
+        this.RegisterField(this.AutoExposureLowPercentileCard, "AutoExposureLowPercentile");
+        this.RegisterField(this.AutoExposureHighPercentileCard, "AutoExposureHighPercentile");
+        this.RegisterField(this.AutoExposureMinLogLuminanceCard, "AutoExposureMinLogLuminance");
+        this.RegisterField(this.AutoExposureLogLuminanceRangeCard, "AutoExposureLogLuminanceRange");
+        this.RegisterField(this.AutoExposureBlackInfluenceCard, "AutoExposureBlackInfluence");
+        this.RegisterField(this.AutoExposureMeteringMaskCard, "AutoExposureMeteringMask", this.AutoExposureMeteringMaskApplicabilityNote);
+        this.RegisterField(this.AutoExposureCompensationCurveCard, "AutoExposureCompensationCurve", this.AutoExposureCompensationCurveApplicabilityNote);
+        this.RegisterField(this.ToneMapperCard, "ToneMapper");
+        this.RegisterField(this.DisplayGammaCard, "DisplayGamma");
+        this.RegisterField(this.SaturationCard, "Saturation");
+        this.RegisterField(this.ContrastCard, "Contrast");
+        this.RegisterField(this.VignetteIntensityCard, "VignetteIntensity");
+        this.RegisterField(this.BloomIntensityCard, "BloomIntensity");
+        this.RegisterField(this.BloomThresholdCard, "BloomThreshold");
+    }
+
+    private void RegisterField(FrameworkElement card, string key, TextBlock? note = null)
+    {
+        var field = this.search.Fields[key];
+        this.fields.Add(key, card);
+        card.SetBinding(VisibilityProperty, new Binding
         {
-            section.Items.Remove(card);
-            content.Children.Add(card);
+            Source = field,
+            Path = new PropertyPath(nameof(InspectorFieldPresentation.IsVisible)),
+            Mode = BindingMode.OneWay,
+            Converter = (IValueConverter)this.Resources["InspectorDiagnosticVisibility"],
+        });
+        if (card is InspectorNumberField numeric)
+        {
+            numeric.SetBinding(InspectorNumberField.ApplicabilityTextProperty, new Binding
+            {
+                Source = field,
+                Path = new PropertyPath(nameof(InspectorFieldPresentation.ApplicabilityText)),
+                Mode = BindingMode.OneWay,
+            });
         }
 
-        var disclosure = new Expander
+        if (note is null)
         {
-            Style = (Style)this.Resources["QuietDisclosure"],
-            Header = title,
-            Content = content,
-            IsExpanded = expanded,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Stretch,
-        };
-        this.disclosureCards[disclosure] = cards;
-        section.Items.Add(disclosure);
+            return;
+        }
+
+        note.SetBinding(TextBlock.TextProperty, new Binding
+        {
+            Source = field,
+            Path = new PropertyPath(nameof(InspectorFieldPresentation.ApplicabilityText)),
+            Mode = BindingMode.OneWay,
+        });
+        note.SetBinding(VisibilityProperty, new Binding
+        {
+            Source = field,
+            Path = new PropertyPath(nameof(InspectorFieldPresentation.HasApplicabilityText)),
+            Mode = BindingMode.OneWay,
+            Converter = (IValueConverter)this.Resources["InspectorDiagnosticVisibility"],
+        });
     }
 
     private void OnLoaded(object sender, RoutedEventArgs args)
+        => this.ObserveModel();
+
+    private void ObserveModel()
     {
+        this.StopObservingModel();
+        if (!this.IsLoaded)
+        {
+            return;
+        }
+
         this.observedModel = this.ViewModel;
         if (this.observedModel is { } model)
         {
@@ -124,6 +176,9 @@ public sealed partial class EnvironmentView
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs args)
+        => this.StopObservingModel();
+
+    private void StopObservingModel()
     {
         if (this.observedModel is { } model)
         {
@@ -188,284 +243,60 @@ public sealed partial class EnvironmentView
         }
     }
 
-    private void RemoveExposureCurveKey_Click(object sender, RoutedEventArgs args)
-    {
-        if (sender is FrameworkElement { DataContext: ExposureCompensationKeyViewModel key })
-        {
-            this.ViewModel?.RemoveExposureCurveKeyCommand.Execute(key);
-        }
-    }
-
-    private void ExposureCurveEditStarted(object? sender, NumberBoxEditSessionEventArgs args)
-        => this.ViewModel?.BeginEditSession("AutoExposureCompensationCurve", args.InteractionKind);
-
-    private void ExposureCurveEditCompleted(object? sender, NumberBoxEditSessionEventArgs args)
-        => this.ViewModel?.CompleteEditSession(args);
-
-    private void ExposureCurveKey_Validate(object? sender, ValidationEventArgs<float> args)
-    {
-        args.IsValid = sender is FrameworkElement { DataContext: ExposureCompensationKeyViewModel key, Tag: string field }
-            && this.ViewModel?.ValidateExposureCurveKey(key, editMeteredEv: string.Equals(field, "MeteredEv", StringComparison.Ordinal), args.NewValue) == true;
-    }
-
     private void ScenePropertyScope_Changed(object sender, SelectionChangedEventArgs args)
     {
         if (sender is CommunityToolkit.WinUI.Controls.Segmented selector)
         {
-            this.propertyScope = selector.SelectedIndex switch { 1 => "Environment", 2 => "Post-processing", _ => "All" };
+            this.propertyScope = selector.SelectedIndex switch
+            {
+                1 => InspectorPropertyScope.Environment,
+                2 => InspectorPropertyScope.PostProcessing,
+                _ => InspectorPropertyScope.All,
+            };
             this.ApplyScenePropertyFilter();
         }
     }
 
     private void ApplyScenePropertyFilter()
     {
-        if (this.ViewModel is not { } model || this.ScenePropertySearchBox is null || this.sectionCards.Count == 0)
+        if (this.ViewModel is not { } model || this.ScenePropertySearchBox is null || this.fields.Count == 0)
         {
             return;
         }
 
-        var query = this.ScenePropertySearchBox.Text.Trim();
-        var queryTerms = query.Split([' ', '\t', '/', '_', '-'], StringSplitOptions.RemoveEmptyEntries);
-        var isSearching = queryTerms.Length > 0;
-        this.ClearPropertySearchButton.Visibility = isSearching ? Visibility.Visible : Visibility.Collapsed;
-        var sections = new[]
+        foreach (var (key, section) in this.sections)
         {
-            this.SkyAtmosphereSection,
-            this.AtmosphereLightsSection,
-            this.ExposureSection,
-            this.ToneMappingSection,
-            this.ColorGradingSection,
-            this.BloomSection,
-            this.BackgroundSection,
-        };
-
-        if (isSearching && !this.hasActiveSearch)
-        {
-            this.expandedBeforeSearch.Clear();
-            foreach (var section in sections)
-            {
-                this.expandedBeforeSearch[section] = section.IsExpanded;
-            }
-
-            foreach (var disclosure in this.disclosureCards.Keys.Concat([this.PrimarySourceDisclosure, this.SecondarySourceDisclosure]))
-            {
-                this.disclosuresBeforeSearch[disclosure] = disclosure.IsExpanded;
-            }
-        }
-        else if (!isSearching && this.hasActiveSearch)
-        {
-            foreach (var (section, wasExpanded) in this.expandedBeforeSearch)
-            {
-                section.IsExpanded = wasExpanded;
-            }
-
-            this.expandedBeforeSearch.Clear();
-            foreach (var (disclosure, wasExpanded) in this.disclosuresBeforeSearch)
-            {
-                disclosure.IsExpanded = wasExpanded;
-            }
-
-            this.disclosuresBeforeSearch.Clear();
+            this.search.RecordExpansion(key, section.IsExpanded);
         }
 
-        this.hasActiveSearch = isSearching;
-        var visibleCardCount = 0;
-        foreach (var section in sections)
+        foreach (var (key, disclosure) in this.disclosures)
         {
-            var tags = (section.Tag as string ?? string.Empty).Split(';', StringSplitOptions.RemoveEmptyEntries);
-            var scopeMatches = string.Equals(this.propertyScope, "All", StringComparison.Ordinal)
-                || tags.Contains(this.propertyScope, StringComparer.Ordinal);
-            var sectionApplicable = !tags.Contains("ToneMapping", StringComparer.Ordinal) || model.IsToneMappingControlsVisible;
-            var sectionVisibleCount = 0;
-
-            foreach (var card in this.sectionCards[section])
-            {
-                var applicable = sectionApplicable && IsPropertyApplicable(card, model);
-                var matches = !isSearching || this.MatchesSearch(card, section, queryTerms);
-                var visible = scopeMatches && (isSearching ? matches : applicable);
-                card.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-                if (visible)
-                {
-                    sectionVisibleCount++;
-                    visibleCardCount++;
-                }
-
-                var applicabilityMessage = isSearching && matches && !applicable
-                    ? this.GetApplicabilityMessage(card, tags, model)
-                    : null;
-                this.SetApplicabilityNote(card, applicabilityMessage);
-            }
-
-            section.Visibility = scopeMatches && sectionVisibleCount > 0 ? Visibility.Visible : Visibility.Collapsed;
-            if (isSearching && scopeMatches && sectionVisibleCount > 0)
-            {
-                section.IsExpanded = true;
-            }
+            this.search.RecordExpansion(key, disclosure.IsExpanded);
         }
 
-        foreach (var (disclosure, cards) in this.disclosureCards)
+        this.search.RecordExpansion("PrimarySource", this.PrimarySourceDisclosure.IsExpanded);
+        this.search.RecordExpansion("SecondarySource", this.SecondarySourceDisclosure.IsExpanded);
+        this.search.Update(this.ScenePropertySearchBox.Text, this.propertyScope, model.ExposureMode, model.AutoExposureMeteringMode, model.ToneMapping);
+        foreach (var (key, section) in this.sections)
         {
-            var visible = cards.Any(card => card.Visibility == Visibility.Visible);
-            disclosure.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-            if (isSearching && visible)
-            {
-                disclosure.IsExpanded = true;
-            }
+            section.Visibility = this.search.IsGroupVisible(key) ? Visibility.Visible : Visibility.Collapsed;
+            section.IsExpanded = this.search.IsExpanded(key);
         }
 
-        if (isSearching && this.AtmosphereLightsSection.Visibility == Visibility.Visible)
+        foreach (var (key, disclosure) in this.disclosures)
         {
-            this.PrimarySourceDisclosure.IsExpanded = true;
-            this.SecondarySourceDisclosure.IsExpanded = true;
+            disclosure.Visibility = this.search.IsGroupVisible(key) ? Visibility.Visible : Visibility.Collapsed;
+            disclosure.IsExpanded = this.search.IsExpanded(key);
         }
 
-        this.EnvironmentHeading.Visibility = sections.Where(section => string.Equals(section.Tag as string, "Environment", StringComparison.Ordinal)).Any(section => section.Visibility == Visibility.Visible) ? Visibility.Visible : Visibility.Collapsed;
-        this.PostProcessingHeading.Visibility = sections.Where(section => (section.Tag as string ?? string.Empty).Contains("Post-processing", StringComparison.Ordinal)).Any(section => section.Visibility == Visibility.Visible) ? Visibility.Visible : Visibility.Collapsed;
-        this.NoScenePropertyMatches.Visibility = isSearching && visibleCardCount == 0 ? Visibility.Visible : Visibility.Collapsed;
+        var revealSources = this.search.IsSearching && this.search.IsGroupVisible("AtmosphereLights");
+        this.PrimarySourceDisclosure.IsExpanded = revealSources || this.search.IsExpanded("PrimarySource");
+        this.SecondarySourceDisclosure.IsExpanded = revealSources || this.search.IsExpanded("SecondarySource");
+        this.EnvironmentHeading.Visibility = this.search.IsScopeVisible(InspectorPropertyScope.Environment) ? Visibility.Visible : Visibility.Collapsed;
+        this.PostProcessingHeading.Visibility = this.search.IsScopeVisible(InspectorPropertyScope.PostProcessing) ? Visibility.Visible : Visibility.Collapsed;
+        this.ClearPropertySearchButton.Visibility = this.search.IsSearching ? Visibility.Visible : Visibility.Collapsed;
+        this.NoScenePropertyMatches.Visibility = this.search.HasNoMatches ? Visibility.Visible : Visibility.Collapsed;
     }
-
-    private static bool IsPropertyApplicable(EditorPropertyCard card, EnvironmentViewModel model)
-        => (card.Tag as string) switch
-        {
-            "AutoExposure" => model.IsAutoExposureVisible,
-            "AutoExposureSpot" => model.IsAutoExposureVisible && model.AutoExposureMeteringMode == MeteringMode.Spot,
-            "ManualExposure" => model.ExposureMode == Oxygen.Editor.World.Serialization.ExposureMode.Manual,
-            _ => true,
-        };
-
-    private string? GetApplicabilityMessage(EditorPropertyCard card, string[] sectionTags, EnvironmentViewModel model)
-    {
-        if (card.Tag as string == "AutoExposureSpot")
-        {
-            return "Stored value; applies in Auto exposure mode with Spot metering.";
-        }
-
-        if (card.Tag as string == "AutoExposure")
-        {
-            return $"Stored value; applies in Auto exposure mode. Current mode: {model.ExposureMode}.";
-        }
-
-        if (card.Tag as string == "ManualExposure")
-        {
-            return $"Stored value; applies in Manual exposure mode. Current mode: {model.ExposureMode}.";
-        }
-
-        return sectionTags.Contains("ToneMapping", StringComparer.Ordinal)
-            ? "Stored value; color grading is inactive while tone mapping is set to None."
-            : null;
-    }
-
-    private void SetApplicabilityNote(EditorPropertyCard card, string? message)
-    {
-        if (!this.applicabilityNotes.TryGetValue(card, out var note))
-        {
-            note = new TextBlock
-            {
-                FontSize = 12,
-                Foreground = card.Foreground,
-                TextWrapping = TextWrapping.Wrap,
-                Visibility = Visibility.Collapsed,
-            };
-
-            if (card.Content is StackPanel stack)
-            {
-                stack.Children.Add(note);
-            }
-            else if (card.Content is UIElement content)
-            {
-                var wrapper = new StackPanel { Spacing = 4 };
-                card.Content = null;
-                wrapper.Children.Add(content);
-                wrapper.Children.Add(note);
-                card.Content = wrapper;
-            }
-
-            this.applicabilityNotes[card] = note;
-        }
-
-        note.Text = message ?? string.Empty;
-        note.Visibility = string.IsNullOrEmpty(message) ? Visibility.Collapsed : Visibility.Visible;
-    }
-
-    private bool MatchesSearch(EditorPropertyCard card, EditorPropertiesExpander section, IReadOnlyList<string> queryTerms)
-    {
-        if (this.propertySearchText.TryGetValue(card, out var searchableText))
-        {
-            return queryTerms.All(term => searchableText.Contains(NormalizeSearchText(term), StringComparison.Ordinal));
-        }
-
-        var values = new List<string>
-        {
-            card.PropertyName,
-            card.Tag?.ToString() ?? string.Empty,
-            section.Header?.ToString() ?? string.Empty,
-            section.Description?.ToString() ?? string.Empty,
-        };
-        if (card.Content is DependencyObject content)
-        {
-            this.CollectSearchTerms(content, values);
-        }
-
-        searchableText = NormalizeSearchText(string.Join(' ', values));
-        this.propertySearchText.Add(card, searchableText);
-        return queryTerms.All(term => searchableText.Contains(NormalizeSearchText(term), StringComparison.Ordinal));
-    }
-
-    private void CollectSearchTerms(DependencyObject element, ICollection<string> values)
-    {
-        if (element is TextBlock note && this.applicabilityNotes.Values.Contains(note))
-        {
-            return;
-        }
-
-        if (element is FrameworkElement frameworkElement)
-        {
-            if (frameworkElement.Tag is { } tag)
-            {
-                values.Add(tag.ToString() ?? string.Empty);
-            }
-
-            if (ToolTipService.GetToolTip(frameworkElement) is string toolTip)
-            {
-                values.Add(toolTip);
-            }
-        }
-
-        switch (element)
-        {
-            case NumberBox number:
-                values.Add(number.Label);
-                break;
-            case VectorBox vector:
-                values.Add(vector.Label);
-                break;
-            case TextBlock textBlock:
-                values.Add(textBlock.Text);
-                break;
-            case ComboBox comboBox:
-                values.Add(comboBox.SelectedItem?.ToString() ?? string.Empty);
-                break;
-        }
-
-        if (element is Panel panel)
-        {
-            foreach (var child in panel.Children)
-            {
-                this.CollectSearchTerms(child, values);
-            }
-        }
-        else if (element is Border border && border.Child is { } child)
-        {
-            this.CollectSearchTerms(child, values);
-        }
-        else if (element is ContentControl contentControl && contentControl.Content is DependencyObject content)
-        {
-            this.CollectSearchTerms(content, values);
-        }
-    }
-
-    private static string NormalizeSearchText(string value)
-        => string.Concat(value.Where(char.IsLetterOrDigit)).ToLowerInvariant();
 
     private void OnFieldFocusRequested(object? sender, EventArgs args) => this.FocusPendingField();
 
@@ -479,14 +310,8 @@ public sealed partial class EnvironmentView
         this.ScenePropertySearchBox.Text = string.Empty;
         this.ScenePropertyScopeSelector.SelectedIndex = 0;
         this.ApplyScenePropertyFilter();
-        foreach (var (disclosure, cards) in this.disclosureCards)
-        {
-            if (cards.Contains(this.AerialStartCard))
-            {
-                disclosure.IsExpanded = true;
-                _ = this.SkyAtmosphereSection.BringItemIntoView(disclosure);
-            }
-        }
+        this.AerialPerspectiveDisclosure.IsExpanded = true;
+        _ = this.SkyAtmosphereSection.BringItemIntoView(this.AerialPerspectiveDisclosure);
         this.TryFocusAerialStart();
         _ = this.DispatcherQueue.TryEnqueue(this.TryFocusAerialStart);
     }
@@ -504,11 +329,18 @@ public sealed partial class EnvironmentView
         }
     }
 
-    private void BackgroundPicker_ColorChanged(ColorPicker sender, ColorChangedEventArgs args)
+    private void OnRgbColorPicked(object? sender, InspectorRgbColorPickedEventArgs args)
     {
-        if (this.ViewModel is { } model && InspectorRgbPresentation.ToDisplayColor(model.BackgroundColor) != args.NewColor)
+        if (args.Owner is EnvironmentViewModel model && sender is FrameworkElement { Tag: string field })
         {
-            InspectorColorGestures.Apply(sender, owner => ((EnvironmentViewModel)owner).SetBackgroundColor(InspectorRgbPresentation.ToLinearRgb(args.NewColor)));
+            if (string.Equals(field, "GroundAlbedo", StringComparison.Ordinal))
+            {
+                model.SetGroundAlbedoColor(args.Color);
+            }
+            else if (string.Equals(field, "BackgroundColor", StringComparison.Ordinal))
+            {
+                model.SetBackgroundColor(args.Color);
+            }
         }
     }
 
@@ -536,12 +368,4 @@ public sealed partial class EnvironmentView
 
     private void VectorEditCompleted(object? sender, VectorBoxEditSessionEventArgs args)
         => this.ViewModel?.CompleteEditSession(new(args.InteractionKind, args.CompletionKind));
-
-    private void ColorPickerLoaded(object sender, RoutedEventArgs args)
-    {
-        if (sender is ColorPicker picker)
-        {
-            InspectorColorGestures.Attach(picker, this.ViewModel, picker.Tag as string ?? "BackgroundColor");
-        }
-    }
 }

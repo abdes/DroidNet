@@ -21,78 +21,57 @@
         HeaderIcon="{ui:FontIcon Glyph='&#xE714;'}"
         IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
         <editorcontrols:PropertiesExpander.Items>
-            <editorcontrols:PropertyCard PropertyName="Field of view" Qualifier="°">
-                <StackPanel Spacing="2">
-                    <controls:NumberBox
-                        EditSessionCompleted="NumberEditCompleted"
-                        EditSessionStarted="NumberEditStarted"
-                        IsIndeterminate="{x:Bind ViewModel.FieldOfViewIsIndeterminate, Mode=OneWay}"
-                        LabelPosition="None"
-                        Mask="~.###"
-                        NumberValue="{x:Bind ViewModel.FieldOfView, Mode=TwoWay}"
-                        Tag="FieldOfView" />
-                    <TextBlock
-                        AutomationProperties.LiveSetting="Polite"
-                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                        Text="{x:Bind ViewModel.FieldOfViewDiagnostic.Message, Mode=OneWay}"
-                        TextWrapping="Wrap"
-                        Visibility="{x:Bind ViewModel.FieldOfViewDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                </StackPanel>
-            </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard PropertyName="Aspect ratio" Qualifier="">
-                <StackPanel Spacing="2">
-                    <controls:NumberBox
-                        EditSessionCompleted="NumberEditCompleted"
-                        EditSessionStarted="NumberEditStarted"
-                        IsIndeterminate="{x:Bind ViewModel.AspectRatioIsIndeterminate, Mode=OneWay}"
-                        LabelPosition="None"
-                        Mask="~.###"
-                        NumberValue="{x:Bind ViewModel.AspectRatio, Mode=TwoWay}"
-                        Tag="AspectRatio" />
-                    <TextBlock
-                        AutomationProperties.LiveSetting="Polite"
-                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                        Text="{x:Bind ViewModel.AspectRatioDiagnostic.Message, Mode=OneWay}"
-                        TextWrapping="Wrap"
-                        Visibility="{x:Bind ViewModel.AspectRatioDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                </StackPanel>
-            </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard PropertyName="Near plane" Qualifier="m">
-                <StackPanel Spacing="2">
-                    <controls:NumberBox
-                        EditSessionCompleted="NumberEditCompleted"
-                        EditSessionStarted="NumberEditStarted"
-                        IsIndeterminate="{x:Bind ViewModel.NearPlaneIsIndeterminate, Mode=OneWay}"
-                        LabelPosition="None"
-                        Mask="~.###"
-                        NumberValue="{x:Bind ViewModel.NearPlane, Mode=TwoWay}"
-                        Tag="NearPlane" />
-                    <TextBlock
-                        AutomationProperties.LiveSetting="Polite"
-                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                        Text="{x:Bind ViewModel.NearPlaneDiagnostic.Message, Mode=OneWay}"
-                        TextWrapping="Wrap"
-                        Visibility="{x:Bind ViewModel.NearPlaneDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                </StackPanel>
-            </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard PropertyName="Far plane" Qualifier="m">
-                <StackPanel Spacing="2">
-                    <controls:NumberBox
-                        EditSessionCompleted="NumberEditCompleted"
-                        EditSessionStarted="NumberEditStarted"
-                        IsIndeterminate="{x:Bind ViewModel.FarPlaneIsIndeterminate, Mode=OneWay}"
-                        LabelPosition="None"
-                        Mask="~.###"
-                        NumberValue="{x:Bind ViewModel.FarPlane, Mode=TwoWay}"
-                        Tag="FarPlane" />
-                    <TextBlock
-                        AutomationProperties.LiveSetting="Polite"
-                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                        Text="{x:Bind ViewModel.FarPlaneDiagnostic.Message, Mode=OneWay}"
-                        TextWrapping="Wrap"
-                        Visibility="{x:Bind ViewModel.FarPlaneDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                </StackPanel>
-            </editorcontrols:PropertyCard>
+            <editorcontrols:InspectorNumberField
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.FieldOfViewDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.FieldOfViewDiagnostic.HasError, Mode=OneWay}"
+                IsMixed="{x:Bind ViewModel.FieldOfViewIsIndeterminate, Mode=OneWay}"
+                Label="Field of view"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.FieldOfView, Mode=TwoWay}"
+                Qualifier="°"
+                Tag="FieldOfView" />
+            <editorcontrols:InspectorNumberField
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.AspectRatioDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.AspectRatioDiagnostic.HasError, Mode=OneWay}"
+                IsMixed="{x:Bind ViewModel.AspectRatioIsIndeterminate, Mode=OneWay}"
+                Label="Aspect ratio"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.AspectRatio, Mode=TwoWay}"
+                Tag="AspectRatio" />
+            <editorcontrols:InspectorNumberField
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.NearPlaneDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.NearPlaneDiagnostic.HasError, Mode=OneWay}"
+                IsMixed="{x:Bind ViewModel.NearPlaneIsIndeterminate, Mode=OneWay}"
+                Label="Near plane"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.NearPlane, Mode=TwoWay}"
+                Qualifier="m"
+                Tag="NearPlane" />
+            <editorcontrols:InspectorNumberField
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.FarPlaneDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.FarPlaneDiagnostic.HasError, Mode=OneWay}"
+                IsMixed="{x:Bind ViewModel.FarPlaneIsIndeterminate, Mode=OneWay}"
+                Label="Far plane"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.FarPlane, Mode=TwoWay}"
+                Qualifier="m"
+                Tag="FarPlane" />
         </editorcontrols:PropertiesExpander.Items>
     </editorcontrols:PropertiesExpander>
 </UserControl>

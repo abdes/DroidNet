@@ -94,7 +94,8 @@ public sealed partial class InspectorBindingTests
         await LoadTestContentAsync(view).ConfigureAwait(true);
         ((TextBox)view.FindName("ScenePropertySearchBox")).Text = "background";
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var swatch = view.FindDescendant<Button>(button => button.Name == "BackgroundSwatch")!;
+        var field = (Oxygen.Editor.World.Inspector.Controls.InspectorRgbField)view.FindName("BackgroundColorCard");
+        var swatch = (Button)((Oxygen.Editor.Controls.PropertyCard)field.Content).LeadingContent!;
         var displayColor = Windows.UI.Color.FromArgb(255, 128, 64, 32);
         await PickDisplayColorAsync(swatch, displayColor).ConfigureAwait(true);
         await model.PendingEdits.ConfigureAwait(true);

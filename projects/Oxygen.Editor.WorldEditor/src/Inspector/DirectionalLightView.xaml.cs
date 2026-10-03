@@ -5,7 +5,7 @@
 using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.World.Inspector.Controls;
 
 namespace Oxygen.Editor.World.Inspector;
 
@@ -21,15 +21,13 @@ public sealed partial class DirectionalLightView
     public DirectionalLightView()
     {
         this.InitializeComponent();
-        InspectorRgbPresentation.Configure(this.ColorChannels);
-        InspectorRgbPresentation.Configure(this.DiskScaleChannels);
     }
 
-    private void ColorPicker_ColorChanged(ColorPicker sender, ColorChangedEventArgs args)
+    private void OnRgbColorPicked(object? sender, InspectorRgbColorPickedEventArgs args)
     {
-        if (this.ViewModel is { } model && InspectorRgbPresentation.ToDisplayColor(model.ColorValue) != args.NewColor)
+        if (args.Owner is DirectionalLightViewModel model)
         {
-            InspectorColorGestures.Apply(sender, owner => ((DirectionalLightViewModel)owner).SetColor(InspectorRgbPresentation.ToLinearRgb(args.NewColor)));
+            model.SetColor(args.Color);
         }
     }
 
@@ -55,12 +53,4 @@ public sealed partial class DirectionalLightView
 
     private void VectorEditCompleted(object? sender, VectorBoxEditSessionEventArgs args)
         => this.ViewModel?.CompleteEditSession(new(args.InteractionKind, args.CompletionKind));
-
-    private void ColorPickerLoaded(object sender, RoutedEventArgs args)
-    {
-        if (sender is ColorPicker picker)
-        {
-            InspectorColorGestures.Attach(picker, this.ViewModel, "Color");
-        }
-    }
 }

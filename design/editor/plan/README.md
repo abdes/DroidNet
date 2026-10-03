@@ -32,6 +32,13 @@ Detailed milestone plans should include:
 9. Validation Gates
 10. Status Ledger Hook
 
+## Scoped maintenance plans
+
+- [Inspector refactoring with visual fidelity](./inspector-refactoring.md):
+  incremental component/VM extraction, preserving existing authoring behavior
+  through UI tests and local-only screenshot comparisons. This does not reopen
+  ED-M04 or replace milestone delivery plans.
+
 ## Milestone Plans
 
 | Plan                                                                                                                         | Milestone   | Purpose                                                                                                                                                                                                 |

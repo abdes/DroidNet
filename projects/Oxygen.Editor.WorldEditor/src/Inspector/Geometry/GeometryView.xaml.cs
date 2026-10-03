@@ -4,7 +4,7 @@
 
 using System.Diagnostics;
 using DroidNet.Mvvm.Generators;
-using Microsoft.UI.Xaml;
+using Oxygen.Editor.World.Inspector.Controls;
 
 namespace Oxygen.Editor.World.Inspector.Geometry;
 
@@ -22,11 +22,11 @@ public partial class GeometryView
         this.InitializeComponent();
     }
 
-    private async void OnPickerItemClicked(object? sender, RoutedEventArgs e)
+    private async void OnPickerItemClicked(object? sender, AssetPickerItemInvokedEventArgs e)
     {
         Debug.Assert(this.ViewModel is not null, "ViewModel should not be null when handling picker item click.");
 
-        if (sender is not FrameworkElement fe || fe.DataContext is not AssetPickerRow row)
+        if (e.Asset is not { } row)
         {
             return;
         }
@@ -35,11 +35,11 @@ public partial class GeometryView
         this.AssetPickerFlyout.Hide();
     }
 
-    private async void OnMaterialPickerItemClicked(object? sender, RoutedEventArgs e)
+    private async void OnMaterialPickerItemClicked(object? sender, AssetPickerItemInvokedEventArgs e)
     {
         Debug.Assert(this.ViewModel is not null, "ViewModel should not be null when handling material picker item click.");
 
-        if (sender is not FrameworkElement fe || fe.DataContext is not MaterialPickerRow row)
+        if (e.Material is not { } row)
         {
             return;
         }

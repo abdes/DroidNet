@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:DroidNet.Controls"
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:fields="using:Oxygen.Editor.World.Inspector.Controls"
     xmlns:local="using:Oxygen.Editor.World.Inspector"
     xmlns:ui="using:CommunityToolkit.WinUI">
     <UserControl.Resources>
@@ -22,123 +23,74 @@
         HeaderIcon="{ui:FontIcon Glyph='&#xE706;'}"
         IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
         <editorcontrols:PropertiesExpander.Items>
-            <editorcontrols:PropertyCard
-                EditorMinimumWidth="248"
-                IsCompound="True"
-                Layout="Stacked"
-                PropertyName="Color"
-                Qualifier="Linear RGB">
-                <editorcontrols:PropertyCard.LeadingContent>
-                    <Button Style="{StaticResource InspectorColorSwatchStyle}" ToolTipService.ToolTip="Pick light color">
-                        <Button.Flyout>
-                            <Flyout>
-                                <ColorPicker
-                                    ColorChanged="ColorPicker_ColorChanged"
-                                    IsAlphaEnabled="False"
-                                    IsColorChannelTextInputVisible="True"
-                                    IsHexInputVisible="True"
-                                    Loaded="ColorPickerLoaded"
-                                    Color="{x:Bind local:InspectorRgbPresentation.ToDisplayColor(ViewModel.ColorValue), Mode=OneWay}" />
-                            </Flyout>
-                        </Button.Flyout>
-                        <Border
-                            Width="20"
-                            Height="24"
-                            Background="{x:Bind local:InspectorRgbPresentation.ToBrush(ViewModel.ColorValue), Mode=OneWay}"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="2" />
-                    </Button>
-                </editorcontrols:PropertyCard.LeadingContent>
-                <StackPanel Spacing="4">
-                    <controls:VectorBox
-                        x:Name="ColorChannels"
-                        AutomationProperties.Name="Color, linear RGB"
-                        ComponentLabelPosition="Left"
-                        ComponentMask="~.###"
-                        EditSessionCompleted="VectorEditCompleted"
-                        EditSessionStarted="VectorEditStarted"
-                        LabelPosition="None"
-                        Tag="Color"
-                        XValue="{x:Bind ViewModel.ColorR, Mode=TwoWay}"
-                        YValue="{x:Bind ViewModel.ColorG, Mode=TwoWay}"
-                        ZValue="{x:Bind ViewModel.ColorB, Mode=TwoWay}" />
-                    <TextBlock
-                        AutomationProperties.LiveSetting="Polite"
-                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                        Text="{x:Bind ViewModel.ColorRDiagnostic.Message, Mode=OneWay}"
-                        TextWrapping="Wrap"
-                        Visibility="{x:Bind ViewModel.ColorRDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                </StackPanel>
-            </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard PropertyName="Illuminance" Qualifier="lux">
-                <StackPanel Spacing="2">
-                    <controls:NumberBox
-                        EditSessionCompleted="NumberEditCompleted"
-                        EditSessionStarted="NumberEditStarted"
-                        LabelPosition="None"
-                        Mask="~.###"
-                        NumberValue="{x:Bind ViewModel.IntensityLux, Mode=TwoWay}"
-                        Tag="IntensityLux" />
-                    <TextBlock
-                        AutomationProperties.LiveSetting="Polite"
-                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                        Text="{x:Bind ViewModel.IntensityLuxDiagnostic.Message, Mode=OneWay}"
-                        TextWrapping="Wrap"
-                        Visibility="{x:Bind ViewModel.IntensityLuxDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                </StackPanel>
-            </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard PropertyName="Angular diameter" Qualifier="rad">
-                <StackPanel Spacing="2">
-                    <controls:NumberBox
-                        EditSessionCompleted="NumberEditCompleted"
-                        EditSessionStarted="NumberEditStarted"
-                        LabelPosition="None"
-                        Mask="~.####"
-                        NumberValue="{x:Bind ViewModel.AngularDiameterDegrees, Mode=TwoWay}"
-                        Tag="AngularSizeRadians" />
-                    <TextBlock
-                        AutomationProperties.LiveSetting="Polite"
-                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                        Text="{x:Bind ViewModel.AngularSizeRadiansDiagnostic.Message, Mode=OneWay}"
-                        TextWrapping="Wrap"
-                        Visibility="{x:Bind ViewModel.AngularSizeRadiansDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                </StackPanel>
-            </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard PropertyName="Azimuth" Qualifier="°">
-                <StackPanel Spacing="2">
-                    <controls:NumberBox
-                        EditSessionCompleted="NumberEditCompleted"
-                        EditSessionStarted="NumberEditStarted"
-                        LabelPosition="None"
-                        Mask="~.#"
-                        NumberValue="{x:Bind ViewModel.SunAzimuth, Mode=TwoWay}"
-                        Tag="SunAzimuth" />
-                    <TextBlock
-                        AutomationProperties.LiveSetting="Polite"
-                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                        Text="{x:Bind ViewModel.SunAzimuthDiagnostic.Message, Mode=OneWay}"
-                        TextWrapping="Wrap"
-                        Visibility="{x:Bind ViewModel.SunAzimuthDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                </StackPanel>
-            </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard PropertyName="Elevation" Qualifier="°">
-                <StackPanel Spacing="2">
-                    <controls:NumberBox
-                        EditSessionCompleted="NumberEditCompleted"
-                        EditSessionStarted="NumberEditStarted"
-                        LabelPosition="None"
-                        Mask="~.#"
-                        NumberValue="{x:Bind ViewModel.SunElevation, Mode=TwoWay}"
-                        Tag="SunElevation" />
-                    <TextBlock
-                        AutomationProperties.LiveSetting="Polite"
-                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                        Text="{x:Bind ViewModel.SunElevationDiagnostic.Message, Mode=OneWay}"
-                        TextWrapping="Wrap"
-                        Visibility="{x:Bind ViewModel.SunElevationDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                </StackPanel>
-            </editorcontrols:PropertyCard>
+            <fields:InspectorRgbField
+                x:Name="ColorField"
+                Blue="{x:Bind ViewModel.ColorB, Mode=TwoWay}"
+                ChannelAutomationName="Color, linear RGB"
+                ColorPicked="OnRgbColorPicked"
+                EditOwner="{x:Bind ViewModel, Mode=OneWay}"
+                EditSessionCompleted="VectorEditCompleted"
+                EditSessionStarted="VectorEditStarted"
+                ErrorText="{x:Bind ViewModel.ColorRDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                Green="{x:Bind ViewModel.ColorG, Mode=TwoWay}"
+                HasError="{x:Bind ViewModel.ColorRDiagnostic.HasError, Mode=OneWay}"
+                Label="Color"
+                PickerAutomationName="Pick light color"
+                Qualifier="Linear RGB"
+                Red="{x:Bind ViewModel.ColorR, Mode=TwoWay}"
+                Tag="Color" />
+            <editorcontrols:InspectorNumberField
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.IntensityLuxDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.IntensityLuxDiagnostic.HasError, Mode=OneWay}"
+                Label="Illuminance"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.IntensityLux, Mode=TwoWay}"
+                Qualifier="lux"
+                Tag="IntensityLux" />
+            <editorcontrols:InspectorNumberField
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.AngularSizeRadiansDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.AngularSizeRadiansDiagnostic.HasError, Mode=OneWay}"
+                Label="Angular diameter"
+                Mask="~.####"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.AngularDiameterDegrees, Mode=TwoWay}"
+                Qualifier="rad"
+                Tag="AngularSizeRadians" />
+            <editorcontrols:InspectorNumberField
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.SunAzimuthDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.SunAzimuthDiagnostic.HasError, Mode=OneWay}"
+                Label="Azimuth"
+                Mask="~.#"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.SunAzimuth, Mode=TwoWay}"
+                Qualifier="°"
+                Tag="SunAzimuth" />
+            <editorcontrols:InspectorNumberField
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.SunElevationDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.SunElevationDiagnostic.HasError, Mode=OneWay}"
+                Label="Elevation"
+                Mask="~.#"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.SunElevation, Mode=TwoWay}"
+                Qualifier="°"
+                Tag="SunElevation" />
             <editorcontrols:PropertyCard PropertyName="Source assignment">
                 <StackPanel Spacing="4">
                     <ComboBox
@@ -155,56 +107,36 @@
             <editorcontrols:PropertyCard PropertyName="Per-pixel transmittance">
                 <ToggleSwitch AutomationProperties.Name="Per-pixel transmittance" IsOn="{x:Bind ViewModel.UsePerPixelAtmosphereTransmittance, Mode=TwoWay}" />
             </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard
-                EditorMinimumWidth="248"
-                IsCompound="True"
-                Layout="Stacked"
-                PropertyName="Disk luminance scale"
-                Qualifier="RGB ×">
-                <StackPanel Spacing="4">
-                    <controls:VectorBox
-                        x:Name="DiskScaleChannels"
-                        AutomationProperties.Name="Disk luminance scale, RGB ×"
-                        ComponentLabelPosition="Left"
-                        ComponentMask="~.###"
-                        EditSessionCompleted="VectorEditCompleted"
-                        EditSessionStarted="VectorEditStarted"
-                        LabelPosition="None"
-                        Tag="DiskScale"
-                        XValue="{x:Bind ViewModel.DiskScaleR, Mode=TwoWay}"
-                        YValue="{x:Bind ViewModel.DiskScaleG, Mode=TwoWay}"
-                        ZValue="{x:Bind ViewModel.DiskScaleB, Mode=TwoWay}" />
-                    <TextBlock
-                        AutomationProperties.LiveSetting="Polite"
-                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                        Text="{x:Bind ViewModel.AtmosphereDiskLuminanceScaleRgbDiagnostic.Message, Mode=OneWay}"
-                        TextWrapping="Wrap"
-                        Visibility="{x:Bind ViewModel.AtmosphereDiskLuminanceScaleRgbDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                </StackPanel>
-            </editorcontrols:PropertyCard>
+            <fields:InspectorRgbField
+                x:Name="DiskScaleField"
+                Blue="{x:Bind ViewModel.DiskScaleB, Mode=TwoWay}"
+                ChannelAutomationName="Disk luminance scale, RGB ×"
+                EditSessionCompleted="VectorEditCompleted"
+                EditSessionStarted="VectorEditStarted"
+                ErrorText="{x:Bind ViewModel.AtmosphereDiskLuminanceScaleRgbDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                Green="{x:Bind ViewModel.DiskScaleG, Mode=TwoWay}"
+                HasError="{x:Bind ViewModel.AtmosphereDiskLuminanceScaleRgbDiagnostic.HasError, Mode=OneWay}"
+                IsMultiplier="True"
+                Label="Disk luminance scale"
+                Qualifier="RGB ×"
+                Red="{x:Bind ViewModel.DiskScaleR, Mode=TwoWay}"
+                Tag="DiskScale" />
             <editorcontrols:PropertyCard PropertyName="Affects world">
                 <ToggleSwitch AutomationProperties.Name="Affects world" IsOn="{x:Bind ViewModel.AffectsWorld, Mode=TwoWay}" />
             </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard
-                HorizontalContentAlignment="Stretch"
-                PropertyName="Exposure"
-                Qualifier="EV">
-                <StackPanel Spacing="2">
-                    <controls:NumberBox
-                        EditSessionCompleted="NumberEditCompleted"
-                        EditSessionStarted="NumberEditStarted"
-                        LabelPosition="None"
-                        Mask="~.###"
-                        NumberValue="{x:Bind ViewModel.ExposureCompensation, Mode=TwoWay}"
-                        Tag="ExposureCompensation" />
-                    <TextBlock
-                        AutomationProperties.LiveSetting="Polite"
-                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                        Text="{x:Bind ViewModel.ExposureCompensationDiagnostic.Message, Mode=OneWay}"
-                        TextWrapping="Wrap"
-                        Visibility="{x:Bind ViewModel.ExposureCompensationDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                </StackPanel>
-            </editorcontrols:PropertyCard>
+            <editorcontrols:InspectorNumberField
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.ExposureCompensationDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.ExposureCompensationDiagnostic.HasError, Mode=OneWay}"
+                Label="Exposure"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.ExposureCompensation, Mode=TwoWay}"
+                Qualifier="EV"
+                Tag="ExposureCompensation" />
 
             <StackPanel Spacing="4">
                 <TextBlock FontWeight="SemiBold" Text="Shadows" />
@@ -220,40 +152,30 @@
                         ItemsSource="{x:Bind ViewModel.ShadowResolutionOptions}"
                         SelectedItem="{x:Bind ViewModel.ShadowResolutionHint, Mode=TwoWay}" />
                 </editorcontrols:PropertyCard>
-                <editorcontrols:PropertyCard PropertyName="Depth bias" Qualifier="">
-                    <StackPanel Spacing="2">
-                        <controls:NumberBox
-                            EditSessionCompleted="NumberEditCompleted"
-                            EditSessionStarted="NumberEditStarted"
-                            LabelPosition="None"
-                            Mask="~.####"
-                            NumberValue="{x:Bind ViewModel.ShadowBias, Mode=TwoWay}"
-                            Tag="ShadowBias" />
-                        <TextBlock
-                            AutomationProperties.LiveSetting="Polite"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            Text="{x:Bind ViewModel.ShadowBiasDiagnostic.Message, Mode=OneWay}"
-                            TextWrapping="Wrap"
-                            Visibility="{x:Bind ViewModel.ShadowBiasDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                    </StackPanel>
-                </editorcontrols:PropertyCard>
-                <editorcontrols:PropertyCard PropertyName="Normal bias" Qualifier="">
-                    <StackPanel Spacing="2">
-                        <controls:NumberBox
-                            EditSessionCompleted="NumberEditCompleted"
-                            EditSessionStarted="NumberEditStarted"
-                            LabelPosition="None"
-                            Mask="~.####"
-                            NumberValue="{x:Bind ViewModel.ShadowNormalBias, Mode=TwoWay}"
-                            Tag="ShadowNormalBias" />
-                        <TextBlock
-                            AutomationProperties.LiveSetting="Polite"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            Text="{x:Bind ViewModel.ShadowNormalBiasDiagnostic.Message, Mode=OneWay}"
-                            TextWrapping="Wrap"
-                            Visibility="{x:Bind ViewModel.ShadowNormalBiasDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                    </StackPanel>
-                </editorcontrols:PropertyCard>
+                <editorcontrols:InspectorNumberField
+                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                    EditSessionCompleted="NumberEditCompleted"
+                    EditSessionStarted="NumberEditStarted"
+                    ErrorText="{x:Bind ViewModel.ShadowBiasDiagnostic.Message, Mode=OneWay}"
+                    FontSize="14"
+                    HasError="{x:Bind ViewModel.ShadowBiasDiagnostic.HasError, Mode=OneWay}"
+                    Label="Depth bias"
+                    Mask="~.####"
+                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                    NumberValue="{x:Bind ViewModel.ShadowBias, Mode=TwoWay}"
+                    Tag="ShadowBias" />
+                <editorcontrols:InspectorNumberField
+                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                    EditSessionCompleted="NumberEditCompleted"
+                    EditSessionStarted="NumberEditStarted"
+                    ErrorText="{x:Bind ViewModel.ShadowNormalBiasDiagnostic.Message, Mode=OneWay}"
+                    FontSize="14"
+                    HasError="{x:Bind ViewModel.ShadowNormalBiasDiagnostic.HasError, Mode=OneWay}"
+                    Label="Normal bias"
+                    Mask="~.####"
+                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                    NumberValue="{x:Bind ViewModel.ShadowNormalBias, Mode=TwoWay}"
+                    Tag="ShadowNormalBias" />
             </StackPanel>
 
 
@@ -265,165 +187,117 @@
                             ItemsSource="{x:Bind ViewModel.SplitModeOptions}"
                             SelectedItem="{x:Bind ViewModel.SplitMode, Mode=TwoWay}" />
                     </editorcontrols:PropertyCard>
-                    <editorcontrols:PropertyCard PropertyName="Cascade count" Qualifier="">
-                        <StackPanel Spacing="2">
-                            <controls:NumberBox
-                                EditSessionCompleted="NumberEditCompleted"
-                                EditSessionStarted="NumberEditStarted"
-                                LabelPosition="None"
-                                Mask="#."
-                                NumberValue="{x:Bind ViewModel.CascadeCount, Mode=TwoWay}"
-                                Tag="CascadeCount" />
-                            <TextBlock
-                                AutomationProperties.LiveSetting="Polite"
-                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                Text="{x:Bind ViewModel.CascadeCountDiagnostic.Message, Mode=OneWay}"
-                                TextWrapping="Wrap"
-                                Visibility="{x:Bind ViewModel.CascadeCountDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                        </StackPanel>
-                    </editorcontrols:PropertyCard>
-                    <editorcontrols:PropertyCard PropertyName="Maximum distance" Qualifier="m">
-                        <StackPanel Spacing="2">
-                            <controls:NumberBox
-                                EditSessionCompleted="NumberEditCompleted"
-                                EditSessionStarted="NumberEditStarted"
-                                LabelPosition="None"
-                                Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.MaxShadowDistance, Mode=TwoWay}"
-                                Tag="MaxShadowDistance" />
-                            <TextBlock
-                                AutomationProperties.LiveSetting="Polite"
-                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                Text="{x:Bind ViewModel.MaxShadowDistanceDiagnostic.Message, Mode=OneWay}"
-                                TextWrapping="Wrap"
-                                Visibility="{x:Bind ViewModel.MaxShadowDistanceDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                        </StackPanel>
-                    </editorcontrols:PropertyCard>
-                    <editorcontrols:PropertyCard PropertyName="Distribution exponent" Qualifier="">
-                        <StackPanel Spacing="2">
-                            <controls:NumberBox
-                                EditSessionCompleted="NumberEditCompleted"
-                                EditSessionStarted="NumberEditStarted"
-                                LabelPosition="None"
-                                Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.DistributionExponent, Mode=TwoWay}"
-                                Tag="DistributionExponent" />
-                            <TextBlock
-                                AutomationProperties.LiveSetting="Polite"
-                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                Text="{x:Bind ViewModel.DistributionExponentDiagnostic.Message, Mode=OneWay}"
-                                TextWrapping="Wrap"
-                                Visibility="{x:Bind ViewModel.DistributionExponentDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                        </StackPanel>
-                    </editorcontrols:PropertyCard>
-                    <editorcontrols:PropertyCard PropertyName="Cascade 1 distance" Qualifier="m">
-                        <StackPanel Spacing="2">
-                            <controls:NumberBox
-                                EditSessionCompleted="NumberEditCompleted"
-                                EditSessionStarted="NumberEditStarted"
-                                LabelPosition="None"
-                                Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.CascadeDistance1, Mode=TwoWay}"
-                                Tag="CascadeDistance1" />
-                            <TextBlock
-                                AutomationProperties.LiveSetting="Polite"
-                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                Text="{x:Bind ViewModel.CascadeDistance1Diagnostic.Message, Mode=OneWay}"
-                                TextWrapping="Wrap"
-                                Visibility="{x:Bind ViewModel.CascadeDistance1Diagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                        </StackPanel>
-                    </editorcontrols:PropertyCard>
-                    <editorcontrols:PropertyCard PropertyName="Cascade 2 distance" Qualifier="m">
-                        <StackPanel Spacing="2">
-                            <controls:NumberBox
-                                EditSessionCompleted="NumberEditCompleted"
-                                EditSessionStarted="NumberEditStarted"
-                                LabelPosition="None"
-                                Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.CascadeDistance2, Mode=TwoWay}"
-                                Tag="CascadeDistance2" />
-                            <TextBlock
-                                AutomationProperties.LiveSetting="Polite"
-                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                Text="{x:Bind ViewModel.CascadeDistance2Diagnostic.Message, Mode=OneWay}"
-                                TextWrapping="Wrap"
-                                Visibility="{x:Bind ViewModel.CascadeDistance2Diagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                        </StackPanel>
-                    </editorcontrols:PropertyCard>
-                    <editorcontrols:PropertyCard PropertyName="Cascade 3 distance" Qualifier="m">
-                        <StackPanel Spacing="2">
-                            <controls:NumberBox
-                                EditSessionCompleted="NumberEditCompleted"
-                                EditSessionStarted="NumberEditStarted"
-                                LabelPosition="None"
-                                Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.CascadeDistance3, Mode=TwoWay}"
-                                Tag="CascadeDistance3" />
-                            <TextBlock
-                                AutomationProperties.LiveSetting="Polite"
-                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                Text="{x:Bind ViewModel.CascadeDistance3Diagnostic.Message, Mode=OneWay}"
-                                TextWrapping="Wrap"
-                                Visibility="{x:Bind ViewModel.CascadeDistance3Diagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                        </StackPanel>
-                    </editorcontrols:PropertyCard>
-                    <editorcontrols:PropertyCard PropertyName="Cascade 4 distance" Qualifier="m">
-                        <StackPanel Spacing="2">
-                            <controls:NumberBox
-                                EditSessionCompleted="NumberEditCompleted"
-                                EditSessionStarted="NumberEditStarted"
-                                LabelPosition="None"
-                                Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.CascadeDistance4, Mode=TwoWay}"
-                                Tag="CascadeDistance4" />
-                            <TextBlock
-                                AutomationProperties.LiveSetting="Polite"
-                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                Text="{x:Bind ViewModel.CascadeDistance4Diagnostic.Message, Mode=OneWay}"
-                                TextWrapping="Wrap"
-                                Visibility="{x:Bind ViewModel.CascadeDistance4Diagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                        </StackPanel>
-                    </editorcontrols:PropertyCard>
+                    <editorcontrols:InspectorNumberField
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.CascadeCountDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.CascadeCountDiagnostic.HasError, Mode=OneWay}"
+                        Label="Cascade count"
+                        Mask="#."
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.CascadeCount, Mode=TwoWay}"
+                        Tag="CascadeCount" />
+                    <editorcontrols:InspectorNumberField
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.MaxShadowDistanceDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.MaxShadowDistanceDiagnostic.HasError, Mode=OneWay}"
+                        Label="Maximum distance"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.MaxShadowDistance, Mode=TwoWay}"
+                        Qualifier="m"
+                        Tag="MaxShadowDistance" />
+                    <editorcontrols:InspectorNumberField
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.DistributionExponentDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.DistributionExponentDiagnostic.HasError, Mode=OneWay}"
+                        Label="Distribution exponent"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.DistributionExponent, Mode=TwoWay}"
+                        Tag="DistributionExponent" />
+                    <editorcontrols:InspectorNumberField
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.CascadeDistance1Diagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.CascadeDistance1Diagnostic.HasError, Mode=OneWay}"
+                        Label="Cascade 1 distance"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.CascadeDistance1, Mode=TwoWay}"
+                        Qualifier="m"
+                        Tag="CascadeDistance1" />
+                    <editorcontrols:InspectorNumberField
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.CascadeDistance2Diagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.CascadeDistance2Diagnostic.HasError, Mode=OneWay}"
+                        Label="Cascade 2 distance"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.CascadeDistance2, Mode=TwoWay}"
+                        Qualifier="m"
+                        Tag="CascadeDistance2" />
+                    <editorcontrols:InspectorNumberField
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.CascadeDistance3Diagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.CascadeDistance3Diagnostic.HasError, Mode=OneWay}"
+                        Label="Cascade 3 distance"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.CascadeDistance3, Mode=TwoWay}"
+                        Qualifier="m"
+                        Tag="CascadeDistance3" />
+                    <editorcontrols:InspectorNumberField
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.CascadeDistance4Diagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.CascadeDistance4Diagnostic.HasError, Mode=OneWay}"
+                        Label="Cascade 4 distance"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.CascadeDistance4, Mode=TwoWay}"
+                        Qualifier="m"
+                        Tag="CascadeDistance4" />
                 </StackPanel>
             </Expander>
 
 
             <Expander Header="Cascade blending" Style="{StaticResource QuietDisclosure}">
                 <StackPanel Spacing="4">
-                    <editorcontrols:PropertyCard PropertyName="Transition fraction" Qualifier="">
-                        <StackPanel Spacing="2">
-                            <controls:NumberBox
-                                EditSessionCompleted="NumberEditCompleted"
-                                EditSessionStarted="NumberEditStarted"
-                                LabelPosition="None"
-                                Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.TransitionFraction, Mode=TwoWay}"
-                                Tag="TransitionFraction" />
-                            <TextBlock
-                                AutomationProperties.LiveSetting="Polite"
-                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                Text="{x:Bind ViewModel.TransitionFractionDiagnostic.Message, Mode=OneWay}"
-                                TextWrapping="Wrap"
-                                Visibility="{x:Bind ViewModel.TransitionFractionDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                        </StackPanel>
-                    </editorcontrols:PropertyCard>
-                    <editorcontrols:PropertyCard PropertyName="Fade-out fraction" Qualifier="">
-                        <StackPanel Spacing="2">
-                            <controls:NumberBox
-                                EditSessionCompleted="NumberEditCompleted"
-                                EditSessionStarted="NumberEditStarted"
-                                LabelPosition="None"
-                                Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.DistanceFadeoutFraction, Mode=TwoWay}"
-                                Tag="DistanceFadeoutFraction" />
-                            <TextBlock
-                                AutomationProperties.LiveSetting="Polite"
-                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                Text="{x:Bind ViewModel.DistanceFadeoutFractionDiagnostic.Message, Mode=OneWay}"
-                                TextWrapping="Wrap"
-                                Visibility="{x:Bind ViewModel.DistanceFadeoutFractionDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                        </StackPanel>
-                    </editorcontrols:PropertyCard>
+                    <editorcontrols:InspectorNumberField
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.TransitionFractionDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.TransitionFractionDiagnostic.HasError, Mode=OneWay}"
+                        Label="Transition fraction"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.TransitionFraction, Mode=TwoWay}"
+                        Tag="TransitionFraction" />
+                    <editorcontrols:InspectorNumberField
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.DistanceFadeoutFractionDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.DistanceFadeoutFractionDiagnostic.HasError, Mode=OneWay}"
+                        Label="Fade-out fraction"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.DistanceFadeoutFraction, Mode=TwoWay}"
+                        Tag="DistanceFadeoutFraction" />
                 </StackPanel>
             </Expander>
 
