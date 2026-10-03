@@ -187,7 +187,7 @@
                         ErrorText="{x:Bind ViewModel.AutoExposureTransitionDistanceEvDiagnostic.Message, Mode=OneWay}"
                         FontSize="14"
                         HasError="{x:Bind ViewModel.AutoExposureTransitionDistanceEvDiagnostic.HasError, Mode=OneWay}"
-                        Label="Adaptation transition distance · Proposed"
+                        Label="Adaptation transition distance"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.AutoExposureTransitionDistanceEv, Mode=TwoWay}"
                         Qualifier="EV"
@@ -271,7 +271,7 @@
                         ErrorText="{x:Bind ViewModel.AutoExposureBlackInfluenceDiagnostic.Message, Mode=OneWay}"
                         FontSize="14"
                         HasError="{x:Bind ViewModel.AutoExposureBlackInfluenceDiagnostic.HasError, Mode=OneWay}"
-                        Label="Dark-sample influence · Proposed"
+                        Label="Dark-sample influence"
                         NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.AutoExposureBlackInfluence, Mode=TwoWay}"
                         Qualifier="0–1"
@@ -290,7 +290,7 @@
                     <editorcontrols:PropertyCard
                         x:Name="AutoExposureMeteringMaskCard"
                         HorizontalContentAlignment="Stretch"
-                        PropertyName="Metering mask · Proposed"
+                        PropertyName="Metering mask"
                         Tag="AutoExposure">
                         <StackPanel Spacing="4">
                             <Grid ColumnSpacing="6">
@@ -356,7 +356,7 @@
                     <editorcontrols:PropertyCard
                         x:Name="AutoExposureCompensationCurveCard"
                         HorizontalContentAlignment="Stretch"
-                        PropertyName="Exposure-compensation curve · Proposed"
+                        PropertyName="Exposure-compensation curve"
                         Tag="AutoExposure">
                         <StackPanel Spacing="6" Tag="AutoExposureCompensationCurve Metered EV100 Compensation EV">
                             <environment:ExposureCompensationCurveEditorView ViewModel="{x:Bind ViewModel.CurveEditor, Mode=OneWay}" />

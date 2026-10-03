@@ -41,6 +41,20 @@ public sealed class InspectorSearchModelTests
     }
 
     [TestMethod]
+    [DataRow("AutoExposureMeteringMask", "Metering mask")]
+    [DataRow("AutoExposureTransitionDistanceEv", "Adaptation transition distance")]
+    [DataRow("AutoExposureBlackInfluence", "Dark-sample influence")]
+    [DataRow("AutoExposureCompensationCurve", "Exposure-compensation curve")]
+    public void AcceptedExposureLabels_SearchUsesTheAcceptedNameWithoutProposed(string key, string label)
+    {
+        var model = EnvironmentFieldCatalog.Create();
+        model.Update(label, InspectorPropertyScope.All, ExposureMode.Auto, MeteringMode.Average, ToneMappingMode.AcesFitted);
+        _ = model.Fields[key].IsVisible.Should().BeTrue();
+        model.Update("Proposed", InspectorPropertyScope.All, ExposureMode.Auto, MeteringMode.Average, ToneMappingMode.AcesFitted);
+        _ = model.HasNoMatches.Should().BeTrue();
+    }
+
+    [TestMethod]
     public void Search_TracksApplicabilityAcrossModeChangesWithoutRebuildingMetadata()
     {
         var model = EnvironmentFieldCatalog.Create();

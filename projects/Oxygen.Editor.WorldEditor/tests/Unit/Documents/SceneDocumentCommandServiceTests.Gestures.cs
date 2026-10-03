@@ -103,7 +103,7 @@ public sealed partial class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
-    public async Task ProposedExposureDescriptors_EditThroughCanonicalSceneTransactionAndUndo()
+    public async Task ExposureShapingDescriptors_EditThroughCanonicalSceneTransactionAndUndo()
     {
         var fixture = CreateFixture();
         var scene = CreateScene();
