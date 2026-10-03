@@ -217,9 +217,7 @@ colour-picker display conversion occurs at the UI boundary only.
 | TransitionFraction                              | 0.1                                                | [0,1]                                             | Advanced conventional shadows; cascade transition                                        |
 | DistanceFadeoutFraction                         | 0.1                                                | [0,1]                                             | Advanced conventional shadows; far-distance fade                                         |
 
-Mode/count-dependent CSM inputs without an active effect remain visible but
-disabled, with inline explanations identifying their values as stored rather
-than generated results.
+Mode/count-dependent CSM inputs without an active effect remain visible but disabled.
 Mode/count changes retain all manual distances and the distribution exponent;
 they do not overwrite dormant authoring data. With multiple lights selected,
 mode-specific inputs require a common split mode, and each editable boundary

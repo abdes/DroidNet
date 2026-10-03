@@ -139,7 +139,7 @@ public sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
             && (name.StartsWith("CascadeDistance", StringComparison.Ordinal) || name == "DistributionExponent")))
         {
             _ = field.IsEnabled.Should().BeFalse();
-            _ = field.ApplicabilityText.Should().Contain("common split mode");
+            _ = field.ApplicabilityText.Should().BeEmpty();
         }
 
         first.SplitMode = DirectionalCsmSplitMode.Generated;
@@ -172,27 +172,18 @@ public sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
     {
         var distribution = Field(view, "DistributionExponent");
         _ = distribution.IsEnabled.Should().Be(mode == DirectionalCsmSplitMode.Generated && count > 1);
-        _ = distribution.ApplicabilityText.Should().Be(distribution.IsEnabled ? string.Empty
-            : mode == DirectionalCsmSplitMode.Generated
-                ? "Stored value; distribution requires more than one cascade on every selected light."
-                : "Stored value; used only in Generated mode.");
+        _ = distribution.ApplicabilityText.Should().BeEmpty();
         for (var cascade = 1; cascade <= 4; cascade++)
         {
             var field = Field(view, $"CascadeDistance{cascade}");
             var enabled = mode == DirectionalCsmSplitMode.ManualDistances && cascade < count;
             _ = field.IsEnabled.Should().Be(enabled);
-            if (enabled)
+            _ = field.FindDescendant<NumberBox>()!.IsEnabled.Should().Be(enabled);
+            _ = field.FindDescendants().OfType<TextBlock>().Should().NotContain(text => text.Text.StartsWith("Stored manual value;", StringComparison.Ordinal));
+            _ = field.ApplicabilityText.Should().BeEmpty();
+            if (!enabled)
             {
-                _ = field.ApplicabilityText.Should().BeEmpty();
-            }
-            else
-            {
-                _ = field.ApplicabilityText.Should().StartWith("Stored manual value;");
                 _ = field.FindDescendant<NumberBox>()!.Focus(FocusState.Keyboard).Should().BeFalse();
-                if (mode == DirectionalCsmSplitMode.ManualDistances)
-                {
-                    _ = field.ApplicabilityText.Should().Contain("final cascade uses Maximum distance");
-                }
             }
         }
     }
