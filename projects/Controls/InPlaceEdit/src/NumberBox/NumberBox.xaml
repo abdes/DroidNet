@@ -25,74 +25,104 @@
                             HorizontalAlignment="{TemplateBinding HorizontalLabelAlignment}"
                             VerticalAlignment="Center"
                             Foreground="{TemplateBinding LabelForeground}"
+                            Opacity="0.85"
                             Text="{TemplateBinding Label}"
-                            TextTrimming="CharacterEllipsis"
-                            TextWrapping="NoWrap" />
-                        <Border
-                            x:Name="PartBackgroundBorder"
-                            Margin="1"
-                            Background="{ThemeResource ControlAltFillColorTertiaryBrush}"
-                            BackgroundSizing="OuterBorderEdge"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{TemplateBinding CornerRadius}">
-                            <Grid ColumnSpacing="0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock
-                                    x:Name="PartCompactLabelTextBlock"
-                                    Grid.Column="0"
-                                    Margin="8,0,4,0"
-                                    VerticalAlignment="Center"
-                                    Foreground="{TemplateBinding LabelForeground}"
-                                    Text="{TemplateBinding Label}"
-                                    TextTrimming="CharacterEllipsis"
-                                    TextWrapping="NoWrap"
-                                    Visibility="Collapsed" />
-                                <local:NumberBoxValuePanel Grid.Column="1">
+                            TextWrapping="Wrap"
+                            ToolTipService.ToolTip="{TemplateBinding Label}" />
+                        <Grid x:Name="PartValueGroup" VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                x:Name="PartValuePrefix"
+                                Margin="0,0,4,0"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{TemplateBinding Prefix}" />
+                            <Border
+                                x:Name="PartBackgroundBorder"
+                                Grid.Column="1"
+                                Margin="1"
+                                Background="{ThemeResource ControlAltFillColorTertiaryBrush}"
+                                BackgroundSizing="OuterBorderEdge"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{TemplateBinding CornerRadius}">
+                                <Grid ColumnSpacing="0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
                                     <TextBlock
-                                        x:Name="PartValueTextBlock"
-                                        MinHeight="{TemplateBinding MinHeight}"
-                                        Padding="{TemplateBinding Padding}"
-                                        HorizontalAlignment="Stretch"
+                                        x:Name="PartCompactLabelTextBlock"
+                                        Grid.Column="0"
+                                        Margin="8,0,4,0"
                                         VerticalAlignment="Center"
-                                        FontSize="{TemplateBinding FontSize}"
-                                        HorizontalTextAlignment="{Binding Path=HorizontalValueAlignment, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
-                                        Text="{Binding Path=DisplayText, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}" />
-                                    <TextBox
-                                        x:Name="PartEditBox"
-                                        MinWidth="0"
-                                        MinHeight="{TemplateBinding MinHeight}"
-                                        Margin="0"
-                                        Padding="{TemplateBinding Padding}"
-                                        VerticalAlignment="Center"
-                                        Background="{ThemeResource ControlAltFillColorTertiaryBrush}"
-                                        BackgroundSizing="OuterBorderEdge"
-                                        BorderThickness="0"
-                                        CornerRadius="{TemplateBinding CornerRadius}"
-                                        FontSize="{TemplateBinding FontSize}"
-                                        InputScope="Number"
-                                        IsSpellCheckEnabled="False"
-                                        IsTextPredictionEnabled="False"
-                                        TextAlignment="{Binding Path=HorizontalValueAlignment, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
-                                        TextWrapping="Wrap"
+                                        Foreground="{TemplateBinding LabelForeground}"
+                                        Opacity="0.85"
+                                        Text="{TemplateBinding Label}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="NoWrap"
                                         Visibility="Collapsed" />
-                                </local:NumberBoxValuePanel>
-                            </Grid>
-                        </Border>
+                                    <local:NumberBoxValuePanel Grid.Column="1">
+                                        <TextBlock
+                                            x:Name="PartValueTextBlock"
+                                            MinHeight="{TemplateBinding MinHeight}"
+                                            Padding="{TemplateBinding Padding}"
+                                            HorizontalAlignment="Stretch"
+                                            VerticalAlignment="Center"
+                                            FontSize="{TemplateBinding FontSize}"
+                                            HorizontalTextAlignment="{Binding Path=HorizontalValueAlignment, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
+                                            Text="{Binding Path=DisplayText, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}" />
+                                        <TextBox
+                                            x:Name="PartEditBox"
+                                            MinWidth="0"
+                                            MinHeight="{TemplateBinding MinHeight}"
+                                            Margin="0"
+                                            Padding="{TemplateBinding Padding}"
+                                            VerticalAlignment="Center"
+                                            Background="{ThemeResource ControlAltFillColorTertiaryBrush}"
+                                            BackgroundSizing="OuterBorderEdge"
+                                            BorderThickness="0"
+                                            CornerRadius="{TemplateBinding CornerRadius}"
+                                            FontSize="{TemplateBinding FontSize}"
+                                            InputScope="Number"
+                                            IsSpellCheckEnabled="False"
+                                            IsTextPredictionEnabled="False"
+                                            TextAlignment="{Binding Path=HorizontalValueAlignment, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
+                                            TextWrapping="Wrap"
+                                            Visibility="Collapsed" />
+                                    </local:NumberBoxValuePanel>
+                                </Grid>
+                            </Border>
+                            <TextBlock
+                                x:Name="PartValueQualifier"
+                                Grid.Column="2"
+                                Margin="4,0,0,0"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{TemplateBinding Qualifier}" />
+                        </Grid>
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
                                 <VisualState x:Name="Hover">
                                     <VisualState.Setters>
                                         <Setter Target="PartValueTextBlock.Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                        <Setter Target="PartLabelTextBlock.FontWeight" Value="SemiBold" />
-                                        <Setter Target="PartCompactLabelTextBlock.FontWeight" Value="SemiBold" />
+                                        <Setter Target="PartLabelTextBlock.Opacity" Value="1" />
+                                        <Setter Target="PartCompactLabelTextBlock.Opacity" Value="1" />
                                     </VisualState.Setters>
                                 </VisualState>
-                                <VisualState x:Name="Pressed" />
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartLabelTextBlock.Opacity" Value="1" />
+                                        <Setter Target="PartCompactLabelTextBlock.Opacity" Value="1" />
+                                    </VisualState.Setters>
+                                </VisualState>
                             </VisualStateGroup>
                             <VisualStateGroup x:Name="ValueStates">
                                 <VisualState x:Name="ShowingValidValue" />

@@ -14,6 +14,60 @@ namespace DroidNet.Controls;
 /// </summary>
 public partial class NumberBox
 {
+    /// <summary>Identifies whether an external label moves above the value at narrow widths.</summary>
+    public static readonly DependencyProperty AutoStackLabelProperty = RegisterLabelLayoutProperty(nameof(AutoStackLabel), typeof(bool), false);
+
+    /// <summary>Identifies the external label-column width; NaN retains the default proportional layout.</summary>
+    public static readonly DependencyProperty LabelWidthProperty = RegisterLabelLayoutProperty(nameof(LabelWidth), typeof(double), double.NaN);
+
+    /// <summary>Identifies the minimum value-region width, excluding the label and annotations.</summary>
+    public static readonly DependencyProperty EditorMinimumWidthProperty = RegisterLabelLayoutProperty(nameof(EditorMinimumWidth), typeof(double), 0d);
+
+    /// <summary>Identifies the horizontal gap between the label and value region.</summary>
+    public static readonly DependencyProperty LabelSpacingProperty = RegisterLabelLayoutProperty(nameof(LabelSpacing), typeof(double), 5d);
+
+    /// <summary>Identifies the vertical gap between the label and value region.</summary>
+    public static readonly DependencyProperty LabelRowSpacingProperty = RegisterLabelLayoutProperty(nameof(LabelRowSpacing), typeof(double), 5d);
+
+    /// <summary>Identifies the read-only annotation preceding the value field.</summary>
+    public static readonly DependencyProperty PrefixProperty = RegisterLabelLayoutProperty(nameof(Prefix), typeof(string), string.Empty);
+
+    /// <summary>Identifies the read-only annotation following the value field.</summary>
+    public static readonly DependencyProperty QualifierProperty = RegisterLabelLayoutProperty(nameof(Qualifier), typeof(string), string.Empty);
+
+    /// <summary>Identifies the reserved width of a nonempty qualifier.</summary>
+    public static readonly DependencyProperty QualifierMinimumWidthProperty = RegisterLabelLayoutProperty(nameof(QualifierMinimumWidth), typeof(double), 0d);
+
+    /// <summary>Gets or sets whether an external label stacks above its value at narrow widths.</summary>
+    public bool AutoStackLabel { get => (bool)this.GetValue(AutoStackLabelProperty); set => this.SetValue(AutoStackLabelProperty, value); }
+
+    /// <summary>Gets or sets the external label width in DIPs, or NaN for proportional columns.</summary>
+    public double LabelWidth { get => (double)this.GetValue(LabelWidthProperty); set => this.SetValue(LabelWidthProperty, value); }
+
+    /// <summary>Gets or sets the minimum usable value-region width in DIPs.</summary>
+    public double EditorMinimumWidth { get => (double)this.GetValue(EditorMinimumWidthProperty); set => this.SetValue(EditorMinimumWidthProperty, value); }
+
+    /// <summary>Gets or sets the horizontal label gap in DIPs.</summary>
+    public double LabelSpacing { get => (double)this.GetValue(LabelSpacingProperty); set => this.SetValue(LabelSpacingProperty, value); }
+
+    /// <summary>Gets or sets the vertical label gap in DIPs.</summary>
+    public double LabelRowSpacing { get => (double)this.GetValue(LabelRowSpacingProperty); set => this.SetValue(LabelRowSpacingProperty, value); }
+
+    /// <summary>Gets or sets the read-only prefix outside the value field.</summary>
+    public string Prefix { get => (string)this.GetValue(PrefixProperty); set => this.SetValue(PrefixProperty, value); }
+
+    /// <summary>Gets or sets the read-only qualifier outside the value field.</summary>
+    public string Qualifier { get => (string)this.GetValue(QualifierProperty); set => this.SetValue(QualifierProperty, value); }
+
+    /// <summary>Gets or sets the reserved qualifier width in DIPs.</summary>
+    public double QualifierMinimumWidth { get => (double)this.GetValue(QualifierMinimumWidthProperty); set => this.SetValue(QualifierMinimumWidthProperty, value); }
+
+    /// <summary>Gets the label placement selected during measurement.</summary>
+    public LabelPosition ActualLabelPosition { get; private set; }
+
+    private static DependencyProperty RegisterLabelLayoutProperty(string name, Type type, object defaultValue)
+        => DependencyProperty.Register(name, type, typeof(NumberBox), new PropertyMetadata(defaultValue, static (d, _) => ((NumberBox)d).UpdateLabelPosition()));
+
     /// <summary>
     ///     Identifies the <see cref="IsIndeterminate" /> dependency property.
     /// </summary>

@@ -107,8 +107,8 @@ public partial class NumberBox : Control
 
     private const string DefaultIndeterminateDisplayText = "-.-";
 
-    private readonly InputSystemCursor defaultCursor;
-    private readonly InputSystemCursor dragCursor;
+    private InputSystemCursor? defaultCursor;
+    private InputSystemCursor? dragCursor;
 
     private InputCursor? originalCursor;
     private MaskParser maskParser;
@@ -141,13 +141,26 @@ public partial class NumberBox : Control
         this.defaultCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
         this.dragCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeWestEast);
 
-        this.Loaded += (_, _) => this.AttachRootPointerPressedHandler();
+        this.Loaded += (_, _) =>
+        {
+            this.defaultCursor ??= InputSystemCursor.Create(InputSystemCursorShape.Arrow);
+            this.dragCursor ??= InputSystemCursor.Create(InputSystemCursorShape.SizeWestEast);
+            this.AttachRootPointerPressedHandler();
+        };
         this.Unloaded += (_, _) =>
         {
             this.DetachRootPointerPressedHandler();
             this.CompleteActiveEditSessionOnUnload();
-            this.defaultCursor.Dispose();
-            this.dragCursor.Dispose();
+            if (this.rootGrid is not null)
+            {
+                this.rootGrid.InputCursor = null;
+            }
+
+            this.defaultCursor?.Dispose();
+            this.dragCursor?.Dispose();
+            this.defaultCursor = null;
+            this.dragCursor = null;
+            this.originalCursor = null;
         };
     }
 
@@ -177,6 +190,9 @@ public partial class NumberBox : Control
 
         this.rootGrid = this.GetTemplateChild(RootGridPartName) as CustomGrid;
         this.backgroundBorder = this.GetTemplateChild(BackgroundBorderPartName) as Border;
+        this.valueGroup = this.GetTemplateChild("PartValueGroup") as FrameworkElement ?? this.backgroundBorder;
+        this.prefixTextBlock = this.GetTemplateChild("PartValuePrefix") as TextBlock;
+        this.qualifierTextBlock = this.GetTemplateChild("PartValueQualifier") as TextBlock;
         this.labelTextBlock = this.GetTemplateChild(LabelTextBlockPartName) as TextBlock;
         this.compactLabelTextBlock = this.GetTemplateChild(CompactLabelTextBlockPartName) as TextBlock;
         this.SetupValueTextBlockPart();
@@ -776,121 +792,6 @@ public partial class NumberBox : Control
         }
 
         this.DisplayText = this.maskParser.FormatValue(this.NumberValue, trimTrailingZeros: this.TrimTrailingZeros);
-    }
-
-    private void UpdateLabelPosition()
-    {
-        if (this.rootGrid == null || this.labelTextBlock == null || this.compactLabelTextBlock == null || this.valueTextBlock == null || this.backgroundBorder == null)
-        {
-            return;
-        }
-
-        this.rootGrid.RowDefinitions.Clear();
-        this.rootGrid.ColumnDefinitions.Clear();
-
-        this.valueTextBlock.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        var valueWidth = Math.Max(this.valueTextBlock.MinWidth, this.valueTextBlock.DesiredSize.Width);
-        var hasLabel = !string.IsNullOrWhiteSpace(this.Label) && this.LabelPosition != LabelPosition.None;
-
-        if (this.IsCompact && hasLabel && this.LabelPosition == LabelPosition.Left)
-        {
-            this.labelTextBlock.Visibility = Visibility.Collapsed;
-            this.compactLabelTextBlock.Visibility = Visibility.Visible;
-            this.rootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = valueWidth });
-            Grid.SetColumn(this.backgroundBorder, 0);
-            return;
-        }
-
-        this.compactLabelTextBlock.Visibility = Visibility.Collapsed;
-        var labelPosition = hasLabel ? this.LabelPosition : LabelPosition.None;
-        switch (labelPosition)
-        {
-            case LabelPosition.Left or LabelPosition.Right:
-                this.labelTextBlock.Visibility = Visibility.Visible;
-                LayoutHorizontally();
-                break;
-            case LabelPosition.Top or LabelPosition.Bottom:
-                this.labelTextBlock.Visibility = Visibility.Visible;
-                LayoutVertically();
-                break;
-            default:
-                this.labelTextBlock.Visibility = Visibility.Collapsed;
-                LayoutNoLabel();
-                break;
-        }
-
-        return;
-
-        void LayoutNoLabel()
-        {
-            this.rootGrid.ColumnDefinitions.Add(
-                new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = valueWidth });
-
-            Grid.SetColumn(this.labelTextBlock, 0);
-            Grid.SetColumn(this.backgroundBorder, 0);
-        }
-
-        void LayoutHorizontally()
-        {
-            var labelColumn = new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) };
-            var valueColumn = new ColumnDefinition
-            {
-                Width = new GridLength(1, GridUnitType.Star),
-                MinWidth = valueWidth,
-            };
-
-            if (this.LabelPosition == LabelPosition.Left)
-            {
-                this.rootGrid.ColumnDefinitions.Add(labelColumn);
-                this.rootGrid.ColumnDefinitions.Add(valueColumn);
-                Grid.SetColumn(this.labelTextBlock, 0);
-
-                // Grid.SetColumn(this.valueTextBlock, 1);
-                // Grid.SetColumn(this.editTextBox, 1);
-                Grid.SetColumn(this.backgroundBorder, 1);
-            }
-            else
-            {
-                this.rootGrid.ColumnDefinitions.Add(valueColumn);
-                this.rootGrid.ColumnDefinitions.Add(labelColumn);
-                Grid.SetColumn(this.labelTextBlock, 1);
-
-                // Grid.SetColumn(this.valueTextBlock, 0);
-                // Grid.SetColumn(this.editTextBox, 0);
-                Grid.SetColumn(this.backgroundBorder, 0);
-            }
-        }
-
-        void LayoutVertically()
-        {
-            this.rootGrid.ColumnDefinitions.Add(
-                new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = valueWidth });
-            this.rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            this.rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-            if (this.LabelPosition == LabelPosition.Top)
-            {
-                Grid.SetRow(this.labelTextBlock, 0);
-
-                // Grid.SetRow(this.valueTextBlock, 1);
-                // Grid.SetRow(this.editTextBox, 1);
-                Grid.SetRow(this.backgroundBorder, 1);
-            }
-            else
-            {
-                Grid.SetRow(this.labelTextBlock, 1);
-
-                // Grid.SetRow(this.valueTextBlock, 0);
-                // Grid.SetRow(this.editTextBox, 0);
-                Grid.SetRow(this.backgroundBorder, 0);
-            }
-
-            Grid.SetColumn(this.labelTextBlock, 0);
-
-            // Grid.SetColumn(this.valueTextBlock, 0);
-            // Grid.SetColumn(this.editTextBox, 0);
-            Grid.SetColumn(this.backgroundBorder, 0);
-        }
     }
 
     private void UpdateMinimumWidth()

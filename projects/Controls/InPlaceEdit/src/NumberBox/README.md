@@ -17,6 +17,8 @@ This control combines display and edit modes, supports masked formatting, horizo
 - Optional compact labels fit to their text while the value editor fills the remaining width.
 - Wheel input remains available to scroll the containing view and never edits the value.
 - Optional label foreground for axis cues such as red X, green Y, and blue Z.
+- Hover and drag emphasize the existing label color through opacity only; font
+  metrics, wrapping, and editor geometry do not change.
 - Indeterminate display mode (preserves numeric backing value).
 - Template parts exposed for full styling and templating.
 - Text editing follows the container's current width; entering edit mode does not
@@ -70,6 +72,16 @@ numberBox.Validate += (s, e) =>
 - `IndeterminateDisplayText` (string) — text shown when `IsIndeterminate` is true (default `-.-`).
 - `HorizontalValueAlignment` (TextAlignment) — alignment for the value text.
 - `HorizontalLabelAlignment` (HorizontalAlignment) — alignment for the label.
+- `AutoStackLabel` (bool) — moves an external horizontal label above the value when
+  the available width cannot fit the label, minimum editor width, and annotations.
+- `LabelWidth` (double) — shared external label-column width; NaN preserves the
+  default proportional columns. Text scaling applies to a fixed label width.
+- `EditorMinimumWidth` (double) — minimum value-region width used by adaptive layout.
+- `LabelSpacing` / `LabelRowSpacing` (double) — horizontal and vertical label gaps.
+- `Prefix` / `Qualifier` (string) — read-only annotations outside the value border,
+  retained next to the input in both inline and stacked layouts.
+- `QualifierMinimumWidth` (double) — reserved width for a nonempty qualifier.
+- `ActualLabelPosition` (read-only) — placement selected during measurement.
 
 ## Events
 
@@ -106,6 +118,9 @@ Control template parts (names used in `NumberBox.xaml`):
 
 - `PartRootGrid` — `CustomGrid` (exposes an `InputCursor` property used while dragging).
 - `PartBackgroundBorder` — `Border` around the content.
+- `PartValueGroup` — annotation/value `Grid`, positioned as a single group beside
+  or below the native drag label.
+- `PartValuePrefix` / `PartValueQualifier` — read-only annotation `TextBlock`s.
 - `PartValueTextBlock` — `TextBlock` used for display mode.
 - `PartLabelTextBlock` — `TextBlock` for the label.
 - `PartCompactLabelTextBlock` — `TextBlock` for the optional in-field label.

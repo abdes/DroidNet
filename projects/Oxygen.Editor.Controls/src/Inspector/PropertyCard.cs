@@ -56,6 +56,12 @@ public partial class PropertyCard : ContentControl
     /// <summary>Identifies a value-group accessory, such as a color swatch.</summary>
     public static readonly DependencyProperty LeadingContentProperty = RegisterLayoutProperty(nameof(LeadingContent), typeof(object), null);
 
+    /// <summary>Identifies scalar compositions whose label and annotations are owned by their NumberBox.</summary>
+    public static readonly DependencyProperty UseEditorLabelProperty = RegisterLayoutProperty(nameof(UseEditorLabel), typeof(bool), false);
+
+    /// <summary>Gets or sets whether a single NumberBox supplies the interactive property label.</summary>
+    public bool UseEditorLabel { get => (bool)this.GetValue(UseEditorLabelProperty); set => this.SetValue(UseEditorLabelProperty, value); }
+
     /// <summary>Gets or sets the row layout policy.</summary>
     public PropertyLayout Layout { get => (PropertyLayout)this.GetValue(LayoutProperty); set => this.SetValue(LayoutProperty, value); }
 
@@ -90,6 +96,7 @@ public partial class PropertyCard : ContentControl
         => DependencyProperty.Register(name, type, typeof(PropertyCard), new PropertyMetadata(defaultValue, (d, _) =>
         {
             var card = (PropertyCard)d;
+            card.SynchronizeScalarEditor();
             card.appliedLayout = null;
             card.InvalidateMeasure();
         }));
@@ -121,6 +128,8 @@ public partial class PropertyCard : ContentControl
     public PropertyCard()
     {
         this.DefaultStyleKey = typeof(PropertyCard);
+        _ = this.RegisterPropertyChangedCallback(ContentProperty, static (d, _) => ((PropertyCard)d).SynchronizeScalarEditor());
+        _ = this.RegisterPropertyChangedCallback(ContentTemplateProperty, static (d, _) => ((PropertyCard)d).SynchronizeScalarEditor());
     }
 
     /// <summary>
@@ -162,6 +171,11 @@ public partial class PropertyCard : ContentControl
         if (this.layoutRoot is not null && this.header is not null && this.editor is not null
             && this.headerQualifier is not null && this.suffix is not null && this.prefix is not null)
         {
+            if (this.MeasureScalarEditor(availableSize))
+            {
+                return base.MeasureOverride(availableSize);
+            }
+
             var scale = Math.Max(this.uiSettings.TextScaleFactor, this.FontSize / 14);
             this.editor.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             var annotation = new TextBlock { Text = this.Qualifier, FontSize = 12, FontFamily = this.FontFamily };
