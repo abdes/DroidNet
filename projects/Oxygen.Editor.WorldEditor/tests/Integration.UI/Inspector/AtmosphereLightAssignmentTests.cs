@@ -11,6 +11,7 @@ using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
+using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
 
 namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.Inspector;
 
@@ -22,7 +23,7 @@ public sealed partial class AtmosphereLightAssignmentTests : DroidNet.Tests.Visu
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public Task OccupiedPrimaryRejectsInspectorAndEnvironmentPickerEdits(bool scenePicker) => EnqueueAsync(async () =>
+    public Task PrimaryRoleAssignment_RejectsDirectConflictButScenePickerReplacesAtomically(bool scenePicker) => EnqueueAsync(async () =>
     {
         var fixture = new NativeSceneFixture(automatic: false, SeedSunNodes);
         await using var lifetime = fixture.ConfigureAwait(true);
@@ -63,19 +64,37 @@ public sealed partial class AtmosphereLightAssignmentTests : DroidNet.Tests.Visu
             await lightModel.PendingEdits.ConfigureAwait(true);
         }
 
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-        foreach (var node in new[]
+        if (scenePicker)
         {
-            owner,
-            candidate
+            _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+            _ = fixture.Context.Metadata.IsDirty.Should().BeTrue();
+            await VerifyRolesAsync(replaced: true).ConfigureAwait(true);
+            await fixture.Context.History.UndoAsync(timeout.Token).ConfigureAwait(true);
+            await VerifyRolesAsync(replaced: false).ConfigureAwait(true);
+            await fixture.Context.History.RedoAsync(timeout.Token).ConfigureAwait(true);
+            await VerifyRolesAsync(replaced: true).ConfigureAwait(true);
+            await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);
+            await VerifyRolesAsync(replaced: true).ConfigureAwait(true);
+        }
+        else
+        {
+            _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+            _ = ((DirectionalLightViewModel)model).AtmosphereSlotDiagnostic.HasError.Should().BeTrue();
+            await VerifyRolesAsync(replaced: false).ConfigureAwait(true);
         }
 
-        )
+        async Task VerifyRolesAsync(bool replaced)
         {
-            var expected = node == owner ? AtmosphereLightSlot.Primary : AtmosphereLightSlot.None;
-            _ = node.Components.OfType<DirectionalLightComponent>().Single().AtmosphereSlot.Should().Be(expected);
-            var native = await fixture.ReadNodeAsync(node.Id, timeout.Token).ConfigureAwait(true);
-            _ = native.Properties.Single(value => value.ComponentId == 3 && value.FieldId == 25).Value.Should().Be((int)expected);
+            foreach (var nodeId in new[] { owner.Id, candidate.Id })
+            {
+                var expected = (nodeId == candidate.Id) == replaced ? AtmosphereLightSlot.Primary : AtmosphereLightSlot.None;
+                var source = fixture.Source.AllNodes.Single(node => node.Id == nodeId);
+                _ = source.Components.OfType<DirectionalLightComponent>().Single().AtmosphereSlot.Should().Be(expected);
+                var native = await WaitForNodeAsync(fixture, nodeId,
+                    state => state.Properties.Any(value => value.ComponentId == 3 && value.FieldId == 25 && value.Value == (int)expected),
+                    timeout.Token).ConfigureAwait(true);
+                _ = native.Properties.Single(value => value.ComponentId == 3 && value.FieldId == 25).Value.Should().Be((int)expected);
+            }
         }
     });
 

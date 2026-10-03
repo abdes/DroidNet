@@ -300,7 +300,11 @@ means priority, brightness or an intrinsic celestial body type.
 ### Assignment rules
 
 - At most one stored occupant per non-None slot, even while hidden/off. Conflicting
-  edit/import/cook reports the occupant and changes neither light.
+  direct Light assignment/import/cook reports the occupant and changes neither light.
+  The Scene source picker explicitly replaces a role's source: clearing the old
+  occupant and assigning the selected light are one atomic command change set and
+  one undo entry. This changes only role ownership, not either light's illumination
+  settings or existence. Undo/redo and saved reopen preserve both role assignments.
 - Assignment/clear/copy uses the ordinary light command/history path. Hiding or
   disabling retains assignment; Secondary-only never promotes it.
 - None retains ordinary directional illumination/shadow controls. Each light's
