@@ -198,12 +198,14 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     private readonly ProjectContextService projectContexts = new();
     private readonly ContentCookCoordinator materialCookCoordinator;
     private readonly Oxygen.Testing.NativeContentPipelineFixture materialPipeline;
+    private readonly Mock<IGeometryMaterialSlotProvider> materialSlotProvider = new();
     private readonly Dictionary<string, (ContentCookCoordinator Coordinator, Oxygen.Testing.NativeContentPipelineFixture Pipeline)> foreignMaterialPipelines = new(StringComparer.OrdinalIgnoreCase);
     private readonly Mock<IDocumentService> documents = new();
     private readonly StrongReferenceMessenger messenger = new();
     private readonly HostingContext hosting;
     private readonly BehaviorSubject<IReadOnlyList<MaterialPickerResult>> materialChoices = new([]);
     private RuntimeSceneTarget? target;
+    private IGeometryMaterialSlotProvider activeMaterialSlotProvider;
     public NativeSceneFixture(bool automatic, Action<Scene>? seed = null, EngineSettings? engineSettings = null, ILoggerFactory? loggerFactory = null)
     {
         var dispatcher = VisualUserInterfaceTestsApp.DispatcherQueue;
@@ -229,6 +231,9 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         this.projectContexts.Activate(ProjectContext.FromProjectInfo(project.ProjectInfo));
         this.materialCookCoordinator = new(this.projectContexts, NullLogger<ContentCookCoordinator>.Instance);
         this.materialPipeline = new(this.projectContexts, this.materialCookCoordinator, new CookDocumentRegistry());
+        this.activeMaterialSlotProvider = this.materialPipeline.Pipeline;
+        _ = this.materialSlotProvider.Setup(provider => provider.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<Uri>(), It.IsAny<CancellationToken>()))
+            .Returns((ProjectContext context, Uri uri, CancellationToken token) => this.activeMaterialSlotProvider.ReadAsync(context, uri, token));
         var mode = automatic ? ExposureMode.Auto : ExposureMode.Manual;
         this.Source = Scene.CreateAndHydrate(project, new SceneData { Id = Guid.NewGuid(), Name = "Environment", Environment = new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = mode } }, });
         seed?.Invoke(this.Source);
@@ -241,7 +246,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         _ = this.AssetCatalog.Setup(value => value.RefreshAsync(It.IsAny<Oxygen.Editor.ContentBrowser.AssetIdentity.AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         _ = this.MaterialPicker.Setup(value => value.Results).Returns(this.materialChoices);
         _ = this.MaterialPicker.Setup(value => value.RefreshAsync(It.IsAny<MaterialPickerFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        this.Commands = new SceneDocumentCommandService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), Mock.Of<ISceneExplorerService>(), new SceneSelectionService(), this.sync, this.manager, this.documents.Object, default, this.messenger, results, new OperationStatusReducer(), this.materialPipeline.Pipeline, this.projectContexts);
+        this.Commands = new SceneDocumentCommandService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), Mock.Of<ISceneExplorerService>(), new SceneSelectionService(), this.sync, this.manager, this.documents.Object, default, this.messenger, results, new OperationStatusReducer(), this.materialSlotProvider.Object, this.projectContexts);
         this.Model = new EnvironmentViewModel(this.Commands, () => this.Context);
         this.Model.SetScene(this.Source);
         this.sync.SceneSynchronized += (_, args) =>
@@ -313,10 +318,11 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     }
 
     public Task SuspendCookedContentAsync() => this.engine.SuspendCookedContentAsync();
-    public SceneNodeEditorViewModel CreateInspectorHost(IList<SceneNode> selection, Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider? assets = null, IMaterialPickerService? materials = null, Oxygen.Editor.ContentPipeline.Discovery.IBuiltinCatalogDiscovery? builtins = null, ISceneContentDemandService? contentDemand = null)
+    public SceneNodeEditorViewModel CreateInspectorHost(IList<SceneNode> selection, Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider? assets = null, IMaterialPickerService? materials = null, Oxygen.Editor.ContentPipeline.Discovery.IBuiltinCatalogDiscovery? builtins = null, ISceneContentDemandService? contentDemand = null, IGeometryMaterialSlotProvider? materialSlots = null)
     {
+        this.activeMaterialSlotProvider = materialSlots ?? this.materialPipeline.Pipeline;
         this.messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
-        return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.Commands, this.documents.Object, default, assets ?? this.AssetCatalog.Object, materials ?? this.MaterialPicker.Object, this.sync, builtins ?? new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>(), this.materialPipeline.Pipeline, this.projectContexts);
+        return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.Commands, this.documents.Object, default, assets ?? this.AssetCatalog.Object, materials ?? this.MaterialPicker.Object, this.sync, builtins ?? new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>(), this.materialSlotProvider.Object, this.projectContexts);
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken, bool mountPublished = false)

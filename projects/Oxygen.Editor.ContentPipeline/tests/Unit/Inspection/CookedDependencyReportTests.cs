@@ -44,7 +44,8 @@ public sealed class CookedDependencyReportTests
         var legacy = ReportJson.Replace("oxygen.cooked-dependencies.v2", "oxygen.cooked-dependencies.v1", StringComparison.Ordinal);
 
         var parse = () => CookedDependencyReport.Parse(legacy);
-        _ = parse.Should().Throw<InvalidDataException>().WithMessage("*does not match its schema*");
+        _ = parse.Should().Throw<InvalidDataException>()
+            .WithMessage("*Expected oxygen.cooked-dependencies.v2; received 'oxygen.cooked-dependencies.v1'*installed native Inspector*");
     }
 
     [TestMethod]

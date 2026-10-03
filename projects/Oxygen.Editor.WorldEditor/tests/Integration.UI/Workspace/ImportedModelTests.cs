@@ -77,7 +77,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         AssertImportedAssetInformation(geometryRow!, libraryOnly);
         AssertImportedAssetInformation(materialRow!, libraryOnly);
         using var demand = fixture.CreateImportedAssetDemand(services, provider);
-        using var host = fixture.CreateInspectorHost([fixture.Source.RootNodes[0]], provider, picker, services.Builtins, demand);
+        using var host = fixture.CreateInspectorHost([fixture.Source.RootNodes[0]], provider, picker, services.Builtins, demand, services.Pipeline);
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
         await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);
         while (model.IsMaterialSlotLoading)
