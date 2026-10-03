@@ -12,6 +12,16 @@ namespace Oxygen.Editor.Controls;
 /// </summary>
 public partial class PropertiesExpander
 {
+    /// <summary>Identifies the independent actions displayed before the disclosure.</summary>
+    public static readonly DependencyProperty HeaderActionsProperty = DependencyProperty.Register(
+        nameof(HeaderActions), typeof(object), typeof(PropertiesExpander), new PropertyMetadata(null));
+
+    /// <summary>Gets or sets independent section actions, such as Reset.</summary>
+    public object? HeaderActions
+    {
+        get => this.GetValue(HeaderActionsProperty);
+        set => this.SetValue(HeaderActionsProperty, value);
+    }
     /// <summary>
     /// The backing <see cref="DependencyProperty"/> for the <see cref="Header"/> property.
     /// </summary>

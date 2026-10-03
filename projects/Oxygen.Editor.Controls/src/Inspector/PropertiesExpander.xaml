@@ -76,7 +76,7 @@
                                             x:Name="HeaderPanel"
                                             Grid.Row="0"
                                             Grid.Column="1"
-                                            Margin="0,0,24,0"
+                                            Margin="0,0,12,0"
                                             VerticalAlignment="Center"
                                             Orientation="Vertical">
                                             <ContentPresenter
@@ -84,6 +84,8 @@
                                                 HorizontalAlignment="Left"
                                                 win:HighContrastAdjustment="None"
                                                 Content="{TemplateBinding Header}"
+                                                FontSize="14"
+                                                FontWeight="SemiBold"
                                                 TextWrapping="Wrap" />
 
                                             <ContentPresenter
@@ -109,10 +111,16 @@
                                             VerticalAlignment="Center"
                                             HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
                                             Content="{TemplateBinding Content}" />
+                                        <ContentPresenter
+                                            x:Name="PartHeaderActionsPresenter"
+                                            Grid.Column="3"
+                                            Margin="4,0,0,0"
+                                            VerticalAlignment="Center"
+                                            Content="{TemplateBinding HeaderActions}" />
                                     </Grid>
                                 </Expander.Header>
                                 <Expander.Content>
-                                    <Grid>
+                                    <Grid Padding="{TemplateBinding Padding}">
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="*" />
@@ -174,7 +182,6 @@
                                             <ui:ControlSizeTrigger MaxWidth="{ThemeResource PropertiesExpanderWrapNoIconThreshold}" TargetElement="{Binding ElementName=PartRootGrid}" />
                                         </VisualState.StateTriggers>
                                         <VisualState.Setters>
-                                            <Setter Target="PartHeaderIconPresenterHolder.Visibility" Value="Collapsed" />
                                             <Setter Target="PartContentPresenter.(Grid.Row)" Value="1" />
                                             <Setter Target="PartContentPresenter.(Grid.Column)" Value="1" />
                                             <Setter Target="PartContentPresenter.HorizontalAlignment" Value="Stretch" />
