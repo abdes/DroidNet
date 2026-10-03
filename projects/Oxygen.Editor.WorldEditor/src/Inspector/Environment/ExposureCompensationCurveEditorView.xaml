@@ -13,15 +13,22 @@
         </ResourceDictionary>
     </UserControl.Resources>
     <StackPanel Spacing="6">
-        <Canvas
-            Width="160"
+        <Polyline
             Height="36"
-            HorizontalAlignment="Left">
-            <Polyline
-                Points="{x:Bind local:InspectorCurvePresentation.CreatePoints(ViewModel.Curve), Mode=OneWay}"
-                Stroke="{ThemeResource AccentFillColorDefaultBrush}"
-                StrokeThickness="2" />
-        </Canvas>
+            HorizontalAlignment="Stretch"
+            Points="{x:Bind local:InspectorCurvePresentation.CreatePoints(ViewModel.Curve), Mode=OneWay}"
+            Stretch="Fill"
+            Stroke="{ThemeResource AccentFillColorDefaultBrush}"
+            StrokeThickness="2" />
+        <Grid ColumnSpacing="6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="32" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Metered EV100" />
+            <TextBlock Grid.Column="1" Text="Compensation EV" />
+        </Grid>
         <ItemsRepeater ItemsSource="{x:Bind ViewModel.Keys, Mode=OneWay}">
             <ItemsRepeater.Layout>
                 <StackLayout Spacing="4" />
@@ -32,29 +39,30 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="32" />
                         </Grid.ColumnDefinitions>
                         <controls:NumberBox
+                            AutomationProperties.Name="Metered EV100"
                             EditSessionCompleted="OnEditCompleted"
                             EditSessionStarted="OnEditStarted"
-                            Label="Metered EV100"
-                            LabelPosition="Top"
+                            LabelPosition="None"
                             Mask="~.###"
                             NumberValue="{x:Bind MeteredEv, Mode=TwoWay}"
                             Tag="MeteredEv"
                             Validate="OnKeyValidate" />
                         <controls:NumberBox
                             Grid.Column="1"
+                            AutomationProperties.Name="Compensation EV"
                             EditSessionCompleted="OnEditCompleted"
                             EditSessionStarted="OnEditStarted"
-                            Label="Compensation EV"
-                            LabelPosition="Top"
+                            LabelPosition="None"
                             Mask="~.###"
                             NumberValue="{x:Bind CompensationEv, Mode=TwoWay}"
                             Tag="CompensationEv"
                             Validate="OnKeyValidate" />
                         <Button
                             Grid.Column="2"
+                            Padding="0"
                             Click="OnRemoveKey"
                             ToolTipService.ToolTip="Remove curve key">
                             <FontIcon Glyph="&#xE738;" />
