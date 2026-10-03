@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
+using System.Collections.Immutable;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core.Diagnostics;
@@ -36,6 +37,10 @@ internal sealed class SceneEnvironmentDescriptors
     private readonly PropertyDescriptor<float> autoExposureLogLuminanceRangeDescriptor;
     private readonly PropertyDescriptor<float> autoExposureTargetLuminanceDescriptor;
     private readonly PropertyDescriptor<float> autoExposureSpotMeterRadiusDescriptor;
+    private readonly PropertyDescriptor<float> autoExposureBlackInfluenceDescriptor;
+    private readonly PropertyDescriptor<float> autoExposureTransitionDistanceEvDescriptor;
+    private readonly PropertyDescriptor<Uri?> autoExposureMeteringMaskDescriptor;
+    private readonly PropertyDescriptor<ImmutableArray<ExposureCompensationKeyData>> autoExposureCompensationCurveDescriptor;
     private readonly PropertyDescriptor<float> bloomIntensityDescriptor;
     private readonly PropertyDescriptor<float> bloomThresholdDescriptor;
     private readonly PropertyDescriptor<float> saturationDescriptor;
@@ -78,6 +83,10 @@ internal sealed class SceneEnvironmentDescriptors
         this.autoExposureLogLuminanceRangeDescriptor = this.Get<float>("/post_process/auto_exposure_log_luminance_range");
         this.autoExposureTargetLuminanceDescriptor = this.Get<float>("/post_process/auto_exposure_target_luminance");
         this.autoExposureSpotMeterRadiusDescriptor = this.Get<float>("/post_process/auto_exposure_spot_meter_radius");
+        this.autoExposureBlackInfluenceDescriptor = this.Get<float>("/post_process/auto_exposure_black_influence");
+        this.autoExposureTransitionDistanceEvDescriptor = this.Get<float>("/post_process/auto_exposure_transition_distance_ev");
+        this.autoExposureMeteringMaskDescriptor = this.Get<Uri?>("/post_process/auto_exposure_metering_mask");
+        this.autoExposureCompensationCurveDescriptor = this.Get<ImmutableArray<ExposureCompensationKeyData>>("/post_process/auto_exposure_compensation_curve");
         this.bloomIntensityDescriptor = this.Get<float>("/post_process/bloom_intensity");
         this.bloomThresholdDescriptor = this.Get<float>("/post_process/bloom_threshold");
         this.saturationDescriptor = this.Get<float>("/post_process/saturation");
@@ -157,6 +166,18 @@ internal sealed class SceneEnvironmentDescriptors
 
     /// <summary>Gets the typed property id for spot meter radius.</summary>
     internal PropertyId<float> AutoExposureSpotMeterRadius => this.autoExposureSpotMeterRadiusDescriptor.TypedId;
+
+    /// <summary>Gets the typed property id for dark histogram sample influence.</summary>
+    internal PropertyId<float> AutoExposureBlackInfluence => this.autoExposureBlackInfluenceDescriptor.TypedId;
+
+    /// <summary>Gets the typed property id for hybrid adaptation transition distance.</summary>
+    internal PropertyId<float> AutoExposureTransitionDistanceEv => this.autoExposureTransitionDistanceEvDescriptor.TypedId;
+
+    /// <summary>Gets the typed property id for the exposure metering mask reference.</summary>
+    internal PropertyId<Uri?> AutoExposureMeteringMask => this.autoExposureMeteringMaskDescriptor.TypedId;
+
+    /// <summary>Gets the typed property id for the exposure compensation curve.</summary>
+    internal PropertyId<ImmutableArray<ExposureCompensationKeyData>> AutoExposureCompensationCurve => this.autoExposureCompensationCurveDescriptor.TypedId;
 
     /// <summary>Gets the typed property id for bloom intensity.</summary>
     internal PropertyId<float> BloomIntensity => this.bloomIntensityDescriptor.TypedId;
@@ -262,6 +283,40 @@ internal sealed class SceneEnvironmentDescriptors
         AddPostFloat(descriptors, "/post_process/auto_exposure_log_luminance_range", "Log Luminance Range", static p => p.AutoExposureLogLuminanceRange, static (p, v) => p with { AutoExposureLogLuminanceRange = v });
         AddPostFloat(descriptors, "/post_process/auto_exposure_target_luminance", "Target Luminance", static p => p.AutoExposureTargetLuminance, static (p, v) => p with { AutoExposureTargetLuminance = v });
         AddPostFloat(descriptors, "/post_process/auto_exposure_spot_meter_radius", "Spot Radius", static p => p.AutoExposureSpotMeterRadius, static (p, v) => p with { AutoExposureSpotMeterRadius = v });
+        descriptors.Add(PostProcessDescriptor(
+            "/post_process/auto_exposure_black_influence",
+            "Dark-sample influence",
+            static p => p.AutoExposureBlackInfluence,
+            static (p, v) => p with { AutoExposureBlackInfluence = v },
+            static value => float.IsFinite(value) && value is >= 0 and <= 1
+                ? ValidationResult.Ok
+                : ValidationResult.Fail("EXPOSURE_BLACK_INFLUENCE_RANGE", "Dark-sample influence must be between 0 and 1."),
+            "numberbox"));
+        descriptors.Add(PostProcessDescriptor(
+            "/post_process/auto_exposure_transition_distance_ev",
+            "Adaptation transition distance",
+            static p => p.AutoExposureTransitionDistanceEv,
+            static (p, v) => p with { AutoExposureTransitionDistanceEv = v },
+            static value => float.IsFinite(value) && value > 0
+                ? ValidationResult.Ok
+                : ValidationResult.Fail("EXPOSURE_TRANSITION_DISTANCE_RANGE", "Adaptation transition distance must be positive and finite."),
+            "numberbox"));
+        descriptors.Add(PostProcessDescriptor(
+            "/post_process/auto_exposure_metering_mask",
+            "Metering mask",
+            static p => p.AutoExposureMeteringMask,
+            static (p, v) => p with { AutoExposureMeteringMask = v },
+            static value => value is null || (value.IsAbsoluteUri && string.Equals(value.Scheme, "asset", StringComparison.OrdinalIgnoreCase))
+                ? ValidationResult.Ok
+                : ValidationResult.Fail("EXPOSURE_METERING_MASK_REFERENCE", "Metering mask must be an absolute asset URI or empty."),
+            "asset-picker"));
+        descriptors.Add(PostProcessDescriptor(
+            "/post_process/auto_exposure_compensation_curve",
+            "Exposure-compensation curve",
+            static p => p.AutoExposureCompensationCurve,
+            static (p, v) => p with { AutoExposureCompensationCurve = v },
+            ValidateExposureCompensationCurve,
+            "exposure-curve"));
         AddPostFloat(descriptors, "/post_process/bloom_intensity", "Intensity", static p => p.BloomIntensity, static (p, v) => p with { BloomIntensity = v });
         AddPostFloat(descriptors, "/post_process/bloom_threshold", "Threshold", static p => p.BloomThreshold, static (p, v) => p with { BloomThreshold = v });
         AddPostFloat(descriptors, "/post_process/saturation", "Saturation", static p => p.Saturation, static (p, v) => p with { Saturation = v });
@@ -427,6 +482,10 @@ internal sealed class SceneEnvironmentDescriptors
             "/post_process/auto_exposure_log_luminance_range" => "#/definitions/editor_scene_environment/post_process/auto_exposure_log_luminance_range",
             "/post_process/auto_exposure_target_luminance" => "#/definitions/editor_scene_environment/post_process/auto_exposure_target_luminance",
             "/post_process/auto_exposure_spot_meter_radius" => "#/definitions/editor_scene_environment/post_process/auto_exposure_spot_meter_radius",
+            "/post_process/auto_exposure_black_influence" => "#/definitions/editor_scene_environment/post_process/auto_exposure_black_influence",
+            "/post_process/auto_exposure_transition_distance_ev" => "#/definitions/editor_scene_environment/post_process/auto_exposure_transition_distance_ev",
+            "/post_process/auto_exposure_metering_mask" => "#/definitions/editor_scene_environment/post_process/auto_exposure_metering_mask",
+            "/post_process/auto_exposure_compensation_curve" => "#/definitions/editor_scene_environment/post_process/auto_exposure_compensation_curve",
             "/post_process/bloom_intensity" => "#/definitions/editor_scene_environment/post_process/bloom_intensity",
             "/post_process/bloom_threshold" => "#/definitions/editor_scene_environment/post_process/bloom_threshold",
             "/post_process/saturation" => "#/definitions/editor_scene_environment/post_process/saturation",
@@ -462,6 +521,46 @@ internal sealed class SceneEnvironmentDescriptors
             SceneDiagnosticCodes.EnvironmentManualExposureInvalid,
             "Post-process values must be finite.",
             $"environment{pointer.Replace('/', '.')}"));
+
+    private static PropertyDescriptor<T> PostProcessDescriptor<T>(
+        string pointer,
+        string label,
+        Func<PostProcessEnvironmentData, T> read,
+        Func<PostProcessEnvironmentData, T, PostProcessEnvironmentData> write,
+        Func<T, ValidationResult> validator,
+        string renderer)
+        => new(
+            id: new PropertyId<T>(SceneDocumentCommandService.SceneEnvironmentKind, pointer),
+            reader: target => read(GetValue(target).PostProcess),
+            writer: (target, value) =>
+            {
+                var sceneEnvironment = GetValue(target);
+                SetValue(target, sceneEnvironment with { PostProcess = write(sceneEnvironment.PostProcess, value) });
+            },
+            validator: validator,
+            annotation: Annotation(pointer, new EditorAnnotation { Group = "Post-processing", Label = label, Renderer = renderer }),
+            engineCommandKey: $"environment{pointer.Replace('/', '.')}" );
+
+    private static ValidationResult ValidateExposureCompensationCurve(ImmutableArray<ExposureCompensationKeyData> keys)
+    {
+        if (keys.IsDefault || keys.Length > 64)
+        {
+            return ValidationResult.Fail("EXPOSURE_CURVE_LENGTH", "The exposure-compensation curve must contain at most 64 keys.");
+        }
+
+        var previousMeteredEv = float.NegativeInfinity;
+        foreach (var key in keys)
+        {
+            if (!float.IsFinite(key.MeteredEv) || !float.IsFinite(key.CompensationEv) || key.MeteredEv <= previousMeteredEv)
+            {
+                return ValidationResult.Fail("EXPOSURE_CURVE_KEYS", "Curve keys must be finite and have unique, increasing metered EV coordinates.");
+            }
+
+            previousMeteredEv = key.MeteredEv;
+        }
+
+        return ValidationResult.Ok;
+    }
 
     private static void AddSkyFloat(
         List<PropertyDescriptor> descriptors,

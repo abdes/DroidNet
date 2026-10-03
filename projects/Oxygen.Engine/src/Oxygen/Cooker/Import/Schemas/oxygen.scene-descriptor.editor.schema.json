@@ -406,6 +406,28 @@
               "x-editor-renderer": "numberbox",
               "x-editor-step": 0.01
             },
+            "auto_exposure_black_influence": {
+              "x-editor-label": "Dark-sample influence",
+              "x-editor-group": "Auto Exposure",
+              "x-editor-renderer": "numberbox",
+              "x-editor-step": 0.01
+            },
+            "auto_exposure_transition_distance_ev": {
+              "x-editor-label": "Adaptation transition distance",
+              "x-editor-group": "Auto Exposure",
+              "x-editor-renderer": "numberbox",
+              "x-editor-step": 0.1
+            },
+            "auto_exposure_metering_mask": {
+              "x-editor-label": "Metering mask",
+              "x-editor-group": "Auto Exposure",
+              "x-editor-renderer": "asset-picker"
+            },
+            "auto_exposure_compensation_curve": {
+              "x-editor-label": "Exposure-compensation curve",
+              "x-editor-group": "Auto Exposure",
+              "x-editor-renderer": "exposure-curve"
+            },
             "bloom_intensity": {
               "x-editor-label": "Intensity",
               "x-editor-group": "Bloom",
