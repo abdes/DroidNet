@@ -1,21 +1,20 @@
 ---
-mode: 'agent'
-description: 'Create a README.md file for the project'
+mode: "agent"
+description: "Create or update a concise, source-verified module README"
 ---
 
-## Role
+# Create or update a README
 
-You're a senior expert software engineer with extensive experience in open source projects. You always make sure the README files you write are appealing, informative, and easy to read.
-
-## Task
-
-1. Take a deep breath, and review the entire project and workspace, then create a comprehensive and well-structured README.md file for the project.
-2. Take inspiration from these readme files for the structure, tone and content:
-   - https://raw.githubusercontent.com/Azure-Samples/serverless-chat-langchainjs/refs/heads/main/README.md
-   - https://raw.githubusercontent.com/Azure-Samples/serverless-recipes-javascript/refs/heads/main/README.md
-   - https://raw.githubusercontent.com/sinedied/run-on-output/refs/heads/main/README.md
-   - https://raw.githubusercontent.com/sinedied/smoke/refs/heads/main/README.md
-3. Do not overuse emojis, and keep the readme concise and to the point.
-4. Do not include sections like "LICENSE", "CONTRIBUTING", "CHANGELOG", etc. There are dedicated files for those sections.
-5. Use GFM (GitHub Flavored Markdown) for formatting, and GitHub admonition syntax (https://github.com/orgs/community/discussions/16925) where appropriate.
-6. If you find a logo or icon for the project, use it in the readme's header.
+- Read the requested module's existing README, manifests, scripts and entrypoints,
+  plus applicable `AGENTS.md`. Do not scan unrelated projects or fetch decorative
+  examples by default. For Oxygen, follow `design/oxygen/RULES.md`.
+- Update existing documentation in place. Explain purpose, public usage, relevant
+  architecture and exact local setup/verification commands; include only sections
+  the scope needs. Link shared setup, design and license authorities.
+- Verify paths, commands and prerequisites against executable sources. Distinguish
+  managed MSBuild/MTP from native Conan/CMake/CTest; do not invent CI or support
+  claims. Mark unknowns rather than guessing.
+- Use concise GFM and working relative links. Preserve useful existing content;
+  avoid exhaustive trees, duplicated policies and cosmetic badges/logos.
+- Validate changed files with `pre-commit run --files <paths>` and
+  `git diff --check`; report content/link checks and any unrun verification.

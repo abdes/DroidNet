@@ -1,79 +1,18 @@
 ---
-description: 'Intelligent README.md generation prompt that analyzes project documentation structure and creates comprehensive repository documentation. Scans .github/copilot directory files and copilot-instructions.md to extract project information, technology stack, architecture, development workflow, coding standards, and testing approaches while generating well-structured markdown documentation with proper formatting, cross-references, and developer-focused content.'
-
-mode: 'agent'
+description: "Plan a README from verified repository sources"
+mode: "agent"
 ---
 
-# README Generator Prompt
+# README blueprint
 
-Generate a comprehensive README.md for this repository by analyzing the documentation files in the .github/copilot directory and the copilot-instructions.md file. Follow these steps:
+Follow [README guidance](create-readme.prompt.md). Build a short outline for the
+requested scope from existing READMEs, applicable `AGENTS.md`, manifests, scripts
+and owning designs. Do not assume a `.github/copilot/` source tree exists.
 
-1. Scan all the files in the .github/copilot folder, like:
-   - Architecture
-   - Code_Exemplars
-   - Coding_Standards
-   - Project_Folder_Structure
-   - Technology_Stack
-   - Unit_Tests
-   - Workflow_Analysis
-
-2. Also review the copilot-instructions.md file in the .github folder
-
-3. Create a README.md with the following sections:
-
-## Project Name and Description
-- Extract the project name and primary purpose from the documentation
-- Include a concise description of what the project does
-
-## Technology Stack
-- List the primary technologies, languages, and frameworks used
-- Include version information when available
-- Source this information primarily from the Technology_Stack file
-
-## Project Architecture
-- Provide a high-level overview of the architecture
-- Consider including a simple diagram if described in the documentation
-- Source from the Architecture file
-
-## Getting Started
-- Include installation instructions based on the technology stack
-- Add setup and configuration steps
-- Include any prerequisites
-
-## Project Structure
-- Brief overview of the folder organization
-- Source from Project_Folder_Structure file
-
-## Key Features
-- List main functionality and features of the project
-- Extract from various documentation files
-
-## Development Workflow
-- Summarize the development process
-- Include information about branching strategy if available
-- Source from Workflow_Analysis file
-
-## Coding Standards
-- Summarize key coding standards and conventions
-- Source from the Coding_Standards file
-
-## Testing
-- Explain testing approach and tools
-- Source from Unit_Tests file
-
-## Contributing
-- Guidelines for contributing to the project
-- Reference any code exemplars for guidance
-- Source from Code_Exemplars and copilot-instructions
-
-## License
-- Include license information if available
-
-Format the README with proper Markdown, including:
-- Clear headings and subheadings
-- Code blocks where appropriate
-- Lists for better readability
-- Links to other documentation files
-- Badges for build status, version, etc. if information is available
-
-Keep the README concise yet informative, focusing on what new developers or users would need to know about the project.
+- Associate each proposed section with its verified source; omit sections without
+  useful evidence. Link shared authorities instead of duplicating them.
+- For repository scope, distinguish DroidNet's managed/WinUI modules from
+  Oxygen.Engine's native workflow. For module scope, keep only local usage and
+  architecture needed by its consumers/contributors.
+- If README creation is requested, write the scoped document from that outline;
+  otherwise return the outline and important unresolved facts, not extra files.

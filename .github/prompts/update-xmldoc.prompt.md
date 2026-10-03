@@ -1,101 +1,24 @@
-# Prompt: Update XML Documentation Comments in C# Files (Indentation-locked)
+# Update C# XML documentation
 
-Goal
-Ensure XML documentation comments (`/// ...`) are accurate and complete while preserving EXACT whitespace inside XML tags. Any whitespace deviation inside tags is a hard failure.
+Update existing `///` comments and document missing non-private contracts in the
+requested files. Read the implementation first; follow `.editorconfig` and the
+file's established XMLDoc indentation, not a whole-file reflow.
 
----
-
-1. Scope
-- Existing XMLDoc comments
-- New XMLDoc comments to be added for non-documented non-private members
-
----
-
-2. Indentation Lock (hard constraints)
-- Inside multi-line XML elements (`<summary>`, `<remarks>`, `<param>`, `<typeparam>`, `<returns>`, `<exception>`):
-  - Lines that are not opening or closing tags MUST start with `///    ` (four spaces after `///`).
-- CDATA blocks must be byte-for-byte identical (no changes inside `<![CDATA[ ... ]]>`).
-
-Regex enforcement (apply pre- and post-edit checks):
-- Multi-line inner line: `^///    \S.*$`
-- Opening tag: `^/// <([a-z]+)(\s[^>]*)?>\s*$`
-- Closing tag: `^/// </[a-z]+>\s*$`
-- Tags inside <remarks> or <summary>:
-  - Opening tag: `^///    <para>\s*$`
-  - Closing tag: `^///    </para>\s*$`
-- `code` open: `^///    <code><!\[CDATA\[$`
-- `code` close: `^///    \]\]></code>$`
-
-If any post-edit line inside an element fails these regexs, revert the change or mark as FAIL.
-
----
-
-3. Formatting Rules
-- Use `<see langword="null"/>`, `<see langword="true"/>`, `<see langword="false"/>` for keywords.
-- `<summary>` and `<remarks>`:
-  - First paragraph: single line without `<para>`.
-  - Subsequent paragraphs: wrap in `<para>` and use EXACT 4-space indentation for inner lines.
-- Single-line elements (<120 chars): keep on one line, no reflow.
-- Multi-line elements: opening and closing tags on their own lines; inner lines start with EXACT 4 spaces.
-
----
-
-4. <param>, <typeparam>, <returns>, <exception>
-- Always include `name` for `<param>`/`<typeparam>`; match symbol exactly.
-- Use `<paramref name="..."/>` when referencing parameters.
-- Add `<exception>` only when the code clearly throws (e.g., `ArgumentNullException.ThrowIfNull`).
-- Line-length rule: if >120 chars, convert to multi-line, enforcing the indentation lock.
-
----
-
-5. Prohibited edits (hard failures)
-- Changing any leading whitespace after `///` on inner lines of multi-line elements.
-- Altering CDATA content or its indentation.
-- Expanding single-line elements that are under 120 chars.
-- Modifying any non-`///` lines.
-
----
-
-6. Post-edit validation (must perform)
-- Re-scan file and validate with the regexs in section 2.
-- Run diff: confirm only `///` lines changed.
-- If build or XML-doc lint is available, report result; otherwise state “not run.”
-- If validation fails: list offending lines and revert or mark as FAIL with reasons.
-
----
-
-7. Output format
-- One-line summary per file.
-- List of TODOs inserted for uncertain behavior.
-- Validation status:
-  - "Regex indentation: PASS/FAIL"
-  - "Diff scope: PASS/FAIL"
-  - "Build/XML-doc lint: PASS/NOT RUN"
-
----
-
-8. Examples (strictly preserved indentation)
-Short param (single line):
-/// <param name="watch">Whether to watch the file for changes.</param>
-
-Long param (multi-line):
-/// <param name="encryption">
-///     Optional type of encryption provider. Must implement <see cref="IEncryptionProvider"/>.
-/// </param>
-
-Exception (single line):
-/// <exception cref="System.ArgumentNullException">Thrown when <paramref name="container"/> is <see langword="null"/>.</exception>
-
-Exception (multi-line):
-/// <exception cref="System.InvalidOperationException">
-///     Thrown when the configuration source cannot be initialized (e.g., invalid JSON or missing dependencies).
-/// </exception>
-
-CDATA (unchanged):
-/// <code><![CDATA[
-///     var bootstrapper = new Bootstrapper(args)
-///         .Configure()
-///         .WithConfig()
-///         .WithJsonConfigSource(...)
-///         .Build();
-/// ]]></code>
+- Change only documentation comments; preserve implementation and unrelated user
+  edits. Keep existing indentation after `///` and source indentation before it.
+  For new comments, match adjacent documentation. Preserve CDATA byte-for-byte
+  unless changing the example is explicitly requested.
+- Keep short single-line elements intact. Wrap new/changed long prose at the
+  local limit (120 columns where the existing convention uses it); do not combine
+  contradictory whitespace locks with forced reformatting of existing comments.
+- Use valid XML, matching `<param name="...">`/`<typeparam name="...">`,
+  `<paramref>`, `<see cref="...">` and `<see langword="...">` references.
+  Describe non-void results and actual exceptions; do not invent guarantees.
+- In summaries/remarks, keep the first paragraph unwrapped and use `<para>` for
+  subsequent paragraphs where consistent with the file. Document ownership,
+  lifecycle and failure behavior only when supported by the code.
+- Check edited XML, symbol references, indentation and diff scope. Regexes alone
+  cannot validate nested XML or indented source comments. Fix your own mistakes
+  without reverting unrelated edits; leave uncertain claims out and report them.
+- Report changed files, unresolved contract questions and checks actually run.
+  Build/XMLDoc checks must be reported as not run when unavailable or out of scope.

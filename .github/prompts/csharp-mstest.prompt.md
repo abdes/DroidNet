@@ -1,68 +1,26 @@
 ---
-agent: 'agent'
-tools: ['edit', 'search', 'microsoftdocs/mcp/*', 'problems', 'changes', 'testFailure', 'todos', 'runTests']
-description: 'Get best practices for MSTest unit testing, including data-driven tests'
+agent: "agent"
+description: "Write focused MSTest tests using DroidNet tooling and fixtures"
 ---
 
-# MSTest Best Practices
+# DroidNet MSTest tests
 
-Your goal is to help me write effective unit tests with MSTest, covering both standard and data-driven testing approaches.
-
-## Project Setup
-
-- Use a separate test project with naming convention `[ProjectName].Tests`
-- Reference MSTest package
-- Create test classes that match the classes being tested (e.g., `CalculatorTests` for `Calculator`)
-- Use .NET SDK test commands: `dotnet test` for running tests
-
-## Test Structure
-
-- Use `[TestClass]` attribute for test classes
-- Use `[TestMethod]` attribute for test methods
-- Follow the Arrange-Act-Assert (AAA) pattern
-- Name tests using the pattern `MethodName_Scenario_ExpectedBehavior`
-- Use `[TestInitialize]` and `[TestCleanup]` for per-test setup and teardown
-- Use `[ClassInitialize]` and `[ClassCleanup]` for per-class setup and teardown
-- Use `[AssemblyInitialize]` and `[AssemblyCleanup]` for assembly-level setup and teardown
-
-## Standard Tests
-
-- Keep tests focused on a single behavior
-- Avoid testing multiple behaviors in one test method
-- Use clear assertions that express intent
-- Include only the assertions needed to verify the test case
-- Make tests independent and idempotent (can run in any order)
-- Avoid test interdependencies
-
-## Data-Driven Tests
-
-- Use `[TestMethod]` combined with data source attributes
-- Use `[DataRow]` for inline test data
-- Use `[DynamicData]` for programmatically generated test data
-- Use `[TestProperty]` to add metadata to tests
-- Use meaningful parameter names in data-driven tests
-
-## Assertions
-
-- Use `Assert.AreEqual` for value equality
-- Use `Assert.AreSame` for reference equality
-- Use `Assert.IsTrue`/`Assert.IsFalse` for boolean conditions
-- Use `CollectionAssert` for collection comparisons
-- Use `StringAssert` for string-specific assertions
-- Use `Assert.Throws<T>` to test exceptions
-- Ensure assertions are simple in nature and have a message provided for clarity on failure
-
-## Mocking and Isolation
-
-- Consider using Moq or NSubstitute alongside MSTest
-- Mock dependencies to isolate units under test
-- Use interfaces to facilitate mocking
-- Consider using a DI container for complex test setups
-
-## Test Organization
-
-- Group tests by feature or component
-- Use test categories with `[TestCategory("Category")]`
-- Use test priorities with `[Priority(1)]` for critical tests
-- Use `[Owner("DeveloperName")]` to indicate ownership
-- Do not use regions.
+- Follow root/module `AGENTS.md` and the owning suite. Managed tests use
+  `MSTest.Sdk`, pinned by `global.json`, not hand-added MSTest runner packages or
+  legacy Coverlet flags. Project names end in `.Tests` (`.UI.Tests` for WinUI).
+- Reuse `projects/TestHelpers` and the relevant templates under `tooling/samples`.
+  Put versions in `Directory.packages.props`; add Moq only when needed. Do not
+  introduce another mocking library or a DI container just for a test.
+- Use `[TestClass]`, `[TestMethod]` and scenario-focused names such as
+  `Method_Scenario_ExpectedBehavior`. Use `[DataRow]`/`[DynamicData]` for meaningful
+  variations; use lifecycle attributes only for shared setup/cleanup that needs
+  them. No regions, unnecessary priority/owner metadata or order-dependent tests.
+- Assert observable behavior with the suite's AwesomeAssertions/MSTest patterns.
+  Add messages only for missing context; avoid mock/private-call assertions that
+  lock tests to an implementation rather than its contract.
+- UI tests use the shared unpackaged host and its dispatcher/content helpers.
+  See [UI scaffolding](dn-create-test-project-ui.prompt.md) when creating a host.
+- Build the owning project with Visual Studio `MSBuild.exe /restore /m`, then:
+  `traverse Invoke-Tests --start projects/<module>/tests --configuration Debug -- --filter FullyQualifiedName~MyTest`.
+  Substitute the actual module/test name. The runner does not build; report
+  failures and unrun checks accurately. See [build workflows](../../tooling/doc/build.md).

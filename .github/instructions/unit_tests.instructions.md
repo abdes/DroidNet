@@ -1,45 +1,27 @@
 ---
-applyTo: '**/*.cpp;**/*.h'
+applyTo: "**/*.cpp;**/*.h"
 ---
-# UNIT TEST RULES
 
-## TEST CASES
+# Native tests
 
-- Use Google Test; use Google Mock only if required.
-- Include src/Oxygen/Testing/GTest.h, when not already included, instead of gtest.h and gmock.h.
-- Follow the AAA pattern (Arrange, Act, Assert) with clear comments and empty lines between phases.
-- Use NOLINT_* macros from the file src/Oxygen/Testing/GTest.h for all test cases.
-- Use GCHECK_F for assertion that use helper methods with EXPECT_ inside of them. Use TRACE_GCHECK_F only when the failure location is ambiguous, and always provide a concise tag. Never use SCOPED_TRACE directly.
-- Add doc comments (//! or /*! ...*/) above each test to describe intent and scenario. Brief comment only if the test is trivial.
-
-## FIXTURES AND HELPERS
-
-- Create separate fixtures for different test types (basic, error, death, edge, complex).
-- Implement helper methods for common actions, node creation, and expectations.
-- Create reusable helpers for logic and expectation checks (e.g., node order, presence, filtering).
-- Use and extend existing helper methods and base class patterns as needed.
-- Use SetUp() and TearDown() for resource management and clean state.
-- Manage all state within fixtures or locally; never use global or static state.
-
-## TEST CASE DESIGN
-
-- Test one behavior per test; use the format TestCase_WhatIsTested (e.g - Write scenario-based tests with clear, descriptive names.
-- Group tests by functionality with detailed comment headers (describe hierarchy, scenario, or feature).
-- Place all tests in anonymous namespaces to avoid symbol clashes.
-- Cover normal, boundary, error, edge, and cross-object scenarios.
-- Use EXPECT_DEATH for assertion/death scenarios.
-- Verify proper state setup before complex scenarios.
-- Use expressive, scenario-driven test design; avoid trivial or assumption-based tests.
-
-## ASSERTIONS AND MATCHERS
-
-- Use EXPECT_*and ASSERT_*, custom failure messages only when they add valuable information not shown by gtest diagnostics already.
-- Check both state and side effects; verify node order, presence, and filtering
-  as appropriate.
-- Use Google Test collection matchers when applicable instead of hand writing the expectations: using ::testing::AllOf; using
-  ::testing::Contains; using ::testing::IsSupersetOf; using ::testing::SizeIs;
-  EXPECT_THAT(collection, AllOf( SizeIs(expected_count), IsSupersetOf({"item1",
-  "item2"}) ));
-- Add using ::testing::MatcherName declarations at test start for the matchers used in the tests.
-- Use expectation helpers (e.g., ExpectVisitedNodes, ExpectContainsExactlyNodes)
-  for clarity and reuse.
+- These GoogleTest conventions apply to Oxygen.Engine, not the editor's native
+  interop VSTest projects. Follow the owning suite and
+  [engine workflow](../../projects/Oxygen.Engine/AGENTS.md).
+- Include `<Oxygen/Testing/GTest.h>`, not GoogleTest/GoogleMock headers directly.
+  Use its `NOLINT_TEST*`, typed-test, throw and death wrappers as applicable;
+  use GoogleMock only when the behavior needs it.
+- Wrap assertion helpers with `GCHECK_F`; use `TRACE_GCHECK_F` with a concise tag
+  when failure context would otherwise be ambiguous, not `SCOPED_TRACE` directly.
+- Test observable behavior and recovery, not private call sequences. Separate
+  arrange/act/assert and briefly document intent with `//!` or `/*! ... */`.
+  Follow existing suite/test naming and place test definitions in anonymous
+  namespaces where compatible with the suite's registration.
+- Keep mutable state fixture-owned or local. Split fixtures only when lifecycle
+  or setup differs; do not create one fixture for every scenario category.
+  Reuse owning helpers for assertions and resource setup/cleanup.
+- Prefer collection matchers over hand-written assertion loops. Add custom
+  messages only for missing context; use fatal assertions when continuing would
+  make the test invalid or unsafe.
+- Build the owning executable before CTest; `-R` selects executables, whereas
+  `--gtest_filter=Suite.Case` selects individual cases. GPU CTest resource locks
+  coordinate one CTest run, not simultaneous runs or other applications.
