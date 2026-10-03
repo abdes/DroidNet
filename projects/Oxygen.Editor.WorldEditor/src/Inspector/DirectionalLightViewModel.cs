@@ -387,6 +387,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
         }
 
         this.NotifyColorChanged();
+        this.NotifyCascadeApplicabilityChanged();
     }
 
     /// <summary>
@@ -555,6 +556,11 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
                 if (string.Equals(property, nameof(this.AngularSizeRadians), StringComparison.Ordinal))
                 {
                     this.OnPropertyChanged(nameof(this.AngularDiameterDegrees));
+                }
+
+                if (property is nameof(this.SplitMode) or nameof(this.CascadeCount))
+                {
+                    this.NotifyCascadeApplicabilityChanged();
                 }
             }));
 

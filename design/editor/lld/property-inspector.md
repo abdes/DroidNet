@@ -196,26 +196,37 @@ excluded; existing native physical exposure is not removed or renamed.
 All numeric rows are float32 unless stated otherwise. Light colour is linear RGB;
 colour-picker display conversion occurs at the UI boundary only.
 
-| Field                                           | Default/unit                                       | Bounds                                            | Disclosure/active effect                                                             |
-| ----------------------------------------------- | -------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Affects Scene (`AffectsWorld`)                  | On; bool                                           | Boolean                                           | Primary; controls all contribution, separately gated by effective node visibility    |
-| Color                                           | (1,1,1); linear RGB                                | Clamp each channel [0,1]                          | Primary; illumination and atmospheric colour                                         |
-| IntensityLux                                    | 100000 lux                                         | Clamp >=0                                         | Primary; stored illuminance                                                          |
-| Cast Shadows                                    | On; bool                                           | Boolean                                           | Primary; shadowing from this light, independent of geometry flags                    |
-| AtmosphereLightSlot                             | None                                               | None / Primary / Secondary                        | Primary; stable atmosphere assignment, independent of direct light                   |
-| Atmosphere Disk Diameter (`AngularSizeRadians`) | 0.00935 rad full diameter; optional degree display | Finite, Clamp [0,pi] radians; zero disables disk  | Advanced, role other than None; analytic atmospheric disk size only                  |
-| ExposureCompensation                            | 0 EV                                               | Clamp [-10,10]                                    | Advanced; effective light intensity multiplier 2^EV, without rewriting lux           |
-| Shadow.Bias                                     | 0; dimensionless user bias                         | Clamp [0,10]                                      | Advanced, Cast Shadows On; depth-bias effect                                         |
-| Shadow.NormalBias                               | 0.02 m receiver normal offset                      | Clamp >=0                                         | Advanced, Cast Shadows On; normal offset effect                                      |
-| Shadow.ContactShadows                           | Off; bool                                          | Boolean                                           | Advanced, Cast Shadows On; real contact-shadow contribution required                 |
-| Shadow.ResolutionHint                           | Medium                                             | Low / Medium / High / Ultra                       | Advanced, Cast Shadows On; resolution request bounded by renderer quality/capability |
-| CascadeCount                                    | 4; int                                             | [1,4]                                             | Advanced conventional shadows; active cascade count                                  |
-| SplitMode                                       | Generated                                          | Generated / ManualDistances                       | Advanced conventional shadows                                                        |
-| MaxShadowDistance                               | 160 m                                              | Finite >0                                         | Advanced conventional shadows; coverage/fade extent                                  |
-| CascadeDistances[0..3]                          | [8,24,64,160] m                                    | Active distances positive and strictly increasing | ManualDistances only; inactive stored entries remain valid and retained              |
-| DistributionExponent                            | 3                                                  | >=1                                               | Generated only; distribution of cascade coverage                                     |
-| TransitionFraction                              | 0.1                                                | [0,1]                                             | Advanced conventional shadows; cascade transition                                    |
-| DistanceFadeoutFraction                         | 0.1                                                | [0,1]                                             | Advanced conventional shadows; far-distance fade                                     |
+| Field                                           | Default/unit                                       | Bounds                                            | Disclosure/active effect                                                                 |
+| ----------------------------------------------- | -------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Affects Scene (`AffectsWorld`)                  | On; bool                                           | Boolean                                           | Primary; controls all contribution, separately gated by effective node visibility        |
+| Color                                           | (1,1,1); linear RGB                                | Clamp each channel [0,1]                          | Primary; illumination and atmospheric colour                                             |
+| IntensityLux                                    | 100000 lux                                         | Clamp >=0                                         | Primary; stored illuminance                                                              |
+| Cast Shadows                                    | On; bool                                           | Boolean                                           | Primary; shadowing from this light, independent of geometry flags                        |
+| AtmosphereLightSlot                             | None                                               | None / Primary / Secondary                        | Primary; stable atmosphere assignment, independent of direct light                       |
+| Atmosphere Disk Diameter (`AngularSizeRadians`) | 0.00935 rad full diameter; optional degree display | Finite, Clamp [0,pi] radians; zero disables disk  | Advanced, role other than None; analytic atmospheric disk size only                      |
+| ExposureCompensation                            | 0 EV                                               | Clamp [-10,10]                                    | Advanced; effective light intensity multiplier 2^EV, without rewriting lux               |
+| Shadow.Bias                                     | 0; dimensionless user bias                         | Clamp [0,10]                                      | Advanced, Cast Shadows On; depth-bias effect                                             |
+| Shadow.NormalBias                               | 0.02 m receiver normal offset                      | Clamp >=0                                         | Advanced, Cast Shadows On; normal offset effect                                          |
+| Shadow.ContactShadows                           | Off; bool                                          | Boolean                                           | Advanced, Cast Shadows On; real contact-shadow contribution required                     |
+| Shadow.ResolutionHint                           | Medium                                             | Low / Medium / High / Ultra                       | Advanced, Cast Shadows On; resolution request bounded by renderer quality/capability     |
+| CascadeCount                                    | 4; int                                             | [1,4]                                             | Advanced conventional shadows; active cascade count                                      |
+| SplitMode                                       | Generated                                          | Generated / ManualDistances                       | Advanced conventional shadows                                                            |
+| MaxShadowDistance                               | 160 m                                              | Finite >0                                         | Both split modes; coverage/fade extent and final cascade end, capped by camera far plane |
+| CascadeDistances[0..3]                          | [8,24,64,160] m                                    | Active distances positive and strictly increasing | ManualDistances only; editable for interior boundaries before the final active cascade   |
+| DistributionExponent                            | 3                                                  | >=1                                               | Generated only, with more than one cascade; distribution of cascade coverage             |
+| TransitionFraction                              | 0.1                                                | [0,1]                                             | Advanced conventional shadows; cascade transition                                        |
+| DistanceFadeoutFraction                         | 0.1                                                | [0,1]                                             | Advanced conventional shadows; far-distance fade                                         |
+
+Mode/count-dependent CSM inputs without an active effect remain visible but
+disabled, with inline explanations identifying their values as stored rather
+than generated results.
+Mode/count changes retain all manual distances and the distribution exponent;
+they do not overwrite dormant authoring data. With multiple lights selected,
+mode-specific inputs require a common split mode, and each editable boundary
+must precede the final cascade on every selected light. Cascade count and Maximum
+distance remain editable in both modes. The final active cascade always ends at
+the lesser of Maximum distance and the camera far plane, so its stored manual
+distance is not independently editable.
 
 Light Cast Shadows On is an explicit creation default. The writer emits it;
 the low-level native CommonLightProperties constructor currently defaults Off.
