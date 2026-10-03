@@ -15,6 +15,16 @@ namespace DroidNet.Controls;
 public partial class NumberBox
 {
     /// <summary>
+    ///     Identifies the <see cref="IsIndeterminate" /> dependency property.
+    /// </summary>
+    public static readonly DependencyProperty IsIndeterminateProperty =
+        DependencyProperty.Register(
+            nameof(IsIndeterminate),
+            typeof(bool),
+            typeof(NumberBox),
+            new PropertyMetadata(defaultValue: false, OnIsIndeterminatePropertyChanged));
+
+    /// <summary>
     ///     Identifies the <see cref="NumberValue" /> dependency property.
     /// </summary>
     public static readonly DependencyProperty NumberValueProperty =
@@ -59,14 +69,14 @@ public partial class NumberBox
         nameof(LabelForeground),
         typeof(Brush),
         typeof(NumberBox),
-        new PropertyMetadata(null, OnLabelForegroundPropertyChanged));
+        new PropertyMetadata(defaultValue: null, OnLabelForegroundPropertyChanged));
 
     /// <summary>Identifies the <see cref="IsCompact"/> dependency property.</summary>
     public static readonly DependencyProperty IsCompactProperty = DependencyProperty.Register(
         nameof(IsCompact),
         typeof(bool),
         typeof(NumberBox),
-        new PropertyMetadata(false, OnIsCompactPropertyChanged));
+        new PropertyMetadata(defaultValue: false, OnIsCompactPropertyChanged));
 
     /// <summary>
     ///     Identifies the <see cref="Multiplier" /> dependency property.
@@ -118,15 +128,12 @@ public partial class NumberBox
             typeof(NumberBox),
             new PropertyMetadata(defaultValue: false, OnWithPaddingPropertyChanged));
 
-    /// <summary>
-    ///     Identifies the <see cref="IsIndeterminate" /> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty IsIndeterminateProperty =
-        DependencyProperty.Register(
-            nameof(IsIndeterminate),
-            typeof(bool),
-            typeof(NumberBox),
-            new PropertyMetadata(false, OnIsIndeterminatePropertyChanged));
+    /// <summary>Identifies the <see cref="TrimTrailingZeros"/> dependency property.</summary>
+    public static readonly DependencyProperty TrimTrailingZerosProperty = DependencyProperty.Register(
+        nameof(TrimTrailingZeros),
+        typeof(bool),
+        typeof(NumberBox),
+        new PropertyMetadata(defaultValue: false, static (d, _) => ((NumberBox)d).OnTrimTrailingZerosChanged()));
 
     /// <summary>
     ///     Identifies the <see cref="IndeterminateDisplayText" /> dependency property.
@@ -146,7 +153,14 @@ public partial class NumberBox
         nameof(LoggerFactory),
         typeof(ILoggerFactory),
         typeof(NumberBox),
-        new PropertyMetadata(defaultValue: null, (d, e) => ((NumberBox)d).OnLoggerFactoryChanged((ILoggerFactory?)e.NewValue)));
+        new PropertyMetadata(defaultValue: null, static (d, e) => ((NumberBox)d).OnLoggerFactoryChanged((ILoggerFactory?)e.NewValue)));
+
+    /// <summary>Gets or sets a value indicating whether fractional trailing zeros are omitted, retaining a leading zero.</summary>
+    public bool TrimTrailingZeros
+    {
+        get => (bool)this.GetValue(TrimTrailingZerosProperty);
+        set => this.SetValue(TrimTrailingZerosProperty, value);
+    }
 
     /// <summary>
     ///     Gets or sets the numeric value of the <see cref="NumberBox" />.

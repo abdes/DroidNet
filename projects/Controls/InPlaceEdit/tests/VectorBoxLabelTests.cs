@@ -18,6 +18,23 @@ namespace DroidNet.Controls.Tests;
 public sealed class VectorBoxLabelTests : VisualUserInterfaceTests
 {
     [TestMethod]
+    public Task ComponentStyleAppliesToStandardNumberBoxesAndUpdatesAtRuntime() => EnqueueAsync(async () =>
+    {
+        var style = new Style(typeof(NumberBox));
+        style.Setters.Add(new Setter(NumberBox.TrimTrailingZerosProperty, true));
+        var vector = new VectorBox { Width = 180, Padding = new Thickness(0), ComponentStyle = style };
+        await LoadTestContentAsync(vector).ConfigureAwait(true);
+        var inputs = vector.FindDescendants().OfType<NumberBox>().ToArray();
+        _ = inputs.Should().HaveCount(3);
+        _ = inputs.Should().OnlyContain(input => ReferenceEquals(input.Style, style) && input.TrimTrailingZeros);
+        _ = vector.ActualWidth.Should().BeApproximately(180, 1);
+        var replacement = new Style(typeof(NumberBox));
+        vector.ComponentStyle = replacement;
+        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+        _ = inputs.Should().OnlyContain(input => ReferenceEquals(input.Style, replacement) && !input.TrimTrailingZeros);
+    });
+
+    [TestMethod]
     public Task LeftComponentLabelsRenderInsideCompactNumberBoxesAndCanBeColored() => EnqueueAsync(async () =>
     {
         var xBrush = new SolidColorBrush(Colors.Red);

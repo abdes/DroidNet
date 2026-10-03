@@ -559,7 +559,6 @@ public partial class NumberBox : Control
 
         this.UpdateVisualState();
 
-        this.editTextBox.MinWidth = this.valueTextBlock.ActualWidth;
         this.editTextBox.Text = this.originalValue ?? string.Empty;
         _ = this.editTextBox.Focus(FocusState.Programmatic);
     }
@@ -776,7 +775,7 @@ public partial class NumberBox : Control
             return;
         }
 
-        this.DisplayText = this.maskParser.FormatValue(this.NumberValue);
+        this.DisplayText = this.maskParser.FormatValue(this.NumberValue, trimTrailingZeros: this.TrimTrailingZeros);
     }
 
     private void UpdateLabelPosition()
@@ -797,14 +796,12 @@ public partial class NumberBox : Control
         {
             this.labelTextBlock.Visibility = Visibility.Collapsed;
             this.compactLabelTextBlock.Visibility = Visibility.Visible;
-            this.backgroundBorder.BorderThickness = new Thickness(1);
             this.rootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = valueWidth });
             Grid.SetColumn(this.backgroundBorder, 0);
             return;
         }
 
         this.compactLabelTextBlock.Visibility = Visibility.Collapsed;
-        this.backgroundBorder.BorderThickness = new Thickness(0);
         var labelPosition = hasLabel ? this.LabelPosition : LabelPosition.None;
         switch (labelPosition)
         {
@@ -903,7 +900,7 @@ public partial class NumberBox : Control
             return;
         }
 
-        var sampleText = "-" + this.maskParser.FormatValue(0, withPadding: true);
+        var sampleText = "-" + this.maskParser.FormatValue(0, withPadding: true, trimTrailingZeros: this.TrimTrailingZeros);
         var measureTextBlock = new TextBlock
         {
             Text = sampleText,
@@ -918,6 +915,13 @@ public partial class NumberBox : Control
     }
 
     private void OnWithPaddingChanged() => this.UpdateDisplayText();
+
+    private void OnTrimTrailingZerosChanged()
+    {
+        this.UpdateDisplayText();
+        this.UpdateMinimumWidth();
+        this.UpdateLabelPosition();
+    }
 
     private void OnIsIndeterminateChanged()
     {

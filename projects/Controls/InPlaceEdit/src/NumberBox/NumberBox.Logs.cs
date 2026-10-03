@@ -9,11 +9,14 @@ using Windows.System;
 namespace DroidNet.Controls;
 
 /// <summary>
+/// <para>
 ///     Logging helpers for <see cref="NumberBox"/>. Follows the same LoggerMessage/source-generator
 ///     pattern used across the project (see MenuItem.Logs.cs for the reference pattern).
-///
+/// </para>
+/// <para>
 ///     Hosts can enable logging for a NumberBox instance by assigning an <see cref="ILogger"/>
 ///     to the internal <see cref="logger"/> property.
+/// </para>
 /// </summary>
 public partial class NumberBox
 {

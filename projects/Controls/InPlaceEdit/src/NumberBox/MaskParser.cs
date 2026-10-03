@@ -78,8 +78,9 @@ public partial class MaskParser
     /// </summary>
     /// <param name="value">The value to format.</param>
     /// <param name="withPadding">Whether to pad the formatted value with zeros.</param>
+    /// <param name="trimTrailingZeros">Whether to omit fractional trailing zeros and retain a leading zero.</param>
     /// <returns>The formatted value as a string.</returns>
-    public string FormatValue(float value, bool withPadding = false)
+    public string FormatValue(float value, bool withPadding = false, bool trimTrailingZeros = false)
     {
         // Clamp value to max if not unbounded
         if (!this.isUnbounded && Math.Abs(value) > this.maxValue)
@@ -92,7 +93,12 @@ public partial class MaskParser
 
         // Create format string for exact digit count
         var beforeFormat = new string(withPadding ? '0' : '#', this.beforeDecimalCount);
-        var afterFormat = this.afterDecimalCount > 0 ? new string('0', this.afterDecimalCount) : string.Empty;
+        if (trimTrailingZeros)
+        {
+            beforeFormat = beforeFormat.Length == 0 ? "0" : beforeFormat[..^1] + "0";
+        }
+
+        var afterFormat = this.afterDecimalCount > 0 ? new string(trimTrailingZeros ? '#' : '0', this.afterDecimalCount) : string.Empty;
         var numberFormat = this.afterDecimalCount > 0 ? $"{beforeFormat}.{afterFormat}" : beforeFormat;
 
         var result = value.ToString(numberFormat, CultureInfo.InvariantCulture);

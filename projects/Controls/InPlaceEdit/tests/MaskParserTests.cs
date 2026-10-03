@@ -10,6 +10,15 @@ namespace DroidNet.Controls.Tests;
 public class MaskParserTests
 {
     [TestMethod]
+    [DataRow("~.###", 0f, "0")]
+    [DataRow("~.###", 45f, "45")]
+    [DataRow("~.###", 0.536f, "0.536")]
+    [DataRow("~.###", -0.5f, "-0.5")]
+    [DataRow("~.### EV", 1.2f, "1.2 EV")]
+    public void CompactFormattingPreservesPrecisionUnitsAndLeadingZero(string mask, float value, string expected)
+        => _ = new MaskParser(mask).FormatValue(value, trimTrailingZeros: true).Should().Be(expected);
+
+    [TestMethod]
     [DataRow("~.#", 1.0f, "1.0")]
     [DataRow("~.##", 11.0f, "11.00")]
     [DataRow("~.#", 11.0f, "11.0")]

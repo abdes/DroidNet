@@ -22,12 +22,13 @@
     <Style BasedOn="{StaticResource DefaultVectorBoxStyle}" TargetType="local:VectorBox" />
 
     <Style x:Key="DefaultVectorBoxStyle" TargetType="local:VectorBox">
+        <Setter Property="Padding" Value="5" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:VectorBox">
                     <Border
                         x:Name="PartBackgroundBorder"
-                        Padding="5"
+                        Padding="{TemplateBinding Padding}"
                         Background="Transparent"
                         BorderThickness="0"
                         CornerRadius="4">
@@ -38,7 +39,7 @@
                             RowSpacing="5">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" MinWidth="200" />
+                                <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <TextBlock
                                 x:Name="PartLabelTextBlock"
@@ -50,8 +51,8 @@
                                 x:Name="PartComponentPanel"
                                 Grid.Column="1"
                                 HorizontalAlignment="Stretch"
-                                ColumnSpacing="5"
-                                RowSpacing="5">
+                                ColumnSpacing="4"
+                                RowSpacing="4">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="*" />
@@ -79,7 +80,7 @@
                                         HorizontalAlignment="Stretch"
                                         HorizontalValueAlignment="Center"
                                         LabelPosition="None"
-                                        Style="{StaticResource DefaultNumberBoxStyle}" />
+                                        Style="{Binding ComponentStyle, RelativeSource={RelativeSource Mode=TemplatedParent}, TargetNullValue={StaticResource DefaultNumberBoxStyle}}" />
                                 </Grid>
                                 <!--  Y Component  -->
                                 <Grid
@@ -103,7 +104,7 @@
                                         HorizontalAlignment="Stretch"
                                         HorizontalValueAlignment="Center"
                                         LabelPosition="None"
-                                        Style="{StaticResource DefaultNumberBoxStyle}" />
+                                        Style="{Binding ComponentStyle, RelativeSource={RelativeSource Mode=TemplatedParent}, TargetNullValue={StaticResource DefaultNumberBoxStyle}}" />
                                 </Grid>
                                 <!--  Z Component  -->
                                 <Grid
@@ -127,7 +128,7 @@
                                         HorizontalAlignment="Stretch"
                                         HorizontalValueAlignment="Center"
                                         LabelPosition="None"
-                                        Style="{StaticResource DefaultNumberBoxStyle}" />
+                                        Style="{Binding ComponentStyle, RelativeSource={RelativeSource Mode=TemplatedParent}, TargetNullValue={StaticResource DefaultNumberBoxStyle}}" />
                                 </Grid>
                             </Grid>
                         </local:CustomGrid>

@@ -15,6 +15,20 @@ namespace DroidNet.Controls;
 /// </summary>
 public partial class VectorBox
 {
+    /// <summary>Identifies whether channels stack when their usable width cannot be preserved.</summary>
+    public static readonly DependencyProperty AutoStackComponentsProperty = DependencyProperty.Register(
+        nameof(AutoStackComponents),
+        typeof(bool),
+        typeof(VectorBox),
+        new PropertyMetadata(defaultValue: false, static (d, _) => ((VectorBox)d).InvalidateMeasure()));
+
+    /// <summary>Identifies the minimum usable width per channel.</summary>
+    public static readonly DependencyProperty ComponentMinimumWidthProperty = DependencyProperty.Register(
+        nameof(ComponentMinimumWidth),
+        typeof(double),
+        typeof(VectorBox),
+        new PropertyMetadata(80d, static (d, _) => ((VectorBox)d).InvalidateMeasure()));
+
     /// <summary>
     ///     Identifies the <see cref="VectorValue" /> dependency property.
     /// </summary>
@@ -123,7 +137,7 @@ public partial class VectorBox
             nameof(Label),
             typeof(string),
             typeof(VectorBox),
-            new PropertyMetadata(string.Empty));
+            new PropertyMetadata(string.Empty, static (d, _) => ((VectorBox)d).UpdateLabelPosition()));
 
     /// <summary>
     ///     Identifies the <see cref="LabelPosition" /> dependency property.
@@ -185,6 +199,13 @@ public partial class VectorBox
             typeof(VectorBox),
             new PropertyMetadata(defaultValue: false, OnWithPaddingPropertyChanged));
 
+    /// <summary>Identifies the <see cref="ComponentStyle"/> dependency property.</summary>
+    public static readonly DependencyProperty ComponentStyleProperty = DependencyProperty.Register(
+        nameof(ComponentStyle),
+        typeof(Style),
+        typeof(VectorBox),
+        new PropertyMetadata(defaultValue: null));
+
     /// <summary>
     ///     Identifies the <see cref="LoggerFactory" /> dependency property. Hosts can provide an
     ///     <see cref="ILoggerFactory" /> to enable logging for VectorBox and its inner NumberBox components.
@@ -193,7 +214,21 @@ public partial class VectorBox
         nameof(LoggerFactory),
         typeof(ILoggerFactory),
         typeof(VectorBox),
-        new PropertyMetadata(defaultValue: null, (d, e) => ((VectorBox)d).OnLoggerFactoryChanged((ILoggerFactory?)e.NewValue)));
+        new PropertyMetadata(defaultValue: null, static (d, e) => ((VectorBox)d).OnLoggerFactoryChanged((ILoggerFactory?)e.NewValue)));
+
+    /// <summary>Gets or sets a value indicating whether channels stack vertically at narrow widths.</summary>
+    public bool AutoStackComponents
+    {
+        get => (bool)this.GetValue(AutoStackComponentsProperty);
+        set => this.SetValue(AutoStackComponentsProperty, value);
+    }
+
+    /// <summary>Gets or sets the minimum usable channel width in DIPs.</summary>
+    public double ComponentMinimumWidth
+    {
+        get => (double)this.GetValue(ComponentMinimumWidthProperty);
+        set => this.SetValue(ComponentMinimumWidthProperty, value);
+    }
 
     /// <summary>
     ///     Gets or sets the aggregate numeric vector value.
@@ -348,25 +383,32 @@ public partial class VectorBox
         set => this.SetValue(WithPaddingProperty, value);
     }
 
+    /// <summary>Gets or sets the style of each NumberBox without replacing the vector editor template.</summary>
+    public Style? ComponentStyle
+    {
+        get => (Style?)this.GetValue(ComponentStyleProperty);
+        set => this.SetValue(ComponentStyleProperty, value);
+    }
+
     /// <summary>
     ///     Gets the per-component mask overrides. Keys are "X", "Y", "Z".
     /// </summary>
     public IDictionary<string, string> ComponentMasks =>
-        this.componentMasks ??= new Dictionary<string, string>(StringComparer.Ordinal);
+        this.componentMasks ??= [with(StringComparer.Ordinal)];
 
     /// <summary>
     ///     Gets the per-component label position overrides. Keys are "X", "Y", "Z".
     /// </summary>
     public IDictionary<string, LabelPosition> ComponentLabelPositions =>
-        this.componentLabelPositions ??= new Dictionary<string, LabelPosition>(StringComparer.Ordinal);
+        this.componentLabelPositions ??= [with(StringComparer.Ordinal)];
 
     /// <summary>Gets optional per-component label text overrides. Keys are "X", "Y", "Z".</summary>
     public IDictionary<string, string> ComponentLabels =>
-        this.componentLabels ??= new Dictionary<string, string>(StringComparer.Ordinal);
+        this.componentLabels ??= [with(StringComparer.Ordinal)];
 
     /// <summary>Gets optional per-component label foreground overrides. Keys are "X", "Y", "Z".</summary>
     public IDictionary<string, Brush> ComponentLabelForegrounds =>
-        this.componentLabelForegrounds ??= new Dictionary<string, Brush>(StringComparer.Ordinal);
+        this.componentLabelForegrounds ??= [with(StringComparer.Ordinal)];
 
     /// <summary>
     ///     Gets or sets the <see cref="ILoggerFactory" /> used to create loggers for this control and children.

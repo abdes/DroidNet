@@ -43,11 +43,8 @@ public partial class VectorBox
     ///     is delegated to the internal <see cref="NumberBox" /> editors if they support it.
     /// </remarks>
     /// <param name="e">The pointer event arguments.</param>
-    protected override void OnPointerMoved(PointerRoutedEventArgs e)
-    {
-        // Drag-to-edit is handled by internal NumberBox editors
-        base.OnPointerMoved(e);
-    }
+    protected override void OnPointerMoved(PointerRoutedEventArgs e) =>
+        base.OnPointerMoved(e); // Drag-to-edit is handled by internal NumberBox editors
 
     /// <summary>
     ///     Handles pointer press events for potential drag-to-edit initiation.
@@ -57,11 +54,8 @@ public partial class VectorBox
     ///     is delegated to the internal <see cref="NumberBox" /> editors if they support it.
     /// </remarks>
     /// <param name="e">The pointer event arguments.</param>
-    protected override void OnPointerPressed(PointerRoutedEventArgs e)
-    {
-        // Drag-to-edit is handled by internal NumberBox editors
-        base.OnPointerPressed(e);
-    }
+    protected override void OnPointerPressed(PointerRoutedEventArgs e) =>
+        base.OnPointerPressed(e); // Drag-to-edit is handled by internal NumberBox editors
 
     /// <summary>
     ///     Handles pointer release events.
@@ -70,11 +64,8 @@ public partial class VectorBox
     ///     This method is called when the pointer is released over the control.
     /// </remarks>
     /// <param name="e">The pointer event arguments.</param>
-    protected override void OnPointerReleased(PointerRoutedEventArgs e)
-    {
-        // Drag-to-edit is handled by internal NumberBox editors
-        base.OnPointerReleased(e);
-    }
+    protected override void OnPointerReleased(PointerRoutedEventArgs e) =>
+        base.OnPointerReleased(e); // Drag-to-edit is handled by internal NumberBox editors
 
     /// <summary>
     ///     Handles keyboard input for the control.
@@ -92,12 +83,8 @@ public partial class VectorBox
     ///     </list>
     /// </remarks>
     /// <param name="e">The keyboard event arguments.</param>
-    protected override void OnKeyDown(KeyRoutedEventArgs e)
-    {
-        // Keyboard handling is delegated to internal NumberBox editors
-        // Tab navigation will naturally move between editors in the StackPanel
-        base.OnKeyDown(e);
-    }
+    protected override void OnKeyDown(KeyRoutedEventArgs e) =>
+        base.OnKeyDown(e); // Keyboard handling is delegated to internal NumberBox editors. Tab navigation will naturally move between editors in the StackPanel
 
     /// <summary>
     ///     Leaves mouse wheel input available to the containing scroll view.
@@ -106,9 +93,6 @@ public partial class VectorBox
     ///     The control does not use wheel input to edit component values.
     /// </remarks>
     /// <param name="e">The pointer event arguments.</param>
-    protected override void OnPointerWheelChanged(PointerRoutedEventArgs e)
-    {
-        // Let the containing scroll view handle wheel input.
-        base.OnPointerWheelChanged(e);
-    }
+    protected override void OnPointerWheelChanged(PointerRoutedEventArgs e) =>
+        base.OnPointerWheelChanged(e); // Let the containing scroll view handle wheel input.
 }

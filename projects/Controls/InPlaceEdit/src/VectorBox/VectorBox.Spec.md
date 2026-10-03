@@ -72,6 +72,10 @@ These DPs forward to the internal editors' `IsIndeterminate` property (see `Numb
 #### Control-Level Formatting and Display
 
 - **`string IndeterminateDisplayText`** (DP; default: `"-.-"`) — Text displayed by the internal editors when they are indeterminate. Forwarded to each internal `NumberBox.IndeterminateDisplayText`.
+- **`Style? ComponentStyle`** (DP; default: `null`) — Optional style for all component NumberBoxes. The default template uses `DefaultNumberBoxStyle` when unset. Use a style based on that standard style to adjust borders, corner radii, padding and minimum height without replacing either control template. The standard VectorBox template respects `Padding` and fits its component fields to the available width.
+- **`bool AutoStackComponents`** (DP; default: `false`) — Opt in to vertical component editors when the available control width cannot accommodate the measured horizontal group.
+- **`double ComponentMinimumWidth`** (DP; default: `80`) — Minimum usable channel width at normal text size. The policy includes component spacing, padding, an optional control label, system text scaling and measured component requirements. `AreComponentsStacked` reports the chosen layout. Resizing does not recreate editors or interrupt edit sessions.
+- An empty control label reserves no column or gap, regardless of `LabelPosition`. Each component's automation name includes the group's `AutomationProperties.Name` and its channel label; include the property's unit or color-space annotation in the group name.
 
 #### Control-Level Label
 

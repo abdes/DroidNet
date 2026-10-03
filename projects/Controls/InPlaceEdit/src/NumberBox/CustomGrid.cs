@@ -12,9 +12,10 @@ namespace DroidNet.Controls;
 ///     <see cref="Grid" />.
 /// </summary>
 /// <remarks>
-///     We need to change the cursor when we are changing the value in a number-box through mouse dragging.
+///     Used as the root template part for NumberBox and VectorBox so custom templates preserve cursor handling
+///     during numeric scrubbing.
 /// </remarks>
-internal partial class CustomGrid : Grid
+public partial class CustomGrid : Grid
 {
     /// <summary>
     ///     Gets or sets the input cursor for the grid.

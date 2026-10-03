@@ -7,6 +7,12 @@
     <Style BasedOn="{StaticResource DefaultNumberBoxStyle}" TargetType="local:NumberBox" />
 
     <Style x:Key="DefaultNumberBoxStyle" TargetType="local:NumberBox">
+        <Setter Property="MinHeight" Value="26" />
+        <Setter Property="Padding" Value="8,2,8,0" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="0" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:NumberBox">
@@ -27,8 +33,9 @@
                             Margin="1"
                             Background="{ThemeResource ControlAltFillColorTertiaryBrush}"
                             BackgroundSizing="OuterBorderEdge"
-                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                            BorderThickness="0">
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}">
                             <Grid ColumnSpacing="0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -44,33 +51,35 @@
                                     TextTrimming="CharacterEllipsis"
                                     TextWrapping="NoWrap"
                                     Visibility="Collapsed" />
-                                <Grid Grid.Column="1">
+                                <local:NumberBoxValuePanel Grid.Column="1">
                                     <TextBlock
                                         x:Name="PartValueTextBlock"
-                                        MinHeight="26"
-                                        Padding="8,2,8,0"
+                                        MinHeight="{TemplateBinding MinHeight}"
+                                        Padding="{TemplateBinding Padding}"
                                         HorizontalAlignment="Stretch"
                                         VerticalAlignment="Center"
-                                        FontSize="14"
+                                        FontSize="{TemplateBinding FontSize}"
                                         HorizontalTextAlignment="{Binding Path=HorizontalValueAlignment, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
                                         Text="{Binding Path=DisplayText, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}" />
                                     <TextBox
                                         x:Name="PartEditBox"
-                                        MinHeight="26"
+                                        MinWidth="0"
+                                        MinHeight="{TemplateBinding MinHeight}"
                                         Margin="0"
-                                        Padding="8,2,8,0"
+                                        Padding="{TemplateBinding Padding}"
                                         VerticalAlignment="Center"
                                         Background="{ThemeResource ControlAltFillColorTertiaryBrush}"
                                         BackgroundSizing="OuterBorderEdge"
-                                        CornerRadius="0"
-                                        FontSize="14"
+                                        BorderThickness="0"
+                                        CornerRadius="{TemplateBinding CornerRadius}"
+                                        FontSize="{TemplateBinding FontSize}"
                                         InputScope="Number"
                                         IsSpellCheckEnabled="False"
                                         IsTextPredictionEnabled="False"
                                         TextAlignment="{Binding Path=HorizontalValueAlignment, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
                                         TextWrapping="Wrap"
                                         Visibility="Collapsed" />
-                                </Grid>
+                                </local:NumberBoxValuePanel>
                             </Grid>
                         </Border>
                         <VisualStateManager.VisualStateGroups>
@@ -101,8 +110,11 @@
                                 </VisualState>
                                 <VisualState x:Name="EditingValidValue">
                                     <Storyboard>
-                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartValueTextBlock" Storyboard.TargetProperty="Visibility">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="Collapsed" />
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartValueTextBlock" Storyboard.TargetProperty="Opacity">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="0" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartValueTextBlock" Storyboard.TargetProperty="IsHitTestVisible">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="False" />
                                         </ObjectAnimationUsingKeyFrames>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartEditBox" Storyboard.TargetProperty="Visibility">
                                             <DiscreteObjectKeyFrame KeyTime="0" Value="Visible" />
@@ -111,8 +123,11 @@
                                 </VisualState>
                                 <VisualState x:Name="EditingInvalidValue">
                                     <Storyboard>
-                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartValueTextBlock" Storyboard.TargetProperty="Visibility">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="Collapsed" />
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartValueTextBlock" Storyboard.TargetProperty="Opacity">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="0" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartValueTextBlock" Storyboard.TargetProperty="IsHitTestVisible">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="False" />
                                         </ObjectAnimationUsingKeyFrames>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartEditBox" Storyboard.TargetProperty="Visibility">
                                             <DiscreteObjectKeyFrame KeyTime="0" Value="Visible" />

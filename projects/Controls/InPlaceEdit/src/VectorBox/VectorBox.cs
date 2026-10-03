@@ -4,7 +4,10 @@
 
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Windows.Foundation;
+using Windows.UI.ViewManagement;
 
 namespace DroidNet.Controls;
 
@@ -75,6 +78,7 @@ public partial class VectorBox : Control
     private const string LabelYPartName = "PartLabelY";
     private const string LabelZPartName = "PartLabelZ";
 
+    private readonly UISettings uiSettings = new();
     private CustomGrid? rootGrid;
     private Border? backgroundBorder;
     private TextBlock? labelTextBlock;
@@ -92,6 +96,7 @@ public partial class VectorBox : Control
     private Dictionary<string, LabelPosition>? componentLabelPositions;
     private Dictionary<string, string>? componentLabels;
     private Dictionary<string, Microsoft.UI.Xaml.Media.Brush>? componentLabelForegrounds;
+    private bool? stackedComponents;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="VectorBox" /> class.
@@ -100,6 +105,9 @@ public partial class VectorBox : Control
     {
         this.DefaultStyleKey = typeof(VectorBox);
     }
+
+    /// <summary>Gets a value indicating whether gets whether the current available width requires vertical component editors.</summary>
+    public bool AreComponentsStacked => this.stackedComponents == true;
 
     /// <summary>
     ///     Atomically updates all component values in a single operation.
@@ -174,6 +182,7 @@ public partial class VectorBox : Control
         this.backgroundBorder = this.GetTemplateChild(BackgroundBorderPartName) as Border;
         this.labelTextBlock = this.GetTemplateChild(LabelTextBlockPartName) as TextBlock;
         this.componentPanel = this.GetTemplateChild(ComponentPanelPartName) as Panel;
+        this.stackedComponents = null;
 
         this.labelX = this.GetTemplateChild(LabelXPartName) as TextBlock;
         this.labelY = this.GetTemplateChild(LabelYPartName) as TextBlock;
@@ -185,6 +194,65 @@ public partial class VectorBox : Control
         this.UpdateComponentLabelPositions();
         this.SyncAllComponentsFromProperties();
         this.UpdateVisualState();
+    }
+
+    /// <inheritdoc />
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        if (this.componentPanel is Grid grid && this.numberBoxX is not null && this.numberBoxY is not null
+            && (this.Dimension == 2 || this.numberBoxZ is not null))
+        {
+            var count = this.Dimension == 3 ? 3 : 2;
+            var minimum = this.ComponentMinimumWidth * Math.Max(this.uiSettings.TextScaleFactor, this.FontSize / 14);
+            for (var i = 0; i < count; i++)
+            {
+                var box = this.GetComponentBox(i);
+                minimum = Math.Max(minimum, this.ComponentMinimumWidth * box.FontSize / 14);
+                var container = VectorBoxComponentLayout.GetComponentContainer(grid, this.GetComponentLabel(i), box);
+                if (container is not null)
+                {
+                    container.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    minimum = Math.Max(minimum, container.DesiredSize.Width);
+                }
+            }
+
+            var labelWidth = 0d;
+            if (!string.IsNullOrEmpty(this.Label) && this.LabelPosition is LabelPosition.Left or LabelPosition.Right && this.labelTextBlock is not null)
+            {
+                this.labelTextBlock.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                labelWidth = this.labelTextBlock.DesiredSize.Width + (this.rootGrid?.ColumnSpacing ?? 0);
+            }
+
+            var stacked = this.AutoStackComponents && availableSize.Width - this.Padding.Left - this.Padding.Right - labelWidth < (minimum * count) + (grid.ColumnSpacing * (count - 1));
+            if (stacked != this.stackedComponents || grid.ColumnDefinitions.Count != (stacked ? 1 : count))
+            {
+                grid.ColumnDefinitions.Clear();
+                grid.RowDefinitions.Clear();
+                for (var i = 0; i < (stacked ? 1 : count); i++)
+                {
+                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                }
+
+                for (var i = 0; i < count; i++)
+                {
+                    var container = VectorBoxComponentLayout.GetComponentContainer(grid, this.GetComponentLabel(i), this.GetComponentBox(i));
+                    if (container is not null)
+                    {
+                        Grid.SetColumn(container, stacked ? 0 : i);
+                        Grid.SetRow(container, stacked ? i : 0);
+                    }
+
+                    if (stacked)
+                    {
+                        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                    }
+                }
+
+                this.stackedComponents = stacked;
+            }
+        }
+
+        return base.MeasureOverride(availableSize);
     }
 
     private void SetupNumberBoxParts()
@@ -666,20 +734,12 @@ public partial class VectorBox : Control
         var labelPosition = this.componentLabelPositions?.TryGetValue(componentName, out var configuredPosition) == true
             ? configuredPosition
             : this.ComponentLabelPosition;
-        var foreground = this.componentLabelForegrounds?.TryGetValue(componentName, out var configuredForeground) == true
-            ? configuredForeground
-            : null;
-        var componentLabel = this.componentLabels?.TryGetValue(componentName, out var configuredLabel) == true
-            ? configuredLabel
-            : componentName;
-        label.Text = componentLabel;
-        label.Foreground = foreground;
-        box.LabelForeground = foreground;
+        this.UpdateComponentLabelPresentation(componentName, label, box);
 
-        if (labelPosition == LabelPosition.Left && !string.IsNullOrWhiteSpace(componentLabel))
+        if (labelPosition == LabelPosition.Left && !string.IsNullOrWhiteSpace(label.Text))
         {
             label.Visibility = Visibility.Collapsed;
-            box.Label = componentLabel;
+            box.Label = label.Text;
             box.LabelPosition = LabelPosition.Left;
             box.IsCompact = true;
             container.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -710,6 +770,21 @@ public partial class VectorBox : Control
                 VectorBoxComponentLayout.LayoutWithoutLabel(container, label, box);
                 break;
         }
+    }
+
+    private void UpdateComponentLabelPresentation(string componentName, TextBlock label, NumberBox box)
+    {
+        var foreground = this.componentLabelForegrounds?.TryGetValue(componentName, out var configuredForeground) == true
+            ? configuredForeground
+            : null;
+        var componentLabel = this.componentLabels?.TryGetValue(componentName, out var configuredLabel) == true
+            ? configuredLabel
+            : componentName;
+        label.Text = componentLabel;
+        var accessibleName = AutomationProperties.GetName(this);
+        AutomationProperties.SetName(box, $"{(string.IsNullOrEmpty(accessibleName) ? this.Label : accessibleName)} {componentLabel}".Trim());
+        label.Foreground = foreground;
+        box.LabelForeground = foreground;
     }
 
     private TextBlock GetComponentLabel(int componentIndex)
@@ -743,7 +818,8 @@ public partial class VectorBox : Control
         this.rootGrid.RowDefinitions.Clear();
         this.rootGrid.ColumnDefinitions.Clear();
 
-        switch (this.LabelPosition)
+        var effectivePosition = string.IsNullOrWhiteSpace(this.Label) ? LabelPosition.None : this.LabelPosition;
+        switch (effectivePosition)
         {
             case LabelPosition.Left or LabelPosition.Right:
                 this.labelTextBlock.Visibility = Visibility.Visible;
@@ -766,6 +842,8 @@ public partial class VectorBox : Control
 
             Grid.SetColumn(this.labelTextBlock, 0);
             Grid.SetColumn(this.componentPanel, 0);
+            Grid.SetRow(this.labelTextBlock, 0);
+            Grid.SetRow(this.componentPanel, 0);
         }
 
         void LayoutHorizontally()

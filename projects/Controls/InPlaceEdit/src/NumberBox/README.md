@@ -19,6 +19,8 @@ This control combines display and edit modes, supports masked formatting, horizo
 - Optional label foreground for axis cues such as red X, green Y, and blue Z.
 - Indeterminate display mode (preserves numeric backing value).
 - Template parts exposed for full styling and templating.
+- Text editing follows the container's current width; entering edit mode does not
+  lock the previously arranged width or force an adaptive parent into a new layout.
 
 ## Quick start
 
@@ -63,6 +65,7 @@ numberBox.Validate += (s, e) =>
 - `Multiplier` (int) — used for step adjustments.
 - `Mask` (string) — formatting mask (see below).
 - `WithPadding` (bool) — pad integer portion to mask width.
+- `TrimTrailingZeros` (bool, default `false`) — omit fractional trailing zeros while retaining a leading zero, for example `0`, `45`, and `0.536`. Mask precision and units are preserved.
 - `IsIndeterminate` (bool) — show `IndeterminateDisplayText` instead of formatted value.
 - `IndeterminateDisplayText` (string) — text shown when `IsIndeterminate` is true (default `-.-`).
 - `HorizontalValueAlignment` (TextAlignment) — alignment for the value text.
@@ -108,6 +111,11 @@ Control template parts (names used in `NumberBox.xaml`):
 - `PartCompactLabelTextBlock` — `TextBlock` for the optional in-field label.
 - `PartEditBox` — `TextBox` used in edit mode.
 
+The standard template overlays the display and text editor in
+`NumberBoxValuePanel`. The display value determines the measured footprint, while
+the editor follows the arranged bounds, so native text-editor chrome and draft
+expressions do not change the parent property's responsive layout.
+
 Visual state groups & names (used by the control to animate UI):
 
 - Group `CommonStates`: `Normal`, `Hover`, `Pressed`.
@@ -128,6 +136,11 @@ This keeps UI presentation and underlying numeric state decoupled and predictabl
 ## Styling and templating
 
 The folder contains `NumberBox.xaml` which declares `DefaultNumberBoxStyle`. To customize visuals, override the style in your application resources or create a new `ControlTemplate` that reuses the named parts and visual states listed above.
+
+Prefer a style based on `DefaultNumberBoxStyle` for ordinary sizing and border
+changes: its template respects `Padding`, `MinHeight`, `FontSize`,
+`BorderBrush`, `BorderThickness`, and `CornerRadius`. `VectorBox.ComponentStyle`
+applies the same NumberBox style to all channels without replacing templates.
 
 ## Implementation notes
 

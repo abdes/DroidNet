@@ -92,7 +92,7 @@ public partial class InPlaceEditableLabel : ContentControl
             typeof(InPlaceEditableLabel),
             new PropertyMetadata(
                 defaultValue: null,
-                (d, _) => ((InPlaceEditableLabel)d).UpdateDisplayText()));
+                static (d, _) => ((InPlaceEditableLabel)d).UpdateDisplayText()));
 
     /// <summary>
     ///     Identifies the <see cref="DisplayText" /> dependency property.

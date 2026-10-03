@@ -36,7 +36,5 @@ public sealed class NumericInputParserTests
     [DataRow("NaN")]
     [DataRow("Infinity")]
     public void InvalidOrNonFiniteInputIsRejected(string text)
-    {
-        _ = NumericInputParser.TryParse(text, 5f, out _).Should().BeFalse();
-    }
+        => _ = NumericInputParser.TryParse(text, 5f, out _).Should().BeFalse();
 }

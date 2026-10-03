@@ -18,6 +18,8 @@ namespace DroidNet.Controls.Tests;
 [TestCategory("UITest")]
 public sealed class NumberBoxSaveTests : VisualUserInterfaceTests
 {
+    private static readonly double[] ResizeWidths = [200d, 80d, 320d];
+
     /// <summary>Saving commits valid focused text once, including the later focus-loss callback.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]
@@ -153,6 +155,41 @@ public sealed class NumberBoxSaveTests : VisualUserInterfaceTests
         _ = compactLabel.Visibility.Should().Be(Visibility.Visible);
         _ = compactLabel.Foreground.Should().BeSameAs(brush);
         _ = ((Grid)compactLabel.Parent).ColumnSpacing.Should().Be(0);
+    });
+
+    /// <summary>Entering text editing must not freeze the field's previously arranged width.</summary>
+    /// <returns>The layout regression task.</returns>
+    [TestMethod]
+    public Task TextEditingAllowsTheFieldToShrinkWithItsContainer() => EnqueueAsync(async () =>
+    {
+        var number = new NumberBox
+        {
+            NumberValue = 1,
+            Label = "R",
+            LabelPosition = LabelPosition.Left,
+            IsCompact = true,
+            MinHeight = 28,
+            Padding = new Thickness(6, 4, 6, 4),
+            BorderThickness = new Thickness(1),
+        };
+        var host = new Grid { Width = 320 };
+        host.Children.Add(number);
+        await LoadTestContentAsync(host).ConfigureAwait(true);
+        var input = BeginTextInput(number);
+
+        foreach (var width in ResizeWidths)
+        {
+            host.Width = width;
+            host.UpdateLayout();
+            _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+            _ = number.ActualWidth.Should().BeApproximately(width, 1);
+            _ = input.MinWidth.Should().Be(0);
+            _ = input.ActualWidth.Should().BeLessThan(width);
+            _ = input.Text.Should().Be("1");
+        }
+
+        number.CompletePendingTextEdit();
+        _ = number.NumberValue.Should().Be(1);
     });
 
     private static TextBox BeginTextInput(NumberBox number)

@@ -28,10 +28,7 @@ public partial class VectorBox
     ///     Raises the <see cref="Validate" /> event.
     /// </summary>
     /// <param name="e">The <see cref="ValidationEventArgs{T}" /> instance containing the event data.</param>
-    protected virtual void OnValidate(ValidationEventArgs<float> e)
-    {
-        this.Validate?.Invoke(this, e);
-    }
+    protected virtual void OnValidate(ValidationEventArgs<float> e) => this.Validate?.Invoke(this, e);
 
     private void OnNumberBoxEditSessionStarted(object? sender, NumberBoxEditSessionEventArgs e)
     {

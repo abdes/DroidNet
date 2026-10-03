@@ -28,21 +28,13 @@ internal static class VectorBoxComponentLayout
     /// <param name="box">The component editor.</param>
     /// <returns>The owning grid, if found.</returns>
     internal static Grid? GetComponentContainer(Grid outerGrid, TextBlock label, NumberBox box)
-    {
-        if (label.Parent is Grid labelContainer)
-        {
-            return labelContainer;
-        }
-
-        if (box.Parent is Grid boxContainer)
-        {
-            return boxContainer;
-        }
-
-        return outerGrid.Children
+        => label.Parent is Grid labelContainer
+            ? labelContainer
+            : box.Parent is Grid boxContainer
+            ? boxContainer
+            : outerGrid.Children
             .OfType<Grid>()
             .FirstOrDefault(child => child.Children.Contains(label) || child.Children.Contains(box));
-    }
 
     /// <summary>Places an editor without a component label.</summary>
     /// <param name="container">The component container.</param>

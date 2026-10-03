@@ -46,7 +46,7 @@ public partial class VectorBox
         }
     }
 
-    [LoggerMessage(EventId = 3622, Level = LogLevel.Trace, Message = "[VectorBox] Component {Component} value changed from {OldValue} to {NewValue}")]
+    [LoggerMessage(EventId = 3621, Level = LogLevel.Trace, Message = "[VectorBox] Component {Component} value changed from {OldValue} to {NewValue}")]
     private static partial void LogComponentChanged(ILogger logger, string component, float oldValue, float newValue);
 
     private void LogComponentChanged(string component, float oldValue, float newValue)
@@ -57,7 +57,7 @@ public partial class VectorBox
         }
     }
 
-    [LoggerMessage(EventId = 3623, Level = LogLevel.Trace, Message = "[VectorBox] NumberBox for component {Component} attached")]
+    [LoggerMessage(EventId = 3624, Level = LogLevel.Trace, Message = "[VectorBox] NumberBox for component {Component} attached")]
     private static partial void LogNumberBoxAttached(ILogger logger, string component);
 
     private void LogNumberBoxAttached(string component)
