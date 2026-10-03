@@ -5,12 +5,12 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.World.Inspector.Editing;
 
 /// <summary>
-///   Logging methods for <see cref="TransformViewModel"/>.
+///   Logging methods for <see cref="TransformEditController"/>.
 /// </summary>
-public sealed partial class TransformViewModel
+internal sealed partial class TransformEditController
 {
     [LoggerMessage(
         SkipEnabledCheck = true,

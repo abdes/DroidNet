@@ -80,15 +80,15 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = ConfigureGestureSync(fixture, scene);
         using var editor = new EnvironmentViewModel(fixture.Sut, () => context);
         editor.SetScene(scene);
-        editor.SelectedSun = editor.SunOptions.Single(option => option.NodeId == sun.Id);
+        editor.AtmosphereLights.SelectedSun = editor.AtmosphereLights.SunOptions.Single(option => option.NodeId == sun.Id);
         await editor.PendingEdits.ConfigureAwait(false);
         _ = light.AtmosphereSlot.Should().Be(AtmosphereLightSlot.Primary);
         _ = scene.Environment.Should().BeSameAs(environment);
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = light.AtmosphereSlot.Should().Be(AtmosphereLightSlot.None);
-        _ = editor.SelectedSun!.NodeId.Should().BeNull();
+        _ = editor.AtmosphereLights.SelectedSun!.NodeId.Should().BeNull();
         await context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = editor.SelectedSun!.NodeId.Should().Be(sun.Id);
+        _ = editor.AtmosphereLights.SelectedSun!.NodeId.Should().Be(sun.Id);
     }
 
     [TestMethod]

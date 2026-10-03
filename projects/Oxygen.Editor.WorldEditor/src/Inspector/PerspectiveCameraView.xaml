@@ -28,10 +28,10 @@
                 ErrorText="{x:Bind ViewModel.FieldOfViewDiagnostic.Message, Mode=OneWay}"
                 FontSize="14"
                 HasError="{x:Bind ViewModel.FieldOfViewDiagnostic.HasError, Mode=OneWay}"
-                IsMixed="{x:Bind ViewModel.FieldOfViewIsIndeterminate, Mode=OneWay}"
+                IsMixed="{x:Bind ViewModel.FieldOfView.IsMixed, Mode=OneWay}"
                 Label="Field of view"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
-                NumberValue="{x:Bind ViewModel.FieldOfView, Mode=TwoWay}"
+                NumberValue="{x:Bind ViewModel.FieldOfView.Value, Mode=TwoWay}"
                 Qualifier="°"
                 Tag="FieldOfView" />
             <editorcontrols:InspectorNumberField
@@ -41,10 +41,10 @@
                 ErrorText="{x:Bind ViewModel.AspectRatioDiagnostic.Message, Mode=OneWay}"
                 FontSize="14"
                 HasError="{x:Bind ViewModel.AspectRatioDiagnostic.HasError, Mode=OneWay}"
-                IsMixed="{x:Bind ViewModel.AspectRatioIsIndeterminate, Mode=OneWay}"
+                IsMixed="{x:Bind ViewModel.AspectRatio.IsMixed, Mode=OneWay}"
                 Label="Aspect ratio"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
-                NumberValue="{x:Bind ViewModel.AspectRatio, Mode=TwoWay}"
+                NumberValue="{x:Bind ViewModel.AspectRatio.Value, Mode=TwoWay}"
                 Tag="AspectRatio" />
             <editorcontrols:InspectorNumberField
                 CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -53,10 +53,10 @@
                 ErrorText="{x:Bind ViewModel.NearPlaneDiagnostic.Message, Mode=OneWay}"
                 FontSize="14"
                 HasError="{x:Bind ViewModel.NearPlaneDiagnostic.HasError, Mode=OneWay}"
-                IsMixed="{x:Bind ViewModel.NearPlaneIsIndeterminate, Mode=OneWay}"
+                IsMixed="{x:Bind ViewModel.NearPlane.IsMixed, Mode=OneWay}"
                 Label="Near plane"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
-                NumberValue="{x:Bind ViewModel.NearPlane, Mode=TwoWay}"
+                NumberValue="{x:Bind ViewModel.NearPlane.Value, Mode=TwoWay}"
                 Qualifier="m"
                 Tag="NearPlane" />
             <editorcontrols:InspectorNumberField
@@ -66,10 +66,10 @@
                 ErrorText="{x:Bind ViewModel.FarPlaneDiagnostic.Message, Mode=OneWay}"
                 FontSize="14"
                 HasError="{x:Bind ViewModel.FarPlaneDiagnostic.HasError, Mode=OneWay}"
-                IsMixed="{x:Bind ViewModel.FarPlaneIsIndeterminate, Mode=OneWay}"
+                IsMixed="{x:Bind ViewModel.FarPlane.IsMixed, Mode=OneWay}"
                 Label="Far plane"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
-                NumberValue="{x:Bind ViewModel.FarPlane, Mode=TwoWay}"
+                NumberValue="{x:Bind ViewModel.FarPlane.Value, Mode=TwoWay}"
                 Qualifier="m"
                 Tag="FarPlane" />
         </editorcontrols:PropertiesExpander.Items>

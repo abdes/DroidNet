@@ -36,7 +36,7 @@ public sealed partial class ColorHistoryTests
         using var model = CreateColorModel(kind, fixture);
         if (model is EnvironmentViewModel environment)
         {
-            environment.SetBackgroundColor(Vector3.One);
+            environment.Background.SetBackgroundColor(Vector3.One);
             await environment.PendingEdits.ConfigureAwait(true);
         }
 
@@ -50,7 +50,7 @@ public sealed partial class ColorHistoryTests
             preview = new Vector3(0.15f * sample, 0.25f, 0.5f);
             if (model is EnvironmentViewModel background)
             {
-                background.SetBackgroundColor(preview);
+                background.Background.SetBackgroundColor(preview);
             }
             else
             {

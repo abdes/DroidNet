@@ -40,7 +40,7 @@ public sealed partial class AerialStartTests : DroidNet.Tests.VisualUserInterfac
         await WaitForRenderAsync().ConfigureAwait(true);
         var number = view.FindDescendant<NumberBox>(element => Equals(element.Tag, "AerialPerspectiveStartDepthMeters"))!;
         _ = number.NumberValue.Should().Be(-1);
-        _ = model.AerialPerspectiveStartDepthMetersDiagnostic.Message.Should().Contain("0 m");
+        _ = model.SkyAtmosphere.AerialPerspectiveStartDepthMetersDiagnostic.Message.Should().Contain("0 m");
         await EnterTextAsync(number, "-2").ConfigureAwait(true);
         number.CompletePendingTextEdit();
         await model.PendingEdits.ConfigureAwait(true);
@@ -50,7 +50,7 @@ public sealed partial class AerialStartTests : DroidNet.Tests.VisualUserInterfac
         number.CompletePendingTextEdit();
         await model.PendingEdits.ConfigureAwait(true);
         _ = fixture.Scene.Environment.SkyAtmosphere.AerialPerspectiveStartDepthMeters.Should().Be(100);
-        _ = model.AerialPerspectiveStartDepthMetersDiagnostic.Message.Should().BeEmpty();
+        _ = model.SkyAtmosphere.AerialPerspectiveStartDepthMetersDiagnostic.Message.Should().BeEmpty();
         _ = fixture.Context.History.UndoStack.Should().ContainSingle();
     });
 

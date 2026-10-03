@@ -24,16 +24,16 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = ConfigureGestureSync(fixture, scene);
         using var editor = new EnvironmentViewModel(fixture.Sut, () => context);
         editor.SetScene(scene);
-        var original = editor.BackgroundR;
+        var original = editor.Background.BackgroundR;
         editor.BeginEditSession("BackgroundR", NumberBoxEditInteractionKind.PointerDrag);
-        editor.BackgroundR = 0.8f;
+        editor.Background.BackgroundR = 0.8f;
         editor.EndEditSession(NumberBoxEditCompletionKind.Commit);
         await editor.PendingEdits.ConfigureAwait(false);
 
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = editor.BackgroundR.Should().Be(original);
+        _ = editor.Background.BackgroundR.Should().Be(original);
         await context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = editor.BackgroundR.Should().Be(0.8f);
+        _ = editor.Background.BackgroundR.Should().Be(0.8f);
     }
 
     [TestMethod]
@@ -44,12 +44,12 @@ public sealed partial class SceneDocumentCommandServiceTests
         scene.RootNodes.Add(sun);
         using var editor = new EnvironmentViewModel();
         editor.SetScene(scene);
-        _ = editor.SelectedSun!.NodeId.Should().Be(sun.Id);
+        _ = editor.AtmosphereLights.SelectedSun!.NodeId.Should().Be(sun.Id);
 
         _ = scene.RootNodes.Remove(sun);
-        _ = editor.SelectedSun!.NodeId.Should().BeNull();
+        _ = editor.AtmosphereLights.SelectedSun!.NodeId.Should().BeNull();
         scene.RootNodes.Add(sun);
-        _ = editor.SelectedSun!.NodeId.Should().Be(sun.Id);
+        _ = editor.AtmosphereLights.SelectedSun!.NodeId.Should().Be(sun.Id);
         var light = sun.Components.OfType<DirectionalLightComponent>().Single();
         _ = sun.RemoveComponent(light);
         _ = sun.AddComponent(light);
@@ -62,15 +62,15 @@ public sealed partial class SceneDocumentCommandServiceTests
         var scene = CreateScene();
         var context = CreateContext(scene);
         using var editor = new EnvironmentViewModel(fixture.Sut, () => context);
-        var boundDiagnostic = editor.ManualExposureEvDiagnostic;
+        var boundDiagnostic = editor.Exposure.ManualExposureEvDiagnostic;
         editor.SetScene(scene);
 
-        editor.ManualExposureEv = float.NaN;
+        editor.Exposure.ManualExposureEv = float.NaN;
         await editor.PendingEdits.ConfigureAwait(false);
 
-        _ = editor.ManualExposureEvDiagnostic.Should().BeSameAs(boundDiagnostic);
+        _ = editor.Exposure.ManualExposureEvDiagnostic.Should().BeSameAs(boundDiagnostic);
         _ = boundDiagnostic.Message.Should().NotBeEmpty();
-        _ = float.IsFinite(editor.ManualExposureEv).Should().BeTrue();
+        _ = float.IsFinite(editor.Exposure.ManualExposureEv).Should().BeTrue();
         _ = context.History.UndoStack.Should().BeEmpty();
     }
 
@@ -86,15 +86,15 @@ public sealed partial class SceneDocumentCommandServiceTests
         using var editor = new EnvironmentViewModel();
         editor.SetScene(first);
         editor.SetScene(second);
-        var selected = editor.SelectedSun;
+        var selected = editor.AtmosphereLights.SelectedSun;
 
         first.RootNodes.Clear();
         firstSun.Name = "Old document change";
 
-        _ = editor.SelectedSun.Should().BeSameAs(selected);
-        _ = editor.SelectedSun!.NodeId.Should().Be(secondSun.Id);
+        _ = editor.AtmosphereLights.SelectedSun.Should().BeSameAs(selected);
+        _ = editor.AtmosphereLights.SelectedSun!.NodeId.Should().Be(secondSun.Id);
         secondSun.Name = "Renamed Sun";
-        _ = editor.SelectedSun.DisplayName.Should().Be("Renamed Sun");
+        _ = editor.AtmosphereLights.SelectedSun.DisplayName.Should().Be("Renamed Sun");
     }
 
     [TestMethod]
@@ -116,7 +116,7 @@ public sealed partial class SceneDocumentCommandServiceTests
             editor.BeginEditSession("BackgroundR", NumberBoxEditInteractionKind.PointerDrag);
         }
 
-        editor.BackgroundR = 0.8f;
+        editor.Background.BackgroundR = 0.8f;
         if (gesture)
         {
             editor.EndEditSession(NumberBoxEditCompletionKind.Commit);

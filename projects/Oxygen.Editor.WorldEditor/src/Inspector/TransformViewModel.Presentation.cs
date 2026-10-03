@@ -19,16 +19,7 @@ public sealed partial class TransformViewModel
     /// <inheritdoc />
     protected override void OnInputEnabledChanged(bool enabled)
     {
-        if (!enabled)
-        {
-            foreach (var (field, session) in this.activeSessions.ToArray())
-            {
-                this.supersededFields.Add(field);
-                var completion = session.Interaction == NumberBoxEditInteractionKind.Text
-                    ? NumberBoxEditCompletionKind.Commit : NumberBoxEditCompletionKind.Cancel;
-                _ = this.CompleteActiveSessionAsync(field, completion);
-            }
-        }
+        this.controller.SetInputEnabled(enabled);
     }
 
     private void RefreshSourceFeedback(PropertyBinding<float> binding, Dictionary<Guid, object?> targets)

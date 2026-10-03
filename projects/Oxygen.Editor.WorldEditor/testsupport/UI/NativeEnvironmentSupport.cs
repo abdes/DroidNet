@@ -26,9 +26,9 @@ internal static class NativeEnvironmentSupport
         "AtmosphereEnabled" => FindEnvironmentToggle(view, "Sky Atmosphere"),
         "ExposureEnabled" => FindEnvironmentToggle(view, "Exposure"),
         "SunDiskEnabled" => view.FindDescendant<ToggleSwitch>(element => Equals(element.Tag, "SunDiskEnabled")),
-        "ExposureMode" => view.FindDescendant<ComboBox>(element => ReferenceEquals(element.ItemsSource, model.ExposureModes)),
-        "ToneMapping" => view.FindDescendant<ComboBox>(element => ReferenceEquals(element.ItemsSource, model.ToneMappingModes)),
-        "AutoExposureMeteringMode" => view.FindDescendant<ComboBox>(element => ReferenceEquals(element.ItemsSource, model.MeteringModes)),
+        "ExposureMode" => view.FindDescendant<ComboBox>(element => ReferenceEquals(element.ItemsSource, model.Exposure.ExposureModes)),
+        "ToneMapping" => view.FindDescendant<ComboBox>(element => ReferenceEquals(element.ItemsSource, model.PostProcessing.ToneMappingModes)),
+        "AutoExposureMeteringMode" => view.FindDescendant<ComboBox>(element => ReferenceEquals(element.ItemsSource, model.Exposure.MeteringModes)),
         _ when field.VectorTag is { } tag => view.FindDescendant<VectorBox>(element => Equals(element.Tag, tag))?.FindDescendant<NumberBox>(element => string.Equals(element.Name, $"PartNumberBox{field.VectorAxis}", StringComparison.Ordinal)),
         _ => view.FindDescendant<NumberBox>(element => Equals(element.Tag, field.Field)),
     };

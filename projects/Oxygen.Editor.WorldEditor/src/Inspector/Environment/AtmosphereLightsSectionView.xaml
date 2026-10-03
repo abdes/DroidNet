@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.World.Inspector.Environment.AtmosphereLightsSectionView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:local="using:Oxygen.Editor.World.Inspector"
+    xmlns:ui="using:CommunityToolkit.WinUI">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Inspector/SceneInspectorStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+            <Style BasedOn="{StaticResource QuietInspectorAction}" TargetType="Button" />
+            <Style
+                x:Key="SourceReferenceAction"
+                BasedOn="{StaticResource QuietInspectorAction}"
+                TargetType="Button">
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <editorcontrols:PropertiesExpander
+        x:Name="AtmosphereLightsSection"
+        HorizontalAlignment="Stretch"
+        HorizontalContentAlignment="Stretch"
+        Description="Primary and secondary directional light sources."
+        Header="Atmosphere Lights"
+        HeaderIcon="{ui:FontIcon Glyph='&#xE706;'}"
+        IsExpanded="True"
+        Tag="Environment">
+        <editorcontrols:PropertiesExpander.HeaderActions>
+            <Button
+                AutomationProperties.Name="Reset atmosphere lights"
+                Background="Transparent"
+                BorderThickness="0"
+                Click="ResetAtmosphereSources_Click"
+                ToolTipService.ToolTip="Reset atmosphere lights">
+                <FontIcon FontSize="14" Glyph="&#xE777;" />
+            </Button>
+        </editorcontrols:PropertiesExpander.HeaderActions>
+        <editorcontrols:PropertiesExpander.Items>
+            <editorcontrols:PropertyCard
+                x:Name="SourcesCard"
+                HorizontalContentAlignment="Stretch"
+                PropertyName="Sources"
+                Style="{StaticResource ContentOnlyPropertyCard}"
+                Tag="Sun Binding Sun Reference atmosphere_light_slot azimuth elevation direction angular diameter disk luminance transmittance primary secondary">
+                <StackPanel Spacing="4">
+                    <Grid ColumnSpacing="5" RowSpacing="4">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.ColumnSpan="3" Text="Primary" />
+                        <ComboBox
+                            Grid.Row="1"
+                            MinHeight="32"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="Primary atmosphere source"
+                            DisplayMemberPath="DisplayName"
+                            FontSize="14"
+                            ItemsSource="{x:Bind ViewModel.SunOptions, Mode=OneWay}"
+                            SelectedItem="{x:Bind ViewModel.SelectedSun, Mode=TwoWay}">
+                            <ComboBox.ItemContainerStyle>
+                                <Style TargetType="ComboBoxItem">
+                                    <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
+                                </Style>
+                            </ComboBox.ItemContainerStyle>
+                        </ComboBox>
+                        <Button
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            AutomationProperties.Name="Inspect primary atmosphere source"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="InspectPrimarySource_Click"
+                            IsEnabled="{x:Bind ViewModel.HasPrimaryAtmosphereSource, Mode=OneWay}"
+                            Style="{StaticResource SourceReferenceAction}"
+                            ToolTipService.ToolTip="Inspect the primary atmosphere light">
+                            <FontIcon FontSize="14" Glyph="&#xE8FD;" />
+                        </Button>
+                        <Button
+                            Grid.Row="1"
+                            Grid.Column="2"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Command="{x:Bind ViewModel.ClearSunCommand}"
+                            IsEnabled="{x:Bind ViewModel.HasPrimaryAtmosphereSource, Mode=OneWay}"
+                            Style="{StaticResource SourceReferenceAction}"
+                            ToolTipService.ToolTip="Clear Primary assignment">
+                            <FontIcon FontSize="14" Glyph="&#xE711;" />
+                        </Button>
+                        <Expander
+                            x:Name="PrimarySourceDisclosure"
+                            Grid.Row="2"
+                            Grid.ColumnSpan="3"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            Header="Direction &amp; atmosphere"
+                            IsExpanded="False"
+                            Style="{StaticResource QuietDisclosure}"
+                            Visibility="{x:Bind ViewModel.HasPrimaryAtmosphereSource, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <local:AtmosphereSourceView DataContext="{x:Bind ViewModel.PrimaryAtmosphereSource, Mode=OneWay}" />
+                        </Expander>
+                        <Border
+                            x:Name="SourceSeparator"
+                            Grid.Row="3"
+                            Grid.ColumnSpan="3"
+                            Height="1"
+                            Margin="0,4"
+                            Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                        <TextBlock
+                            Grid.Row="4"
+                            Grid.ColumnSpan="3"
+                            Text="Secondary" />
+                        <ComboBox
+                            Grid.Row="5"
+                            MinHeight="32"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="Secondary atmosphere source"
+                            DisplayMemberPath="DisplayName"
+                            FontSize="14"
+                            ItemsSource="{x:Bind ViewModel.SecondarySunOptions, Mode=OneWay}"
+                            SelectedItem="{x:Bind ViewModel.SelectedSecondarySun, Mode=TwoWay}">
+                            <ComboBox.ItemContainerStyle>
+                                <Style TargetType="ComboBoxItem">
+                                    <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
+                                </Style>
+                            </ComboBox.ItemContainerStyle>
+                        </ComboBox>
+                        <Button
+                            Grid.Row="5"
+                            Grid.Column="1"
+                            AutomationProperties.Name="Inspect secondary atmosphere source"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="InspectSecondarySource_Click"
+                            IsEnabled="{x:Bind ViewModel.HasSecondaryAtmosphereSource, Mode=OneWay}"
+                            Style="{StaticResource SourceReferenceAction}"
+                            ToolTipService.ToolTip="Inspect the secondary atmosphere light">
+                            <FontIcon FontSize="14" Glyph="&#xE8FD;" />
+                        </Button>
+                        <Button
+                            Grid.Row="5"
+                            Grid.Column="2"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Command="{x:Bind ViewModel.ClearSecondarySunCommand}"
+                            IsEnabled="{x:Bind ViewModel.HasSecondaryAtmosphereSource, Mode=OneWay}"
+                            Style="{StaticResource SourceReferenceAction}"
+                            ToolTipService.ToolTip="Clear Secondary assignment">
+                            <FontIcon FontSize="14" Glyph="&#xE711;" />
+                        </Button>
+                        <Expander
+                            x:Name="SecondarySourceDisclosure"
+                            Grid.Row="6"
+                            Grid.ColumnSpan="3"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            Header="Direction &amp; atmosphere"
+                            IsExpanded="False"
+                            Style="{StaticResource QuietDisclosure}"
+                            Visibility="{x:Bind ViewModel.HasSecondaryAtmosphereSource, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <local:AtmosphereSourceView DataContext="{x:Bind ViewModel.SecondaryAtmosphereSource, Mode=OneWay}" />
+                        </Expander>
+                        <TextBlock
+                            Grid.Row="7"
+                            Grid.ColumnSpan="3"
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.SunReferenceDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.SunReferenceDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
+                    </Grid>
+                </StackPanel>
+            </editorcontrols:PropertyCard>
+        </editorcontrols:PropertiesExpander.Items>
+    </editorcontrols:PropertiesExpander>
+</UserControl>

@@ -71,7 +71,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         };
         if (view is EnvironmentView environmentView)
         {
-            ((Expander)environmentView.FindName("PrimarySourceDisclosure")).IsExpanded = true;
+            ((Expander)FindInspectorElement(environmentView, "PrimarySourceDisclosure")).IsExpanded = true;
         }
 
         await LoadTestContentAsync(view).ConfigureAwait(true);
@@ -103,7 +103,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         await LoadTestContentAsync(host).ConfigureAwait(true);
         ((TextBox)view.FindName("ScenePropertySearchBox")).Text = "sky_luminance_factor_rgb";
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var sky = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("SkyAtmosphereSection");
+        var sky = (Oxygen.Editor.Controls.PropertiesExpander)FindInspectorElement(view, "SkyAtmosphereSection");
         var card = SceneCards(sky).Single(property => property.PropertyName == "Sky Luminance");
         _ = sky.BringItemIntoView(card);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
@@ -180,11 +180,11 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         await LoadTestContentAsync(host).ConfigureAwait(true);
         ((TextBox)view.FindName("ScenePropertySearchBox")).Text = "background";
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var section = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("BackgroundSection");
+        var section = (Oxygen.Editor.Controls.PropertiesExpander)FindInspectorElement(view, "BackgroundSection");
         _ = section.Description.Should().Be("Fallback color when atmosphere rendering is disabled.");
-        _ = ((Button)view.FindName("ResetBackgroundButton")).IsEnabled.Should().BeTrue();
+        _ = ((Button)FindInspectorElement(view, "ResetBackgroundButton")).IsEnabled.Should().BeTrue();
         var card = SceneCards(section).Single(property => property.PropertyName == "Color");
-        _ = section.BringItemIntoView(view.FindName("BackgroundColorCard"));
+        _ = section.BringItemIntoView(FindInspectorElement(view, "BackgroundColorCard"));
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         var label = card.FindDescendant<TextBlock>(text => text.Text == "Color")!;
         var unit = card.FindDescendant<TextBlock>(text => text.Text == "Linear RGB")!;
@@ -286,13 +286,13 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         scroller.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("ms-appx:///Microsoft.UI.Xaml/DensityStyles/Compact.xaml") });
         scroller.Children.Add(view);
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
-        var primary = (Expander)view.FindName("PrimarySourceDisclosure");
-        var secondary = (Expander)view.FindName("SecondarySourceDisclosure");
+        var primary = (Expander)FindInspectorElement(view, "PrimarySourceDisclosure");
+        var secondary = (Expander)FindInspectorElement(view, "SecondarySourceDisclosure");
         _ = primary.IsExpanded.Should().BeFalse();
         _ = secondary.IsExpanded.Should().BeFalse();
         var collapsedHeader = primary.FindDescendant<ToggleButton>(toggle => toggle.Name == "ExpanderHeader")!;
         _ = primary.ActualHeight.Should().BeApproximately(collapsedHeader.ActualHeight, 1);
-        var sourceCard = ((Oxygen.Editor.Controls.PropertiesExpander)view.FindName("AtmosphereLightsSection")).Items.OfType<Oxygen.Editor.Controls.PropertyCard>().Single();
+        var sourceCard = ((Oxygen.Editor.Controls.PropertiesExpander)FindInspectorElement(view, "AtmosphereLightsSection")).Items.OfType<Oxygen.Editor.Controls.PropertyCard>().Single();
         var separator = ((StackPanel)sourceCard.Content).Children.OfType<Grid>().Single().Children.OfType<Border>().Single();
         var separatorGap = separator.TransformToVisual(view).TransformPoint(default).Y
             - collapsedHeader.TransformToVisual(view).TransformPoint(default).Y - collapsedHeader.ActualHeight;
@@ -322,7 +322,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         var disclosureGap = source.TransformToVisual(primary).TransformPoint(default).Y
             - disclosureHeader.TransformToVisual(primary).TransformPoint(default).Y - disclosureHeader.ActualHeight;
         _ = disclosureGap.Should().BeApproximately(0, 1);
-        var section = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("AtmosphereLightsSection");
+        var section = (Oxygen.Editor.Controls.PropertiesExpander)FindInspectorElement(view, "AtmosphereLightsSection");
         var references = section.FindDescendants().OfType<ComboBox>().ToArray();
         _ = references.Should().HaveCount(2);
         foreach (var reference in references)
@@ -344,7 +344,8 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
                 _ = iconCenter.Should().BeApproximately(referenceCenter, 1);
             }
         }
-        var headerToggles = section.FindDescendants().OfType<ToggleButton>().Where(toggle => ReferenceEquals(toggle.Style, view.Resources["QuietInspectorToggle"])).ToArray();
+        var sectionResources = view.SectionView("AtmosphereLights").Resources;
+        var headerToggles = section.FindDescendants().OfType<ToggleButton>().Where(toggle => ReferenceEquals(toggle.Style, sectionResources["QuietInspectorToggle"])).ToArray();
         _ = headerToggles.Should().NotBeEmpty();
         foreach (var toggle in headerToggles)
         {
@@ -387,7 +388,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         var host = new Grid { Width = 420, Height = 780 };
         host.Children.Add(view);
         await LoadTestContentAsync(host).ConfigureAwait(true);
-        var atmosphere = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("AtmosphereLightsSection");
+        var atmosphere = (Oxygen.Editor.Controls.PropertiesExpander)FindInspectorElement(view, "AtmosphereLightsSection");
         var header = atmosphere.FindDescendant<ToggleButton>(button => button.Name == "ExpanderHeader")!;
         var icon = header.FindDescendant<Viewbox>(element => element.Name == "PartHeaderIconPresenterHolder");
         _ = icon.Should().NotBeNull();
@@ -402,7 +403,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         provider.Toggle();
         _ = atmosphere.IsExpanded.Should().BeTrue();
         _ = header.FindDescendants().Should().NotContain((FrameworkElement)atmosphere.Content);
-        var sky = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("SkyAtmosphereSection");
+        var sky = (Oxygen.Editor.Controls.PropertiesExpander)FindInspectorElement(view, "SkyAtmosphereSection");
         var sunDisk = SceneCards(sky).Single(card => card.PropertyName == "Sun Disk");
         _ = sky.BringItemIntoView(sunDisk);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
@@ -420,9 +421,9 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         var albedo = (Oxygen.Editor.Controls.PropertyCard)albedoField.Content;
         var swatch = (Button)albedo.LeadingContent!;
         _ = swatch.Flyout.Should().BeOfType<Flyout>();
-        model.GroundAlbedoR = 0.21404114f;
+        model.SkyAtmosphere.GroundAlbedoR = 0.21404114f;
         await model.PendingEdits.ConfigureAwait(true);
-        _ = InspectorRgbPresentation.ToDisplayColor(model.GroundAlbedoColor).R.Should().Be(128);
+        _ = InspectorRgbPresentation.ToDisplayColor(model.SkyAtmosphere.GroundAlbedoColor).R.Should().Be(128);
         _ = ((Microsoft.UI.Xaml.Media.SolidColorBrush)((Border)swatch.Content).Background).Color.R.Should().Be(128);
         var historyCount = fixture.Context.History.UndoStack.Count;
         ((TextBox)view.FindName("ScenePropertySearchBox")).Text = "Ground Albedo";
@@ -433,7 +434,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = fixture.Scene.Environment.SkyAtmosphere.GroundAlbedoRgb.Y.Should().BeApproximately(0.05126946f, 0.000001f);
         _ = fixture.Context.History.UndoStack.Should().HaveCount(historyCount + 1);
         await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
-        _ = InspectorRgbPresentation.ToDisplayColor(model.GroundAlbedoColor).R.Should().Be(128);
+        _ = InspectorRgbPresentation.ToDisplayColor(model.SkyAtmosphere.GroundAlbedoColor).R.Should().Be(128);
     });
 
     /// <summary>Read-only numeric text is compact while the editor retains its authored value and mask.</summary>
@@ -476,19 +477,19 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         var scroller = new ScrollViewer { Content = view, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
 
-        var exposure = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("ExposureSection");
-        var sky = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("SkyAtmosphereSection");
-        var background = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("BackgroundSection");
+        var exposure = (Oxygen.Editor.Controls.PropertiesExpander)FindInspectorElement(view, "ExposureSection");
+        var sky = (Oxygen.Editor.Controls.PropertiesExpander)FindInspectorElement(view, "SkyAtmosphereSection");
+        var background = (Oxygen.Editor.Controls.PropertiesExpander)FindInspectorElement(view, "BackgroundSection");
         exposure.IsExpanded = false;
-        var autoMinimum = (Oxygen.Editor.Controls.PropertyCard)((Oxygen.Editor.Controls.InspectorNumberField)view.FindName("AutoExposureMinEvCard")).Content;
-        _ = model.ExposureMode.Should().Be(Oxygen.Editor.World.Serialization.ExposureMode.Manual);
-        _ = ((FrameworkElement)view.FindName("AutoExposureMinEvCard")).Visibility.Should().Be(Visibility.Collapsed);
+        var autoMinimum = (Oxygen.Editor.Controls.PropertyCard)((Oxygen.Editor.Controls.InspectorNumberField)FindInspectorElement(view, "AutoExposureMinEvCard")).Content;
+        _ = model.Exposure.ExposureMode.Should().Be(Oxygen.Editor.World.Serialization.ExposureMode.Manual);
+        _ = ((FrameworkElement)FindInspectorElement(view, "AutoExposureMinEvCard")).Visibility.Should().Be(Visibility.Collapsed);
 
         var search = view.FindDescendant<TextBox>(element => string.Equals(element.Name, "ScenePropertySearchBox", StringComparison.Ordinal))!;
         search.Text = "auto_exposure_min_ev";
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
 
-        _ = ((FrameworkElement)view.FindName("AutoExposureMinEvCard")).Visibility.Should().Be(Visibility.Visible);
+        _ = ((FrameworkElement)FindInspectorElement(view, "AutoExposureMinEvCard")).Visibility.Should().Be(Visibility.Visible);
         _ = ((StackPanel)autoMinimum.Content).Children.OfType<TextBlock>().Should().Contain(element => element.Text.Contains("applies in Auto exposure mode", StringComparison.Ordinal));
         _ = exposure.IsExpanded.Should().BeTrue();
 
@@ -500,7 +501,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = exposure.Visibility.Should().Be(Visibility.Visible);
 
         search.Text = "manual";
-        _ = ((FrameworkElement)view.FindName("AutoExposureMinEvCard")).Visibility.Should().Be(Visibility.Collapsed);
+        _ = ((FrameworkElement)FindInspectorElement(view, "AutoExposureMinEvCard")).Visibility.Should().Be(Visibility.Collapsed);
         search.Text = string.Empty;
         _ = exposure.IsExpanded.Should().BeFalse();
         _ = background.Visibility.Should().Be(Visibility.Collapsed);
@@ -516,11 +517,11 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         search.Text = string.Empty;
         _ = background.Visibility.Should().Be(Visibility.Visible);
 
-        model.ToneMapping = Oxygen.Editor.World.Serialization.ToneMappingMode.None;
+        model.PostProcessing.ToneMapping = Oxygen.Editor.World.Serialization.ToneMappingMode.None;
         await model.PendingEdits.ConfigureAwait(true);
-        var toneMapping = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("ToneMappingSection");
-        _ = ((FrameworkElement)view.FindName("DisplayGammaCard")).Visibility.Should().Be(Visibility.Visible);
-        _ = ((Oxygen.Editor.Controls.InspectorNumberField)view.FindName("DisplayGammaCard")).Label.Should().Be("Display Gamma");
+        var toneMapping = (Oxygen.Editor.Controls.PropertiesExpander)FindInspectorElement(view, "ToneMappingSection");
+        _ = ((FrameworkElement)FindInspectorElement(view, "DisplayGammaCard")).Visibility.Should().Be(Visibility.Visible);
+        _ = ((Oxygen.Editor.Controls.InspectorNumberField)FindInspectorElement(view, "DisplayGammaCard")).Label.Should().Be("Display Gamma");
     });
 
     /// <summary>The seven design-order sections preserve all 42 scene cards and closed secondary groups.</summary>
@@ -535,7 +536,12 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         host.Children.Add(view);
         await LoadTestContentAsync(host).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
-        var sections = ((StackPanel)view.FindName("SceneSections")).Children.OfType<Oxygen.Editor.Controls.PropertiesExpander>().ToArray();
+        var sections = ((StackPanel)view.FindName("SceneSections")).Children.SelectMany(child => child switch
+        {
+            UserControl { Content: Oxygen.Editor.Controls.PropertiesExpander section } => [section],
+            UserControl { Content: StackPanel effects } => effects.Children.OfType<Oxygen.Editor.Controls.PropertiesExpander>(),
+            _ => Enumerable.Empty<Oxygen.Editor.Controls.PropertiesExpander>(),
+        }).ToArray();
         _ = sections.Select(section => section.Header).Should().Equal("Atmosphere Lights", "Sky Atmosphere", "Background", "Exposure", "Tone Mapping", "Color Grading", "Bloom");
         _ = sections.SelectMany(SceneCards).Should().HaveCount(42);
         _ = sections.Select(section => section.IsExpanded).Should().Equal(true, true, true, true, true, false, false);
@@ -612,7 +618,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         search.Text = "ground_albedo";
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         _ = planet.IsExpanded.Should().BeTrue();
-        _ = ((FrameworkElement)view.FindName("GroundAlbedoCard")).Visibility.Should().Be(Visibility.Visible);
+        _ = ((FrameworkElement)FindInspectorElement(view, "GroundAlbedoCard")).Visibility.Should().Be(Visibility.Visible);
         search.Text = string.Empty;
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         _ = planet.IsExpanded.Should().BeFalse();
@@ -655,22 +661,22 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         using var model = (EnvironmentViewModel)CreateModel("Environment", fixture);
         var view = new EnvironmentView { ViewModel = model, Width = 420, Height = 780 };
         await LoadTestContentAsync(view).ConfigureAwait(true);
-        var exposure = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("ExposureSection");
-        var spot = (Oxygen.Editor.Controls.PropertyCard)((Oxygen.Editor.Controls.InspectorNumberField)view.FindName("AutoExposureSpotMeterRadiusCard")).Content;
+        var exposure = (Oxygen.Editor.Controls.PropertiesExpander)FindInspectorElement(view, "ExposureSection");
+        var spot = (Oxygen.Editor.Controls.PropertyCard)((Oxygen.Editor.Controls.InspectorNumberField)FindInspectorElement(view, "AutoExposureSpotMeterRadiusCard")).Content;
         var originalContent = spot.Content;
         var storedRadius = fixture.Scene.Environment.PostProcess.AutoExposureSpotMeterRadius;
         var search = (TextBox)view.FindName("ScenePropertySearchBox");
         search.Text = "spot radius";
         await WaitForRenderAsync().ConfigureAwait(true);
-        _ = ((FrameworkElement)view.FindName("AutoExposureSpotMeterRadiusCard")).Visibility.Should().Be(Visibility.Visible);
+        _ = ((FrameworkElement)FindInspectorElement(view, "AutoExposureSpotMeterRadiusCard")).Visibility.Should().Be(Visibility.Visible);
         _ = ((StackPanel)spot.Content).Children.OfType<TextBlock>().Should().Contain(note =>
             note.Text.Contains("applies in Auto exposure mode with Spot metering", StringComparison.Ordinal));
         _ = spot.Content.Should().BeSameAs(originalContent);
         _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
 
-        model.ExposureMode = Oxygen.Editor.World.Serialization.ExposureMode.Auto;
-        model.AutoExposureMeteringMode = Oxygen.Editor.World.Serialization.MeteringMode.Spot;
+        model.Exposure.ExposureMode = Oxygen.Editor.World.Serialization.ExposureMode.Auto;
+        model.Exposure.AutoExposureMeteringMode = Oxygen.Editor.World.Serialization.MeteringMode.Spot;
         await model.PendingEdits.ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = ((StackPanel)spot.Content).Children.OfType<TextBlock>().Should().NotContain(note =>
@@ -695,14 +701,14 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         await WaitForRenderAsync().ConfigureAwait(true);
         var search = (TextBox)view.FindName("ScenePropertySearchBox");
         search.Text = "auto_exposure_min_ev";
-        secondModel.ExposureMode = Oxygen.Editor.World.Serialization.ExposureMode.Auto;
+        secondModel.Exposure.ExposureMode = Oxygen.Editor.World.Serialization.ExposureMode.Auto;
         await secondModel.PendingEdits.ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
-        var exposure = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("ExposureSection");
-        var minimum = (Oxygen.Editor.Controls.PropertyCard)((Oxygen.Editor.Controls.InspectorNumberField)view.FindName("AutoExposureMinEvCard")).Content;
+        var exposure = (Oxygen.Editor.Controls.PropertiesExpander)FindInspectorElement(view, "ExposureSection");
+        var minimum = (Oxygen.Editor.Controls.PropertyCard)((Oxygen.Editor.Controls.InspectorNumberField)FindInspectorElement(view, "AutoExposureMinEvCard")).Content;
         _ = ((StackPanel)minimum.Content).Children.OfType<TextBlock>().Should().NotContain(note =>
             note.Visibility == Visibility.Visible && note.Text.StartsWith("Stored value", StringComparison.Ordinal));
-        firstModel.ExposureMode = Oxygen.Editor.World.Serialization.ExposureMode.Auto;
+        firstModel.Exposure.ExposureMode = Oxygen.Editor.World.Serialization.ExposureMode.Auto;
         await firstModel.PendingEdits.ConfigureAwait(true);
         _ = view.ViewModel.Should().BeSameAs(secondModel);
         _ = second.Scene.Environment.PostProcess.AutoExposureMinEv.Should().Be(-6);
@@ -828,7 +834,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         await LoadTestContentAsync(host).ConfigureAwait(true);
         if (field == "GroundAlbedo")
         {
-            var sky = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("SkyAtmosphereSection");
+            var sky = (Oxygen.Editor.Controls.PropertiesExpander)FindInspectorElement(view, "SkyAtmosphereSection");
             sky.Items.OfType<Expander>().Single(group => Equals(group.Header, "Planet & ground")).IsExpanded = true;
             _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         }

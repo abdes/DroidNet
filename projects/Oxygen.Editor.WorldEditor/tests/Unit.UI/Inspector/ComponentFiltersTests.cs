@@ -104,7 +104,7 @@ public sealed partial class ComponentFiltersTests : DroidNet.Tests.VisualUserInt
         _ = model.IsAllComponentsSelected.Should().BeTrue();
         model.SelectComponentFilter(typeof(PerspectiveCamera));
         var camera = model.PropertyEditors.Should().ContainSingle().Which.Should().BeOfType<PerspectiveCameraViewModel>().Which;
-        _ = camera.FieldOfViewIsIndeterminate.Should().BeTrue();
+        _ = camera.FieldOfView.IsMixed.Should().BeTrue();
         _ = model.SelectedComponent.Should().BeNull("a multi-node filter must not expose a single-node deletion target");
         _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([]));
         await WaitForRenderAsync().ConfigureAwait(true);

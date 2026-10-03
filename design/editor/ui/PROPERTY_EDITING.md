@@ -103,7 +103,18 @@ temporary expansion restoration are headless presentation policy; XAML declares
 the sections, disclosures and applicability notes. The view binds registered
 fields and retains focus/BringIntoView adapters; it neither searches realized
 control text nor wraps card content at runtime. Applicability notes remain
-separate from command diagnostics.
+separate from command diagnostics. Section views register their own controls with
+`InspectorSceneFieldRegistry`; the host composes views rather than accessing child
+namescopes to construct layout. Aerial Start realization, scrolling and focus live
+in the Sky section, with acknowledgement only after focus succeeds.
+
+`EnvironmentViewModel` owns scene identity and five stable child models:
+Background, Sky Atmosphere, Exposure, Atmosphere Lights and Post Processing.
+Ordinary sections borrow one `SceneEnvironmentEditOwner` and its canonical
+diagnostics/coordinator. Atmosphere Lights owns source-role observation, initial
+reset snapshots, the role-assignment coordinator and the two canonical Light
+models. Exposure owns the scheduled texture feed and curve editor. Child views
+receive these instances and never create or dispose replacement models.
 
 Perspective Camera, Environment, Directional Light and atmosphere-source scalar
 fields use shared `InspectorNumberField` to compose the existing
@@ -118,7 +129,7 @@ WorldEditor's `InspectorRgbField` shares color and multiplier composition. Color
 use the existing display conversion and captured-owner gesture helper; multipliers
 never expose a color picker. `ExposureCompensationCurveEditorViewModel` owns stable
 key rows, finite/increasing-EV validation and add/remove policy while borrowing the
-Environment model's command, gesture and diagnostic owner. Its view receives the
+Exposure section's shared scene command, gesture and diagnostic owner. Its view receives the
 parent-owned instance and creates the preview points. Geometry and material flyouts
 share `AssetPickerContent` with typed templates; catalog services, stable rows and
 captured assignment targets remain in Geometry's model. Texture picker presentation
@@ -126,7 +137,26 @@ remains separate because its row layout differs. Refactoring qualification is tr
 [the inspector maintenance plan](../plan/inspector-refactoring.md), separately
 from the historical verification below.
 
-Environment asset notifications use an injected reactive `IScheduler`.
+Camera binds directly to typed `PropertyBinding<float>` state instead of duplicate
+observable value/mixed fields. Disposable `InspectorBindingRegistration<T>` routes
+requests, guards model-refresh echoes and detaches subscriptions. Light's scalar
+adapters read their binding state directly; degree/radian and integer-count
+conversions remain explicit, as do per-target color/multiplier channel edits.
+`DirectionalLightShadowsView` uses the same Light model, and
+`DirectionalLightOrientation` owns pure Z-up / emitted-forward -Y conversion.
+
+`TransformEditController` owns captured targets, relative expressions, wheel-idle
+work, edit serialization, pending completion and terminal disposal. Transform's
+model retains field values, mixed states and source diagnostics. The host uses
+`InspectorEditorFactory` with its existing scoped dependencies and preserves cached
+editor instances; `InspectorSelectionObserver` owns component/material-slot
+subscriptions and suppresses queued callbacks from old selections.
+
+Shared Editor.Controls is the sole PropertyCard/PropertiesExpander authority.
+WorldEditor's Generic resources reference that owner; the unused local controls,
+templates and theme dictionary are retired.
+
+Exposure asset notifications use an injected reactive `IScheduler`.
 Inspector composition supplies the existing hosting dispatcher scheduler;
 standalone models use immediate delivery without acquiring a WinUI dispatcher.
 Disposing the model cancels queued asset notifications and removes the feed

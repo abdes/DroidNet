@@ -1,0 +1,374 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.World.Inspector.Environment.ExposureSectionView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:environment="using:Oxygen.Editor.World.Inspector.Environment">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Inspector/SceneInspectorStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <Style BasedOn="{StaticResource QuietInspectorAction}" TargetType="Button" />
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <editorcontrols:PropertiesExpander
+        x:Name="ExposureSection"
+        HorizontalAlignment="Stretch"
+        HorizontalContentAlignment="Stretch"
+        Description="Exposure pipeline values from Oxygen's native PostProcessVolume."
+        Header="Exposure"
+        IsExpanded="True"
+        Tag="Post-processing">
+        <editorcontrols:PropertiesExpander.HeaderIcon>
+            <FontIcon Glyph="&#xE9CA;" />
+        </editorcontrols:PropertiesExpander.HeaderIcon>
+        <editorcontrols:PropertiesExpander.Items>
+            <editorcontrols:PropertyCard
+                x:Name="ExposureEnabledCard"
+                HorizontalContentAlignment="Stretch"
+                PropertyName="Enabled">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.ExposureEnabled, Mode=TwoWay}" Tag="ExposureEnabled" />
+            </editorcontrols:PropertyCard>
+            <editorcontrols:PropertyCard
+                x:Name="ExposureModeCard"
+                HorizontalContentAlignment="Stretch"
+                PropertyName="Mode">
+                <ComboBox
+                    ItemsSource="{x:Bind ViewModel.ExposureModes}"
+                    SelectedItem="{x:Bind ViewModel.ExposureMode, Mode=TwoWay}"
+                    Tag="ExposureMode" />
+            </editorcontrols:PropertyCard>
+            <editorcontrols:InspectorNumberField
+                x:Name="ManualExposureEvCard"
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.ManualExposureEvDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.ManualExposureEvDiagnostic.HasError, Mode=OneWay}"
+                Label="Manual EV"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.ManualExposureEv, Mode=TwoWay}"
+                Qualifier="EV100"
+                Tag="ManualExposureEv" />
+            <editorcontrols:InspectorNumberField
+                x:Name="ExposureCompensationCard"
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.ExposureCompensationDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.ExposureCompensationDiagnostic.HasError, Mode=OneWay}"
+                Label="Compensation"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.ExposureCompensation, Mode=TwoWay}"
+                Qualifier="EV"
+                Tag="ExposureCompensation" />
+            <Expander
+                x:Name="MeteringLimitsDisclosure"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.AutomationId="Scene.Exposure.MeteringLimits"
+                Header="Metering &amp; limits"
+                IsExpanded="True"
+                Style="{StaticResource QuietDisclosure}">
+                <StackPanel Spacing="4">
+                    <editorcontrols:PropertyCard
+                        x:Name="AutoExposureMeteringModeCard"
+                        HorizontalContentAlignment="Stretch"
+                        PropertyName="Metering"
+                        Tag="AutoExposure">
+                        <StackPanel Spacing="4">
+                            <ComboBox
+                                ItemsSource="{x:Bind ViewModel.MeteringModes}"
+                                SelectedItem="{x:Bind ViewModel.AutoExposureMeteringMode, Mode=TwoWay}"
+                                Tag="AutoExposureMeteringMode" />
+                            <TextBlock
+                                x:Name="AutoExposureMeteringModeApplicabilityNote"
+                                FontSize="12"
+                                TextWrapping="Wrap"
+                                Visibility="Collapsed" />
+                        </StackPanel>
+                    </editorcontrols:PropertyCard>
+                    <editorcontrols:InspectorNumberField
+                        x:Name="AutoExposureMinEvCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.AutoExposureMinEvDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.AutoExposureMinEvDiagnostic.HasError, Mode=OneWay}"
+                        Label="Auto Min EV"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.AutoExposureMinEv, Mode=TwoWay}"
+                        Qualifier="EV100"
+                        Tag="AutoExposureMinEv" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="AutoExposureMaxEvCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.AutoExposureMaxEvDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.AutoExposureMaxEvDiagnostic.HasError, Mode=OneWay}"
+                        Label="Auto Max EV"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.AutoExposureMaxEv, Mode=TwoWay}"
+                        Qualifier="EV100"
+                        Tag="AutoExposureMaxEv" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="AutoExposureTargetLuminanceCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.AutoExposureTargetLuminanceDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.AutoExposureTargetLuminanceDiagnostic.HasError, Mode=OneWay}"
+                        Label="Target Luminance"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.AutoExposureTargetLuminance, Mode=TwoWay}"
+                        Tag="AutoExposureTargetLuminance" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="AutoExposureSpotMeterRadiusCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.AutoExposureSpotMeterRadiusDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.AutoExposureSpotMeterRadiusDiagnostic.HasError, Mode=OneWay}"
+                        Label="Spot Radius"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.AutoExposureSpotMeterRadius, Mode=TwoWay}"
+                        Tag="AutoExposureSpotMeterRadius" />
+                </StackPanel>
+            </Expander>
+            <Expander
+                x:Name="AdaptationDisclosure"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.AutomationId="Scene.Exposure.Adaptation"
+                Header="Adaptation"
+                IsExpanded="False"
+                Style="{StaticResource QuietDisclosure}">
+                <StackPanel Spacing="4">
+                    <editorcontrols:InspectorNumberField
+                        x:Name="AutoExposureSpeedUpCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.AutoExposureSpeedUpDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.AutoExposureSpeedUpDiagnostic.HasError, Mode=OneWay}"
+                        Label="Adapt Up"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.AutoExposureSpeedUp, Mode=TwoWay}"
+                        Qualifier="EV/s"
+                        Tag="AutoExposureSpeedUp" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="AutoExposureSpeedDownCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.AutoExposureSpeedDownDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.AutoExposureSpeedDownDiagnostic.HasError, Mode=OneWay}"
+                        Label="Adapt Down"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.AutoExposureSpeedDown, Mode=TwoWay}"
+                        Qualifier="EV/s"
+                        Tag="AutoExposureSpeedDown" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="AutoExposureTransitionDistanceEvCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.AutoExposureTransitionDistanceEvDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.AutoExposureTransitionDistanceEvDiagnostic.HasError, Mode=OneWay}"
+                        Label="Adaptation transition distance · Proposed"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.AutoExposureTransitionDistanceEv, Mode=TwoWay}"
+                        Qualifier="EV"
+                        Tag="AutoExposureTransitionDistanceEv" />
+                </StackPanel>
+            </Expander>
+            <Expander
+                x:Name="HistogramCalibrationDisclosure"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.AutomationId="Scene.Exposure.HistogramCalibration"
+                Header="Histogram &amp; calibration"
+                IsExpanded="False"
+                Style="{StaticResource QuietDisclosure}">
+                <StackPanel Spacing="4">
+                    <editorcontrols:InspectorNumberField
+                        x:Name="ExposureKeyCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.ExposureKeyDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.ExposureKeyDiagnostic.HasError, Mode=OneWay}"
+                        Label="Key"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.ExposureKey, Mode=TwoWay}"
+                        Tag="ExposureKey" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="AutoExposureLowPercentileCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.AutoExposureLowPercentileDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.AutoExposureLowPercentileDiagnostic.HasError, Mode=OneWay}"
+                        Label="Low Percentile"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.AutoExposureLowPercentile, Mode=TwoWay}"
+                        Tag="AutoExposureLowPercentile" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="AutoExposureHighPercentileCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.AutoExposureHighPercentileDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.AutoExposureHighPercentileDiagnostic.HasError, Mode=OneWay}"
+                        Label="High Percentile"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.AutoExposureHighPercentile, Mode=TwoWay}"
+                        Tag="AutoExposureHighPercentile" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="AutoExposureMinLogLuminanceCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.AutoExposureMinLogLuminanceDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.AutoExposureMinLogLuminanceDiagnostic.HasError, Mode=OneWay}"
+                        Label="Min Log Luminance"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.AutoExposureMinLogLuminance, Mode=TwoWay}"
+                        Tag="AutoExposureMinLogLuminance" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="AutoExposureLogLuminanceRangeCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.AutoExposureLogLuminanceRangeDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.AutoExposureLogLuminanceRangeDiagnostic.HasError, Mode=OneWay}"
+                        Label="Log Luminance Range"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.AutoExposureLogLuminanceRange, Mode=TwoWay}"
+                        Tag="AutoExposureLogLuminanceRange" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="AutoExposureBlackInfluenceCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.AutoExposureBlackInfluenceDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.AutoExposureBlackInfluenceDiagnostic.HasError, Mode=OneWay}"
+                        Label="Dark-sample influence · Proposed"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.AutoExposureBlackInfluence, Mode=TwoWay}"
+                        Qualifier="0–1"
+                        Tag="AutoExposureBlackInfluence" />
+                </StackPanel>
+            </Expander>
+            <Expander
+                x:Name="ExposureShapingDisclosure"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.AutomationId="Scene.Exposure.ExposureShaping"
+                Header="Exposure shaping"
+                IsExpanded="False"
+                Style="{StaticResource QuietDisclosure}">
+                <StackPanel Spacing="4">
+                    <editorcontrols:PropertyCard
+                        x:Name="AutoExposureMeteringMaskCard"
+                        HorizontalContentAlignment="Stretch"
+                        PropertyName="Metering mask · Proposed"
+                        Tag="AutoExposure">
+                        <StackPanel Spacing="4">
+                            <Grid ColumnSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Button
+                                    HorizontalAlignment="Stretch"
+                                    Content="{x:Bind ViewModel.MeteringMaskDisplayName, Mode=OneWay}"
+                                    Tag="AutoExposureMeteringMask"
+                                    ToolTipService.ToolTip="Choose an exposure metering mask">
+                                    <Button.Flyout>
+                                        <Flyout x:Name="MeteringMaskFlyout">
+                                            <StackPanel Width="320" Spacing="6">
+                                                <TextBox PlaceholderText="Search textures…" Text="{x:Bind ViewModel.MeteringMaskSearchText, Mode=TwoWay}" />
+                                                <ItemsRepeater ItemsSource="{x:Bind ViewModel.FilteredMeteringMaskRows, Mode=OneWay}">
+                                                    <ItemsRepeater.Layout>
+                                                        <StackLayout Spacing="2" />
+                                                    </ItemsRepeater.Layout>
+                                                    <ItemsRepeater.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Button
+                                                                HorizontalAlignment="Stretch"
+                                                                HorizontalContentAlignment="Left"
+                                                                Click="MeteringMaskItem_Click"
+                                                                IsEnabled="{Binding Item.IsEnabled, Mode=OneWay}"
+                                                                ToolTipService.ToolTip="{Binding Item.DisplayPath, Mode=OneWay}">
+                                                                <StackPanel>
+                                                                    <TextBlock Text="{Binding Item.Name, Mode=OneWay}" />
+                                                                    <TextBlock
+                                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                        Text="{Binding Item.DisplayPath, Mode=OneWay}"
+                                                                        TextTrimming="CharacterEllipsis" />
+                                                                </StackPanel>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsRepeater.ItemTemplate>
+                                                </ItemsRepeater>
+                                            </StackPanel>
+                                        </Flyout>
+                                    </Button.Flyout>
+                                </Button>
+                                <Button
+                                    Grid.Column="1"
+                                    Click="ClearMeteringMask_Click"
+                                    ToolTipService.ToolTip="Clear metering mask">
+                                    <FontIcon Glyph="&#xE711;" />
+                                </Button>
+                            </Grid>
+                            <TextBlock
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                Text="{x:Bind ViewModel.AutoExposureMeteringMaskDiagnostic.Message, Mode=OneWay}"
+                                TextWrapping="Wrap"
+                                Visibility="{x:Bind ViewModel.AutoExposureMeteringMaskDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
+                            <TextBlock
+                                x:Name="AutoExposureMeteringMaskApplicabilityNote"
+                                FontSize="12"
+                                TextWrapping="Wrap"
+                                Visibility="Collapsed" />
+                        </StackPanel>
+                    </editorcontrols:PropertyCard>
+                    <editorcontrols:PropertyCard
+                        x:Name="AutoExposureCompensationCurveCard"
+                        HorizontalContentAlignment="Stretch"
+                        PropertyName="Exposure-compensation curve · Proposed"
+                        Tag="AutoExposure">
+                        <StackPanel Spacing="6" Tag="AutoExposureCompensationCurve Metered EV100 Compensation EV">
+                            <environment:ExposureCompensationCurveEditorView ViewModel="{x:Bind ViewModel.CurveEditor, Mode=OneWay}" />
+                            <TextBlock
+                                x:Name="AutoExposureCompensationCurveApplicabilityNote"
+                                FontSize="12"
+                                TextWrapping="Wrap"
+                                Visibility="Collapsed" />
+                        </StackPanel>
+                    </editorcontrols:PropertyCard>
+                </StackPanel>
+            </Expander>
+        </editorcontrols:PropertiesExpander.Items>
+    </editorcontrols:PropertiesExpander>
+</UserControl>

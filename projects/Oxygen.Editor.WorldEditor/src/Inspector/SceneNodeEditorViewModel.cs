@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Specialized;
-using System.ComponentModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
@@ -43,8 +41,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private readonly ISceneEngineSync sceneEngineSync;
     private readonly WindowId windowId;
     private readonly DispatcherQueue? dispatcher;
-    private readonly Dictionary<INotifyCollectionChanged, SceneNode> componentNotifiers = [];
-    private readonly Dictionary<GameComponent, SceneNode> componentPropertyNotifiers = [];
+    private readonly InspectorSelectionObserver selectionObserver;
     private readonly EnvironmentViewModel environmentEditor;
     private (Guid sceneId, string property)? pendingEnvironmentFocus;
 
@@ -52,9 +49,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private ICollection<SceneNode> items;
     private Scene? activeScene;
     private int pendingLiveSyncEditCount;
-
-    /// <summary>Gets the scene-level editor hosted outside component-property scrolling.</summary>
-    public EnvironmentViewModel EnvironmentEditor => this.environmentEditor;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SceneNodeEditorViewModel"/> class.
@@ -105,7 +99,8 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.dispatcher = hosting.Dispatcher;
         this.sceneEngineSync.PendingPropertySyncCountChanged += this.OnPendingPropertySyncCountChanged;
 
-        this.propertyEditorFactories = this.CreatePropertyEditorFactories(
+        this.selectionObserver = new(this.dispatcher, this.OnSelectionObserved);
+        this.propertyEditorFactories = InspectorEditorFactory.Create(
             hosting,
             assetProvider,
             materialPickerService,
@@ -113,7 +108,9 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             contentDemand,
             materialSlots,
             projectContexts,
-            loggerFactory);
+            loggerFactory,
+            commandService,
+            this.CreateCommandContext);
         this.environmentEditor = new EnvironmentViewModel(commandService, this.CreateCommandContext, assetProvider, this.InspectAtmosphereSource, hosting.DispatcherScheduler);
 
         this.items = this.messenger.Send(new SceneNodeSelectionRequestMessage()).SelectedEntities;
@@ -138,6 +135,9 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.RegisterSceneMessages(hosting);
         this.RegisterComponentMessages(hosting);
     }
+
+    /// <summary>Gets the scene-level editor hosted outside component-property scrolling.</summary>
+    public EnvironmentViewModel EnvironmentEditor => this.environmentEditor;
 
     /// <summary>
     /// Gets a value indicating whether exactly one item is selected.
@@ -224,7 +224,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.sceneEngineSync.PendingPropertySyncCountChanged -= this.OnPendingPropertySyncCountChanged;
         this.messenger.UnregisterAll(this);
         WeakReferenceMessenger.Default.UnregisterAll(this);
-        this.UnsubscribeAllComponentCollections();
+        this.selectionObserver.Dispose();
         this.StopObservingComponentFeedback();
         foreach (var editor in this.editorInstances.Values.OfType<IDisposable>())
         {
@@ -246,28 +246,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     {
         this.pendingEnvironmentFocus = (sceneId, property);
         this.ApplyPendingEnvironmentFocus();
-    }
-
-    private async Task InspectAtmosphereSource(Guid nodeId)
-    {
-        var node = this.activeScene?.AllNodes.FirstOrDefault(candidate => candidate.Id == nodeId);
-        if (node is null)
-        {
-            return;
-        }
-
-        var request = this.messenger.Send(new InspectSceneNodeMessage(nodeId, this.windowId));
-        if (!request.HasReceivedResponse || !await request.Response.ConfigureAwait(true))
-        {
-            throw new InvalidOperationException("The atmosphere source could not be revealed in Scene Explorer.");
-        }
-
-        if (this.items.Count == 1 && ReferenceEquals(this.items.First(), node))
-        {
-            this.SetComponentFilter(typeof(DirectionalLightComponent));
-            this.RefreshPropertyEditors(refreshValues: false);
-            this.RefreshEditorInputState();
-        }
     }
 
     /// <inheritdoc/>
@@ -345,6 +323,28 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.environmentEditor.SetInputEnabled(this.PropertyEditors.Contains(this.environmentEditor));
     }
 
+    private async Task InspectAtmosphereSource(Guid nodeId)
+    {
+        var node = this.activeScene?.AllNodes.FirstOrDefault(candidate => candidate.Id == nodeId);
+        if (node is null)
+        {
+            return;
+        }
+
+        var request = this.messenger.Send(new InspectSceneNodeMessage(nodeId, this.windowId));
+        if (!request.HasReceivedResponse || !await request.Response.ConfigureAwait(true))
+        {
+            throw new InvalidOperationException("The atmosphere source could not be revealed in Scene Explorer.");
+        }
+
+        if (this.items.Count == 1 && ReferenceEquals(this.items.First(), node))
+        {
+            this.SetComponentFilter(typeof(DirectionalLightComponent));
+            this.RefreshPropertyEditors(refreshValues: false);
+            this.RefreshEditorInputState();
+        }
+    }
+
     private HashSet<Type> GetApplicablePropertyEditorTypes()
     {
         var keysToCheck = new HashSet<Type>(this.propertyEditorFactories.Keys);
@@ -395,39 +395,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.ObserveComponentFeedback(factory.Key, (ComponentPropertyEditor)instance);
         return instance;
     }
-
-    private Dictionary<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>> CreatePropertyEditorFactories(
-        HostingContext hosting,
-        IContentBrowserAssetProvider assetProvider,
-        IMaterialPickerService materialPickerService,
-        IBuiltinCatalogDiscovery builtins,
-        ISceneContentDemandService contentDemand,
-        IGeometryMaterialSlotProvider materialSlots,
-        IProjectContextService projectContexts,
-        ILoggerFactory? loggerFactory)
-        => new()
-        {
-            [typeof(TransformComponent)] = _ => new TransformViewModel(
-                loggerFactory: loggerFactory,
-                commandService: this.commandService,
-                commandContextProvider: this.CreateCommandContext),
-            [typeof(GeometryComponent)] = _ => new GeometryViewModel(
-                hosting,
-                assetProvider,
-                materialPickerService,
-                builtins,
-                contentDemand,
-                materialSlots,
-                projectContexts,
-                this.commandService,
-                this.CreateCommandContext),
-            [typeof(PerspectiveCamera)] = _ => new PerspectiveCameraViewModel(
-                this.commandService,
-                this.CreateCommandContext),
-            [typeof(DirectionalLightComponent)] = _ => new DirectionalLightViewModel(
-                this.commandService,
-                this.CreateCommandContext),
-        };
 
     private void RegisterSceneMessages(HostingContext hosting)
     {
@@ -589,84 +556,18 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     }
 
     private void SubscribeToComponentCollections()
+        => this.selectionObserver.Bind(this.items);
+
+    private void OnSelectionObserved(InspectorSelectionChange change)
     {
-        // Unsubscribe previous
-        this.UnsubscribeAllComponentCollections();
-
-        foreach (var node in this.items)
+        if (change == InspectorSelectionChange.Structure)
         {
-            if (node.Components is INotifyCollectionChanged notifier)
-            {
-                notifier.CollectionChanged += this.OnNodeComponentsChanged;
-                this.componentNotifiers[notifier] = node;
-            }
-
-            this.SubscribeToComponentProperties(node);
-        }
-    }
-
-    private void UnsubscribeAllComponentCollections()
-    {
-        foreach (var kvp in this.componentNotifiers.ToList())
-        {
-            kvp.Key.CollectionChanged -= this.OnNodeComponentsChanged;
-        }
-
-        this.componentNotifiers.Clear();
-
-        foreach (var component in this.componentPropertyNotifiers.Keys.ToList())
-        {
-            component.PropertyChanged -= this.OnSelectedComponentPropertyChanged;
-        }
-
-        this.componentPropertyNotifiers.Clear();
-        this.UnsubscribeMaterialSlots();
-    }
-
-    private void OnNodeComponentsChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        if (sender is not INotifyCollectionChanged notifier)
-        {
-            return;
-        }
-
-        if (!this.componentNotifiers.TryGetValue(notifier, out var node))
-        {
-            return;
-        }
-
-        _ = this.dispatcher?.DispatchAsync(() => // Replaced SafeEnqueue with DispatchAsync
-        {
-            this.LogComponentsUpdateEnqueued("ComponentCollectionChanged", node.Name, e.NewItems?.OfType<object>().FirstOrDefault()?.GetType().Name ?? string.Empty);
-
-            // Rebuild property editors for current selection
             this.UpdateItemsCollection(this.items);
             this.SubscribeToComponentCollections();
-        });
-    }
-
-    private void SubscribeToComponentProperties(SceneNode node)
-    {
-        foreach (var component in node.Components)
-        {
-            if (this.componentPropertyNotifiers.ContainsKey(component))
-            {
-                continue;
-            }
-
-            component.PropertyChanged += this.OnSelectedComponentPropertyChanged;
-            this.componentPropertyNotifiers[component] = node;
-            if (component is GeometryComponent geometry)
-            {
-                this.SubscribeMaterialSlots(geometry);
-            }
         }
-    }
-
-    private void OnSelectedComponentPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        _ = sender;
-        _ = e;
-        _ = this.dispatcher?.DispatchAsync(this.RefreshPropertyEditorValues);
+        else
+        {
+            this.RefreshPropertyEditorValues();
+        }
     }
 }

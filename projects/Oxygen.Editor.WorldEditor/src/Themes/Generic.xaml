@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Inspector/ThemeResources.xaml" />
-        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Inspector/PropertiesExpander.xaml" />
-        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Inspector/PropertyCard.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Inspector/ThemeResources.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Inspector/PropertiesExpander.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Inspector/PropertyCard.xaml" />
         <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Resources/ViewportIcons.xaml" />
     </ResourceDictionary.MergedDictionaries>
 </ResourceDictionary>

@@ -26,12 +26,12 @@ public sealed partial class InspectorBindingTests
     {
         using var fixture = new SceneAuthoringFixture();
         using var model = (EnvironmentViewModel)CreateModel("Environment", fixture);
-        model.ExposureMode = ExposureMode.Auto;
+        model.Exposure.ExposureMode = ExposureMode.Auto;
         await model.PendingEdits.ConfigureAwait(true);
         var view = new EnvironmentView { ViewModel = model, Width = 420, Height = 650 };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         ((TextBox)view.FindName("ScenePropertySearchBox")).Text = "Exposure-compensation";
-        var section = (PropertiesExpander)view.FindName("ExposureSection");
+        var section = (PropertiesExpander)FindInspectorElement(view, "ExposureSection");
         var disclosure = section.Items.OfType<Expander>().Single(item => string.Equals(item.Header as string, "Exposure shaping", StringComparison.Ordinal));
         disclosure.IsExpanded = true;
         _ = section.BringItemIntoView(disclosure);
@@ -39,7 +39,7 @@ public sealed partial class InspectorBindingTests
         var preview = view.FindDescendants().OfType<Microsoft.UI.Xaml.Shapes.Polyline>().Single();
         var original = preview.Points.Select(point => (point.X, point.Y)).ToArray();
 
-        model.AutoExposureCompensationCurve =
+        model.Exposure.AutoExposureCompensationCurve =
         [
             new ExposureCompensationKeyData(-2, -1),
             new ExposureCompensationKeyData(0, 1),
@@ -62,11 +62,11 @@ public sealed partial class InspectorBindingTests
         ((TextBox)view.FindName("ScenePropertySearchBox")).Text = "background";
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
 
-        model.SetBackgroundColor(InspectorRgbPresentation.ToLinearRgb(Windows.UI.Color.FromArgb(255, 128, 64, 32)));
+        model.Background.SetBackgroundColor(InspectorRgbPresentation.ToLinearRgb(Windows.UI.Color.FromArgb(255, 128, 64, 32)));
         await model.PendingEdits.ConfigureAwait(true);
         var original = fixture.Scene.Environment;
         var count = fixture.Context.History.UndoStack.Count;
-        var reset = (Button)view.FindName("ResetBackgroundButton");
+        var reset = (Button)FindInspectorElement(view, "ResetBackgroundButton");
         ((IInvokeProvider)new ButtonAutomationPeer(reset).GetPattern(PatternInterface.Invoke)).Invoke();
         await model.PendingEdits.ConfigureAwait(true);
 
@@ -74,13 +74,13 @@ public sealed partial class InspectorBindingTests
         _ = fixture.Scene.Environment.Should().Be(original with { BackgroundColor = Vector3.Zero });
         _ = fixture.Context.Metadata.IsDirty.Should().BeTrue();
         _ = fixture.Context.History.UndoStack.Should().HaveCount(count + 1);
-        _ = model.BackgroundR.Should().Be(0);
-        _ = model.BackgroundG.Should().Be(0);
-        _ = model.BackgroundB.Should().Be(0);
+        _ = model.Background.BackgroundR.Should().Be(0);
+        _ = model.Background.BackgroundG.Should().Be(0);
+        _ = model.Background.BackgroundB.Should().Be(0);
 
         await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = fixture.Scene.Environment.Should().Be(original);
-        _ = new Vector3(model.BackgroundR, model.BackgroundG, model.BackgroundB).Should().Be(original.BackgroundColor);
+        _ = new Vector3(model.Background.BackgroundR, model.Background.BackgroundG, model.Background.BackgroundB).Should().Be(original.BackgroundColor);
         await fixture.Context.History.RedoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = fixture.Scene.Environment.BackgroundColor.Should().Be(Vector3.Zero);
     });
@@ -94,24 +94,24 @@ public sealed partial class InspectorBindingTests
         await LoadTestContentAsync(view).ConfigureAwait(true);
         ((TextBox)view.FindName("ScenePropertySearchBox")).Text = "background";
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var field = (Oxygen.Editor.World.Inspector.Controls.InspectorRgbField)view.FindName("BackgroundColorCard");
+        var field = (Oxygen.Editor.World.Inspector.Controls.InspectorRgbField)FindInspectorElement(view, "BackgroundColorCard");
         var swatch = (Button)((Oxygen.Editor.Controls.PropertyCard)field.Content).LeadingContent!;
         var displayColor = Windows.UI.Color.FromArgb(255, 128, 64, 32);
         await PickDisplayColorAsync(swatch, displayColor).ConfigureAwait(true);
         await model.PendingEdits.ConfigureAwait(true);
 
-        _ = model.BackgroundR.Should().BeApproximately(0.21586f, 0.00001f);
-        _ = model.BackgroundG.Should().BeApproximately(0.05127f, 0.00001f);
-        _ = model.BackgroundB.Should().BeApproximately(0.01444f, 0.00001f);
-        _ = model.BackgroundColor.Should().Be(fixture.Scene.Environment.BackgroundColor);
+        _ = model.Background.BackgroundR.Should().BeApproximately(0.21586f, 0.00001f);
+        _ = model.Background.BackgroundG.Should().BeApproximately(0.05127f, 0.00001f);
+        _ = model.Background.BackgroundB.Should().BeApproximately(0.01444f, 0.00001f);
+        _ = model.Background.BackgroundColor.Should().Be(fixture.Scene.Environment.BackgroundColor);
         _ = ((Microsoft.UI.Xaml.Media.SolidColorBrush)((Border)swatch.Content).Background).Color.Should().Be(displayColor);
-        model.BackgroundR = 1;
+        model.Background.BackgroundR = 1;
         await model.PendingEdits.ConfigureAwait(true);
         var display = ((Microsoft.UI.Xaml.Media.SolidColorBrush)((Border)swatch.Content).Background).Color;
         _ = display.R.Should().Be(255);
         _ = display.G.Should().Be(64);
         _ = display.B.Should().Be(32);
-        _ = fixture.Scene.Environment.BackgroundColor.Should().Be(new Vector3(1, model.BackgroundG, model.BackgroundB));
+        _ = fixture.Scene.Environment.BackgroundColor.Should().Be(new Vector3(1, model.Background.BackgroundG, model.Background.BackgroundB));
     });
 
     private static async Task PickDisplayColorAsync(Button swatch, Windows.UI.Color color)

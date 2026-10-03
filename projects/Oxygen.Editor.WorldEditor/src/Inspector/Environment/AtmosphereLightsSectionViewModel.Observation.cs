@@ -7,16 +7,16 @@ using System.ComponentModel;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.World.Inspector.Environment;
 
 /// <summary>Refreshes current environment values and only the affected sun-reference dependencies.</summary>
-public partial class EnvironmentViewModel
+public sealed partial class AtmosphereLightsSectionViewModel
 {
     private readonly HashSet<SceneNode> observedNodes = [];
-    private Guid? observedSunId;
-    private Guid? observedSecondarySunId;
     private readonly HashSet<DirectionalLightComponent> observedLights = [];
     private readonly HashSet<TransformComponent> observedTransforms = [];
+    private Guid? observedSunId;
+    private Guid? observedSecondarySunId;
 
     private void AttachSceneObservers()
     {
@@ -61,8 +61,12 @@ public partial class EnvironmentViewModel
         node.PropertyChanged += this.OnSunNodeChanged;
         foreach (var light in node.Components.OfType<DirectionalLightComponent>())
         {
-            if (this.observedLights.Add(light)) light.PropertyChanged += this.OnLightAssignmentChanged;
+            if (this.observedLights.Add(light))
+            {
+                light.PropertyChanged += this.OnLightAssignmentChanged;
+            }
         }
+
         foreach (var transform in node.Components.OfType<TransformComponent>())
         {
             if (this.observedTransforms.Add(transform))
@@ -70,6 +74,7 @@ public partial class EnvironmentViewModel
                 transform.PropertyChanged += this.OnSourceTransformChanged;
             }
         }
+
         foreach (var child in node.Children)
         {
             this.ObserveSubtree(child);
@@ -88,8 +93,12 @@ public partial class EnvironmentViewModel
         node.PropertyChanged -= this.OnSunNodeChanged;
         foreach (var light in node.Components.OfType<DirectionalLightComponent>())
         {
-            if (this.observedLights.Remove(light)) light.PropertyChanged -= this.OnLightAssignmentChanged;
+            if (this.observedLights.Remove(light))
+            {
+                light.PropertyChanged -= this.OnLightAssignmentChanged;
+            }
         }
+
         foreach (var transform in node.Components.OfType<TransformComponent>())
         {
             if (this.observedTransforms.Remove(transform))
@@ -97,6 +106,7 @@ public partial class EnvironmentViewModel
                 transform.PropertyChanged -= this.OnSourceTransformChanged;
             }
         }
+
         foreach (var child in node.Children)
         {
             this.UnobserveSubtree(child);
@@ -108,7 +118,7 @@ public partial class EnvironmentViewModel
 
     private void OnLightAssignmentChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (string.IsNullOrEmpty(args.PropertyName) || args.PropertyName == nameof(DirectionalLightComponent.AtmosphereSlot))
+        if (string.IsNullOrEmpty(args.PropertyName) || string.Equals(args.PropertyName, nameof(DirectionalLightComponent.AtmosphereSlot), StringComparison.Ordinal))
         {
             this.observedSunId = this.FindAtmosphereSource(AtmosphereLightSlot.Primary)?.Id;
             this.observedSecondarySunId = this.FindAtmosphereSource(AtmosphereLightSlot.Secondary)?.Id;
@@ -126,7 +136,7 @@ public partial class EnvironmentViewModel
         if (ReferenceEquals(sender, this.scene)
             && (string.IsNullOrEmpty(args.PropertyName) || string.Equals(args.PropertyName, nameof(Scene.Environment), StringComparison.Ordinal)))
         {
-            this.RefreshFromScene();
+            this.RefreshSunDependencies();
             var primaryId = this.FindAtmosphereSource(AtmosphereLightSlot.Primary)?.Id;
             var secondaryId = this.FindAtmosphereSource(AtmosphereLightSlot.Secondary)?.Id;
             if (this.observedSunId != primaryId || this.observedSecondarySunId != secondaryId)
@@ -174,17 +184,20 @@ public partial class EnvironmentViewModel
             removed.PropertyChanged -= this.OnLightAssignmentChanged;
             this.observedLights.Remove(removed);
         }
+
         foreach (var added in currentLights.Except(this.observedLights))
         {
             added.PropertyChanged += this.OnLightAssignmentChanged;
             this.observedLights.Add(added);
         }
+
         var currentTransforms = this.observedNodes.SelectMany(node => node.Components.OfType<TransformComponent>()).ToHashSet();
         foreach (var removed in this.observedTransforms.Except(currentTransforms).ToArray())
         {
             removed.PropertyChanged -= this.OnSourceTransformChanged;
             this.observedTransforms.Remove(removed);
         }
+
         foreach (var added in currentTransforms.Except(this.observedTransforms))
         {
             added.PropertyChanged += this.OnSourceTransformChanged;

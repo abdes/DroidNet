@@ -26,22 +26,22 @@ public sealed class EnvironmentSchedulingTests
         using var model = new EnvironmentViewModel(assetProvider: provider.Object, observerScheduler: scheduler);
         model.SetScene(fixture.Scene);
         var deliveryThreads = new List<int>();
-        model.MeteringMaskRows.CollectionChanged += (_, _) => deliveryThreads.Add(Environment.CurrentManagedThreadId);
+        model.Exposure.MeteringMaskRows.CollectionChanged += (_, _) => deliveryThreads.Add(Environment.CurrentManagedThreadId);
         var original = CreateTexture("First");
 
         await Task.Run(() => source.OnNext([original])).ConfigureAwait(false);
-        _ = model.MeteringMaskRows.Should().BeEmpty("notifications must wait for the supplied scheduler");
+        _ = model.Exposure.MeteringMaskRows.Should().BeEmpty("notifications must wait for the supplied scheduler");
         var observerThread = Environment.CurrentManagedThreadId;
         scheduler.Start();
-        _ = model.MeteringMaskRows.Should().ContainSingle();
+        _ = model.Exposure.MeteringMaskRows.Should().ContainSingle();
         _ = deliveryThreads.Should().OnlyContain(thread => thread == observerThread);
-        var row = model.MeteringMaskRows[0];
+        var row = model.Exposure.MeteringMaskRows[0];
         _ = row.Item.Name.Should().Be("First");
 
         await Task.Run(() => source.OnNext([original with { DisplayName = "Renamed" }])).ConfigureAwait(false);
         _ = row.Item.Name.Should().Be("First");
         scheduler.Start();
-        _ = model.MeteringMaskRows[0].Should().BeSameAs(row);
+        _ = model.Exposure.MeteringMaskRows[0].Should().BeSameAs(row);
         _ = row.Item.Name.Should().Be("Renamed");
         provider.Verify(value => value.RefreshAsync(AssetBrowserFilter.Default, It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -61,7 +61,7 @@ public sealed class EnvironmentSchedulingTests
         source.OnNext([CreateTexture("After disposal")]);
         scheduler.Start();
 
-        _ = model.MeteringMaskRows.Should().BeEmpty();
+        _ = model.Exposure.MeteringMaskRows.Should().BeEmpty();
         _ = source.HasObservers.Should().BeFalse();
     }
 
@@ -76,8 +76,8 @@ public sealed class EnvironmentSchedulingTests
 
         source.OnNext([CreateTexture("Synchronous")]);
 
-        _ = model.MeteringMaskRows.Should().ContainSingle();
-        _ = model.MeteringMaskRows[0].Item.Name.Should().Be("Synchronous");
+        _ = model.Exposure.MeteringMaskRows.Should().ContainSingle();
+        _ = model.Exposure.MeteringMaskRows[0].Item.Name.Should().Be("Synchronous");
     }
 
     private static Mock<IContentBrowserAssetProvider> CreateProvider(IObservable<IReadOnlyList<ContentBrowserAssetItem>> items)

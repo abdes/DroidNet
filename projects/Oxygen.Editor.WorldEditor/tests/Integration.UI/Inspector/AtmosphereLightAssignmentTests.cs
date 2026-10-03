@@ -52,7 +52,7 @@ public sealed partial class AtmosphereLightAssignmentTests : DroidNet.Tests.Visu
         if (model is EnvironmentViewModel sceneModel)
         {
             var picker = await FindSunPickerAsync((EnvironmentView)view, scroller, sceneModel).ConfigureAwait(true);
-            picker.SelectedItem = sceneModel.SunOptions.Single(option => option.NodeId == candidate.Id);
+            picker.SelectedItem = sceneModel.AtmosphereLights.SunOptions.Single(option => option.NodeId == candidate.Id);
             await sceneModel.PendingEdits.ConfigureAwait(true);
         }
         else

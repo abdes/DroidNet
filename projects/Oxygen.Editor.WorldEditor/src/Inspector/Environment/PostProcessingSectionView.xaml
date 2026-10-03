@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.World.Inspector.Environment.PostProcessingSectionView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:ui="using:CommunityToolkit.WinUI">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Inspector/SceneInspectorStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <StackPanel Spacing="8">
+        <editorcontrols:PropertiesExpander
+            x:Name="ToneMappingSection"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch"
+            Description="Tone mapper selection and display transfer."
+            Header="Tone Mapping"
+            HeaderIcon="{ui:FontIcon Glyph='&#xE9A6;'}"
+            IsExpanded="True"
+            Tag="Post-processing">
+            <editorcontrols:PropertiesExpander.Items>
+                <editorcontrols:PropertyCard
+                    x:Name="ToneMapperCard"
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Mapper">
+                    <ComboBox
+                        ItemsSource="{x:Bind ViewModel.ToneMappingModes}"
+                        SelectedItem="{x:Bind ViewModel.ToneMapping, Mode=TwoWay}"
+                        Tag="ToneMapper" />
+                </editorcontrols:PropertyCard>
+                <editorcontrols:InspectorNumberField
+                    x:Name="DisplayGammaCard"
+                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                    EditSessionCompleted="NumberEditCompleted"
+                    EditSessionStarted="NumberEditStarted"
+                    ErrorText="{x:Bind ViewModel.DisplayGammaDiagnostic.Message, Mode=OneWay}"
+                    FontSize="14"
+                    HasError="{x:Bind ViewModel.DisplayGammaDiagnostic.HasError, Mode=OneWay}"
+                    Label="Display Gamma"
+                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                    NumberValue="{x:Bind ViewModel.DisplayGamma, Mode=TwoWay}"
+                    Tag="DisplayGamma" />
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+        <editorcontrols:PropertiesExpander
+            x:Name="ColorGradingSection"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch"
+            Description="Color and lens-style post-process adjustments."
+            Header="Color Grading"
+            HeaderIcon="{ui:FontIcon Glyph='&#xE790;'}"
+            IsExpanded="False"
+            Tag="Post-processing;ToneMapping">
+            <editorcontrols:PropertiesExpander.Items>
+                <editorcontrols:InspectorNumberField
+                    x:Name="SaturationCard"
+                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                    EditSessionCompleted="NumberEditCompleted"
+                    EditSessionStarted="NumberEditStarted"
+                    ErrorText="{x:Bind ViewModel.SaturationDiagnostic.Message, Mode=OneWay}"
+                    FontSize="14"
+                    HasError="{x:Bind ViewModel.SaturationDiagnostic.HasError, Mode=OneWay}"
+                    Label="Saturation"
+                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                    NumberValue="{x:Bind ViewModel.Saturation, Mode=TwoWay}"
+                    Tag="Saturation" />
+                <editorcontrols:InspectorNumberField
+                    x:Name="ContrastCard"
+                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                    EditSessionCompleted="NumberEditCompleted"
+                    EditSessionStarted="NumberEditStarted"
+                    ErrorText="{x:Bind ViewModel.ContrastDiagnostic.Message, Mode=OneWay}"
+                    FontSize="14"
+                    HasError="{x:Bind ViewModel.ContrastDiagnostic.HasError, Mode=OneWay}"
+                    Label="Contrast"
+                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                    NumberValue="{x:Bind ViewModel.Contrast, Mode=TwoWay}"
+                    Tag="Contrast" />
+                <editorcontrols:InspectorNumberField
+                    x:Name="VignetteIntensityCard"
+                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                    EditSessionCompleted="NumberEditCompleted"
+                    EditSessionStarted="NumberEditStarted"
+                    ErrorText="{x:Bind ViewModel.VignetteIntensityDiagnostic.Message, Mode=OneWay}"
+                    FontSize="14"
+                    HasError="{x:Bind ViewModel.VignetteIntensityDiagnostic.HasError, Mode=OneWay}"
+                    Label="Vignette"
+                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                    NumberValue="{x:Bind ViewModel.VignetteIntensity, Mode=TwoWay}"
+                    Tag="VignetteIntensity" />
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+        <editorcontrols:PropertiesExpander
+            x:Name="BloomSection"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch"
+            Description="Bloom thresholding and contribution."
+            Header="Bloom"
+            HeaderIcon="{ui:FontIcon Glyph='&#xE950;'}"
+            IsExpanded="False"
+            Tag="Post-processing">
+            <editorcontrols:PropertiesExpander.Items>
+                <editorcontrols:InspectorNumberField
+                    x:Name="BloomIntensityCard"
+                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                    EditSessionCompleted="NumberEditCompleted"
+                    EditSessionStarted="NumberEditStarted"
+                    ErrorText="{x:Bind ViewModel.BloomIntensityDiagnostic.Message, Mode=OneWay}"
+                    FontSize="14"
+                    HasError="{x:Bind ViewModel.BloomIntensityDiagnostic.HasError, Mode=OneWay}"
+                    Label="Intensity"
+                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                    NumberValue="{x:Bind ViewModel.BloomIntensity, Mode=TwoWay}"
+                    Tag="BloomIntensity" />
+                <editorcontrols:InspectorNumberField
+                    x:Name="BloomThresholdCard"
+                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                    EditSessionCompleted="NumberEditCompleted"
+                    EditSessionStarted="NumberEditStarted"
+                    ErrorText="{x:Bind ViewModel.BloomThresholdDiagnostic.Message, Mode=OneWay}"
+                    FontSize="14"
+                    HasError="{x:Bind ViewModel.BloomThresholdDiagnostic.HasError, Mode=OneWay}"
+                    Label="Threshold"
+                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                    NumberValue="{x:Bind ViewModel.BloomThreshold, Mode=TwoWay}"
+                    Tag="BloomThreshold" />
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+    </StackPanel>
+</UserControl>

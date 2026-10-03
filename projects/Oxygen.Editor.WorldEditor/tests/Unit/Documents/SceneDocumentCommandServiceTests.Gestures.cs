@@ -34,18 +34,18 @@ public sealed partial class SceneDocumentCommandServiceTests
         using var editor = new PerspectiveCameraViewModel(fixture.Sut, () => context);
         editor.UpdateValues([node]);
         editor.BeginEditSession("FieldOfView", NumberBoxEditInteractionKind.PointerDrag);
-        editor.FieldOfView = 90;
+        editor.FieldOfView.Value = 90;
 
         _ = node.Components.Remove(original);
         var replacement = new PerspectiveCamera { Name = "Replacement", FieldOfView = 75 };
         node.Components.Add(replacement);
-        editor.FieldOfView = 100;
+        editor.FieldOfView.Value = 100;
         editor.EndEditSession(NumberBoxEditCompletionKind.Commit);
         await editor.PendingEdits.ConfigureAwait(false);
 
         _ = original.FieldOfView.Should().Be(60);
         _ = replacement.FieldOfView.Should().Be(75);
-        _ = editor.FieldOfView.Should().Be(75);
+        _ = editor.FieldOfView.Value.Should().Be(75);
         _ = context.History.UndoStack.Should().BeEmpty();
         _ = context.Metadata.IsDirty.Should().BeFalse();
         _ = terminal.Should().BeEmpty();
@@ -86,7 +86,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         for (var sample = 1; sample <= 100; ++sample)
         {
-            editor.BackgroundR = sample / 100f;
+            editor.Background.BackgroundR = sample / 100f;
         }
 
         _ = context.History.UndoStack.Should().BeEmpty();
@@ -148,7 +148,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         for (var tick = 0; tick < 4; ++tick)
         {
             editor.BeginEditSession("FieldOfView", NumberBoxEditInteractionKind.MouseWheel);
-            editor.FieldOfView = 61 + tick;
+            editor.FieldOfView.Value = 61 + tick;
             editor.CompleteEditSession(new NumberBoxEditSessionEventArgs(NumberBoxEditInteractionKind.MouseWheel, NumberBoxEditCompletionKind.Commit));
         }
 
@@ -173,18 +173,18 @@ public sealed partial class SceneDocumentCommandServiceTests
         using var editor = new PerspectiveCameraViewModel(fixture.Sut, () => context);
         editor.UpdateValues([node]);
         editor.BeginEditSession("NearPlane", NumberBoxEditInteractionKind.Text);
-        editor.NearPlane = 11;
+        editor.NearPlane.Value = 11;
         await editor.PendingEdits.ConfigureAwait(false);
 
         _ = camera.NearPlane.Should().Be(1);
-        _ = editor.NearPlane.Should().Be(1);
+        _ = editor.NearPlane.Value.Should().Be(1);
         _ = editor.NearPlaneDiagnostic.Message.Should().NotBeEmpty();
         _ = editor.FarPlaneDiagnostic.Message.Should().NotBeEmpty();
         _ = context.History.UndoStack.Should().BeEmpty();
         editor.EndEditSession(NumberBoxEditCompletionKind.Cancel);
         await editor.PendingEdits.ConfigureAwait(false);
         editor.BeginEditSession("FarPlane", NumberBoxEditInteractionKind.Text);
-        editor.FarPlane = 20;
+        editor.FarPlane.Value = 20;
         editor.EndEditSession(NumberBoxEditCompletionKind.Commit);
         await editor.PendingEdits.ConfigureAwait(false);
         _ = editor.NearPlaneDiagnostic.Message.Should().BeEmpty();
@@ -206,7 +206,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         for (var value = 1; value <= 100; ++value)
         {
-            editor.FieldOfView = value;
+            editor.FieldOfView.Value = value;
         }
 
         _ = context.History.UndoStack.Should().BeEmpty();
@@ -235,16 +235,16 @@ public sealed partial class SceneDocumentCommandServiceTests
         using var editor = new PerspectiveCameraViewModel(fixture.Sut, () => context);
         editor.UpdateValues([first]);
         editor.BeginEditSession("FieldOfView", NumberBoxEditInteractionKind.PointerDrag);
-        editor.FieldOfView = 110;
+        editor.FieldOfView.Value = 110;
 
         editor.UpdateValues([second]);
-        editor.FieldOfView = 120;
+        editor.FieldOfView.Value = 120;
         editor.CompleteEditSession(new NumberBoxEditSessionEventArgs(NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Cancel));
         await editor.PendingEdits.ConfigureAwait(false);
 
         _ = first.Components.OfType<PerspectiveCamera>().Single().FieldOfView.Should().Be(60);
         _ = second.Components.OfType<PerspectiveCamera>().Single().FieldOfView.Should().Be(80);
-        _ = editor.FieldOfView.Should().Be(80);
+        _ = editor.FieldOfView.Value.Should().Be(80);
         _ = context.History.UndoStack.Should().BeEmpty();
         _ = context.Metadata.IsDirty.Should().BeFalse();
     }
@@ -291,7 +291,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         using var editor = new EnvironmentViewModel(fixture.Sut, () => context);
         editor.SetScene(scene);
         editor.BeginEditSession("BackgroundR", NumberBoxEditInteractionKind.PointerDrag);
-        editor.BackgroundR = 0.8f;
+        editor.Background.BackgroundR = 0.8f;
         _ = scene.Environment.BackgroundColor.X.Should().Be(0.8f);
 
         editor.EndEditSession(NumberBoxEditCompletionKind.Cancel);

@@ -46,7 +46,7 @@ public sealed partial class SunDependenciesTests : DroidNet.Tests.VisualUserInte
         };
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
         var picker = await FindSunPickerAsync(view, scroller, model).ConfigureAwait(true);
-        picker.SelectedItem = model.SunOptions.Single(option => option.NodeId == fixture.Node.Id);
+        picker.SelectedItem = model.AtmosphereLights.SunOptions.Single(option => option.NodeId == fixture.Node.Id);
         await model.PendingEdits.ConfigureAwait(true);
         _ = fixture.Node.Components.OfType<DirectionalLightComponent>().Single().AtmosphereSlot.Should().Be(Oxygen.Editor.World.Serialization.AtmosphereLightSlot.Primary);
         _ = fixture.Context.History.UndoStack.Should().ContainSingle();
@@ -66,7 +66,7 @@ public sealed partial class SunDependenciesTests : DroidNet.Tests.VisualUserInte
         await model.PendingEdits.ConfigureAwait(true);
         _ = ((SunLightOption)picker.SelectedItem).NodeId.Should().Be(fixture.Node.Id);
         _ = fixture.Context.History.UndoStack.Should().ContainSingle();
-        var clear = ((Grid)picker.Parent).Children.OfType<Button>().Single(button => ReferenceEquals(button.Command, model.ClearSunCommand));
+        var clear = ((Grid)picker.Parent).Children.OfType<Button>().Single(button => ReferenceEquals(button.Command, model.AtmosphereLights.ClearSunCommand));
         ((IInvokeProvider)new ButtonAutomationPeer(clear).GetPattern(PatternInterface.Invoke)).Invoke();
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() =>
         {
@@ -84,7 +84,7 @@ public sealed partial class SunDependenciesTests : DroidNet.Tests.VisualUserInte
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Environment");
         var model = host.PropertyEditors.OfType<EnvironmentViewModel>().Single();
-        var source = model.SunOptions.Single(option => option.NodeId == fixture.Node.Id);
+        var source = model.AtmosphereLights.SunOptions.Single(option => option.NodeId == fixture.Node.Id);
         fixture.Messenger.Register<InspectSceneNodeMessage>(this, (_, message) => message.Reply(RevealAsync()));
 
         async Task<bool> RevealAsync()
@@ -95,11 +95,11 @@ public sealed partial class SunDependenciesTests : DroidNet.Tests.VisualUserInte
             return true;
         }
 
-        await model.InspectAtmosphereSourceAsync(source).ConfigureAwait(true);
+        await model.AtmosphereLights.InspectAtmosphereSourceAsync(source).ConfigureAwait(true);
         _ = host.SelectedNode.Should().BeSameAs(fixture.Node);
         _ = host.SelectedComponentType.Should().Be(typeof(DirectionalLightComponent));
         _ = host.PropertyEditors.Should().ContainSingle().Which.Should().BeOfType<DirectionalLightViewModel>();
-        await model.InspectAtmosphereSourceAsync(source).ConfigureAwait(true);
+        await model.AtmosphereLights.InspectAtmosphereSourceAsync(source).ConfigureAwait(true);
         _ = host.SelectedComponentType.Should().Be(typeof(DirectionalLightComponent));
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
         _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
@@ -116,16 +116,16 @@ public sealed partial class SunDependenciesTests : DroidNet.Tests.VisualUserInte
         var originalAngularSize = light.AngularSizeRadians;
         using var host = fixture.CreateInspectorHost("Environment");
         var model = host.PropertyEditors.OfType<EnvironmentViewModel>().Single();
-        model.PrimaryAtmosphereSource.AngularDiameterDegrees = 1;
-        await model.PrimaryAtmosphereSource.PendingEdits.ConfigureAwait(true);
-        model.ClearSunCommand.Execute(null);
+        model.AtmosphereLights.PrimaryAtmosphereSource.AngularDiameterDegrees = 1;
+        await model.AtmosphereLights.PrimaryAtmosphereSource.PendingEdits.ConfigureAwait(true);
+        model.AtmosphereLights.ClearSunCommand.Execute(null);
         await model.PendingEdits.ConfigureAwait(true);
         var editedAngularSize = light.AngularSizeRadians;
         var historyCount = fixture.Context.History.UndoStack.Count;
         var intensity = light.IntensityLux;
-        await model.ResetAtmosphereSourcesAsync().ConfigureAwait(true);
+        await model.AtmosphereLights.ResetAtmosphereSourcesAsync().ConfigureAwait(true);
         await model.PendingEdits.ConfigureAwait(true);
-        _ = model.SunReferenceDiagnostic.Message.Should().BeEmpty();
+        _ = model.AtmosphereLights.SunReferenceDiagnostic.Message.Should().BeEmpty();
         _ = light.AtmosphereSlot.Should().Be(Oxygen.Editor.World.Serialization.AtmosphereLightSlot.Primary);
         _ = light.AngularSizeRadians.Should().Be(originalAngularSize);
         _ = light.IntensityLux.Should().Be(intensity);

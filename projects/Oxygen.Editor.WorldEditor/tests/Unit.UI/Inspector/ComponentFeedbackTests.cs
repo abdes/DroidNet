@@ -77,7 +77,7 @@ public sealed partial class ComponentFeedbackTests : DroidNet.Tests.VisualUserIn
         _ = commands.Setup(service => service.EditPropertiesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<PropertyEdit>(), It.IsAny<string>(), It.IsAny<EditSessionToken>())).Returns(pending.Task);
         using var host = fixture.CreateInspectorHost("Camera", commandService: commands.Object);
         var camera = host.PropertyEditors.OfType<PerspectiveCameraViewModel>().Single();
-        camera.NearPlane = 2;
+        camera.NearPlane.Value = 2;
         host.SelectComponentFilter(typeof(TransformComponent));
         pending.SetResult(new(Succeeded: false) { ValidationCode = "TEST_REJECTED", ValidationMessage = "Pending field rejected." });
         await camera.PendingEdits.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -95,7 +95,7 @@ public sealed partial class ComponentFeedbackTests : DroidNet.Tests.VisualUserIn
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Camera");
         var camera = host.PropertyEditors.OfType<PerspectiveCameraViewModel>().Single();
-        camera.NearPlane = 2000;
+        camera.NearPlane.Value = 2000;
         await camera.PendingEdits.ConfigureAwait(true);
         _ = camera.NearPlaneDiagnostic.Message.Should().NotBeEmpty();
         host.SelectComponentFilter(typeof(TransformComponent));
@@ -114,7 +114,7 @@ public sealed partial class ComponentFeedbackTests : DroidNet.Tests.VisualUserIn
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Camera");
         var camera = host.PropertyEditors.OfType<PerspectiveCameraViewModel>().Single();
-        camera.NearPlane = 2000;
+        camera.NearPlane.Value = 2000;
         await camera.PendingEdits.ConfigureAwait(true);
         host.SelectComponentFilter(typeof(TransformComponent));
         _ = camera.NearPlaneDiagnostic.Message.Should().NotBeEmpty();
@@ -164,7 +164,7 @@ public sealed partial class ComponentFeedbackTests : DroidNet.Tests.VisualUserIn
         switch (editor)
         {
             case PerspectiveCameraViewModel camera:
-                camera.NearPlane = 2000;
+                camera.NearPlane.Value = 2000;
                 break;
             case DirectionalLightViewModel light:
                 light.ColorR = float.NaN;
@@ -180,7 +180,7 @@ public sealed partial class ComponentFeedbackTests : DroidNet.Tests.VisualUserIn
         switch (editor)
         {
             case PerspectiveCameraViewModel camera:
-                camera.NearPlane = 0.2f;
+                camera.NearPlane.Value = 0.2f;
                 break;
             case DirectionalLightViewModel light:
                 light.ColorR = 0.75f;

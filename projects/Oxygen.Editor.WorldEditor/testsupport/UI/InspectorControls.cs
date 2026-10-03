@@ -45,6 +45,27 @@ namespace Oxygen.Editor.WorldEditor.TestSupport;
 
 internal static class InspectorControls
 {
+    internal static object FindInspectorElement(UserControl view, string name)
+    {
+        if (view.FindName(name) is { } parentElement)
+        {
+            return parentElement;
+        }
+
+        if (view is EnvironmentView environment)
+        {
+            foreach (var section in new[] { "AtmosphereLights", "SkyAtmosphere", "Background", "Exposure", "ToneMapping" })
+            {
+                if (environment.SectionView(section).FindName(name) is { } element)
+                {
+                    return element;
+                }
+            }
+        }
+
+        throw new InvalidOperationException($"Inspector element {name} was not found in its owning namescope.");
+    }
+
     internal static Type FeedbackType(string kind) => kind switch
     {
         "Camera" => typeof(PerspectiveCamera),
@@ -280,7 +301,7 @@ internal static class InspectorControls
     {
         for (var step = 0; step <= 40; step++)
         {
-            if (view.FindDescendant<ComboBox>(element => ReferenceEquals(element.ItemsSource, model.SunOptions)) is { } picker)
+            if (view.FindDescendant<ComboBox>(element => ReferenceEquals(element.ItemsSource, model.AtmosphereLights.SunOptions)) is { } picker)
             {
                 return picker;
             }

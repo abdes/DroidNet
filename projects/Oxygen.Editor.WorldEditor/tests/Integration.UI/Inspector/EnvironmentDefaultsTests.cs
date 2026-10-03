@@ -44,7 +44,7 @@ public sealed partial class EnvironmentDefaultsTests : DroidNet.Tests.VisualUser
             ViewModel = model
         };
         await LoadTestContentAsync(new ScrollViewer { Content = view }).ConfigureAwait(true);
-        _ = model.AtmosphereEnabled.Should().BeTrue();
+        _ = model.SkyAtmosphere.AtmosphereEnabled.Should().BeTrue();
         var expected = NativeEnvironmentFields.ToDictionary(field => field.Field, field => field.ReadSource(fixture.Source.Environment), StringComparer.Ordinal);
         await AssertEnvironmentFieldValuesAsync(fixture, expected, timeout.Token).ConfigureAwait(true);
         await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);
