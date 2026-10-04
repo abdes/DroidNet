@@ -123,6 +123,22 @@ public sealed partial class SceneDocumentCommandService
                 context)));
         }
 
+        // Validate the parent folder before seeding: the organizer resolves it against the layout and
+        // would throw after the seed, leaving an uncommitted, un-undoable mutation behind a generic failure.
+        if (parentFolderId.HasValue)
+        {
+            var (folderFound, _) = FindFolderSceneParentNodeId(context.Scene.ExplorerLayout, parentFolderId.Value);
+            if (!folderFound)
+            {
+                return Task.FromResult(SceneCommandResults.Failure<Guid>(this.PublishSceneFailure(
+                    SceneOperationKinds.ExplorerFolderCreate,
+                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                    "Folder was not created",
+                    "The target parent folder no longer exists.",
+                    context)));
+            }
+        }
+
         try
         {
             EnsureExplorerLayout(context.Scene);
@@ -445,17 +461,19 @@ public sealed partial class SceneDocumentCommandService
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
         // Publish the compensated local TRS before reparenting native with preserve-world
         // disabled, so the native side applies the new local TRS instead of a stale one.
+        Guid? firstOperationResultId = null;
         foreach (var move in moves)
         {
-            await this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, move.Node).ConfigureAwait(true);
+            var outcome = await this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, move.Node).ConfigureAwait(true);
+            firstOperationResultId ??= await this.PublishSyncOutcomeAsync(context, SceneOperationKinds.NodeReparent, outcome).ConfigureAwait(true);
         }
 
         await this.sceneEngineSync.ReparentHierarchiesAsync(context.Scene, [.. topLevelIds], newParentNodeId, preserveWorldTransform: false).ConfigureAwait(true);
-        return SceneCommandResult.Success;
+        return new SceneCommandResult(Succeeded: true, firstOperationResultId);
     }
 
     /// <inheritdoc />
-    public Task<SceneCommandResult> MoveNodesToFolderAsync(
+    public async Task<SceneCommandResult> MoveNodesToFolderAsync(
         SceneDocumentCommandContext context,
         IReadOnlyList<Guid> nodeIds,
         Guid folderId)
@@ -463,7 +481,7 @@ public sealed partial class SceneDocumentCommandService
         using var authoring = EnterAuthoring(context);
         if (authoring is null)
         {
-            return Task.FromResult(new SceneCommandResult(Succeeded: false));
+            return new SceneCommandResult(Succeeded: false);
         }
 
         try
@@ -474,12 +492,12 @@ public sealed partial class SceneDocumentCommandService
             var (folderFound, folderSceneParentNodeId) = FindFolderSceneParentNodeId(context.Scene.ExplorerLayout, folderId);
             if (!folderFound)
             {
-                return Task.FromResult(this.ValidationFailure(
+                return this.ValidationFailure(
                     SceneOperationKinds.ExplorerLayoutMoveNode,
                     DiagnosticCodes.ScenePrefix + "STALE_TARGET",
                     "Nodes were not grouped",
                     "The target folder no longer exists.",
-                    context));
+                    context);
             }
 
             var folderScopeParent = folderSceneParentNodeId.HasValue
@@ -494,12 +512,12 @@ public sealed partial class SceneDocumentCommandService
                 var node = FindNode(context.Scene, nodeId);
                 if (node is null)
                 {
-                    return Task.FromResult(this.ValidationFailure(
+                    return this.ValidationFailure(
                         SceneOperationKinds.ExplorerLayoutMoveNode,
                         DiagnosticCodes.ScenePrefix + "STALE_TARGET",
                         "Nodes were not grouped",
                         "One or more selected nodes no longer exist.",
-                        context));
+                        context);
                 }
 
                 nodes.Add(node);
@@ -512,12 +530,12 @@ public sealed partial class SceneDocumentCommandService
                 if (folderScopeParent is not null
                     && (ReferenceEquals(node, folderScopeParent) || folderScopeParent.Ancestors().Contains(node)))
                 {
-                    return Task.FromResult(this.ValidationFailure(
+                    return this.ValidationFailure(
                         SceneOperationKinds.ExplorerLayoutMoveNode,
                         DiagnosticCodes.ScenePrefix + "INVALID_CYCLE",
                         "Nodes were not grouped",
                         "A node cannot be grouped under its own descendant.",
-                        context));
+                        context);
                 }
 
                 reparents.Add(ReparentMove.Capture(node, folderScopeParent, preserveWorldTransform: false));
@@ -549,13 +567,17 @@ public sealed partial class SceneDocumentCommandService
 
             _ = this.MarkDirtyAsync(context);
 
+            // Push each cross-scope reparent's local TRS and surface a native rejection instead of
+            // discarding it, so the grouping never diverges in the runtime silently.
+            Guid? firstOperationResultId = null;
             foreach (var move in reparents)
             {
-                _ = this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, move.Node);
+                var outcome = await this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, move.Node).ConfigureAwait(true);
+                firstOperationResultId ??= await this.PublishSyncOutcomeAsync(context, SceneOperationKinds.ExplorerLayoutMoveNode, outcome).ConfigureAwait(true);
                 _ = this.sceneEngineSync.ReparentNodeAsync(context.Scene, move.Node.Id, move.NewParent?.Id, preserveWorldTransform: false);
             }
 
-            return Task.FromResult(SceneCommandResult.Success);
+            return new SceneCommandResult(Succeeded: true, firstOperationResultId);
         }
         catch (Exception ex)
         {
@@ -566,7 +588,7 @@ public sealed partial class SceneDocumentCommandService
                 ex.Message,
                 context,
                 ex);
-            return Task.FromResult(new SceneCommandResult(Succeeded: false, operationResultId));
+            return new SceneCommandResult(Succeeded: false, operationResultId);
         }
     }
 
@@ -768,7 +790,10 @@ public sealed partial class SceneDocumentCommandService
             $"Move {move.Node.Name}",
             async () => await this.RedoReparentAsync(context, move).ConfigureAwait(true));
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        await this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, move.Node).ConfigureAwait(true);
+        // Surface a native rejection from inside the history delegate: operation results reach the
+        // user through the operations channel regardless of who initiated the reparent.
+        var outcome = await this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, move.Node).ConfigureAwait(true);
+        _ = await this.PublishSyncOutcomeAsync(context, SceneOperationKinds.NodeReparent, outcome).ConfigureAwait(true);
         await this.sceneEngineSync.ReparentNodeAsync(context.Scene, move.Node.Id, move.OldParent?.Id, preserveWorldTransform: false).ConfigureAwait(true);
     }
 
@@ -785,7 +810,9 @@ public sealed partial class SceneDocumentCommandService
             $"Move {move.Node.Name}",
             async () => await this.UndoReparentAsync(context, move).ConfigureAwait(true));
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        await this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, move.Node).ConfigureAwait(true);
+        // Surface a native rejection from inside the history delegate, as in UndoReparentAsync.
+        var outcome = await this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, move.Node).ConfigureAwait(true);
+        _ = await this.PublishSyncOutcomeAsync(context, SceneOperationKinds.NodeReparent, outcome).ConfigureAwait(true);
         await this.sceneEngineSync.ReparentNodeAsync(context.Scene, move.Node.Id, move.NewParent?.Id, preserveWorldTransform: false).ConfigureAwait(true);
     }
 

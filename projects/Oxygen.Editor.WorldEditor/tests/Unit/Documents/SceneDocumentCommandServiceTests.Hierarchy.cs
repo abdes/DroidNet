@@ -112,6 +112,31 @@ public sealed partial class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
+    public async Task CreateFolderAsync_WhenParentFolderIsStale_RejectsWithStaleTargetWithoutSeedingLayout()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Node" };
+        scene.RootNodes.Add(node);
+        var context = CreateContext(scene);
+        _ = scene.ExplorerLayout.Should().BeNull();
+
+        var result = await fixture.Sut.CreateFolderAsync(context, parentFolderId: Guid.NewGuid(), parentNodeId: null, "Folder").ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = result.OperationResultId.Should().NotBeNull("a user-triggered folder creation failure must publish an operation result");
+        var published = fixture.Results.Published.Should().ContainSingle().Which;
+        _ = published.OperationId.Should().Be(result.OperationResultId!.Value);
+        _ = published.OperationKind.Should().Be(SceneOperationKinds.ExplorerFolderCreate);
+        _ = published.Diagnostics.Should().ContainSingle()
+            .Which.Code.Should().Be(DiagnosticCodes.ScenePrefix + "STALE_TARGET");
+        _ = scene.ExplorerLayout.Should().BeNull("a rejected folder creation must not leave an uncommitted seeded layout behind");
+        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.History.UndoStack.Should().BeEmpty();
+    }
+
+    [TestMethod]
     public async Task DeleteNodesAsync_DeletesSubtreeAndUndoRestoresExactHierarchy()
     {
         var fixture = CreateFixture();
@@ -161,6 +186,175 @@ public sealed partial class SceneDocumentCommandServiceTests
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = scene.ExplorerLayout.Should().NotBeNull();
         _ = scene.AllNodes.Should().ContainSingle();
+    }
+
+    [TestMethod]
+    public async Task DeleteFolderAsync_NestedFolders_PromotesEntriesWithoutRemovingNodes()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Grouped" };
+        scene.RootNodes.Add(node);
+        var context = CreateContext(scene);
+        var outer = await fixture.Sut.CreateFolderAsync(context, parentFolderId: null, parentNodeId: null, "Outer").ConfigureAwait(false);
+        var inner = await fixture.Sut.CreateFolderAsync(context, parentFolderId: outer.Value, parentNodeId: null, "Inner").ConfigureAwait(false);
+        _ = (await fixture.Sut.MoveNodesToFolderAsync(context, [node.Id], inner.Value!).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+
+        var deleteInner = await fixture.Sut.DeleteFolderAsync(context, inner.Value!).ConfigureAwait(false);
+
+        _ = deleteInner.Succeeded.Should().BeTrue();
+        _ = scene.RootNodes.Should().ContainSingle().Which.Should().BeSameAs(node);
+        _ = FindFolderEntry(scene.ExplorerLayout, inner.Value).Should().BeNull("the inner folder is removed");
+        _ = scene.ExplorerLayout!.Single(entry => entry.FolderId == outer.Value).Children
+            .Should().Contain(entry => entry.NodeId == node.Id, "deleting the inner folder promotes its entries into the outer folder's position");
+        var undoSteps = context.History.UndoStack.Count;
+
+        await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var restoredInner = FindFolderEntry(scene.ExplorerLayout, inner.Value);
+        _ = restoredInner.Should().NotBeNull("one undo step restores the deleted folder");
+        _ = restoredInner!.Children.Should().Contain(entry => entry.NodeId == node.Id);
+
+        var deleteOuter = await fixture.Sut.DeleteFolderAsync(context, outer.Value!).ConfigureAwait(false);
+
+        _ = deleteOuter.Succeeded.Should().BeTrue();
+        _ = scene.RootNodes.Should().ContainSingle().Which.Should().BeSameAs(node);
+        _ = FindFolderEntry(scene.ExplorerLayout, outer.Value).Should().BeNull("the outer folder is removed");
+        var promotedInner = scene.ExplorerLayout!.Single(entry => entry.FolderId == inner.Value);
+        _ = promotedInner.Children.Should().Contain(entry => entry.NodeId == node.Id, "deleting the outer folder promotes the inner folder with its children");
+        _ = context.History.UndoStack.Should().HaveCount(undoSteps, "each folder delete is exactly one undo step");
+
+        await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = FindFolderEntry(scene.ExplorerLayout, outer.Value).Should().NotBeNull();
+        _ = scene.AllNodes.Should().ContainSingle("folder deletes never remove nodes");
+    }
+
+    [TestMethod]
+    public async Task DeleteItemsAsync_MixedBatch_PromotesNestedFolderEntriesAndDeletesNodesAsOneUndoStep()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Grouped" };
+        var doomed = new SceneNode(scene) { Name = "Doomed" };
+        scene.RootNodes.Add(node);
+        scene.RootNodes.Add(doomed);
+        var context = CreateContext(scene);
+        var outer = await fixture.Sut.CreateFolderAsync(context, parentFolderId: null, parentNodeId: null, "Outer").ConfigureAwait(false);
+        var inner = await fixture.Sut.CreateFolderAsync(context, parentFolderId: outer.Value, parentNodeId: null, "Inner").ConfigureAwait(false);
+        _ = (await fixture.Sut.MoveNodesToFolderAsync(context, [node.Id], inner.Value!).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+        var undoSteps = context.History.UndoStack.Count;
+
+        var first = await fixture.Sut.DeleteItemsAsync(context, [doomed.Id], [inner.Value!]).ConfigureAwait(false);
+
+        _ = first.Succeeded.Should().BeTrue();
+        _ = scene.RootNodes.Should().ContainSingle().Which.Should().BeSameAs(node);
+        _ = FindFolderEntry(scene.ExplorerLayout, inner.Value).Should().BeNull();
+        _ = scene.ExplorerLayout!.Single(entry => entry.FolderId == outer.Value).Children
+            .Should().Contain(entry => entry.NodeId == node.Id, "the mixed batch promotes the inner folder's entries into the outer folder");
+        _ = context.History.UndoStack.Should().HaveCount(undoSteps + 1, "the mixed batch is exactly one undo step");
+
+        await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = scene.RootNodes.Should().HaveCount(2, "one undo step restores the deleted node");
+        _ = FindFolderEntry(scene.ExplorerLayout, inner.Value).Should().NotBeNull("one undo step restores the deleted folder");
+
+        var second = await fixture.Sut.DeleteItemsAsync(context, [doomed.Id], [outer.Value!]).ConfigureAwait(false);
+
+        _ = second.Succeeded.Should().BeTrue();
+        _ = scene.RootNodes.Should().ContainSingle().Which.Should().BeSameAs(node);
+        _ = FindFolderEntry(scene.ExplorerLayout, outer.Value).Should().BeNull();
+        var promotedInner = scene.ExplorerLayout!.Single(entry => entry.FolderId == inner.Value);
+        _ = promotedInner.Children.Should().Contain(entry => entry.NodeId == node.Id, "the mixed batch promotes the inner folder with its children");
+        _ = context.History.UndoStack.Should().HaveCount(undoSteps + 1, "the mixed batch is exactly one undo step");
+
+        await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = scene.AllNodes.Should().HaveCount(2);
+        _ = FindFolderEntry(scene.ExplorerLayout, outer.Value).Should().NotBeNull();
+        _ = FindFolderEntry(scene.ExplorerLayout, inner.Value).Should().NotBeNull();
+    }
+
+    [TestMethod]
+    public async Task DeleteFolderAsync_AfterCrossScopeGrouping_KeepsNodeParentAndWorldPose()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var scopeParent = new SceneNode(scene) { Name = "Scope" };
+        scopeParent.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(10f, 0f, 0f);
+        scene.RootNodes.Add(scopeParent);
+        var node = new SceneNode(scene) { Name = "Grouped" };
+        var transform = node.Components.OfType<TransformComponent>().Single();
+        transform.LocalPosition = new Vector3(1f, 2f, 3f);
+        scene.RootNodes.Add(node);
+        var context = CreateContext(scene);
+        var folder = await fixture.Sut.CreateFolderAsync(context, parentFolderId: null, parentNodeId: scopeParent.Id, "Scoped").ConfigureAwait(false);
+
+        // Grouping into a folder scoped under another node performs the D2 cross-scope reparent.
+        _ = (await fixture.Sut.MoveNodesToFolderAsync(context, [node.Id], folder.Value!).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+        _ = node.Parent.Should().BeSameAs(scopeParent);
+        var worldBefore = SceneTransformMath.WorldMatrix(node);
+        var undoSteps = context.History.UndoStack.Count;
+
+        var result = await fixture.Sut.DeleteFolderAsync(context, folder.Value!).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = scene.AllNodes.Should().HaveCount(2, "folder deletion is grouping-only and removes no nodes");
+        _ = node.Parent.Should().BeSameAs(scopeParent, "promotion must not reparent the grouped node");
+        _ = transform.LocalPosition.Should().Be(new Vector3(1f, 2f, 3f), "promotion must not touch local transforms");
+        _ = MatricesClose(SceneTransformMath.WorldMatrix(node), worldBefore).Should().BeTrue("promotion must preserve the world pose");
+        _ = scene.ExplorerLayout!.Single(entry => entry.NodeId == scopeParent.Id).Children
+            .Should().Contain(entry => entry.NodeId == node.Id, "the node entry is promoted into the folder's former position");
+        _ = FindFolderEntry(scene.ExplorerLayout, folder.Value).Should().BeNull();
+        _ = context.History.UndoStack.Should().HaveCount(undoSteps + 1, "the folder delete is exactly one undo step");
+
+        await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = FindFolderEntry(scene.ExplorerLayout, folder.Value).Should().NotBeNull();
+        _ = node.Parent.Should().BeSameAs(scopeParent);
+        _ = MatricesClose(SceneTransformMath.WorldMatrix(node), worldBefore).Should().BeTrue();
+    }
+
+    [TestMethod]
+    public async Task DeleteItemsAsync_MixedBatch_AfterCrossScopeGrouping_KeepsNodeParentAndWorldPose()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var scopeParent = new SceneNode(scene) { Name = "Scope" };
+        scopeParent.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(10f, 0f, 0f);
+        scene.RootNodes.Add(scopeParent);
+        var node = new SceneNode(scene) { Name = "Grouped" };
+        var transform = node.Components.OfType<TransformComponent>().Single();
+        transform.LocalPosition = new Vector3(1f, 2f, 3f);
+        scene.RootNodes.Add(node);
+        var doomed = new SceneNode(scene) { Name = "Doomed" };
+        scene.RootNodes.Add(doomed);
+        var context = CreateContext(scene);
+        var folder = await fixture.Sut.CreateFolderAsync(context, parentFolderId: null, parentNodeId: scopeParent.Id, "Scoped").ConfigureAwait(false);
+
+        // Grouping into a folder scoped under another node performs the D2 cross-scope reparent.
+        _ = (await fixture.Sut.MoveNodesToFolderAsync(context, [node.Id], folder.Value!).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+        _ = node.Parent.Should().BeSameAs(scopeParent);
+        var worldBefore = SceneTransformMath.WorldMatrix(node);
+        var undoSteps = context.History.UndoStack.Count;
+
+        var result = await fixture.Sut.DeleteItemsAsync(context, [doomed.Id], [folder.Value!]).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = scene.AllNodes.Should().HaveCount(2, "only the selected node is deleted");
+        _ = scene.AllNodes.Should().NotContain(doomed);
+        _ = node.Parent.Should().BeSameAs(scopeParent, "promotion must not reparent the grouped node");
+        _ = transform.LocalPosition.Should().Be(new Vector3(1f, 2f, 3f), "promotion must not touch local transforms");
+        _ = MatricesClose(SceneTransformMath.WorldMatrix(node), worldBefore).Should().BeTrue("promotion must preserve the world pose");
+        _ = scene.ExplorerLayout!.Single(entry => entry.NodeId == scopeParent.Id).Children
+            .Should().Contain(entry => entry.NodeId == node.Id, "the node entry is promoted into the folder's former position");
+        _ = FindFolderEntry(scene.ExplorerLayout, folder.Value).Should().BeNull();
+        _ = context.History.UndoStack.Should().HaveCount(undoSteps + 1, "the mixed batch is exactly one undo step");
+
+        await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = scene.AllNodes.Should().HaveCount(3, "one undo step restores the deleted node");
+        _ = FindFolderEntry(scene.ExplorerLayout, folder.Value).Should().NotBeNull();
+        _ = node.Parent.Should().BeSameAs(scopeParent);
+        _ = MatricesClose(SceneTransformMath.WorldMatrix(node), worldBefore).Should().BeTrue();
     }
 
     [TestMethod]
@@ -286,6 +480,78 @@ public sealed partial class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
+    public async Task ReparentNodesAsync_WhenTransformSyncRejects_PublishesOutcomeAndThreadsOperationId()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var parent = new SceneNode(scene) { Name = "Parent" };
+        var child = new SceneNode(scene) { Name = "Child" };
+        parent.AddChild(child);
+        scene.RootNodes.Add(parent);
+        var context = CreateContext(scene);
+        _ = fixture.Sync
+            .Setup(sync => sync.UpdateNodeTransformAsync(scene, child, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SyncOutcome(
+                SyncStatus.Rejected,
+                SceneOperationKinds.EditTransform,
+                AffectedScope.Empty,
+                LiveSyncDiagnosticCodes.TransformRejected,
+                "The runtime rejected the transform."));
+
+        var result = await fixture.Sut.ReparentNodesAsync(context, [child.Id], newParentNodeId: null, preserveWorldTransform: false).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue("the authoring reparent commits even when the live preview rejects the transform push");
+        _ = child.Parent.Should().BeNull();
+        _ = result.OperationResultId.Should().NotBeNull("a rejected transform push must publish an operation result");
+        var published = fixture.Results.Published.Should().ContainSingle().Which;
+        _ = published.OperationId.Should().Be(result.OperationResultId!.Value);
+        _ = published.OperationKind.Should().Be(SceneOperationKinds.NodeReparent);
+        _ = published.Diagnostics.Should().ContainSingle()
+            .Which.Code.Should().Be(LiveSyncDiagnosticCodes.TransformRejected);
+    }
+
+    [TestMethod]
+    public async Task ReparentUndoRedo_WhenTransformSyncRejects_PublishesOutcomesFromHistoryDelegates()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var parent = new SceneNode(scene) { Name = "Parent" };
+        var child = new SceneNode(scene) { Name = "Child" };
+        parent.AddChild(child);
+        scene.RootNodes.Add(parent);
+        var context = CreateContext(scene);
+
+        _ = (await fixture.Sut.ReparentNodesAsync(context, [child.Id], newParentNodeId: null, preserveWorldTransform: false).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+        _ = fixture.Results.Published.Should().BeEmpty("the committed reparent synced cleanly");
+
+        // The runtime starts rejecting transform pushes only after the commit; undo and redo must surface that.
+        _ = fixture.Sync
+            .Setup(sync => sync.UpdateNodeTransformAsync(scene, child, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SyncOutcome(
+                SyncStatus.Rejected,
+                SceneOperationKinds.EditTransform,
+                AffectedScope.Empty,
+                LiveSyncDiagnosticCodes.TransformRejected,
+                "The runtime rejected the transform."));
+
+        await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = child.Parent.Should().BeSameAs(parent);
+        _ = fixture.Results.Published.Should().ContainSingle("undo publishes through the operations channel without a return path");
+        _ = fixture.Results.Published[0].OperationKind.Should().Be(SceneOperationKinds.NodeReparent);
+        _ = fixture.Results.Published[0].Diagnostics.Should().ContainSingle()
+            .Which.Code.Should().Be(LiveSyncDiagnosticCodes.TransformRejected);
+
+        await context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = child.Parent.Should().BeNull();
+        _ = fixture.Results.Published.Should().HaveCount(2, "redo publishes its own rejected transform outcome");
+        _ = fixture.Results.Published[1].OperationKind.Should().Be(SceneOperationKinds.NodeReparent);
+        _ = fixture.Results.Published[1].Diagnostics.Should().ContainSingle()
+            .Which.Code.Should().Be(LiveSyncDiagnosticCodes.TransformRejected);
+    }
+
+    [TestMethod]
     public async Task MoveNodesToFolderAsync_IsGroupingOnlyAndDoesNotChangeParentOrTransform()
     {
         var fixture = CreateFixture();
@@ -307,6 +573,40 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = node.Parent.Should().BeSameAs(beforeParent, "grouping must not reparent");
         _ = transform.LocalPosition.Should().Be(beforePosition, "grouping must not change transforms");
         _ = scene.ExplorerLayout.Should().NotBeNull();
+    }
+
+    [TestMethod]
+    public async Task MoveNodesToFolderAsync_WhenCrossScopeTransformSyncRejects_PublishesOutcomeAndThreadsOperationId()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var scopeParent = new SceneNode(scene) { Name = "Scope" };
+        scene.RootNodes.Add(scopeParent);
+        var node = new SceneNode(scene) { Name = "Grouped" };
+        scene.RootNodes.Add(node);
+        var context = CreateContext(scene);
+        var folder = await fixture.Sut.CreateFolderAsync(context, parentFolderId: null, parentNodeId: scopeParent.Id, "Scoped").ConfigureAwait(false);
+        _ = folder.Succeeded.Should().BeTrue();
+        _ = fixture.Sync
+            .Setup(sync => sync.UpdateNodeTransformAsync(scene, node, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SyncOutcome(
+                SyncStatus.Rejected,
+                SceneOperationKinds.EditTransform,
+                AffectedScope.Empty,
+                LiveSyncDiagnosticCodes.TransformRejected,
+                "The runtime rejected the transform."));
+
+        var result = await fixture.Sut.MoveNodesToFolderAsync(context, [node.Id], folder.Value!).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue("the authoring grouping commits even when the live preview rejects the transform push");
+        _ = node.Parent.Should().BeSameAs(scopeParent, "cross-scope grouping reparents in the authoring model");
+        _ = result.OperationResultId.Should().NotBeNull("a rejected transform push must publish an operation result");
+        var published = fixture.Results.Published.Should().ContainSingle().Which;
+        _ = published.OperationId.Should().Be(result.OperationResultId!.Value);
+        _ = published.OperationKind.Should().Be(SceneOperationKinds.ExplorerLayoutMoveNode);
+        _ = published.Diagnostics.Should().ContainSingle()
+            .Which.Code.Should().Be(LiveSyncDiagnosticCodes.TransformRejected);
     }
 
     [TestMethod]
@@ -578,4 +878,27 @@ public sealed partial class SceneDocumentCommandServiceTests
            && MathF.Abs(left.M22 - right.M22) <= MatrixTolerance && MathF.Abs(left.M23 - right.M23) <= MatrixTolerance
            && MathF.Abs(left.M31 - right.M31) <= MatrixTolerance && MathF.Abs(left.M32 - right.M32) <= MatrixTolerance
            && MathF.Abs(left.M33 - right.M33) <= MatrixTolerance;
+
+    private static ExplorerEntryData? FindFolderEntry(IList<ExplorerEntryData>? entries, Guid folderId)
+    {
+        if (entries is null)
+        {
+            return null;
+        }
+
+        foreach (var entry in entries)
+        {
+            if (entry.FolderId == folderId)
+            {
+                return entry;
+            }
+
+            if (FindFolderEntry(entry.Children, folderId) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
 }
