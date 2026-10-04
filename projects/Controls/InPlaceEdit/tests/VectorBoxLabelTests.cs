@@ -21,7 +21,7 @@ public sealed class VectorBoxLabelTests : VisualUserInterfaceTests
     public Task ComponentStyleAppliesToStandardNumberBoxesAndUpdatesAtRuntime() => EnqueueAsync(async () =>
     {
         var style = new Style(typeof(NumberBox));
-        style.Setters.Add(new Setter(NumberBox.TrimTrailingZerosProperty, true));
+        style.Setters.Add(new Setter(NumberBox.TrimTrailingZerosProperty, value: true));
         var vector = new VectorBox { Width = 180, Padding = new Thickness(0), ComponentStyle = style };
         await LoadTestContentAsync(vector).ConfigureAwait(true);
         var inputs = vector.FindDescendants().OfType<NumberBox>().ToArray();

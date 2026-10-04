@@ -98,6 +98,7 @@ public partial class NumberBox
                     (double.IsNaN(labelWidth) ? 0 : labelWidth) / this.LabelWidthRatio,
                     (valueWidth + prefixWidth + qualifierWidth) / (1 - this.LabelWidthRatio));
             }
+
             if (availableWidth < inlineMinimum)
             {
                 return LabelPosition.Top;
@@ -145,6 +146,7 @@ public partial class NumberBox
             valueColumn.Width = new GridLength(1 - this.LabelWidthRatio, GridUnitType.Star);
             valueColumn.MinWidth = 0;
         }
+
         var labelOnLeft = position == LabelPosition.Left;
         this.rootGrid!.ColumnDefinitions.Add(labelOnLeft ? labelColumn : valueColumn);
         this.rootGrid.ColumnDefinitions.Add(labelOnLeft ? valueColumn : labelColumn);

@@ -15,7 +15,7 @@ namespace DroidNet.Controls;
 public partial class NumberBox
 {
     /// <summary>Identifies whether an external label moves above the value at narrow widths.</summary>
-    public static readonly DependencyProperty AutoStackLabelProperty = RegisterLabelLayoutProperty(nameof(AutoStackLabel), typeof(bool), false);
+    public static readonly DependencyProperty AutoStackLabelProperty = RegisterLabelLayoutProperty(nameof(AutoStackLabel), typeof(bool), defaultValue: false);
 
     /// <summary>Identifies the external label-column width; NaN retains the default proportional layout.</summary>
     public static readonly DependencyProperty LabelWidthProperty = RegisterLabelLayoutProperty(nameof(LabelWidth), typeof(double), double.NaN);

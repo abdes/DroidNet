@@ -40,7 +40,7 @@ public sealed class NumberBoxLabelPresentationTests : VisualUserInterfaceTests
             AutoStackLabel = !compact,
         };
         await LoadTestContentAsync(number).ConfigureAwait(true);
-        _ = VisualStateManager.GoToState(number, "Normal", false).Should().BeTrue();
+        _ = VisualStateManager.GoToState(number, "Normal", useTransitions: false).Should().BeTrue();
         number.UpdateLayout();
         var partName = compact ? "PartCompactLabelTextBlock" : "PartLabelTextBlock";
         var label = number.FindDescendant<TextBlock>(part => part.Name == partName)!;
@@ -52,7 +52,7 @@ public sealed class NumberBoxLabelPresentationTests : VisualUserInterfaceTests
         var labelFontSize = label.FontSize;
         foreach (var state in new[] { "Hover", "Pressed", "Normal", "Hover", "Normal" })
         {
-            _ = VisualStateManager.GoToState(number, state, false).Should().BeTrue();
+            _ = VisualStateManager.GoToState(number, state, useTransitions: false).Should().BeTrue();
             number.UpdateLayout();
             _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
             _ = label.FontWeight.Should().Be(weight);
