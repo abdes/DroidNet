@@ -342,6 +342,45 @@ public sealed partial class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
+    public async Task DuplicateNodesAsync_StaleRoot_RejectsAtomicallyWithoutPartialCommit()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var a = new SceneNode(scene) { Name = "A" };
+        var b = new SceneNode(scene) { Name = "B" };
+        scene.RootNodes.Add(a);
+        scene.RootNodes.Add(b);
+        var context = CreateContext(scene);
+
+        var result = await fixture.Sut.DuplicateNodesAsync(context, [a.Id, Guid.NewGuid()], newParentNodeId: null, newParentFolderId: null).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = scene.RootNodes.Should().HaveCount(2, "no clone may be committed when any source is stale");
+        _ = context.History.UndoStack.Should().BeEmpty();
+        _ = context.Metadata.IsDirty.Should().BeFalse();
+    }
+
+    [TestMethod]
+    public async Task DeleteNodesAsync_Undo_RecreatesFullSubtreeInNative()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var source = new SceneNode(scene) { Name = "Source" };
+        var child = new SceneNode(scene) { Name = "Child" };
+        source.AddChild(child);
+        scene.RootNodes.Add(source);
+        var context = CreateContext(scene);
+
+        _ = await fixture.Sut.DeleteNodesAsync(context, [source.Id]).ConfigureAwait(false);
+        await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = scene.RootNodes.Should().ContainSingle().Which.Children.Should().ContainSingle();
+        fixture.Sync.Verify(sync => sync.CreateNodeAsync(It.IsAny<SceneNode>(), It.IsAny<Guid?>()), Times.Exactly(2));
+    }
+
+    [TestMethod]
     public async Task ReorderNodesAsync_ReordersSiblingWithinRoot()
     {
         var fixture = CreateFixture();
