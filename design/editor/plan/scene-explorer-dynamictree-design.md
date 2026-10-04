@@ -738,8 +738,12 @@ hierarchy commands (`CreateNodeAsync`, `CreateFolderAsync`, `RenameNodeAsync`,
 `MoveNodesToFolderAsync`, `RemoveNodesFromFolderAsync`) implemented in
 `SceneDocumentCommandService.Hierarchy.cs` with whole-batch prevalidation, atomic
 graph+layout commit, synchronous history/dirty advance and native convergence.
-Folders are grouping-only (no `Parent`/TRS change); true reparent preserves world
-pose via `SceneTransformMath` (decompose/recompose with singular/shear rejection)
+Corrected 2026-10-04 (P8): grouping is **not** always Parent/TRS-neutral — under D2 a move into a
+folder whose scene-parent scope differs performs the lineage-driven reparent inside the same command
+(`MoveNodesToFolderAsync`), and under D1 the Explorer default is **preserve-local**, not preserve
+world pose (`SceneExplorerViewModel` passes `preserveWorldTransform: false`); "Paste as child (keep
+world)" is the only preserve-world path. The transform math itself is unchanged: decompose/recompose
+via `SceneTransformMath` with singular/shear rejection
 and redoes the forward move rather than re-guessing. `SceneDocumentCommandService`
 now owns `ISceneMutator`/`ISceneOrganizer` directly. Reconciled 2026-10-04 (P2): the atomic
 commit claim now holds — C8, C9 and C10 are closed with whole-batch prevalidation, single-undo
@@ -1008,6 +1012,35 @@ Generic tree
       `IndexOf` returns `-2`, which is unreachable. It must test `removeIndex != 0`. Found while closing
       C27; belongs with the C34/C35 generic-tree work rather than the search group.
 
+Command surface and result publication (found by the P7 design review, each re-verified)
+
+- [ ] C39 — `SceneExplorerService` is a **second mutation surface with no history authority**: zero
+      `AddChange`/`BeginChangeSet` calls in the file, still DI-registered
+      (`WorkspaceViewModel.cs:202`), and its folder delete calls
+      `sceneOrganizer.RemoveFolder(..., promoteChildrenToParent: false)` (`SceneExplorerService.cs:272`),
+      which **discards** contained entries — the opposite of the D5 rule just recorded in
+      `scene-explorer.md:105-108`. Its only remaining src caller is the dead `RenameItemAsync`, but its
+      `AuthoringChanged` event is consumed by `SceneContentDemandService.Lifecycle.cs:33,42`, so pruning
+      needs that consumer checked first. Doc §5:97-99 forbids this shape.
+- [ ] C40 — duplication and paste failures publish **no operation result**: every failure path returns
+      `SceneCommandResults.Failure<T>()` (`Clipboard.cs:34,40,49,59,72,...`) and that helper defaults
+      `operationResultId` to null (`SceneCommandResults.cs:26`), with the view model swallowing the
+      failure (`SceneExplorerViewModel.cs:591-602`, copy-drop `:1386-1388`). `documents-and-commands.md`
+      §12:340-341 requires a visible result for user-triggered failures. Also: duplication has no kind in
+      `SceneOperationKinds` at all.
+- [ ] C41 — `"Scene.Reload"` is a bare string literal (`Reload.cs:63,103`) outside the stable
+      vocabulary: `SceneOperationKinds.cs` contains no Reload constant and
+      `DiagnosticSceneVocabularyTests.cs:25-42` does not pin it.
+- [ ] C42 — dead and unsafe public API on the command interface. `RenameItemAsync`
+      (`ISceneDocumentCommandService.cs:228`, impl `SceneDocumentCommandService.cs:511-564`) has zero
+      callers in src or tests, targets by **UI adapter type** rather than identity, trims nothing, skips
+      the native rename sync that `RenameNodeAsync` performs, and captures the adapter in its undo
+      closure — undo after a projection rebuild would target a retired adapter. `DeleteNodesAsync`
+      (`:281`) and `DeleteFolderAsync` (`:289`) also have **no production callers** (only tests, plus the
+      one live path `RemoveSelectedItems` → `DeleteItemsAsync` at `SceneExplorerViewModel.cs:168,187`, bound
+      to the Delete accelerator `SceneExplorerView.xaml.cs:117` and toolbar `.xaml:130`), and their
+      prevalidation has already drifted from `DeleteItemsAsync`'s.
+
 #### Test / verification gaps (editor/controls; runtime for native rows)
 
 - [~] T1 — one undo per batch + atomic rejection (mixed delete, multi-root duplication).
@@ -1059,7 +1092,27 @@ Generic tree
       surface (identity-based commands, whole-batch prevalidation, one undo step, grouping-only folder
       moves vs lineage-driven reparent) is the right model for a game-engine editor, then update the
       doc to match only where the code is deemed good enough — where it is not, the code is the defect
-      and needs its own owner decision or C-item.
+      and needs its own owner decision or C-item. **Review outcome (2026-10-04, re-verified):** §8's
+      real contract is single mutation authority + operation-kind coverage + the side-effect pipeline;
+      the method list is explicitly illustrative ("for example", doc:173) and the five phantom names
+      appear in **zero commits** touching `projects/` (`git log --all -S`), so this was a planned-API
+      sketch that never matched anything built, not rename drift. The implementation is the better
+      model for an editor on the families audited (identity targeting, whole-batch prevalidation, one
+      undo per batch confirmed through `HistoryKeeper.cs:356-399` nesting, synchronous dirty/revision
+      advance) — so the list is replaced by families + a pointer to the interface as authoritative,
+      not renamed. Where code contradicts the _recorded_ decisions or the doc's own normative rules,
+      code moves: that became C39-C42. Interface is 33 methods (+1 class-only overload), and its kind
+      table is a strict subset of `SceneOperationKinds` (11 vs 19). Proposed §8 wording is pending the
+      owner's approval; the one-to-one claim at doc:172 is false in both directions (`DeleteItemsAsync`
+      → 2 kinds, four layout methods → 1 kind).
+- [ ] P8 — cross-doc consistency pass: four texts still contradict the owner's recorded D1/D2. The
+      interface XMLDoc says grouping happens "without changing scene parenting or transforms"
+      (`ISceneDocumentCommandService.cs:317`); the plan's own drop table says "Into folder | Group only;
+      every affected node must already have the folder's actual parent scope" and "first explicitly
+      reparent… reject" (`:439`, `:443-445`); §6 said "Folders are grouping-only (no Parent/TRS change);
+      true reparent preserves world pose" (corrected in place); and `scene-explorer.md:250` still lists
+      copy/paste/duplicate as out of ED-M03. Trusting any of them makes owner-approved correct code look
+      like a bug — which is exactly the trap this pass exists to close.
 
 ### SE-03 — Showcase UI, workspace protection and live integration
 
