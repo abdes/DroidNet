@@ -7,6 +7,4 @@ namespace DroidNet.Controls.Demo.Tree.Model;
 /// <summary>
 /// Represents a geometry component attached to an entity in the demo domain model.
 /// </summary>
-internal sealed class GeometryComponent
-{
-}
+internal sealed class GeometryComponent;

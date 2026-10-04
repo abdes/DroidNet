@@ -7,6 +7,4 @@ namespace DroidNet.Controls.Demo.Tree.Model;
 /// <summary>
 /// Represents a camera component attached to an entity in the demo domain model.
 /// </summary>
-internal sealed class CameraComponent
-{
-}
+internal sealed class CameraComponent;
