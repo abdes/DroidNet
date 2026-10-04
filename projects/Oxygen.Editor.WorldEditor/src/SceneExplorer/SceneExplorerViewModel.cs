@@ -34,7 +34,6 @@ namespace Oxygen.Editor.World.SceneExplorer;
 /// </summary>
 public partial class SceneExplorerViewModel : DynamicTreeViewModel
 {
-    private readonly IProject currentProject;
     private readonly ILogger<SceneExplorerViewModel> logger;
     private readonly IMessenger messenger;
     private readonly IRouter router;
@@ -99,9 +98,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.sceneEngineSync.SceneSynchronized += this.OnSceneSynchronized;
         this.selectionService = selectionService;
         this.commandService = commandService;
-
-        Debug.Assert(projectManager.CurrentProject is not null, "must have a current project");
-        this.currentProject = projectManager.CurrentProject;
 
         this.UndoStack = this.History.UndoStack;
         this.RedoStack = this.History.RedoStack;
@@ -731,7 +727,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         // Find the scene in the current project
-        var scene = this.currentProject.Scenes.FirstOrDefault(s => s.Id == sceneMetadata.DocumentId);
+        var scene = this.projectManager.CurrentProject?.Scenes.FirstOrDefault(s => s.Id == sceneMetadata.DocumentId);
         if (scene is null)
         {
             return;
@@ -763,7 +759,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         // Find the scene in the current project
-        var scene = this.currentProject.Scenes.FirstOrDefault(s => s.Id == sceneMetadata.DocumentId);
+        var scene = this.projectManager.CurrentProject?.Scenes.FirstOrDefault(s => s.Id == sceneMetadata.DocumentId);
         if (scene is null)
         {
             return;
