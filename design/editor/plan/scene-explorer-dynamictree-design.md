@@ -636,7 +636,10 @@ batch order, filtered range/index correctness, focus and recycled rows. Controls
 DemoApp consumes the hooks with non-Oxygen data/actions. DynamicTree has no Oxygen
 reference and no alternate application-specific tree implementation.
 
-**Closure (2026-10-04):** SE-01 implementation is complete. The direct trailing
+**Status (corrected 2026-10-04 per P1):** SE-01 is **in progress**, not complete — C32 (recycling
+detach / drop-state reset), C34 (displayed-scope keyboard and typeahead), C35 (drag cancellation),
+C38 (inert `HideChildrenAsync` guard) and the T9/T10 verification gaps remain open. What is done
+below stands; the completion claim did not. The direct trailing
 template takes precedence over selectors; fixed-width empty slots and recycled
 content are covered. Demo-owned lock/visibility hover commands and loaded-status
 cells remain aligned across depths and densities. Final review corrected passive
@@ -738,9 +741,13 @@ graph+layout commit, synchronous history/dirty advance and native convergence.
 Folders are grouping-only (no `Parent`/TRS change); true reparent preserves world
 pose via `SceneTransformMath` (decompose/recompose with singular/shear rejection)
 and redoes the forward move rather than re-guessing. `SceneDocumentCommandService`
-now owns `ISceneMutator`/`ISceneOrganizer` directly.
+now owns `ISceneMutator`/`ISceneOrganizer` directly. Reconciled 2026-10-04 (P2): the atomic
+commit claim now holds — C8, C9 and C10 are closed with whole-batch prevalidation, single-undo
+and mixed-delete regression coverage.
 
-The single-loaded-scene policy is in place: `DefaultSceneId` is persisted in the
+The single-loaded-scene policy is **partly** in place (corrected 2026-10-04 per P3 — C30 has no
+guard/stage/retire on scene replacement and C31's creation seed is unimplemented, so startup is not
+yet wholly configuration-driven):`DefaultSceneId` is persisted in the
 project manifest/model and propagated through `ProjectContext`; workspace startup
 resolves the initial scene from it (after any explicit activation request) and no
 longer falls back to `LastOpenedScene` or first-listed discovery; the competing
@@ -782,7 +789,9 @@ collapsed descendants, and restores the prior expansion on clear.
 Step 6 is complete: `MoveFolderToParentAsync` (grouping-only folder reparent),
 `ReorderNodesAsync`/`MoveNodeToSiblingIndex` (layout-only sibling insertion with
 source-removal index adjustment) and copy-drop via `DuplicateNodesAsync` cover every
-drop intent (Into root/node/folder, Before/After reorder and Ctrl-drag copy). Step 10
+drop intent (Into root/node/folder, Before/After reorder and Ctrl-drag copy). Reconciled
+2026-10-04 (P4): C6 and C13 are closed, and `SceneExplorerDropTests` pins the preserve-local
+(D1) routing that this claim depends on. Step 10
 landed typed command availability (the view reflection helpers are removed), the
 shared action definitions and menu-shape builder (`SceneExplorerContextMenu`), and
 the `SceneExplorerCommandAdapter` with Remove-from-folder/Move-to-scene-root
@@ -807,8 +816,16 @@ WorldEditor src, Unit, and
 Oxygen.Editor.App build clean. An independent adversarial review (2026-10-04) found
 SE-01 and SE-02 **not complete**: several source-level correctness defects and
 unapproved contract decisions remain. They are tracked in the corrective-action
-checklist below and must be closed before SE-03. The legacy `AuthoringChanged` note
-(item P6) is restated there against the observed collection-subscription mechanism.
+checklist below and must be closed before SE-03. Restated per P6 — there is no deferred
+`AuthoringChanged` event to wire: `SceneContentDemandService` observes the model directly. It
+subscribes `RootNodes` and, per node, `Children`, `Components` and each
+`GeometryComponent.OverrideSlots` (`SceneContentDemandService.References.cs:24-32`);
+`ObserveCollection` attaches `CollectionChanged += OnReferencesChanged` (`:50-54`) and
+`OnReferencesChanged` dispatches `RefreshReferenceObservers` (`:59`), while property edits go
+through `OnReferenceChanged` → `InvalidateObsoleteDemands` (`:58`). Any writer that mutates those
+collections therefore re-subscribes the observers without an authoring signal, which is why no
+`AuthoringChanged` hook is needed. What is unproven is that a **command-driven** mutation reaches
+this path — that is a test gap, recorded as T12, not an integration note to carry into SE-03.
 
 ### SE-02 corrective actions — review findings (tracking)
 
@@ -842,10 +859,11 @@ publishes added with C2/C1/C3, so four tests threw while their defects were mark
   the Cut→Paste assignment loss accepted knowingly. Code and tests landed (`Clipboard.cs:257`
   with `DuplicateNodesAsync_ResetsCopiedDirectionalLightAtmosphereSlot`; `DeleteFolderAsync` at
   `SceneDocumentCommandService.Hierarchy.cs:295` with
-  `DeleteFolderAsync_PromotesContainedEntriesWithoutRemovingNodes`). Outstanding: the owning LLDs
-  record neither clause (`content-pipeline.md:200`, `environment-authoring.md:33` state the
-  role model but not the duplication or folder-delete rules), and the layout-only qualifier is
-  untested for nested folders and D2-reparented grouping — see T11.
+  `DeleteFolderAsync_PromotesContainedEntriesWithoutRemovingNodes`). **Contract recording is done**
+  (owner approved the wording 2026-10-04): `scene-authoring-model.md` §6 now states the duplication
+  rule next to the existing single-occupant rule, and `scene-explorer.md` §7 states folder Delete as
+  layout-only promotion that leaves parentage and world pose untouched. Remaining before `[x]`: T11 —
+  the layout-only qualifier is still untested for nested folders and D2-reparented grouping.
 - [ ] D6 — reviewer + projects/docs. Default-scene schema/migration/seed policy (`plan:567`)
       unapproved; migration + fallback still contradict the contract.
 - [ ] D7 — reviewer + projects/docs. Sequential-scene Copy / scene-bound Cut lifetime
@@ -869,7 +887,8 @@ the code and the contract-doc recording (plus its regression tests) are done.
 - D5 → **grouping-only folder Delete + subtree node Delete + copied lights `AtmosphereSlot = None`**.
   Owner confirmed both clauses directly on 2026-10-04, including the deliberate Cut→Paste loss. Code
   (C12, `710007c92`) and the simple-case tests landed; the layout-only qualifier is still untested for
-  nested folders and D2-reparented grouping (T11), and no owning LLD records either rule yet.
+  nested folders and D2-reparented grouping (T11). Both rules are recorded in the owning LLDs
+  (`scene-authoring-model.md` §6, `scene-explorer.md` §7) as of 2026-10-04.
 - D6 → **keep migration + fallback + persist/seed default**. Migration/fallback kept and the
   premature `ActiveScene` write removed (C31 partial); **seed-on-creation is unimplemented**
   (`ProjectCreationService.cs` has no `DefaultSceneId`).
@@ -1011,16 +1030,36 @@ Generic tree
 - [ ] T11 — D5's layout-only qualifier is untested beyond the flat root-folder case: folder Delete
       inside a nested folder, and inside a folder whose grouping followed a D2 reparent, must both
       promote entries without deleting nodes and without changing `SceneNode.Parent` or world pose.
+- [ ] T12 — prove command-driven mutations reach the demand service's observers: add/remove a node,
+      child or component through the owning command and assert `RefreshReferenceObservers` re-subscribes
+      the new collection graph and obsolete demands are invalidated, with no stale demand surviving a
+      rename or reparent. Replaces the `AuthoringChanged` "integration note" that P6 retired.
 
 #### Progress-note corrections (reconcile §6 with the above)
 
-- [ ] P1 — `plan:639` "SE-01 complete" → in-progress until C32–C36/T9/T10 close.
-- [ ] P2 — `plan:738` "atomic graph+layout commit" → until C8–C10 close.
-- [ ] P3 — `plan:743` "single-loaded-scene policy in place" → until C28–C31 close.
-- [ ] P4 — `plan:782` "every drop intent" → until C6/C13 close.
-- [ ] P5 — `plan:807` "all ten steps implemented" → corrected (this checklist).
-- [ ] P6 — restate legacy `AuthoringChanged` note: demand service also observes collections
-      (`SceneContentDemandService.References.cs:24,59`); add command-driven observer regressions.
+- [x] P1 — §6 closure statement rewritten as an in-progress status naming C32/C34/C35/C38 and
+      T9/T10. (C33/C36 had already closed, so the original "until C32–C36" range was too wide.)
+- [x] P2 — condition met (C8/C9/C10 closed); the §6 atomic graph+layout claim is kept and cited.
+- [x] P3 — §6 claim downgraded to "partly in place", naming C30 (no guard/stage/retire) and C31 (no
+      creation seed) as the substance still owed.
+- [x] P4 — condition met (C6/C13 closed); the §6 "every drop intent" claim is kept and cited to
+      `SceneExplorerDropTests` and the D1 default.
+- [x] P5 — the stale "all ten steps implemented" claim was not §6's evidence paragraph (which already
+      carried the adversarial-review correction) but the **SE-01/SE-02 status-table rows**; SE-01 is
+      now `in_progress` and SE-02's cell lists what is closed with evidence against what remains.
+- [x] P6 — restated in §6 against the observed mechanism: `SceneContentDemandService` subscribes
+      `RootNodes`/`Children`/`Components`/`OverrideSlots` and routes `CollectionChanged` to
+      `RefreshReferenceObservers`, so no `AuthoringChanged` signal is missing; the unproven part is
+      that command-driven mutations reach it, moved to T12 instead of staying an SE-03 note.
+- [ ] P7 — `documents-and-commands.md:179-184` names five operations that do not exist in
+      `ISceneDocumentCommandService` (`DeleteNodeHierarchyAsync`, `DeleteExplorerFolderAsync`,
+      `CreateExplorerFolderAsync`, `RenameExplorerFolderAsync`, `MoveExplorerLayoutItemAsync`; grep
+      across `src` returns zero hits, and `ReparentNodeAsync` is really `ReparentNodesAsync`). This is
+      **not** a rename-the-doc task: read what §8 intends to pin down, judge whether the implemented
+      surface (identity-based commands, whole-batch prevalidation, one undo step, grouping-only folder
+      moves vs lineage-driven reparent) is the right model for a game-engine editor, then update the
+      doc to match only where the code is deemed good enough — where it is not, the code is the defect
+      and needs its own owner decision or C-item.
 
 ### SE-03 — Showcase UI, workspace protection and live integration
 
@@ -1182,11 +1221,11 @@ CMake target or run a whole engine build from this managed checklist. Record
 native dependency/build/test ownership before implementation and keep SE-03's
 native acceptance blocked until the required API and observed behavior exist.
 
-| ID    | State                   | Next action                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Responsible role                       |
-| ----- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| SE-01 | validated               | Await user demo acceptance.                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Implementer + user                     |
-| SE-02 | landed_needs_validation | All ten steps implemented: identity-based hierarchy commands + preserve-world reparent; stable node/folder index + command-first create/delete/move; DefaultSceneId; clipboard (deep-copy paste/cut) + selection context + search; folder reparent/sibling reorder/copy-drop; typed command availability + context-menu shape/adapter; projection collaborator split. Awaiting user review; one integration note (AuthoringChanged reference-observer refresh) deferred to SE-03. | Implementer                            |
-| SE-03 | planned                 | Connect target UI, workspace state and supported native mask/picking; qualify workflows.                                                                                                                                                                                                                                                                                                                                                                                          | Implementer + runtime owner + reviewer |
+| ID    | State                   | Next action                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Responsible role                       |
+| ----- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| SE-01 | in_progress             | Close C32/C34/C35/C38 and T9/T10, then seek demo acceptance (P1).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Implementer + user                     |
+| SE-02 | landed_needs_validation | Corrected per P5: the steps landed, the slice is not validated. Closed with evidence 2026-10-04: transforms/reparent, atomicity (C8-C10), clipboard (C11-C15), selection-adjacent drop routing (C6/C13), search and layout domain (C24-C27, T6) — 277/277 unit tests. Still open: selection C16-C19 and context menu C20-C23 (gated on D3), scene replacement C30, creation seed C31, reconcile-during-search C37, gaps T4/T5/T7/T8/T12, approvals D3-D8. The `AuthoringChanged` item is not deferred to SE-03 — see the P6 restatement in §6 and T12. | Implementer                            |
+| SE-03 | planned                 | Connect target UI, workspace state and supported native mask/picking; qualify workflows.                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Implementer + runtime owner + reviewer |
 
 Use `in_progress`, `landed_needs_validation`, `blocked`, `validated` accurately.
 Document contract decisions and named dependencies next to the slice, not as a
