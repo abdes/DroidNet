@@ -362,6 +362,16 @@ public partial class DynamicTree : Control
                 }
 
                 return false;
+
+            case VirtualKey.Escape:
+                if (this.TryHandleTypeAhead(VirtualKey.Escape))
+                {
+                    return true;
+                }
+
+                // No typeahead to clear: cancel an active cut/clipboard staging.
+                await this.ViewModel.ClearClipboardAsync().ConfigureAwait(true);
+                return true;
         }
 
         return !isControlDown && this.TryHandleTypeAhead(key);
