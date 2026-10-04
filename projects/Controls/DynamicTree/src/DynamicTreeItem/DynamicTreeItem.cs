@@ -293,6 +293,7 @@ public partial class DynamicTreeItem : ContentControl
 
     private long ancestorTreeThumbnailTemplateSelectorChangeCallbackToken;
     private long ancestorTreeTrailingContentTemplateSelectorChangeCallbackToken;
+    private long ancestorTreeTrailingContentTemplateChangeCallbackToken;
     private long ancestorTreeTrailingContentWidthChangeCallbackToken;
     private Expander? expander;
     private ColumnDefinition? trailingContentColumn;
@@ -344,6 +345,7 @@ public partial class DynamicTreeItem : ContentControl
     /// </summary>
     internal void OnElementPrepared()
     {
+        this.UpdateAncestorReference();
         if (this.GetTemplateChild(ThumbnailPresenterPart) is ContentPresenter { Content: Thumbnail thumbnail })
         {
             thumbnail.ContentTemplate = thumbnail.ContentTemplateSelector?.SelectTemplate(thumbnail.Content);
@@ -586,6 +588,9 @@ public partial class DynamicTreeItem : ContentControl
             DynamicTree.TrailingContentTemplateSelectorProperty,
             this.ancestorTreeTrailingContentTemplateSelectorChangeCallbackToken);
         this.treeControl?.UnregisterPropertyChangedCallback(
+            DynamicTree.TrailingContentTemplateProperty,
+            this.ancestorTreeTrailingContentTemplateChangeCallbackToken);
+        this.treeControl?.UnregisterPropertyChangedCallback(
             DynamicTree.TrailingContentWidthProperty,
             this.ancestorTreeTrailingContentWidthChangeCallbackToken);
 
@@ -603,7 +608,7 @@ public partial class DynamicTreeItem : ContentControl
         // tree control
         this.OnThumbnailTemplateSelectorChanged();
         this.OnTrailingContentTemplateSelectorChanged();
-        this.TrailingContentWidth = this.treeControl.TrailingContentTemplateSelector is null
+        this.TrailingContentWidth = this.treeControl.TrailingContentTemplate is null && this.treeControl.TrailingContentTemplateSelector is null
             ? 0
             : this.treeControl.TrailingContentWidth;
 
@@ -613,14 +618,23 @@ public partial class DynamicTreeItem : ContentControl
             = this.treeControl.RegisterPropertyChangedCallback(
                 DynamicTree.ThumbnailTemplateSelectorProperty,
                 (_, _) => this.OnThumbnailTemplateSelectorChanged());
+        this.RegisterTrailingContentCallbacks(this.treeControl);
+    }
+
+    private void RegisterTrailingContentCallbacks(DynamicTree owner)
+    {
         this.ancestorTreeTrailingContentTemplateSelectorChangeCallbackToken
-            = this.treeControl.RegisterPropertyChangedCallback(
+            = owner.RegisterPropertyChangedCallback(
                 DynamicTree.TrailingContentTemplateSelectorProperty,
                 (_, _) => this.OnTrailingContentTemplateSelectorChanged());
+        this.ancestorTreeTrailingContentTemplateChangeCallbackToken
+            = owner.RegisterPropertyChangedCallback(
+                DynamicTree.TrailingContentTemplateProperty,
+                (_, _) => this.OnTrailingContentTemplateSelectorChanged());
         this.ancestorTreeTrailingContentWidthChangeCallbackToken
-            = this.treeControl.RegisterPropertyChangedCallback(
+            = owner.RegisterPropertyChangedCallback(
                 DynamicTree.TrailingContentWidthProperty,
-                (_, _) => this.TrailingContentWidth = this.treeControl?.TrailingContentTemplateSelector is null
+                (_, _) => this.TrailingContentWidth = this.treeControl?.TrailingContentTemplate is null && this.treeControl?.TrailingContentTemplateSelector is null
                     ? 0
                     : this.treeControl.TrailingContentWidth);
     }
@@ -640,5 +654,5 @@ public partial class DynamicTreeItem : ContentControl
     }
 
     private void OnTrailingContentTemplateSelectorChanged()
-        => this.UpdateTrailingContentTemplate(this.treeControl?.TrailingContentTemplateSelector, this.ItemAdapter);
+        => this.UpdateTrailingContentTemplate(this.treeControl?.TrailingContentTemplateSelector, this.ItemAdapter, this.treeControl?.TrailingContentTemplate);
 }

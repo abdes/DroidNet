@@ -4,6 +4,7 @@
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 
 namespace DroidNet.Controls;
@@ -11,12 +12,12 @@ namespace DroidNet.Controls;
 /// <summary>Consumer-owned trailing presentation and gesture isolation for tree rows.</summary>
 public partial class DynamicTreeItem
 {
-    /// <summary>Gets a value indicating whether gets whether an interactive trailing-content pointer gesture is in progress.</summary>
+    /// <summary>Gets a value indicating whether an interactive trailing-content pointer gesture is in progress.</summary>
     internal bool IsInteractiveActionInProgress => this.isInteractivePointerActive;
 
-    /// <summary>Checks whether an event source belongs to the consumer's trailing content.</summary>
+    /// <summary>Checks whether an event source belongs to an interactive control in the consumer's trailing content.</summary>
     /// <param name="element">The input event source.</param>
-    /// <returns>True for elements within the trailing presenter.</returns>
+    /// <returns>True for enabled buttons or focusable controls and their descendants within the trailing presenter.</returns>
     internal bool IsInteractiveContentElement(DependencyObject? element)
     {
         if (this.GetTemplateChild(TrailingContentPresenterPart) is not DependencyObject trailingContent)
@@ -24,12 +25,15 @@ public partial class DynamicTreeItem
             return false;
         }
 
+        var isInteractive = false;
         for (var current = element; current is not null; current = VisualTreeHelper.GetParent(current))
         {
             if (ReferenceEquals(current, trailingContent))
             {
-                return true;
+                return isInteractive;
             }
+
+            isInteractive |= current is Control { IsEnabled: true, IsTabStop: true } or ButtonBase { IsEnabled: true };
         }
 
         return false;
@@ -38,10 +42,11 @@ public partial class DynamicTreeItem
     /// <summary>Applies the consumer-selected template to a realized logical item.</summary>
     /// <param name="selector">The consumer template selector.</param>
     /// <param name="item">The logical row identity, or null during recycling.</param>
-    internal void UpdateTrailingContentTemplate(DataTemplateSelector? selector, ITreeItem? item)
+    /// <param name="template">A uniform template that takes precedence over the selector.</param>
+    internal void UpdateTrailingContentTemplate(DataTemplateSelector? selector, ITreeItem? item, DataTemplate? template = null)
     {
         this.TrailingContent = item;
-        this.TrailingContentTemplate = item is null ? null : selector?.SelectTemplate(item, this);
+        this.TrailingContentTemplate = item is null ? null : template ?? selector?.SelectTemplate(item, this);
         this.UpdateTrailingContentPresenter();
     }
 

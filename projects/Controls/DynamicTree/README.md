@@ -198,12 +198,15 @@ The default item row measures content with a compact minimum height, allowing
 larger text or consumer-owned trailing content to grow the row. Set
 `DynamicTree.TrailingContentTemplateSelector` to a normal WinUI
 `DataTemplateSelector`; it receives the `ITreeItem` and supplies the trailing
-content template. Set `TrailingContentWidth` to a shared DIP width when sibling
-actions need alignment. A null selector collapses the slot and reserves no width;
-with a selector, its shared width can align rows whose selected template is empty.
-At width zero the column is content-measured. The control does not select or drag
-the row when trailing content is used, and keyboard navigation does not consume
-keys from that content.
+content template. For uniform content, set `TrailingContentTemplate` directly;
+it takes precedence over the selector and binds to the row's `ITreeItem`.
+Set `TrailingContentWidth` to a shared DIP width when sibling actions need
+alignment. With neither template nor selector, the slot reserves no width.
+With either configured, a positive width reserves the same space even when a
+selector returns no template. At width zero empty slots collapse and populated
+slots are content-measured. Interactive trailing controls do not select or drag
+the row, and keyboard navigation does not consume their keys. Plain status text
+and icons retain normal row input behavior.
 
 Applications that commit rename through a document/service override
 `DynamicTreeViewModel.CommitRenameAsync`. The row retains the draft until the
@@ -228,6 +231,58 @@ Consumers can tune row presentation without replacing the item template using
 `ItemRowHeight`, `ItemFontSize`, `ItemIconSize`, `ItemIconMargin`, and
 `ItemIndentWidth`. These are presentation properties only; the row height is a
 minimum so consumer templates can request more room when needed.
+
+### Trailing-content examples
+
+A single accessible action needs no selector class:
+
+```xml
+<dnc:DynamicTree TrailingContentWidth="56">
+    <dnc:DynamicTree.TrailingContentTemplate>
+        <DataTemplate>
+            <Button Content="…" Command="{Binding MoreCommand}"
+                    AutomationProperties.Name="More actions" />
+        </DataTemplate>
+    </dnc:DynamicTree.TrailingContentTemplate>
+</dnc:DynamicTree>
+```
+
+For multiple actions, compose fixed-width cells inside the template. Use the
+same column widths on every row; hide their children, not the columns, to avoid
+movement when actions are revealed:
+
+```xml
+<Grid>
+    <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="32" />
+        <ColumnDefinition Width="32" />
+    </Grid.ColumnDefinitions>
+    <Button Command="{Binding LockCommand}" Content="L"
+            AutomationProperties.Name="Lock or unlock item" />
+    <Button Grid.Column="1" Command="{Binding VisibilityCommand}" Content="V"
+            AutomationProperties.Name="Show or hide item" />
+</Grid>
+```
+
+A noninteractive label can share that same layout with an action:
+
+```xml
+<Grid>
+    <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="80" />
+        <ColumnDefinition Width="32" />
+    </Grid.ColumnDefinitions>
+    <TextBlock Text="{Binding Status}" VerticalAlignment="Center" />
+    <Button Grid.Column="1" Content="…" Command="{Binding MoreCommand}"
+            AutomationProperties.Name="More actions" />
+</Grid>
+```
+
+Commands, state, hover policy, and accessibility names belong to the application.
+The demo's `EntityRowActions` demonstrates hover-only lock/visibility buttons and
+a document icon for loaded content. Its three fixed-width cells remain aligned
+across tree depths and when content is hidden. Demo content residency is metadata,
+not the adapter's lazy-child loading state.
 
 ## Thumbnail Template Selector
 

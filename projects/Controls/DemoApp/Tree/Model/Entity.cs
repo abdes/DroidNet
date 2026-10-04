@@ -15,6 +15,12 @@ internal sealed class Entity(string name) : NamedItem(name)
     /// </summary>
     public IList<Entity> Entities { get; init; } = [];
 
+    /// <summary>Gets or sets whether the demo entity is visible.</summary>
+    public bool IsVisible { get; set; } = true;
+
+    /// <summary>Gets or sets whether the demo entity's content is loaded.</summary>
+    public bool IsLoaded { get; set; } = true;
+
     /// <summary>
     /// Gets the light component attached to this entity, if any.
     /// </summary>
@@ -58,5 +64,7 @@ internal sealed class Entity(string name) : NamedItem(name)
             Light = this.Light is null ? null : new LightComponent(),
             Camera = this.Camera is null ? null : new CameraComponent(),
             Geometry = this.Geometry is null ? null : new GeometryComponent(),
+            IsVisible = this.IsVisible,
+            IsLoaded = this.IsLoaded,
         };
 }

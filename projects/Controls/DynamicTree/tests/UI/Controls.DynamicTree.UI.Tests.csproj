@@ -21,4 +21,13 @@
         <PackageReference Include="Moq" />
     </ItemGroup>
 
+    <!-- Run the actual demo row composition in the shared WinUI test host. -->
+    <ItemGroup>
+        <Compile Include="$(ProjectsRoot)\Controls\DemoApp\Tree\Model\*.cs" Exclude="$(ProjectsRoot)\Controls\DemoApp\Tree\Model\Scene.cs" Link="Demo\Model\%(Filename)%(Extension)" />
+        <Compile Include="$(ProjectsRoot)\Controls\DemoApp\Tree\EntityAdapter.cs" Link="Demo\EntityAdapter.cs" />
+        <Compile Include="$(ProjectsRoot)\Controls\DemoApp\Tree\LockStateTo*Converter.cs" Link="Demo\%(Filename)%(Extension)" />
+        <Compile Include="$(ProjectsRoot)\Controls\DemoApp\Tree\EntityRowActions.xaml.cs" Link="Demo\EntityRowActions.xaml.cs" />
+        <Page Include="$(ProjectsRoot)\Controls\DemoApp\Tree\EntityRowActions.xaml" Link="Demo\EntityRowActions.xaml" />
+    </ItemGroup>
+
 </Project>

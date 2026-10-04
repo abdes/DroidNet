@@ -456,6 +456,48 @@ public partial class DynamicTree : Control
             : position.Y > height - band ? DropZone.After : DropZone.Inside;
     }
 
+    private static DynamicTreeItem? FindTreeItemAncestor(DependencyObject? element)
+    {
+        for (var current = element; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is DynamicTreeItem item)
+            {
+                return item;
+            }
+        }
+
+        return null;
+    }
+
+    private static async Task<TreeDropResult> ProcessDropAsync(DynamicTreeViewModel owner, IReadOnlyList<ITreeItem> sources, ITreeItem target, DropZone zone, bool isCopy)
+    {
+        var parent = target;
+        var insertIndex = target.ChildrenCount;
+        if (zone != DropZone.Inside)
+        {
+            if (target.Parent is not { } targetParent)
+            {
+                return TreeDropResult.Rejected;
+            }
+
+            parent = targetParent;
+            var children = await parent.Children.ConfigureAwait(true);
+            insertIndex = children.IndexOf(target);
+            if (insertIndex < 0)
+            {
+                return TreeDropResult.Rejected;
+            }
+
+            if (zone == DropZone.After)
+            {
+                insertIndex++;
+            }
+        }
+
+        return await owner.CommitDropAsync(
+            new TreeDropRequest(sources, parent, insertIndex, isCopy ? TreeDropOperation.Copy : TreeDropOperation.Move)).ConfigureAwait(true);
+    }
+
     private void UpdateThumbnailTemplateForRealizedItems()
     {
         if (this.itemsRepeater?.ItemsSourceView is not { } itemsSourceView)
@@ -485,8 +527,8 @@ public partial class DynamicTree : Control
             if (this.itemsRepeater.TryGetElement(index) is FrameworkElement element
                 && element.FindName(TreeItemPart) is DynamicTreeItem item)
             {
-                item.UpdateTrailingContentTemplate(this.TrailingContentTemplateSelector, item.ItemAdapter);
-                item.UpdateTrailingContentWidth(this.TrailingContentTemplateSelector is null ? 0 : this.TrailingContentWidth);
+                item.UpdateTrailingContentTemplate(this.TrailingContentTemplateSelector, item.ItemAdapter, this.TrailingContentTemplate);
+                item.UpdateTrailingContentWidth(this.TrailingContentTemplate is null && this.TrailingContentTemplateSelector is null ? 0 : this.TrailingContentWidth);
             }
         }
     }
@@ -503,7 +545,7 @@ public partial class DynamicTree : Control
             if (this.itemsRepeater.TryGetElement(index) is FrameworkElement element
                 && element.FindName(TreeItemPart) is DynamicTreeItem item)
             {
-                item.UpdateTrailingContentWidth(this.TrailingContentTemplateSelector is null ? 0 : width);
+                item.UpdateTrailingContentWidth(this.TrailingContentTemplate is null && this.TrailingContentTemplateSelector is null ? 0 : width);
             }
         }
     }
@@ -589,7 +631,7 @@ public partial class DynamicTree : Control
     private void ItemsRepeater_OnKeyDown(object sender, KeyRoutedEventArgs args)
     {
         this.LogKeyDown(args.Key);
-        if (this.FindTreeItemAncestor(args.OriginalSource as DependencyObject) is { } row
+        if (FindTreeItemAncestor(args.OriginalSource as DependencyObject) is { } row
             && row.IsInteractiveContentElement(args.OriginalSource as DependencyObject))
         {
             return;
@@ -922,8 +964,8 @@ public partial class DynamicTree : Control
         }
 
         treeItemPart.OnElementPrepared();
-        treeItemPart.UpdateTrailingContentTemplate(this.TrailingContentTemplateSelector, treeItemPart.ItemAdapter);
-        treeItemPart.UpdateTrailingContentWidth(this.TrailingContentTemplateSelector is null ? 0 : this.TrailingContentWidth);
+        treeItemPart.UpdateTrailingContentTemplate(this.TrailingContentTemplateSelector, treeItemPart.ItemAdapter, this.TrailingContentTemplate);
+        treeItemPart.UpdateTrailingContentWidth(this.TrailingContentTemplate is null && this.TrailingContentTemplateSelector is null ? 0 : this.TrailingContentWidth);
         treeItemPart.ItemRowHeight = this.ItemRowHeight;
         treeItemPart.ItemFontSize = this.ItemFontSize;
         treeItemPart.ItemIconSize = this.ItemIconSize;
@@ -1048,7 +1090,7 @@ public partial class DynamicTree : Control
         }
 
         this.LogPointerPressed(element, args);
-        if (this.FindTreeItemAncestor(args.OriginalSource as DependencyObject) is { } row
+        if (FindTreeItemAncestor(args.OriginalSource as DependencyObject) is { } row
             && row.IsInteractiveContentElement(args.OriginalSource as DependencyObject))
         {
             return;
@@ -1097,7 +1139,7 @@ public partial class DynamicTree : Control
             return;
         }
 
-        if (this.FindTreeItemAncestor(args.OriginalSource as DependencyObject) is { } row
+        if (FindTreeItemAncestor(args.OriginalSource as DependencyObject) is { } row
             && row.IsInteractiveContentElement(args.OriginalSource as DependencyObject))
         {
             return;
@@ -1147,7 +1189,7 @@ public partial class DynamicTree : Control
     // ReSharper disable once MemberCanBeMadeStatic.Local
     private void TreeItem_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
     {
-        if (this.FindTreeItemAncestor(args.OriginalSource as DependencyObject) is { } row
+        if (FindTreeItemAncestor(args.OriginalSource as DependencyObject) is { } row
             && row.IsInteractiveContentElement(args.OriginalSource as DependencyObject))
         {
             return;
@@ -1169,7 +1211,7 @@ public partial class DynamicTree : Control
             return;
         }
 
-        if (this.FindTreeItemAncestor(sender as DependencyObject) is { IsInteractiveActionInProgress: true })
+        if (FindTreeItemAncestor(sender as DependencyObject) is { IsInteractiveActionInProgress: true })
         {
             args.Cancel = true;
             return;
@@ -1260,7 +1302,7 @@ public partial class DynamicTree : Control
         var sources = this.draggedItems.ToArray();
         try
         {
-            var result = await this.ProcessDropAsync(owner, sources, target, zone, isCopy).ConfigureAwait(true);
+            var result = await ProcessDropAsync(owner, sources, target, zone, isCopy).ConfigureAwait(true);
             if (result.Succeeded && ReferenceEquals(this.ViewModel, owner) && result.Items.Count > 0 && result.Items[0] is { } first)
             {
                 _ = owner.FocusItem(first, RequestOrigin.PointerInput);
@@ -1293,19 +1335,6 @@ public partial class DynamicTree : Control
 
         this.CancelHoverExpand();
         this.ClearDropIndicatorVisual();
-    }
-
-    private DynamicTreeItem? FindTreeItemAncestor(DependencyObject? element)
-    {
-        for (var current = element; current is not null; current = VisualTreeHelper.GetParent(current))
-        {
-            if (current is DynamicTreeItem item)
-            {
-                return item;
-            }
-        }
-
-        return null;
     }
 
     private async void OnExpandTreeItem(object? sender, DynamicTreeEventArgs args)
@@ -1432,36 +1461,6 @@ public partial class DynamicTree : Control
     private bool IsCopyIntentCurrent() => IsControlKeyDown() || this.dragIsCopy;
 
     private bool CanCopyDraggedItems() => this.draggedItems is { Count: > 0 } && this.draggedItems.TrueForAll(item => item is ICanBeCloned);
-
-    private async Task<TreeDropResult> ProcessDropAsync(DynamicTreeViewModel owner, IReadOnlyList<ITreeItem> sources, ITreeItem target, DropZone zone, bool isCopy)
-    {
-        var parent = target;
-        var insertIndex = target.ChildrenCount;
-
-        if (zone != DropZone.Inside)
-        {
-            if (target.Parent is not { } targetParent)
-            {
-                return TreeDropResult.Rejected;
-            }
-
-            parent = targetParent;
-            var children = await parent.Children.ConfigureAwait(true);
-            insertIndex = children.IndexOf(target);
-            if (insertIndex < 0)
-            {
-                return TreeDropResult.Rejected;
-            }
-
-            if (zone == DropZone.After)
-            {
-                insertIndex++;
-            }
-        }
-
-        return await owner.CommitDropAsync(
-            new TreeDropRequest(sources, parent, insertIndex, isCopy ? TreeDropOperation.Copy : TreeDropOperation.Move)).ConfigureAwait(true);
-    }
 
     private void ScheduleHoverExpand(ITreeItem target)
     {

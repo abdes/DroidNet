@@ -21,6 +21,13 @@ public partial class DynamicTree
         typeof(DynamicTree),
         new PropertyMetadata(defaultValue: null, (d, _) => ((DynamicTree)d).UpdateThumbnailTemplateForRealizedItems()));
 
+    /// <summary>Identifies the uniform trailing-content template.</summary>
+    public static readonly DependencyProperty TrailingContentTemplateProperty = DependencyProperty.Register(
+        nameof(TrailingContentTemplate),
+        typeof(DataTemplate),
+        typeof(DynamicTree),
+        new PropertyMetadata(defaultValue: null, (d, _) => ((DynamicTree)d).UpdateTrailingContentForRealizedItems()));
+
     /// <summary>Identifies the item-specific trailing-content template selector.</summary>
     public static readonly DependencyProperty TrailingContentTemplateSelectorProperty = DependencyProperty.Register(
         nameof(TrailingContentTemplateSelector),
@@ -120,11 +127,19 @@ public partial class DynamicTree
     }
 
     /// <summary>Gets or sets the selector for optional generic content displayed after each item label.</summary>
-    /// <remarks>A null selector leaves the trailing slot empty and consumes no width.</remarks>
+    /// <remarks>Used only when <see cref="TrailingContentTemplate"/> is null; a null selector disables the fallback.</remarks>
     public DataTemplateSelector? TrailingContentTemplateSelector
     {
         get => (DataTemplateSelector?)this.GetValue(TrailingContentTemplateSelectorProperty);
         set => this.SetValue(TrailingContentTemplateSelectorProperty, value);
+    }
+
+    /// <summary>Gets or sets one trailing-content template used for every row.</summary>
+    /// <remarks>This template takes precedence over <see cref="TrailingContentTemplateSelector"/>. Its data context is the row's logical item.</remarks>
+    public DataTemplate? TrailingContentTemplate
+    {
+        get => (DataTemplate?)this.GetValue(TrailingContentTemplateProperty);
+        set => this.SetValue(TrailingContentTemplateProperty, value);
     }
 
     /// <summary>Gets or sets the optional aligned width, in DIPs, of the trailing-content column.</summary>

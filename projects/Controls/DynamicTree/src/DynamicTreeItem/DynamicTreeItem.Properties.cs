@@ -152,6 +152,7 @@ public partial class DynamicTreeItem
     /// </remarks>
     protected virtual void OnItemAdapterChanged(ITreeItem? oldItem, ITreeItem? newItem)
     {
+        this.UpdateAncestorReference();
         if (this.itemNameTextBox?.Visibility == Visibility.Visible)
         {
             this.CancelRename();

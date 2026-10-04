@@ -1,10 +1,10 @@
 # Scene Explorer and generic DynamicTree design implementation
 
-Status: `planned`
+Status: `in_progress` — SE-01 validated; SE-02 and SE-03 planned.
 
-| Outcome                                                                                                                       | Remaining                                                                             | Evidence                                                                                                                                                                                                                                                                                          |
-| ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A three-slice implementation plan targeting the design brief and interactive showcase, not the current Explorer's appearance. | SE-01 through SE-03; required contract alignment and runtime capability verification. | Source review of SceneExplorer, DynamicTree, selection/command/settings owners and representative tests. The local brief's Scene Explorer chapter and showcase search/parent-hide interactions were inspected. No implementation, builds, native UI checks or performance measurements performed. |
+| Outcome                                                                                              | Remaining                                                                | Evidence                                                                                                                                                                                                                   |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SE-01 generic tree capabilities and the single-scene DemoApp showcase are implemented and validated. | User demo acceptance; SE-02/03 editor authoring and runtime integration. | Final source review; 151 model and 89 UI tests passed; scoped builds and changed-file hooks passed. Live demo checks cover native compact/comfortable filtering, aligned hover actions, loaded status and copy/paste/undo. |
 
 ## 1. Goal, scope and design authority
 
@@ -633,8 +633,19 @@ selection/filter/focus/clipboard/mutation paths, public events/contracts;
 interactive trailing slots, default no-slot layout, enlarged text, Light/Dark/
 contrast semantics, rename accept/reject/cancel/stale completion, drop cues and
 batch order, filtered range/index correctness, focus and recycled rows. Controls
-DemoApp consumes the hooks with non-scene data/actions. DynamicTree has no Oxygen
+DemoApp consumes the hooks with non-Oxygen data/actions. DynamicTree has no Oxygen
 reference and no alternate application-specific tree implementation.
+
+**Closure (2026-10-04):** SE-01 implementation is complete. The direct trailing
+template takes precedence over selectors; fixed-width empty slots and recycled
+content are covered. Demo-owned lock/visibility hover commands and loaded-status
+cells remain aligned across depths and densities. Final review corrected passive
+status content intercepting row input and made hover subscriptions idempotent.
+The UI project builds without warnings with analyzers enabled; 151 model and
+89 UI tests pass. User demo acceptance remains pending. Exhaustive
+contrast/DPI/text-scaling and workload qualification was not rerun in this
+closeout; editor/runtime qualification remains part of SE-03. No engine build
+or production editor integration is claimed.
 
 ### SE-02 — Scene Explorer domain projection and atomic authoring
 
@@ -877,11 +888,11 @@ CMake target or run a whole engine build from this managed checklist. Record
 native dependency/build/test ownership before implementation and keep SE-03's
 native acceptance blocked until the required API and observed behavior exist.
 
-| ID    | State   | Next action                                                                               | Responsible role                       |
-| ----- | ------- | ----------------------------------------------------------------------------------------- | -------------------------------------- |
-| SE-01 | planned | Align changed contracts, implement and test generic row/request/interaction capabilities. | Implementer + reviewer                 |
-| SE-02 | planned | Implement atomic authoring/projection/selection/search integration.                       | Implementer                            |
-| SE-03 | planned | Connect target UI, workspace state and supported native mask/picking; qualify workflows.  | Implementer + runtime owner + reviewer |
+| ID    | State     | Next action                                                                              | Responsible role                       |
+| ----- | --------- | ---------------------------------------------------------------------------------------- | -------------------------------------- |
+| SE-01 | validated | Await user demo acceptance.                                                              | Implementer + user                     |
+| SE-02 | planned   | Implement atomic authoring/projection/selection/search integration.                      | Implementer                            |
+| SE-03 | planned   | Connect target UI, workspace state and supported native mask/picking; qualify workflows. | Implementer + runtime owner + reviewer |
 
 Use `in_progress`, `landed_needs_validation`, `blocked`, `validated` accurately.
 Document contract decisions and named dependencies next to the slice, not as a

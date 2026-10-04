@@ -26,6 +26,7 @@ public sealed partial class DynamicTreeDemoView
     public DynamicTreeDemoView()
     {
         this.InitializeComponent();
+        this.SceneTree.TrailingContentTemplate = (DataTemplate)this.Resources["TreeEntityActionTemplate"];
         this.Unloaded += this.DynamicTreeDemoView_Unloaded;
     }
 
@@ -79,15 +80,6 @@ public sealed partial class DynamicTreeDemoView
         else
         {
             menu.ShowAt(args.Anchor);
-        }
-    }
-
-    private void EntityLockButton_OnClick(object sender, RoutedEventArgs args)
-    {
-        _ = args;
-        if (sender is Button { DataContext: ITreeItem item })
-        {
-            item.IsLocked = !item.IsLocked;
         }
     }
 

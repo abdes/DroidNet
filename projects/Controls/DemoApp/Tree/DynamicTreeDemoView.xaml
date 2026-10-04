@@ -22,34 +22,9 @@
             </ResourceDictionary.MergedDictionaries>
             <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
             <ctkConverters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
-            <local:LockStateToGlyphConverter x:Key="LockStateToGlyphConverter" />
-            <local:LockStateToActionConverter x:Key="LockStateToActionConverter" />
-
-            <DataTemplate x:Key="TreeEntityActionTemplate" x:DataType="dnc:TreeItemAdapter">
-                <Button
-                    Width="40"
-                    MinWidth="40"
-                    MinHeight="24"
-                    Margin="0,2"
-                    Padding="0"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    HorizontalContentAlignment="Center"
-                    VerticalContentAlignment="Center"
-                    AutomationProperties.Name="{x:Bind IsLocked, Mode=OneWay, Converter={StaticResource LockStateToActionConverter}}"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    CanDrag="False"
-                    Click="EntityLockButton_OnClick">
-                    <FontIcon
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        FontFamily="Segoe Fluent Icons"
-                        FontSize="16"
-                        Glyph="{x:Bind IsLocked, Mode=OneWay, Converter={StaticResource LockStateToGlyphConverter}}" />
-                </Button>
+            <DataTemplate x:Key="TreeEntityActionTemplate">
+                <local:EntityRowActions />
             </DataTemplate>
-            <local:TreeItemTrailingContentSelector x:Key="TreeItemTrailingContentSelector" EntityActionTemplate="{StaticResource TreeEntityActionTemplate}" />
         </ResourceDictionary>
     </Page.Resources>
 
@@ -258,8 +233,7 @@
                     ItemIndentWidth="34"
                     ItemRowHeight="40"
                     ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
-                    TrailingContentTemplateSelector="{StaticResource TreeItemTrailingContentSelector}"
-                    TrailingContentWidth="64"
+                    TrailingContentWidth="120"
                     ViewModel="{x:Bind ViewModel, Mode=OneWay}">
                     <dnc:DynamicTree.FilterBarAccessoryContent>
                         <cm:MenuButton

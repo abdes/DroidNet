@@ -12,6 +12,37 @@ namespace DroidNet.Controls.Tests;
 public sealed class DemoSceneModelTests
 {
     [TestMethod]
+    [DataRow(true, true)]
+    [DataRow(false, false)]
+    public void ClonePreservesVisibilityAndLoadedStateWithoutSharingModel(bool visible, bool loaded)
+    {
+        var original = new EntityAdapter(new Entity("Entity") { IsVisible = visible, IsLoaded = loaded });
+        var clone = (EntityAdapter)original.CloneSelf();
+        _ = clone.IsVisible.Should().Be(visible);
+        _ = clone.IsLoaded.Should().Be(loaded);
+        _ = clone.LoadedGlyph.Should().Be(loaded ? "\uE8A5" : string.Empty);
+        clone.IsVisible = !visible;
+        clone.IsLoaded = !loaded;
+        _ = original.IsVisible.Should().Be(visible);
+        _ = original.IsLoaded.Should().Be(loaded);
+    }
+
+    [TestMethod]
+    public void PresentationStateNotifiesWithoutLoadingChildrenOrChangingSelection()
+    {
+        var adapter = new EntityAdapter(new Entity("Entity")) { IsSelected = true };
+        var properties = new List<string?>();
+        adapter.PropertyChanged += (_, args) => properties.Add(args.PropertyName);
+        adapter.IsVisible = false;
+        adapter.IsLoaded = false;
+        _ = properties.Should().Contain([nameof(adapter.IsVisible), nameof(adapter.VisibilityGlyph), nameof(adapter.VisibilityAction), nameof(adapter.IsLoaded), nameof(adapter.LoadedGlyph), nameof(adapter.LoadedStatus)]);
+        _ = adapter.VisibilityAction.Should().Be("Show entity");
+        _ = adapter.LoadedStatus.Should().Be("Unloaded");
+        _ = adapter.IsSelected.Should().BeTrue();
+        _ = adapter.AreChildrenLoaded.Should().BeFalse();
+    }
+
+    [TestMethod]
     public async Task ChildrenCountNotifiesAfterInsertionAndRemoval()
     {
         var parent = new EntityAdapter(new Entity("Parent"));

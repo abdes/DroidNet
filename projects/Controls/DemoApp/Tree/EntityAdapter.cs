@@ -31,6 +31,54 @@ internal sealed partial class EntityAdapter(Entity entity) : TreeItemAdapter(isR
     /// <inheritdoc/>
     public Entity AttachedObject => entity;
 
+    /// <summary>Gets or sets the demo entity's visibility independently of tree selection.</summary>
+    public bool IsVisible
+    {
+        get => entity.IsVisible;
+        set
+        {
+            if (entity.IsVisible == value)
+            {
+                return;
+            }
+
+            entity.IsVisible = value;
+            this.OnPropertyChanged();
+            this.OnPropertyChanged(nameof(this.VisibilityGlyph));
+            this.OnPropertyChanged(nameof(this.VisibilityAction));
+        }
+    }
+
+    /// <summary>Gets or sets demo content residency, independently of lazy child enumeration.</summary>
+    public bool IsLoaded
+    {
+        get => entity.IsLoaded;
+        set
+        {
+            if (entity.IsLoaded == value)
+            {
+                return;
+            }
+
+            entity.IsLoaded = value;
+            this.OnPropertyChanged();
+            this.OnPropertyChanged(nameof(this.LoadedGlyph));
+            this.OnPropertyChanged(nameof(this.LoadedStatus));
+        }
+    }
+
+    /// <summary>Gets the visible or hidden state glyph.</summary>
+    public string VisibilityGlyph => this.IsVisible ? "\uE890" : "\uED1A";
+
+    /// <summary>Gets the accessible action offered by the visibility button.</summary>
+    public string VisibilityAction => this.IsVisible ? "Hide entity" : "Show entity";
+
+    /// <summary>Gets the document glyph for loaded content, or no glyph for unloaded content.</summary>
+    public string LoadedGlyph => this.IsLoaded ? "\uE8A5" : string.Empty;
+
+    /// <summary>Gets the noninteractive content-residency description.</summary>
+    public string LoadedStatus => this.IsLoaded ? "Loaded" : "Unloaded";
+
     /// <inheritdoc/>
     public override bool ValidateItemName(string name) => name.Trim().Length != 0;
 

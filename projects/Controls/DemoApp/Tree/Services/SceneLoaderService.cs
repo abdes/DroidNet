@@ -16,7 +16,7 @@ internal static class SceneLoaderService
         Entities =
         [
             new("Key Light") { Light = new LightComponent() },
-            new("Camera") { Camera = new CameraComponent() },
+            new("Camera") { Camera = new CameraComponent(), IsLoaded = false },
             new("Environment")
             {
                 Entities =
