@@ -114,5 +114,10 @@ public sealed partial class SceneDocumentCommandService
         };
 
     private static ComponentData RemapComponentId(ComponentData data)
-        => data with { Id = Guid.NewGuid() };
+        => data switch
+        {
+            // Duplicated lights must not steal the source's Primary/Secondary atmosphere role.
+            DirectionalLightData directional => directional with { Id = Guid.NewGuid(), AtmosphereSlot = AtmosphereLightSlot.None },
+            _ => data with { Id = Guid.NewGuid() },
+        };
 }

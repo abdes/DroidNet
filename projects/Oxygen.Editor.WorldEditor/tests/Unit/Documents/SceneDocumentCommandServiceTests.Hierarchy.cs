@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer.Operations;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
@@ -302,6 +303,24 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = clone.Components.Select(component => component.Id).Should().NotIntersectWith(source.Components.Select(component => component.Id));
         _ = context.Metadata.IsDirty.Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
+    }
+
+    [TestMethod]
+    public async Task DuplicateNodesAsync_ResetsCopiedDirectionalLightAtmosphereSlot()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var source = new SceneNode(scene) { Name = "Sun" };
+        _ = source.AddComponent(new DirectionalLightComponent { Name = "Directional Light", AtmosphereSlot = AtmosphereLightSlot.Primary });
+        scene.RootNodes.Add(source);
+        var context = CreateContext(scene);
+
+        var result = await fixture.Sut.DuplicateNodesAsync(context, [source.Id], newParentNodeId: null, newParentFolderId: null).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        var clone = scene.RootNodes.Single(node => !ReferenceEquals(node, source));
+        _ = clone.Components.OfType<DirectionalLightComponent>().Single().AtmosphereSlot.Should().Be(AtmosphereLightSlot.None, "duplication must not steal the source's atmosphere role");
     }
 
     [TestMethod]
