@@ -928,7 +928,7 @@ when its code, its contract-doc recording and its regression tests are all done;
 "code landed" alone never does.
 
 Verification evidence (2026-10-04): `Oxygen.Editor.WorldEditor.Unit.Tests` full
-project green — 304 total, 304 succeeded, 0 failed, 0 skipped (272 baseline +
+project green — 313 total, 313 succeeded, 0 failed, 0 skipped (272 baseline +
 five search/layout tests with C25/C26/C27, two delete tests with C42, five
 failure-visibility tests with C40/C41/C43/D-f, twelve primitive-shape tests with
 C48), plus `Oxygen.Managed.Core.Tests` 95/95 (`traverse Invoke-Tests --start
@@ -1221,23 +1221,26 @@ shown list")` still passes; the assertion can only fire when `IndexOf`
 Command surface and result publication (found by the P7 design review, each
 re-verified)
 
-- [~] C39 — `SceneExplorerService` is a **second mutation surface with no
-  history authority** — narrowed 2026-10-04 by `e4eaf2f44`: the uncalled facade
-  (create node, create folder, move, update-moved, rename, four private helpers,
-  17 orphaned log methods) is deleted, and what survives is
-  `AddNodeAsync`/`DeleteItemsAsync`, which now leave `AuthoringChanged` with
-  **no production publisher** and still carry the D5-contradicting
-  `promoteChildrenToParent: false` branch. Left deliberately as a unit rather
-  than half-removed: retirement is tracked with its consumer repoint, not
-  patched in dead code. Original evidence: zero `AddChange`/`BeginChangeSet`
-  calls in the file, still DI-registered (`WorkspaceViewModel.cs:202`), and its
-  folder delete calls `sceneOrganizer.RemoveFolder(..., promoteChildrenToParent:
+- [x] C39 — `SceneExplorerService` was a **second mutation surface with no
+      history authority** — narrowed 2026-10-04 by `e4eaf2f44`: the uncalled facade
+      (create node, create folder, move, update-moved, rename, four private helpers,
+      17 orphaned log methods) is deleted, and what survives is
+      `AddNodeAsync`/`DeleteItemsAsync`, which now leave `AuthoringChanged` with
+      **no production publisher** and still carry the D5-contradicting
+      `promoteChildrenToParent: false` branch. Left deliberately as a unit rather
+      than half-removed: retirement is tracked with its consumer repoint, not
+      patched in dead code. Closed 2026-10-05 (`9d54484ea`): the service, its interface,
+      log helpers, event args and DI registration are deleted, the D5-violating branch
+      went with them, and `SceneSaveRevisionTests` now drives the real command service.
+      Original evidence: zero `AddChange`/`BeginChangeSet`
+      calls in the file, still DI-registered (`WorkspaceViewModel.cs:202`), and its
+      folder delete calls `sceneOrganizer.RemoveFolder(..., promoteChildrenToParent:
 false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
-  — the opposite of the D5 rule just recorded in `scene-explorer.md:105-108`.
-  Its only remaining src caller is the dead `RenameItemAsync`, but its
-  `AuthoringChanged` event is consumed by
-  `SceneContentDemandService.Lifecycle.cs:33,42`, so pruning needs that consumer
-  checked first. Doc §5:97-99 forbids this shape.
+      — the opposite of the D5 rule just recorded in `scene-explorer.md:105-108`.
+      Its only remaining src caller is the dead `RenameItemAsync`, but its
+      `AuthoringChanged` event is consumed by
+      `SceneContentDemandService.Lifecycle.cs:33,42`, so pruning needs that consumer
+      checked first. Doc §5:97-99 forbids this shape.
 - [x] C40 — duplication and paste failures publish **no operation result**.
       Closed 2026-10-05 (`ce3538328`): all eleven paths publish through
       `PublishSceneFailure` under a new `Scene.Node.Duplicate` kind,
@@ -1309,11 +1312,14 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       replay-notice site and pinned, `NodeCreate` is pinned too, the never-read
       `EditSessionToken.OperationKind` field and its plumbing are gone, and the
       three callerless transform log wrappers are deleted.
-- [ ] C51 — `CreateFolderAsync` still has the C45 shape for a stale
+- [x] C51 — `CreateFolderAsync` still had the C45 shape for a stale
       **`parentNodeId`**: `EnsureNodeInLayout` throws after the layout was
       seeded, so the rejection leaves an uncommitted, un-undoable seed behind
       while reporting `CREATE_FOLDER_FAILED`. Same fix as C45 — validate before
       seeding — found during that change and deliberately not bundled into it.
+      Closed 2026-10-05 (`8b09817c3`): the parent node is resolved before any seeding and
+      rejection publishes `STALE_TARGET`; red check observed on both the wrong code and the
+      left-behind seed.
 - [x] C48 — quick-add and `CreatePrimitiveAsync` offered only **five of the
       ten** canonical primitive shapes: `NormalizePrimitiveKind` had no arm for
       Capsule, IcoSphere, Torus, Quad or SubdividedCube, so those fell through
@@ -1446,12 +1452,15 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       cross-scope cases asserting parent identity, exact local TRS and world
       matrix unchanged before and after. All four were green on first execution
       — D5 held, so these are guards and no red state was obtainable.
-- [ ] T12 — prove command-driven mutations reach the demand service's observers:
-      add/remove a node, child or component through the owning command and
-      assert `RefreshReferenceObservers` re-subscribes the new collection graph
-      and obsolete demands are invalidated, with no stale demand surviving a
-      rename or reparent. Replaces the `AuthoringChanged` "integration note"
-      that P6 retired.
+- [~] T12 — prove command-driven mutations reach the demand service's observers:
+  add/remove a node, child or component through the owning command and
+  assert `RefreshReferenceObservers` re-subscribes the new collection graph
+  and obsolete demands are invalidated, with no stale demand surviving a
+  rename or reparent. Replaces the `AuthoringChanged` "integration note"
+  that P6 retired. Evidence is in but not complete: 8 Unit tests prove the command path
+  mutates the observed collections and re-exposes created sources, green in `9d54484ea`
+  (313/313). Five service-level Unit.UI tests compile and still need one run in a lane
+  that may open the WinUI host.
 
 #### Progress-note corrections (reconcile §6 with the above)
 
