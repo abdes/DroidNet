@@ -7,6 +7,7 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 
 #pragma warning disable IDE0130 // Authoring commands use the established WorldEditor namespace across this assembly.
@@ -367,6 +368,20 @@ public interface ISceneDocumentCommandService
     public Task<SceneValueCommandResult<IReadOnlyList<SceneNode>>> DuplicateNodesAsync(
         SceneDocumentCommandContext context,
         IReadOnlyList<Guid> nodeIds,
+        Guid? newParentNodeId,
+        Guid? newParentFolderId,
+        Guid? insertAfterNodeId = null);
+
+    /// <summary>Deep-copies previously captured node snapshots and inserts them under a node, folder, or the scene root.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="rootData">The captured root DTOs to duplicate.</param>
+    /// <param name="newParentNodeId">The destination parent node, or <see langword="null"/> for root/folder scope.</param>
+    /// <param name="newParentFolderId">The destination folder for grouping, or <see langword="null"/> when not grouping.</param>
+    /// <param name="insertAfterNodeId">Optional sibling to insert after, instead of appending to the parent.</param>
+    /// <returns>The command result with the created node roots.</returns>
+    public Task<SceneValueCommandResult<IReadOnlyList<SceneNode>>> DuplicateNodesFromDataAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<SceneNodeData> rootData,
         Guid? newParentNodeId,
         Guid? newParentFolderId,
         Guid? insertAfterNodeId = null);

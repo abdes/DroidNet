@@ -134,6 +134,105 @@ public sealed partial class SceneDocumentCommandService
         return SceneCommandResults.Success<IReadOnlyList<SceneNode>>(created);
     }
 
+    /// <inheritdoc />
+    public async Task<SceneValueCommandResult<IReadOnlyList<SceneNode>>> DuplicateNodesFromDataAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<SceneNodeData> rootData,
+        Guid? newParentNodeId,
+        Guid? newParentFolderId,
+        Guid? insertAfterNodeId = null)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+        }
+
+        if (rootData.Count == 0)
+        {
+            return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+        }
+
+        SceneNode? parentNode = null;
+        if (newParentNodeId.HasValue)
+        {
+            parentNode = FindNode(context.Scene, newParentNodeId.Value);
+            if (parentNode is null)
+            {
+                return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+            }
+        }
+
+        Guid? folderSceneParentNodeId = null;
+        if (newParentFolderId.HasValue)
+        {
+            var (found, nodeId) = FindFolderSceneParentNodeId(context.Scene.ExplorerLayout, newParentFolderId.Value);
+            if (!found)
+            {
+                return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+            }
+
+            folderSceneParentNodeId = nodeId;
+        }
+
+        var insertIndex = -1;
+        if (insertAfterNodeId.HasValue)
+        {
+            var anchor = FindNode(context.Scene, insertAfterNodeId.Value);
+            if (anchor is null)
+            {
+                return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+            }
+
+            parentNode = anchor.Parent;
+            insertIndex = anchor.Parent is null
+                ? context.Scene.RootNodes.IndexOf(anchor) + 1
+                : anchor.Parent.Children.IndexOf(anchor) + 1;
+        }
+
+        var created = new List<SceneNode>(rootData.Count);
+        context.History.BeginChangeSet($"Duplicate {rootData.Count} node(s)");
+        try
+        {
+            foreach (var data in rootData)
+            {
+                var clone = SceneNode.CreateAndHydrate(context.Scene, RemapNodeIds(data));
+                var actualParent = parentNode ?? (folderSceneParentNodeId.HasValue ? FindNode(context.Scene, folderSceneParentNodeId.Value) : null);
+                _ = actualParent is null
+                    ? this.sceneMutator.CreateNodeAtRoot(clone, context.Scene)
+                    : this.sceneMutator.CreateNodeUnderParent(clone, actualParent, context.Scene);
+
+                if (insertIndex >= 0)
+                {
+                    MoveToIndex(actualParent is null ? context.Scene.RootNodes : actualParent.Children, clone, insertIndex);
+                    insertIndex++;
+                }
+
+                if (newParentFolderId.HasValue)
+                {
+                    EnsureExplorerLayout(context.Scene);
+                    _ = this.sceneOrganizer.MoveNodeToFolder(clone.Id, newParentFolderId.Value, context.Scene);
+                }
+
+                this.RecordCreateNodeUndo(context, clone);
+                this.PublishNodeAdded(context, clone);
+                created.Add(clone);
+            }
+        }
+        finally
+        {
+            context.History.EndChangeSet();
+        }
+
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        foreach (var clone in created)
+        {
+            await this.SyncNodeSubtreeAsync(context, clone).ConfigureAwait(true);
+        }
+
+        return SceneCommandResults.Success<IReadOnlyList<SceneNode>>(created);
+    }
+
     private async Task SyncNodeSubtreeAsync(SceneDocumentCommandContext context, SceneNode node)
     {
         await this.SyncCreateNodeAsync(context, node, node.Parent?.Id).ConfigureAwait(true);

@@ -13,6 +13,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneExplorer;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
@@ -83,7 +84,7 @@ public sealed class SceneExplorerAuthoringTests
     {
         var harness = new AuthoringHarness(out var scene, out var node);
         _ = harness.Commands
-            .Setup(value => value.DuplicateNodesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), null, null))
+            .Setup(value => value.DuplicateNodesFromDataAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<SceneNodeData>>(), null, null, null))
             .ReturnsAsync(SceneCommandResults.Success<IReadOnlyList<SceneNode>>([node]));
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
@@ -97,7 +98,7 @@ public sealed class SceneExplorerAuthoringTests
         await explorer.PasteItemsAsync(targetParent: explorer.Scene).ConfigureAwait(false);
 
         harness.Commands.Verify(
-            value => value.DuplicateNodesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), null, null),
+            value => value.DuplicateNodesFromDataAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<SceneNodeData>>(), null, null, null),
             Times.Once);
     }
 

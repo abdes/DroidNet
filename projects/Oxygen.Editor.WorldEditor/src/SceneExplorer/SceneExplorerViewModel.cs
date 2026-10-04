@@ -23,6 +23,7 @@ using Microsoft.UI;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
@@ -47,6 +48,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     // Node-clipboard state: copied node identities plus whether they were cut (moved) rather than copied.
     private readonly List<Guid> clipboardNodeIds = [];
+    private readonly List<SceneNodeData> clipboardSnapshots = [];
     private bool clipboardIsCut;
 
     // Adapters expanded by a transient search so their expansion can be restored when search clears.
@@ -486,14 +488,20 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <inheritdoc />
     public override Task CopyItemsAsync(IReadOnlyList<ITreeItem> items)
     {
-        var nodeIds = items.OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject.Id).ToList();
-        if (nodeIds.Count == 0)
+        var adapters = items.OfType<SceneNodeAdapter>().ToList();
+        if (adapters.Count == 0)
         {
             return Task.CompletedTask;
         }
 
         this.clipboardNodeIds.Clear();
-        this.clipboardNodeIds.AddRange(nodeIds);
+        this.clipboardSnapshots.Clear();
+        foreach (var adapter in adapters)
+        {
+            this.clipboardNodeIds.Add(adapter.AttachedObject.Id);
+            this.clipboardSnapshots.Add(adapter.AttachedObject.Dehydrate());
+        }
+
         this.clipboardIsCut = false;
 
         this.ClipboardItemStore = [.. items];
@@ -515,6 +523,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         this.clipboardNodeIds.Clear();
         this.clipboardNodeIds.AddRange(nodeIds);
+        this.clipboardSnapshots.Clear();
         this.clipboardIsCut = true;
 
         this.ClipboardStateStore = ClipboardState.Cut;
@@ -586,7 +595,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             }
             else
             {
-                var result = await this.commandService.DuplicateNodesAsync(context, this.clipboardNodeIds, parentNodeId, parentFolderId, insertAfterNodeId).ConfigureAwait(true);
+                var result = await this.commandService.DuplicateNodesFromDataAsync(context, this.clipboardSnapshots, parentNodeId, parentFolderId, insertAfterNodeId).ConfigureAwait(true);
                 if (!result.Succeeded)
                 {
                     return;
@@ -630,6 +639,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     protected override void OnClipboardCleared()
     {
         this.clipboardNodeIds.Clear();
+        this.clipboardSnapshots.Clear();
         this.clipboardIsCut = false;
     }
 
