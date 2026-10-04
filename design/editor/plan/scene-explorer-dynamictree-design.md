@@ -839,7 +839,7 @@ this path — that is a test gap, recorded as T12, not an integration note to ca
 Legend: `[ ]` open · `[~]` in progress · `[x]` closed. Each entry names owner + evidence.
 
 Verification evidence (2026-10-04): `Oxygen.Editor.WorldEditor.Unit.Tests` full project green —
-284 total, 284 succeeded, 0 failed, 0 skipped (272 baseline + five search/layout tests with C25/C26/C27, two delete tests with C42, five failure-visibility tests with C40/C41/C43/D-f), plus `Oxygen.Managed.Core.Tests` 95/95
+296 total, 296 succeeded, 0 failed, 0 skipped (272 baseline + five search/layout tests with C25/C26/C27, two delete tests with C42, five failure-visibility tests with C40/C41/C43/D-f, twelve primitive-shape tests with C48), plus `Oxygen.Managed.Core.Tests` 95/95
 (`traverse Invoke-Tests --start projects/Oxygen.Editor.WorldEditor/tests/Unit --configuration Debug`).
 The strict-mock helper `ConfigureHierarchySync` previously omitted the native rename and transform
 publishes added with C2/C1/C3, so four tests threw while their defects were marked closed.
@@ -1076,6 +1076,28 @@ Command surface and result publication (found by the P7 design review, each re-v
       pre-existing kind unpinned in `SceneOperationKinds_AreStableStrings` and gets pinned; and the
       callerless transform log wrappers `LogCannotUpdateTransform`/`LogUpdatedTransform`/
       `LogFailedToUpdateTransform` go the way the rename wrappers did.
+- [x] C48 — quick-add and `CreatePrimitiveAsync` offered only **five of the ten** canonical primitive
+      shapes: `NormalizePrimitiveKind` had no arm for Capsule, IcoSphere, Torus, Quad or
+      SubdividedCube, so those fell through `NotSupportedException` into a `CREATE_PRIMITIVE_FAILED`
+      result, even though the authoring model lists all ten as native-owned recipes
+      (`scene-authoring-model.md:122-126`, `property-inspector.md:121-139`), the installed SDK declares
+      all ten generators, the picker already asserted ten (`BuiltinCatalogTests.cs:56`) and a native
+      integration test already had DataRows for all ten — so authors could _assign_ those shapes and
+      could not _create_ them. Closed 2026-10-05: five switch arms (casing taken from the native
+      `kDefinitions` list, `BuiltinGeometry.cpp:32-42`, since the managed switch is case-sensitive
+      where the native resolver is not) plus five flat quick-add entries, with the "Advanced"
+      distinction left to the picker's display type rather than inventing a submenu.
+      `SceneDocumentCommandServiceTests.PrimitiveShapes.cs` pins each of the ten kinds to
+      `asset:///Engine/Generated/BasicShapes/<Kind>` by literal URI (deliberate: a builder-shared
+      assertion could not drift, this can) and pins the unknown kind to a published failure with no
+      node and an empty undo stack; `SceneEditorQuickAddMenuTests.cs` pins the menu to the ten in
+      order, which no test did before. Correcting my own framing: for primitives the docs and the
+      engine were right and the editor was behind, so this is code catching up to docs — the
+      "code is ahead, docs move" reading holds only for point/spot light _creation_; their property
+      editing genuinely does not exist (`EngineComponentId` has Directional only, no editor is
+      registered for point/spot, and `ComponentFiltersTests.cs:178-193` asserts the unavailable
+      banner), so `documents-and-commands.md:196` must split creation from editing rather than
+      being deleted.
 - [x] C47 — a failed native rename publish was logged and the command reported success, so the author
       saw an edited label with no native change and no diagnostic. Closed 2026-10-05 (`ce3538328`) on
       the owner's rule that errors reaching the user must reach the user:

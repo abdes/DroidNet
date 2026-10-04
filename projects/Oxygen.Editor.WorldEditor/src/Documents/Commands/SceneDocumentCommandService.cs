@@ -523,6 +523,11 @@ public sealed partial class SceneDocumentCommandService(
             "Cylinder" => "Cylinder",
             "Cone" => "Cone",
             "Plane" => "Plane",
+            "Capsule" => "Capsule",
+            "IcoSphere" => "IcoSphere",
+            "Torus" => "Torus",
+            "Quad" => "Quad",
+            "SubdividedCube" => "SubdividedCube",
             _ => throw new NotSupportedException($"Primitive kind '{kind}' is not supported."),
         };
 

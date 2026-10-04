@@ -634,6 +634,11 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             _ = shapes.AddMenuItem("Cylinder", new AsyncRelayCommand(() => this.AddPrimitive("Cylinder")));
             _ = shapes.AddMenuItem("Cone", new AsyncRelayCommand(() => this.AddPrimitive("Cone")));
             _ = shapes.AddMenuItem("Plane", new AsyncRelayCommand(() => this.AddPrimitive("Plane")));
+            _ = shapes.AddMenuItem("Capsule", new AsyncRelayCommand(() => this.AddPrimitive("Capsule")));
+            _ = shapes.AddMenuItem("IcoSphere", new AsyncRelayCommand(() => this.AddPrimitive("IcoSphere")));
+            _ = shapes.AddMenuItem("Torus", new AsyncRelayCommand(() => this.AddPrimitive("Torus")));
+            _ = shapes.AddMenuItem("Quad", new AsyncRelayCommand(() => this.AddPrimitive("Quad")));
+            _ = shapes.AddMenuItem("SubdividedCube", new AsyncRelayCommand(() => this.AddPrimitive("SubdividedCube")));
         });
 
         _ = builder.AddSeparator();
