@@ -691,15 +691,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         this.NotifySelectionDependentCommands();
-
         this.HasUnlockedSelectedItems = this.SelectionModel?.SelectedItem?.IsLocked == false;
-
-        var selectedNode = AsSceneNode(this.SelectionModel?.SelectedItem as ITreeItem);
-        var selected = selectedNode is null
-            ? Array.Empty<SceneNode>()
-            : [selectedNode];
-
-        this.PublishSelection(selected);
+        this.PublishCurrentSelection();
     }
 
     private void OnMultipleSelectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
@@ -723,15 +716,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         this.HasUnlockedSelectedItems = unlockedSelectedItems;
-
-        var selection = multipleSelectionModel.SelectedIndices
-            .Select(this.GetShownItemAt)
-            .Select(AsSceneNode)
-            .Where(node => node is not null)
-            .Select(node => node!)
-            .ToList();
-
-        this.PublishSelection(selection);
+        this.PublishCurrentSelection();
     }
 
     private void PublishSelection(IReadOnlyList<SceneNode> selected)
@@ -741,8 +726,69 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        this.selectionService.SetSelection(sceneAdapter.AttachedObject.Id, selected, "SceneExplorer");
+        var sceneId = sceneAdapter.AttachedObject.Id;
+        this.selectionService.SetSelection(sceneId, selected, "SceneExplorer");
+        this.selectionService.SetContext(
+            sceneId,
+            selected.Count == 0
+                ? SceneSelectionContext.Empty
+                : new SceneSelectionContext(
+                    SceneSelectionKind.Node,
+                    selected.Select(node => node.Id).ToList(),
+                    [],
+                    selected[^1].Id,
+                    null),
+            "SceneExplorer");
         _ = this.messenger.Send(new SceneNodeSelectionChangedMessage([.. selected]));
+    }
+
+    private void PublishCurrentSelection()
+    {
+        if (this.Scene is not { } sceneAdapter)
+        {
+            return;
+        }
+
+        var items = this.GetSelectedItems();
+        var context = BuildSelectionContext(items);
+        var nodes = items.OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject).ToList();
+
+        var sceneId = sceneAdapter.AttachedObject.Id;
+        this.selectionService.SetContext(sceneId, context, "SceneExplorer");
+        this.selectionService.SetSelection(sceneId, nodes, "SceneExplorer");
+        _ = this.messenger.Send(new SceneNodeSelectionChangedMessage([.. nodes]));
+    }
+
+    internal static SceneSelectionContext BuildSelectionContext(IReadOnlyList<ITreeItem> items)
+    {
+        if (items.Count == 0)
+        {
+            return SceneSelectionContext.Empty;
+        }
+
+        var hasScene = items.Any(item => item is SceneAdapter);
+        var hasFolder = items.Any(item => item is FolderAdapter);
+        var hasNode = items.Any(item => item is SceneNodeAdapter);
+
+        var kind = (hasScene, hasFolder, hasNode) switch
+        {
+            (true, false, false) => SceneSelectionKind.Scene,
+            (false, false, true) => SceneSelectionKind.Node,
+            (false, true, false) => SceneSelectionKind.Folder,
+            (false, false, false) => SceneSelectionKind.Empty,
+            _ => SceneSelectionKind.Mixed,
+        };
+
+        var nodeIds = items.OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject.Id).ToList();
+        var folderIds = items.OfType<FolderAdapter>().Select(folder => folder.Id).ToList();
+        var primary = items[^1];
+
+        return new SceneSelectionContext(
+            kind,
+            nodeIds,
+            folderIds,
+            primary is SceneNodeAdapter primaryNode ? primaryNode.AttachedObject.Id : null,
+            primary is FolderAdapter primaryFolder ? primaryFolder.Id : null);
     }
 
     private List<ITreeItem> GetSelectedItems()

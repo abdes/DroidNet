@@ -56,6 +56,27 @@ public sealed class SceneExplorerAuthoringTests
             Times.Once);
     }
 
+    [TestMethod]
+    public void BuildSelectionContext_ClassifiesRowKindsAndPrimary()
+    {
+        var project = new Project(new ProjectInfo("Sel", Category.Games, "H:/SelTests", "preview.png")) { Name = "Sel" };
+        var scene = new Scene(project) { Name = "Scene" };
+        var node = new SceneNode(scene) { Name = "Node" };
+        var nodeAdapter = new SceneNodeAdapter(node);
+        var folderAdapter = new FolderAdapter(Guid.NewGuid(), "Folder");
+        var sceneAdapter = new SceneAdapter(scene) { IsRoot = true };
+
+        _ = SceneExplorerViewModel.BuildSelectionContext([nodeAdapter]).Kind.Should().Be(SceneSelectionKind.Node);
+        _ = SceneExplorerViewModel.BuildSelectionContext([folderAdapter]).Kind.Should().Be(SceneSelectionKind.Folder);
+        _ = SceneExplorerViewModel.BuildSelectionContext([sceneAdapter]).Kind.Should().Be(SceneSelectionKind.Scene);
+        _ = SceneExplorerViewModel.BuildSelectionContext([nodeAdapter, folderAdapter]).Kind.Should().Be(SceneSelectionKind.Mixed);
+        _ = SceneExplorerViewModel.BuildSelectionContext([]).Kind.Should().Be(SceneSelectionKind.Empty);
+
+        var nodeContext = SceneExplorerViewModel.BuildSelectionContext([nodeAdapter]);
+        _ = nodeContext.PrimaryNodeId.Should().Be(node.Id);
+        _ = nodeContext.PrimaryFolderId.Should().BeNull();
+    }
+
     private sealed class AuthoringHarness
     {
         private readonly Scene scene;

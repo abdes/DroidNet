@@ -61,6 +61,29 @@ public sealed class SceneSelectionServiceTests
         _ = sut.GetSelectedNodes(scene.Id, scene).Should().BeEmpty();
     }
 
+    [TestMethod]
+    public void SetContext_StoresContextAndClearRemovesIt()
+    {
+        var documentId = Guid.NewGuid();
+        var folderId = Guid.NewGuid();
+        var context = new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], null, folderId);
+        var sut = new SceneSelectionService();
+
+        sut.SetContext(documentId, context, "test");
+
+        _ = sut.GetContext(documentId).Should().Be(context);
+        sut.Clear(documentId);
+        _ = sut.GetContext(documentId).Should().Be(SceneSelectionContext.Empty);
+    }
+
+    [TestMethod]
+    public void GetContext_WithoutSelection_ReturnsEmpty()
+    {
+        var sut = new SceneSelectionService();
+
+        _ = sut.GetContext(Guid.NewGuid()).Should().Be(SceneSelectionContext.Empty);
+    }
+
     private static Scene CreateScene()
     {
         var project = new Mock<IProject>().Object;

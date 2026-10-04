@@ -40,4 +40,19 @@ public interface ISceneSelectionService
     /// </summary>
     /// <param name="documentId">The document identity.</param>
     public void Clear(Guid documentId);
+
+    /// <summary>
+    /// Sets the full selection context (kind, identities and primary) for a document.
+    /// </summary>
+    /// <param name="documentId">The document identity.</param>
+    /// <param name="context">The classified selection context.</param>
+    /// <param name="source">The selection source.</param>
+    public void SetContext(Guid documentId, SceneSelectionContext context, string source);
+
+    /// <summary>
+    /// Gets the last selection context for a document.
+    /// </summary>
+    /// <param name="documentId">The document identity.</param>
+    /// <returns>The selection context, or <see cref="SceneSelectionContext.Empty"/> when none.</returns>
+    public SceneSelectionContext GetContext(Guid documentId);
 }

@@ -10,6 +10,7 @@ namespace Oxygen.Editor.WorldEditor.Documents.Selection;
 public sealed class SceneSelectionService : ISceneSelectionService
 {
     private readonly Dictionary<Guid, SelectionSnapshot> selections = [];
+    private readonly Dictionary<Guid, SceneSelectionContext> contexts = [];
 
     /// <inheritdoc />
     public void SetSelection(Guid documentId, IReadOnlyList<SceneNode> nodes, string source)
@@ -61,7 +62,22 @@ public sealed class SceneSelectionService : ISceneSelectionService
     }
 
     /// <inheritdoc />
-    public void Clear(Guid documentId) => _ = this.selections.Remove(documentId);
+    public void Clear(Guid documentId)
+    {
+        _ = this.selections.Remove(documentId);
+        _ = this.contexts.Remove(documentId);
+    }
+
+    /// <inheritdoc />
+    public void SetContext(Guid documentId, SceneSelectionContext context, string source)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        this.contexts[documentId] = context;
+    }
+
+    /// <inheritdoc />
+    public SceneSelectionContext GetContext(Guid documentId)
+        => this.contexts.TryGetValue(documentId, out var context) ? context : SceneSelectionContext.Empty;
 
     private sealed record SelectionSnapshot(
         IReadOnlyList<Guid> SelectedNodeIds,
