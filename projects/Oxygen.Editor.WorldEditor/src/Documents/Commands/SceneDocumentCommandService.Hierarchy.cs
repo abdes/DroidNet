@@ -398,6 +398,13 @@ public sealed partial class SceneDocumentCommandService
 
         this.RecordReparentUndo(context, moves);
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        // Publish the compensated local TRS before reparenting native with preserve-world
+        // disabled, so the native side applies the new local TRS instead of a stale one.
+        foreach (var move in moves)
+        {
+            await this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, move.Node).ConfigureAwait(true);
+        }
+
         await this.sceneEngineSync.ReparentHierarchiesAsync(context.Scene, [.. topLevelIds], newParentNodeId, preserveWorldTransform: false).ConfigureAwait(true);
         return SceneCommandResult.Success;
     }
@@ -603,7 +610,7 @@ public sealed partial class SceneDocumentCommandService
         InsertNodeAt(context.Scene, restore.Node, restore.Parent, restore.Index);
         this.RecordCreateNodeUndo(context, restore.Node);
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        await this.SyncCreateNodeAsync(context, restore.Node, restore.Parent?.Id).ConfigureAwait(true);
+        await this.SyncNodeSubtreeAsync(context, restore.Node).ConfigureAwait(true);
         this.PublishNodeAdded(context, restore.Node);
     }
 
@@ -638,6 +645,7 @@ public sealed partial class SceneDocumentCommandService
             $"Move {move.Node.Name}",
             async () => await this.RedoReparentAsync(context, move).ConfigureAwait(true));
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        await this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, move.Node).ConfigureAwait(true);
         await this.sceneEngineSync.ReparentNodeAsync(context.Scene, move.Node.Id, move.OldParent?.Id, preserveWorldTransform: false).ConfigureAwait(true);
     }
 
@@ -654,6 +662,7 @@ public sealed partial class SceneDocumentCommandService
             $"Move {move.Node.Name}",
             async () => await this.UndoReparentAsync(context, move).ConfigureAwait(true));
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        await this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, move.Node).ConfigureAwait(true);
         await this.sceneEngineSync.ReparentNodeAsync(context.Scene, move.Node.Id, move.NewParent?.Id, preserveWorldTransform: false).ConfigureAwait(true);
     }
 
