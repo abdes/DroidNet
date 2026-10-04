@@ -8,7 +8,9 @@ using Moq;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
@@ -38,6 +40,7 @@ public sealed partial class SceneDocumentCommandServiceTests
     public async Task RenameNodeAsync_WhenCommitted_RecordsSingleUndoStep()
     {
         var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
         var scene = CreateScene();
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
@@ -49,6 +52,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = node.Name.Should().Be("Sphere");
         _ = context.Metadata.IsDirty.Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
+        fixture.Sync.Verify(sync => sync.RenameNodeAsync(scene, node.Id, "Sphere"), Times.Once);
 
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = node.Name.Should().Be("Cube");
@@ -428,6 +432,8 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = fixture.Sync.Setup(sync => sync.RemoveNodeHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<Guid>>())).Returns(Task.CompletedTask);
         _ = fixture.Sync.Setup(sync => sync.ReparentNodeAsync(It.IsAny<Scene>(), It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
         _ = fixture.Sync.Setup(sync => sync.ReparentHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<Guid?>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
+        _ = fixture.Sync.Setup(sync => sync.RenameNodeAsync(It.IsAny<Scene>(), It.IsAny<Guid>(), It.IsAny<string>())).Returns(Task.CompletedTask);
+        _ = fixture.Sync.Setup(sync => sync.UpdateNodeTransformAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<CancellationToken>())).ReturnsAsync(new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditTransform, AffectedScope.Empty));
     }
 
     private static bool MatricesClose(Matrix4x4 left, Matrix4x4 right)

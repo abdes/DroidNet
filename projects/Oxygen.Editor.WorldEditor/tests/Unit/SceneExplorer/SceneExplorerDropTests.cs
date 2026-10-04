@@ -30,7 +30,7 @@ public sealed class SceneExplorerDropTests
         var harness = CreateHarness(out var scene, out var parent, out var child);
         var commands = harness.Commands;
         _ = commands
-            .Setup(value => value.ReparentNodesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), parent.Id, true))
+            .Setup(value => value.ReparentNodesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), parent.Id, false))
             .ReturnsAsync(SceneCommandResult.Success);
         using var explorer = harness.Build();
 
@@ -47,7 +47,7 @@ public sealed class SceneExplorerDropTests
                 It.IsAny<SceneDocumentCommandContext>(),
                 It.Is<IReadOnlyList<Guid>>(ids => ids.SequenceEqual(new[] { child.Id })),
                 parent.Id,
-                true),
+                false),
             Times.Once);
     }
 
