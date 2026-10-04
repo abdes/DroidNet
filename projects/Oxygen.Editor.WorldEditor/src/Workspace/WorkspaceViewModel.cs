@@ -50,6 +50,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     private readonly IContainer container;
     private readonly IProjectContextService projectContextService;
     private readonly IProjectManagerService projectManager;
+    private readonly IProjectUsageService projectUsage;
     private readonly IEngineService engineService;
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
@@ -67,6 +68,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     /// <param name="router">The router for navigation within the workspace.</param>
     /// <param name="projectContextService">The active project context service.</param>
     /// <param name="projectManager">The project authoring service.</param>
+    /// <param name="projectUsage">The per-project usage store (last-opened scene).</param>
     /// <param name="engineService">The engine service for mounting cooked roots.</param>
     /// <param name="operationResults">The visible operation-result publisher.</param>
     /// <param name="statusReducer">The diagnostic status reducer.</param>
@@ -77,6 +79,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         IRouter router,
         IProjectContextService projectContextService,
         IProjectManagerService projectManager,
+        IProjectUsageService projectUsage,
         IEngineService engineService,
         IOperationResultPublisher operationResults,
         IStatusReducer statusReducer,
@@ -86,6 +89,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         this.container = container;
         this.projectContextService = projectContextService;
         this.projectManager = projectManager;
+        this.projectUsage = projectUsage;
         this.engineService = engineService;
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
@@ -389,6 +393,9 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             return;
         }
 
+        // Seed the default scene for projects that predate DefaultSceneId before resolving it.
+        await this.MigrateDefaultSceneAsync(project, context).ConfigureAwait(true);
+
         var scene = this.ResolveInitialScene(project, context);
         if (scene is null)
         {
@@ -408,6 +415,66 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         }
     }
 
+    /// <summary>
+    ///     Seeds the project's configured default scene from the last-opened scene when the project
+    ///     predates <see cref="IProjectInfo.DefaultSceneId"/> and no default has been persisted yet.
+    /// </summary>
+    /// <remarks>
+    ///     This is a one-time migration: once a default exists it is authoritative and last-opened
+    ///     usage no longer influences startup. The default is project metadata persisted in
+    ///     <c>Project.oxy</c>; it is not scene undo/dirty state.
+    /// </remarks>
+    private async Task MigrateDefaultSceneAsync(IProject project, ProjectContext context)
+    {
+        if (project.ProjectInfo.DefaultSceneId is not null || project.Scenes.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var usage = await this.projectUsage.GetProjectUsageAsync(context.Name, context.ProjectRoot).ConfigureAwait(true);
+            if (string.IsNullOrWhiteSpace(usage?.LastOpenedScene))
+            {
+                return;
+            }
+
+            var lastOpened = usage.LastOpenedScene;
+            var migrated = ResolveSceneByNameOrId(project, lastOpened);
+            if (migrated is null)
+            {
+                return;
+            }
+
+            project.ProjectInfo.DefaultSceneId = migrated.Id;
+            _ = await this.projectManager.SaveProjectInfoAsync(project.ProjectInfo).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            this.LogSceneRestorationFailed(ex, context.Name);
+        }
+    }
+
+    /// <summary>Resolves a scene from a last-opened name by display name, file stem, or stable ID.</summary>
+    /// <param name="project">The project whose scenes are searched.</param>
+    /// <param name="lastOpenedScene">The persisted last-opened scene name.</param>
+    /// <returns>The matching scene, or <see langword="null"/> when no scene matches.</returns>
+    internal static Oxygen.Editor.World.Scene? ResolveSceneByNameOrId(IProject project, string? lastOpenedScene)
+    {
+        if (string.IsNullOrWhiteSpace(lastOpenedScene))
+        {
+            return null;
+        }
+
+        var sceneName = lastOpenedScene.EndsWith(Oxygen.Editor.Projects.Constants.SceneFileExtension, StringComparison.OrdinalIgnoreCase)
+            ? lastOpenedScene[..^Oxygen.Editor.Projects.Constants.SceneFileExtension.Length]
+            : System.IO.Path.GetFileNameWithoutExtension(lastOpenedScene);
+        return project.Scenes.FirstOrDefault(scene =>
+            string.Equals(scene.Name, lastOpenedScene, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(scene.Name, sceneName, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(scene.Id.ToString("D"), lastOpenedScene, StringComparison.OrdinalIgnoreCase));
+    }
+
     private Oxygen.Editor.World.Scene? ResolveInitialScene(IProject project, ProjectContext context)
     {
         // Fresh activation may carry an explicit scene request (template StarterScene or a workflow open).
@@ -419,7 +486,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
         // Otherwise the single loaded scene is the project's configured default, resolved by stable ID.
         // A missing or invalid default is not silently replaced by last-opened or first-listed.
-        if (context.DefaultSceneId is { } defaultSceneId
+        if (project.ProjectInfo.DefaultSceneId is { } defaultSceneId
             && project.Scenes.FirstOrDefault(scene => scene.Id == defaultSceneId) is { } defaultScene)
         {
             return defaultScene;
