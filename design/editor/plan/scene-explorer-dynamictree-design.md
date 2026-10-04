@@ -1,6 +1,6 @@
 # Scene Explorer and generic DynamicTree design implementation
 
-Status: `in_progress` — SE-01 validated; SE-02 and SE-03 planned.
+Status: `in_progress` — SE-01 validated; SE-02 landed (awaiting review); SE-03 planned.
 
 | Outcome                                                                                              | Remaining                                                                | Evidence                                                                                                                                                                                                                   |
 | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -777,16 +777,28 @@ asset and material-slot references. Copy snapshots node identities, Cut stages t
 as a move, and Paste duplicates or moves at the resolved destination. Scene name
 search is landed (`SearchAsync`/`ClearSearchAsync`): it matches node and folder
 names through the scene index, expands matching nodes' scene ancestry to reveal
-collapsed descendants, and restores the prior expansion on clear. Copy-drop
-(Ctrl-drag), folder reparent and exact sibling reordering remain deferred to
-step 6.
+collapsed descendants, and restores the prior expansion on clear.
 
-Evidence: 68 Projects tests and 256 WorldEditor Unit tests pass (drop-hook,
-folder-index, layout-initialization, command-routing, selection-context, deep-copy
-and search cases); WorldEditor src, Unit, and Oxygen.Editor.App build clean.
-Remaining steps 1 (VM collaborator split), 6 (sibling reorder + folder move
-commands), 10 (command availability/menu) are not yet implemented; SE-02 stays
-`in_progress` until those land with their own evidence.
+Step 6 is complete: `MoveFolderToParentAsync` (grouping-only folder reparent),
+`ReorderNodesAsync`/`MoveNodeToSiblingIndex` (layout-only sibling insertion with
+source-removal index adjustment) and copy-drop via `DuplicateNodesAsync` cover every
+drop intent (Into root/node/folder, Before/After reorder and Ctrl-drag copy). Step 10
+landed typed command availability (the view reflection helpers are removed), the
+shared action definitions and menu-shape builder (`SceneExplorerContextMenu`), and
+the `SceneExplorerCommandAdapter` with Remove-from-folder/Move-to-scene-root
+hierarchy commands. Step 1 extracted the adapter index/tracking into a
+`SceneExplorerProjection` collaborator, shrinking the consumer orchestrator and
+removing the remaining tree-first mutation paths.
+
+Evidence: 68 Projects tests and 264 WorldEditor Unit tests pass (drop-hook,
+folder-index, layout-initialization, command-routing, selection-context, deep-copy,
+search, reorder/folder-move and context-menu cases); WorldEditor src, Unit, and
+Oxygen.Editor.App build clean. All ten SE-02 steps are implemented; SE-02 moves to
+`landed_needs_validation`. One known integration note remains: the command owner
+does not yet raise the legacy `ISceneExplorerService.AuthoringChanged`, so
+`SceneContentDemandService` reference observers do not refresh on command-driven
+mutations — this predates SE-02 and should be consolidated when the workspace
+interaction owner is wired in SE-03.
 
 ### SE-03 — Showcase UI, workspace protection and live integration
 
@@ -948,11 +960,11 @@ CMake target or run a whole engine build from this managed checklist. Record
 native dependency/build/test ownership before implementation and keep SE-03's
 native acceptance blocked until the required API and observed behavior exist.
 
-| ID    | State       | Next action                                                                                                                                                                                                                                                                                                               | Responsible role                       |
-| ----- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| SE-01 | validated   | Await user demo acceptance.                                                                                                                                                                                                                                                                                               | Implementer + user                     |
-| SE-02 | in_progress | Landed: identity-based hierarchy command surface + preserve-world reparent; stable node/folder index + command-first create/delete/move; DefaultSceneId; clipboard (deep-copy paste/cut) + selection context + search. Remaining: VM collaborator split, sibling reorder/folder-move commands, command/menu availability. | Implementer                            |
-| SE-03 | planned     | Connect target UI, workspace state and supported native mask/picking; qualify workflows.                                                                                                                                                                                                                                  | Implementer + runtime owner + reviewer |
+| ID    | State                   | Next action                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Responsible role                       |
+| ----- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| SE-01 | validated               | Await user demo acceptance.                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Implementer + user                     |
+| SE-02 | landed_needs_validation | All ten steps implemented: identity-based hierarchy commands + preserve-world reparent; stable node/folder index + command-first create/delete/move; DefaultSceneId; clipboard (deep-copy paste/cut) + selection context + search; folder reparent/sibling reorder/copy-drop; typed command availability + context-menu shape/adapter; projection collaborator split. Awaiting user review; one integration note (AuthoringChanged reference-observer refresh) deferred to SE-03. | Implementer                            |
+| SE-03 | planned                 | Connect target UI, workspace state and supported native mask/picking; qualify workflows.                                                                                                                                                                                                                                                                                                                                                                                          | Implementer + runtime owner + reviewer |
 
 Use `in_progress`, `landed_needs_validation`, `blocked`, `validated` accurately.
 Document contract decisions and named dependencies next to the slice, not as a
