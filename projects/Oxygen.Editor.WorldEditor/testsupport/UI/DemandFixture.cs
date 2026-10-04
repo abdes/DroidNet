@@ -17,7 +17,6 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World.SceneExplorer.Services;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World;
@@ -78,7 +77,7 @@ internal sealed partial class DemandFixture : IDisposable
             this.Requests.Add((uri, token));
             return new TaskCompletionSource<ContentCookResult>(TaskCreationOptions.RunContinuationsAsynchronously).Task.WaitAsync(token);
         });
-        this.Service = new(CreateStatusHosting(), this.Assets.Object, this.pipeline.Object, this.projects, this.Authoring.Documents.Object, this.Authoring.Sync.Object, Mock.Of<ISceneExplorerService>(), this.Authoring.Messenger, default, NullLogger<SceneContentDemandService>.Instance);
+        this.Service = new(CreateStatusHosting(), this.Assets.Object, this.pipeline.Object, this.projects, this.Authoring.Documents.Object, this.Authoring.Sync.Object, this.Authoring.Messenger, default, NullLogger<SceneContentDemandService>.Instance);
     }
 
     public SceneAuthoringFixture Authoring { get; } = new();

@@ -15,8 +15,6 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneExplorer.Operations;
-using Oxygen.Editor.World.SceneExplorer.Services;
-using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World;
@@ -58,16 +56,15 @@ public sealed class SceneSaveRevisionTests
         await fixture.WriteStarted.Task.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var sync = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _ = fixture.Sync.Setup(value => value.CreateNodeAsync(It.IsAny<SceneNode>(), parentGuid: null)).Returns(sync.Task);
-        var service = MakeHierarchyService(fixture);
-        service.AuthoringChanged += (_, _) => fixture.Context.Metadata.IsDirty = true;
-        var edit = service.AddNodeAsync(new SceneAdapter(fixture.Context.Scene), new SceneNode(fixture.Context.Scene) { Name = "Tree Node" });
+        var edit = fixture.Commands.CreateNodeAsync(fixture.Context, parentNodeId: null, parentFolderId: null, "Tree Node");
         _ = edit.IsCompleted.Should().BeFalse();
+        _ = fixture.Context.Scene.RootNodes.Should().ContainSingle().Which.Name.Should().Be("Tree Node");
         _ = fixture.Context.Metadata.ChangeVersion.Should().Be(2);
         fixture.ReleaseWrite.SetResult();
         _ = (await save.ConfigureAwait(false)).HasUnsavedChanges.Should().BeTrue();
         _ = fixture.Persisted.Should().NotContain("Tree Node");
         sync.SetResult();
-        _ = await edit.ConfigureAwait(false);
+        _ = (await edit.ConfigureAwait(false)).Succeeded.Should().BeTrue();
     }
 
     [TestMethod]
@@ -81,16 +78,17 @@ public sealed class SceneSaveRevisionTests
         scene.RootNodes.Add(second);
         scene.SetExplorerLayout([new ExplorerEntryData { NodeId = first.Id }, new ExplorerEntryData { NodeId = second.Id }]);
         var sync = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _ = fixture.Sync.Setup(value => value.RemoveNodeAsync(It.IsAny<Scene>(), It.IsAny<Guid>())).Returns(sync.Task);
-        var service = MakeHierarchyService(fixture);
-        service.AuthoringChanged += (_, _) => fixture.Context.Metadata.IsDirty = true;
-        var removal = service.DeleteItemsAsync([new SceneNodeAdapter(first), new SceneNodeAdapter(second)]);
+        _ = fixture.Sync.Setup(value => value.RemoveNodeHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<Guid>>())).Returns(sync.Task);
+        var removal = fixture.Commands.DeleteNodesAsync(fixture.Context, [first.Id, second.Id]);
         _ = removal.IsCompleted.Should().BeFalse();
         _ = scene.RootNodes.Should().BeEmpty();
         _ = scene.ExplorerLayout.Should().BeEmpty();
-        _ = fixture.Context.Metadata.ChangeVersion.Should().Be(3);
+
+        // The atomic command records exactly one revision before awaiting live sync; the retired
+        // explorer service raised one authoring notification per item and counted one more.
+        _ = fixture.Context.Metadata.ChangeVersion.Should().Be(2);
         sync.SetResult();
-        _ = await removal.ConfigureAwait(false);
+        _ = (await removal.ConfigureAwait(false)).Succeeded.Should().BeTrue();
     }
 
     [TestMethod]
@@ -181,9 +179,6 @@ public sealed class SceneSaveRevisionTests
         _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
     }
 
-    private static SceneExplorerService MakeHierarchyService(SaveFixture fixture)
-        => new(new SceneMutator(NullLogger<SceneMutator>.Instance), new SceneOrganizer(NullLogger<SceneOrganizer>.Instance), fixture.Sync.Object, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer());
-
     private sealed class SaveFixture
     {
         public SaveFixture()
@@ -218,7 +213,7 @@ public sealed class SceneSaveRevisionTests
                 default,
                 new StrongReferenceMessenger(),
                 Mock.Of<IOperationResultPublisher>(),
-                new OperationStatusReducer(), Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Moq.Mock.Of<Oxygen.Editor.Projects.IProjectContextService>(), Mock.Of<ISceneMutator>(), Mock.Of<ISceneOrganizer>());
+                new OperationStatusReducer(), Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Moq.Mock.Of<Oxygen.Editor.Projects.IProjectContextService>(), new SceneMutator(NullLogger<SceneMutator>.Instance), new SceneOrganizer(NullLogger<SceneOrganizer>.Instance));
         }
 
         public SceneDocumentCommandContext Context { get; }

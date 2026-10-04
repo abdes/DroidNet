@@ -17,7 +17,6 @@ using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World.SceneExplorer.Services;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.TestSupport;

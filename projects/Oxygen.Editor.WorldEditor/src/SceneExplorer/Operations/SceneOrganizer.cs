@@ -1166,7 +1166,7 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
         {
             // If the node is not in the scene, we can't validate lineage.
             // This might happen if we are adding a node that hasn't been synced yet?
-            // But SceneExplorerService calls Mutator (Sync) BEFORE Organizer.
+            // But SceneDocumentCommandService commits the graph mutation BEFORE the layout mutation.
             return false;
         }
 

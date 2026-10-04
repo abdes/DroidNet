@@ -5,6 +5,7 @@
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
 using DroidNet.TimeMachine;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Inspection;
@@ -64,7 +65,7 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
         _ = sync.Setup(value => value.CompleteTerminalSyncAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>())).Returns((Guid _, Guid _, Func<CancellationToken, Task<SyncOutcome>> action, CancellationToken token) => action(token));
         var documents = this.Documents;
         _ = documents.Setup(value => value.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>())).ReturnsAsync(value: true);
-        this.Commands = new SceneDocumentCommandService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new SceneSelectionService(), sync.Object, Mock.Of<IProjectManagerService>(), documents.Object, default, this.Messenger, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer(), this.Slots.Object, this.Projects, Mock.Of<ISceneMutator>(), Mock.Of<ISceneOrganizer>());
+        this.Commands = new SceneDocumentCommandService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new SceneSelectionService(), sync.Object, Mock.Of<IProjectManagerService>(), documents.Object, default, this.Messenger, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer(), this.Slots.Object, this.Projects, new SceneMutator(NullLogger<SceneMutator>.Instance), new SceneOrganizer(NullLogger<SceneOrganizer>.Instance));
     }
 
     public ProjectContextService Projects { get; } = new();

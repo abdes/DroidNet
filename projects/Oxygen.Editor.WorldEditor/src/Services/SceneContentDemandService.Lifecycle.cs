@@ -6,7 +6,6 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World.SceneExplorer.Services;
 
 namespace Oxygen.Editor.World.Services;
 
@@ -30,7 +29,6 @@ public sealed partial class SceneContentDemandService
         this.documents.DocumentActivated += this.OnActivated;
         this.documents.DocumentClosed += this.OnClosed;
         this.documents.DocumentMetadataChanged += this.OnMetadataChanged;
-        this.explorer.AuthoringChanged += this.OnAuthoringChanged;
     }
 
     private void Unsubscribe()
@@ -39,7 +37,6 @@ public sealed partial class SceneContentDemandService
         this.documents.DocumentActivated -= this.OnActivated;
         this.documents.DocumentClosed -= this.OnClosed;
         this.documents.DocumentMetadataChanged -= this.OnMetadataChanged;
-        this.explorer.AuthoringChanged -= this.OnAuthoringChanged;
     }
 
     private void Activate(Scene candidate, SceneDocumentMetadata owner)
@@ -103,8 +100,6 @@ public sealed partial class SceneContentDemandService
             this.Dispatch(this.InvalidateObsoleteDemands);
         }
     }
-
-    private void OnAuthoringChanged(object? sender, SceneAuthoringChangedEventArgs args) => this.Dispatch(this.RefreshReferenceObservers);
 
     private void InvalidateObsoleteDemands()
     {

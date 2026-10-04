@@ -59,7 +59,6 @@ using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.World.SceneExplorer.Operations;
-using Oxygen.Editor.World.SceneExplorer.Services;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Slots;
@@ -186,7 +185,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     public Task<bool> OpenTransitionInspectionAsync(ProjectContext project) => this.messenger.Send(new OpenCookedInspectionRequestMessage(project, new Uri("asset:///Content/Geometry"), validate: false)).Response;
     public SceneContentDemandService CreateImportedAssetDemand(CatalogWorkloadServices services, ContentBrowserAssetProvider provider)
     {
-        var demand = new SceneContentDemandService(this.hosting, provider, services.Pipeline, services.Projects, this.documents.Object, this.sync, Mock.Of<ISceneExplorerService>(), this.messenger, default, NullLogger<SceneContentDemandService>.Instance);
+        var demand = new SceneContentDemandService(this.hosting, provider, services.Pipeline, services.Projects, this.documents.Object, this.sync, this.messenger, default, NullLogger<SceneContentDemandService>.Instance);
         _ = this.messenger.Send(new SceneAuthoringLoadedMessage(this.Source, this.Context.Metadata));
         return demand;
     }

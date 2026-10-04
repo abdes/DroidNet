@@ -13,7 +13,6 @@ using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World.SceneExplorer.Services;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets.Catalog;
 
@@ -28,7 +27,6 @@ public sealed partial class SceneContentDemandService : ISceneContentDemandServi
     private readonly IProjectContextService projects;
     private readonly IDocumentService documents;
     private readonly ISceneEngineSync sceneSync;
-    private readonly ISceneExplorerService explorer;
     private readonly IMessenger messenger;
     private readonly WindowId windowId;
     private readonly ILogger<SceneContentDemandService> logger;
@@ -44,7 +42,6 @@ public sealed partial class SceneContentDemandService : ISceneContentDemandServi
     /// <param name="projects">The current project lifetime.</param>
     /// <param name="documents">Document activation, closure and authoring changes.</param>
     /// <param name="sceneSync">The already loaded scene registry.</param>
-    /// <param name="explorer">Structural authoring changes.</param>
     /// <param name="messenger">Scene load and selection notifications.</param>
     /// <param name="windowId">The owning workspace window.</param>
     /// <param name="logger">Reports failures to submit preview work.</param>
@@ -55,7 +52,6 @@ public sealed partial class SceneContentDemandService : ISceneContentDemandServi
         IProjectContextService projects,
         IDocumentService documents,
         ISceneEngineSync sceneSync,
-        ISceneExplorerService explorer,
         IMessenger messenger,
         WindowId windowId,
         ILogger<SceneContentDemandService> logger)
@@ -66,7 +62,6 @@ public sealed partial class SceneContentDemandService : ISceneContentDemandServi
         this.projects = projects;
         this.documents = documents;
         this.sceneSync = sceneSync;
-        this.explorer = explorer;
         this.messenger = messenger;
         this.windowId = windowId;
         this.logger = logger;
