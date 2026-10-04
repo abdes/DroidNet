@@ -424,14 +424,92 @@ public sealed partial class SceneDocumentCommandService
         try
         {
             EnsureExplorerLayout(context.Scene);
-            var previousLayout = this.sceneOrganizer.CloneLayout(context.Scene.ExplorerLayout);
-            foreach (var nodeId in nodeIds)
+
+            // Resolve the folder's scene-parent scope (the enclosing node, or root when null).
+            var (folderFound, folderSceneParentNodeId) = FindFolderSceneParentNodeId(context.Scene.ExplorerLayout, folderId);
+            if (!folderFound)
             {
-                _ = this.sceneOrganizer.MoveNodeToFolder(nodeId, folderId, context.Scene);
+                return Task.FromResult(this.ValidationFailure(
+                    SceneOperationKinds.ExplorerLayoutMoveNode,
+                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                    "Nodes were not grouped",
+                    "The target folder no longer exists.",
+                    context));
             }
 
-            this.RecordLayoutHistory(context, $"Group {nodeIds.Count} node(s)", previousLayout, context.Scene.ExplorerLayout);
+            var folderScopeParent = folderSceneParentNodeId.HasValue
+                ? FindNode(context.Scene, folderSceneParentNodeId.Value)
+                : null;
+
+            // Pre-resolve every node and the reparent it needs (preserve-local), before mutating.
+            var nodes = new List<SceneNode>(nodeIds.Count);
+            var reparents = new List<ReparentMove>();
+            foreach (var nodeId in nodeIds)
+            {
+                var node = FindNode(context.Scene, nodeId);
+                if (node is null)
+                {
+                    return Task.FromResult(this.ValidationFailure(
+                        SceneOperationKinds.ExplorerLayoutMoveNode,
+                        DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                        "Nodes were not grouped",
+                        "One or more selected nodes no longer exist.",
+                        context));
+                }
+
+                nodes.Add(node);
+
+                if (node.Parent?.Id == folderSceneParentNodeId)
+                {
+                    continue;
+                }
+
+                if (folderScopeParent is not null
+                    && (ReferenceEquals(node, folderScopeParent) || folderScopeParent.Ancestors().Contains(node)))
+                {
+                    return Task.FromResult(this.ValidationFailure(
+                        SceneOperationKinds.ExplorerLayoutMoveNode,
+                        DiagnosticCodes.ScenePrefix + "INVALID_CYCLE",
+                        "Nodes were not grouped",
+                        "A node cannot be grouped under its own descendant.",
+                        context));
+                }
+
+                reparents.Add(ReparentMove.Capture(node, folderScopeParent, preserveWorldTransform: false));
+            }
+
+            var previousLayout = this.sceneOrganizer.CloneLayout(context.Scene.ExplorerLayout);
+
+            context.History.BeginChangeSet($"Group {nodes.Count} node(s)");
+            try
+            {
+                foreach (var move in reparents)
+                {
+                    move.ApplyForward(this.sceneMutator, this.sceneOrganizer);
+                }
+
+                this.RecordReparentUndo(context, reparents);
+
+                foreach (var nodeId in nodeIds)
+                {
+                    _ = this.sceneOrganizer.MoveNodeToFolder(nodeId, folderId, context.Scene);
+                }
+
+                this.RecordLayoutHistory(context, $"Group {nodes.Count} node(s)", previousLayout, context.Scene.ExplorerLayout);
+            }
+            finally
+            {
+                context.History.EndChangeSet();
+            }
+
             _ = this.MarkDirtyAsync(context);
+
+            foreach (var move in reparents)
+            {
+                _ = this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, move.Node);
+                _ = this.sceneEngineSync.ReparentNodeAsync(context.Scene, move.Node.Id, move.NewParent?.Id, preserveWorldTransform: false);
+            }
+
             return Task.FromResult(SceneCommandResult.Success);
         }
         catch (Exception ex)

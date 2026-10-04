@@ -566,7 +566,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         {
             if (this.clipboardIsCut)
             {
-                var result = await this.commandService.ReparentNodesAsync(context, this.clipboardNodeIds, parentNodeId, preserveWorldTransform: true).ConfigureAwait(true);
+                var result = await this.commandService.ReparentNodesAsync(context, this.clipboardNodeIds, parentNodeId, preserveWorldTransform: false).ConfigureAwait(true);
                 if (!result.Succeeded)
                 {
                     return;
@@ -699,7 +699,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.suppressNodeMessages = true;
         try
         {
-            var result = await this.commandService.ReparentNodesAsync(context, [node.AttachedObject.Id], newParentNodeId: null, preserveWorldTransform: true).ConfigureAwait(true);
+            var result = await this.commandService.ReparentNodesAsync(context, [node.AttachedObject.Id], newParentNodeId: null, preserveWorldTransform: false).ConfigureAwait(true);
             if (result.Succeeded)
             {
                 await this.ReconcileProjectionAsync().ConfigureAwait(true);
@@ -1344,8 +1344,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             result = request.Parent switch
             {
                 FolderAdapter folder => await this.commandService.MoveNodesToFolderAsync(context, nodeIds, folder.Id).ConfigureAwait(true),
-                SceneNodeAdapter node => await this.commandService.ReparentNodesAsync(context, nodeIds, node.AttachedObject.Id, preserveWorldTransform: true).ConfigureAwait(true),
-                _ => await this.commandService.ReparentNodesAsync(context, nodeIds, newParentNodeId: null, preserveWorldTransform: true).ConfigureAwait(true),
+                SceneNodeAdapter node => await this.commandService.ReparentNodesAsync(context, nodeIds, node.AttachedObject.Id, preserveWorldTransform: false).ConfigureAwait(true),
+                _ => await this.commandService.ReparentNodesAsync(context, nodeIds, newParentNodeId: null, preserveWorldTransform: false).ConfigureAwait(true),
             };
         }
 
