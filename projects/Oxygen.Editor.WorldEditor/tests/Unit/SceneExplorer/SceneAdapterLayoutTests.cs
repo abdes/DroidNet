@@ -44,6 +44,34 @@ public sealed class SceneAdapterLayoutTests
     }
 
     [TestMethod]
+    public async Task Children_LayoutReferencingSameFolderTwice_RealizesSingleAdapter()
+    {
+        var scene = CreateScene();
+        var folderId = Guid.NewGuid();
+        scene.SetExplorerLayout(
+            [
+                new ExplorerEntryData { Type = "Folder", FolderId = folderId, Name = "First" },
+                new ExplorerEntryData
+                {
+                    Type = "Folder",
+                    FolderId = folderId,
+                    Name = "Duplicate",
+                    Children = [new ExplorerEntryData { Type = "Folder", FolderId = Guid.NewGuid(), Name = "Nested" }],
+                },
+            ]);
+        var adapter = SceneAdapter.BuildLayoutTree(scene);
+
+        var children = await adapter.Children.ConfigureAwait(false);
+
+        _ = children.Should().ContainSingle("a duplicate layout entry must not realize a second adapter sharing one folder id");
+        var folder = children[0].Should().BeOfType<FolderAdapter>().Which;
+        _ = folder.Id.Should().Be(folderId);
+        _ = folder.Name.Should().Be("First");
+        _ = folder.CurrentChildren.Should().BeEmpty("the skipped duplicate must not recurse into its layout children");
+        _ = adapter.RootItems.Should().ContainSingle();
+    }
+
+    [TestMethod]
     public async Task Children_NestedFoldersAndUnknownNodeId_RealizeInLayoutOrder()
     {
         var scene = CreateScene();

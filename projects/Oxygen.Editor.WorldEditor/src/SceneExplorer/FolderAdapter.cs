@@ -14,11 +14,14 @@ namespace Oxygen.Editor.World.SceneExplorer;
 /// </summary>
 public sealed class FolderAdapter : LayoutItemAdapter, ICanBeCloned
 {
+    /// <summary>The display name used for folder entries without an authored name.</summary>
+    internal const string FallbackName = "Folder";
+
     private readonly ExplorerEntryData? entryData;
     private bool isExpansionTransient;
 
     public FolderAdapter(ExplorerEntryData entry)
-        : this(entry.FolderId ?? Guid.NewGuid(), entry.Name ?? "Folder")
+        : this(entry.FolderId ?? Guid.NewGuid(), entry.Name ?? FallbackName)
     {
         this.entryData = entry;
         this.IsExpanded = entry.IsExpanded ?? false;

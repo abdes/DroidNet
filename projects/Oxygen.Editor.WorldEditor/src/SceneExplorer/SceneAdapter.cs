@@ -116,6 +116,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
     {
         var layout = this.AttachedObject.ExplorerLayout;
         var seenNodeIds = new HashSet<Guid>();
+        var seenFolderIds = new HashSet<Guid>();
 
         // 1. Build from Layout (The "Seating Chart")
         if (this.UseLayoutAdapters && layout is { Count: > 0 })
@@ -129,7 +130,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
 
             foreach (var entry in layout)
             {
-                await this.ProcessLayoutEntryAsync(entry, this, nodesById, seenNodeIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
+                await this.ProcessLayoutEntryAsync(entry, this, nodesById, seenNodeIds, seenFolderIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
             }
         }
 
@@ -150,12 +151,22 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
         ITreeItem parent,
         Dictionary<Guid, SceneNode> nodesById,
         HashSet<Guid> seenNodeIds,
+        HashSet<Guid> seenFolderIds,
         ISet<Guid>? expandedFolderIds,
         bool preserveNodeExpansion)
     {
         // Case A: Folder
         if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase))
         {
+            // Claim the id before realizing so a duplicate layout entry cannot realize a second
+            // adapter sharing one folder identity; a skipped entry must not recurse into its
+            // children either. Entries without a folder id are not stably addressable and realize
+            // with a fresh identity per rebuild, so they cannot collide.
+            if (entry.FolderId is { } folderId && !seenFolderIds.Add(folderId))
+            {
+                return;
+            }
+
             var folder = new FolderAdapter(entry);
 
             // Restore expansion state
@@ -169,7 +180,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
             {
                 foreach (var childEntry in entry.Children)
                 {
-                    await this.ProcessLayoutEntryAsync(childEntry, folder, nodesById, seenNodeIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
+                    await this.ProcessLayoutEntryAsync(childEntry, folder, nodesById, seenNodeIds, seenFolderIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
                 }
             }
 
@@ -199,7 +210,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
             {
                 foreach (var childEntry in entry.Children)
                 {
-                    await this.ProcessLayoutEntryAsync(childEntry, adapter, nodesById, seenNodeIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
+                    await this.ProcessLayoutEntryAsync(childEntry, adapter, nodesById, seenNodeIds, seenFolderIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
                 }
             }
 

@@ -929,7 +929,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     /// <summary>Applies a transient name search, revealing collapsed matches by expanding their ancestor paths.</summary>
     /// <param name="query">The search text; empty or whitespace clears the search.</param>
-    /// <returns>The number of matching nodes (excluding context-only ancestors).</returns>
+    /// <returns>The number of matching nodes (excluding context-only ancestors) plus the folder matches from the authored layout domain.</returns>
     public async Task<int> SearchAsync(string? query)
     {
         if (this.Scene is null)
@@ -952,31 +952,17 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             .Select(node => node.Id)
             .ToList();
 
-        // Expand scene-graph ancestor paths of matching nodes (top-down) so collapsed descendants
-        // become visible to the filter. Nodes use their actual scene ancestry rather than the
-        // realized adapter Parent (unset while collapsed). Accumulate across queries;
-        // ClearSearchAsync restores everything a search expanded.
+        // Expand the ancestor paths of matching nodes (top-down) so collapsed descendants become
+        // visible to the filter. Accumulate across queries; ClearSearchAsync restores everything
+        // a search expanded.
         foreach (var nodeId in matchingNodeIds)
         {
-            var ancestors = new Stack<SceneNode>();
-            for (var parent = nodeById[nodeId].Parent; parent is not null; parent = parent.Parent)
-            {
-                ancestors.Push(parent);
-            }
-
-            while (ancestors.TryPop(out var ancestorNode))
-            {
-                if (this.projection.GetNode(ancestorNode.Id) is { } ancestor && !ancestor.IsExpanded)
-                {
-                    await this.ExpandItemAsync(ancestor).ConfigureAwait(true);
-                    this.searchExpandedItems.Add(ancestor);
-                }
-            }
+            await this.ExpandMatchAncestryAsync(nodeId, nodeById).ConfigureAwait(true);
         }
 
-        // Folders are matched over realized adapters; collapsed-folder matching still requires a
-        // domain layout index (C26).
-        var matchingFolderCount = this.projection.Folders
+        // Folder matches are counted from the authored-layout domain so collapsed and unrealized
+        // folders are reported independently of adapter realization.
+        var matchingFolderCount = this.projection.LayoutFolders
             .Count(folder => folder.Name.Contains(trimmed, StringComparison.OrdinalIgnoreCase));
 
         this.FilterPredicate = item => item.Label.Contains(trimmed, StringComparison.OrdinalIgnoreCase);
@@ -994,9 +980,84 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             {
                 await this.CollapseItemAsync(item).ConfigureAwait(true);
             }
+
+            // Clear the transient flag only after the search expansion is undone so the authored
+            // layout entry never observes a search-driven expansion write.
+            if (item is FolderAdapter folder)
+            {
+                folder.SetExpansionTransient(false);
+            }
         }
 
         this.searchExpandedItems.Clear();
+    }
+
+    private async Task ExpandMatchAncestryAsync(Guid nodeId, Dictionary<Guid, SceneNode> nodeById)
+    {
+        if (this.projection.GetNodeLayoutAncestors(nodeId) is { } layoutChain)
+        {
+            // The node is seated in the authored layout: expand its visual ancestry (folders and
+            // node seats) top-down using the layout position rather than scene parentage alone.
+            foreach (var ancestor in layoutChain)
+            {
+                if (!await this.ExpandSearchAncestorAsync(ancestor).ConfigureAwait(true))
+                {
+                    // An ancestor without a stably addressable adapter blocks the rest of the
+                    // chain; deeper items cannot be made visible reliably.
+                    break;
+                }
+            }
+
+            return;
+        }
+
+        // The node has no layout seat: fall back to its scene-graph ancestry over realized
+        // adapters. Nodes use their actual scene ancestry rather than the realized adapter
+        // Parent (unset while collapsed).
+        var ancestors = new Stack<SceneNode>();
+        for (var parent = nodeById[nodeId].Parent; parent is not null; parent = parent.Parent)
+        {
+            ancestors.Push(parent);
+        }
+
+        while (ancestors.TryPop(out var ancestorNode))
+        {
+            if (this.projection.GetNode(ancestorNode.Id) is { } ancestor && !ancestor.IsExpanded)
+            {
+                await this.ExpandItemAsync(ancestor).ConfigureAwait(true);
+                this.searchExpandedItems.Add(ancestor);
+            }
+        }
+    }
+
+    private async Task<bool> ExpandSearchAncestorAsync(SceneExplorerProjection.LayoutAncestor ancestor)
+    {
+        if (ancestor.Id is not { } ancestorId)
+        {
+            return false;
+        }
+
+        ITreeItem? item = ancestor.IsFolder ? this.projection.GetFolder(ancestorId) : this.projection.GetNode(ancestorId);
+        if (item is null)
+        {
+            return false;
+        }
+
+        if (item.IsExpanded)
+        {
+            return true;
+        }
+
+        if (item is FolderAdapter folder)
+        {
+            // Search expansion is transient: it must not write the authored layout entry or
+            // dirty the document.
+            folder.SetExpansionTransient(true);
+        }
+
+        await this.ExpandItemAsync(item).ConfigureAwait(true);
+        this.searchExpandedItems.Add(item);
+        return true;
     }
 
     private void OnSingleSelectionChanged(object? sender, PropertyChangedEventArgs args)
