@@ -738,12 +738,26 @@ graph+layout commit, synchronous history/dirty advance and native convergence.
 Folders are grouping-only (no `Parent`/TRS change); true reparent preserves world
 pose via `SceneTransformMath` (decompose/recompose with singular/shear rejection)
 and redoes the forward move rather than re-guessing. `SceneDocumentCommandService`
-now owns `ISceneMutator`/`ISceneOrganizer` directly. 238 WorldEditor Unit tests
-pass (including the new `SceneDocumentCommandServiceTests.Hierarchy` suite).
-Remaining steps 1 (VM collaborator split/DefaultSceneId), 2-3 (stable projection
-index + read-only label + commit-hook wiring), 7-10 (clipboard, selection context,
-search, command availability/menu) are not yet implemented; SE-02 stays
-`in_progress` until those land with their own evidence.
+now owns `ISceneMutator`/`ISceneOrganizer` directly.
+
+The single-loaded-scene policy is in place: `DefaultSceneId` is persisted in the
+project manifest/model and propagated through `ProjectContext`; workspace startup
+resolves the initial scene from it (after any explicit activation request) and no
+longer falls back to `LastOpenedScene` or first-listed discovery; the competing
+`ActiveScene` writes in `SceneExplorerViewModel`/`DocumentManager` are removed.
+
+Rename is routed through the command owner: `Scene`/`SceneNode`/`Folder` adapter
+labels are read-only presentation, `SceneExplorerViewModel.CommitRenameAsync`
+submits node/folder renames through the command service, and the post-hoc
+label-change/history bridge plus the direct `AttachedObject.Name` writes are gone.
+The in-place rename editor is re-anchored over the item name (dynamic-tree fix).
+
+Evidence: 68 Projects tests (3 new DefaultSceneId cases) and 240 WorldEditor Unit
+tests pass; WorldEditor src/Unit/Unit.UI/Integration.UI and Oxygen.Editor.App build
+clean. Remaining steps 1 (VM collaborator split), 2 (stable projection index +
+drop-hook wiring + remove the remaining `RunTreeMutationAsync` wrappers), 7-10
+(clipboard, selection context, search, command availability/menu) are not yet
+implemented; SE-02 stays `in_progress` until those land with their own evidence.
 
 ### SE-03 — Showcase UI, workspace protection and live integration
 
