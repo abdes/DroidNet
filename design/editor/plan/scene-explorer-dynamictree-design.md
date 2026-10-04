@@ -839,7 +839,7 @@ this path — that is a test gap, recorded as T12, not an integration note to ca
 Legend: `[ ]` open · `[~]` in progress · `[x]` closed. Each entry names owner + evidence.
 
 Verification evidence (2026-10-04): `Oxygen.Editor.WorldEditor.Unit.Tests` full project green —
-279 total, 279 succeeded, 0 failed, 0 skipped (272 baseline + five search/layout tests with C25/C26/C27 + two delete tests with C42)
+284 total, 284 succeeded, 0 failed, 0 skipped (272 baseline + five search/layout tests with C25/C26/C27, two delete tests with C42, five failure-visibility tests with C40/C41/C43/D-f), plus `Oxygen.Managed.Core.Tests` 95/95
 (`traverse Invoke-Tests --start projects/Oxygen.Editor.WorldEditor/tests/Unit --configuration Debug`).
 The strict-mock helper `ConfigureHierarchySync` previously omitted the native rename and transform
 publishes added with C2/C1/C3, so four tests threw while their defects were marked closed.
@@ -1031,15 +1031,63 @@ Command surface and result publication (found by the P7 design review, each re-v
   `scene-explorer.md:105-108`. Its only remaining src caller is the dead `RenameItemAsync`, but its
   `AuthoringChanged` event is consumed by `SceneContentDemandService.Lifecycle.cs:33,42`, so pruning
   needs that consumer checked first. Doc §5:97-99 forbids this shape.
-- [ ] C40 — duplication and paste failures publish **no operation result**: every failure path returns
+- [x] C40 — duplication and paste failures publish **no operation result**. Closed 2026-10-05
+      (`ce3538328`): all eleven paths publish through `PublishSceneFailure` under a new
+      `Scene.Node.Duplicate` kind, `STALE_TARGET` for resolved-target failures plus a new
+      `OXE.SCENE.AUTHORING_SUSPENDED` where the scene is reloading or was replaced (no precedent code
+      existed; sibling commands still return bare failures there, so this is clipboard-only rather than
+      a cross-command change). The view model was deliberately not touched, on evidence: it has no
+      failure-surfacing mechanism at all, and every other failed command from it publishes through the
+      command service into the Operations output channel while the view model merely aborts — paste
+      already aborted identically, so publication was the only missing half. Original claim: every
+      failure path returns
       `SceneCommandResults.Failure<T>()` (`Clipboard.cs:34,40,49,59,72,...`) and that helper defaults
       `operationResultId` to null (`SceneCommandResults.cs:26`), with the view model swallowing the
       failure (`SceneExplorerViewModel.cs:591-602`, copy-drop `:1386-1388`). `documents-and-commands.md`
       §12:340-341 requires a visible result for user-triggered failures. Also: duplication has no kind in
       `SceneOperationKinds` at all.
-- [ ] C41 — `"Scene.Reload"` is a bare string literal (`Reload.cs:63,103`) outside the stable
-      vocabulary: `SceneOperationKinds.cs` contains no Reload constant and
-      `DiagnosticSceneVocabularyTests.cs:25-42` does not pin it.
+- [x] C41 — `"Scene.Reload"` was a bare string literal (`Reload.cs:63,103`) outside the stable
+      vocabulary. Closed 2026-10-05 (`ce3538328`) with `SceneOperationKinds.Reload` and a pinned
+      vocabulary test; one further literal that merely duplicated an existing constant
+      (`SceneEditorViewModel.cs:532` → `SceneOperationKinds.Save`) went with it as a zero-delta
+      correction.
+- [x] C43 — a rejected mixed delete still mutated the scene. `DeleteItemsAsync` called
+      `EnsureExplorerLayout` before folder prevalidation, so a `STALE_TARGET` rejection on a
+      layout-less scene left the seeded layout behind — not dirty, not undoable. Closed 2026-10-05
+      (`ce3538328`) by seeding only after every validation passes, proven by
+      `DeleteItemsAsync_WhenFolderIsStale_LeavesExplorerLayoutUnseeded` (red before, green after).
+- [ ] C44 — four `UpdateNodeTransformAsync` calls discard their `Task<SyncOutcome>`
+      (`SceneDocumentCommandService.Hierarchy.cs:449, :553, :770, :787`). Deferred work returns an
+      immediate `SkippedNotRunning` whose eventual replay failure _is_ visible through
+      `PublishReplayFailures`, but a synchronous `Rejected`/`Failed` from dispatch or interop is
+      published nowhere: the managed edit stands while native silently diverges. Same defect class as
+      the rename path closed today, and not a one-line consequence of it — it needs the operation id
+      threaded into `ReparentNodesAsync`/`MoveNodesToFolderAsync` results, the fire-and-forget site at
+      `:553` restructured, and a decision on how undo/redo callbacks (bare `Task`) report failures.
+- [ ] C45 — `CreateFolderAsync` has the C43 shape but cannot be fixed by the same move: the seed at
+      `Hierarchy.cs:128` must precede `sceneOrganizer.CreateFolder`, which calls `RequireLayout`, so a
+      stale `parentFolderId` throwing `InvalidOperationException` leaves the seed behind while
+      publishing `CREATE_FOLDER_FAILED`. Needs validate-before-seed or capture/restore.
+- [ ] C46 — vocabulary sweep, decided rather than escalated: `"Scene.Mutation"`
+      (`SceneEngineSync.Deferred.cs:139`) is published to the user with no constant, so it gets one;
+      `EditSessionToken.OperationKind` carries `"Scene.Environment.Edit"`/`"Scene.Property.Edit"` that
+      no code reads or publishes, so the field is dropped rather than constantized — a kind string
+      nothing consumes invites the belief it is reported; `SceneOperationKinds.NodeCreate` is the only
+      pre-existing kind unpinned in `SceneOperationKinds_AreStableStrings` and gets pinned; and the
+      callerless transform log wrappers `LogCannotUpdateTransform`/`LogUpdatedTransform`/
+      `LogFailedToUpdateTransform` go the way the rename wrappers did.
+- [x] C47 — a failed native rename publish was logged and the command reported success, so the author
+      saw an edited label with no native change and no diagnostic. Closed 2026-10-05 (`ce3538328`) on
+      the owner's rule that errors reaching the user must reach the user:
+      `ISceneEngineSync.RenameNodeAsync` now returns a `SyncOutcome` from the same
+      `ExecuteNodeSyncAsync` pipeline transforms use (not-running/faulted/world-mismatch →
+      `SkippedNotRunning`; dispatch or interop errors → `Rejected`/`Failed` under new
+      `OXE.LIVESYNC.RENAME.*` codes), and the command publishes any non-Accepted outcome exactly as
+      geometry, camera and light edits do. Deferred renames now queue under `Scene.Node.Rename` instead
+      of the generic `Scene.Mutation`, so a later replay failure names the operation the author
+      performed. The deferral queue was verified rather than duplicated — `PublishReplayFailures`
+      (`SceneEngineSync.Pending.cs:204`) already surfaced replay failures, which is why only the
+      synchronous path was silent. Remaining half of the class is C44.
 - [x] C42 — dead and unsafe public API on the command interface. **Closed 2026-10-04
       (`e4eaf2f44`)**: `RenameItemAsync` deleted from the interface and implementation (no callers,
       no test removed) together with the `ISceneExplorerService` constructor parameter it alone kept
