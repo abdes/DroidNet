@@ -774,16 +774,19 @@ typed `SceneSelectionContext` (scene/folder/node/mixed kind plus primary identit
 published by the Explorer alongside the node subset, and `DuplicateNodesAsync`
 deep-copies node hierarchies with fresh node/component identities while preserving
 asset and material-slot references. Copy snapshots node identities, Cut stages them
-as a move, and Paste duplicates or moves at the resolved destination. Copy-drop
+as a move, and Paste duplicates or moves at the resolved destination. Scene name
+search is landed (`SearchAsync`/`ClearSearchAsync`): it matches node and folder
+names through the scene index, expands matching nodes' scene ancestry to reveal
+collapsed descendants, and restores the prior expansion on clear. Copy-drop
 (Ctrl-drag), folder reparent and exact sibling reordering remain deferred to
 step 6.
 
-Evidence: 68 Projects tests and 255 WorldEditor Unit tests pass (drop-hook,
-folder-index, layout-initialization, command-routing, selection-context and
-deep-copy cases); WorldEditor src, Unit, and Oxygen.Editor.App build clean.
+Evidence: 68 Projects tests and 256 WorldEditor Unit tests pass (drop-hook,
+folder-index, layout-initialization, command-routing, selection-context, deep-copy
+and search cases); WorldEditor src, Unit, and Oxygen.Editor.App build clean.
 Remaining steps 1 (VM collaborator split), 6 (sibling reorder + folder move
-commands), 9 (search), 10 (command availability/menu) are not yet implemented;
-SE-02 stays `in_progress` until those land with their own evidence.
+commands), 10 (command availability/menu) are not yet implemented; SE-02 stays
+`in_progress` until those land with their own evidence.
 
 ### SE-03 — Showcase UI, workspace protection and live integration
 
@@ -945,11 +948,11 @@ CMake target or run a whole engine build from this managed checklist. Record
 native dependency/build/test ownership before implementation and keep SE-03's
 native acceptance blocked until the required API and observed behavior exist.
 
-| ID    | State       | Next action                                                                                                                                                                                                                                                                                                              | Responsible role                       |
-| ----- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
-| SE-01 | validated   | Await user demo acceptance.                                                                                                                                                                                                                                                                                              | Implementer + user                     |
-| SE-02 | in_progress | Landed: identity-based hierarchy command surface + preserve-world reparent; stable node/folder index + command-first create/delete/move; DefaultSceneId; clipboard (deep-copy paste/cut) + selection context. Remaining: VM collaborator split, sibling reorder/folder-move commands, search, command/menu availability. | Implementer                            |
-| SE-03 | planned     | Connect target UI, workspace state and supported native mask/picking; qualify workflows.                                                                                                                                                                                                                                 | Implementer + runtime owner + reviewer |
+| ID    | State       | Next action                                                                                                                                                                                                                                                                                                               | Responsible role                       |
+| ----- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| SE-01 | validated   | Await user demo acceptance.                                                                                                                                                                                                                                                                                               | Implementer + user                     |
+| SE-02 | in_progress | Landed: identity-based hierarchy command surface + preserve-world reparent; stable node/folder index + command-first create/delete/move; DefaultSceneId; clipboard (deep-copy paste/cut) + selection context + search. Remaining: VM collaborator split, sibling reorder/folder-move commands, command/menu availability. | Implementer                            |
+| SE-03 | planned     | Connect target UI, workspace state and supported native mask/picking; qualify workflows.                                                                                                                                                                                                                                  | Implementer + runtime owner + reviewer |
 
 Use `in_progress`, `landed_needs_validation`, `blocked`, `validated` accurately.
 Document contract decisions and named dependencies next to the slice, not as a
