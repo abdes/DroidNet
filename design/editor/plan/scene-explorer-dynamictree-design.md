@@ -836,10 +836,14 @@ this path — that is a test gap, recorded as T12, not an integration note to ca
 
 ### SE-02 corrective actions — review findings (tracking)
 
-Legend: `[ ]` open · `[~]` in progress · `[x]` closed. Each entry names owner + evidence.
+Legend: `[ ]` open · `[~]` in progress · `[x]` closed. Each entry names owner + evidence. A `[~]`
+decision row must state the decision once (no second section restating it) and name the work item
+that implements what is left — a decision with no queued work is mislabelled `[ ]` blocked, not
+`[~]`. An item closes only when its code, its contract-doc recording and its regression tests are
+all done; "code landed" alone never does.
 
 Verification evidence (2026-10-04): `Oxygen.Editor.WorldEditor.Unit.Tests` full project green —
-296 total, 296 succeeded, 0 failed, 0 skipped (272 baseline + five search/layout tests with C25/C26/C27, two delete tests with C42, five failure-visibility tests with C40/C41/C43/D-f, twelve primitive-shape tests with C48), plus `Oxygen.Managed.Core.Tests` 95/95
+304 total, 304 succeeded, 0 failed, 0 skipped (272 baseline + five search/layout tests with C25/C26/C27, two delete tests with C42, five failure-visibility tests with C40/C41/C43/D-f, twelve primitive-shape tests with C48), plus `Oxygen.Managed.Core.Tests` 95/95
 (`traverse Invoke-Tests --start projects/Oxygen.Editor.WorldEditor/tests/Unit --configuration Debug`).
 The strict-mock helper `ConfigureHierarchySync` previously omitted the native rename and transform
 publishes added with C2/C1/C3, so four tests threw while their defects were marked closed.
@@ -856,53 +860,88 @@ publishes added with C2/C1/C3, so four tests threw while their defects were mark
 - [x] D2 — projects/docs. Decision landed (`cbd1d2372`, folder moves reparent). The cited
       `scene-explorer.md:153` already permits lineage-driven reparent, so the contract agrees; the
       plan's conflict row now records the decision instead of the superseded grouping-only restriction.
-- [ ] D3 — reviewer + projects/docs. Row-kind selection + explicit primary stays node-only in
-      `documents-and-commands.md:150`; Inspector does not consume the new context.
-- [ ] D4 — reviewer + projects/docs. Workspace lock/category persistence is Hide-only in
-      `settings-architecture.md:65`; lock/category placement/lifetime unapproved.
-- [~] D5 — **decided by the owner (2026-10-04)**, both clauses: folder Delete = grouping-only
-  promotion that never deletes nodes and never changes scene-graph parentage or transforms; node
-  Delete = subtree deletion; copied directional lights always reset `AtmosphereSlot = None`, with
-  the Cut→Paste assignment loss accepted knowingly. Code and tests landed (`Clipboard.cs:257`
-  with `DuplicateNodesAsync_ResetsCopiedDirectionalLightAtmosphereSlot`; `DeleteFolderAsync` at
-  `SceneDocumentCommandService.Hierarchy.cs:295` with
-  `DeleteFolderAsync_PromotesContainedEntriesWithoutRemovingNodes`). **Contract recording is done**
-  (owner approved the wording 2026-10-04): `scene-authoring-model.md` §6 now states the duplication
-  rule next to the existing single-occupant rule, and `scene-explorer.md` §7 states folder Delete as
-  layout-only promotion that leaves parentage and world pose untouched. Remaining before `[x]`: T11 —
-  the layout-only qualifier is still untested for nested folders and D2-reparented grouping.
-- [ ] D6 — reviewer + projects/docs. Default-scene schema/migration/seed policy (`plan:567`)
-      unapproved; migration + fallback still contradict the contract.
-- [ ] D7 — reviewer + projects/docs. Sequential-scene Copy / scene-bound Cut lifetime
-      (`plan:568`) unapproved; payload is still source IDs/live adapters.
-- [ ] D8 — runtime/native. Editing-view mask + category-picking surface (`plan:569`) absent
-      (`IRuntimeWorldCommands`, `IRuntimeInputCommands`); blocks native qualification.
+- [~] D3 — **decided 2026-10-05 by the orchestrator under the owner's V0.1 delegation** (previously
+  mislabelled "unapproved"): selection carries a row kind (node / folder / mixed / root) and an
+  explicit primary identity rather than deriving primary from row order; a folder or mixed
+  selection shows the summary surface, the root row shows scene Environment, and an empty node
+  subset never means "every non-node case". Remaining: the code (`documents-and-commands.md:150`
+  still publishes node-only; Inspector consumes nothing — C16–C19) and the LLD wording in the
+  docs pass.
+- [~] D4 — **decided 2026-10-05 under the same delegation**: workspace persistence covers Hide, Lock
+  and category/view-column placement as typed per-project settings with scene-scoped lifetime,
+  one coordinated workspace interaction service owning typed substate — not new fields on scene
+  DTOs. Remaining: none of it exists yet (`settings-architecture.md:65` is Hide-only), so this is
+  unimplemented work, not an open question. **Work: C49.**
+- [x] D5 — **decided by the owner (2026-10-04)**, both clauses: folder Delete = grouping-only
+      promotion that never deletes nodes and never changes scene-graph parentage or transforms; node
+      Delete = subtree deletion; copied directional lights always reset `AtmosphereSlot = None`, with
+      the Cut→Paste assignment loss accepted knowingly. Code and tests landed (`Clipboard.cs:257`
+      with `DuplicateNodesAsync_ResetsCopiedDirectionalLightAtmosphereSlot`; `DeleteFolderAsync` at
+      `SceneDocumentCommandService.Hierarchy.cs:295` with
+      `DeleteFolderAsync_PromotesContainedEntriesWithoutRemovingNodes`). **Contract recording is done**
+      (owner approved the wording 2026-10-04): `scene-authoring-model.md` §6 now states the duplication
+      rule next to the existing single-occupant rule, and `scene-explorer.md` §7 states folder Delete as
+      layout-only promotion that leaves parentage and world pose untouched. T11 closed the last evidence gap
+      on 2026-10-05 (`bff041741`), so decision, code, contract and tests are all in place.
+- [~] D6 — **decided and already acted on**: keep the one-time `LastOpenedScene` migration and the
+  first-scene fallback as recovery paths, persist `DefaultSceneId`, and seed it at project
+  creation; usage history may remain but never overrides the configured default. The field,
+  serialization, context propagation and startup resolution all landed earlier; the only open
+  piece was the creation seed, which is being implemented now (task #7 / C31) on the basis of
+  this decision — noted here because I dispatched that work before confirming provenance.
+- [~] D7 — **decided 2026-10-05 under the delegation**: Copy transfers a same-project immutable
+  snapshot (never live adapters or source-only ids), Cut is bound to the scene it came from, and
+  the clipboard is cleared only on a successful project switch, with one intent path and no
+  second history authority. Remaining: snapshot Copy landed (C11); the switch-invalidation
+  protocol is unwired and the payload still carries source ids, and `plan:568` needs the LLD
+  wording. **Work: C50** (plus the `plan:568` wording in the docs pass).
+- [ ] D8 — **not a decision anyone in this thread can make.** The editing-view mask and
+      category-picking surface (`plan:569`) are absent from the installed SDK's
+      `IRuntimeWorldCommands`/`IRuntimeInputCommands`; whether they exist, and whether to build them,
+      belongs to the runtime owner with separate authorization and build evidence — editor-only work
+      does not authorize an engine build. It stays open as a capability gap that blocks native
+      qualification of SE-03, not as work waiting on a ruling here. Scope note from the "Show in
+      Editor & Lock" contract: this gap blocks only the _viewport_ effect of "not shown in editor";
+      the state itself, its persistence, the row treatment and the owning API are all buildable now
+      (C49), so D8 must not be used as a reason to stall the eye/lock feature. Split further by the owner's
+      capability analysis (`design/editor/review/D8-show-in-editor-runtime-capability.md`, 2026-10-05):
+      **D8a** is the editing-view hide mask — a `CompositionView` per-view filter routed through the
+      existing shadow-only path, plus a mandatory depth-prepass fix that currently ignores
+      `kMainViewVisible` — then interop and a managed world command; **D8b** is viewport picking, absent at
+      every layer, which belongs to ED-M09 as a filter carried on pick requests rather than an Explorer
+      side-project. Engine and interop work needs separate authorization and build evidence. Meanwhile the
+      eye stays unavailable to users until the capability flag exists: a toggle that changes persisted state
+      and nothing on screen is worse than no toggle.
 
-Decisions recorded by the owner (2026-10-04). "Code landed" means the source changed; the
-owning LLD/plan text still needs the policy recorded. An item is fully closed only when both
-the code and the contract-doc recording (plus its regression tests) are done.
+#### Show in Editor & Lock — interaction contract (owner, 2026-10-05)
 
-- D1 → **preserve-local** default. Code landed (`cbd1d2372`) with a behavioural test
-  (`CommitDropAsync_RoutesNodeDropIntoNodeThroughReparentCommand`). The policy is already recorded in
-  the owning LLDs (`scene-explorer.md:129`, `scene-authoring-model.md:47`), re-read 2026-10-04, so no
-  contract change is outstanding.
-- D2 → **folder moves reparent**. Code landed (`cbd1d2372`); `scene-explorer.md:153` already permits
-  lineage-driven reparent (re-read 2026-10-04), so no contract change is outstanding.
-- D3 → **row-kind selection + primary**. Code: `SceneSelectionContext` exists, but Inspector
-  routing (folder/mixed → summary, root → Environment) is NOT done — C16–C19 open.
-- D4 → **persist hide + lock + category**. NOT started (settings LLD + workspace service open).
-- D5 → **grouping-only folder Delete + subtree node Delete + copied lights `AtmosphereSlot = None`**.
-  Owner confirmed both clauses directly on 2026-10-04, including the deliberate Cut→Paste loss. Code
-  (C12, `710007c92`) and the simple-case tests landed; the layout-only qualifier is still untested for
-  nested folders and D2-reparented grouping (T11). Both rules are recorded in the owning LLDs
-  (`scene-authoring-model.md` §6, `scene-explorer.md` §7) as of 2026-10-04.
-- D6 → **keep migration + fallback + persist/seed default**. Migration/fallback kept and the
-  premature `ActiveScene` write removed (C31 partial); **seed-on-creation is unimplemented**
-  (`ProjectCreationService.cs` has no `DefaultSceneId`).
-- D7 → **snapshot Copy + scene-bound Cut**. Copy snapshot landed (C11); Cut is scene-bound by
-  construction but the switch-invalidation protocol is NOT wired. Contract-doc recording
-  outstanding (`plan:568`).
-- D8 → **editor mask + picking**. NOT started (runtime/native surface absent).
+Behaviour to deliver, not a prescription for how to build it; the tree surface is DynamicTree,
+implemented the way the controls demo app drives it.
+
+- Two states, fully independent of each other and of runtime visibility: **Show in Editor** (an eye
+  icon) controls viewport presentation _while editing_ — it has zero effect on runtime visibility,
+  cooked assets or game rendering. **Lock** (a lock icon) controls editability, preventing accidental
+  manipulation. Neither implies the other in either direction.
+- The row's trailing area reserves two fixed-width slots, vertically aligned across every row in the
+  tree: slot 1 = Show in Editor, slot 2 = Lock. Showing or hiding an icon must never collapse its
+  slot or shift neighbouring icons, text or buttons. Lock never migrates into slot 1 and vice versa.
+- Default states are quiet; suppressed states are loud. When an item is Shown in Editor and Unlocked,
+  both slots are empty until the pointer enters the row, at which point the interactive Eye and
+  UnlockKeyhole appear at muted opacity. When a state is suppressed — Not Shown in Editor, or Locked —
+  that slot holds its icon **permanently**, regardless of pointer or selection: EyeOff as a warning
+  that the object is not visible in the editor viewport, LockKeyhole in an active/accent treatment as a
+  warning that the item is protected. All four hover/permanent combinations of the matrix are required.
+- Pointer exit removes only the default-state affordances immediately. A click toggles its own state at
+  once and must never leave the sibling icon pinned open — the two slots' hover lifetimes are separate.
+- Hover-revealed controls are input targets; permanently visible status icons are indicators. Passive
+  status content must not intercept row input (the SE-01 review finding applies to these slots), and
+  hover subscriptions must be idempotent under row recycling.
+
+What is gated: the Lock half and both states' persistence are pure editor-side work (C49). Applying
+"Not shown in editor" to the viewport needs the editing-view mask the installed SDK does not yet
+expose (D8) — so build the state, its storage, the row UI and a single owning API now, with viewport
+suppression bound to that API when the mask exists, rather than faking it or shipping an eye icon
+that does nothing.
 
 #### Correctness defects — editor/controls
 
@@ -997,10 +1036,13 @@ Scene lifecycle
 - [x] C29 — `SceneExplorerViewModel.cs:747` background scene opens still load scenes.
 - [ ] C30 — no guard/stage/retire on scene replacement; `SceneEngineSync.Documents.cs:17` retains
       editable graphs.
-- [~] C31 — `ProjectCreationService.cs:237` no default seed; `WorkspaceViewModel.cs:427`
-  LastOpenedScene migration; `Project.cs:26` first-scene fallback; `AssetsViewModel.cs:515`
-  premature ActiveScene write. (D6: migration + fallback approved; premature write fixed;
-  creation seed deferred.)
+- [x] C31 — `ProjectCreationService.cs:237` had no default seed; `WorkspaceViewModel.cs:427`
+      LastOpenedScene migration; `Project.cs:26` first-scene fallback; `AssetsViewModel.cs:515`
+      premature ActiveScene write. (D6: migration + fallback approved; premature write fixed;
+      creation seed landed 2026-10-05 (`f8721d187`): the service reads the copied starter scene's own
+      serialized id and records it as `DefaultSceneId`, leaving the property null rather than guessing when
+      the id is absent or unparseable; the `LastOpenedScene` migration stays as the owner's approved recovery
+      path. D6 still needs its LLD wording (docs pass).
 
 Generic tree
 
@@ -1056,7 +1098,7 @@ Command surface and result publication (found by the P7 design review, each re-v
       layout-less scene left the seeded layout behind — not dirty, not undoable. Closed 2026-10-05
       (`ce3538328`) by seeding only after every validation passes, proven by
       `DeleteItemsAsync_WhenFolderIsStale_LeavesExplorerLayoutUnseeded` (red before, green after).
-- [ ] C44 — four `UpdateNodeTransformAsync` calls discard their `Task<SyncOutcome>`
+- [x] C44 — four `UpdateNodeTransformAsync` calls discarded their `Task<SyncOutcome>`
       (`SceneDocumentCommandService.Hierarchy.cs:449, :553, :770, :787`). Deferred work returns an
       immediate `SkippedNotRunning` whose eventual replay failure _is_ visible through
       `PublishReplayFailures`, but a synchronous `Rejected`/`Failed` from dispatch or interop is
@@ -1064,11 +1106,18 @@ Command surface and result publication (found by the P7 design review, each re-v
       the rename path closed today, and not a one-line consequence of it — it needs the operation id
       threaded into `ReparentNodesAsync`/`MoveNodesToFolderAsync` results, the fire-and-forget site at
       `:553` restructured, and a decision on how undo/redo callbacks (bare `Task`) report failures.
-- [ ] C45 — `CreateFolderAsync` has the C43 shape but cannot be fixed by the same move: the seed at
+      Closed 2026-10-05 (`bff041741`): all four publish through `PublishSyncOutcomeAsync` under the
+      initiating command's kind, the first id threaded into the result; `MoveNodesToFolderAsync` became
+      genuinely async to carry it; undo/redo publish from inside the delegate with no history-signature
+      change, since the operations channel is initiator-agnostic — a test observes exactly one
+      publication from undo and one from redo.
+- [x] C45 — `CreateFolderAsync` had the C43 shape but cannot be fixed by the same move: the seed at
       `Hierarchy.cs:128` must precede `sceneOrganizer.CreateFolder`, which calls `RequireLayout`, so a
       stale `parentFolderId` throwing `InvalidOperationException` leaves the seed behind while
-      publishing `CREATE_FOLDER_FAILED`. Needs validate-before-seed or capture/restore.
-- [ ] C46 — vocabulary sweep, decided rather than escalated: `"Scene.Mutation"`
+      publishing `CREATE_FOLDER_FAILED`. Fixed 2026-10-05 (`bff041741`) by validating `parentFolderId`
+      before seeding and returning a published `STALE_TARGET`, so a rejected create leaves no mutation
+      behind. Its twin for `parentNodeId` is C51.
+- [x] C46 — vocabulary sweep, decided rather than escalated: `"Scene.Mutation"`
       (`SceneEngineSync.Deferred.cs:139`) is published to the user with no constant, so it gets one;
       `EditSessionToken.OperationKind` carries `"Scene.Environment.Edit"`/`"Scene.Property.Edit"` that
       no code reads or publishes, so the field is dropped rather than constantized — a kind string
@@ -1076,6 +1125,13 @@ Command surface and result publication (found by the P7 design review, each re-v
       pre-existing kind unpinned in `SceneOperationKinds_AreStableStrings` and gets pinned; and the
       callerless transform log wrappers `LogCannotUpdateTransform`/`LogUpdatedTransform`/
       `LogFailedToUpdateTransform` go the way the rename wrappers did.
+      Closed 2026-10-05 (`34ff74859`): `Scene.Mutation` is now a constant used at the replay-notice site
+      and pinned, `NodeCreate` is pinned too, the never-read `EditSessionToken.OperationKind` field and
+      its plumbing are gone, and the three callerless transform log wrappers are deleted.
+- [ ] C51 — `CreateFolderAsync` still has the C45 shape for a stale **`parentNodeId`**: `EnsureNodeInLayout`
+      throws after the layout was seeded, so the rejection leaves an uncommitted, un-undoable seed behind
+      while reporting `CREATE_FOLDER_FAILED`. Same fix as C45 — validate before seeding — found during that
+      change and deliberately not bundled into it.
 - [x] C48 — quick-add and `CreatePrimitiveAsync` offered only **five of the ten** canonical primitive
       shapes: `NormalizePrimitiveKind` had no arm for Capsule, IcoSphere, Torus, Quad or
       SubdividedCube, so those fell through `NotSupportedException` into a `CREATE_PRIMITIVE_FAILED`
@@ -1110,6 +1166,20 @@ Command surface and result publication (found by the P7 design review, each re-v
       performed. The deferral queue was verified rather than duplicated — `PublishReplayFailures`
       (`SceneEngineSync.Pending.cs:204`) already surfaced replay failures, which is why only the
       synchronous path was silent. Remaining half of the class is C44.
+- [ ] C49 — workspace interaction persistence exists only for Hide. `settings-architecture.md:65`
+      records hidden nodes; there is no typed storage for per-project Lock state, category/column
+      placement or their lifetime, and no single service owns workspace interaction substate, so lock
+      and column choices cannot survive a session. Scope is decided in D4 — implement one coordinated
+      workspace service with typed settings and project/scene-scoped lifetime, not new fields on scene
+      DTOs. No code exists yet, so this is unimplemented work, not an open question. Lock here means
+      the editor-editability lock specified in the "Show in Editor & Lock" contract above — orthogonal
+      to viewport suppression and to runtime visibility — and the persistence must key on the stable
+      node id, so a renamed or reordered node keeps its state.
+- [ ] C50 — clipboard lifetime is not enforced. Copy carries source ids and live-adapter-derived state
+      instead of an immutable snapshot, Cut is scene-bound only by construction, and nothing clears the
+      clipboard on a successful project switch, so a stale payload can be pasted into another
+      project's scene. Scope is decided in D7 — snapshot at copy time, explicit invalidation on
+      project switch, one intent path so no second history authority appears.
 - [x] C42 — dead and unsafe public API on the command interface. **Closed 2026-10-04
       (`e4eaf2f44`)**: `RenameItemAsync` deleted from the interface and implementation (no callers,
       no test removed) together with the `ISceneExplorerService` constructor parameter it alone kept
@@ -1152,9 +1222,14 @@ Command surface and result publication (found by the P7 design review, each re-v
 - [ ] T8 — single loaded scene: guarded replacement, material-tab retention, configured default.
 - [ ] T9 — generic recycling detach, displayed-scope keyboard, reload/reattach, Escape cancel.
 - [ ] T10 — 32/40 density profiles + measured 1,000-item lazy-tree workload.
-- [ ] T11 — D5's layout-only qualifier is untested beyond the flat root-folder case: folder Delete
+- [x] T11 — D5's layout-only qualifier was untested beyond the flat root-folder case: folder Delete
       inside a nested folder, and inside a folder whose grouping followed a D2 reparent, must both
       promote entries without deleting nodes and without changing `SceneNode.Parent` or world pose.
+      Closed 2026-10-05 (`bff041741`): inner-into-outer promotion, outer promoting the inner folder with
+      its children, both through `DeleteFolderAsync` and the mixed batch as one undo step each, plus D2
+      cross-scope cases asserting parent identity, exact local TRS and world matrix unchanged before and
+      after. All four were green on first execution — D5 held, so these are guards and no red state was
+      obtainable.
 - [ ] T12 — prove command-driven mutations reach the demand service's observers: add/remove a node,
       child or component through the owning command and assert `RefreshReferenceObservers` re-subscribes
       the new collection graph and obsolete demands are invalidated, with no stale demand surviving a
