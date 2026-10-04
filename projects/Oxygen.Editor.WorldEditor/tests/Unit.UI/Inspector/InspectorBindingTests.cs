@@ -87,7 +87,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         }
     });
 
-    /// <summary>Sky luminance uses a wrapping header and full-width RGB multiplier editor at both dock widths.</summary>
+    /// <summary>Sky luminance uses a single-line header and full-width RGB multiplier editor at both dock widths.</summary>
     /// <param name="width">The available inspector width.</param>
     /// <returns>The native layout regression task.</returns>
     [TestMethod]
@@ -110,7 +110,8 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         var label = card.FindDescendant<TextBlock>(text => text.Text == card.PropertyName)!;
         var unit = card.FindDescendant<TextBlock>(text => text.Text == "RGB ×")!;
         var channels = card.FindDescendant<VectorBox>()!;
-        _ = label.TextWrapping.Should().Be(TextWrapping.Wrap);
+        _ = label.TextWrapping.Should().Be(TextWrapping.NoWrap);
+        _ = label.TextTrimming.Should().Be(TextTrimming.CharacterEllipsis);
         _ = channels.ActualWidth.Should().BeApproximately(card.ActualWidth, 1);
         _ = channels.TransformToVisual(card).TransformPoint(default).Y.Should().BeGreaterThanOrEqualTo(
             label.TransformToVisual(card).TransformPoint(default).Y + label.ActualHeight);
@@ -304,12 +305,13 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = source.ActualWidth.Should().BeGreaterThan(340);
         var azimuth = source.FindDescendant<NumberBox>(number => Equals(number.Tag, "SunAzimuth"))!;
         _ = azimuth.ActualWidth.Should().BeGreaterThan(140);
-        _ = source.FindDescendant<TextBlock>(text => text.Text == "Azimuth")!.TextTrimming.Should().Be(TextTrimming.None);
+        _ = source.FindDescendant<TextBlock>(text => text.Text == "Azimuth")!.TextTrimming.Should().Be(TextTrimming.CharacterEllipsis);
         _ = azimuth.LabelPosition.Should().Be(LabelPosition.Left);
         _ = azimuth.Label.Should().Be("Azimuth");
         var valueBorder = azimuth.FindDescendant<Border>(border => border.Name == "PartBackgroundBorder")!;
         _ = valueBorder.ActualWidth.Should().BeGreaterThanOrEqualTo(126);
-        _ = valueBorder.TransformToVisual(azimuth).TransformPoint(default).X.Should().BeApproximately(137, 1);
+        _ = (valueBorder.TransformToVisual(azimuth).TransformPoint(default).X - valueBorder.Margin.Left)
+            .Should().BeApproximately(((azimuth.ActualWidth - 12) * 0.4) + 12, 1);
         var elevation = source.FindDescendant<NumberBox>(number => Equals(number.Tag, "SunElevation"))!;
         var rowPitch = elevation.TransformToVisual(source).TransformPoint(default).Y - azimuth.TransformToVisual(source).TransformPoint(default).Y;
         _ = rowPitch.Should().BeApproximately(azimuth.ActualHeight + 4, 1);
