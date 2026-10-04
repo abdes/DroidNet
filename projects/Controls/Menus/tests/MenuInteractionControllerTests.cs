@@ -727,7 +727,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         var currentItem = CreateMenuItem("File", hasChildren: true);
         var adjacentItem = CreateMenuItem("Edit", hasChildren: true);
 
-        _ = harness.RootMock.Setup(m => m.GetAdjacentItem(currentItem, MenuNavigationDirection.Right, true))
+        _ = harness.RootMock.Setup(m => m.GetAdjacentItem(currentItem, MenuNavigationDirection.Right, wrap: true))
             .Returns(adjacentItem);
 
         var result = harness.Controller.OnDirectionalNavigation(
@@ -737,7 +737,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
             MenuInteractionInputSource.KeyboardInput);
 
         _ = result.Should().BeTrue();
-        harness.RootMock.Verify(m => m.GetAdjacentItem(currentItem, MenuNavigationDirection.Right, true), Times.Once);
+        harness.RootMock.Verify(m => m.GetAdjacentItem(currentItem, MenuNavigationDirection.Right, wrap: true), Times.Once);
         harness.RootMock.Verify(m => m.FocusItem(adjacentItem, MenuNavigationMode.KeyboardInput), Times.Once);
     });
 
@@ -748,7 +748,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         var currentItem = CreateMenuItem("File");
         var adjacentItem = CreateMenuItem("Edit");
 
-        _ = harness.RootMock.Setup(m => m.GetAdjacentItem(currentItem, MenuNavigationDirection.Left, true))
+        _ = harness.RootMock.Setup(m => m.GetAdjacentItem(currentItem, MenuNavigationDirection.Left, wrap: true))
             .Returns(adjacentItem);
 
         var result = harness.Controller.OnDirectionalNavigation(
@@ -758,7 +758,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
             MenuInteractionInputSource.KeyboardInput);
 
         _ = result.Should().BeTrue();
-        harness.RootMock.Verify(m => m.GetAdjacentItem(currentItem, MenuNavigationDirection.Left, true), Times.Once);
+        harness.RootMock.Verify(m => m.GetAdjacentItem(currentItem, MenuNavigationDirection.Left, wrap: true), Times.Once);
         harness.RootMock.Verify(m => m.FocusItem(adjacentItem, MenuNavigationMode.KeyboardInput), Times.Once);
     });
 
@@ -790,7 +790,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
 
         // Setup: File menu is expanded
         harness.SetupRootExpandedItem(currentRootItem);
-        _ = harness.RootMock.Setup(m => m.GetAdjacentItem(currentRootItem, MenuNavigationDirection.Left, true))
+        _ = harness.RootMock.Setup(m => m.GetAdjacentItem(currentRootItem, MenuNavigationDirection.Left, wrap: true))
             .Returns(adjacentRootItem);
 
         var result = harness.Controller.OnDirectionalNavigation(
@@ -802,7 +802,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         _ = result.Should().BeTrue();
 
         // Should navigate to adjacent root item and expand it
-        harness.RootMock.Verify(m => m.GetAdjacentItem(currentRootItem, MenuNavigationDirection.Left, true), Times.Once);
+        harness.RootMock.Verify(m => m.GetAdjacentItem(currentRootItem, MenuNavigationDirection.Left, wrap: true), Times.Once);
         harness.RootMock.Verify(m => m.ExpandItem(adjacentRootItem, MenuNavigationMode.KeyboardInput), Times.Once);
     });
 
@@ -861,7 +861,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         var adjacentItem = CreateMenuItem("Adjacent");
         var level = new MenuLevel(0);
 
-        _ = harness.ColumnMock.Setup(m => m.GetAdjacentItem(level, currentItem, MenuNavigationDirection.Down, true))
+        _ = harness.ColumnMock.Setup(m => m.GetAdjacentItem(level, currentItem, MenuNavigationDirection.Down, wrap: true))
             .Returns(adjacentItem);
 
         var result = harness.Controller.OnDirectionalNavigation(
@@ -871,7 +871,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
             MenuInteractionInputSource.KeyboardInput);
 
         _ = result.Should().BeTrue();
-        harness.ColumnMock.Verify(m => m.GetAdjacentItem(level, currentItem, MenuNavigationDirection.Down, true), Times.Once);
+        harness.ColumnMock.Verify(m => m.GetAdjacentItem(level, currentItem, MenuNavigationDirection.Down, wrap: true), Times.Once);
         harness.ColumnMock.Verify(m => m.FocusItem(level, adjacentItem, MenuNavigationMode.KeyboardInput), Times.Once);
     });
 
@@ -882,7 +882,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         var currentItem = CreateMenuItem("File");
         var adjacentItem = CreateMenuItem("Edit");
 
-        _ = harness.RootMock.Setup(m => m.GetAdjacentItem(currentItem, MenuNavigationDirection.Right, true))
+        _ = harness.RootMock.Setup(m => m.GetAdjacentItem(currentItem, MenuNavigationDirection.Right, wrap: true))
             .Returns(adjacentItem);
 
         var result = harness.Controller.OnDirectionalNavigation(
@@ -892,7 +892,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
             MenuInteractionInputSource.KeyboardInput);
 
         _ = result.Should().BeTrue();
-        harness.RootMock.Verify(m => m.GetAdjacentItem(currentItem, MenuNavigationDirection.Right, true), Times.Once);
+        harness.RootMock.Verify(m => m.GetAdjacentItem(currentItem, MenuNavigationDirection.Right, wrap: true), Times.Once);
         harness.RootMock.Verify(m => m.FocusItem(adjacentItem, MenuNavigationMode.KeyboardInput), Times.Once);
     });
 
@@ -940,7 +940,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
         var level = new MenuLevel(0);
 
         harness.SetupRootExpandedItem(currentRootItem);
-        _ = harness.RootMock.Setup(m => m.GetAdjacentItem(currentRootItem, MenuNavigationDirection.Right, true))
+        _ = harness.RootMock.Setup(m => m.GetAdjacentItem(currentRootItem, MenuNavigationDirection.Right, wrap: true))
             .Returns(adjacentRootItem);
 
         var result = harness.Controller.OnDirectionalNavigation(
@@ -982,7 +982,7 @@ public sealed partial class MenuInteractionControllerTests : VisualUserInterface
     {
         public ControllerHarness()
         {
-            this.Lookup = new Dictionary<string, MenuItemData>(StringComparer.OrdinalIgnoreCase);
+            this.Lookup = [with(StringComparer.OrdinalIgnoreCase)];
             this.GroupSelections = [];
             var services = new MenuServices(() => this.Lookup, item => this.GroupSelections.Add(item), loggerFactory: null);
             this.Controller = new MenuInteractionController(services);
