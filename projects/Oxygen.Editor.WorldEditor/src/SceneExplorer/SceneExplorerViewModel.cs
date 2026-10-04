@@ -777,34 +777,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         await this.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
     }
 
-    private async void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e)
+    private void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e)
     {
-        if (e.WindowId.Value != this.windowId.Value)
-        {
-            return;
-        }
-
-        // Only react to scene documents
-        if (e.Metadata is not SceneDocumentMetadata sceneMetadata)
-        {
-            return;
-        }
-
-        // If we're already showing this scene, or already loading it, do nothing
-        if (this.Scene?.AttachedObject.Id == sceneMetadata.DocumentId || this.loadingDocumentId == sceneMetadata.DocumentId)
-        {
-            return;
-        }
-
-        // Find the scene in the current project
-        var scene = this.projectManager.CurrentProject?.Scenes.FirstOrDefault(s => s.Id == sceneMetadata.DocumentId);
-        if (scene is null)
-        {
-            return;
-        }
-
-        // Load the scene data and display it
-        await this.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
+        // Background document opens must not load scenes; OnDocumentActivated drives the
+        // active-scene load. Material/inspection tabs and background opens leave the current
+        // loaded scene untouched.
+        _ = sender;
+        _ = e;
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
