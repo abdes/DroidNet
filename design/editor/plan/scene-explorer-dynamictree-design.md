@@ -876,10 +876,10 @@ Atomicity (one history step per batch, all-or-nothing)
 
 Clipboard
 
-- [ ] C11 — `SceneExplorerViewModel.cs:503` Copy captures IDs/live adapters, not immutable
+- [x] C11 — `SceneExplorerViewModel.cs:503` Copy captures IDs/live adapters, not immutable
       DTO/layout/pose snapshots; folders excluded; sequential-scene Copy unresolved.
 - [x] C12 — `Clipboard.cs:108` copied directional lights retain `AtmosphereSlot` (plan: `None`).
-- [ ] C13 — `SceneExplorerViewModel.cs:550,650` normal Paste on a node = child Paste; Paste and
+- [x] C13 — `SceneExplorerViewModel.cs:550,650` normal Paste on a node = child Paste; Paste and
       Paste-as-child identical; multi-scope silently falls back to root.
 - [x] C14 — `SceneExplorerViewModel.cs:586` successful Copy-paste clears the payload; Cut into a
       folder loses grouping intent.
