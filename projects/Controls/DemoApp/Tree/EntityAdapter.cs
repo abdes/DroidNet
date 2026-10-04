@@ -31,7 +31,7 @@ internal sealed partial class EntityAdapter(Entity entity) : TreeItemAdapter(isR
     /// <inheritdoc/>
     public Entity AttachedObject => entity;
 
-    /// <summary>Gets or sets the demo entity's visibility independently of tree selection.</summary>
+    /// <summary>Gets or sets a value indicating whether the demo entity is visible, independently of tree selection.</summary>
     public bool IsVisible
     {
         get => entity.IsVisible;
@@ -49,7 +49,7 @@ internal sealed partial class EntityAdapter(Entity entity) : TreeItemAdapter(isR
         }
     }
 
-    /// <summary>Gets or sets demo content residency, independently of lazy child enumeration.</summary>
+    /// <summary>Gets or sets a value indicating whether demo content is resident, independently of lazy child enumeration.</summary>
     public bool IsLoaded
     {
         get => entity.IsLoaded;

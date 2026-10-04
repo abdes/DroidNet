@@ -151,6 +151,7 @@ public partial class DynamicTreeDemoViewModel : DynamicTreeViewModel
     /// </summary>
     /// <param name="item">The tree item to rename.</param>
     /// <param name="newName">The new name to assign to the item.</param>
+    /// <returns>The commit result, including rejection text when the domain service refuses the rename.</returns>
     public override Task<TreeItemRenameResult> CommitRenameAsync(ITreeItem item, string newName)
     {
         ArgumentNullException.ThrowIfNull(item);

@@ -15,10 +15,10 @@ internal sealed class Entity(string name) : NamedItem(name)
     /// </summary>
     public IList<Entity> Entities { get; init; } = [];
 
-    /// <summary>Gets or sets whether the demo entity is visible.</summary>
+    /// <summary>Gets or sets a value indicating whether the demo entity is visible.</summary>
     public bool IsVisible { get; set; } = true;
 
-    /// <summary>Gets or sets whether the demo entity's content is loaded.</summary>
+    /// <summary>Gets or sets a value indicating whether the demo entity's content is loaded.</summary>
     public bool IsLoaded { get; set; } = true;
 
     /// <summary>
