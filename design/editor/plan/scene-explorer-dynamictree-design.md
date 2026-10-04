@@ -841,19 +841,19 @@ Transforms, reparent and native convergence
       `node.IgnoreParentTransform` (verified counterexample: world X=0 under X=10 parent → −10).
       Preserve the node's world (=local) unchanged instead.
 - [x] C2 — `Hierarchy.cs:193` `RenameNodeAsync` records history/dirty but no native rename sync.
-- [ ] C3 — `Hierarchy.cs:400` + `SceneEngineSync.cs:490`: preserve-world updates managed local
+- [x] C3 — `Hierarchy.cs:400` + `SceneEngineSync.cs:490`: preserve-world updates managed local
       TRS, then reparents native with `preserveWorldTransform:false` without publishing the new TRS.
-- [ ] C4 — `Hierarchy.cs:605` delete undo restores the root graph but native-creation only for
+- [x] C4 — `Hierarchy.cs:605` delete undo restores the root graph but native-creation only for
       the restored root, not its subtree.
 - [x] C5 — `Hierarchy.cs:640` undo reparents the native node to the forward destination, not
       the restored parent.
 - [x] C6 — `SceneExplorerViewModel.cs:1339` reorder swaps node/folder tuple values.
-- [ ] C7 — `SceneOrganizer.cs:612,323` layout mutates before destination validation; a rejected
+- [x] C7 — `SceneOrganizer.cs:612,323` layout mutates before destination validation; a rejected
       move alters authored layout.
 
 Atomicity (one history step per batch, all-or-nothing)
 
-- [ ] C8 — `Clipboard.cs:65` duplication records undo per root; a later invalid root leaves
+- [x] C8 — `Clipboard.cs:65` duplication records undo per root; a later invalid root leaves
       earlier changes committed as separate history entries.
 - [ ] C9 — `SceneExplorerViewModel.cs:189` mixed node/folder delete submits separate commands.
 - [ ] C10 — `Hierarchy.cs:419` grouping loops mutate incrementally without batch rollback.
@@ -862,7 +862,7 @@ Clipboard
 
 - [ ] C11 — `SceneExplorerViewModel.cs:503` Copy captures IDs/live adapters, not immutable
       DTO/layout/pose snapshots; folders excluded; sequential-scene Copy unresolved.
-- [ ] C12 — `Clipboard.cs:108` copied directional lights retain `AtmosphereSlot` (plan: `None`).
+- [x] C12 — `Clipboard.cs:108` copied directional lights retain `AtmosphereSlot` (plan: `None`).
 - [ ] C13 — `SceneExplorerViewModel.cs:550,650` normal Paste on a node = child Paste; Paste and
       Paste-as-child identical; multi-scope silently falls back to root.
 - [ ] C14 — `SceneExplorerViewModel.cs:586` successful Copy-paste clears the payload; Cut into a
