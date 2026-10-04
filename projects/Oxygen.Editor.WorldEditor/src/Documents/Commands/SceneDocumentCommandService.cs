@@ -4,7 +4,6 @@
 
 using System.Numerics;
 using CommunityToolkit.Mvvm.Messaging;
-using DroidNet.Controls;
 using DroidNet.Documents;
 using DroidNet.TimeMachine;
 using Microsoft.UI;
@@ -17,9 +16,7 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.SceneExplorer.Operations;
-using Oxygen.Editor.World.SceneExplorer.Services;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Slots;
@@ -33,7 +30,6 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 
 /// <inheritdoc />
 /// <param name="automaticCooking">Schedules cooking after acknowledged source saves.</param>
-/// <param name="sceneExplorerService">The scene explorer service.</param>
 /// <param name="selectionService">The selection service.</param>
 /// <param name="sceneEngineSync">The scene engine sync.</param>
 /// <param name="projectManager">The project manager.</param>
@@ -48,7 +44,6 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// <param name="sceneOrganizer">The explorer-layout mutation owner.</param>
 public sealed partial class SceneDocumentCommandService(
     Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService automaticCooking,
-    ISceneExplorerService sceneExplorerService,
     ISceneSelectionService selectionService,
     ISceneEngineSync sceneEngineSync,
     IProjectManagerService projectManager,
@@ -64,7 +59,6 @@ public sealed partial class SceneDocumentCommandService(
 {
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Scene, SemaphoreSlim> SaveGates = [];
 
-    private readonly ISceneExplorerService sceneExplorerService = sceneExplorerService;
     private readonly ISceneSelectionService selectionService = selectionService;
     private readonly ISceneEngineSync sceneEngineSync = sceneEngineSync;
     private readonly IProjectManagerService projectManager = projectManager;
@@ -504,63 +498,6 @@ public sealed partial class SceneDocumentCommandService(
     {
         using var authoring = EnterAuthoring(context);
         return authoring is null ? new(Succeeded: false) : await this.SaveSceneCoreAsync(context).ConfigureAwait(true);
-    }
-
-    /// <inheritdoc />
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
-    public async Task<SceneCommandResult> RenameItemAsync(
-        SceneDocumentCommandContext context,
-        ITreeItem item,
-        string newName)
-    {
-        using var authoring = EnterAuthoring(context);
-        if (authoring is null)
-        {
-            return new SceneCommandResult(Succeeded: false);
-        }
-
-        var oldName = item.Label;
-        if (string.Equals(oldName, newName, StringComparison.Ordinal))
-        {
-            return SceneCommandResult.Success;
-        }
-
-        if (string.IsNullOrWhiteSpace(newName))
-        {
-            var operationResultId = this.PublishSceneFailure(
-                item is FolderAdapter ? SceneOperationKinds.ExplorerFolderRename : SceneOperationKinds.NodeRename,
-                DiagnosticCodes.ScenePrefix + "INVALID_NAME",
-                "Item was not renamed",
-                "Scene item names cannot be empty.",
-                context);
-            return new SceneCommandResult(Succeeded: false, operationResultId);
-        }
-
-        try
-        {
-            await this.sceneExplorerService.RenameItemAsync(item, newName).ConfigureAwait(true);
-            if (SceneAuthoringGate.IsRetired(context.Scene))
-            {
-                return new(Succeeded: false);
-            }
-
-            context.History.AddChange(
-                $"Rename({oldName} -> {newName})",
-                async () => await this.RenameItemAsync(context, item, oldName).ConfigureAwait(false));
-            await this.MarkDirtyAsync(context).ConfigureAwait(true);
-            return SceneCommandResult.Success;
-        }
-        catch (Exception ex)
-        {
-            var operationResultId = this.PublishSceneFailure(
-                item is FolderAdapter ? SceneOperationKinds.ExplorerFolderRename : SceneOperationKinds.NodeRename,
-                DiagnosticCodes.ScenePrefix + "RENAME_FAILED",
-                "Item was not renamed",
-                $"The item '{oldName}' could not be renamed.",
-                context,
-                ex);
-            return new SceneCommandResult(Succeeded: false, operationResultId);
-        }
     }
 
     private static SceneAuthoringGate.Operation? EnterAuthoring(SceneDocumentCommandContext context)

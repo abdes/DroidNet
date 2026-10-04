@@ -244,84 +244,16 @@ public sealed partial class SceneDocumentCommandService
     }
 
     /// <inheritdoc />
-    public async Task<SceneCommandResult> DeleteNodesAsync(
+    public Task<SceneCommandResult> DeleteNodesAsync(
         SceneDocumentCommandContext context,
         IReadOnlyList<Guid> nodeIds)
-    {
-        using var authoring = EnterAuthoring(context);
-        if (authoring is null)
-        {
-            return new SceneCommandResult(Succeeded: false);
-        }
-
-        var topLevelIds = this.sceneOrganizer.FilterTopLevelSelectedNodeIds([.. nodeIds], context.Scene);
-        var restores = new List<NodeRestore>(topLevelIds.Count);
-        foreach (var nodeId in topLevelIds)
-        {
-            var node = FindNode(context.Scene, nodeId);
-            if (node is null)
-            {
-                return this.ValidationFailure(
-                    SceneOperationKinds.NodeDelete,
-                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
-                    "Nodes were not deleted",
-                    "One or more selected nodes no longer exist.",
-                    context);
-            }
-
-            restores.Add(NodeRestore.Capture(node));
-        }
-
-        EnsureExplorerLayout(context.Scene);
-        foreach (var restore in restores)
-        {
-            _ = this.sceneMutator.RemoveHierarchy(restore.Node.Id, context.Scene);
-            _ = this.sceneOrganizer.RemoveNodeFromLayout(restore.Node.Id, context.Scene);
-        }
-
-        this.RecordDeleteNodesUndo(context, restores);
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        await this.SyncRemoveNodesAsync(context, [.. topLevelIds]).ConfigureAwait(true);
-
-        foreach (var restore in restores)
-        {
-            this.PublishNodeRemoved(context, restore.Node);
-        }
-
-        return SceneCommandResult.Success;
-    }
+        => this.DeleteItemsAsync(context, nodeIds, []);
 
     /// <inheritdoc />
     public Task<SceneCommandResult> DeleteFolderAsync(
         SceneDocumentCommandContext context,
         Guid folderId)
-    {
-        using var authoring = EnterAuthoring(context);
-        if (authoring is null)
-        {
-            return Task.FromResult(new SceneCommandResult(Succeeded: false));
-        }
-
-        try
-        {
-            EnsureExplorerLayout(context.Scene);
-            var change = this.sceneOrganizer.RemoveFolder(folderId, promoteChildrenToParent: true, context.Scene);
-            this.RecordLayoutHistory(context, "Remove folder", change.PreviousLayout, change.NewLayout);
-            _ = this.MarkDirtyAsync(context);
-            return Task.FromResult(SceneCommandResult.Success);
-        }
-        catch (Exception ex)
-        {
-            var operationResultId = this.PublishSceneFailure(
-                SceneOperationKinds.ExplorerFolderDelete,
-                DiagnosticCodes.ScenePrefix + "DELETE_FOLDER_FAILED",
-                "Folder was not removed",
-                "The folder could not be removed.",
-                context,
-                ex);
-            return Task.FromResult(new SceneCommandResult(Succeeded: false, operationResultId));
-        }
-    }
+        => this.DeleteItemsAsync(context, [], [folderId]);
 
     /// <inheritdoc />
     public async Task<SceneCommandResult> DeleteItemsAsync(

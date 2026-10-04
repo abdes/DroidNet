@@ -15,7 +15,6 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.SceneExplorer.Services;
 using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Serialization;
@@ -1320,7 +1319,6 @@ public sealed partial class SceneDocumentCommandServiceTests
             .ReturnsAsync((ProjectContext _, Uri uri, CancellationToken _) => TestSlotInventory(uri));
         var sut = new SceneDocumentCommandService(
             automaticCooking ?? Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
-            new Mock<ISceneExplorerService>(MockBehavior.Strict).Object,
             new SceneSelectionService(),
             synchronization ?? sync.Object,
             projectManager ?? new Mock<IProjectManagerService>(MockBehavior.Strict).Object,

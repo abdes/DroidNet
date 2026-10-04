@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Controls;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
@@ -217,18 +216,6 @@ public interface ISceneDocumentCommandService
     /// <param name="cancellationToken">Cancels before accepting the replacement.</param>
     /// <returns>The replacement model, or a failure retaining the original authoring state.</returns>
     public Task<SceneValueCommandResult<Scene>> ReloadSceneAsync(SceneDocumentCommandContext context, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Renames a tree item in the scene document.
-    /// </summary>
-    /// <param name="context">The document command context.</param>
-    /// <param name="item">The item to rename.</param>
-    /// <param name="newName">The new display name.</param>
-    /// <returns>The command result.</returns>
-    public Task<SceneCommandResult> RenameItemAsync(
-        SceneDocumentCommandContext context,
-        ITreeItem item,
-        string newName);
 
     /// <summary>Creates an empty scene node under a node, a folder, or the scene root.</summary>
     /// <param name="context">The document command context.</param>

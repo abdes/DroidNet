@@ -134,6 +134,46 @@ public sealed partial class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
+    public async Task DeleteFolderAsync_WhenFolderIdIsStale_RejectsWithStaleTargetValidation()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Grouped" };
+        scene.RootNodes.Add(node);
+        var context = CreateContext(scene);
+        var folder = await fixture.Sut.CreateFolderAsync(context, parentFolderId: null, parentNodeId: null, "Folder").ConfigureAwait(false);
+        _ = (await fixture.Sut.DeleteFolderAsync(context, folder.Value!).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+        var undoSteps = context.History.UndoStack.Count;
+
+        var stale = await fixture.Sut.DeleteFolderAsync(context, folder.Value!).ConfigureAwait(false);
+
+        _ = stale.Succeeded.Should().BeFalse();
+        _ = stale.ValidationCode.Should().Be(DiagnosticCodes.ScenePrefix + "STALE_TARGET");
+        _ = scene.AllNodes.Should().ContainSingle();
+        _ = context.History.UndoStack.Should().HaveCount(undoSteps, "a rejected delete records no undo step");
+    }
+
+    [TestMethod]
+    public async Task DeleteNodesAsync_Undo_RestoresGraphAndExplorerLayout()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Node" };
+        scene.RootNodes.Add(node);
+        var context = CreateContext(scene);
+
+        _ = (await fixture.Sut.DeleteNodesAsync(context, [node.Id]).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+        _ = context.History.UndoStack.Should().ContainSingle();
+
+        await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = scene.RootNodes.Should().Contain(node);
+        _ = scene.ExplorerLayout.Should().Contain(entry => entry.NodeId == node.Id, "undo of the delete transaction restores graph and layout together");
+    }
+
+    [TestMethod]
     public async Task ReparentNodesAsync_PreserveWorld_KeepsWorldPoseUnderRotatedScaledParent()
     {
         var fixture = CreateFixture();

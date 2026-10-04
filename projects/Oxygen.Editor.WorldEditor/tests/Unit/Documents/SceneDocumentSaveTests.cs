@@ -11,7 +11,6 @@ using Moq;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneExplorer.Operations;
-using Oxygen.Editor.World.SceneExplorer.Services;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
@@ -46,7 +45,6 @@ public sealed class SceneDocumentSaveTests
         var results = new Mock<IOperationResultPublisher>();
         var sut = new SceneDocumentCommandService(
             Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
-            new Mock<ISceneExplorerService>(MockBehavior.Strict).Object,
             new SceneSelectionService(),
             new Mock<ISceneEngineSync>(MockBehavior.Strict).Object,
             projects.Object,

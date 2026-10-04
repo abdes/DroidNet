@@ -211,7 +211,6 @@ public sealed class SceneSaveRevisionTests
             _ = documents.Setup(value => value.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>())).ReturnsAsync(value: true);
             this.Commands = new SceneDocumentCommandService(
                 this.AutomaticCooking.Object,
-                Mock.Of<ISceneExplorerService>(),
                 new SceneSelectionService(),
                 this.Sync.Object,
                 new ProjectManagerService(this.Storage.Object),
