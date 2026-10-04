@@ -113,7 +113,7 @@ public sealed partial class DynamicTreeDemoView
         {
             var isNarrow = this.LayoutRootGrid.ActualWidth < 760;
             var isCompact = this.TreeDensityToggle.IsChecked == true;
-            sceneTree.ItemRowHeight = isCompact ? 28 : 40;
+            sceneTree.ItemRowHeight = isCompact ? 32 : 40;
             var compactFilterStyles = this.compactFilterStyles ??= new ResourceDictionary
             {
                 Source = new Uri("ms-appx:///DroidNet.Controls.DynamicTree/DynamicTree/CompactFilterBarStyles.xaml"),
