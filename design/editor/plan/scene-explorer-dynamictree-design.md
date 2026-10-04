@@ -804,12 +804,137 @@ Evidence: 68 Projects tests and 265 WorldEditor Unit tests pass (drop-hook,
 folder-index, layout-initialization, command-routing, selection-context, deep-copy,
 keyboard-clipboard routing, search, reorder/folder-move and context-menu cases);
 WorldEditor src, Unit, and
-Oxygen.Editor.App build clean. All ten SE-02 steps are implemented; SE-02 moves to
-`landed_needs_validation`. One known integration note remains: the command owner
-does not yet raise the legacy `ISceneExplorerService.AuthoringChanged`, so
-`SceneContentDemandService` reference observers do not refresh on command-driven
-mutations — this predates SE-02 and should be consolidated when the workspace
-interaction owner is wired in SE-03.
+Oxygen.Editor.App build clean. An independent adversarial review (2026-10-04) found
+SE-01 and SE-02 **not complete**: several source-level correctness defects and
+unapproved contract decisions remain. They are tracked in the corrective-action
+checklist below and must be closed before SE-03. The legacy `AuthoringChanged` note
+(item P6) is restated there against the observed collection-subscription mechanism.
+
+### SE-02 corrective actions — review findings (tracking)
+
+Legend: `[ ]` open · `[~]` in progress · `[x]` closed. Each entry names owner + evidence.
+
+#### Owner-approval blockers (cannot be implemented without a recorded decision)
+
+- [ ] D1 — reviewer + projects/docs. Preserve-world vs preserve-local Explorer default is
+      not recorded in an accepted contract (`scene-explorer.md:129`, `scene-authoring-model.md:47`).
+- [ ] D2 — reviewer + projects/docs. Grouping-only folder scope still permits reparent
+      (`scene-explorer.md:153`); the clarified policy must be recorded.
+- [ ] D3 — reviewer + projects/docs. Row-kind selection + explicit primary stays node-only in
+      `documents-and-commands.md:150`; Inspector does not consume the new context.
+- [ ] D4 — reviewer + projects/docs. Workspace lock/category persistence is Hide-only in
+      `settings-architecture.md:65`; lock/category placement/lifetime unapproved.
+- [ ] D5 — reviewer + projects/docs. Folder delete/duplication + copied-light role policy
+      (`plan:566`) unapproved; duplication currently retains `AtmosphereSlot`.
+- [ ] D6 — reviewer + projects/docs. Default-scene schema/migration/seed policy (`plan:567`)
+      unapproved; migration + fallback still contradict the contract.
+- [ ] D7 — reviewer + projects/docs. Sequential-scene Copy / scene-bound Cut lifetime
+      (`plan:568`) unapproved; payload is still source IDs/live adapters.
+- [ ] D8 — runtime/native. Editing-view mask + category-picking surface (`plan:569`) absent
+      (`IRuntimeWorldCommands`, `IRuntimeInputCommands`); blocks native qualification.
+
+#### Correctness defects — editor/controls
+
+Transforms, reparent and native convergence
+
+- [x] C1 — `SceneTransformMath.cs:66` divides by the new parent world even when
+      `node.IgnoreParentTransform` (verified counterexample: world X=0 under X=10 parent → −10).
+      Preserve the node's world (=local) unchanged instead.
+- [x] C2 — `Hierarchy.cs:193` `RenameNodeAsync` records history/dirty but no native rename sync.
+- [ ] C3 — `Hierarchy.cs:400` + `SceneEngineSync.cs:490`: preserve-world updates managed local
+      TRS, then reparents native with `preserveWorldTransform:false` without publishing the new TRS.
+- [ ] C4 — `Hierarchy.cs:605` delete undo restores the root graph but native-creation only for
+      the restored root, not its subtree.
+- [x] C5 — `Hierarchy.cs:640` undo reparents the native node to the forward destination, not
+      the restored parent.
+- [x] C6 — `SceneExplorerViewModel.cs:1339` reorder swaps node/folder tuple values.
+- [ ] C7 — `SceneOrganizer.cs:612,323` layout mutates before destination validation; a rejected
+      move alters authored layout.
+
+Atomicity (one history step per batch, all-or-nothing)
+
+- [ ] C8 — `Clipboard.cs:65` duplication records undo per root; a later invalid root leaves
+      earlier changes committed as separate history entries.
+- [ ] C9 — `SceneExplorerViewModel.cs:189` mixed node/folder delete submits separate commands.
+- [ ] C10 — `Hierarchy.cs:419` grouping loops mutate incrementally without batch rollback.
+
+Clipboard
+
+- [ ] C11 — `SceneExplorerViewModel.cs:503` Copy captures IDs/live adapters, not immutable
+      DTO/layout/pose snapshots; folders excluded; sequential-scene Copy unresolved.
+- [ ] C12 — `Clipboard.cs:108` copied directional lights retain `AtmosphereSlot` (plan: `None`).
+- [ ] C13 — `SceneExplorerViewModel.cs:550,650` normal Paste on a node = child Paste; Paste and
+      Paste-as-child identical; multi-scope silently falls back to root.
+- [ ] C14 — `SceneExplorerViewModel.cs:586` successful Copy-paste clears the payload; Cut into a
+      folder loses grouping intent.
+- [ ] C15 — base clipboard Escape cannot cancel a subclass's private IDs.
+
+Selection
+
+- [ ] C16 — `SceneExplorerViewModel.cs:1059` publishes node-subset only (folder → empty list →
+      Environment; mixed → nodes → Component Inspector).
+- [ ] C17 — primary identity derived from row order, not an explicit active identity.
+- [ ] C18 — selection service has no change notification consumed by Explorer; rebuild does not
+      reselect by identity.
+- [ ] C19 — root exclusivity not implemented.
+
+Context menu
+
+- [ ] C20 — `SceneExplorerViewModel.cs:618` builds from current selection; no frozen
+      document/lifetime/selection invocation context.
+- [ ] C21 — `SceneExplorerViewModel.cs:637` most actions return current-selection commands;
+      toolbar Click bypasses shared CanExecute.
+- [ ] C22 — no production caller mounts row/background menus; keyboard/touch/stale-dismiss absent.
+- [ ] C23 — `SceneExplorerContextMenu.cs:74` primary-only booleans don't establish batch eligibility.
+
+Search / index
+
+- [ ] C24 — `SceneExplorerViewModel.cs:944` second query discards restoration bookkeeping.
+- [ ] C25 — search expands only node ancestry, not visual folder ancestry / nested folders.
+- [ ] C26 — adapter-tree index is not a complete domain lookup; `SceneAdapter.cs:175` scans per
+      entry; duplicate layout node ids not suppressed.
+- [ ] C27 — `FolderAdapter.cs:62` authored expansion setter used by search.
+
+Scene lifecycle
+
+- [ ] C28 — `SceneExplorerViewModel.cs:104` captures the constructor project.
+- [ ] C29 — `SceneExplorerViewModel.cs:747` background scene opens still load scenes.
+- [ ] C30 — no guard/stage/retire on scene replacement; `SceneEngineSync.Documents.cs:17` retains
+      editable graphs.
+- [ ] C31 — `ProjectCreationService.cs:237` no default seed; `WorkspaceViewModel.cs:427`
+      LastOpenedScene migration; `Project.cs:26` first-scene fallback; `AssetsViewModel.cs:515`
+      premature ActiveScene write.
+
+Generic tree
+
+- [ ] C32 — `DynamicTree.cs:919` recycling does not fully detach subscriptions / reset drop state.
+- [ ] C33 — demo compact profile is 28/12 DIP, not required 32/14; comfortable 40.
+- [ ] C34 — `DynamicTreeViewModel.cs:438,694` displayed-scope keyboard/typeahead scan hidden items.
+- [ ] C35 — `DynamicTree.cs:1567` Escape clears only typeahead; drag cancellation/restoration absent.
+- [ ] C36 — `ContextMenu.cs:119` attached host disposed on unload without Loaded recreation.
+
+#### Test / verification gaps (editor/controls; runtime for native rows)
+
+- [ ] T1 — one undo per batch + atomic rejection (mixed delete, multi-root duplication).
+- [ ] T2 — preserve-world ignored-parent + exact layout/order/TRS undo/redo + native convergence.
+- [ ] T3 — rename reaches native; delete-undo recreates the subtree.
+- [ ] T4 — immutable snapshots, sequential-scene Copy, repeated Copy Paste, Escape cancels Cut.
+- [ ] T5 — folder/mixed selection reaches the right Inspector; external selection reconciles.
+- [ ] T6 — search multi-query restoration, folder ancestry, no authored expansion writes.
+- [ ] T7 — context-menu captured context, keyboard/touch, stale dismissal, toolbar parity.
+- [ ] T8 — single loaded scene: guarded replacement, material-tab retention, configured default.
+- [ ] T9 — generic recycling detach, displayed-scope keyboard, reload/reattach, Escape cancel.
+- [ ] T10 — 32/40 density profiles + measured 1,000-item lazy-tree workload.
+
+#### Progress-note corrections (reconcile §6 with the above)
+
+- [ ] P1 — `plan:639` "SE-01 complete" → in-progress until C32–C36/T9/T10 close.
+- [ ] P2 — `plan:738` "atomic graph+layout commit" → until C8–C10 close.
+- [ ] P3 — `plan:743` "single-loaded-scene policy in place" → until C28–C31 close.
+- [ ] P4 — `plan:782` "every drop intent" → until C6/C13 close.
+- [ ] P5 — `plan:807` "all ten steps implemented" → corrected (this checklist).
+- [ ] P6 — restate legacy `AuthoringChanged` note: demand service also observes collections
+      (`SceneContentDemandService.References.cs:24,59`); add command-driven observer regressions.
 
 ### SE-03 — Showcase UI, workspace protection and live integration
 
