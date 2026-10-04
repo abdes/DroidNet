@@ -138,7 +138,10 @@ Conflicting edits/imports/cooks fail without partial reassignment. Hiding or
 disabling retains assignment; Secondary-only operation never promotes it.
 Primary/Secondary mean neither priority nor a celestial body type. No editable
 scene Sun pointer or independent IsSun/Contributes source remains; a scene
-summary is read-only.
+summary is read-only. Duplication never carries atmosphere membership: a copied
+directional light starts at None, including when the source slot would be free
+after a cut. Automatic promotion or re-acquisition hides the authoring mistake,
+so the author reassigns the moved light explicitly.
 
 Both sources support direct illumination, requested surface/fog shadows,
 atmosphere and captured-sky diffuse/specular lighting. A Moon use case is

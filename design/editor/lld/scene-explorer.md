@@ -13,14 +13,14 @@ for the active scene document.
 
 ## 2. PRD Traceability
 
-| ID | Coverage |
-| --- | --- |
-| `REQ-004` | Scene document hierarchy is visible and usable. |
-| `REQ-006` | Hierarchy commands update dirty state. |
-| `REQ-007` | ED-M03 hierarchy changes save and reopen through the scene document. |
+| ID        | Coverage                                                                          |
+| --------- | --------------------------------------------------------------------------------- |
+| `REQ-004` | Scene document hierarchy is visible and usable.                                   |
+| `REQ-006` | Hierarchy commands update dirty state.                                            |
+| `REQ-007` | ED-M03 hierarchy changes save and reopen through the scene document.              |
 | `REQ-008` | Hierarchy commands request live sync through the command pipeline when supported. |
-| `REQ-022` | Hierarchy command failures are visible operation results. |
-| `REQ-024` | Hierarchy diagnostics identify scene authoring vs. live-sync failure. |
+| `REQ-022` | Hierarchy command failures are visible operation results.                         |
+| `REQ-024` | Hierarchy diagnostics identify scene authoring vs. live-sync failure.             |
 
 ## 3. Architecture Links
 
@@ -79,14 +79,14 @@ Document activated
 
 ## 6. Ownership
 
-| Owner | Responsibility |
-| --- | --- |
-| `SceneExplorerViewModel` | UI state, tree projection, command invocation, selection presentation. |
-| `SceneExplorerService` | Hierarchy/layout orchestration behind commands. |
-| `SceneMutator` | Scene graph create/delete/reparent invariants. |
-| `SceneOrganizer` | Layout-only folders and explorer layout persistence. |
-| `documents-and-commands.md` command service | Command result, dirty state, undo/redo, shared selection ownership. |
-| `scene-authoring-model.md` | Scene graph/domain data rules. |
+| Owner                                       | Responsibility                                                         |
+| ------------------------------------------- | ---------------------------------------------------------------------- |
+| `SceneExplorerViewModel`                    | UI state, tree projection, command invocation, selection presentation. |
+| `SceneExplorerService`                      | Hierarchy/layout orchestration behind commands.                        |
+| `SceneMutator`                              | Scene graph create/delete/reparent invariants.                         |
+| `SceneOrganizer`                            | Layout-only folders and explorer layout persistence.                   |
+| `documents-and-commands.md` command service | Command result, dirty state, undo/redo, shared selection ownership.    |
+| `scene-authoring-model.md`                  | Scene graph/domain data rules.                                         |
 
 ## 7. Data Contracts
 
@@ -101,6 +101,11 @@ Explorer items are projections:
 
 Only `SceneNodeAdapter` maps to runtime scene graph data. Folders never become
 scene nodes.
+
+Deleting a folder is a layout operation only: its entries re-attach to the
+deleted folder's own parent entry, no node is deleted, and scene-graph parentage
+and world transforms are unchanged — including where the grouping followed a
+lineage-driven reparent. Deleting a node deletes its subtree.
 
 ### Selection Projection
 
@@ -141,16 +146,16 @@ Every menu action resolves to a document command request with:
 
 ED-M03 hierarchy commands:
 
-| User Action | Command |
-| --- | --- |
-| Add empty node | `Scene.Node.Create` |
-| Rename node | `Scene.Node.Rename` |
-| Delete selected node(s) | `Scene.Node.Delete` |
-| Drag node to node/root/folder | `Scene.Node.Reparent` plus optional layout update |
-| Create folder | `Scene.ExplorerFolder.Create` |
-| Rename folder | `Scene.ExplorerFolder.Rename` |
-| Delete folder | `Scene.ExplorerFolder.Delete` |
-| Move node into folder | `Scene.ExplorerLayout.MoveNode` plus scene reparent if lineage requires it |
+| User Action                   | Command                                                                    |
+| ----------------------------- | -------------------------------------------------------------------------- |
+| Add empty node                | `Scene.Node.Create`                                                        |
+| Rename node                   | `Scene.Node.Rename`                                                        |
+| Delete selected node(s)       | `Scene.Node.Delete`                                                        |
+| Drag node to node/root/folder | `Scene.Node.Reparent` plus optional layout update                          |
+| Create folder                 | `Scene.ExplorerFolder.Create`                                              |
+| Rename folder                 | `Scene.ExplorerFolder.Rename`                                              |
+| Delete folder                 | `Scene.ExplorerFolder.Delete`                                              |
+| Move node into folder         | `Scene.ExplorerLayout.MoveNode` plus scene reparent if lineage requires it |
 
 Folder commands are layout commands. They update explorer layout and dirty
 state but do not call live sync unless they also trigger scene graph mutation.
@@ -199,13 +204,13 @@ changed, the command remains applied and the result is warning/partial success.
 
 Failure mapping:
 
-| Failure | Domain |
-| --- | --- |
-| stale node/folder ID | `SceneAuthoring` |
-| invalid reparent cycle | `SceneAuthoring` |
-| empty/invalid name | `SceneAuthoring` |
-| folder layout corruption | `SceneAuthoring` |
-| live sync create/delete/reparent failure | `LiveSync` |
+| Failure                                  | Domain           |
+| ---------------------------------------- | ---------------- |
+| stale node/folder ID                     | `SceneAuthoring` |
+| invalid reparent cycle                   | `SceneAuthoring` |
+| empty/invalid name                       | `SceneAuthoring` |
+| folder layout corruption                 | `SceneAuthoring` |
+| live sync create/delete/reparent failure | `LiveSync`       |
 
 User-triggered hierarchy failures must produce visible operation results or
 output/log diagnostics with document and node/folder scope where known.
