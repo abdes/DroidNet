@@ -905,7 +905,7 @@ Context menu
 
 Search / index
 
-- [ ] C24 — `SceneExplorerViewModel.cs:944` second query discards restoration bookkeeping.
+- [x] C24 — `SceneExplorerViewModel.cs:944` second query discards restoration bookkeeping.
 - [ ] C25 — search expands only node ancestry, not visual folder ancestry / nested folders.
 - [ ] C26 — adapter-tree index is not a complete domain lookup; `SceneAdapter.cs:175` scans per
       entry; duplicate layout node ids not suppressed.
