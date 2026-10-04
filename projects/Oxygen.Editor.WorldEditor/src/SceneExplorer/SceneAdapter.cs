@@ -30,6 +30,9 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
     /// <summary>Gets a value indicating whether the tree uses the authored explorer layout.</summary>
     internal bool UseLayoutAdapters { get; init; }
 
+    /// <summary>Gets the root-level items in layout order without triggering lazy child loading.</summary>
+    internal IReadOnlyList<ITreeItem> RootItems => this.rootItemsCache;
+
     /// <inheritdoc />
     public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
 

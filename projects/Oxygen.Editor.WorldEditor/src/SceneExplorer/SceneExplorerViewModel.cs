@@ -49,6 +49,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     // Fast lookup of adapters by SceneNode.Id to avoid traversing/initializing the tree during reconciliation.
     private readonly Dictionary<Guid, SceneNodeAdapter> nodeAdapterIndex = [];
+
+    // Fast lookup of folder adapters by folder Id to avoid scanning the tree during reconciliation.
+    private readonly Dictionary<Guid, FolderAdapter> folderAdapterIndex = [];
     private int nextEntityIndex;
     private CancellationTokenSource? loadSceneCts;
     private Guid loadingDocumentId = Guid.Empty;
@@ -112,7 +115,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         this.ItemBeingAdded += this.OnItemBeingAdded;
         this.ItemAdded += this.OnItemAdded;
-        this.ItemMoved += this.OnItemMoved;
 
         messenger.Register<SceneNodeSelectionRequestMessage>(this, this.OnSceneNodeSelectionRequested);
         messenger.Register<InspectSceneNodeMessage>(this, (_, message) =>
@@ -172,30 +174,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     public partial ReadOnlyObservableCollection<IChange> RedoStack { get; set; }
 
     private HistoryKeeper History => this.Scene != null ? UndoRedo.GetHistory(this.Scene.AttachedObject.Id) : UndoRedo.Default[this];
-
-    /// <inheritdoc/>
-    public override Task InsertItemAsync(ITreeItem item, ITreeItem parent, int relativeIndex)
-        => this.RunTreeMutationAsync(parent, () => base.InsertItemAsync(item, parent, relativeIndex));
-
-    /// <inheritdoc/>
-    public override Task RemoveItemAsync(ITreeItem item, bool updateSelection = true)
-        => this.RunTreeMutationAsync(item, () => base.RemoveItemAsync(item, updateSelection));
-
-    /// <inheritdoc/>
-    public override Task MoveItemAsync(ITreeItem item, ITreeItem newParent, int newIndex)
-        => this.RunTreeMutationAsync(newParent, () => base.MoveItemAsync(item, newParent, newIndex));
-
-    /// <inheritdoc/>
-    public override Task MoveItemsAsync(IReadOnlyList<ITreeItem> items, ITreeItem newParent, int startIndex)
-        => this.RunTreeMutationAsync(newParent, () => base.MoveItemsAsync(items, newParent, startIndex));
-
-    /// <inheritdoc/>
-    public override Task ReorderItemAsync(ITreeItem item, int newIndex)
-        => this.RunTreeMutationAsync(item, () => base.ReorderItemAsync(item, newIndex));
-
-    /// <inheritdoc/>
-    public override Task ReorderItemsAsync(IReadOnlyList<ITreeItem> items, int startIndex)
-        => items.Count == 0 ? Task.CompletedTask : this.RunTreeMutationAsync(items[0], () => base.ReorderItemsAsync(items, startIndex));
 
     /// <inheritdoc />
     [RelayCommand(CanExecute = nameof(SceneExplorerViewModel.HasUnlockedSelectedItems))]
@@ -322,7 +300,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     protected internal virtual void HandleItemBeingAdded(Scene scene, SceneNodeAdapter entityAdapter, ITreeItem parent, TreeItemBeingAddedEventArgs args)
     {
         // Validation logic only. The actual move/add is handled by the caller (DynamicTreeViewModel)
-        // and then synced in OnItemAdded/OnItemMoved.
+        // and then synced in OnItemAdded.
 
         // We can check if the move is valid here.
         // For now, we assume it is valid if the types match (checked in OnItemBeingAdded event handler).
@@ -418,35 +396,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             SceneNodeAdapter lna => lna,
             _ => null,
         };
-
-    private static async Task<FolderAdapter?> FindFolderAdapterAsync(SceneAdapter sceneAdapter, Guid folderId)
-    {
-        var children = await sceneAdapter.Children.ConfigureAwait(true);
-        var stack = new Stack<ITreeItem>((IEnumerable<ITreeItem>?)children ?? []);
-
-        while (stack.Count > 0)
-        {
-            var item = stack.Pop();
-            if (item is FolderAdapter folder && folder.Id == folderId)
-            {
-                return folder;
-            }
-
-            if (item is TreeItemAdapter adapter)
-            {
-                var nested = await adapter.Children.ConfigureAwait(true);
-                if (nested is not null)
-                {
-                    foreach (var child in nested)
-                    {
-                        stack.Push(child);
-                    }
-                }
-            }
-        }
-
-        return null;
-    }
 
     private static SceneNode? AsSceneNode(ITreeItem? item)
         => item switch
@@ -756,7 +705,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         await this.InitializeRootAsync(this.Scene, skipRoot: false).ConfigureAwait(true);
         this.nodeAdapterIndex.Clear();
-        await this.IndexAdaptersForSceneAsync(this.Scene).ConfigureAwait(true);
+        this.folderAdapterIndex.Clear();
+        this.IndexAdaptersForScene(this.Scene);
         this.PublishSelection(this.selectionService.Reconcile(loadedScene.Id, loadedScene));
     }
 
@@ -852,11 +802,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         if (this.suppressTreeCommandHandling)
         {
-            if (AsSceneNodeAdapter(args.TreeItem) is { } suppressedAdapter)
-            {
-                _ = this.nodeAdapterIndex.Remove(suppressedAdapter.AttachedObject.Id);
-            }
-
+            this.UnindexAdapter(args.TreeItem);
             this.UntrackTreeItem(args.TreeItem);
             this.LogItemRemoved(args.TreeItem.Label);
             return;
@@ -885,65 +831,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        if (AsSceneNodeAdapter(item) is { } adapter)
-        {
-            _ = this.nodeAdapterIndex.Remove(adapter.AttachedObject.Id);
-        }
-
+        this.UnindexAdapter(item);
         this.UntrackTreeItem(item);
-    }
-
-    private void OnItemMoved(object? sender, TreeItemsMovedEventArgs args)
-    {
-        _ = sender; // unused
-
-        if (args.Moves.Count == 0)
-        {
-            return;
-        }
-
-        using var authoring = this.EnterTreeAuthoring(args.Moves[0].Item);
-        if (authoring is null)
-        {
-            return;
-        }
-
-        if (this.suppressTreeCommandHandling)
-        {
-            return;
-        }
-
-        if (args.IsBatch)
-        {
-            this.History.BeginChangeSet($"Move {args.Moves.Count} item(s)");
-        }
-
-        try
-        {
-            this.RecordMoveUndo(args);
-            _ = this.sceneExplorerService.UpdateMovedItemsAsync(args);
-        }
-        finally
-        {
-            if (args.IsBatch)
-            {
-                this.History.EndChangeSet();
-            }
-        }
-    }
-
-    private void RecordMoveUndo(TreeItemsMovedEventArgs args)
-    {
-        foreach (var group in args.Moves.GroupBy(m => m.PreviousParent))
-        {
-            foreach (var move in group.OrderBy(m => m.PreviousIndex))
-            {
-                var item = move.Item;
-                this.History.AddChange(
-                    $"MoveItemAsync({item.Label})",
-                    async () => await this.MoveItemAsync(item, move.PreviousParent, move.PreviousIndex).ConfigureAwait(false));
-            }
-        }
     }
 
     private void OnSceneNodeSelectionRequested(object recipient, SceneNodeSelectionRequestMessage message)
@@ -1117,11 +1006,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     {
         if (this.suppressTreeCommandHandling)
         {
-            if (AsSceneNodeAdapter(args.TreeItem) is { } suppressedAdapter)
-            {
-                this.nodeAdapterIndex[suppressedAdapter.AttachedObject.Id] = suppressedAdapter;
-            }
-
+            this.IndexAdapter(args.TreeItem);
             this.TrackTreeItem(args.TreeItem);
             return;
         }
@@ -1155,6 +1040,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         if (addedAdapter is null)
         {
+            this.IndexAdapter(args.TreeItem);
             this.TrackTreeItem(args.TreeItem);
             return;
         }
@@ -1162,7 +1048,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         // Register adapter for quick lookup
         try
         {
-            this.nodeAdapterIndex[addedAdapter.AttachedObject.Id] = addedAdapter;
+            this.IndexAdapter(addedAdapter);
             this.TrackTreeItem(addedAdapter);
         }
         catch (Exception exception)
@@ -1333,15 +1219,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             && await this.LoadSceneAsync(message.Scene).ConfigureAwait(true)
             && ReferenceEquals(this.Scene?.AttachedObject, message.Scene);
 
-    private async Task RunTreeMutationAsync(ITreeItem item, Func<Task> mutation)
-    {
-        using var authoring = this.EnterTreeAuthoring(item);
-        if (authoring is not null)
-        {
-            await mutation().ConfigureAwait(true);
-        }
-    }
-
     private void OnAuthoringChanged(object? sender, SceneAuthoringChangedEventArgs args)
     {
         if (ReferenceEquals(this.Scene?.AttachedObject, args.Scene))
@@ -1367,7 +1244,78 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         _ = await this.documentService.UpdateMetadataAsync(this.windowId, context.DocumentId, context.Metadata).ConfigureAwait(true);
     }
 
-    private async Task IndexAdaptersForSceneAsync(SceneAdapter sceneAdapter)
+    /// <inheritdoc />
+    public override async Task<TreeDropResult> CommitDropAsync(TreeDropRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        // Copy-drop (Ctrl-drag) uses the clipboard/duplication path and is not a move command.
+        if (request.Operation == TreeDropOperation.Copy || request.Items.Count == 0)
+        {
+            return TreeDropResult.Rejected;
+        }
+
+        // Only node roots are supported by the identity-based hierarchy commands today; folder
+        // grouping/reparent and exact sibling reordering land in later steps.
+        var nodeIds = request.Items
+            .OfType<SceneNodeAdapter>()
+            .Select(adapter => adapter.AttachedObject.Id)
+            .ToList();
+        if (nodeIds.Count == 0)
+        {
+            return TreeDropResult.Rejected;
+        }
+
+        var context = this.CreateCommandContext();
+        if (context is null)
+        {
+            return TreeDropResult.Rejected;
+        }
+
+        SceneCommandResult result = request.Parent switch
+        {
+            FolderAdapter folder => await this.commandService.MoveNodesToFolderAsync(context, nodeIds, folder.Id).ConfigureAwait(false),
+            SceneNodeAdapter node => await this.commandService.ReparentNodesAsync(context, nodeIds, node.AttachedObject.Id, preserveWorldTransform: true).ConfigureAwait(false),
+            _ => await this.commandService.ReparentNodesAsync(context, nodeIds, newParentNodeId: null, preserveWorldTransform: true).ConfigureAwait(false),
+        };
+
+        if (!result.Succeeded)
+        {
+            return TreeDropResult.Rejected;
+        }
+
+        await this.ReconcileProjectionAsync().ConfigureAwait(false);
+
+        var moved = nodeIds
+            .Where(this.nodeAdapterIndex.ContainsKey)
+            .Select(id => (ITreeItem)this.nodeAdapterIndex[id])
+            .ToList();
+        return TreeDropResult.Committed(moved);
+    }
+
+    /// <summary>Returns the folder adapter for the given folder identity, or <see langword="null"/>.</summary>
+    /// <param name="folderId">The folder to look up.</param>
+    /// <returns>A task completing with the adapter, or <see langword="null"/> when not realized.</returns>
+    public Task<FolderAdapter?> FindFolderAdapterAsync(Guid folderId)
+        => Task.FromResult(this.folderAdapterIndex.TryGetValue(folderId, out var adapter) ? adapter : null);
+
+    private async Task ReconcileProjectionAsync()
+    {
+        if (this.Scene is not { } sceneAdapter)
+        {
+            return;
+        }
+
+        var expandedFolderIds = sceneAdapter.GetExpandedFolderIds();
+        await sceneAdapter.ReloadChildrenAsync(expandedFolderIds, preserveNodeExpansion: true).ConfigureAwait(true);
+
+        await this.InitializeRootAsync(sceneAdapter, skipRoot: false).ConfigureAwait(true);
+        this.nodeAdapterIndex.Clear();
+        this.folderAdapterIndex.Clear();
+        this.IndexAdaptersForScene(sceneAdapter);
+    }
+
+    private void IndexAdaptersForScene(SceneAdapter sceneAdapter)
     {
         if (sceneAdapter is null)
         {
@@ -1377,28 +1325,46 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.ClearTrackedTreeItems();
         this.TrackTreeItem(sceneAdapter);
 
-        var roots = await sceneAdapter.Children.ConfigureAwait(true);
-        var stack = new Stack<ITreeItem>((IEnumerable<ITreeItem>?)roots ?? []);
+        var stack = new Stack<ITreeItem>(sceneAdapter.RootItems);
         while (stack.Count > 0)
         {
             var item = stack.Pop();
             this.TrackTreeItem(item);
-            if (item is SceneNodeAdapter lna)
-            {
-                this.nodeAdapterIndex[lna.AttachedObject.Id] = lna;
-            }
+            this.IndexAdapter(item);
 
-            if (item is TreeItemAdapter adapter)
+            if (item is LayoutItemAdapter layoutItem)
             {
-                var children = await adapter.Children.ConfigureAwait(true);
-                if (children is not null)
+                foreach (var child in layoutItem.CurrentChildren)
                 {
-                    foreach (var c in children)
-                    {
-                        stack.Push(c);
-                    }
+                    stack.Push(child);
                 }
             }
+        }
+    }
+
+    private void IndexAdapter(ITreeItem item)
+    {
+        switch (item)
+        {
+            case SceneNodeAdapter node:
+                this.nodeAdapterIndex[node.AttachedObject.Id] = node;
+                break;
+            case FolderAdapter folder:
+                this.folderAdapterIndex[folder.Id] = folder;
+                break;
+        }
+    }
+
+    private void UnindexAdapter(ITreeItem item)
+    {
+        switch (item)
+        {
+            case SceneNodeAdapter node:
+                _ = this.nodeAdapterIndex.Remove(node.AttachedObject.Id);
+                break;
+            case FolderAdapter folder:
+                _ = this.folderAdapterIndex.Remove(folder.Id);
+                break;
         }
     }
 
@@ -1406,6 +1372,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     private void UntrackTreeItem(ITreeItem item)
     {
+        if (item is SceneNodeAdapter nodeAdapter)
+        {
+            nodeAdapter.Detach();
+        }
+
         if (item is TreeItemAdapter adapter && adapter.TryGetLoadedChildren(out var children))
         {
             foreach (var child in children)
@@ -1417,5 +1388,16 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         _ = this.trackedTreeItems.Remove(item);
     }
 
-    private void ClearTrackedTreeItems() => this.trackedTreeItems.Clear();
+    private void ClearTrackedTreeItems()
+    {
+        foreach (var item in this.trackedTreeItems)
+        {
+            if (item is SceneNodeAdapter nodeAdapter)
+            {
+                nodeAdapter.Detach();
+            }
+        }
+
+        this.trackedTreeItems.Clear();
+    }
 }

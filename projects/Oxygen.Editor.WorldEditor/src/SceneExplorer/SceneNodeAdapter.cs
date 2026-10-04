@@ -42,6 +42,12 @@ public sealed partial class SceneNodeAdapter : LayoutItemAdapter, ITreeItem<Scen
         return new SceneNodeAdapter(this.AttachedObject);
     }
 
+    /// <summary>
+    /// Detaches this adapter from its payload model, releasing the property-change
+    /// subscription so a removed or reloaded adapter does not keep the model alive.
+    /// </summary>
+    public void Detach() => this.AttachedObject.PropertyChanged -= this.OnPayloadPropertyChanged;
+
     private void OnPayloadPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (string.Equals(e.PropertyName, nameof(SceneNode.Name), StringComparison.Ordinal))
