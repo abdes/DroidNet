@@ -63,6 +63,36 @@ public sealed partial class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
+    public async Task RenameNodeAsync_WhenLiveSyncRejects_PublishesOperationResultAndSucceeds()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Cube" };
+        scene.RootNodes.Add(node);
+        var context = CreateContext(scene);
+        _ = fixture.Sync
+            .Setup(sync => sync.RenameNodeAsync(scene, node.Id, "Sphere"))
+            .ReturnsAsync(new SyncOutcome(
+                SyncStatus.Rejected,
+                SceneOperationKinds.NodeRename,
+                AffectedScope.Empty,
+                LiveSyncDiagnosticCodes.RenameRejected,
+                "The runtime rejected the rename."));
+
+        var result = await fixture.Sut.RenameNodeAsync(context, node.Id, "Sphere").ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue("the authoring rename commits even when the live preview rejects it");
+        _ = node.Name.Should().Be("Sphere");
+        _ = result.OperationResultId.Should().NotBeNull("a rejected live-sync rename must publish an operation result");
+        var published = fixture.Results.Published.Should().ContainSingle().Which;
+        _ = published.OperationId.Should().Be(result.OperationResultId!.Value);
+        _ = published.OperationKind.Should().Be(SceneOperationKinds.NodeRename);
+        _ = published.Diagnostics.Should().ContainSingle()
+            .Which.Code.Should().Be(LiveSyncDiagnosticCodes.RenameRejected);
+    }
+
+    [TestMethod]
     public async Task CreateNodeAsync_AtRoot_CreatesNodeAndUndoRemovesIt()
     {
         var fixture = CreateFixture();
@@ -152,6 +182,27 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = stale.ValidationCode.Should().Be(DiagnosticCodes.ScenePrefix + "STALE_TARGET");
         _ = scene.AllNodes.Should().ContainSingle();
         _ = context.History.UndoStack.Should().HaveCount(undoSteps, "a rejected delete records no undo step");
+    }
+
+    [TestMethod]
+    public async Task DeleteItemsAsync_WhenFolderIsStale_LeavesExplorerLayoutUnseeded()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Node" };
+        scene.RootNodes.Add(node);
+        var context = CreateContext(scene);
+        _ = scene.ExplorerLayout.Should().BeNull();
+
+        var result = await fixture.Sut.DeleteItemsAsync(context, [node.Id], [Guid.NewGuid()]).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = result.ValidationCode.Should().Be(DiagnosticCodes.ScenePrefix + "STALE_TARGET");
+        _ = scene.ExplorerLayout.Should().BeNull("a rejected delete must leave the layout exactly as it was");
+        _ = scene.RootNodes.Should().ContainSingle().Which.Should().BeSameAs(node);
+        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.History.UndoStack.Should().BeEmpty();
     }
 
     [TestMethod]
@@ -406,6 +457,50 @@ public sealed partial class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
+    public async Task DuplicateNodesAsync_WhenSourceIsStale_PublishesFailureOperationResult()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var context = CreateContext(scene);
+
+        var result = await fixture.Sut.DuplicateNodesAsync(context, [Guid.NewGuid()], newParentNodeId: null, newParentFolderId: null).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = result.OperationResultId.Should().NotBeNull("a user-triggered duplication failure must publish an operation result");
+        var published = fixture.Results.Published.Should().ContainSingle().Which;
+        _ = published.OperationId.Should().Be(result.OperationResultId!.Value);
+        _ = published.OperationKind.Should().Be(SceneOperationKinds.NodeDuplicate);
+        _ = published.Diagnostics.Should().ContainSingle()
+            .Which.Code.Should().Be(DiagnosticCodes.ScenePrefix + "STALE_TARGET");
+        _ = scene.RootNodes.Should().BeEmpty("a rejected duplication commits nothing");
+        _ = context.History.UndoStack.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public async Task DuplicateNodesFromDataAsync_WhenTargetParentIsStale_PublishesFailureOperationResult()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var source = new SceneNode(scene) { Name = "Source" };
+        scene.RootNodes.Add(source);
+        var context = CreateContext(scene);
+
+        var result = await fixture.Sut.DuplicateNodesFromDataAsync(context, [source.Dehydrate()], Guid.NewGuid(), newParentFolderId: null).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = result.OperationResultId.Should().NotBeNull("a user-triggered paste failure must publish an operation result");
+        var published = fixture.Results.Published.Should().ContainSingle().Which;
+        _ = published.OperationId.Should().Be(result.OperationResultId!.Value);
+        _ = published.OperationKind.Should().Be(SceneOperationKinds.NodeDuplicate);
+        _ = published.Diagnostics.Should().ContainSingle()
+            .Which.Code.Should().Be(DiagnosticCodes.ScenePrefix + "STALE_TARGET");
+        _ = scene.RootNodes.Should().ContainSingle("a rejected paste commits nothing");
+        _ = context.History.UndoStack.Should().BeEmpty();
+    }
+
+    [TestMethod]
     public async Task DeleteNodesAsync_Undo_RecreatesFullSubtreeInNative()
     {
         var fixture = CreateFixture();
@@ -472,7 +567,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = fixture.Sync.Setup(sync => sync.RemoveNodeHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<Guid>>())).Returns(Task.CompletedTask);
         _ = fixture.Sync.Setup(sync => sync.ReparentNodeAsync(It.IsAny<Scene>(), It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
         _ = fixture.Sync.Setup(sync => sync.ReparentHierarchiesAsync(It.IsAny<Scene>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<Guid?>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
-        _ = fixture.Sync.Setup(sync => sync.RenameNodeAsync(It.IsAny<Scene>(), It.IsAny<Guid>(), It.IsAny<string>())).Returns(Task.CompletedTask);
+        _ = fixture.Sync.Setup(sync => sync.RenameNodeAsync(It.IsAny<Scene>(), It.IsAny<Guid>(), It.IsAny<string>())).ReturnsAsync(new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.NodeRename, AffectedScope.Empty));
         _ = fixture.Sync.Setup(sync => sync.UpdateNodeTransformAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<CancellationToken>())).ReturnsAsync(new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditTransform, AffectedScope.Empty));
     }
 

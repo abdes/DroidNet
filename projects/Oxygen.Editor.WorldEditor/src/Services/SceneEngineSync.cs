@@ -492,25 +492,20 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
-    public Task RenameNodeAsync(Scene scene, Guid nodeId, string newName)
+    public Task<SyncOutcome> RenameNodeAsync(Scene scene, Guid nodeId, string newName)
     {
-        var world = this.TryGetWorld(scene);
-        if (world is null)
-        {
-            this.LogCannotRenameNode(nodeId);
-            return Task.CompletedTask;
-        }
+        ArgumentNullException.ThrowIfNull(scene);
 
-        try
-        {
-            this.ExecuteOrDefer(scene, world, new RuntimeRenameSceneNode(nodeId, newName));
-        }
-        catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
-        {
-            this.LogFailedToRenameNode(ex, nodeId);
-        }
-
-        return Task.CompletedTask;
+        return this.ExecuteNodeSyncAsync(
+            scene,
+            node: null,
+            nodeId,
+            SceneOperationKinds.NodeRename,
+            componentType: null,
+            LiveSyncDiagnosticCodes.RenameRejected,
+            LiveSyncDiagnosticCodes.RenameFailed,
+            world => world.Execute(new RuntimeRenameSceneNode(nodeId, newName)),
+            CancellationToken.None);
     }
 
     /// <inheritdoc/>

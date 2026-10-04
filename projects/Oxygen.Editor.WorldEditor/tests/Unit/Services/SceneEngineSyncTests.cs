@@ -75,6 +75,24 @@ public sealed partial class SceneEngineSyncTests
     }
 
     [TestMethod]
+    public async Task RenameNode_WhenEngineNotRunning_ReturnsSkippedNotRunning()
+    {
+        var engine = new Mock<IEngineService>(MockBehavior.Strict);
+        _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Ready);
+        using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Cube" };
+
+        var outcome = await sut.RenameNodeAsync(scene, node.Id, "Sphere").ConfigureAwait(false);
+
+        _ = outcome.Status.Should().Be(SyncStatus.SkippedNotRunning);
+        _ = outcome.Code.Should().Be(LiveSyncDiagnosticCodes.NotRunning);
+        _ = outcome.OperationKind.Should().Be(SceneOperationKinds.NodeRename);
+        _ = outcome.Scope.NodeId.Should().Be(node.Id);
+        engine.VerifyGet(s => s.WorldCommands, Times.Never);
+    }
+
+    [TestMethod]
     public async Task UpdateProperties_WhenEngineNotRunning_BuffersPendingPropertySync()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);

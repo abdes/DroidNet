@@ -40,6 +40,11 @@ public static class SceneOperationKinds
     public const string NodeReparent = "Scene.Node.Reparent";
 
     /// <summary>
+    /// Scene node hierarchy duplication.
+    /// </summary>
+    public const string NodeDuplicate = "Scene.Node.Duplicate";
+
+    /// <summary>
     /// Transform component edit.
     /// </summary>
     public const string EditTransform = "Scene.Component.EditTransform";
@@ -103,4 +108,9 @@ public static class SceneOperationKinds
     /// Scene document save.
     /// </summary>
     public const string Save = "Scene.Save";
+
+    /// <summary>
+    /// Scene document reload from its source.
+    /// </summary>
+    public const string Reload = "Scene.Reload";
 }

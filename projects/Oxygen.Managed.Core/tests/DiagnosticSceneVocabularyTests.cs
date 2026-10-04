@@ -27,6 +27,7 @@ public sealed class DiagnosticSceneVocabularyTests
         _ = SceneOperationKinds.NodeRename.Should().Be("Scene.Node.Rename");
         _ = SceneOperationKinds.NodeDelete.Should().Be("Scene.Node.Delete");
         _ = SceneOperationKinds.NodeReparent.Should().Be("Scene.Node.Reparent");
+        _ = SceneOperationKinds.NodeDuplicate.Should().Be("Scene.Node.Duplicate");
         _ = SceneOperationKinds.EditTransform.Should().Be("Scene.Component.EditTransform");
         _ = SceneOperationKinds.EditGeometry.Should().Be("Scene.Component.EditGeometry");
         _ = SceneOperationKinds.EditMaterialSlot.Should().Be("Scene.Component.EditMaterialSlot");
@@ -40,6 +41,7 @@ public sealed class DiagnosticSceneVocabularyTests
         _ = SceneOperationKinds.ExplorerFolderDelete.Should().Be("Scene.ExplorerFolder.Delete");
         _ = SceneOperationKinds.ExplorerLayoutMoveNode.Should().Be("Scene.ExplorerLayout.MoveNode");
         _ = SceneOperationKinds.Save.Should().Be("Scene.Save");
+        _ = SceneOperationKinds.Reload.Should().Be("Scene.Reload");
     }
 
     [TestMethod]
@@ -48,6 +50,8 @@ public sealed class DiagnosticSceneVocabularyTests
         _ = LiveSyncDiagnosticCodes.NotRunning.Should().Be("OXE.LIVESYNC.NotRunning");
         _ = LiveSyncDiagnosticCodes.RuntimeFaulted.Should().Be("OXE.LIVESYNC.RuntimeFaulted");
         _ = LiveSyncDiagnosticCodes.Cancelled.Should().Be("OXE.LIVESYNC.Cancelled");
+        _ = LiveSyncDiagnosticCodes.RenameRejected.Should().Be("OXE.LIVESYNC.RENAME.Rejected");
+        _ = LiveSyncDiagnosticCodes.RenameFailed.Should().Be("OXE.LIVESYNC.RENAME.Failed");
         _ = LiveSyncDiagnosticCodes.TransformRejected.Should().Be("OXE.LIVESYNC.TRANSFORM.Rejected");
         _ = LiveSyncDiagnosticCodes.TransformFailed.Should().Be("OXE.LIVESYNC.TRANSFORM.Failed");
         _ = LiveSyncDiagnosticCodes.GeometryRejected.Should().Be("OXE.LIVESYNC.GEOMETRY.Rejected");

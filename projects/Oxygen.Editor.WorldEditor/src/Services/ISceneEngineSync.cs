@@ -126,13 +126,13 @@ public interface ISceneEngineSync
     public Task ReparentHierarchiesAsync(Scene scene, IReadOnlyList<Guid> nodeIds, Guid? newParentGuid, bool preserveWorldTransform = false);
 
     /// <summary>
-    ///     Renames an existing scene node in the engine.
+    ///     Renames an existing scene node in the engine and returns a classified sync outcome.
     /// </summary>
     /// <param name="scene">The originating authoring scene.</param>
     /// <param name="nodeId">Node id to rename.</param>
     /// <param name="newName">The new node name.</param>
-    /// <returns>A task that completes when the node is renamed.</returns>
-    public Task RenameNodeAsync(Scene scene, Guid nodeId, string newName);
+    /// <returns>A classified live-sync outcome.</returns>
+    public Task<SyncOutcome> RenameNodeAsync(Scene scene, Guid nodeId, string newName);
 
     // ============================================================================
     // TransformComponent Operations

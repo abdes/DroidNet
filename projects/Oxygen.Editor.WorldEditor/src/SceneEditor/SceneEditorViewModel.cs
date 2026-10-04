@@ -529,7 +529,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             this.operationResults.Publish(new OperationResult
             {
                 OperationId = Guid.NewGuid(),
-                OperationKind = "Scene.Save",
+                OperationKind = SceneOperationKinds.Save,
                 Status = OperationStatus.Failed,
                 Severity = DiagnosticSeverity.Error,
                 Title = "Scene was not saved",

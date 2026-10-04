@@ -5,6 +5,7 @@
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 
@@ -31,13 +32,19 @@ public sealed partial class SceneDocumentCommandService
         using var authoring = EnterAuthoring(context);
         if (authoring is null)
         {
-            return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+            return this.DuplicateFailure(
+                DiagnosticCodes.ScenePrefix + "AUTHORING_SUSPENDED",
+                "The scene is reloading or was replaced, so the duplication did not run.",
+                context);
         }
 
         var topLevelIds = this.sceneOrganizer.FilterTopLevelSelectedNodeIds([.. nodeIds], context.Scene);
         if (topLevelIds.Count == 0)
         {
-            return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+            return this.DuplicateFailure(
+                DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                "The nodes to duplicate no longer exist in the scene.",
+                context);
         }
 
         SceneNode? parentNode = null;
@@ -46,7 +53,10 @@ public sealed partial class SceneDocumentCommandService
             parentNode = FindNode(context.Scene, newParentNodeId.Value);
             if (parentNode is null)
             {
-                return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+                return this.DuplicateFailure(
+                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                    "The target parent node no longer exists.",
+                    context);
             }
         }
 
@@ -56,7 +66,10 @@ public sealed partial class SceneDocumentCommandService
             var (found, nodeId) = FindFolderSceneParentNodeId(context.Scene.ExplorerLayout, newParentFolderId.Value);
             if (!found)
             {
-                return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+                return this.DuplicateFailure(
+                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                    "The target folder no longer exists.",
+                    context);
             }
 
             folderSceneParentNodeId = nodeId;
@@ -69,7 +82,10 @@ public sealed partial class SceneDocumentCommandService
             var anchor = FindNode(context.Scene, insertAfterNodeId.Value);
             if (anchor is null)
             {
-                return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+                return this.DuplicateFailure(
+                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                    "The destination sibling no longer exists.",
+                    context);
             }
 
             parentNode = anchor.Parent;
@@ -85,7 +101,10 @@ public sealed partial class SceneDocumentCommandService
             var source = FindNode(context.Scene, nodeId);
             if (source is null)
             {
-                return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+                return this.DuplicateFailure(
+                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                    "One or more copied nodes no longer exist.",
+                    context);
             }
 
             sources.Add(source);
@@ -145,12 +164,18 @@ public sealed partial class SceneDocumentCommandService
         using var authoring = EnterAuthoring(context);
         if (authoring is null)
         {
-            return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+            return this.DuplicateFailure(
+                DiagnosticCodes.ScenePrefix + "AUTHORING_SUSPENDED",
+                "The scene is reloading or was replaced, so the duplication did not run.",
+                context);
         }
 
         if (rootData.Count == 0)
         {
-            return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+            return this.DuplicateFailure(
+                DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                "The clipboard no longer contains any node data.",
+                context);
         }
 
         SceneNode? parentNode = null;
@@ -159,7 +184,10 @@ public sealed partial class SceneDocumentCommandService
             parentNode = FindNode(context.Scene, newParentNodeId.Value);
             if (parentNode is null)
             {
-                return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+                return this.DuplicateFailure(
+                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                    "The target parent node no longer exists.",
+                    context);
             }
         }
 
@@ -169,7 +197,10 @@ public sealed partial class SceneDocumentCommandService
             var (found, nodeId) = FindFolderSceneParentNodeId(context.Scene.ExplorerLayout, newParentFolderId.Value);
             if (!found)
             {
-                return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+                return this.DuplicateFailure(
+                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                    "The target folder no longer exists.",
+                    context);
             }
 
             folderSceneParentNodeId = nodeId;
@@ -181,7 +212,10 @@ public sealed partial class SceneDocumentCommandService
             var anchor = FindNode(context.Scene, insertAfterNodeId.Value);
             if (anchor is null)
             {
-                return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+                return this.DuplicateFailure(
+                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                    "The destination sibling no longer exists.",
+                    context);
             }
 
             parentNode = anchor.Parent;
@@ -232,6 +266,17 @@ public sealed partial class SceneDocumentCommandService
 
         return SceneCommandResults.Success<IReadOnlyList<SceneNode>>(created);
     }
+
+    private SceneValueCommandResult<IReadOnlyList<SceneNode>> DuplicateFailure(
+        string code,
+        string message,
+        SceneDocumentCommandContext context)
+        => SceneCommandResults.Failure<IReadOnlyList<SceneNode>>(this.PublishSceneFailure(
+            SceneOperationKinds.NodeDuplicate,
+            code,
+            "Nodes were not duplicated",
+            message,
+            context));
 
     private async Task SyncNodeSubtreeAsync(SceneDocumentCommandContext context, SceneNode node)
     {

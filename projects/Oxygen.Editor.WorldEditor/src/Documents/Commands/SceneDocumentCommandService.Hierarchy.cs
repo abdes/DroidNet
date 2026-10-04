@@ -195,8 +195,9 @@ public sealed partial class SceneDocumentCommandService
             $"Rename({oldName} -> {trimmed})",
             async () => await this.RenameNodeAsync(context, nodeId, oldName).ConfigureAwait(false));
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        await this.sceneEngineSync.RenameNodeAsync(context.Scene, nodeId, trimmed).ConfigureAwait(true);
-        return SceneCommandResult.Success;
+        var outcome = await this.sceneEngineSync.RenameNodeAsync(context.Scene, nodeId, trimmed).ConfigureAwait(true);
+        var operationResultId = await this.PublishSyncOutcomeAsync(context, SceneOperationKinds.NodeRename, outcome).ConfigureAwait(true);
+        return new SceneCommandResult(Succeeded: true, operationResultId);
     }
 
     /// <inheritdoc />
@@ -288,7 +289,6 @@ public sealed partial class SceneDocumentCommandService
         }
 
         // Pre-validate folders before any mutation.
-        EnsureExplorerLayout(context.Scene);
         foreach (var folderId in folderIds)
         {
             var (found, _) = FindFolderSceneParentNodeId(context.Scene.ExplorerLayout, folderId);
@@ -303,6 +303,8 @@ public sealed partial class SceneDocumentCommandService
             }
         }
 
+        // Seed the layout only after every validation passed, so a rejected delete leaves no mutation behind.
+        EnsureExplorerLayout(context.Scene);
         var layoutBefore = this.sceneOrganizer.CloneLayout(context.Scene.ExplorerLayout);
 
         context.History.BeginChangeSet($"Delete {restores.Count + folderIds.Count} item(s)");

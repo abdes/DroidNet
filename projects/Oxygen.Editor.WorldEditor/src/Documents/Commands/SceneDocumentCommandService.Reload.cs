@@ -60,7 +60,7 @@ public sealed partial class SceneDocumentCommandService
                 return this.ReloadFailure(context, exception.Message);
             }
 
-            var operation = this.PublishSceneWarning("Scene.Reload", DiagnosticCodes.DocumentPrefix + "RELOAD_REFRESH_FAILED", "Scene reloaded", $"The source was reloaded, but a document notification failed: {exception.Message}", context, domain: FailureDomain.Document);
+            var operation = this.PublishSceneWarning(SceneOperationKinds.Reload, DiagnosticCodes.DocumentPrefix + "RELOAD_REFRESH_FAILED", "Scene reloaded", $"The source was reloaded, but a document notification failed: {exception.Message}", context, domain: FailureDomain.Document);
             return new(Succeeded: true, accepted, operation);
         }
     }
@@ -100,7 +100,7 @@ public sealed partial class SceneDocumentCommandService
 
     private SceneValueCommandResult<Scene> ReloadFailure(SceneDocumentCommandContext context, string message)
     {
-        var operation = this.PublishSceneFailure("Scene.Reload", DiagnosticCodes.DocumentPrefix + "RELOAD_FAILED", "Scene was not reloaded", message, context, domain: FailureDomain.Document);
+        var operation = this.PublishSceneFailure(SceneOperationKinds.Reload, DiagnosticCodes.DocumentPrefix + "RELOAD_FAILED", "Scene was not reloaded", message, context, domain: FailureDomain.Document);
         return SceneCommandResults.Failure<Scene>(operation) with { FailureMessage = message };
     }
 }
