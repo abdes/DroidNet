@@ -914,7 +914,7 @@ Search / index
 Scene lifecycle
 
 - [x] C28 — `SceneExplorerViewModel.cs:104` captures the constructor project.
-- [ ] C29 — `SceneExplorerViewModel.cs:747` background scene opens still load scenes.
+- [x] C29 — `SceneExplorerViewModel.cs:747` background scene opens still load scenes.
 - [ ] C30 — no guard/stage/retire on scene replacement; `SceneEngineSync.Documents.cs:17` retains
       editable graphs.
 - [~] C31 — `ProjectCreationService.cs:237` no default seed; `WorkspaceViewModel.cs:427`
