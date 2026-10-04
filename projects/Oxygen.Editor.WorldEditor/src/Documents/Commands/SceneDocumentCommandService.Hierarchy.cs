@@ -139,6 +139,18 @@ public sealed partial class SceneDocumentCommandService
             }
         }
 
+        // Validate the parent node before seeding for the same reason: the organizer ensures the node's
+        // layout entry and throws for a node missing from the scene graph only after the seed happened.
+        if (parentNodeId.HasValue && FindNode(context.Scene, parentNodeId.Value) is null)
+        {
+            return Task.FromResult(SceneCommandResults.Failure<Guid>(this.PublishSceneFailure(
+                SceneOperationKinds.ExplorerFolderCreate,
+                DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                "Folder was not created",
+                "The target parent node no longer exists.",
+                context)));
+        }
+
         try
         {
             EnsureExplorerLayout(context.Scene);

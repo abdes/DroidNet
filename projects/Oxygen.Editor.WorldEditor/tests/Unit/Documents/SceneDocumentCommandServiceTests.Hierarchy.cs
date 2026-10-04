@@ -137,6 +137,31 @@ public sealed partial class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
+    public async Task CreateFolderAsync_WhenParentNodeIsStale_RejectsWithStaleTargetWithoutSeedingLayout()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Node" };
+        scene.RootNodes.Add(node);
+        var context = CreateContext(scene);
+        _ = scene.ExplorerLayout.Should().BeNull();
+
+        var result = await fixture.Sut.CreateFolderAsync(context, parentFolderId: null, parentNodeId: Guid.NewGuid(), "Folder").ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = result.OperationResultId.Should().NotBeNull("a user-triggered folder creation failure must publish an operation result");
+        var published = fixture.Results.Published.Should().ContainSingle().Which;
+        _ = published.OperationId.Should().Be(result.OperationResultId!.Value);
+        _ = published.OperationKind.Should().Be(SceneOperationKinds.ExplorerFolderCreate);
+        _ = published.Diagnostics.Should().ContainSingle()
+            .Which.Code.Should().Be(DiagnosticCodes.ScenePrefix + "STALE_TARGET");
+        _ = scene.ExplorerLayout.Should().BeNull("a rejected folder creation must not leave an uncommitted seeded layout behind");
+        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.History.UndoStack.Should().BeEmpty();
+    }
+
+    [TestMethod]
     public async Task DeleteNodesAsync_DeletesSubtreeAndUndoRestoresExactHierarchy()
     {
         var fixture = CreateFixture();
