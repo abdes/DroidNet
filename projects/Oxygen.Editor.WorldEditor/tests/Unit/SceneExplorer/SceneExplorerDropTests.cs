@@ -13,7 +13,6 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World.SceneExplorer.Services;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
@@ -194,7 +193,6 @@ public sealed class SceneExplorerDropTests
                 this.Documents.Object,
                 default,
                 this.Sync.Object,
-                Mock.Of<ISceneExplorerService>(),
                 new SceneSelectionService(),
                 this.Commands.Object);
             this.SceneAdapter = explorer.Scene;

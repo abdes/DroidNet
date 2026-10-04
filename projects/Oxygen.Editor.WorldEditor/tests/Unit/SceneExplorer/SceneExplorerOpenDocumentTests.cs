@@ -12,7 +12,6 @@ using Moq;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World.SceneExplorer.Services;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World;
@@ -47,7 +46,7 @@ public sealed class SceneExplorerOpenDocumentTests
         _ = commands
             .Setup(value => value.RenameNodeAsync(It.IsAny<SceneDocumentCommandContext>(), node.Id, "Renamed"))
             .ReturnsAsync(SceneCommandResult.Success);
-        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents.Object, default, sync.Object, Mock.Of<ISceneExplorerService>(), new SceneSelectionService(), commands.Object);
+        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents.Object, default, sync.Object, new SceneSelectionService(), commands.Object);
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
@@ -77,7 +76,7 @@ public sealed class SceneExplorerOpenDocumentTests
         _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata)).Returns(value: true);
         _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
         var commands = new Mock<ISceneDocumentCommandService>(MockBehavior.Strict);
-        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents.Object, default, sync.Object, Mock.Of<ISceneExplorerService>(), new SceneSelectionService(), commands.Object);
+        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents.Object, default, sync.Object, new SceneSelectionService(), commands.Object);
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
@@ -107,7 +106,7 @@ public sealed class SceneExplorerOpenDocumentTests
         _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata)).Returns(value: true);
         _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
         var commands = new Mock<ISceneDocumentCommandService>(MockBehavior.Strict);
-        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents.Object, default, sync.Object, Mock.Of<ISceneExplorerService>(), new SceneSelectionService(), commands.Object);
+        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents.Object, default, sync.Object, new SceneSelectionService(), commands.Object);
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
@@ -138,7 +137,7 @@ public sealed class SceneExplorerOpenDocumentTests
         _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata)).Returns(value: true);
         _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
         var messenger = new StrongReferenceMessenger();
-        using var explorer = new SceneExplorerViewModel(manager.Object, messenger, Mock.Of<IRouter>(), documents.Object, default, sync.Object, Mock.Of<ISceneExplorerService>(), new SceneSelectionService(), Mock.Of<ISceneDocumentCommandService>());
+        using var explorer = new SceneExplorerViewModel(manager.Object, messenger, Mock.Of<IRouter>(), documents.Object, default, sync.Object, new SceneSelectionService(), Mock.Of<ISceneDocumentCommandService>());
         await explorer.HandleDocumentOpenedAsync(original).ConfigureAwait(false);
         var previousAdapter = await explorer.FindAdapterByNodeIdAsync(originalNode.Id).ConfigureAwait(false);
         var replacement = Scene.CreateAndHydrate(project, original.Dehydrate());
@@ -186,7 +185,6 @@ public sealed class SceneExplorerOpenDocumentTests
             documents.Object,
             default,
             sync.Object,
-            Mock.Of<ISceneExplorerService>(),
             new SceneSelectionService(),
             Mock.Of<ISceneDocumentCommandService>());
 
