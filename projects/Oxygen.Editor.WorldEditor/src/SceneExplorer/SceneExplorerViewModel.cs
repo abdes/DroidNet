@@ -6,10 +6,12 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls;
+using DroidNet.Controls.Menus;
 using DroidNet.Controls.Selection;
 using DroidNet.Documents;
 using DroidNet.Routing;
@@ -549,6 +551,107 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             SceneNodeAdapter node => (node.AttachedObject.Id, null),
             _ => (null, null),
         };
+
+    /// <summary>
+    /// Builds the context menu for a captured anchor row, resolving each shared action to its typed command.
+    /// </summary>
+    /// <param name="anchor">The row that received the context request.</param>
+    /// <returns>The menu source for the captured context.</returns>
+    public IMenuSource BuildContextMenuSource(ITreeItem anchor)
+    {
+        var context = BuildSelectionContext(this.GetSelectedItems());
+        var primaryIsInFolder = anchor is SceneNodeAdapter node && node.Parent is FolderAdapter;
+        var primaryHasChildren = anchor is LayoutItemAdapter { HasChildren: true };
+        var primaryIsUnlocked = !anchor.IsLocked;
+
+        var entries = SceneExplorerContextMenu.Build(context.Kind, primaryIsInFolder, primaryHasChildren, primaryIsUnlocked);
+
+        var builder = new MenuBuilder();
+        foreach (var entry in entries)
+        {
+            _ = builder.AddMenuItem(entry.Label, this.ResolveMenuCommand(entry.Kind, anchor, entry.IsEnabled));
+        }
+
+        return builder.Build();
+    }
+
+    private ICommand ResolveMenuCommand(SceneExplorerCommandKind kind, ITreeItem anchor, bool isEnabled)
+    {
+        switch (kind)
+        {
+            case SceneExplorerCommandKind.NewNode:
+                return this.AddEntityCommand;
+            case SceneExplorerCommandKind.NewFolder:
+                return this.CreateFolderCommand;
+            case SceneExplorerCommandKind.Rename:
+                return this.RenameSelectedCommand;
+            case SceneExplorerCommandKind.Cut:
+                return this.CutCommand;
+            case SceneExplorerCommandKind.Copy:
+                return this.CopyCommand;
+            case SceneExplorerCommandKind.Paste:
+            case SceneExplorerCommandKind.PasteAsChild:
+                return this.PasteCommand;
+            case SceneExplorerCommandKind.Delete:
+                return this.RemoveSelectedItemsCommand;
+            case SceneExplorerCommandKind.RemoveFromFolder:
+                return new SceneExplorerCommandAdapter(() => _ = this.RemoveFromFolderAsync(anchor), () => isEnabled);
+            case SceneExplorerCommandKind.MoveToSceneRoot:
+                return new SceneExplorerCommandAdapter(() => _ = this.MoveToSceneRootAsync(anchor), () => isEnabled);
+            case SceneExplorerCommandKind.Expand:
+                return new SceneExplorerCommandAdapter(() => _ = this.ExpandItemAsync(anchor), () => anchor is { IsExpanded: false, CanAcceptChildren: true });
+            case SceneExplorerCommandKind.Collapse:
+                return new SceneExplorerCommandAdapter(() => _ = this.CollapseItemAsync(anchor), () => anchor.IsExpanded);
+            default:
+                return new SceneExplorerCommandAdapter(static () => { }, static () => false);
+        }
+    }
+
+    private async Task RemoveFromFolderAsync(ITreeItem anchor)
+    {
+        var context = this.CreateCommandContext();
+        if (context is null || anchor is not SceneNodeAdapter node || node.Parent is not FolderAdapter folder)
+        {
+            return;
+        }
+
+        this.suppressNodeMessages = true;
+        try
+        {
+            var result = await this.commandService.RemoveNodesFromFolderAsync(context, [node.AttachedObject.Id], folder.Id).ConfigureAwait(false);
+            if (result.Succeeded)
+            {
+                await this.ReconcileProjectionAsync().ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            this.suppressNodeMessages = false;
+        }
+    }
+
+    private async Task MoveToSceneRootAsync(ITreeItem anchor)
+    {
+        var context = this.CreateCommandContext();
+        if (context is null || anchor is not SceneNodeAdapter node)
+        {
+            return;
+        }
+
+        this.suppressNodeMessages = true;
+        try
+        {
+            var result = await this.commandService.ReparentNodesAsync(context, [node.AttachedObject.Id], newParentNodeId: null, preserveWorldTransform: true).ConfigureAwait(false);
+            if (result.Succeeded)
+            {
+                await this.ReconcileProjectionAsync().ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            this.suppressNodeMessages = false;
+        }
+    }
 
     private async void OnDocumentActivated(object? sender, DocumentActivatedEventArgs e)
     {
