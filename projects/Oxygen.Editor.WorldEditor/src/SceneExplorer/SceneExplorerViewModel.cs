@@ -598,6 +598,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     private bool CanPaste() => this.clipboardNodeIds.Count > 0;
 
+    /// <inheritdoc />
+    protected override void OnClipboardCleared()
+    {
+        this.clipboardNodeIds.Clear();
+        this.clipboardIsCut = false;
+    }
+
     /// <summary>
     /// Builds the context menu for a captured anchor row, resolving each shared action to its typed command.
     /// </summary>

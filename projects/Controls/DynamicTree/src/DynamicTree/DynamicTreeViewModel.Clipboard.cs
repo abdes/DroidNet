@@ -222,8 +222,17 @@ public abstract partial class DynamicTreeViewModel
         this.clipboardState = ClipboardState.Empty;
         this.clipboardSourceParent = null;
         this.clipboardIsValid = true;
+        this.OnClipboardCleared();
         this.RaiseClipboardChanged();
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    ///     Invoked after the base clipboard is cleared so derived types can clear their own
+    ///     clipboard state (for example, staged node identities).
+    /// </summary>
+    protected virtual void OnClipboardCleared()
+    {
     }
 
     /// <summary>
