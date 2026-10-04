@@ -320,11 +320,12 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
             throw new InvalidOperationException($"Folder '{folderId}' not found.");
         }
 
-        _ = parentList.Remove(folderEntry);
-
+        // Resolve and validate the destination list before removing the source, so a rejected
+        // move (e.g. a missing target parent) leaves the authored layout unchanged.
+        IList<ExplorerEntryData> targetList;
         if (newParentFolderId is null)
         {
-            layout.Add(folderEntry);
+            targetList = layout;
         }
         else
         {
@@ -334,8 +335,11 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
                 throw new InvalidOperationException($"Target parent folder '{newParentFolderId}' not found.");
             }
 
-            targetParent.Children!.Add(folderEntry);
+            targetList = targetParent.Children!;
         }
+
+        _ = parentList.Remove(folderEntry);
+        targetList.Add(folderEntry);
 
         scene.SetExplorerLayout(layout);
         this.LogMoveFolderToParent(folderId, newParentFolderId);
