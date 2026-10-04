@@ -21,6 +21,7 @@ public sealed class ProjectCreationService(
     IProjectValidationService validation) : IProjectCreationService
 {
     private const string TemplateManifestFileName = "Template.json";
+    private const string SceneIdPropertyName = "Id";
     private static readonly string[] RequiredTemplateFolders =
     [
         "Content",
@@ -125,7 +126,9 @@ public sealed class ProjectCreationService(
                 .ConfigureAwait(false);
             await this.EnsureRequiredFolderSkeletonAsync(projectFolder, createdItems, cancellationToken)
                 .ConfigureAwait(false);
-            await this.WriteProjectManifestAsync(projectFolder, request, templateDescriptor, cancellationToken)
+            var defaultSceneId = await this.ReadStarterSceneIdAsync(projectFolder, templateDescriptor, cancellationToken)
+                .ConfigureAwait(false);
+            await this.WriteProjectManifestAsync(projectFolder, request, templateDescriptor, defaultSceneId, cancellationToken)
                 .ConfigureAwait(false);
 
             var validationResult = await validation.ValidateAsync(projectRoot, cancellationToken).ConfigureAwait(false);
@@ -232,6 +235,7 @@ public sealed class ProjectCreationService(
         IFolder projectFolder,
         ProjectCreationRequest request,
         TemplateDescriptor templateDescriptor,
+        Guid? defaultSceneId,
         CancellationToken cancellationToken)
     {
         var projectInfo = new ProjectInfo(
@@ -239,7 +243,10 @@ public sealed class ProjectCreationService(
             request.ProjectName,
             templateDescriptor.Category ?? request.Category,
             projectFolder.Location,
-            templateDescriptor.Thumbnail ?? request.Thumbnail);
+            templateDescriptor.Thumbnail ?? request.Thumbnail)
+        {
+            DefaultSceneId = defaultSceneId,
+        };
 
         foreach (var mount in templateDescriptor.AuthoringMounts)
         {
@@ -261,6 +268,56 @@ public sealed class ProjectCreationService(
         var manifest = await projectFolder.GetDocumentAsync(Constants.ProjectFileName, cancellationToken)
             .ConfigureAwait(false);
         await manifest.WriteAllTextAsync(ProjectInfo.ToJson(projectInfo), cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<Guid?> ReadStarterSceneIdAsync(
+        IFolder projectFolder,
+        TemplateDescriptor descriptor,
+        CancellationToken cancellationToken)
+    {
+        if (descriptor.StarterScene is null)
+        {
+            return null;
+        }
+
+        var relativePath = this.ResolveTemplateAssetRelativePath(
+            descriptor,
+            descriptor.StarterScene.AssetUri,
+            descriptor.StarterScene.RelativePath,
+            "StarterScene");
+        var sceneDocument = await storage.GetDocumentFromPathAsync(
+                storage.NormalizeRelativeTo(projectFolder.Location, NormalizeTemplatePath(relativePath)),
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!await sceneDocument.ExistsAsync().ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        var sceneJson = await sceneDocument.ReadAllTextAsync(cancellationToken).ConfigureAwait(false);
+        return TryReadSceneId(sceneJson);
+    }
+
+    private static Guid? TryReadSceneId(string sceneJson)
+    {
+        // The scene schema requires an identity; tolerate payloads without one so creation
+        // leaves the default unset instead of guessing an identity for the starter scene.
+        try
+        {
+            using var document = JsonDocument.Parse(sceneJson);
+            var root = document.RootElement;
+            return root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty(SceneIdPropertyName, out var idProperty)
+                && idProperty.ValueKind == JsonValueKind.String
+                && Guid.TryParse(idProperty.GetString(), out var sceneId)
+                && sceneId != Guid.Empty
+                ? sceneId
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private async Task ValidateTemplateDescriptorAsync(

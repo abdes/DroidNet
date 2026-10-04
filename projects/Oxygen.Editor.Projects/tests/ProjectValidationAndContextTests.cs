@@ -348,6 +348,73 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
+    public async Task ProjectCreationService_ShouldRecordStarterSceneIdAsDefaultScene()
+    {
+        var fs = new MockFileSystem();
+        CreateTemplateSkeleton(fs, @"C:\Templates\Blank");
+        fs.Directory.CreateDirectory(@"C:\Projects");
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", CreateTemplateDescriptorJson()).ConfigureAwait(false);
+
+        var storage = new NativeStorageProvider(fs);
+        var service = new ProjectCreationService(storage, new ProjectValidationService(storage));
+
+        var result = await service.CreateFromTemplateAsync(
+                new ProjectCreationRequest
+                {
+                    TemplateRoot = @"C:\Templates\Blank",
+                    ParentLocation = @"C:\Projects",
+                    ProjectName = "Created",
+                    Category = Category.Games,
+                })
+            .ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue(result.Message);
+        var manifest = await fs.File.ReadAllTextAsync(@"C:\Projects\Created\Project.oxy").ConfigureAwait(false);
+        var info = ProjectInfo.FromJson(manifest);
+        _ = info.DefaultSceneId.Should().Be(
+            Guid.Parse("09b406b8-410c-4cc3-8c0a-5f6af9afcc0c"),
+            "the created manifest must record the starter scene's own serialized id");
+        _ = result.ProjectInfo!.DefaultSceneId.Should().Be(info.DefaultSceneId);
+    }
+
+    [TestMethod]
+    public async Task ProjectCreationService_ShouldLeaveDefaultSceneNull_WhenStarterSceneCarriesNoId()
+    {
+        var fs = new MockFileSystem();
+        CreateTemplateSkeleton(fs, @"C:\Templates\Blank");
+        fs.Directory.CreateDirectory(@"C:\Projects");
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", CreateTemplateDescriptorJson()).ConfigureAwait(false);
+        await fs.File.WriteAllTextAsync(
+                @"C:\Templates\Blank\Content\Scenes\Main.oscene.json",
+                """
+                {
+                  "Name": "Main",
+                  "RootNodes": []
+                }
+                """)
+            .ConfigureAwait(false);
+
+        var storage = new NativeStorageProvider(fs);
+        var service = new ProjectCreationService(storage, new ProjectValidationService(storage));
+
+        var result = await service.CreateFromTemplateAsync(
+                new ProjectCreationRequest
+                {
+                    TemplateRoot = @"C:\Templates\Blank",
+                    ParentLocation = @"C:\Projects",
+                    ProjectName = "Created",
+                    Category = Category.Games,
+                })
+            .ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue(result.Message);
+        var manifest = await fs.File.ReadAllTextAsync(@"C:\Projects\Created\Project.oxy").ConfigureAwait(false);
+        var info = ProjectInfo.FromJson(manifest);
+        _ = info.DefaultSceneId.Should().BeNull("a template scene without a serialized id must not get a guessed default");
+        _ = manifest.Should().NotContain(nameof(ProjectInfo.DefaultSceneId));
+    }
+
+    [TestMethod]
     public async Task ProjectCreationService_ShouldRejectTemplatePayloadProjectManifest()
     {
         var fs = new MockFileSystem();
