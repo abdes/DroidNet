@@ -432,17 +432,20 @@ for confirmation, including descendants hidden by search/collapse.
 
 ### Precise drop intent and cancellation
 
-| Destination                                        | Node roots                                                                                                                                                | Logical folder roots                                                                                                                         |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Into scene root, or clearly marked empty root area | Reparent to root, preserve world pose, append in stable order.                                                                                            | Move grouping to root only if all contained nodes remain in the same actual scene-parent scope.                                              |
-| Into node                                          | Reparent to that node, preserve world pose, append as children.                                                                                           | Accept only if it is already the folder's scene-parent scope; otherwise reject. Moving a folder is not an implicit reparent of its contents. |
-| Into folder                                        | Group only; every affected node must already have the folder's actual parent scope.                                                                       | Nest grouping within the same scene-parent scope; reject cycles.                                                                             |
-| Before/After node or folder                        | Insert into the target's underlying visual sibling list. Reparent node roots only when that list belongs to another node/root scope; preserve world pose. | Reorder/regroup within the same actual parent scope; never reparent through a folder move.                                                   |
+| Destination                                        | Node roots                                                                                                                                                      | Logical folder roots                                                                                                      |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Into scene root, or clearly marked empty root area | Reparent to root, preserve-local by default (D1); append in stable order.                                                                                       | Move grouping to root; contained nodes keep their actual scene parent.                                                    |
+| Into node                                          | Reparent to that node, preserve-local by default (D1); append as children.                                                                                      | Accept. A folder move whose scene-parent scope differs performs the lineage-driven reparent inside the same command (D2). |
+| Into folder                                        | Group; where the folder's scene-parent scope differs, the same command performs the reparent (D2).                                                              | Nest grouping; reject cycles. Cross-scope grouping reparents — it is not rejected and not a separate confirm step.        |
+| Before/After node or folder                        | Insert into the target's underlying visual sibling list. Reparent node roots when that list belongs to another node/root scope, preserve-local by default (D1). | Reorder/regroup; a scope change reparents within the same command (D2).                                                   |
 
-Use the current minimal folder-lineage model deliberately: to group a child under
-a folder in another scope, first explicitly reparent the node to that scope, then
-group it. Reject with a useful reason, not a mystery no-drop cursor. Nodes plus
-folders in a batch are accepted only when every destination rule is valid.
+Use the current minimal folder-lineage model deliberately. Superseded 2026-10-04 (D2):
+grouping a child under a folder in another scope is **not** a two-step "explicitly
+reparent first, then group" flow — `MoveNodesToFolderAsync` validates and performs the
+lineage-driven reparent inside the same command and undo step. Reject with a useful
+reason, not a mystery no-drop cursor, for the cases that remain genuinely invalid:
+cycles, stale targets and unrepresentable transforms. Nodes plus folders in a batch are
+accepted only when every destination rule is valid.
 
 - Begin drag from an already selected row without collapsing multi-selection.
   Dragging an unselected row selects that row first. Row actions/rename editor are
@@ -836,7 +839,7 @@ this path — that is a test gap, recorded as T12, not an integration note to ca
 Legend: `[ ]` open · `[~]` in progress · `[x]` closed. Each entry names owner + evidence.
 
 Verification evidence (2026-10-04): `Oxygen.Editor.WorldEditor.Unit.Tests` full project green —
-277 total, 277 succeeded, 0 failed, 0 skipped (272 + the five search/layout tests added with C25/C26/C27)
+279 total, 279 succeeded, 0 failed, 0 skipped (272 baseline + five search/layout tests with C25/C26/C27 + two delete tests with C42)
 (`traverse Invoke-Tests --start projects/Oxygen.Editor.WorldEditor/tests/Unit --configuration Debug`).
 The strict-mock helper `ConfigureHierarchySync` previously omitted the native rename and transform
 publishes added with C2/C1/C3, so four tests threw while their defects were marked closed.
@@ -1014,14 +1017,20 @@ Generic tree
 
 Command surface and result publication (found by the P7 design review, each re-verified)
 
-- [ ] C39 — `SceneExplorerService` is a **second mutation surface with no history authority**: zero
-      `AddChange`/`BeginChangeSet` calls in the file, still DI-registered
-      (`WorkspaceViewModel.cs:202`), and its folder delete calls
-      `sceneOrganizer.RemoveFolder(..., promoteChildrenToParent: false)` (`SceneExplorerService.cs:272`),
-      which **discards** contained entries — the opposite of the D5 rule just recorded in
-      `scene-explorer.md:105-108`. Its only remaining src caller is the dead `RenameItemAsync`, but its
-      `AuthoringChanged` event is consumed by `SceneContentDemandService.Lifecycle.cs:33,42`, so pruning
-      needs that consumer checked first. Doc §5:97-99 forbids this shape.
+- [~] C39 — `SceneExplorerService` is a **second mutation surface with no history authority** —
+  narrowed 2026-10-04 by `e4eaf2f44`: the uncalled facade (create node, create folder, move,
+  update-moved, rename, four private helpers, 17 orphaned log methods) is deleted, and what
+  survives is `AddNodeAsync`/`DeleteItemsAsync`, which now leave `AuthoringChanged` with **no
+  production publisher** and still carry the D5-contradicting `promoteChildrenToParent: false`
+  branch. Left deliberately as a unit rather than half-removed: retirement is tracked with its
+  consumer repoint, not patched in dead code. Original evidence: zero
+  `AddChange`/`BeginChangeSet` calls in the file, still DI-registered
+  (`WorkspaceViewModel.cs:202`), and its folder delete calls
+  `sceneOrganizer.RemoveFolder(..., promoteChildrenToParent: false)` (`SceneExplorerService.cs:272`),
+  which **discards** contained entries — the opposite of the D5 rule just recorded in
+  `scene-explorer.md:105-108`. Its only remaining src caller is the dead `RenameItemAsync`, but its
+  `AuthoringChanged` event is consumed by `SceneContentDemandService.Lifecycle.cs:33,42`, so pruning
+  needs that consumer checked first. Doc §5:97-99 forbids this shape.
 - [ ] C40 — duplication and paste failures publish **no operation result**: every failure path returns
       `SceneCommandResults.Failure<T>()` (`Clipboard.cs:34,40,49,59,72,...`) and that helper defaults
       `operationResultId` to null (`SceneCommandResults.cs:26`), with the view model swallowing the
@@ -1031,7 +1040,20 @@ Command surface and result publication (found by the P7 design review, each re-v
 - [ ] C41 — `"Scene.Reload"` is a bare string literal (`Reload.cs:63,103`) outside the stable
       vocabulary: `SceneOperationKinds.cs` contains no Reload constant and
       `DiagnosticSceneVocabularyTests.cs:25-42` does not pin it.
-- [ ] C42 — dead and unsafe public API on the command interface. `RenameItemAsync`
+- [x] C42 — dead and unsafe public API on the command interface. **Closed 2026-10-04
+      (`e4eaf2f44`)**: `RenameItemAsync` deleted from the interface and implementation (no callers,
+      no test removed) together with the `ISceneExplorerService` constructor parameter it alone kept
+      alive, and `DeleteNodesAsync`/`DeleteFolderAsync` now delegate into `DeleteItemsAsync` so all
+      three entry points share one prevalidation order, one transaction and one undo record.
+      Deliberate behaviour drift from unifying them: a stale folder id is now a `STALE_TARGET`
+      rejection raised _before_ mutation instead of a `DELETE_FOLDER_FAILED` caught from
+      `SceneOrganizer.RemoveFolder` with no `ValidationCode`; node-only deletes now restore explorer
+      layout entries on undo; batch and single-kind deletes share one undo label. Red check obtained
+      concretely — reinstating the duplicated bodies failed exactly the two new tests
+      (`DeleteFolderAsync_WhenFolderIdIsStale_RejectsWithStaleTargetValidation`,
+      `DeleteNodesAsync_Undo_RestoresGraphAndExplorerLayout`) and left the pre-existing delete tests
+      passing, which is the proof the copies had already diverged. Suite: 279 total, 279 succeeded,
+      0 failed, re-measured by the orchestrator against binaries newer than the last source edit. `RenameItemAsync`
       (`ISceneDocumentCommandService.cs:228`, impl `SceneDocumentCommandService.cs:511-564`) has zero
       callers in src or tests, targets by **UI adapter type** rather than identity, trims nothing, skips
       the native rename sync that `RenameNodeAsync` performs, and captures the adapter in its undo
