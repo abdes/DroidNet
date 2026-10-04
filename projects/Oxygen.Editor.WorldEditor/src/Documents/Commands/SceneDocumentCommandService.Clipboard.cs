@@ -61,7 +61,8 @@ public sealed partial class SceneDocumentCommandService
             folderSceneParentNodeId = nodeId;
         }
 
-        var created = new List<SceneNode>(topLevelIds.Count);
+        // Resolve every source up front so a stale id cannot leave a partially committed batch.
+        var sources = new List<SceneNode>(topLevelIds.Count);
         foreach (var nodeId in topLevelIds)
         {
             var source = FindNode(context.Scene, nodeId);
@@ -70,21 +71,35 @@ public sealed partial class SceneDocumentCommandService
                 return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
             }
 
-            var clone = SceneNode.CreateAndHydrate(context.Scene, RemapNodeIds(source.Dehydrate()));
-            var actualParent = parentNode ?? (folderSceneParentNodeId.HasValue ? FindNode(context.Scene, folderSceneParentNodeId.Value) : null);
-            _ = actualParent is null
-                ? this.sceneMutator.CreateNodeAtRoot(clone, context.Scene)
-                : this.sceneMutator.CreateNodeUnderParent(clone, actualParent, context.Scene);
+            sources.Add(source);
+        }
 
-            if (newParentFolderId.HasValue)
+        var created = new List<SceneNode>(sources.Count);
+        context.History.BeginChangeSet($"Duplicate {sources.Count} node(s)");
+        try
+        {
+            foreach (var source in sources)
             {
-                EnsureExplorerLayout(context.Scene);
-                _ = this.sceneOrganizer.MoveNodeToFolder(clone.Id, newParentFolderId.Value, context.Scene);
-            }
+                var clone = SceneNode.CreateAndHydrate(context.Scene, RemapNodeIds(source.Dehydrate()));
+                var actualParent = parentNode ?? (folderSceneParentNodeId.HasValue ? FindNode(context.Scene, folderSceneParentNodeId.Value) : null);
+                _ = actualParent is null
+                    ? this.sceneMutator.CreateNodeAtRoot(clone, context.Scene)
+                    : this.sceneMutator.CreateNodeUnderParent(clone, actualParent, context.Scene);
 
-            this.RecordCreateNodeUndo(context, clone);
-            this.PublishNodeAdded(context, clone);
-            created.Add(clone);
+                if (newParentFolderId.HasValue)
+                {
+                    EnsureExplorerLayout(context.Scene);
+                    _ = this.sceneOrganizer.MoveNodeToFolder(clone.Id, newParentFolderId.Value, context.Scene);
+                }
+
+                this.RecordCreateNodeUndo(context, clone);
+                this.PublishNodeAdded(context, clone);
+                created.Add(clone);
+            }
+        }
+        finally
+        {
+            context.History.EndChangeSet();
         }
 
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
