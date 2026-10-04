@@ -815,7 +815,7 @@ checklist below and must be closed before SE-03. The legacy `AuthoringChanged` n
 Legend: `[ ]` open · `[~]` in progress · `[x]` closed. Each entry names owner + evidence.
 
 Verification evidence (2026-10-04): `Oxygen.Editor.WorldEditor.Unit.Tests` full project green —
-270 total, 270 succeeded, 0 failed, 0 skipped
+272 total, 272 succeeded, 0 failed, 0 skipped
 (`traverse Invoke-Tests --start projects/Oxygen.Editor.WorldEditor/tests/Unit --configuration Debug`).
 The strict-mock helper `ConfigureHierarchySync` previously omitted the native rename and transform
 publishes added with C2/C1/C3, so four tests threw while their defects were marked closed.
@@ -925,8 +925,11 @@ Search / index
 - [x] C24 — `SceneExplorerViewModel.cs:944` second query discards restoration bookkeeping.
 - [ ] C25 — search expands only node ancestry, not visual folder ancestry / nested folders.
 - [~] C26 — adapter-tree index is not a complete domain lookup; `SceneAdapter.cs:175` scans per
-  entry; duplicate layout node ids not suppressed. (Node matching now uses `Scene.AllNodes`;
-  folder domain index and duplicate-id suppression remain.)
+  entry; duplicate layout node ids not suppressed. (Node matching uses `Scene.AllNodes`; the
+  per-entry scan is now one index per rebuild and node duplicates are claimed before realization
+  (`c381888a9`, covered by `SceneAdapterLayoutTests`). Remaining: the folder domain index, and the
+  same duplicate defect for folder ids in Case A, where two `FolderAdapter`s share an `Id` and the
+  projection's last-write-wins hides one — carried into C25/C27, which own the folder domain.)
 - [~] C27 — `FolderAdapter.cs:62` authored expansion setter used by search. (Transient flag added;
   not yet exercised because C25 folder-ancestry expansion is pending.)
 
