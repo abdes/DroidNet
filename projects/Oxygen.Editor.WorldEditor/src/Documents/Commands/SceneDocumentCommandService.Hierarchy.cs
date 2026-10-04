@@ -412,7 +412,8 @@ public sealed partial class SceneDocumentCommandService
         SceneDocumentCommandContext context,
         IReadOnlyList<Guid> nodeIds,
         Guid? newParentNodeId,
-        bool preserveWorldTransform)
+        bool preserveWorldTransform,
+        Guid? insertAfterNodeId = null)
     {
         using var authoring = EnterAuthoring(context);
         if (authoring is null)
@@ -434,6 +435,27 @@ public sealed partial class SceneDocumentCommandService
                     "The destination parent no longer exists.",
                     context);
             }
+        }
+
+        // Inserting after a sibling implies the sibling's parent.
+        var insertIndex = -1;
+        if (insertAfterNodeId.HasValue)
+        {
+            var anchor = FindNode(context.Scene, insertAfterNodeId.Value);
+            if (anchor is null)
+            {
+                return this.ValidationFailure(
+                    SceneOperationKinds.NodeReparent,
+                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                    "Nodes were not moved",
+                    "The destination sibling no longer exists.",
+                    context);
+            }
+
+            newParent = anchor.Parent;
+            insertIndex = anchor.Parent is null
+                ? context.Scene.RootNodes.IndexOf(anchor) + 1
+                : anchor.Parent.Children.IndexOf(anchor) + 1;
         }
 
         var moves = new List<ReparentMove>(topLevelIds.Count);
@@ -478,6 +500,11 @@ public sealed partial class SceneDocumentCommandService
         foreach (var move in moves)
         {
             move.ApplyForward(this.sceneMutator, this.sceneOrganizer);
+            if (insertIndex >= 0)
+            {
+                MoveToIndex(newParent is null ? context.Scene.RootNodes : newParent.Children, move.Node, insertIndex);
+                insertIndex++;
+            }
         }
 
         this.RecordReparentUndo(context, moves);

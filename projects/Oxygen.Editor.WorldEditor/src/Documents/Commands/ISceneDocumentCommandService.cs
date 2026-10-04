@@ -304,12 +304,14 @@ public interface ISceneDocumentCommandService
     /// <param name="nodeIds">The hierarchy roots to reparent.</param>
     /// <param name="newParentNodeId">The destination parent, or <see langword="null"/> for the scene root.</param>
     /// <param name="preserveWorldTransform">When <see langword="true"/>, preserves world pose rather than local TRS.</param>
+    /// <param name="insertAfterNodeId">Optional sibling to insert after, instead of appending to the parent.</param>
     /// <returns>The command result.</returns>
     public Task<SceneCommandResult> ReparentNodesAsync(
         SceneDocumentCommandContext context,
         IReadOnlyList<Guid> nodeIds,
         Guid? newParentNodeId,
-        bool preserveWorldTransform);
+        bool preserveWorldTransform,
+        Guid? insertAfterNodeId = null);
 
     /// <summary>Groups node entries into a folder without changing scene parenting or transforms.</summary>
     /// <param name="context">The document command context.</param>
@@ -360,10 +362,12 @@ public interface ISceneDocumentCommandService
     /// <param name="nodeIds">The hierarchy roots to duplicate.</param>
     /// <param name="newParentNodeId">The destination parent node, or <see langword="null"/> for root/folder scope.</param>
     /// <param name="newParentFolderId">The destination folder for grouping, or <see langword="null"/> when not grouping.</param>
+    /// <param name="insertAfterNodeId">Optional sibling to insert after, instead of appending to the parent.</param>
     /// <returns>The command result with the created node roots.</returns>
     public Task<SceneValueCommandResult<IReadOnlyList<SceneNode>>> DuplicateNodesAsync(
         SceneDocumentCommandContext context,
         IReadOnlyList<Guid> nodeIds,
         Guid? newParentNodeId,
-        Guid? newParentFolderId);
+        Guid? newParentFolderId,
+        Guid? insertAfterNodeId = null);
 }

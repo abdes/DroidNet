@@ -25,7 +25,8 @@ public sealed partial class SceneDocumentCommandService
         SceneDocumentCommandContext context,
         IReadOnlyList<Guid> nodeIds,
         Guid? newParentNodeId,
-        Guid? newParentFolderId)
+        Guid? newParentFolderId,
+        Guid? insertAfterNodeId = null)
     {
         using var authoring = EnterAuthoring(context);
         if (authoring is null)
@@ -61,6 +62,22 @@ public sealed partial class SceneDocumentCommandService
             folderSceneParentNodeId = nodeId;
         }
 
+        // Resolve the sibling anchor up front; inserting after a node implies its parent.
+        var insertIndex = -1;
+        if (insertAfterNodeId.HasValue)
+        {
+            var anchor = FindNode(context.Scene, insertAfterNodeId.Value);
+            if (anchor is null)
+            {
+                return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+            }
+
+            parentNode = anchor.Parent;
+            insertIndex = anchor.Parent is null
+                ? context.Scene.RootNodes.IndexOf(anchor) + 1
+                : anchor.Parent.Children.IndexOf(anchor) + 1;
+        }
+
         // Resolve every source up front so a stale id cannot leave a partially committed batch.
         var sources = new List<SceneNode>(topLevelIds.Count);
         foreach (var nodeId in topLevelIds)
@@ -85,6 +102,12 @@ public sealed partial class SceneDocumentCommandService
                 _ = actualParent is null
                     ? this.sceneMutator.CreateNodeAtRoot(clone, context.Scene)
                     : this.sceneMutator.CreateNodeUnderParent(clone, actualParent, context.Scene);
+
+                if (insertIndex >= 0)
+                {
+                    MoveToIndex(actualParent is null ? context.Scene.RootNodes : actualParent.Children, clone, insertIndex);
+                    insertIndex++;
+                }
 
                 if (newParentFolderId.HasValue)
                 {

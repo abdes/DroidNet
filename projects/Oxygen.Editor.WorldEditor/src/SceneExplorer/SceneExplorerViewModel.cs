@@ -540,17 +540,45 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        var parent = targetParent ?? this.GetSingleSelectionTarget() ?? this.Scene;
-        var (parentNodeId, parentFolderId) = parent is null
-            ? ((Guid?)null, (Guid?)null)
-            : ResolveDropDestination(parent);
+        // A multi-scope selection has no single destination; reject rather than fall back to the root.
+        if (targetParent is null && this.GetSelectedItems().Count > 1)
+        {
+            return;
+        }
+
+        // A single node target pastes as a sibling (after it); a folder target pastes into the
+        // folder; the scene root pastes at the root.
+        var target = targetParent ?? this.GetSingleSelectionTarget() ?? this.Scene;
+        Guid? insertAfterNodeId;
+        Guid? parentNodeId;
+        Guid? parentFolderId;
+        switch (target)
+        {
+            case SceneNodeAdapter node:
+                insertAfterNodeId = node.AttachedObject.Id;
+                parentNodeId = node.AttachedObject.Parent?.Id;
+                parentFolderId = null;
+                break;
+            case FolderAdapter folder:
+                insertAfterNodeId = null;
+                parentNodeId = null;
+                parentFolderId = folder.Id;
+                break;
+            case SceneAdapter:
+                insertAfterNodeId = null;
+                parentNodeId = null;
+                parentFolderId = null;
+                break;
+            default:
+                return;
+        }
 
         this.suppressNodeMessages = true;
         try
         {
             if (this.clipboardIsCut)
             {
-                var result = await this.commandService.ReparentNodesAsync(context, this.clipboardNodeIds, parentNodeId, preserveWorldTransform: false).ConfigureAwait(true);
+                var result = await this.commandService.ReparentNodesAsync(context, this.clipboardNodeIds, parentNodeId, preserveWorldTransform: false, insertAfterNodeId).ConfigureAwait(true);
                 if (!result.Succeeded)
                 {
                     return;
@@ -558,7 +586,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             }
             else
             {
-                var result = await this.commandService.DuplicateNodesAsync(context, this.clipboardNodeIds, parentNodeId, parentFolderId).ConfigureAwait(true);
+                var result = await this.commandService.DuplicateNodesAsync(context, this.clipboardNodeIds, parentNodeId, parentFolderId, insertAfterNodeId).ConfigureAwait(true);
                 if (!result.Succeeded)
                 {
                     return;
