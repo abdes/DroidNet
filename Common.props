@@ -149,6 +149,8 @@
                 <UseWinUI>true</UseWinUI>
                 <WindowsPackageType>None</WindowsPackageType>
                 <EnableMsixTooling>false</EnableMsixTooling>
+                <!-- Windows-only TFMs already prevent these tests from running on other OS families. -->
+                <NoWarn>$(NoWarn);MSTEST0084</NoWarn>
             </PropertyGroup>
             <ItemGroup>
                 <PackageReference Include="Microsoft.WindowsAppSDK" />
