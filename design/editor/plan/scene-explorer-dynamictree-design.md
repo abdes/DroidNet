@@ -871,8 +871,8 @@ Atomicity (one history step per batch, all-or-nothing)
 
 - [x] C8 — `Clipboard.cs:65` duplication records undo per root; a later invalid root leaves
       earlier changes committed as separate history entries.
-- [ ] C9 — `SceneExplorerViewModel.cs:189` mixed node/folder delete submits separate commands.
-- [ ] C10 — `Hierarchy.cs:419` grouping loops mutate incrementally without batch rollback.
+- [x] C9 — `SceneExplorerViewModel.cs:189` mixed node/folder delete submits separate commands.
+- [x] C10 — `Hierarchy.cs:419` grouping loops mutate incrementally without batch rollback.
 
 Clipboard
 
@@ -883,7 +883,7 @@ Clipboard
       Paste-as-child identical; multi-scope silently falls back to root.
 - [ ] C14 — `SceneExplorerViewModel.cs:586` successful Copy-paste clears the payload; Cut into a
       folder loses grouping intent.
-- [ ] C15 — base clipboard Escape cannot cancel a subclass's private IDs.
+- [x] C15 — base clipboard Escape cannot cancel a subclass's private IDs.
 
 Selection
 
