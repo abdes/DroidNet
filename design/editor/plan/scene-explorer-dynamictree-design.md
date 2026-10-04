@@ -913,13 +913,14 @@ Search / index
 
 Scene lifecycle
 
-- [ ] C28 — `SceneExplorerViewModel.cs:104` captures the constructor project.
+- [x] C28 — `SceneExplorerViewModel.cs:104` captures the constructor project.
 - [ ] C29 — `SceneExplorerViewModel.cs:747` background scene opens still load scenes.
 - [ ] C30 — no guard/stage/retire on scene replacement; `SceneEngineSync.Documents.cs:17` retains
       editable graphs.
-- [ ] C31 — `ProjectCreationService.cs:237` no default seed; `WorkspaceViewModel.cs:427`
-      LastOpenedScene migration; `Project.cs:26` first-scene fallback; `AssetsViewModel.cs:515`
-      premature ActiveScene write.
+- [~] C31 — `ProjectCreationService.cs:237` no default seed; `WorkspaceViewModel.cs:427`
+  LastOpenedScene migration; `Project.cs:26` first-scene fallback; `AssetsViewModel.cs:515`
+  premature ActiveScene write. (D6: migration + fallback approved; premature write fixed;
+  creation seed deferred.)
 
 Generic tree
 
