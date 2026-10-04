@@ -752,12 +752,26 @@ submits node/folder renames through the command service, and the post-hoc
 label-change/history bridge plus the direct `AttachedObject.Name` writes are gone.
 The in-place rename editor is re-anchored over the item name (dynamic-tree fix).
 
-Evidence: 68 Projects tests (3 new DefaultSceneId cases) and 240 WorldEditor Unit
-tests pass; WorldEditor src/Unit/Unit.UI/Integration.UI and Oxygen.Editor.App build
-clean. Remaining steps 1 (VM collaborator split), 2 (stable projection index +
-drop-hook wiring + remove the remaining `RunTreeMutationAsync` wrappers), 7-10
-(clipboard, selection context, search, command availability/menu) are not yet
-implemented; SE-02 stays `in_progress` until those land with their own evidence.
+The stable projection index and drag/drop commit-hook are in place: the VM now
+keeps a node **and** folder adapter index (lookups no longer scan the tree or
+force-load collapsed subtrees), `SceneNodeAdapter` detaches its model observer on
+removal/reload, and `CommitDropAsync` submits node drops (Into root/node/folder)
+through the command owner (`ReparentNodesAsync` with preserve-world, or
+`MoveNodesToFolderAsync` for grouping) then reconciles the projection. The six
+`RunTreeMutationAsync` wrappers and the tree-first `OnItemMoved` backend/history
+handler are removed; moves are command-first. Copy-drop (Ctrl-drag), folder
+reparent and exact sibling reordering are still deferred to steps 6-7 (they need
+the reorder/duplication commands). The organizer's layout overlay now initializes
+lazily from the root nodes instead of throwing on a freshly loaded, layout-less
+scene (fixes the `ExplorerLayout is not initialized` failure on the legacy
+tree-first create-folder path).
+
+Evidence: 68 Projects tests and 249 WorldEditor Unit tests pass (new drop-hook,
+folder-index and layout-initialization cases); WorldEditor src, Unit, and
+Oxygen.Editor.App build clean. Remaining steps 1 (VM collaborator split), 6
+(sibling reorder + folder move commands), 7-10 (clipboard, selection context,
+search, command availability/menu) are not yet implemented; SE-02 stays
+`in_progress` until those land with their own evidence.
 
 ### SE-03 — Showcase UI, workspace protection and live integration
 
@@ -919,11 +933,11 @@ CMake target or run a whole engine build from this managed checklist. Record
 native dependency/build/test ownership before implementation and keep SE-03's
 native acceptance blocked until the required API and observed behavior exist.
 
-| ID    | State       | Next action                                                                                                                                                                                                        | Responsible role                       |
-| ----- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
-| SE-01 | validated   | Await user demo acceptance.                                                                                                                                                                                        | Implementer + user                     |
-| SE-02 | in_progress | Landed: identity-based hierarchy command surface + preserve-world reparent. Remaining: VM collaborator split, commit-hook wiring, DefaultSceneId, clipboard, selection context, search, command/menu availability. | Implementer                            |
-| SE-03 | planned     | Connect target UI, workspace state and supported native mask/picking; qualify workflows.                                                                                                                           | Implementer + runtime owner + reviewer |
+| ID    | State       | Next action                                                                                                                                                                                                                                                                              | Responsible role                       |
+| ----- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| SE-01 | validated   | Await user demo acceptance.                                                                                                                                                                                                                                                              | Implementer + user                     |
+| SE-02 | in_progress | Landed: identity-based hierarchy command surface + preserve-world reparent; stable node/folder index + command-first drop-hook; DefaultSceneId. Remaining: VM collaborator split, sibling reorder/folder-move commands, clipboard, selection context, search, command/menu availability. | Implementer                            |
+| SE-03 | planned     | Connect target UI, workspace state and supported native mask/picking; qualify workflows.                                                                                                                                                                                                 | Implementer + runtime owner + reviewer |
 
 Use `in_progress`, `landed_needs_validation`, `blocked`, `validated` accurately.
 Document contract decisions and named dependencies next to the slice, not as a
