@@ -90,10 +90,19 @@ public sealed partial class SceneDocumentCommandService
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
         foreach (var clone in created)
         {
-            await this.SyncCreateNodeAsync(context, clone, clone.Parent?.Id).ConfigureAwait(true);
+            await this.SyncNodeSubtreeAsync(context, clone).ConfigureAwait(true);
         }
 
         return SceneCommandResults.Success<IReadOnlyList<SceneNode>>(created);
+    }
+
+    private async Task SyncNodeSubtreeAsync(SceneDocumentCommandContext context, SceneNode node)
+    {
+        await this.SyncCreateNodeAsync(context, node, node.Parent?.Id).ConfigureAwait(true);
+        foreach (var child in node.Children)
+        {
+            await this.SyncNodeSubtreeAsync(context, child).ConfigureAwait(true);
+        }
     }
 
     private static SceneNodeData RemapNodeIds(SceneNodeData data)

@@ -275,6 +275,24 @@ public sealed partial class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
+    public async Task DuplicateNodesAsync_SyncsEachNodeInSubtree()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var source = new SceneNode(scene) { Name = "Source" };
+        var child = new SceneNode(scene) { Name = "Child" };
+        source.AddChild(child);
+        scene.RootNodes.Add(source);
+        var context = CreateContext(scene);
+
+        var result = await fixture.Sut.DuplicateNodesAsync(context, [source.Id], newParentNodeId: null, newParentFolderId: null).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        fixture.Sync.Verify(sync => sync.CreateNodeAsync(It.IsAny<SceneNode>(), It.IsAny<Guid?>()), Times.Exactly(2));
+    }
+
+    [TestMethod]
     public async Task ReorderNodesAsync_ReordersSiblingWithinRoot()
     {
         var fixture = CreateFixture();

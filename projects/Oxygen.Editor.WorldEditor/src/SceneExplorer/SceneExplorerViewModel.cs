@@ -390,9 +390,20 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private async Task Undo()
     {
         using var authoring = this.EnterTreeAuthoring();
-        if (authoring is not null)
+        if (authoring is null)
+        {
+            return;
+        }
+
+        this.suppressNodeMessages = true;
+        try
         {
             await this.History.UndoAsync(this.loadSceneCts?.Token ?? CancellationToken.None).ConfigureAwait(false);
+            await this.ReconcileProjectionAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            this.suppressNodeMessages = false;
         }
     }
 
@@ -400,9 +411,20 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private async Task Redo()
     {
         using var authoring = this.EnterTreeAuthoring();
-        if (authoring is not null)
+        if (authoring is null)
+        {
+            return;
+        }
+
+        this.suppressNodeMessages = true;
+        try
         {
             await this.History.RedoAsync(this.loadSceneCts?.Token ?? CancellationToken.None).ConfigureAwait(false);
+            await this.ReconcileProjectionAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            this.suppressNodeMessages = false;
         }
     }
 
