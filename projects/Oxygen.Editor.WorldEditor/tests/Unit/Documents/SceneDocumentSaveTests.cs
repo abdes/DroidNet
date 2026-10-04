@@ -10,6 +10,7 @@ using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Documents;
+using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.SceneExplorer.Services;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Serialization;
@@ -53,7 +54,7 @@ public sealed class SceneDocumentSaveTests
             default,
             new StrongReferenceMessenger(),
             results.Object,
-            new OperationStatusReducer(), Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Moq.Mock.Of<Oxygen.Editor.Projects.IProjectContextService>());
+            new OperationStatusReducer(), Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Moq.Mock.Of<Oxygen.Editor.Projects.IProjectContextService>(), Moq.Mock.Of<ISceneMutator>(), Moq.Mock.Of<ISceneOrganizer>());
         var scene = new Scene(Mock.Of<IProject>(project => project.ProjectInfo == Mock.Of<IProjectInfo>(info => info.Location == "H:/SceneSaveTest"))) { Name = "Test Scene" };
         var metadata = new SceneDocumentMetadata(scene.Id) { Title = scene.Name, IsDirty = true };
         var context = new SceneDocumentCommandContext(scene.Id, metadata, scene, new HistoryKeeper(scene));

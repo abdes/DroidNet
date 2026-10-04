@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
 using DroidNet.TimeMachine;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Inspection;
@@ -15,6 +16,7 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneExplorer.Services;
+using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
@@ -1326,7 +1328,8 @@ public sealed partial class SceneDocumentCommandServiceTests
             default,
             WeakReferenceMessenger.Default,
             results,
-            new OperationStatusReducer(), inventories.Object, projects);
+            new OperationStatusReducer(), inventories.Object, projects,
+            new SceneMutator(NullLogger<SceneMutator>.Instance), new SceneOrganizer(NullLogger<SceneOrganizer>.Instance));
 
         return new(sut, sync, documentService, results, inventories, projects);
     }

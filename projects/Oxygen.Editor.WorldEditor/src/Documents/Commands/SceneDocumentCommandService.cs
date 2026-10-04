@@ -18,6 +18,7 @@ using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneExplorer;
+using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.SceneExplorer.Services;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
@@ -43,6 +44,8 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// <param name="statusReducer">The status reducer.</param>
 /// <param name="materialSlots">The native geometry inventory reader.</param>
 /// <param name="projectContexts">The active project lifetime.</param>
+/// <param name="sceneMutator">The scene-graph mutation owner.</param>
+/// <param name="sceneOrganizer">The explorer-layout mutation owner.</param>
 public sealed partial class SceneDocumentCommandService(
     Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService automaticCooking,
     ISceneExplorerService sceneExplorerService,
@@ -55,7 +58,9 @@ public sealed partial class SceneDocumentCommandService(
     IOperationResultPublisher operationResults,
     IStatusReducer statusReducer,
     IGeometryMaterialSlotProvider materialSlots,
-    IProjectContextService projectContexts) : ISceneDocumentCommandService
+    IProjectContextService projectContexts,
+    ISceneMutator sceneMutator,
+    ISceneOrganizer sceneOrganizer) : ISceneDocumentCommandService
 {
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Scene, SemaphoreSlim> SaveGates = [];
 
@@ -68,6 +73,8 @@ public sealed partial class SceneDocumentCommandService(
     private readonly IMessenger messenger = messenger;
     private readonly IOperationResultPublisher operationResults = operationResults;
     private readonly IStatusReducer statusReducer = statusReducer;
+    private readonly ISceneMutator sceneMutator = sceneMutator;
+    private readonly ISceneOrganizer sceneOrganizer = sceneOrganizer;
 
     /// <inheritdoc />
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]

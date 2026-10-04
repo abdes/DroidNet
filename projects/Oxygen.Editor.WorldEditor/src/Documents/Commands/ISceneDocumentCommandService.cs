@@ -228,4 +228,96 @@ public interface ISceneDocumentCommandService
         SceneDocumentCommandContext context,
         ITreeItem item,
         string newName);
+
+    /// <summary>Creates an empty scene node under a node, a folder, or the scene root.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="parentNodeId">The destination parent node, or <see langword="null"/> for root/folder scope.</param>
+    /// <param name="parentFolderId">The destination folder for grouping, or <see langword="null"/> when not grouping.</param>
+    /// <param name="name">The node name.</param>
+    /// <returns>The command result with the created node.</returns>
+    public Task<SceneValueCommandResult<SceneNode>> CreateNodeAsync(
+        SceneDocumentCommandContext context,
+        Guid? parentNodeId,
+        Guid? parentFolderId,
+        string name);
+
+    /// <summary>Creates an explorer folder under a node, a folder, or the scene root.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="parentFolderId">The destination parent folder, or <see langword="null"/> for root/node scope.</param>
+    /// <param name="parentNodeId">The destination parent node, or <see langword="null"/> for root/folder scope.</param>
+    /// <param name="name">The folder name.</param>
+    /// <returns>The command result with the created folder id.</returns>
+    public Task<SceneValueCommandResult<Guid>> CreateFolderAsync(
+        SceneDocumentCommandContext context,
+        Guid? parentFolderId,
+        Guid? parentNodeId,
+        string name);
+
+    /// <summary>Renames a scene node by identity.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="nodeId">The node to rename.</param>
+    /// <param name="newName">The new name.</param>
+    /// <returns>The command result.</returns>
+    public Task<SceneCommandResult> RenameNodeAsync(
+        SceneDocumentCommandContext context,
+        Guid nodeId,
+        string newName);
+
+    /// <summary>Renames an explorer folder by identity.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="folderId">The folder to rename.</param>
+    /// <param name="newName">The new name.</param>
+    /// <returns>The command result.</returns>
+    public Task<SceneCommandResult> RenameFolderAsync(
+        SceneDocumentCommandContext context,
+        Guid folderId,
+        string newName);
+
+    /// <summary>Deletes node hierarchies (subtree deletion) in one atomic transaction.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="nodeIds">The hierarchy roots to delete.</param>
+    /// <returns>The command result.</returns>
+    public Task<SceneCommandResult> DeleteNodesAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<Guid> nodeIds);
+
+    /// <summary>Deletes an explorer folder, promoting its contained entries in place (grouping-only).</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="folderId">The folder to remove.</param>
+    /// <returns>The command result.</returns>
+    public Task<SceneCommandResult> DeleteFolderAsync(
+        SceneDocumentCommandContext context,
+        Guid folderId);
+
+    /// <summary>Reparents node hierarchies, optionally preserving world pose, in one atomic transaction.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="nodeIds">The hierarchy roots to reparent.</param>
+    /// <param name="newParentNodeId">The destination parent, or <see langword="null"/> for the scene root.</param>
+    /// <param name="preserveWorldTransform">When <see langword="true"/>, preserves world pose rather than local TRS.</param>
+    /// <returns>The command result.</returns>
+    public Task<SceneCommandResult> ReparentNodesAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<Guid> nodeIds,
+        Guid? newParentNodeId,
+        bool preserveWorldTransform);
+
+    /// <summary>Groups node entries into a folder without changing scene parenting or transforms.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="nodeIds">The nodes to group.</param>
+    /// <param name="folderId">The destination folder.</param>
+    /// <returns>The command result.</returns>
+    public Task<SceneCommandResult> MoveNodesToFolderAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<Guid> nodeIds,
+        Guid folderId);
+
+    /// <summary>Removes node entries from a folder, promoting them to the enclosing visual container.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="nodeIds">The nodes to remove from the folder.</param>
+    /// <param name="folderId">The source folder.</param>
+    /// <returns>The command result.</returns>
+    public Task<SceneCommandResult> RemoveNodesFromFolderAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<Guid> nodeIds,
+        Guid folderId);
 }

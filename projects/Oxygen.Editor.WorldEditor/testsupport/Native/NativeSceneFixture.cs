@@ -58,6 +58,7 @@ using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneEditor;
+using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.SceneExplorer.Services;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
@@ -246,7 +247,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         _ = this.AssetCatalog.Setup(value => value.RefreshAsync(It.IsAny<Oxygen.Editor.ContentBrowser.AssetIdentity.AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         _ = this.MaterialPicker.Setup(value => value.Results).Returns(this.materialChoices);
         _ = this.MaterialPicker.Setup(value => value.RefreshAsync(It.IsAny<MaterialPickerFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        this.Commands = new SceneDocumentCommandService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), Mock.Of<ISceneExplorerService>(), new SceneSelectionService(), this.sync, this.manager, this.documents.Object, default, this.messenger, results, new OperationStatusReducer(), this.materialSlotProvider.Object, this.projectContexts);
+        this.Commands = new SceneDocumentCommandService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), Mock.Of<ISceneExplorerService>(), new SceneSelectionService(), this.sync, this.manager, this.documents.Object, default, this.messenger, results, new OperationStatusReducer(), this.materialSlotProvider.Object, this.projectContexts, Mock.Of<ISceneMutator>(), Mock.Of<ISceneOrganizer>());
         this.Model = new EnvironmentViewModel(this.Commands, () => this.Context);
         this.Model.SetScene(this.Source);
         this.sync.SceneSynchronized += (_, args) =>

@@ -20,6 +20,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
+using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.SceneExplorer.Services;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
@@ -117,7 +118,7 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
     {
         var documents = new Mock<IDocumentService>();
         _ = documents.Setup(value => value.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>())).ReturnsAsync(value: true);
-        var commands = new SceneDocumentCommandService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), Mock.Of<ISceneExplorerService>(), new SceneSelectionService(), sync, manager, documents.Object, default, new StrongReferenceMessenger(), results, new OperationStatusReducer(), Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Moq.Mock.Of<Oxygen.Editor.Projects.IProjectContextService>());
+        var commands = new SceneDocumentCommandService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), Mock.Of<ISceneExplorerService>(), new SceneSelectionService(), sync, manager, documents.Object, default, new StrongReferenceMessenger(), results, new OperationStatusReducer(), Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Moq.Mock.Of<Oxygen.Editor.Projects.IProjectContextService>(), Moq.Mock.Of<ISceneMutator>(), Moq.Mock.Of<ISceneOrganizer>());
         var context = new SceneDocumentCommandContext(scene.Id, metadata, scene, new HistoryKeeper(scene));
         var model = new EnvironmentViewModel(commands, () => context);
         using (model)

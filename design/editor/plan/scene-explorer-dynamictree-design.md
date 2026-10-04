@@ -728,6 +728,23 @@ copy A → load B → paste and cancelled switches are covered. Projects model/m
 and existing inspector/scene-document regressions pass. No hidden direct
 mutation or separate selection/history/clipboard authority remains.
 
+**Progress (2026-10-04):** the atomic-authoring foundation is landed on the document
+command owner. `ISceneDocumentCommandService` now exposes typed, identity-based
+hierarchy commands (`CreateNodeAsync`, `CreateFolderAsync`, `RenameNodeAsync`,
+`RenameFolderAsync`, `DeleteNodesAsync`, `DeleteFolderAsync`, `ReparentNodesAsync`,
+`MoveNodesToFolderAsync`, `RemoveNodesFromFolderAsync`) implemented in
+`SceneDocumentCommandService.Hierarchy.cs` with whole-batch prevalidation, atomic
+graph+layout commit, synchronous history/dirty advance and native convergence.
+Folders are grouping-only (no `Parent`/TRS change); true reparent preserves world
+pose via `SceneTransformMath` (decompose/recompose with singular/shear rejection)
+and redoes the forward move rather than re-guessing. `SceneDocumentCommandService`
+now owns `ISceneMutator`/`ISceneOrganizer` directly. 238 WorldEditor Unit tests
+pass (including the new `SceneDocumentCommandServiceTests.Hierarchy` suite).
+Remaining steps 1 (VM collaborator split/DefaultSceneId), 2-3 (stable projection
+index + read-only label + commit-hook wiring), 7-10 (clipboard, selection context,
+search, command availability/menu) are not yet implemented; SE-02 stays
+`in_progress` until those land with their own evidence.
+
 ### SE-03 — Showcase UI, workspace protection and live integration
 
 **Dependencies:** SE-01/02; actual runtime picking/editor-mask capability and approved
@@ -888,11 +905,11 @@ CMake target or run a whole engine build from this managed checklist. Record
 native dependency/build/test ownership before implementation and keep SE-03's
 native acceptance blocked until the required API and observed behavior exist.
 
-| ID    | State     | Next action                                                                              | Responsible role                       |
-| ----- | --------- | ---------------------------------------------------------------------------------------- | -------------------------------------- |
-| SE-01 | validated | Await user demo acceptance.                                                              | Implementer + user                     |
-| SE-02 | planned   | Implement atomic authoring/projection/selection/search integration.                      | Implementer                            |
-| SE-03 | planned   | Connect target UI, workspace state and supported native mask/picking; qualify workflows. | Implementer + runtime owner + reviewer |
+| ID    | State       | Next action                                                                                                                                                                                                        | Responsible role                       |
+| ----- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| SE-01 | validated   | Await user demo acceptance.                                                                                                                                                                                        | Implementer + user                     |
+| SE-02 | in_progress | Landed: identity-based hierarchy command surface + preserve-world reparent. Remaining: VM collaborator split, commit-hook wiring, DefaultSceneId, clipboard, selection context, search, command/menu availability. | Implementer                            |
+| SE-03 | planned     | Connect target UI, workspace state and supported native mask/picking; qualify workflows.                                                                                                                           | Implementer + runtime owner + reviewer |
 
 Use `in_progress`, `landed_needs_validation`, `blocked`, `validated` accurately.
 Document contract decisions and named dependencies next to the slice, not as a
