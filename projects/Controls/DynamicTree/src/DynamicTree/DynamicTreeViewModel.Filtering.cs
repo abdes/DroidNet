@@ -22,9 +22,9 @@ public abstract partial class DynamicTreeViewModel
     public const int FilterDebounceMilliseconds = 250;
 
     // "Loaded-only" subtree filtering cache.
-    private readonly Dictionary<ITreeItem, bool> filterSelfMatch = new(ReferenceEqualityComparer.Instance);
-    private readonly Dictionary<ITreeItem, bool> filterSubtreeMatch = new(ReferenceEqualityComparer.Instance);
-    private readonly HashSet<ITreeItem> filteringSubscribedNodes = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<ITreeItem, bool> filterSelfMatch = [with(ReferenceEqualityComparer.Instance)];
+    private readonly Dictionary<ITreeItem, bool> filterSubtreeMatch = [with(ReferenceEqualityComparer.Instance)];
+    private readonly HashSet<ITreeItem> filteringSubscribedNodes = [with(ReferenceEqualityComparer.Instance)];
 
     private FilteredObservableCollection<ITreeItem>? filteredItems;
     private HierarchicalFilterBuilder? filterBuilder;

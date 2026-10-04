@@ -96,7 +96,7 @@ public class TreeItemAdapterTests
 
         var children = await sut.Children.ConfigureAwait(false);
 
-        _ = children.Count.Should().Be(1);
+        _ = children.Should().ContainSingle();
         _ = children.Should().Contain(child);
 
         // Access the Children collection again - No initialization should happen
@@ -199,7 +199,7 @@ public class TreeItemAdapterTests
 
         _ = sut.ChildrenCount.Should().Be(2);
         var children = await sut.Children.ConfigureAwait(false);
-        _ = children.Count.Should().Be(2);
+        _ = children.Should().HaveCount(2);
         _ = children.Should().ContainInConsecutiveOrder([child1, child2]);
 
         _ = child1.Depth.Should().Be(1);
@@ -267,7 +267,7 @@ public class TreeItemAdapterTests
 
         _ = sut.ChildrenCount.Should().Be(2);
         var children = await sut.Children.ConfigureAwait(false);
-        _ = children.Count.Should().Be(2);
+        _ = children.Should().HaveCount(2);
         _ = children.Should().ContainInConsecutiveOrder([child2, child1]);
 
         _ = child1.Depth.Should().Be(1);
@@ -455,10 +455,10 @@ public class TreeItemAdapterTests
         var child = childMock.Object;
         child.Label = "Child";
 
-        rootMock.Setup(x => x.LoadChildrenPublic()).Returns(Task.CompletedTask);
-        folderMock.Setup(x => x.LoadChildrenPublic()).Returns(Task.CompletedTask);
-        parentMock.Setup(x => x.LoadChildrenPublic()).Returns(Task.CompletedTask);
-        childMock.Setup(x => x.LoadChildrenPublic()).Returns(Task.CompletedTask);
+        _ = rootMock.Setup(x => x.LoadChildrenPublic()).Returns(Task.CompletedTask);
+        _ = folderMock.Setup(x => x.LoadChildrenPublic()).Returns(Task.CompletedTask);
+        _ = parentMock.Setup(x => x.LoadChildrenPublic()).Returns(Task.CompletedTask);
+        _ = childMock.Setup(x => x.LoadChildrenPublic()).Returns(Task.CompletedTask);
 
         // Build initial tree: Root -> Parent -> Child
         await root.AddChildAsync(parent).ConfigureAwait(false);
@@ -474,7 +474,7 @@ public class TreeItemAdapterTests
         _ = folder.Depth.Should().Be(1);
 
         // Move Parent to Folder
-        await root.RemoveChildAsync(parent).ConfigureAwait(false);
+        _ = await root.RemoveChildAsync(parent).ConfigureAwait(false);
         await folder.AddChildAsync(parent).ConfigureAwait(false);
 
         // Verify new depths
