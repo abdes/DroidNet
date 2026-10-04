@@ -637,7 +637,7 @@ public sealed partial class SceneDocumentCommandService
             $"Move {move.Node.Name}",
             async () => await this.RedoReparentAsync(context, move).ConfigureAwait(true));
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        await this.sceneEngineSync.ReparentNodeAsync(context.Scene, move.Node.Id, move.NewParent?.Id, preserveWorldTransform: false).ConfigureAwait(true);
+        await this.sceneEngineSync.ReparentNodeAsync(context.Scene, move.Node.Id, move.OldParent?.Id, preserveWorldTransform: false).ConfigureAwait(true);
     }
 
     private async Task RedoReparentAsync(SceneDocumentCommandContext context, ReparentMove move)

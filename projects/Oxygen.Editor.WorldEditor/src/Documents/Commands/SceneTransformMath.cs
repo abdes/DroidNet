@@ -63,6 +63,16 @@ internal static class SceneTransformMath
         scale = default;
 
         var world = WorldMatrix(node);
+
+        // A node that ignores its parent has world == local, and it keeps ignoring the
+        // destination parent after the move, so its local must stay equal to its world.
+        // Dividing by the new parent's world here would shift it (e.g. world X=0 under a
+        // parent at X=10 would become X=-10).
+        if (node.IgnoreParentTransform)
+        {
+            return TryDecompose(world, out position, out rotation, out scale);
+        }
+
         var newParentWorld = newParent is null ? Matrix4x4.Identity : WorldMatrix(newParent);
         if (!Matrix4x4.Invert(newParentWorld, out var inverseParent))
         {

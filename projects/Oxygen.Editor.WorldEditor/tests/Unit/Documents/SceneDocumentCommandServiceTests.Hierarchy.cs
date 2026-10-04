@@ -249,6 +249,36 @@ public sealed partial class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
+    public async Task ReparentNodesAsync_PreserveWorld_IgnoreParentTransformKeepsLocalAndWorld()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var parent = new SceneNode(scene) { Name = "Parent" };
+        parent.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(10f, 0f, 0f);
+        scene.RootNodes.Add(parent);
+
+        var child = new SceneNode(scene) { Name = "Child", IgnoreParentTransform = true };
+        var childTransform = child.Components.OfType<TransformComponent>().Single();
+        childTransform.LocalPosition = new Vector3(1f, 2f, 3f);
+        parent.AddChild(child);
+
+        var newParent = new SceneNode(scene) { Name = "NewParent" };
+        newParent.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(20f, 0f, 0f);
+        scene.RootNodes.Add(newParent);
+
+        var context = CreateContext(scene);
+        var before = SceneTransformMath.WorldMatrix(child);
+
+        var result = await fixture.Sut.ReparentNodesAsync(context, [child.Id], newParent.Id, preserveWorldTransform: true).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = child.Parent.Should().BeSameAs(newParent);
+        _ = childTransform.LocalPosition.Should().Be(new Vector3(1f, 2f, 3f), "an ignored-parent node keeps its local TRS unchanged");
+        _ = MatricesClose(SceneTransformMath.WorldMatrix(child), before).Should().BeTrue("an ignored-parent node must keep its world pose when reparented");
+    }
+
+    [TestMethod]
     public async Task DuplicateNodesAsync_DeepCopiesSubtreeWithIndependentIdentities()
     {
         var fixture = CreateFixture();
