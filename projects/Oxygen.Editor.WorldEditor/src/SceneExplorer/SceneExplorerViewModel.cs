@@ -944,36 +944,43 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return 0;
         }
 
-        var matches = this.projection.Nodes
-            .Where(adapter => adapter.AttachedObject.Name.Contains(trimmed, StringComparison.OrdinalIgnoreCase))
-            .Cast<ITreeItem>()
-            .Concat(this.projection.Folders.Where(folder => folder.Name.Contains(trimmed, StringComparison.OrdinalIgnoreCase)))
+        var scene = this.Scene.AttachedObject;
+        var nodeById = scene.AllNodes.ToDictionary(node => node.Id);
+
+        var matchingNodeIds = nodeById.Values
+            .Where(node => node.Name.Contains(trimmed, StringComparison.OrdinalIgnoreCase))
+            .Select(node => node.Id)
             .ToList();
 
         // Expand scene-graph ancestor paths of matching nodes (top-down) so collapsed descendants
-        // become visible to the filter. Folder grouping is an overlay, so nodes use their actual
-        // scene ancestry rather than their realized adapter Parent (unset while collapsed).
-        // Accumulate across queries; ClearSearchAsync restores everything a search expanded.
-        foreach (var nodeMatch in matches.OfType<SceneNodeAdapter>())
+        // become visible to the filter. Nodes use their actual scene ancestry rather than the
+        // realized adapter Parent (unset while collapsed). Accumulate across queries;
+        // ClearSearchAsync restores everything a search expanded.
+        foreach (var nodeId in matchingNodeIds)
         {
-            var path = new List<SceneNodeAdapter>();
-            for (var ancestorNode = nodeMatch.AttachedObject.Parent; ancestorNode is not null; ancestorNode = ancestorNode.Parent)
+            var ancestors = new Stack<SceneNode>();
+            for (var parent = nodeById[nodeId].Parent; parent is not null; parent = parent.Parent)
+            {
+                ancestors.Push(parent);
+            }
+
+            while (ancestors.TryPop(out var ancestorNode))
             {
                 if (this.projection.GetNode(ancestorNode.Id) is { } ancestor && !ancestor.IsExpanded)
                 {
-                    path.Add(ancestor);
+                    await this.ExpandItemAsync(ancestor).ConfigureAwait(true);
+                    this.searchExpandedItems.Add(ancestor);
                 }
-            }
-
-            for (var i = path.Count - 1; i >= 0; i--)
-            {
-                await this.ExpandItemAsync(path[i]).ConfigureAwait(true);
-                this.searchExpandedItems.Add(path[i]);
             }
         }
 
+        // Folders are matched over realized adapters; collapsed-folder matching still requires a
+        // domain layout index (C26).
+        var matchingFolderCount = this.projection.Folders
+            .Count(folder => folder.Name.Contains(trimmed, StringComparison.OrdinalIgnoreCase));
+
         this.FilterPredicate = item => item.Label.Contains(trimmed, StringComparison.OrdinalIgnoreCase);
-        return matches.Count;
+        return matchingNodeIds.Count + matchingFolderCount;
     }
 
     /// <summary>Clears the transient search and restores the expansion state it changed.</summary>

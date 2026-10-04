@@ -15,6 +15,7 @@ namespace Oxygen.Editor.World.SceneExplorer;
 public sealed class FolderAdapter : LayoutItemAdapter, ICanBeCloned
 {
     private readonly ExplorerEntryData? entryData;
+    private bool isExpansionTransient;
 
     public FolderAdapter(ExplorerEntryData entry)
         : this(entry.FolderId ?? Guid.NewGuid(), entry.Name ?? "Folder")
@@ -59,9 +60,17 @@ public sealed class FolderAdapter : LayoutItemAdapter, ICanBeCloned
         return new FolderAdapter(Guid.NewGuid(), this.Name);
     }
 
+    /// <summary>
+    ///     Controls whether expansion changes are persisted to the authored layout entry. Search
+    ///     sets this to <see langword="true"/> so its transient ancestor expansion does not write
+    ///     <see cref="ExplorerEntryData.IsExpanded"/> or dirty the document.
+    /// </summary>
+    /// <param name="transient"><see langword="true"/> to suppress authored expansion persistence.</param>
+    public void SetExpansionTransient(bool transient) => this.isExpansionTransient = transient;
+
     protected override void OnIsExpandedChanged(bool isExpanded)
     {
-        if (this.entryData is not null)
+        if (this.entryData is not null && !this.isExpansionTransient)
         {
             this.entryData.IsExpanded = isExpanded;
         }
