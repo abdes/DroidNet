@@ -347,6 +347,64 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
             ModifiedFolders: [folderEntry]);
     }
 
+    /// <inheritdoc />
+    public LayoutChangeRecord MoveNodeToSiblingIndex(Guid nodeId, Guid? parentFolderId, Guid? parentNodeId, int index, Scene scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+
+        var previousLayout = this.CloneLayout(scene.ExplorerLayout);
+        var layout = RequireLayout(scene);
+
+        IList<ExplorerEntryData> targetList;
+        if (parentFolderId.HasValue)
+        {
+            var (folderEntry, _) = FindFolderEntryWithParent(layout, parentFolderId.Value);
+            if (folderEntry is null)
+            {
+                throw new InvalidOperationException($"Folder '{parentFolderId}' not found.");
+            }
+
+            targetList = folderEntry.EnsureChildren();
+        }
+        else if (parentNodeId.HasValue)
+        {
+            this.EnsureNodeInLayout(layout, parentNodeId.Value, scene);
+            var (parentNodeEntry, _) = this.FindNodeEntryWithParent(layout, parentNodeId.Value);
+            if (parentNodeEntry is null)
+            {
+                throw new InvalidOperationException($"Node '{parentNodeId}' not found in layout.");
+            }
+
+            targetList = parentNodeEntry.EnsureChildren();
+        }
+        else
+        {
+            targetList = layout;
+        }
+
+        // Capture the node's current position within the destination list before removal so a
+        // same-parent move can adjust the insertion index after the source entry is removed.
+        var (currentEntry, currentParentList) = this.FindNodeEntryWithParent(layout, nodeId);
+        var removedIndex = currentEntry is not null && currentParentList is not null && ReferenceEquals(currentParentList, targetList)
+            ? currentParentList.IndexOf(currentEntry)
+            : -1;
+
+        var removed = new List<ExplorerEntryData>();
+        RemoveEntriesForNodeIds(layout, [nodeId], removed);
+        var nodeEntry = removed.FirstOrDefault() ?? new ExplorerEntryData { Type = "Node", NodeId = nodeId };
+
+        var adjustedIndex = removedIndex >= 0 && removedIndex < index ? index - 1 : index;
+        var insertIndex = Math.Clamp(adjustedIndex, 0, targetList.Count);
+        targetList.Insert(insertIndex, nodeEntry);
+
+        scene.SetExplorerLayout(layout);
+
+        return new LayoutChangeRecord(
+            OperationName: "MoveNodeToSiblingIndex",
+            PreviousLayout: previousLayout,
+            NewLayout: layout);
+    }
+
     /// <summary>
     /// Removes the folder with id <paramref name="folderId"/> from the layout.
     /// If <paramref name="promoteChildrenToParent"/> is true any children of the

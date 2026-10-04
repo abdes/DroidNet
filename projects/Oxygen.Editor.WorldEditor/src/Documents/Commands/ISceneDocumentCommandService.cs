@@ -321,6 +321,30 @@ public interface ISceneDocumentCommandService
         IReadOnlyList<Guid> nodeIds,
         Guid folderId);
 
+    /// <summary>Moves an explorer folder to another folder or the scene root (grouping-only, no graph change).</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="folderId">The folder to move.</param>
+    /// <param name="newParentFolderId">The destination parent folder, or <see langword="null"/> for the scene root.</param>
+    /// <returns>The command result.</returns>
+    public Task<SceneCommandResult> MoveFolderToParentAsync(
+        SceneDocumentCommandContext context,
+        Guid folderId,
+        Guid? newParentFolderId);
+
+    /// <summary>Moves a node's layout entry to a sibling index within a container without changing scene parenting.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="nodeId">The node to reorder.</param>
+    /// <param name="parentFolderId">The destination folder, or <see langword="null"/> for root/node scope.</param>
+    /// <param name="parentNodeId">The destination node, or <see langword="null"/> for root/folder scope.</param>
+    /// <param name="index">The sibling insertion index within the destination.</param>
+    /// <returns>The command result.</returns>
+    public Task<SceneCommandResult> ReorderNodesAsync(
+        SceneDocumentCommandContext context,
+        Guid nodeId,
+        Guid? parentFolderId,
+        Guid? parentNodeId,
+        int index);
+
     /// <summary>Deep-copies node hierarchies and inserts them under a node, folder, or the scene root.</summary>
     /// <param name="context">The document command context.</param>
     /// <param name="nodeIds">The hierarchy roots to duplicate.</param>

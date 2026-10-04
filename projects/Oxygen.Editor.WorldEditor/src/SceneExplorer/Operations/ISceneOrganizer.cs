@@ -41,6 +41,18 @@ public interface ISceneOrganizer
     public LayoutChangeRecord MoveFolderToParent(Guid folderId, Guid? newParentFolderId, Scene scene);
 
     /// <summary>
+    /// Moves a node's layout entry to a sibling index within a parent container (root, node or folder)
+    /// without changing scene parenting or transforms.
+    /// </summary>
+    /// <param name="nodeId">The node to reorder.</param>
+    /// <param name="parentFolderId">The destination folder, or <see langword="null"/> for root/node scope.</param>
+    /// <param name="parentNodeId">The destination node, or <see langword="null"/> for root/folder scope.</param>
+    /// <param name="index">The sibling insertion index within the destination.</param>
+    /// <param name="scene">The owning scene.</param>
+    /// <returns>A layout change record with the updated layout.</returns>
+    public LayoutChangeRecord MoveNodeToSiblingIndex(Guid nodeId, Guid? parentFolderId, Guid? parentNodeId, int index, Scene scene);
+
+    /// <summary>
     /// Removes a folder and optionally promotes its children to the parent.
     /// </summary>
     /// <param name="folderId">The folder to remove.</param>

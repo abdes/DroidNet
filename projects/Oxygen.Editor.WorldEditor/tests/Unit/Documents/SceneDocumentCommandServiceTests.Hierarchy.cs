@@ -274,6 +274,48 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = context.History.UndoStack.Should().ContainSingle();
     }
 
+    [TestMethod]
+    public async Task ReorderNodesAsync_ReordersSiblingWithinRoot()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var a = new SceneNode(scene) { Name = "A" };
+        var b = new SceneNode(scene) { Name = "B" };
+        var c = new SceneNode(scene) { Name = "C" };
+        scene.RootNodes.Add(a);
+        scene.RootNodes.Add(b);
+        scene.RootNodes.Add(c);
+        var context = CreateContext(scene);
+
+        // Move A to after C: insertion index 3 in the original [A, B, C] list.
+        var result = await fixture.Sut.ReorderNodesAsync(context, a.Id, parentFolderId: null, parentNodeId: null, index: 3).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = scene.ExplorerLayout!.Select(entry => entry.NodeId).Should().Equal(b.Id, c.Id, a.Id);
+        _ = context.Metadata.IsDirty.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public async Task MoveFolderToParentAsync_MovesFolderUnderAnotherFolder()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        scene.RootNodes.Add(new SceneNode(scene) { Name = "Node" });
+        var context = CreateContext(scene);
+
+        var first = await fixture.Sut.CreateFolderAsync(context, parentFolderId: null, parentNodeId: null, "First").ConfigureAwait(false);
+        var second = await fixture.Sut.CreateFolderAsync(context, parentFolderId: null, parentNodeId: null, "Second").ConfigureAwait(false);
+
+        var result = await fixture.Sut.MoveFolderToParentAsync(context, second.Value!, first.Value).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        var firstEntry = scene.ExplorerLayout!.Single(entry => entry.FolderId == first.Value);
+        _ = firstEntry.Children.Should().Contain(entry => entry.FolderId == second.Value);
+        _ = scene.ExplorerLayout.Should().NotContain(entry => entry.FolderId == second.Value);
+    }
+
     private static void ConfigureHierarchySync(Fixture fixture)
     {
         _ = fixture.Sync.Setup(sync => sync.CreateNodeAsync(It.IsAny<SceneNode>(), It.IsAny<Guid?>())).Returns(Task.CompletedTask);

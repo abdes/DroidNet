@@ -477,6 +477,76 @@ public sealed partial class SceneDocumentCommandService
         }
     }
 
+    /// <inheritdoc />
+    public Task<SceneCommandResult> MoveFolderToParentAsync(
+        SceneDocumentCommandContext context,
+        Guid folderId,
+        Guid? newParentFolderId)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return Task.FromResult(new SceneCommandResult(Succeeded: false));
+        }
+
+        try
+        {
+            EnsureExplorerLayout(context.Scene);
+            var previousLayout = this.sceneOrganizer.CloneLayout(context.Scene.ExplorerLayout);
+            _ = this.sceneOrganizer.MoveFolderToParent(folderId, newParentFolderId, context.Scene);
+            this.RecordLayoutHistory(context, "Move folder", previousLayout, context.Scene.ExplorerLayout);
+            _ = this.MarkDirtyAsync(context);
+            return Task.FromResult(SceneCommandResult.Success);
+        }
+        catch (Exception ex)
+        {
+            var operationResultId = this.PublishSceneFailure(
+                SceneOperationKinds.ExplorerLayoutMoveNode,
+                DiagnosticCodes.ScenePrefix + "MOVE_FOLDER_FAILED",
+                "Folder was not moved",
+                ex.Message,
+                context,
+                ex);
+            return Task.FromResult(new SceneCommandResult(Succeeded: false, operationResultId));
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<SceneCommandResult> ReorderNodesAsync(
+        SceneDocumentCommandContext context,
+        Guid nodeId,
+        Guid? parentFolderId,
+        Guid? parentNodeId,
+        int index)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return Task.FromResult(new SceneCommandResult(Succeeded: false));
+        }
+
+        try
+        {
+            EnsureExplorerLayout(context.Scene);
+            var previousLayout = this.sceneOrganizer.CloneLayout(context.Scene.ExplorerLayout);
+            _ = this.sceneOrganizer.MoveNodeToSiblingIndex(nodeId, parentFolderId, parentNodeId, index, context.Scene);
+            this.RecordLayoutHistory(context, "Reorder", previousLayout, context.Scene.ExplorerLayout);
+            _ = this.MarkDirtyAsync(context);
+            return Task.FromResult(SceneCommandResult.Success);
+        }
+        catch (Exception ex)
+        {
+            var operationResultId = this.PublishSceneFailure(
+                SceneOperationKinds.ExplorerLayoutMoveNode,
+                DiagnosticCodes.ScenePrefix + "REORDER_FAILED",
+                "Node was not reordered",
+                ex.Message,
+                context,
+                ex);
+            return Task.FromResult(new SceneCommandResult(Succeeded: false, operationResultId));
+        }
+    }
+
     private void RecordCreateNodeUndo(SceneDocumentCommandContext context, SceneNode node)
     {
         var restore = NodeRestore.Capture(node);

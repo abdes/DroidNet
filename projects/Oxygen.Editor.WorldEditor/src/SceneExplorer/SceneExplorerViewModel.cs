@@ -1121,29 +1121,46 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return TreeDropResult.Rejected;
         }
 
-        // Only node roots are supported by the identity-based hierarchy commands today; folder
-        // grouping/reparent and exact sibling reordering land in later steps.
-        var nodeIds = request.Items
-            .OfType<SceneNodeAdapter>()
-            .Select(adapter => adapter.AttachedObject.Id)
-            .ToList();
-        if (nodeIds.Count == 0)
-        {
-            return TreeDropResult.Rejected;
-        }
-
         var context = this.CreateCommandContext();
         if (context is null)
         {
             return TreeDropResult.Rejected;
         }
 
-        SceneCommandResult result = request.Parent switch
+        var folderIds = request.Items.OfType<FolderAdapter>().Select(folder => folder.Id).ToList();
+        var nodeIds = request.Items.OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject.Id).ToList();
+
+        SceneCommandResult result;
+        if (folderIds.Count > 0)
         {
-            FolderAdapter folder => await this.commandService.MoveNodesToFolderAsync(context, nodeIds, folder.Id).ConfigureAwait(false),
-            SceneNodeAdapter node => await this.commandService.ReparentNodesAsync(context, nodeIds, node.AttachedObject.Id, preserveWorldTransform: true).ConfigureAwait(false),
-            _ => await this.commandService.ReparentNodesAsync(context, nodeIds, newParentNodeId: null, preserveWorldTransform: true).ConfigureAwait(false),
-        };
+            // Folder moves are grouping-only. Support a single-folder drop; reject mixed batches.
+            if (folderIds.Count != 1 || nodeIds.Count != 0)
+            {
+                return TreeDropResult.Rejected;
+            }
+
+            var newParentFolderId = request.Parent is FolderAdapter targetFolder ? targetFolder.Id : (Guid?)null;
+            result = await this.commandService.MoveFolderToParentAsync(context, folderIds[0], newParentFolderId).ConfigureAwait(false);
+        }
+        else if (nodeIds.Count == 1 && this.IsSameParentReorder(request, nodeIds[0]))
+        {
+            var (parentFolderId, parentNodeId) = request.Parent switch
+            {
+                FolderAdapter folder => ((Guid?)folder.Id, (Guid?)null),
+                SceneNodeAdapter node => ((Guid?)null, node.AttachedObject.Id),
+                _ => ((Guid?)null, (Guid?)null),
+            };
+            result = await this.commandService.ReorderNodesAsync(context, nodeIds[0], parentFolderId, parentNodeId, request.Index).ConfigureAwait(false);
+        }
+        else
+        {
+            result = request.Parent switch
+            {
+                FolderAdapter folder => await this.commandService.MoveNodesToFolderAsync(context, nodeIds, folder.Id).ConfigureAwait(false),
+                SceneNodeAdapter node => await this.commandService.ReparentNodesAsync(context, nodeIds, node.AttachedObject.Id, preserveWorldTransform: true).ConfigureAwait(false),
+                _ => await this.commandService.ReparentNodesAsync(context, nodeIds, newParentNodeId: null, preserveWorldTransform: true).ConfigureAwait(false),
+            };
+        }
 
         if (!result.Succeeded)
         {
@@ -1155,8 +1172,25 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         var moved = nodeIds
             .Where(this.nodeAdapterIndex.ContainsKey)
             .Select(id => (ITreeItem)this.nodeAdapterIndex[id])
+            .Concat(folderIds.Where(this.folderAdapterIndex.ContainsKey).Select(id => (ITreeItem)this.folderAdapterIndex[id]))
             .ToList();
         return TreeDropResult.Committed(moved);
+    }
+
+    private bool IsSameParentReorder(TreeDropRequest request, Guid nodeId)
+    {
+        if (!this.nodeAdapterIndex.TryGetValue(nodeId, out var adapter))
+        {
+            return false;
+        }
+
+        var sceneParentId = adapter.AttachedObject.Parent?.Id;
+        return request.Parent switch
+        {
+            SceneAdapter => sceneParentId is null,
+            SceneNodeAdapter node => sceneParentId == node.AttachedObject.Id,
+            _ => false,
+        };
     }
 
     /// <summary>Returns the folder adapter for the given folder identity, or <see langword="null"/>.</summary>
