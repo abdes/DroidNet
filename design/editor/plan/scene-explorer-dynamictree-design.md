@@ -836,8 +836,15 @@ publishes added with C2/C1/C3, so four tests threw while their defects were mark
       `documents-and-commands.md:150`; Inspector does not consume the new context.
 - [ ] D4 — reviewer + projects/docs. Workspace lock/category persistence is Hide-only in
       `settings-architecture.md:65`; lock/category placement/lifetime unapproved.
-- [ ] D5 — reviewer + projects/docs. Folder delete/duplication + copied-light role policy
-      (`plan:566`) unapproved; duplication currently retains `AtmosphereSlot`.
+- [ ] D5 — reviewer + projects/docs. Folder delete/duplication + copied-light role policy.
+      Code and regression tests landed (`Clipboard.cs:257` with
+      `DuplicateNodesAsync_ResetsCopiedDirectionalLightAtmosphereSlot`; `DeleteFolderAsync` at
+      `SceneDocumentCommandService.Hierarchy.cs:295` with
+      `DeleteFolderAsync_PromotesContainedEntriesWithoutRemovingNodes`). Open only because no owning
+      LLD states the policy: `plan:566` is this plan's proposal row, and the LLDs cover the
+      atmosphere-role model (`content-pipeline.md:200`, `environment-authoring.md:33`) without the
+      duplication-clears-slot rule or the folder-delete promotion rule. Needs a contract edit plus
+      approval, not merely a citation.
 - [ ] D6 — reviewer + projects/docs. Default-scene schema/migration/seed policy (`plan:567`)
       unapproved; migration + fallback still contradict the contract.
 - [ ] D7 — reviewer + projects/docs. Sequential-scene Copy / scene-bound Cut lifetime
@@ -849,15 +856,20 @@ Decisions recorded by the owner (2026-10-04). "Code landed" means the source cha
 owning LLD/plan text still needs the policy recorded. An item is fully closed only when both
 the code and the contract-doc recording (plus its regression tests) are done.
 
-- D1 → **preserve-local** default. Code landed (`cbd1d2372`). Contract-doc recording outstanding
-  (`scene-explorer.md:129`, `scene-authoring-model.md:47`).
-- D2 → **folder moves reparent**. Code landed (`cbd1d2372`). Contract-doc recording outstanding
-  (`scene-explorer.md:153`).
+- D1 → **preserve-local** default. Code landed (`cbd1d2372`) with a behavioural test
+  (`CommitDropAsync_RoutesNodeDropIntoNodeThroughReparentCommand`). The policy is already recorded in
+  the owning LLDs (`scene-explorer.md:129`, `scene-authoring-model.md:47`), re-read 2026-10-04, so no
+  contract change is outstanding.
+- D2 → **folder moves reparent**. Code landed (`cbd1d2372`); `scene-explorer.md:153` already permits
+  lineage-driven reparent (re-read 2026-10-04), so no contract change is outstanding.
 - D3 → **row-kind selection + primary**. Code: `SceneSelectionContext` exists, but Inspector
   routing (folder/mixed → summary, root → Environment) is NOT done — C16–C19 open.
 - D4 → **persist hide + lock + category**. NOT started (settings LLD + workspace service open).
-- D5 → **copied lights `AtmosphereSlot = None`**. Code landed (C12, `710007c92`). Contract-doc
-  recording outstanding (`plan:566`).
+- D5 → **copied lights `AtmosphereSlot = None`**. Code (C12, `710007c92`) and its regression tests
+  landed, as did folder-delete promotion (`DeleteFolderAsync_PromotesContainedEntriesWithoutRemovingNodes`).
+  Contract-doc recording is the only outstanding part: no owning LLD states the duplication or
+  folder-delete rules, so closing D5 needs a docs change plus approval. That is why it was not
+  closed the way D1/D2 were, whose decisions the LLDs already record.
 - D6 → **keep migration + fallback + persist/seed default**. Migration/fallback kept and the
   premature `ActiveScene` write removed (C31 partial); **seed-on-creation is unimplemented**
   (`ProjectCreationService.cs` has no `DefaultSceneId`).
@@ -961,7 +973,6 @@ Generic tree
 - [x] T3 — rename reaches native; delete-undo recreates the subtree.
       (`RenameNodeAsync_WhenCommitted_RecordsSingleUndoStep` verifies the native rename call;
       `DeleteNodesAsync_Undo_RecreatesFullSubtreeInNative` verifies `CreateNodeAsync` twice, root + child.)
-      (Delete-undo subtree native recreation tested; rename-to-native sync test pending.)
 - [ ] T4 — immutable snapshots, sequential-scene Copy, repeated Copy Paste, Escape cancels Cut.
 - [ ] T5 — folder/mixed selection reaches the right Inspector; external selection reconciles.
 - [ ] T6 — search multi-query restoration, folder ancestry, no authored expansion writes.
