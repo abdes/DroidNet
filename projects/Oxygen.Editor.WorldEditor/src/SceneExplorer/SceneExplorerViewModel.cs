@@ -974,7 +974,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         // Expand scene-graph ancestor paths of matching nodes (top-down) so collapsed descendants
         // become visible to the filter. Folder grouping is an overlay, so nodes use their actual
         // scene ancestry rather than their realized adapter Parent (unset while collapsed).
-        this.searchExpandedItems.Clear();
+        // Accumulate across queries; ClearSearchAsync restores everything a search expanded.
         foreach (var nodeMatch in matches.OfType<SceneNodeAdapter>())
         {
             var path = new List<SceneNodeAdapter>();
