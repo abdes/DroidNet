@@ -1336,7 +1336,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
         else if (nodeIds.Count == 1 && this.IsSameParentReorder(request, nodeIds[0]))
         {
-            var (parentFolderId, parentNodeId) = ResolveDropDestination(request.Parent);
+            var (parentNodeId, parentFolderId) = ResolveDropDestination(request.Parent);
             result = await this.commandService.ReorderNodesAsync(context, nodeIds[0], parentFolderId, parentNodeId, request.Index).ConfigureAwait(true);
         }
         else

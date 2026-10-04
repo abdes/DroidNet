@@ -119,6 +119,18 @@ public partial class SceneEngineSync
     private void LogCannotReparentHierarchies()
         => LogCannotReparentHierarchies(this.logger);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "OxygenWorld is not available; cannot rename node '{NodeId}'")]
+    private static partial void LogCannotRenameNode(ILogger logger, Guid nodeId);
+
+    private void LogCannotRenameNode(Guid nodeId)
+        => LogCannotRenameNode(this.logger, nodeId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to rename node '{NodeId}'")]
+    private static partial void LogFailedToRenameNode(ILogger logger, Exception exception, Guid nodeId);
+
+    private void LogFailedToRenameNode(Exception ex, Guid nodeId)
+        => LogFailedToRenameNode(this.logger, ex, nodeId);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "OxygenWorld is not available; cannot update transform for '{NodeName}'")]
     private static partial void LogCannotUpdateTransform(ILogger logger, string nodeName);
 

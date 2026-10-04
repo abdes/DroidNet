@@ -492,6 +492,28 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
+    public Task RenameNodeAsync(Scene scene, Guid nodeId, string newName)
+    {
+        var world = this.TryGetWorld(scene);
+        if (world is null)
+        {
+            this.LogCannotRenameNode(nodeId);
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            this.ExecuteOrDefer(scene, world, new RuntimeRenameSceneNode(nodeId, newName));
+        }
+        catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
+        {
+            this.LogFailedToRenameNode(ex, nodeId);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public Task UpdateNodeTransformAsync(SceneNode node)
     {
         ArgumentNullException.ThrowIfNull(node);

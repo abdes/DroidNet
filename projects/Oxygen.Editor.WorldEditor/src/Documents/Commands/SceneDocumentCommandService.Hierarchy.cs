@@ -195,6 +195,7 @@ public sealed partial class SceneDocumentCommandService
             $"Rename({oldName} -> {trimmed})",
             async () => await this.RenameNodeAsync(context, nodeId, oldName).ConfigureAwait(false));
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        await this.sceneEngineSync.RenameNodeAsync(context.Scene, nodeId, trimmed).ConfigureAwait(true);
         return SceneCommandResult.Success;
     }
 
