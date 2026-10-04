@@ -559,8 +559,8 @@ accepted contract. The reviewer is the user or assigned maintainer.
 
 | Conflict/dependency                                                                                                                    | Proposed resolution / decision owner                                                                                                                                                                                                                                                                                                                          |
 | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Scene Explorer LLD currently defaults to preserve-local reparent; brief requires preserve-world.                                       | Reviewer approves preserve-world as Explorer command policy. Update the LLD and transform acceptance tests; generic tree move APIs have no transform policy.                                                                                                                                                                                                  |
-| Existing folder-lineage rules allow folder scope to trigger reparent; brief says grouping never reparents.                             | Keep logical folders in a scene-parent scope and reject incompatible grouping drops with an explanation. Explicit node/root drop or Paste Into handles reparenting. Reviewer approves the clarified command policy; unrestricted cross-scope grouping is not part of these slices.                                                                            |
+| Scene Explorer LLD currently defaults to preserve-local reparent; brief requires preserve-world.                                       | Decided D1 (2026-10-04): preserve-local is the Explorer reparent default; explicit "Paste as child (keep world)" remains the only preserve-world path. The LLDs already state this (`scene-explorer.md:129`, `scene-authoring-model.md:47`); no contract change needed. Generic tree move APIs keep no transform policy.                                      |
+| Existing folder-lineage rules allow folder scope to trigger reparent; brief says grouping never reparents.                             | Decided D2 (2026-10-04): moving a node/folder into a folder in a different scene-parent scope reparents it; no grouping-only restriction. `scene-explorer.md:153` already permits lineage-driven reparent, so the contract agrees.                                                                                                                            |
 | Root/folder/mixed context cannot travel through node-only selection messages.                                                          | Extend existing document selection owner with row-kind context and primary identity, then adapt Inspector/viewport consumers. Do not redefine an empty node list as every non-node case.                                                                                                                                                                      |
 | Settings LLD specifies Hide persistence but not complete Lock/picking placement.                                                       | Extend the same owning workspace LLD for per-project/scene lock and category preferences, using typed settings and existing project-lifetime rules. Prefer one coordinated workspace interaction service with typed substate; do not mix them into scene DTOs.                                                                                                |
 | Folder delete/duplication has ambiguous old draft descriptions.                                                                        | Reviewer approves ordinary folder Delete as grouping-only promotion, node Delete as subtree deletion, and copied lights as unassigned atmosphere sources. Update the owning contracts/tests; do not implement the earlier destructive folder-delete recommendation.                                                                                           |
@@ -814,12 +814,24 @@ checklist below and must be closed before SE-03. The legacy `AuthoringChanged` n
 
 Legend: `[ ]` open · `[~]` in progress · `[x]` closed. Each entry names owner + evidence.
 
+Verification evidence (2026-10-04): `Oxygen.Editor.WorldEditor.Unit.Tests` full project green —
+270 total, 270 succeeded, 0 failed, 0 skipped
+(`traverse Invoke-Tests --start projects/Oxygen.Editor.WorldEditor/tests/Unit --configuration Debug`).
+The strict-mock helper `ConfigureHierarchySync` previously omitted the native rename and transform
+publishes added with C2/C1/C3, so four tests threw while their defects were marked closed.
+
 #### Owner-approval blockers (cannot be implemented without a recorded decision)
 
-- [ ] D1 — reviewer + projects/docs. Preserve-world vs preserve-local Explorer default is
-      not recorded in an accepted contract (`scene-explorer.md:129`, `scene-authoring-model.md:47`).
-- [ ] D2 — reviewer + projects/docs. Grouping-only folder scope still permits reparent
-      (`scene-explorer.md:153`); the clarified policy must be recorded.
+- [x] D1 — projects/docs. Decision landed and asserted
+      (`CommitDropAsync_RoutesNodeDropIntoNodeThroughReparentCommand` expects preserve-local). The
+      original citation was stale: `scene-explorer.md:129` already states "ED-M03 default is preserve
+      local transform" and `scene-authoring-model.md:47` already states "Reparenting preserves local
+      transform; an existing explicit preserve-world operation remains distinct", both predating this
+      milestone. The plan's conflict row now records the decision instead of the superseded
+      preserve-world proposal, so no contract change was needed.
+- [x] D2 — projects/docs. Decision landed (`cbd1d2372`, folder moves reparent). The cited
+      `scene-explorer.md:153` already permits lineage-driven reparent, so the contract agrees; the
+      plan's conflict row now records the decision instead of the superseded grouping-only restriction.
 - [ ] D3 — reviewer + projects/docs. Row-kind selection + explicit primary stays node-only in
       `documents-and-commands.md:150`; Inspector does not consume the new context.
 - [ ] D4 — reviewer + projects/docs. Workspace lock/category persistence is Hide-only in
@@ -943,8 +955,10 @@ Generic tree
   (Multi-root duplication stale-id rejection is tested; mixed-delete atomicity test pending.)
 - [~] T2 — preserve-world ignored-parent + exact layout/order/TRS undo/redo + native convergence.
   (Ignored-parent world preservation tested; exact-layout undo/native-convergence pending.)
-- [~] T3 — rename reaches native; delete-undo recreates the subtree.
-  (Delete-undo subtree native recreation tested; rename-to-native sync test pending.)
+- [x] T3 — rename reaches native; delete-undo recreates the subtree.
+      (`RenameNodeAsync_WhenCommitted_RecordsSingleUndoStep` verifies the native rename call;
+      `DeleteNodesAsync_Undo_RecreatesFullSubtreeInNative` verifies `CreateNodeAsync` twice, root + child.)
+      (Delete-undo subtree native recreation tested; rename-to-native sync test pending.)
 - [ ] T4 — immutable snapshots, sequential-scene Copy, repeated Copy Paste, Escape cancels Cut.
 - [ ] T5 — folder/mixed selection reaches the right Inspector; external selection reconciles.
 - [ ] T6 — search multi-query restoration, folder ancestry, no authored expansion writes.
