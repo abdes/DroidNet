@@ -28,16 +28,7 @@ public sealed partial class SceneNodeAdapter : LayoutItemAdapter, ITreeItem<Scen
     public override string Label
     {
         get => this.AttachedObject.Name;
-        set
-        {
-            if (string.Equals(value, this.AttachedObject.Name, StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            this.AttachedObject.Name = value;
-            this.OnPropertyChanged();
-        }
+        set => throw new NotSupportedException("Scene node name is read-only presentation; rename through the document command owner.");
     }
 
     // Default node glyph (Cube) when not acting as a folder

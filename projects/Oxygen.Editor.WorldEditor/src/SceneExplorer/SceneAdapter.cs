@@ -21,16 +21,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
     public override string Label
     {
         get => this.AttachedObject.Name;
-        set
-        {
-            if (string.Equals(value, this.AttachedObject.Name, StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            this.AttachedObject.Name = value;
-            this.OnPropertyChanged();
-        }
+        set => throw new NotSupportedException("Scene name is read-only presentation; rename scene documents through their owning command surface.");
     }
 
     /// <inheritdoc />

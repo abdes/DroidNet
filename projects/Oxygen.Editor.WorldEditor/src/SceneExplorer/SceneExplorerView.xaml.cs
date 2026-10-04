@@ -72,8 +72,7 @@ public sealed partial class SceneExplorerView
         {
             var newName = tb.Text?.Trim() ?? string.Empty;
 
-            // Basic validation could go here
-            await this.ViewModel!.RenameItemAsync(item, newName).ConfigureAwait(false);
+            _ = await this.ViewModel!.CommitRenameAsync(item, newName).ConfigureAwait(false);
         }
     }
 

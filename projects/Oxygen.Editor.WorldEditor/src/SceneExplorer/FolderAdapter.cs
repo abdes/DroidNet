@@ -31,21 +31,25 @@ public sealed class FolderAdapter : LayoutItemAdapter, ICanBeCloned
 
     public Guid Id { get; }
 
-    public string Name { get; set; }
-
-    public override string Label
+    public string Name
     {
-        get => this.Name;
+        get;
         set
         {
-            if (string.Equals(value, this.Name, StringComparison.Ordinal))
+            if (string.Equals(value, field, StringComparison.Ordinal))
             {
                 return;
             }
 
-            this.Name = value;
-            this.OnPropertyChanged();
+            field = value;
+            this.OnPropertyChanged(nameof(this.Label));
         }
+    }
+
+    public override string Label
+    {
+        get => this.Name;
+        set => throw new NotSupportedException("Folder name is read-only presentation; rename through the document command owner.");
     }
 
     /// <inheritdoc />

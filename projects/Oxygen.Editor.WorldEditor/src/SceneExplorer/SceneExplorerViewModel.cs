@@ -43,8 +43,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly ISceneEngineSync sceneEngineSync;
     private readonly ISceneExplorerService sceneExplorerService;
     private readonly ISceneSelectionService selectionService;
+    private readonly ISceneDocumentCommandService commandService;
     private readonly List<ITreeItem> clipboard = [];
-    private readonly Dictionary<ITreeItem, string> trackedItemLabels = [];
     private readonly HashSet<ITreeItem> trackedTreeItems = [];
 
     // Fast lookup of adapters by SceneNode.Id to avoid traversing/initializing the tree during reconciliation.
@@ -53,7 +53,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private CancellationTokenSource? loadSceneCts;
     private Guid loadingDocumentId = Guid.Empty;
     private bool suppressTreeCommandHandling;
-    private bool suppressTreeItemLabelHandling;
 
     private bool isDisposed;
 
@@ -70,6 +69,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <param name="sceneEngineSync">The scene-engine synchronization service.</param>
     /// <param name="sceneExplorerService">The scene explorer service.</param>
     /// <param name="selectionService">The document selection service.</param>
+    /// <param name="commandService">The document command service.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
     ///     recognition process. If <see langword="null" />, logging is disabled.
@@ -83,6 +83,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         ISceneEngineSync sceneEngineSync,
         ISceneExplorerService sceneExplorerService,
         ISceneSelectionService selectionService,
+        ISceneDocumentCommandService commandService,
         ILoggerFactory? loggerFactory = null)
         : base(loggerFactory)
     {
@@ -98,6 +99,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.sceneExplorerService = sceneExplorerService;
         this.sceneExplorerService.AuthoringChanged += this.OnAuthoringChanged;
         this.selectionService = selectionService;
+        this.commandService = commandService;
 
         Debug.Assert(projectManager.CurrentProject is not null, "must have a current project");
         this.currentProject = projectManager.CurrentProject;
@@ -218,57 +220,49 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
     }
 
-    /// <summary>
-    ///     Renames the specified <paramref name="item"/> to <paramref name="newName"/> and
-    ///     records an undo change so the operation can be undone.
-    /// </summary>
-    /// <param name="item">The tree item to rename.</param>
-    /// <param name="newName">The new name for the item.</param>
-    /// <returns>A <see cref="Task"/> that completes when the rename has finished.</returns>
-    public async Task RenameItemAsync(ITreeItem item, string newName)
+    /// <inheritdoc />
+    public override async Task<TreeItemRenameResult> CommitRenameAsync(ITreeItem item, string newName)
     {
         ArgumentNullException.ThrowIfNull(item);
-        using var authoring = this.EnterTreeAuthoring(item);
-        if (authoring is null)
-        {
-            return;
-        }
 
-        var scene = this.Scene!.AttachedObject;
-        var history = this.History;
+        var context = this.CreateCommandContext();
+        if (context is null)
+        {
+            return TreeItemRenameResult.Rejected("No scene document is loaded.");
+        }
 
         var trimmed = (newName ?? string.Empty).Trim();
         if (!item.ValidateItemName(trimmed))
         {
-            return;
+            return TreeItemRenameResult.Rejected("The name is not valid.");
         }
 
-        var oldName = item.Label;
-        if (string.Equals(oldName, trimmed, StringComparison.Ordinal))
+        if (string.Equals(item.Label, trimmed, StringComparison.Ordinal))
         {
-            return;
+            return TreeItemRenameResult.Success;
         }
 
-        this.suppressTreeItemLabelHandling = true;
-        try
+        SceneCommandResult result = item switch
         {
-            item.Label = trimmed;
-            this.trackedItemLabels[item] = trimmed;
-            await this.sceneExplorerService.RenameItemAsync(item, trimmed).ConfigureAwait(false);
-        }
-        finally
+            SceneNodeAdapter node => await this.commandService.RenameNodeAsync(context, node.AttachedObject.Id, trimmed).ConfigureAwait(false),
+            FolderAdapter folder => await this.RenameFolderAsync(context, folder, trimmed).ConfigureAwait(false),
+            _ => new SceneCommandResult(Succeeded: false),
+        };
+
+        return result.Succeeded
+            ? TreeItemRenameResult.Success
+            : TreeItemRenameResult.Rejected(result.ValidationMessage ?? "The rename was rejected.");
+    }
+
+    private async Task<SceneCommandResult> RenameFolderAsync(SceneDocumentCommandContext context, FolderAdapter folder, string newName)
+    {
+        var result = await this.commandService.RenameFolderAsync(context, folder.Id, newName).ConfigureAwait(false);
+        if (result.Succeeded)
         {
-            this.suppressTreeItemLabelHandling = false;
+            folder.Name = newName;
         }
 
-        if (this.isDisposed || !ReferenceEquals(this.Scene?.AttachedObject, scene))
-        {
-            return;
-        }
-
-        history.AddChange(
-            $"Rename({oldName} -> {trimmed})",
-            async () => await this.RenameItemAsync(item, oldName).ConfigureAwait(false));
+        return result;
     }
 
     /// <summary>
@@ -1408,21 +1402,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
     }
 
-    private void TrackTreeItem(ITreeItem item)
-    {
-        if (this.trackedTreeItems.Contains(item))
-        {
-            this.trackedItemLabels[item] = item.Label;
-            return;
-        }
-
-        this.trackedTreeItems.Add(item);
-        this.trackedItemLabels[item] = item.Label;
-        if (item is INotifyPropertyChanged notifier)
-        {
-            notifier.PropertyChanged += this.OnTrackedTreeItemPropertyChanged;
-        }
-    }
+    private void TrackTreeItem(ITreeItem item) => _ = this.trackedTreeItems.Add(item);
 
     private void UntrackTreeItem(ITreeItem item)
     {
@@ -1434,74 +1414,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             }
         }
 
-        if (item is INotifyPropertyChanged notifier)
-        {
-            notifier.PropertyChanged -= this.OnTrackedTreeItemPropertyChanged;
-        }
-
         _ = this.trackedTreeItems.Remove(item);
-        _ = this.trackedItemLabels.Remove(item);
     }
 
-    private void ClearTrackedTreeItems()
-    {
-        foreach (var item in this.trackedTreeItems.ToArray())
-        {
-            if (item is INotifyPropertyChanged notifier)
-            {
-                notifier.PropertyChanged -= this.OnTrackedTreeItemPropertyChanged;
-            }
-        }
-
-        this.trackedTreeItems.Clear();
-        this.trackedItemLabels.Clear();
-    }
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
-    private async void OnTrackedTreeItemPropertyChanged(object? sender, PropertyChangedEventArgs args)
-    {
-        if (!string.Equals(args.PropertyName, nameof(TreeItemAdapter.Label), StringComparison.Ordinal)
-            || sender is not ITreeItem item)
-        {
-            return;
-        }
-
-        // TODO(ED-M03-deferred): replace this label-change bridge with a DynamicTree rename commit hook.
-        var newName = item.Label;
-        if (!this.trackedItemLabels.TryGetValue(item, out var oldName))
-        {
-            this.trackedItemLabels[item] = newName;
-            return;
-        }
-
-        if (string.Equals(oldName, newName, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        this.trackedItemLabels[item] = newName;
-        if (this.suppressTreeItemLabelHandling)
-        {
-            return;
-        }
-
-        using var authoring = this.EnterTreeAuthoring(item);
-        if (authoring is null)
-        {
-            return;
-        }
-
-        this.History.AddChange(
-            $"Rename({oldName} -> {newName})",
-            async () => await this.RenameItemAsync(item, oldName).ConfigureAwait(false));
-
-        try
-        {
-            await this.sceneExplorerService.RenameItemAsync(item, newName).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            this.LogAuthoringRenameFailed(ex, newName);
-        }
-    }
+    private void ClearTrackedTreeItems() => this.trackedTreeItems.Clear();
 }
