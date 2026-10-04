@@ -178,7 +178,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var context = CreateContext(scene);
         var synced = new List<IReadOnlyList<EnginePropertyValueEntry>>();
         ConfigureTransformSessionPropertySync(fixture, scene, node, synced);
-        var session = EditSessionToken.Begin(SceneOperationKinds.EditTransform, [node.Id], "PositionX");
+        var session = EditSessionToken.Begin([node.Id], "PositionX");
 
         _ = await fixture.Sut.EditTransformAsync(
             context,
@@ -231,7 +231,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var context = CreateContext(scene);
         var synced = new List<IReadOnlyList<EnginePropertyValueEntry>>();
         ConfigureTransformSessionPropertySync(fixture, scene, first, synced);
-        var session = EditSessionToken.Begin(SceneOperationKinds.EditTransform, [first.Id], "PositionX");
+        var session = EditSessionToken.Begin([first.Id], "PositionX");
 
         _ = await fixture.Sut.EditTransformAsync(context, [first.Id], PositionXEdit(1f), session).ConfigureAwait(false);
         _ = await fixture.Sut.EditTransformAsync(context, [second.Id], PositionXEdit(2f), session).ConfigureAwait(false);

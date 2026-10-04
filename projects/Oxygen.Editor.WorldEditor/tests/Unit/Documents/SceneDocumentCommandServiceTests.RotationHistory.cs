@@ -29,7 +29,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var context = CreateContext(scene);
         _ = ConfigureGestureSync(fixture, scene);
         var edit = PropertyEdit.Single(SceneDocumentCommandService.Transform.RotationZ, 15f);
-        var token = gesture ? EditSessionToken.Begin("Rotation", [node.Id], "Z") : EditSessionToken.OneShot;
+        var token = gesture ? EditSessionToken.Begin([node.Id], "Z") : EditSessionToken.OneShot;
         _ = await fixture.Sut.EditPropertiesAsync(context, [node.Id], edit, "Rotate", token).ConfigureAwait(false);
         if (gesture)
         {

@@ -106,7 +106,7 @@ internal sealed partial class InspectorEditSessionCoordinator(
             this.targets,
             field,
             interaction,
-            EditSessionToken.Begin(environment ? "Scene.Environment.Edit" : "Scene.Property.Edit", this.targets, field));
+            EditSessionToken.Begin(this.targets, field));
     }
 
     /// <summary>Completes numeric edits, coalescing wheel events for 250 milliseconds.</summary>

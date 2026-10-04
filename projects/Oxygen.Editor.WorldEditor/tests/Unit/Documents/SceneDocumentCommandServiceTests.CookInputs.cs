@@ -94,7 +94,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = fixture.Sync.Setup(value => value.CancelPreviewSyncAsync(
                 scene.Id, node.Id, It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>()))
             .Returns((Guid _, Guid _, Func<CancellationToken, Task<SyncOutcome>> apply, CancellationToken token) => apply(token));
-        var session = EditSessionToken.Begin(SceneOperationKinds.EditTransform, [node.Id], "PositionX");
+        var session = EditSessionToken.Begin([node.Id], "PositionX");
         _ = await fixture.Sut.EditTransformAsync(context, [node.Id], PositionXEdit(7), session).ConfigureAwait(false);
 
         using var lease = await fixture.Sut.AcquireCookReadAsync(context, this.TestContext.CancellationToken).ConfigureAwait(false);

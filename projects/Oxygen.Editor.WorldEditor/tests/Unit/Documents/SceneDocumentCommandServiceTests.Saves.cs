@@ -13,7 +13,6 @@ using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
@@ -33,7 +32,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var node = scene.RootNodes[0];
         var context = CreateContext(scene);
         ConfigureTransformSessionPropertySync(fixture, scene, node, []);
-        var session = EditSessionToken.Begin(SceneOperationKinds.EditTransform, [node.Id], "PositionX");
+        var session = EditSessionToken.Begin([node.Id], "PositionX");
         _ = await fixture.Sut.EditTransformAsync(context, [node.Id], PositionXEdit(7f), session).ConfigureAwait(false);
 
         _ = (await fixture.Sut.SaveSceneAsync(context).ConfigureAwait(false)).Succeeded.Should().BeTrue();
@@ -64,7 +63,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var node = scene.RootNodes[0];
         var context = CreateContext(scene);
         ConfigureTransformSessionPropertySync(fixture, scene, node, []);
-        var session = EditSessionToken.Begin(SceneOperationKinds.EditTransform, [node.Id], "PositionX");
+        var session = EditSessionToken.Begin([node.Id], "PositionX");
         _ = await fixture.Sut.EditTransformAsync(context, [node.Id], PositionXEdit(7f), session).ConfigureAwait(false);
 
         var result = await fixture.Sut.SaveSceneAsync(context).ConfigureAwait(false);

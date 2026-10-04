@@ -22,6 +22,7 @@ public sealed class DiagnosticSceneVocabularyTests
     [TestMethod]
     public void SceneOperationKinds_AreStableStrings()
     {
+        _ = SceneOperationKinds.NodeCreate.Should().Be("Scene.Node.Create");
         _ = SceneOperationKinds.NodeCreatePrimitive.Should().Be("Scene.Node.CreatePrimitive");
         _ = SceneOperationKinds.NodeCreateLight.Should().Be("Scene.Node.CreateLight");
         _ = SceneOperationKinds.NodeRename.Should().Be("Scene.Node.Rename");
@@ -42,6 +43,7 @@ public sealed class DiagnosticSceneVocabularyTests
         _ = SceneOperationKinds.ExplorerLayoutMoveNode.Should().Be("Scene.ExplorerLayout.MoveNode");
         _ = SceneOperationKinds.Save.Should().Be("Scene.Save");
         _ = SceneOperationKinds.Reload.Should().Be("Scene.Reload");
+        _ = SceneOperationKinds.Mutation.Should().Be("Scene.Mutation");
     }
 
     [TestMethod]

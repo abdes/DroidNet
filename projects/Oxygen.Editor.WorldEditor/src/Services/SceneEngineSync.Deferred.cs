@@ -136,7 +136,7 @@ public sealed partial class SceneEngineSync
 
     private void ExecuteOrDefer(Scene scene, WorldDispatch world, RuntimeWorldCommand command)
     {
-        if (!this.TryDeferMutation(scene, world, target => target.Execute(command), "Scene.Mutation", Scope(scene), out _))
+        if (!this.TryDeferMutation(scene, world, target => target.Execute(command), SceneOperationKinds.Mutation, Scope(scene), out _))
         {
             world.Execute(command);
         }

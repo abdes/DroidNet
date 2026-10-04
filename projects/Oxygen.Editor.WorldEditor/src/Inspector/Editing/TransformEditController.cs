@@ -9,7 +9,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Inspector.Editing;
 
@@ -186,7 +185,7 @@ internal sealed partial class TransformEditController(
         }
 
         this.activeSessions[property] = new TransformEditSession(
-            EditSessionToken.Begin(SceneOperationKinds.EditTransform, nodes.ConvertAll(static node => node.Id), property),
+            EditSessionToken.Begin(nodes.ConvertAll(static node => node.Id), property),
             nodes,
             originalValues,
             context,

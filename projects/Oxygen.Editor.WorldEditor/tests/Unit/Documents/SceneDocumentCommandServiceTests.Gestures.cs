@@ -59,7 +59,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var node = CameraNode(scene, 60);
         var context = CreateContext(scene);
         _ = ConfigureGestureSync(fixture, scene);
-        var token = EditSessionToken.Begin("Camera", [node.Id], "FieldOfView");
+        var token = EditSessionToken.Begin([node.Id], "FieldOfView");
         var edit = PropertyEdit.Single(SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegrees, 90f);
         _ = await fixture.Sut.EditPropertiesForTargetsAsync(context, new Dictionary<Guid, PropertyEdit> { [node.Id] = edit }, "Edit Camera", token).ConfigureAwait(false);
         token.Commit();

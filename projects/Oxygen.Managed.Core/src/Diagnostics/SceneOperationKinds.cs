@@ -113,4 +113,9 @@ public static class SceneOperationKinds
     /// Scene document reload from its source.
     /// </summary>
     public const string Reload = "Scene.Reload";
+
+    /// <summary>
+    /// Generic runtime scene mutation deferred while a frozen scene snapshot is projecting.
+    /// </summary>
+    public const string Mutation = "Scene.Mutation";
 }

@@ -119,24 +119,6 @@ public partial class SceneEngineSync
     private void LogCannotReparentHierarchies()
         => LogCannotReparentHierarchies(this.logger);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "OxygenWorld is not available; cannot update transform for '{NodeName}'")]
-    private static partial void LogCannotUpdateTransform(ILogger logger, string nodeName);
-
-    private void LogCannotUpdateTransform(SceneNode node)
-        => LogCannotUpdateTransform(this.logger, node.Name);
-
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Updated transform for node '{NodeName}'")]
-    private static partial void LogUpdatedTransform(ILogger logger, string nodeName);
-
-    private void LogUpdatedTransform(SceneNode node)
-        => LogUpdatedTransform(this.logger, node.Name);
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to update transform for node '{NodeName}'")]
-    private static partial void LogFailedToUpdateTransform(ILogger logger, Exception exception, string nodeName);
-
-    private void LogFailedToUpdateTransform(Exception ex, SceneNode node)
-        => LogFailedToUpdateTransform(this.logger, ex, node.Name);
-
     [LoggerMessage(Level = LogLevel.Warning, Message = "OxygenWorld is not available; cannot attach geometry to '{NodeName}'")]
     private static partial void LogCannotAttachGeometry(ILogger logger, string nodeName);
 

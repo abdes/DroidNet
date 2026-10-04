@@ -15,18 +15,15 @@ public sealed class EditSessionToken
 
     private EditSessionToken(
         Guid sessionId,
-        string operationKind,
         IReadOnlyList<Guid> nodeIds,
         string fieldKey,
         bool isOneShot,
         CompletionState? completion = null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(operationKind);
         ArgumentNullException.ThrowIfNull(nodeIds);
         ArgumentException.ThrowIfNullOrWhiteSpace(fieldKey);
 
         this.SessionId = sessionId;
-        this.OperationKind = operationKind;
         this.NodeIds = [.. nodeIds];
         this.FieldKey = fieldKey;
         this.IsOneShot = isOneShot;
@@ -39,7 +36,6 @@ public sealed class EditSessionToken
     /// </summary>
     public static EditSessionToken OneShot { get; } = new(
         Guid.Empty,
-        "OneShot",
         [],
         "OneShot",
         isOneShot: true);
@@ -48,11 +44,6 @@ public sealed class EditSessionToken
     /// Gets the session identity.
     /// </summary>
     public Guid SessionId { get; }
-
-    /// <summary>
-    /// Gets the operation kind associated with this edit session.
-    /// </summary>
-    public string OperationKind { get; }
 
     /// <summary>
     /// Gets the edited node identities.
@@ -80,20 +71,18 @@ public sealed class EditSessionToken
     /// <summary>
     /// Starts an interactive edit session.
     /// </summary>
-    /// <param name="operationKind">The operation kind.</param>
     /// <param name="nodeIds">The edited node identities.</param>
     /// <param name="fieldKey">The edited field key.</param>
     /// <returns>The edit session token.</returns>
     public static EditSessionToken Begin(
-        string operationKind,
         IReadOnlyList<Guid> nodeIds,
         string fieldKey)
-        => new(Guid.NewGuid(), operationKind, nodeIds, fieldKey, isOneShot: false);
+        => new(Guid.NewGuid(), nodeIds, fieldKey, isOneShot: false);
 
     /// <summary>Captures the phase before an asynchronous producer can observe a later commit or cancellation.</summary>
     /// <returns>A token with the same identity and the current immutable request phase.</returns>
     public EditSessionToken Capture()
-        => this.IsOneShot ? this : new(this.SessionId, this.OperationKind, this.NodeIds, this.FieldKey, isOneShot: false, this.completion) { State = this.State };
+        => this.IsOneShot ? this : new(this.SessionId, this.NodeIds, this.FieldKey, isOneShot: false, this.completion) { State = this.State };
 
     /// <summary>
     /// Marks the session as committed.
