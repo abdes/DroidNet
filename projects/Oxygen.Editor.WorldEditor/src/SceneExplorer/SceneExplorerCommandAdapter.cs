@@ -28,7 +28,11 @@ public sealed class SceneExplorerCommandAdapter : ICommand
     }
 
     /// <inheritdoc />
+    // ICommand requires the event, but the adapter's eligibility is frozen at construction and
+    // never changes, so CanExecuteChanged is intentionally never raised.
+#pragma warning disable CS0067
     public event EventHandler? CanExecuteChanged;
+#pragma warning restore CS0067
 
     /// <inheritdoc />
     public bool CanExecute(object? parameter) => this.canExecute();

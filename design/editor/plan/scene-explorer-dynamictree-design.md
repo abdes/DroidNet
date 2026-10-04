@@ -790,9 +790,20 @@ hierarchy commands. Step 1 extracted the adapter index/tracking into a
 `SceneExplorerProjection` collaborator, shrinking the consumer orchestrator and
 removing the remaining tree-first mutation paths.
 
-Evidence: 68 Projects tests and 264 WorldEditor Unit tests pass (drop-hook,
+The keyboard clipboard path is also routed through the command owner: the base
+`DynamicTreeViewModel` clipboard methods (`CopyItemsAsync`/`CutItemsAsync`/
+`PasteItemsAsync`) are now `virtual` with protected store accessors, and the
+Explorer overrides them to stage node identities and paste through
+`DuplicateNodesAsync` (deep copy) or `ReparentNodesAsync` (cut), instead of the
+generic `ICanBeCloned` shallow copy that reused the same `SceneNode`. All async
+continuations that mutate UI-bound tree collections now use `ConfigureAwait(true)`,
+fixing the `RPC_E_WRONG_THREAD`/`0x80010117` crash where `ReconcileProjectionAsync`
+touched an `ObservableCollection` from a thread-pool thread after a command await.
+
+Evidence: 68 Projects tests and 265 WorldEditor Unit tests pass (drop-hook,
 folder-index, layout-initialization, command-routing, selection-context, deep-copy,
-search, reorder/folder-move and context-menu cases); WorldEditor src, Unit, and
+keyboard-clipboard routing, search, reorder/folder-move and context-menu cases);
+WorldEditor src, Unit, and
 Oxygen.Editor.App build clean. All ten SE-02 steps are implemented; SE-02 moves to
 `landed_needs_validation`. One known integration note remains: the command owner
 does not yet raise the legacy `ISceneExplorerService.AuthoringChanged`, so

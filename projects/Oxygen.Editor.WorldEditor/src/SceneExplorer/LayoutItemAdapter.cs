@@ -102,7 +102,7 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
             }
         }
 
-        await Task.CompletedTask.ConfigureAwait(false);
+        await Task.CompletedTask.ConfigureAwait(true);
     }
 
     protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
@@ -184,7 +184,7 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
         try
         {
             // Ensure Children collection is realized
-            var children = await this.Children.ConfigureAwait(false);
+            var children = await this.Children.ConfigureAwait(true);
             if (!children.Contains(child))
             {
                 this.AddChildInternal(child);
@@ -200,8 +200,8 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
     {
         try
         {
-            await this.Children.ConfigureAwait(false);
-            await this.RemoveChildAsync(child).ConfigureAwait(false);
+            await this.Children.ConfigureAwait(true);
+            await this.RemoveChildAsync(child).ConfigureAwait(true);
         }
         catch (Exception)
         {

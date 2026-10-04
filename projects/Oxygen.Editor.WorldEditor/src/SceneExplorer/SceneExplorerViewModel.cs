@@ -188,7 +188,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         {
             if (nodeIds.Count > 0)
             {
-                var result = await this.commandService.DeleteNodesAsync(context, nodeIds).ConfigureAwait(false);
+                var result = await this.commandService.DeleteNodesAsync(context, nodeIds).ConfigureAwait(true);
                 if (!result.Succeeded)
                 {
                     return;
@@ -197,14 +197,14 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
             foreach (var folderId in folderIds)
             {
-                var result = await this.commandService.DeleteFolderAsync(context, folderId).ConfigureAwait(false);
+                var result = await this.commandService.DeleteFolderAsync(context, folderId).ConfigureAwait(true);
                 if (!result.Succeeded)
                 {
                     return;
                 }
             }
 
-            await this.ReconcileProjectionAsync().ConfigureAwait(false);
+            await this.ReconcileProjectionAsync().ConfigureAwait(true);
         }
         finally
         {
@@ -236,8 +236,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         SceneCommandResult result = item switch
         {
-            SceneNodeAdapter node => await this.commandService.RenameNodeAsync(context, node.AttachedObject.Id, trimmed).ConfigureAwait(false),
-            FolderAdapter folder => await this.RenameFolderAsync(context, folder, trimmed).ConfigureAwait(false),
+            SceneNodeAdapter node => await this.commandService.RenameNodeAsync(context, node.AttachedObject.Id, trimmed).ConfigureAwait(true),
+            FolderAdapter folder => await this.RenameFolderAsync(context, folder, trimmed).ConfigureAwait(true),
             _ => new SceneCommandResult(Succeeded: false),
         };
 
@@ -248,7 +248,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     private async Task<SceneCommandResult> RenameFolderAsync(SceneDocumentCommandContext context, FolderAdapter folder, string newName)
     {
-        var result = await this.commandService.RenameFolderAsync(context, folder.Id, newName).ConfigureAwait(false);
+        var result = await this.commandService.RenameFolderAsync(context, folder.Id, newName).ConfigureAwait(true);
         if (result.Succeeded)
         {
             folder.Name = newName;
@@ -398,8 +398,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.suppressNodeMessages = true;
         try
         {
-            await this.History.UndoAsync(this.loadSceneCts?.Token ?? CancellationToken.None).ConfigureAwait(false);
-            await this.ReconcileProjectionAsync().ConfigureAwait(false);
+            await this.History.UndoAsync(this.loadSceneCts?.Token ?? CancellationToken.None).ConfigureAwait(true);
+            await this.ReconcileProjectionAsync().ConfigureAwait(true);
         }
         finally
         {
@@ -419,8 +419,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.suppressNodeMessages = true;
         try
         {
-            await this.History.RedoAsync(this.loadSceneCts?.Token ?? CancellationToken.None).ConfigureAwait(false);
-            await this.ReconcileProjectionAsync().ConfigureAwait(false);
+            await this.History.RedoAsync(this.loadSceneCts?.Token ?? CancellationToken.None).ConfigureAwait(true);
+            await this.ReconcileProjectionAsync().ConfigureAwait(true);
         }
         finally
         {
@@ -479,10 +479,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.suppressNodeMessages = true;
         try
         {
-            var result = await this.commandService.CreateNodeAsync(context, parentNodeId, parentFolderId, name).ConfigureAwait(false);
+            var result = await this.commandService.CreateNodeAsync(context, parentNodeId, parentFolderId, name).ConfigureAwait(true);
             if (result.Succeeded)
             {
-                await this.ReconcileProjectionAsync().ConfigureAwait(false);
+                await this.ReconcileProjectionAsync().ConfigureAwait(true);
             }
         }
         finally
@@ -499,58 +499,95 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             _ => null,
         };
 
-    [RelayCommand(CanExecute = nameof(CanCopy))]
-    private void Copy()
+    /// <inheritdoc />
+    public override Task CopyItemsAsync(IReadOnlyList<ITreeItem> items)
     {
+        var nodeIds = items.OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject.Id).ToList();
+        if (nodeIds.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
         this.clipboardNodeIds.Clear();
+        this.clipboardNodeIds.AddRange(nodeIds);
         this.clipboardIsCut = false;
-        this.clipboardNodeIds.AddRange(this.GetSelectedItems().OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject.Id));
+
+        this.ClipboardItemStore = [.. items];
+        this.ClipboardStateStore = ClipboardState.Copied;
+        this.ClearCutMarks();
+        this.RaiseClipboardChanged();
+        return Task.CompletedTask;
     }
 
-    private bool CanCopy() => this.GetSelectedItems().OfType<SceneNodeAdapter>().Any();
-
-    [RelayCommand(CanExecute = nameof(CanCut))]
-    private void Cut()
+    /// <inheritdoc />
+    public override Task CutItemsAsync(IReadOnlyList<ITreeItem> items)
     {
+        var eligible = items.Where(item => !item.IsLocked).ToArray();
+        var nodeIds = eligible.OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject.Id).ToList();
+        if (nodeIds.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
         this.clipboardNodeIds.Clear();
+        this.clipboardNodeIds.AddRange(nodeIds);
         this.clipboardIsCut = true;
-        this.clipboardNodeIds.AddRange(this.GetSelectedItems().OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject.Id));
+
+        this.ClipboardStateStore = ClipboardState.Cut;
+        this.ClearCutMarks();
+        this.CutMarkedStore = eligible;
+        foreach (var item in eligible)
+        {
+            item.IsCut = true;
+        }
+
+        this.ClipboardItemStore = eligible;
+        this.RaiseClipboardChanged();
+        return Task.CompletedTask;
     }
 
-    private bool CanCut() => this.HasUnlockedSelectedItems;
-
-    [RelayCommand(CanExecute = nameof(CanPaste))]
-    private async Task Paste()
+    /// <inheritdoc />
+    public override async Task PasteItemsAsync(ITreeItem? targetParent = null, int? insertIndex = null)
     {
+        _ = insertIndex; // Oxygen paste appends/regroups via the command owner; the index is not yet honored.
         var context = this.CreateCommandContext();
         if (context is null || this.clipboardNodeIds.Count == 0)
         {
             return;
         }
 
-        var (parentNodeId, parentFolderId) = ResolvePasteDestination();
+        var parent = targetParent ?? this.GetSingleSelectionTarget() ?? this.Scene;
+        var (parentNodeId, parentFolderId) = parent is null
+            ? ((Guid?)null, (Guid?)null)
+            : ResolveDropDestination(parent);
 
         this.suppressNodeMessages = true;
         try
         {
             if (this.clipboardIsCut)
             {
-                var result = await this.commandService.ReparentNodesAsync(context, this.clipboardNodeIds, parentNodeId, preserveWorldTransform: true).ConfigureAwait(false);
-                if (result.Succeeded)
+                var result = await this.commandService.ReparentNodesAsync(context, this.clipboardNodeIds, parentNodeId, preserveWorldTransform: true).ConfigureAwait(true);
+                if (!result.Succeeded)
                 {
-                    this.clipboardNodeIds.Clear();
-                    this.clipboardIsCut = false;
-                    await this.ReconcileProjectionAsync().ConfigureAwait(false);
+                    return;
                 }
             }
             else
             {
-                var result = await this.commandService.DuplicateNodesAsync(context, this.clipboardNodeIds, parentNodeId, parentFolderId).ConfigureAwait(false);
-                if (result.Succeeded)
+                var result = await this.commandService.DuplicateNodesAsync(context, this.clipboardNodeIds, parentNodeId, parentFolderId).ConfigureAwait(true);
+                if (!result.Succeeded)
                 {
-                    await this.ReconcileProjectionAsync().ConfigureAwait(false);
+                    return;
                 }
             }
+
+            await this.ReconcileProjectionAsync().ConfigureAwait(true);
+
+            this.clipboardNodeIds.Clear();
+            this.clipboardIsCut = false;
+            this.ClipboardStateStore = ClipboardState.Empty;
+            this.ClearCutMarks();
+            this.RaiseClipboardChanged();
         }
         finally
         {
@@ -558,15 +595,20 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
     }
 
-    private bool CanPaste() => this.clipboardNodeIds.Count > 0;
+    [RelayCommand(CanExecute = nameof(CanCopy))]
+    private Task Copy() => this.CopyItemsAsync(this.GetSelectedItems());
 
-    private (Guid? ParentNodeId, Guid? ParentFolderId) ResolvePasteDestination()
-        => this.GetSingleSelectionTarget() switch
-        {
-            FolderAdapter folder => (null, folder.Id),
-            SceneNodeAdapter node => (node.AttachedObject.Id, null),
-            _ => (null, null),
-        };
+    private bool CanCopy() => this.GetSelectedItems().OfType<SceneNodeAdapter>().Any();
+
+    [RelayCommand(CanExecute = nameof(CanCut))]
+    private Task Cut() => this.CutItemsAsync(this.GetSelectedItems());
+
+    private bool CanCut() => this.HasUnlockedSelectedItems;
+
+    [RelayCommand(CanExecute = nameof(CanPaste))]
+    private Task Paste() => this.PasteItemsAsync(targetParent: null);
+
+    private bool CanPaste() => this.clipboardNodeIds.Count > 0;
 
     /// <summary>
     /// Builds the context menu for a captured anchor row, resolving each shared action to its typed command.
@@ -634,10 +676,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.suppressNodeMessages = true;
         try
         {
-            var result = await this.commandService.RemoveNodesFromFolderAsync(context, [node.AttachedObject.Id], folder.Id).ConfigureAwait(false);
+            var result = await this.commandService.RemoveNodesFromFolderAsync(context, [node.AttachedObject.Id], folder.Id).ConfigureAwait(true);
             if (result.Succeeded)
             {
-                await this.ReconcileProjectionAsync().ConfigureAwait(false);
+                await this.ReconcileProjectionAsync().ConfigureAwait(true);
             }
         }
         finally
@@ -657,10 +699,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.suppressNodeMessages = true;
         try
         {
-            var result = await this.commandService.ReparentNodesAsync(context, [node.AttachedObject.Id], newParentNodeId: null, preserveWorldTransform: true).ConfigureAwait(false);
+            var result = await this.commandService.ReparentNodesAsync(context, [node.AttachedObject.Id], newParentNodeId: null, preserveWorldTransform: true).ConfigureAwait(true);
             if (result.Succeeded)
             {
-                await this.ReconcileProjectionAsync().ConfigureAwait(false);
+                await this.ReconcileProjectionAsync().ConfigureAwait(true);
             }
         }
         finally
@@ -757,7 +799,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     {
         if (this.loadSceneCts is { IsCancellationRequested: false })
         {
-            await this.loadSceneCts.CancelAsync().ConfigureAwait(false);
+            await this.loadSceneCts.CancelAsync().ConfigureAwait(true);
         }
 
         this.loadSceneCts?.Dispose();
@@ -1078,7 +1120,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                 : this.projection.GetNode(node.Parent.Id) as ITreeItem ?? this.Scene;
 
             var adapter = new SceneNodeAdapter(node);
-            await this.ApplyExternalTreeChangeAsync(async () => await this.InsertItemAsync(adapter, parent, 0).ConfigureAwait(false)).ConfigureAwait(true);
+            await this.ApplyExternalTreeChangeAsync(async () => await this.InsertItemAsync(adapter, parent, 0).ConfigureAwait(true)).ConfigureAwait(true);
             this.projection.Index(adapter);
             this.projection.Track(adapter);
         }
@@ -1099,7 +1141,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                 continue;
             }
 
-            await this.ApplyExternalTreeChangeAsync(async () => await this.RemoveItemAsync(adapter).ConfigureAwait(false)).ConfigureAwait(true);
+            await this.ApplyExternalTreeChangeAsync(async () => await this.RemoveItemAsync(adapter).ConfigureAwait(true)).ConfigureAwait(true);
             this.projection.Unindex(adapter);
             this.projection.Untrack(adapter);
         }
@@ -1132,10 +1174,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.suppressNodeMessages = true;
         try
         {
-            var result = await this.commandService.CreateFolderAsync(context, parentFolderId, parentNodeId, "New Folder").ConfigureAwait(false);
+            var result = await this.commandService.CreateFolderAsync(context, parentFolderId, parentNodeId, "New Folder").ConfigureAwait(true);
             if (result.Succeeded)
             {
-                await this.ReconcileProjectionAsync().ConfigureAwait(false);
+                await this.ReconcileProjectionAsync().ConfigureAwait(true);
             }
         }
         finally
@@ -1260,14 +1302,14 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             this.suppressNodeMessages = true;
             try
             {
-                var duplicate = await this.commandService.DuplicateNodesAsync(context, nodeIds, copyParentNodeId, copyParentFolderId).ConfigureAwait(false);
+                var duplicate = await this.commandService.DuplicateNodesAsync(context, nodeIds, copyParentNodeId, copyParentFolderId).ConfigureAwait(true);
                 if (!duplicate.Succeeded)
                 {
                     return TreeDropResult.Rejected;
                 }
 
                 createdNodes = duplicate.Value;
-                await this.ReconcileProjectionAsync().ConfigureAwait(false);
+                await this.ReconcileProjectionAsync().ConfigureAwait(true);
             }
             finally
             {
@@ -1290,20 +1332,20 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             }
 
             var newParentFolderId = request.Parent is FolderAdapter targetFolder ? targetFolder.Id : (Guid?)null;
-            result = await this.commandService.MoveFolderToParentAsync(context, folderIds[0], newParentFolderId).ConfigureAwait(false);
+            result = await this.commandService.MoveFolderToParentAsync(context, folderIds[0], newParentFolderId).ConfigureAwait(true);
         }
         else if (nodeIds.Count == 1 && this.IsSameParentReorder(request, nodeIds[0]))
         {
             var (parentFolderId, parentNodeId) = ResolveDropDestination(request.Parent);
-            result = await this.commandService.ReorderNodesAsync(context, nodeIds[0], parentFolderId, parentNodeId, request.Index).ConfigureAwait(false);
+            result = await this.commandService.ReorderNodesAsync(context, nodeIds[0], parentFolderId, parentNodeId, request.Index).ConfigureAwait(true);
         }
         else
         {
             result = request.Parent switch
             {
-                FolderAdapter folder => await this.commandService.MoveNodesToFolderAsync(context, nodeIds, folder.Id).ConfigureAwait(false),
-                SceneNodeAdapter node => await this.commandService.ReparentNodesAsync(context, nodeIds, node.AttachedObject.Id, preserveWorldTransform: true).ConfigureAwait(false),
-                _ => await this.commandService.ReparentNodesAsync(context, nodeIds, newParentNodeId: null, preserveWorldTransform: true).ConfigureAwait(false),
+                FolderAdapter folder => await this.commandService.MoveNodesToFolderAsync(context, nodeIds, folder.Id).ConfigureAwait(true),
+                SceneNodeAdapter node => await this.commandService.ReparentNodesAsync(context, nodeIds, node.AttachedObject.Id, preserveWorldTransform: true).ConfigureAwait(true),
+                _ => await this.commandService.ReparentNodesAsync(context, nodeIds, newParentNodeId: null, preserveWorldTransform: true).ConfigureAwait(true),
             };
         }
 
@@ -1312,7 +1354,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return TreeDropResult.Rejected;
         }
 
-        await this.ReconcileProjectionAsync().ConfigureAwait(false);
+        await this.ReconcileProjectionAsync().ConfigureAwait(true);
 
         var moved = nodeIds
             .Where(this.projection.ContainsNode)

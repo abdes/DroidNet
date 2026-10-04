@@ -44,7 +44,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
     {
         this.ClearChildren();
         this.rootItemsCache.Clear();
-        await this.RebuildTreeAsync(expandedFolderIds, preserveNodeExpansion).ConfigureAwait(false);
+        await this.RebuildTreeAsync(expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -97,7 +97,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
         this.ClearChildren();
         this.rootItemsCache.Clear();
 
-        await this.RebuildTreeAsync().ConfigureAwait(false);
+        await this.RebuildTreeAsync().ConfigureAwait(true);
     }
 
     private static void PopulateMissingChildren(SceneNodeAdapter parentAdapter)
@@ -122,7 +122,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
         {
             foreach (var entry in layout)
             {
-                await this.ProcessLayoutEntryAsync(entry, this, seenNodeIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(false);
+                await this.ProcessLayoutEntryAsync(entry, this, seenNodeIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
             }
         }
 
@@ -161,7 +161,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
             {
                 foreach (var childEntry in entry.Children)
                 {
-                    await this.ProcessLayoutEntryAsync(childEntry, folder, seenNodeIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(false);
+                    await this.ProcessLayoutEntryAsync(childEntry, folder, seenNodeIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
                 }
             }
 
@@ -192,7 +192,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
             {
                 foreach (var childEntry in entry.Children)
                 {
-                    await this.ProcessLayoutEntryAsync(childEntry, adapter, seenNodeIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(false);
+                    await this.ProcessLayoutEntryAsync(childEntry, adapter, seenNodeIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
                 }
             }
 

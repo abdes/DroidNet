@@ -30,12 +30,33 @@ public abstract partial class DynamicTreeViewModel
     /// </summary>
     public bool IsClipboardValid => this.clipboardIsValid;
 
+    /// <summary>Gets or sets the clipboard items (used by overrides providing domain snapshots).</summary>
+    protected ITreeItem[] ClipboardItemStore
+    {
+        get => this.clipboardItems;
+        set => this.clipboardItems = value;
+    }
+
+    /// <summary>Gets or sets the cut-marked items (used by overrides).</summary>
+    protected ITreeItem[] CutMarkedStore
+    {
+        get => this.cutMarkedItems;
+        set => this.cutMarkedItems = value;
+    }
+
+    /// <summary>Gets or sets the clipboard state (used by overrides).</summary>
+    protected ClipboardState ClipboardStateStore
+    {
+        get => this.clipboardState;
+        set => this.clipboardState = value;
+    }
+
     /// <summary>
     ///     Copies the provided items into the clipboard. Items must be visible in the tree.
     /// </summary>
     /// <param name="items">The items to copy.</param>
     /// <returns>A completed task.</returns>
-    public async Task CopyItemsAsync(IReadOnlyList<ITreeItem> items)
+    public virtual async Task CopyItemsAsync(IReadOnlyList<ITreeItem> items)
     {
         ArgumentNullException.ThrowIfNull(items);
         if (items.Count == 0)
@@ -136,7 +157,7 @@ public abstract partial class DynamicTreeViewModel
     /// </summary>
     /// <param name="items">The items to cut.</param>
     /// <returns>A completed task.</returns>
-    public async Task CutItemsAsync(IReadOnlyList<ITreeItem> items)
+    public virtual async Task CutItemsAsync(IReadOnlyList<ITreeItem> items)
     {
         ArgumentNullException.ThrowIfNull(items);
         if (items.Count == 0)
@@ -211,7 +232,7 @@ public abstract partial class DynamicTreeViewModel
     /// <param name="targetParent">Optional target parent. When <see langword="null" />, the focused item is used.</param>
     /// <param name="insertIndex">Optional insertion index under the target parent.</param>
     /// <returns>A task that completes when paste is finished.</returns>
-    public async Task PasteItemsAsync(ITreeItem? targetParent = null, int? insertIndex = null)
+    public virtual async Task PasteItemsAsync(ITreeItem? targetParent = null, int? insertIndex = null)
     {
         if (this.clipboardState == ClipboardState.Empty)
         {
@@ -405,7 +426,7 @@ public abstract partial class DynamicTreeViewModel
         }
     }
 
-    private void RaiseClipboardChanged()
+    protected void RaiseClipboardChanged()
         => this.ClipboardContentChanged?.Invoke(
             this,
             new ClipboardContentChangedEventArgs
@@ -415,7 +436,7 @@ public abstract partial class DynamicTreeViewModel
                 IsValid = this.clipboardIsValid,
             });
 
-    private void ClearCutMarks()
+    protected void ClearCutMarks()
     {
         if (this.clipboardState != ClipboardState.Cut)
         {

@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
+using DroidNet.Controls;
 using DroidNet.Documents;
 using DroidNet.Routing;
 using Microsoft.UI;
@@ -75,6 +76,29 @@ public sealed class SceneExplorerAuthoringTests
         var nodeContext = SceneExplorerViewModel.BuildSelectionContext([nodeAdapter]);
         _ = nodeContext.PrimaryNodeId.Should().Be(node.Id);
         _ = nodeContext.PrimaryFolderId.Should().BeNull();
+    }
+
+    [TestMethod]
+    public async Task CopyItemsThenPasteItems_RoutesThroughDeepCopyCommand()
+    {
+        var harness = new AuthoringHarness(out var scene, out var node);
+        _ = harness.Commands
+            .Setup(value => value.DuplicateNodesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), null, null))
+            .ReturnsAsync(SceneCommandResults.Success<IReadOnlyList<SceneNode>>([node]));
+        using var explorer = harness.Build();
+        await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
+        var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
+        _ = adapter.Should().NotBeNull();
+
+        await explorer.CopyItemsAsync([adapter!]).ConfigureAwait(false);
+        _ = explorer.CurrentClipboardState.Should().Be(ClipboardState.Copied, "copy should stage the node through the deep-copy clipboard");
+        _ = explorer.PasteCommand.CanExecute(null).Should().BeTrue("copy should capture node ids for paste");
+
+        await explorer.PasteItemsAsync(targetParent: explorer.Scene).ConfigureAwait(false);
+
+        harness.Commands.Verify(
+            value => value.DuplicateNodesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), null, null),
+            Times.Once);
     }
 
     private sealed class AuthoringHarness
