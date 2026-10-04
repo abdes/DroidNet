@@ -925,7 +925,7 @@ Scene lifecycle
 Generic tree
 
 - [ ] C32 — `DynamicTree.cs:919` recycling does not fully detach subscriptions / reset drop state.
-- [ ] C33 — demo compact profile is 28/12 DIP, not required 32/14; comfortable 40.
+- [x] C33 — demo compact profile is 28/12 DIP, not required 32/14; comfortable 40.
 - [ ] C34 — `DynamicTreeViewModel.cs:438,694` displayed-scope keyboard/typeahead scan hidden items.
 - [ ] C35 — `DynamicTree.cs:1567` Escape clears only typeahead; drag cancellation/restoration absent.
 - [ ] C36 — `ContextMenu.cs:119` attached host disposed on unload without Loaded recreation.
