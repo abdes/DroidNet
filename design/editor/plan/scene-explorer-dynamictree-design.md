@@ -895,30 +895,31 @@ publishes added with C2/C1/C3, so four tests threw while their defects were mark
   second history authority. Remaining: snapshot Copy landed (C11); the switch-invalidation
   protocol is unwired and the payload still carries source ids, and `plan:568` needs the LLD
   wording. **Work: C50** (plus the `plan:568` wording in the docs pass).
-- [x] D8 — **decided by the owner**, partitioned as **D8a** (editing-view hide mask) and **D8b**
-      (viewport picking + category filters). This row does not restate the analysis:
+- [x] D8 — **decided by the owner and ratified in the analysis this row points at**:
       [`D8-show-in-editor-runtime-capability.md`](../review/D8-show-in-editor-runtime-capability.md)
-      is the authority for the requirement contract (R1–R8), the ratified design decisions DD1–DD4,
-      the per-team action plans (E1–E5 engine, I1–I4 interop/runtime, W1–W4 editor) and the
-      qualification cases. What binds the plan and this tracker: - **D8a** is a per-view filter on `CompositionView` applied in the ScenePrep view phase
-      (DD1-A), with the **editor sending local hidden roots and the engine resolving the descendant
-      closure** (DD2-A), transported as a revisioned full snapshot per scene activation (DD3-A).
-      Hidden geometry is routed to the **existing shadow-only path, not dropped**: an editor-hidden
-      node still casts shadows, still lights the scene and its camera stays usable (R3, E4), and the
-      **depth prepass must start honouring `kMainViewVisible`** (E2) or a hidden node keeps writing
-      depth behind it. Capture and standalone-validation views render unmasked (R4); the mask never
-      writes scene flags, dirties, records history or requests cooking (R5). - The eye **must not** be routed through `RuntimeSetVisibility`/`SetVisibilityCommand` — that
-      writes authored `kVisible`, strips shadows, diverges the live preview from the saved scene and
-      breaks capture parity. - **D8b** is ED-M09's work: picking does not exist at any layer, and Explorer contributes only the
-      category mask and hidden set as filters carried on each pick request (DD4-A). It is not an
-      Explorer side-project. - Editor status: C49/W1–W4 are **buildable now and unblocked**; the viewport effect waits on
-      I4's capability. Engine and interop work needs separate authorization and build evidence
-      (`design/oxygen/RULES.md`), so it is not scheduled here. - Open question this row cannot settle: the plan previously stated, as an owner directive, that an
-      editor-hidden node **does not cast shadows** — which is the opposite of R3/DD1-A above. R3 is
-      taken as the owner's decision because it is the analysis the owner ratified; if the simpler
-      drop-from-view rule was the later directive, say so, because it removes E2 and the shadow-only
-      routing from the engine plan rather than adding them. Q4 (selection/gizmo treatment for a
-      selected editor-hidden node) is also still listed open in the analysis.
+      owns the behaviour contract (R1–R9), the design decisions (DD1–DD4), the per-team action plans
+      (E1–E3 engine, I1–I4 interop/runtime, W1–W7 editor) and the qualification cases. This row does
+      not restate them. What binds the plan: - **D8a** is a per-view hidden-node filter on `CompositionView`, culled in
+      `ScenePrepPipeline::PrepareView`. An editor-hidden node **does not render and does not cast
+      shadows** in editing views (R2) — it is dropped, so no draw, no depth, no shadow-caster
+      source; the UE5.7 parity basis is `bHiddenEd`, which removes the actor and its direct shadows
+      from the editor viewport without touching runtime state. The existing shadow-only route
+      (`main_view_visible = false`) is deliberately **not** used, because it exists to keep
+      off-frustum casters shading the scene and a hidden node must stop shading it. No depth-prepass
+      change is required for this, since dropped geometry never reaches the prepass. - Editor-hidden nodes stay **fully visible in game, in game viewports, in cooked assets and in
+      capture/validation views** (R3/R6). The mask never writes `kVisible`, never dirties, never
+      records history and never cooks (R4) — which is why the eye must never be routed through
+      `RuntimeSetVisibility`/`SetVisibilityCommand`. - Inheritance follows **actual scene ancestors only**, never logical folders (R1); the editor
+      sends hidden roots and the engine resolves the closure (DD2), as a revisioned per-activation
+      snapshot applied to every editing viewport of the active scene (DD3, R6). - **D8b** is ED-M09's work: picking does not exist at any layer. The Explorer contributes
+      category and hidden-set filters on each pick request (DD4); hidden nodes cannot be picked in
+      viewports (R8) yet Explorer selection still works, and a hidden node selected individually in
+      the Scene Explorer shows its transform gizmo at its world transform (R9, W7 — owner decision
+      on Q4). - Editor side (C49 / W1–W4) is **unblocked and buildable now**: workspace service,
+      `WorldEditor/SceneVisibility` persistence, the eye/lock slots and the binding with the
+      `SupportsEditingViewMask` warning fallback (Q2 — the eye works immediately and logs a
+      diagnostic while suppression awaits I4). Engine and interop work needs separate authorization
+      and build evidence, so it is not scheduled from this plan.
 
 #### Show in Editor & Lock — interaction contract (owner, 2026-10-05)
 
