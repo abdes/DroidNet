@@ -912,9 +912,11 @@ Search / index
 
 - [x] C24 — `SceneExplorerViewModel.cs:944` second query discards restoration bookkeeping.
 - [ ] C25 — search expands only node ancestry, not visual folder ancestry / nested folders.
-- [ ] C26 — adapter-tree index is not a complete domain lookup; `SceneAdapter.cs:175` scans per
-      entry; duplicate layout node ids not suppressed.
-- [ ] C27 — `FolderAdapter.cs:62` authored expansion setter used by search.
+- [~] C26 — adapter-tree index is not a complete domain lookup; `SceneAdapter.cs:175` scans per
+  entry; duplicate layout node ids not suppressed. (Node matching now uses `Scene.AllNodes`;
+  folder domain index and duplicate-id suppression remain.)
+- [~] C27 — `FolderAdapter.cs:62` authored expansion setter used by search. (Transient flag added;
+  not yet exercised because C25 folder-ancestry expansion is pending.)
 
 Scene lifecycle
 
@@ -937,9 +939,12 @@ Generic tree
 
 #### Test / verification gaps (editor/controls; runtime for native rows)
 
-- [ ] T1 — one undo per batch + atomic rejection (mixed delete, multi-root duplication).
-- [ ] T2 — preserve-world ignored-parent + exact layout/order/TRS undo/redo + native convergence.
-- [ ] T3 — rename reaches native; delete-undo recreates the subtree.
+- [~] T1 — one undo per batch + atomic rejection (mixed delete, multi-root duplication).
+  (Multi-root duplication stale-id rejection is tested; mixed-delete atomicity test pending.)
+- [~] T2 — preserve-world ignored-parent + exact layout/order/TRS undo/redo + native convergence.
+  (Ignored-parent world preservation tested; exact-layout undo/native-convergence pending.)
+- [~] T3 — rename reaches native; delete-undo recreates the subtree.
+  (Delete-undo subtree native recreation tested; rename-to-native sync test pending.)
 - [ ] T4 — immutable snapshots, sequential-scene Copy, repeated Copy Paste, Escape cancels Cut.
 - [ ] T5 — folder/mixed selection reaches the right Inspector; external selection reconciles.
 - [ ] T6 — search multi-query restoration, folder ancestry, no authored expansion writes.
