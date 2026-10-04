@@ -186,22 +186,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.suppressNodeMessages = true;
         try
         {
-            if (nodeIds.Count > 0)
+            var result = await this.commandService.DeleteItemsAsync(context, nodeIds, folderIds).ConfigureAwait(true);
+            if (!result.Succeeded)
             {
-                var result = await this.commandService.DeleteNodesAsync(context, nodeIds).ConfigureAwait(true);
-                if (!result.Succeeded)
-                {
-                    return;
-                }
-            }
-
-            foreach (var folderId in folderIds)
-            {
-                var result = await this.commandService.DeleteFolderAsync(context, folderId).ConfigureAwait(true);
-                if (!result.Succeeded)
-                {
-                    return;
-                }
+                return;
             }
 
             await this.ReconcileProjectionAsync().ConfigureAwait(true);

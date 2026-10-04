@@ -289,6 +289,16 @@ public interface ISceneDocumentCommandService
         SceneDocumentCommandContext context,
         Guid folderId);
 
+    /// <summary>Deletes node hierarchies and folders together in one atomic transaction.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="nodeIds">The hierarchy roots to delete.</param>
+    /// <param name="folderIds">The folders to remove (grouping-only promotion).</param>
+    /// <returns>The command result.</returns>
+    public Task<SceneCommandResult> DeleteItemsAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<Guid> nodeIds,
+        IReadOnlyList<Guid> folderIds);
+
     /// <summary>Reparents node hierarchies, optionally preserving world pose, in one atomic transaction.</summary>
     /// <param name="context">The document command context.</param>
     /// <param name="nodeIds">The hierarchy roots to reparent.</param>

@@ -324,6 +324,90 @@ public sealed partial class SceneDocumentCommandService
     }
 
     /// <inheritdoc />
+    public async Task<SceneCommandResult> DeleteItemsAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<Guid> nodeIds,
+        IReadOnlyList<Guid> folderIds)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return new SceneCommandResult(Succeeded: false);
+        }
+
+        var topLevelIds = this.sceneOrganizer.FilterTopLevelSelectedNodeIds([.. nodeIds], context.Scene);
+
+        // Pre-validate nodes before any mutation.
+        var restores = new List<NodeRestore>(topLevelIds.Count);
+        foreach (var nodeId in topLevelIds)
+        {
+            var node = FindNode(context.Scene, nodeId);
+            if (node is null)
+            {
+                return this.ValidationFailure(
+                    SceneOperationKinds.NodeDelete,
+                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                    "Items were not deleted",
+                    "One or more selected nodes no longer exist.",
+                    context);
+            }
+
+            restores.Add(NodeRestore.Capture(node));
+        }
+
+        // Pre-validate folders before any mutation.
+        EnsureExplorerLayout(context.Scene);
+        foreach (var folderId in folderIds)
+        {
+            var (found, _) = FindFolderSceneParentNodeId(context.Scene.ExplorerLayout, folderId);
+            if (!found)
+            {
+                return this.ValidationFailure(
+                    SceneOperationKinds.ExplorerFolderDelete,
+                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                    "Items were not deleted",
+                    "One or more selected folders no longer exist.",
+                    context);
+            }
+        }
+
+        var layoutBefore = this.sceneOrganizer.CloneLayout(context.Scene.ExplorerLayout);
+
+        context.History.BeginChangeSet($"Delete {restores.Count + folderIds.Count} item(s)");
+        try
+        {
+            foreach (var restore in restores)
+            {
+                _ = this.sceneMutator.RemoveHierarchy(restore.Node.Id, context.Scene);
+                _ = this.sceneOrganizer.RemoveNodeFromLayout(restore.Node.Id, context.Scene);
+            }
+
+            this.RecordDeleteNodesUndo(context, restores);
+
+            foreach (var folderId in folderIds)
+            {
+                _ = this.sceneOrganizer.RemoveFolder(folderId, promoteChildrenToParent: true, context.Scene);
+            }
+
+            this.RecordLayoutHistory(context, "Delete folders", layoutBefore, context.Scene.ExplorerLayout);
+        }
+        finally
+        {
+            context.History.EndChangeSet();
+        }
+
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        await this.SyncRemoveNodesAsync(context, [.. topLevelIds]).ConfigureAwait(true);
+
+        foreach (var restore in restores)
+        {
+            this.PublishNodeRemoved(context, restore.Node);
+        }
+
+        return SceneCommandResult.Success;
+    }
+
+    /// <inheritdoc />
     public async Task<SceneCommandResult> ReparentNodesAsync(
         SceneDocumentCommandContext context,
         IReadOnlyList<Guid> nodeIds,
