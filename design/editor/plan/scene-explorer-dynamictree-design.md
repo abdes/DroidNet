@@ -881,7 +881,7 @@ Clipboard
 - [x] C12 — `Clipboard.cs:108` copied directional lights retain `AtmosphereSlot` (plan: `None`).
 - [ ] C13 — `SceneExplorerViewModel.cs:550,650` normal Paste on a node = child Paste; Paste and
       Paste-as-child identical; multi-scope silently falls back to root.
-- [ ] C14 — `SceneExplorerViewModel.cs:586` successful Copy-paste clears the payload; Cut into a
+- [x] C14 — `SceneExplorerViewModel.cs:586` successful Copy-paste clears the payload; Cut into a
       folder loses grouping intent.
 - [x] C15 — base clipboard Escape cannot cancel a subclass's private IDs.
 
