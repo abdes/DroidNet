@@ -89,6 +89,36 @@ public sealed class SceneExplorerOpenDocumentTests
     }
 
     [TestMethod]
+    public async Task CommitRenameAsync_UnchangedNameSkipsCommand()
+    {
+        var project = new Project(new ProjectInfo("Rename", Category.Games, "H:/RenameTreeTests", "preview.png")) { Name = "Rename" };
+        var scene = new Scene(project) { Name = "Scene" };
+        var node = new SceneNode(scene) { Name = "Original" };
+        scene.RootNodes.Add(node);
+        project.Scenes.Add(scene);
+        var metadata = new SceneDocumentMetadata(scene.Id);
+        var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
+        _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
+        var documents = new Mock<IDocumentService>();
+        _ = documents.Setup(value => value.GetOpenDocuments(It.IsAny<WindowId>())).Returns([metadata]);
+        _ = documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(metadata.DocumentId);
+        var sync = new Mock<ISceneEngineSync>();
+        _ = sync.Setup(value => value.GetDocumentScene(metadata)).Returns(scene);
+        _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata)).Returns(value: true);
+        _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
+        var commands = new Mock<ISceneDocumentCommandService>(MockBehavior.Strict);
+        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents.Object, default, sync.Object, Mock.Of<ISceneExplorerService>(), new SceneSelectionService(), commands.Object);
+
+        await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
+        var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
+
+        var result = await explorer.CommitRenameAsync(adapter!, "Original").ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        commands.Verify(value => value.RenameNodeAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [TestMethod]
     public async Task ReloadMessageReplacesTreeAdaptersWithoutReadingDiskOrRequiringRuntime()
     {
         var project = new Project(new ProjectInfo("Reload", Category.Games, "H:/ReloadTreeTests", "preview.png")) { Name = "Reload" };

@@ -57,10 +57,23 @@ public sealed partial class SceneExplorerView
             Title = "Rename",
             PrimaryButtonText = "OK",
             CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
         };
 
         var tb = new TextBox() { Text = item.Label };
         dialog.Content = tb;
+
+        // Pressing Enter commits the draft and closes the dialog, matching the OK button.
+        var confirmed = false;
+        tb.KeyDown += (_, e) =>
+        {
+            if (e.Key == Windows.System.VirtualKey.Enter)
+            {
+                e.Handled = true;
+                confirmed = true;
+                dialog.Hide();
+            }
+        };
 
         if (this.XamlRoot is not null)
         {
@@ -68,12 +81,18 @@ public sealed partial class SceneExplorerView
         }
 
         var result = await dialog.ShowAsync();
-        if (result == ContentDialogResult.Primary)
+        if (result != ContentDialogResult.Primary && !confirmed)
         {
-            var newName = tb.Text?.Trim() ?? string.Empty;
-
-            _ = await this.ViewModel!.CommitRenameAsync(item, newName).ConfigureAwait(false);
+            return;
         }
+
+        var newName = tb.Text?.Trim() ?? string.Empty;
+        if (string.Equals(newName, item.Label, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _ = await this.ViewModel!.CommitRenameAsync(item, newName).ConfigureAwait(false);
     }
 
     private async void UndoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
