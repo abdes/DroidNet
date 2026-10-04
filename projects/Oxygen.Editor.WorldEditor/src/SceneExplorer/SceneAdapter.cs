@@ -120,9 +120,16 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
         // 1. Build from Layout (The "Seating Chart")
         if (this.UseLayoutAdapters && layout is { Count: > 0 })
         {
+            // Index the scene graph once per rebuild so each entry resolves in O(1); the first node wins on duplicate ids.
+            var nodesById = new Dictionary<Guid, SceneNode>();
+            foreach (var node in this.AttachedObject.AllNodes)
+            {
+                _ = nodesById.TryAdd(node.Id, node);
+            }
+
             foreach (var entry in layout)
             {
-                await this.ProcessLayoutEntryAsync(entry, this, seenNodeIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
+                await this.ProcessLayoutEntryAsync(entry, this, nodesById, seenNodeIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
             }
         }
 
@@ -141,6 +148,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
     private async Task ProcessLayoutEntryAsync(
         ExplorerEntryData entry,
         ITreeItem parent,
+        Dictionary<Guid, SceneNode> nodesById,
         HashSet<Guid> seenNodeIds,
         ISet<Guid>? expandedFolderIds,
         bool preserveNodeExpansion)
@@ -161,7 +169,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
             {
                 foreach (var childEntry in entry.Children)
                 {
-                    await this.ProcessLayoutEntryAsync(childEntry, folder, seenNodeIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
+                    await this.ProcessLayoutEntryAsync(childEntry, folder, nodesById, seenNodeIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
                 }
             }
 
@@ -172,8 +180,9 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
         // Case B: Scene Node
         if (string.Equals(entry.Type, "Node", StringComparison.OrdinalIgnoreCase) && entry.NodeId.HasValue)
         {
-            var node = this.AttachedObject.AllNodes.FirstOrDefault(n => n.Id == entry.NodeId);
-            if (node == null)
+            // Claim the id before realizing so a duplicate layout entry cannot realize a second
+            // adapter for the same node; a skipped entry must not recurse into its children either.
+            if (!nodesById.TryGetValue(entry.NodeId.Value, out var node) || !seenNodeIds.Add(node.Id))
             {
                 return;
             }
@@ -185,14 +194,12 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                 adapter.IsExpanded = entry.IsExpanded.Value;
             }
 
-            _ = seenNodeIds.Add(node.Id);
-
             // Recurse (Layout Children)
             if (entry.Children != null)
             {
                 foreach (var childEntry in entry.Children)
                 {
-                    await this.ProcessLayoutEntryAsync(childEntry, adapter, seenNodeIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
+                    await this.ProcessLayoutEntryAsync(childEntry, adapter, nodesById, seenNodeIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
                 }
             }
 
