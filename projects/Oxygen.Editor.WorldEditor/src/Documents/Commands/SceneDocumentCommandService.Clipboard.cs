@@ -1,0 +1,109 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using Oxygen.Editor.World;
+using Oxygen.Editor.World.SceneExplorer.Operations;
+using Oxygen.Editor.World.Serialization;
+
+namespace Oxygen.Editor.WorldEditor.Documents.Commands;
+
+/// <summary>
+/// Deep-duplication authoring for <see cref="SceneDocumentCommandService"/>. Paste and copy-drop
+/// create independent node/component identities while preserving asset references and material-slot
+/// identities.
+/// </summary>
+public sealed partial class SceneDocumentCommandService
+{
+    /// <summary>Deep-copies node hierarchies and inserts them under a node, folder, or the scene root.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="nodeIds">The hierarchy roots to duplicate.</param>
+    /// <param name="newParentNodeId">The destination parent node, or <see langword="null"/> for root/folder scope.</param>
+    /// <param name="newParentFolderId">The destination folder for grouping, or <see langword="null"/> when not grouping.</param>
+    /// <returns>The created node roots.</returns>
+    public async Task<SceneValueCommandResult<IReadOnlyList<SceneNode>>> DuplicateNodesAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<Guid> nodeIds,
+        Guid? newParentNodeId,
+        Guid? newParentFolderId)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+        }
+
+        var topLevelIds = this.sceneOrganizer.FilterTopLevelSelectedNodeIds([.. nodeIds], context.Scene);
+        if (topLevelIds.Count == 0)
+        {
+            return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+        }
+
+        SceneNode? parentNode = null;
+        if (newParentNodeId.HasValue)
+        {
+            parentNode = FindNode(context.Scene, newParentNodeId.Value);
+            if (parentNode is null)
+            {
+                return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+            }
+        }
+
+        Guid? folderSceneParentNodeId = null;
+        if (newParentFolderId.HasValue)
+        {
+            var (found, nodeId) = FindFolderSceneParentNodeId(context.Scene.ExplorerLayout, newParentFolderId.Value);
+            if (!found)
+            {
+                return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+            }
+
+            folderSceneParentNodeId = nodeId;
+        }
+
+        var created = new List<SceneNode>(topLevelIds.Count);
+        foreach (var nodeId in topLevelIds)
+        {
+            var source = FindNode(context.Scene, nodeId);
+            if (source is null)
+            {
+                return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>();
+            }
+
+            var clone = SceneNode.CreateAndHydrate(context.Scene, RemapNodeIds(source.Dehydrate()));
+            var actualParent = parentNode ?? (folderSceneParentNodeId.HasValue ? FindNode(context.Scene, folderSceneParentNodeId.Value) : null);
+            _ = actualParent is null
+                ? this.sceneMutator.CreateNodeAtRoot(clone, context.Scene)
+                : this.sceneMutator.CreateNodeUnderParent(clone, actualParent, context.Scene);
+
+            if (newParentFolderId.HasValue)
+            {
+                EnsureExplorerLayout(context.Scene);
+                _ = this.sceneOrganizer.MoveNodeToFolder(clone.Id, newParentFolderId.Value, context.Scene);
+            }
+
+            this.RecordCreateNodeUndo(context, clone);
+            this.PublishNodeAdded(context, clone);
+            created.Add(clone);
+        }
+
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        foreach (var clone in created)
+        {
+            await this.SyncCreateNodeAsync(context, clone, clone.Parent?.Id).ConfigureAwait(true);
+        }
+
+        return SceneCommandResults.Success<IReadOnlyList<SceneNode>>(created);
+    }
+
+    private static SceneNodeData RemapNodeIds(SceneNodeData data)
+        => data with
+        {
+            Id = Guid.NewGuid(),
+            Components = data.Components.Select(RemapComponentId).ToList(),
+            Children = data.Children?.Select(RemapNodeIds).ToList(),
+        };
+
+    private static ComponentData RemapComponentId(ComponentData data)
+        => data with { Id = Guid.NewGuid() };
+}

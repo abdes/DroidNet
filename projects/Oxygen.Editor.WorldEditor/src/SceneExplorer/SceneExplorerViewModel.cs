@@ -49,6 +49,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     // Fast lookup of folder adapters by folder Id to avoid scanning the tree during reconciliation.
     private readonly Dictionary<Guid, FolderAdapter> folderAdapterIndex = [];
+
+    // Node-clipboard state: copied node identities plus whether they were cut (moved) rather than copied.
+    private readonly List<Guid> clipboardNodeIds = [];
+    private bool clipboardIsCut;
     private int nextEntityIndex;
     private CancellationTokenSource? loadSceneCts;
     private Guid loadingDocumentId = Guid.Empty;
@@ -474,6 +478,75 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             _ => null,
         };
 
+    [RelayCommand(CanExecute = nameof(CanCopy))]
+    private void Copy()
+    {
+        this.clipboardNodeIds.Clear();
+        this.clipboardIsCut = false;
+        this.clipboardNodeIds.AddRange(this.GetSelectedItems().OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject.Id));
+    }
+
+    private bool CanCopy() => this.GetSelectedItems().OfType<SceneNodeAdapter>().Any();
+
+    [RelayCommand(CanExecute = nameof(CanCut))]
+    private void Cut()
+    {
+        this.clipboardNodeIds.Clear();
+        this.clipboardIsCut = true;
+        this.clipboardNodeIds.AddRange(this.GetSelectedItems().OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject.Id));
+    }
+
+    private bool CanCut() => this.HasUnlockedSelectedItems;
+
+    [RelayCommand(CanExecute = nameof(CanPaste))]
+    private async Task Paste()
+    {
+        var context = this.CreateCommandContext();
+        if (context is null || this.clipboardNodeIds.Count == 0)
+        {
+            return;
+        }
+
+        var (parentNodeId, parentFolderId) = ResolvePasteDestination();
+
+        this.suppressNodeMessages = true;
+        try
+        {
+            if (this.clipboardIsCut)
+            {
+                var result = await this.commandService.ReparentNodesAsync(context, this.clipboardNodeIds, parentNodeId, preserveWorldTransform: true).ConfigureAwait(false);
+                if (result.Succeeded)
+                {
+                    this.clipboardNodeIds.Clear();
+                    this.clipboardIsCut = false;
+                    await this.ReconcileProjectionAsync().ConfigureAwait(false);
+                }
+            }
+            else
+            {
+                var result = await this.commandService.DuplicateNodesAsync(context, this.clipboardNodeIds, parentNodeId, parentFolderId).ConfigureAwait(false);
+                if (result.Succeeded)
+                {
+                    await this.ReconcileProjectionAsync().ConfigureAwait(false);
+                }
+            }
+        }
+        finally
+        {
+            this.suppressNodeMessages = false;
+        }
+    }
+
+    private bool CanPaste() => this.clipboardNodeIds.Count > 0;
+
+    private (Guid? ParentNodeId, Guid? ParentFolderId) ResolvePasteDestination()
+        => this.GetSingleSelectionTarget() switch
+        {
+            FolderAdapter folder => (null, folder.Id),
+            SceneNodeAdapter node => (node.AttachedObject.Id, null),
+            _ => (null, null),
+        };
+
     private async void OnDocumentActivated(object? sender, DocumentActivatedEventArgs e)
     {
         if (e.WindowId.Value != this.windowId.Value)
@@ -893,6 +966,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     {
         this.AddEntityCommand.NotifyCanExecuteChanged();
         this.CreateFolderCommand.NotifyCanExecuteChanged();
+        this.CopyCommand.NotifyCanExecuteChanged();
+        this.CutCommand.NotifyCanExecuteChanged();
+        this.PasteCommand.NotifyCanExecuteChanged();
     }
 
     private string GetNextEntityName()

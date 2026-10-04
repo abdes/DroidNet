@@ -320,4 +320,16 @@ public interface ISceneDocumentCommandService
         SceneDocumentCommandContext context,
         IReadOnlyList<Guid> nodeIds,
         Guid folderId);
+
+    /// <summary>Deep-copies node hierarchies and inserts them under a node, folder, or the scene root.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="nodeIds">The hierarchy roots to duplicate.</param>
+    /// <param name="newParentNodeId">The destination parent node, or <see langword="null"/> for root/folder scope.</param>
+    /// <param name="newParentFolderId">The destination folder for grouping, or <see langword="null"/> when not grouping.</param>
+    /// <returns>The command result with the created node roots.</returns>
+    public Task<SceneValueCommandResult<IReadOnlyList<SceneNode>>> DuplicateNodesAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<Guid> nodeIds,
+        Guid? newParentNodeId,
+        Guid? newParentFolderId);
 }

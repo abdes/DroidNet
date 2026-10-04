@@ -248,6 +248,32 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = world.Translation.Should().Be(Vector3.Zero, "an ignored-parent child has world == local");
     }
 
+    [TestMethod]
+    public async Task DuplicateNodesAsync_DeepCopiesSubtreeWithIndependentIdentities()
+    {
+        var fixture = CreateFixture();
+        ConfigureHierarchySync(fixture);
+        var scene = CreateScene();
+        var source = new SceneNode(scene) { Name = "Source" };
+        var child = new SceneNode(scene) { Name = "Child" };
+        source.AddChild(child);
+        scene.RootNodes.Add(source);
+        var context = CreateContext(scene);
+
+        var result = await fixture.Sut.DuplicateNodesAsync(context, [source.Id], newParentNodeId: null, newParentFolderId: null).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = scene.RootNodes.Should().HaveCount(2);
+        var clone = scene.RootNodes.Single(node => !ReferenceEquals(node, source));
+        _ = clone.Id.Should().NotBe(source.Id);
+        _ = clone.Name.Should().Be("Source");
+        _ = clone.Children.Should().ContainSingle().Which.Name.Should().Be("Child");
+        _ = clone.Children[0].Id.Should().NotBe(child.Id);
+        _ = clone.Components.Select(component => component.Id).Should().NotIntersectWith(source.Components.Select(component => component.Id));
+        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = context.History.UndoStack.Should().ContainSingle();
+    }
+
     private static void ConfigureHierarchySync(Fixture fixture)
     {
         _ = fixture.Sync.Setup(sync => sync.CreateNodeAsync(It.IsAny<SceneNode>(), It.IsAny<Guid?>())).Returns(Task.CompletedTask);
