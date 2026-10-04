@@ -571,11 +571,15 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
             await this.ReconcileProjectionAsync().ConfigureAwait(true);
 
-            this.clipboardNodeIds.Clear();
-            this.clipboardIsCut = false;
-            this.ClipboardStateStore = ClipboardState.Empty;
-            this.ClearCutMarks();
-            this.RaiseClipboardChanged();
+            // A completed Cut (move) clears the staging; a Copy payload is retained for repeated Paste.
+            if (this.clipboardIsCut)
+            {
+                this.clipboardNodeIds.Clear();
+                this.clipboardIsCut = false;
+                this.ClipboardStateStore = ClipboardState.Empty;
+                this.ClearCutMarks();
+                this.RaiseClipboardChanged();
+            }
         }
         finally
         {
