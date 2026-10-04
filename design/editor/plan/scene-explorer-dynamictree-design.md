@@ -815,7 +815,7 @@ checklist below and must be closed before SE-03. The legacy `AuthoringChanged` n
 Legend: `[ ]` open · `[~]` in progress · `[x]` closed. Each entry names owner + evidence.
 
 Verification evidence (2026-10-04): `Oxygen.Editor.WorldEditor.Unit.Tests` full project green —
-272 total, 272 succeeded, 0 failed, 0 skipped
+277 total, 277 succeeded, 0 failed, 0 skipped (272 + the five search/layout tests added with C25/C26/C27)
 (`traverse Invoke-Tests --start projects/Oxygen.Editor.WorldEditor/tests/Unit --configuration Debug`).
 The strict-mock helper `ConfigureHierarchySync` previously omitted the native rename and transform
 publishes added with C2/C1/C3, so four tests threw while their defects were marked closed.
@@ -935,15 +935,35 @@ Context menu
 Search / index
 
 - [x] C24 — `SceneExplorerViewModel.cs:944` second query discards restoration bookkeeping.
-- [ ] C25 — search expands only node ancestry, not visual folder ancestry / nested folders.
-- [~] C26 — adapter-tree index is not a complete domain lookup; `SceneAdapter.cs:175` scans per
-  entry; duplicate layout node ids not suppressed. (Node matching uses `Scene.AllNodes`; the
-  per-entry scan is now one index per rebuild and node duplicates are claimed before realization
-  (`c381888a9`, covered by `SceneAdapterLayoutTests`). Remaining: the folder domain index, and the
-  same duplicate defect for folder ids in Case A, where two `FolderAdapter`s share an `Id` and the
-  projection's last-write-wins hides one — carried into C25/C27, which own the folder domain.)
-- [~] C27 — `FolderAdapter.cs:62` authored expansion setter used by search. (Transient flag added;
-  not yet exercised because C25 folder-ancestry expansion is pending.)
+- [x] C25 — search expands only node ancestry, not visual folder ancestry / nested folders.
+      (`SceneExplorerProjection.GetNodeLayoutAncestors` returns each match's authored-layout chain —
+      folders and node seats — which `SceneExplorerViewModel.ExpandMatchAncestryAsync` expands top-down,
+      falling back to scene-graph ancestry only for nodes with no layout seat. Proven by
+      `SearchAsync_RevealsNodeInsideCollapsedNestedFolders`, which expands and then restores both an
+      outer and an inner collapsed folder.)
+- [x] C26 — adapter-tree index is not a complete domain lookup; `SceneAdapter.cs:175` scanned per
+      entry; duplicate layout ids not suppressed. Node side: `Scene.AllNodes` indexed once per rebuild
+      and node duplicates claimed before realization (`c381888a9`). Folder side: the projection now owns
+      a domain view built from `Scene.ExplorerLayout` (`LayoutFolders` plus per-node ancestor chains)
+      that is independent of adapter realization and expansion state, and Case A claims `FolderId` in a
+      `seenFolderIds` set before realizing, so a duplicate entry cannot produce two adapters sharing one
+      identity and contributes no children — the same claim rule as nodes, matching "duplicate/ambiguous
+      persistent IDs are errors" (`content-pipeline.md:1205`). Proven by
+      `Children_LayoutReferencingSameFolderTwice_RealizesSingleAdapter` and by the folder-match count
+      taken from the domain (`SearchAsync_CountsCollapsedFolderMatchesFromLayoutDomain`). An entry with a
+      null `FolderId` is not stably addressable: it still realizes under a fresh id each rebuild, which
+      search now tolerates (`SearchAsync_FolderEntryWithoutFolderId_ToleratedBySearchAndClear`).
+- [x] C27 — `FolderAdapter.cs:62` authored expansion setter used by search. `SetExpansionTransient`
+      is exercised for real: set before a search-driven expand, cleared only after the collapse in
+      `ClearSearchAsync`, so search never writes `entry.IsExpanded` and never dirties the document —
+      asserted by `SearchAsync_RestoresExpansionAcrossSuccessiveQueriesWithoutAuthoringLayout`, which
+      runs two queries, keeps the first query's expansion until clear, leaves authored expansion alone,
+      compares the serialized layout before/after and checks `Metadata.IsDirty` is false.
+- [ ] C37 — `ReconcileProjectionAsync` during an **active** search re-authors transient search
+      expansions into `entry.IsExpanded` on the freshly realized adapters (no transient flag survives a
+      reload) and leaves `searchExpandedItems` referencing retired adapters, so clearing cannot restore the
+      prior view. Needs a reconcile-side decision; found while closing C27 and deliberately not papered
+      over inside the search path.
 
 Scene lifecycle
 
@@ -963,6 +983,11 @@ Generic tree
 - [ ] C34 — `DynamicTreeViewModel.cs:438,694` displayed-scope keyboard/typeahead scan hidden items.
 - [~] C35 — `DynamicTree.cs:1567` Escape clears only typeahead; drag cancellation/restoration absent.
 - [x] C36 — `ContextMenu.cs:119` attached host disposed on unload without Loaded recreation.
+- [ ] C38 — `DynamicTreeViewModel.cs:933-934` `HideChildrenAsync` guard is inert: `removeIndex` is
+      `shownItems.IndexOf(item) + 1`, so a missing item yields `0` and `Debug.Assert(removeIndex != -1,
+"expecting item … to be in the shown list")` still passes; the assertion can only fire when
+      `IndexOf` returns `-2`, which is unreachable. It must test `removeIndex != 0`. Found while closing
+      C27; belongs with the C34/C35 generic-tree work rather than the search group.
 
 #### Test / verification gaps (editor/controls; runtime for native rows)
 
@@ -975,7 +1000,10 @@ Generic tree
       `DeleteNodesAsync_Undo_RecreatesFullSubtreeInNative` verifies `CreateNodeAsync` twice, root + child.)
 - [ ] T4 — immutable snapshots, sequential-scene Copy, repeated Copy Paste, Escape cancels Cut.
 - [ ] T5 — folder/mixed selection reaches the right Inspector; external selection reconciles.
-- [ ] T6 — search multi-query restoration, folder ancestry, no authored expansion writes.
+- [x] T6 — search multi-query restoration, folder ancestry, no authored expansion writes.
+      (`SearchAsync_RestoresExpansionAcrossSuccessiveQueriesWithoutAuthoringLayout` covers two successive
+      queries, accumulated expansion, restoration on clear, serialized-layout equality and `IsDirty`;
+      `SearchAsync_RevealsNodeInsideCollapsedNestedFolders` covers nested visual folder ancestry.)
 - [ ] T7 — context-menu captured context, keyboard/touch, stale dismissal, toolbar parity.
 - [ ] T8 — single loaded scene: guarded replacement, material-tab retention, configured default.
 - [ ] T9 — generic recycling detach, displayed-scope keyboard, reload/reattach, Escape cancel.
