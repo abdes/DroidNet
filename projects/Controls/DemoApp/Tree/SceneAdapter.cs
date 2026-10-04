@@ -8,10 +8,10 @@ using DroidNet.Controls.Demo.Tree.Services;
 namespace DroidNet.Controls.Demo.Tree.Model;
 
 /// <summary>
-/// A <see cref="DynamicTree" /> item adapter for the <see cref="Scene" /> model class.
+/// The root <see cref="DynamicTree" /> item adapter for the currently opened <see cref="Scene" />.
 /// </summary>
-/// <param name="scene">The <see cref="Entity" /> object to wrap as a <see cref="ITreeItem" />.</param>
-internal sealed partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot: false, isHidden: false), ITreeItem<Scene>, ICanBeCloned
+/// <param name="scene">The opened scene represented by the root tree item.</param>
+internal sealed partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot: true, isHidden: false), ITreeItem<Scene>
 {
     /// <summary>
     /// A regular expression pattern to validate a suggested scene name. It checks
@@ -43,18 +43,6 @@ internal sealed partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot
     public Scene AttachedObject => scene;
 
     /// <inheritdoc/>
-    public ITreeItem CloneSelf()
-    {
-        var sceneClone = new Scene(this.AttachedObject.Name);
-        var clone = new SceneAdapter(sceneClone);
-        this.CopyBasePropertiesTo(clone);
-
-        // IMPORTANT: Do not add children to the clone. The copy/paste logic expects clones with no parent or
-        // children so that the clipboard code can reparent child clones under cloned parents in the correct order.
-        return clone;
-    }
-
-    /// <inheritdoc/>
     public override bool ValidateItemName(string name) => ValidNameMatcher().IsMatch(name);
 
     /// <inheritdoc/>
@@ -63,7 +51,7 @@ internal sealed partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot
     /// <inheritdoc/>
     protected override async Task LoadChildren()
     {
-        await ProjectLoaderService.LoadSceneAsync(this.AttachedObject).ConfigureAwait(false);
+        await SceneLoaderService.LoadSceneAsync(this.AttachedObject).ConfigureAwait(false);
 
         foreach (var entity in this.AttachedObject.Entities)
         {

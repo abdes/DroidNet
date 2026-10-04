@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Specialized;
-using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
 using Windows.System;
@@ -142,12 +142,15 @@ namespace DroidNet.Controls;
 [TemplateVisualState(Name = NameIsValidVisualState, GroupName = NameValidationState)]
 [TemplateVisualState(Name = NameIsInvalidVisualState, GroupName = NameValidationState)]
 [TemplatePart(Name = ThumbnailPresenterPart, Type = typeof(ContentPresenter))]
+[TemplatePart(Name = TrailingContentPresenterPart, Type = typeof(ContentPresenter))]
 [TemplatePart(Name = ExpanderPart, Type = typeof(Expander))]
 [TemplatePart(Name = ContentPresenterPart, Type = typeof(ContentPresenter))]
 [TemplatePart(Name = InPlaceRenamePart, Type = typeof(Popup))]
 [TemplatePart(Name = ItemNamePart, Type = typeof(TextBlock))]
 [TemplatePart(Name = ItemNameEditPart, Type = typeof(TextBox))]
+[TemplatePart(Name = ItemNameErrorPart, Type = typeof(FontIcon))]
 [TemplatePart(Name = ContentGridPart, Type = typeof(Grid))]
+[TemplatePart(Name = DropIntoIndicatorPart, Type = typeof(Border))]
 [TemplatePart(Name = RootGridPart, Type = typeof(Grid))]
 [ContentProperty(Name = nameof(Content))]
 public partial class DynamicTreeItem : ContentControl
@@ -156,6 +159,12 @@ public partial class DynamicTreeItem : ContentControl
     /// The name of the thumbnail presenter part used to host thumbnails inside the item template.
     /// </summary>
     public const string ThumbnailPresenterPart = "PartThumbnailPresenter";
+
+    /// <summary>The template part presenting optional consumer-owned trailing content.</summary>
+    public const string TrailingContentPresenterPart = "PartTrailingContentPresenter";
+
+    /// <summary>The template part highlighted when an item is a drop-into target.</summary>
+    public const string DropIntoIndicatorPart = "PartDropIntoIndicator";
 
     /// <summary>
     /// The name of the expander control part inside the tree item template.
@@ -191,6 +200,9 @@ public partial class DynamicTreeItem : ContentControl
     /// The name of the text box used for editing the item's name in the template.
     /// </summary>
     public const string ItemNameEditPart = "PartItemNameEdit";
+
+    /// <summary>The name of the glyph shown when the proposed rename is invalid or rejected.</summary>
+    public const string ItemNameErrorPart = "PartItemNameError";
 
     /// <summary>
     /// The name of the VisualStateGroup used for name validation states.
@@ -277,17 +289,18 @@ public partial class DynamicTreeItem : ContentControl
     /// </summary>
     public const string NotCutVisualState = "NotCut";
 
-    /// <summary>
-    ///     Default indent increment value.
-    /// </summary>
-    private const double DefaultIndentIncrement = 34.0;
-
-    private readonly double indentIncrement;
-
     private ILogger? logger;
 
     private long ancestorTreeThumbnailTemplateSelectorChangeCallbackToken;
+    private long ancestorTreeTrailingContentTemplateSelectorChangeCallbackToken;
+    private long ancestorTreeTrailingContentWidthChangeCallbackToken;
     private Expander? expander;
+    private ColumnDefinition? trailingContentColumn;
+    private ContentPresenter? trailingContentPresenter;
+    private Border? dropIntoIndicator;
+    private bool isPointerHandlersAttached;
+    private bool isInteractivePointerActive;
+    private bool areInteractivePointerHandlersAttached;
 
     private DynamicTree? treeControl;
 
@@ -297,15 +310,6 @@ public partial class DynamicTreeItem : ContentControl
     public DynamicTreeItem()
     {
         this.DefaultStyleKey = typeof(DynamicTreeItem);
-
-        // Try to get the indent increment from the XAML resources, fallback to default if not found
-        this.indentIncrement = DefaultIndentIncrement;
-        if (Application.Current.Resources.TryGetValue(
-                "DynamicTreeItemIndentIncrement",
-                out var indentIncrementObj) && indentIncrementObj is double increment)
-        {
-            this.indentIncrement = increment;
-        }
 
         this.Loaded += this.OnLoaded;
         this.Unloaded += this.OnUnloaded;
@@ -327,9 +331,8 @@ public partial class DynamicTreeItem : ContentControl
             return;
         }
 
-        // Calculate the extra left margin based on the IndentLevel and set it as the RootGrid margin
-        var extraLeftMargin = this.ItemAdapter.Depth * this.indentIncrement;
-        Debug.Assert(extraLeftMargin >= 0, "negative margin means bad depth, i.e. bug");
+        // Removed items have an unassigned (negative) depth before their realized rows are recycled.
+        var extraLeftMargin = Math.Max(0, this.ItemAdapter.Depth) * this.ItemIndentWidth;
         rootGrid.Margin = new Thickness(extraLeftMargin, 0, 0, 0);
         this.LogItemMarginUpdated(extraLeftMargin);
     }
@@ -357,6 +360,11 @@ public partial class DynamicTreeItem : ContentControl
         this.SetupItemNameParts();
 
         this.OnThumbnailTemplateSelectorChanged();
+        this.trailingContentPresenter = this.GetTemplateChild(TrailingContentPresenterPart) as ContentPresenter;
+        this.trailingContentColumn = (this.GetTemplateChild(RootGridPart) as Grid)?.ColumnDefinitions.ElementAtOrDefault(1);
+        this.dropIntoIndicator = this.GetTemplateChild(DropIntoIndicatorPart) as Border;
+        this.OnTrailingContentTemplateSelectorChanged();
+        this.UpdateTrailingContentPresenter();
         this.UpdateItemMargin();
         this.UpdateExpansionVisualState();
         this.UpdateHasChildrenVisualState();
@@ -392,25 +400,23 @@ public partial class DynamicTreeItem : ContentControl
         _ = sender; // unused
         _ = args; // unused
 
-        this.PointerEntered += (_, _) =>
+        if (!this.isPointerHandlersAttached)
         {
-            var isSelected = this.ItemAdapter?.IsSelected ?? false;
-            _ = VisualStateManager.GoToState(
-                this,
-                isSelected ? PointerOverSelectedVisualState : PointerOverVisualState,
-                useTransitions: false);
-        };
-
-        this.PointerExited += (_, _) =>
-        {
-            var isSelected = this.ItemAdapter?.IsSelected ?? false;
-            _ = VisualStateManager.GoToState(
-                this,
-                isSelected ? SelectedVisualState : NormalVisualState,
-                useTransitions: false);
-        };
+            this.PointerEntered += this.OnPointerEntered;
+            this.PointerExited += this.OnPointerExited;
+            this.isPointerHandlersAttached = true;
+        }
 
         this.UpdateAncestorReference();
+
+        if (!this.areInteractivePointerHandlersAttached)
+        {
+            this.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(this.OnActionPointerPressed), handledEventsToo: true);
+            this.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(this.OnActionPointerEnded), handledEventsToo: true);
+            this.AddHandler(UIElement.PointerCanceledEvent, new PointerEventHandler(this.OnActionPointerEnded), handledEventsToo: true);
+            this.AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler(this.OnActionPointerEnded), handledEventsToo: true);
+            this.areInteractivePointerHandlersAttached = true;
+        }
 
         // Subscribe to LayoutUpdated to detect parent changes
         this.LayoutUpdated += this.OnLayoutUpdated;
@@ -418,10 +424,60 @@ public partial class DynamicTreeItem : ContentControl
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        // Detach event handlers to prevent memory leaks
-        this.Loaded -= this.OnLoaded;
-        this.Unloaded -= this.OnUnloaded;
+        if (this.isPointerHandlersAttached)
+        {
+            this.PointerEntered -= this.OnPointerEntered;
+            this.PointerExited -= this.OnPointerExited;
+            this.isPointerHandlersAttached = false;
+        }
+
         this.LayoutUpdated -= this.OnLayoutUpdated;
+        if (this.areInteractivePointerHandlersAttached)
+        {
+            this.RemoveHandler(UIElement.PointerPressedEvent, new PointerEventHandler(this.OnActionPointerPressed));
+            this.RemoveHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(this.OnActionPointerEnded));
+            this.RemoveHandler(UIElement.PointerCanceledEvent, new PointerEventHandler(this.OnActionPointerEnded));
+            this.RemoveHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler(this.OnActionPointerEnded));
+            this.areInteractivePointerHandlersAttached = false;
+        }
+
+        this.isInteractivePointerActive = false;
+        if (this.itemNameTextBox?.Visibility == Visibility.Visible)
+        {
+            this.CancelRename();
+        }
+    }
+
+    private void OnPointerEntered(object sender, PointerRoutedEventArgs args)
+    {
+        _ = sender;
+        _ = args;
+        var isSelected = this.ItemAdapter?.IsSelected ?? false;
+        _ = VisualStateManager.GoToState(this, isSelected ? PointerOverSelectedVisualState : PointerOverVisualState, useTransitions: false);
+    }
+
+    private void OnPointerExited(object sender, PointerRoutedEventArgs args)
+    {
+        _ = sender;
+        _ = args;
+        var isSelected = this.ItemAdapter?.IsSelected ?? false;
+        _ = VisualStateManager.GoToState(this, isSelected ? SelectedVisualState : NormalVisualState, useTransitions: false);
+    }
+
+    private void OnActionPointerPressed(object sender, PointerRoutedEventArgs args)
+    {
+        _ = sender;
+        if (this.IsInteractiveContentElement(args.OriginalSource as DependencyObject))
+        {
+            this.isInteractivePointerActive = true;
+        }
+    }
+
+    private void OnActionPointerEnded(object sender, PointerRoutedEventArgs args)
+    {
+        _ = sender;
+        _ = args;
+        this.isInteractivePointerActive = false;
     }
 
     private void OnLayoutUpdated(object? sender, object args)
@@ -437,9 +493,10 @@ public partial class DynamicTreeItem : ContentControl
         _ = sender; // unused
         _ = args; // unused
 
-        this.Expand?.Invoke(
-            this,
-            new DynamicTreeEventArgs { TreeItem = (TreeItemAdapter)this.DataContext });
+        if (this.ItemAdapter is { } item)
+        {
+            this.Expand?.Invoke(this, new DynamicTreeEventArgs { TreeItem = item });
+        }
     }
 
     private void OnCollapse(object? sender, EventArgs args)
@@ -447,9 +504,10 @@ public partial class DynamicTreeItem : ContentControl
         _ = sender; // unused
         _ = args; // unused
 
-        this.Collapse?.Invoke(
-            this,
-            new DynamicTreeEventArgs { TreeItem = (TreeItemAdapter)this.DataContext });
+        if (this.ItemAdapter is { } item)
+        {
+            this.Collapse?.Invoke(this, new DynamicTreeEventArgs { TreeItem = item });
+        }
     }
 
     private void UpdateSelectionVisualState(bool isSelected)
@@ -524,16 +582,30 @@ public partial class DynamicTreeItem : ContentControl
         this.treeControl?.UnregisterPropertyChangedCallback(
             DynamicTree.ThumbnailTemplateSelectorProperty,
             this.ancestorTreeThumbnailTemplateSelectorChangeCallbackToken);
+        this.treeControl?.UnregisterPropertyChangedCallback(
+            DynamicTree.TrailingContentTemplateSelectorProperty,
+            this.ancestorTreeTrailingContentTemplateSelectorChangeCallbackToken);
+        this.treeControl?.UnregisterPropertyChangedCallback(
+            DynamicTree.TrailingContentWidthProperty,
+            this.ancestorTreeTrailingContentWidthChangeCallbackToken);
 
         this.treeControl = newAncestorTreeControl;
         if (this.treeControl == null)
         {
+            this.TrailingContent = null;
+            this.TrailingContentTemplate = null;
+            this.TrailingContentWidth = 0;
+            this.UpdateTrailingContentPresenter();
             return;
         }
 
         // Get the initial value of thumbnail template selector from our ancestor
         // tree control
         this.OnThumbnailTemplateSelectorChanged();
+        this.OnTrailingContentTemplateSelectorChanged();
+        this.TrailingContentWidth = this.treeControl.TrailingContentTemplateSelector is null
+            ? 0
+            : this.treeControl.TrailingContentWidth;
 
         // Register callbacks on the new tree control to get the updated template
         // selector when it changes
@@ -541,6 +613,16 @@ public partial class DynamicTreeItem : ContentControl
             = this.treeControl.RegisterPropertyChangedCallback(
                 DynamicTree.ThumbnailTemplateSelectorProperty,
                 (_, _) => this.OnThumbnailTemplateSelectorChanged());
+        this.ancestorTreeTrailingContentTemplateSelectorChangeCallbackToken
+            = this.treeControl.RegisterPropertyChangedCallback(
+                DynamicTree.TrailingContentTemplateSelectorProperty,
+                (_, _) => this.OnTrailingContentTemplateSelectorChanged());
+        this.ancestorTreeTrailingContentWidthChangeCallbackToken
+            = this.treeControl.RegisterPropertyChangedCallback(
+                DynamicTree.TrailingContentWidthProperty,
+                (_, _) => this.TrailingContentWidth = this.treeControl?.TrailingContentTemplateSelector is null
+                    ? 0
+                    : this.treeControl.TrailingContentWidth);
     }
 
     private void OnThumbnailTemplateSelectorChanged()
@@ -556,4 +638,7 @@ public partial class DynamicTreeItem : ContentControl
             thumbnail.ContentTemplateSelector = templateSelector;
         }
     }
+
+    private void OnTrailingContentTemplateSelectorChanged()
+        => this.UpdateTrailingContentTemplate(this.treeControl?.TrailingContentTemplateSelector, this.ItemAdapter);
 }

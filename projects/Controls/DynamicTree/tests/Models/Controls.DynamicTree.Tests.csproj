@@ -7,6 +7,8 @@
 
         <RootNamespace>$(RootNamespace).Controls.Tests</RootNamespace>
         <AssemblyName>DroidNet.Controls.DynamicTree.Tests</AssemblyName>
+        <NoWarn>$(NoWarn);MSTEST0084</NoWarn>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
 
     <ItemGroup>
@@ -16,6 +18,14 @@
 
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Controls\DynamicTree\src\Controls.DynamicTree.csproj" />
+    </ItemGroup>
+
+    <!-- Exercise the demo's small domain adapter without depending on the WinUI executable. -->
+    <ItemGroup>
+        <Compile Include="$(ProjectsRoot)\Controls\DemoApp\Tree\Model\*.cs" Link="Demo\Model\%(Filename)%(Extension)" />
+        <Compile Include="$(ProjectsRoot)\Controls\DemoApp\Tree\EntityAdapter.cs" Link="Demo\EntityAdapter.cs" />
+        <Compile Include="$(ProjectsRoot)\Controls\DemoApp\Tree\SceneAdapter.cs" Link="Demo\SceneAdapter.cs" />
+        <Compile Include="$(ProjectsRoot)\Controls\DemoApp\Tree\Services\*.cs" Link="Demo\Services\%(Filename)%(Extension)" />
     </ItemGroup>
 
 </Project>

@@ -25,15 +25,12 @@ internal sealed partial class DomainModelService(ILoggerFactory? loggerFactory =
         errorMessage = null;
         switch (item)
         {
-            case SceneAdapter sceneAdapter when parent is ProjectAdapter projectAdapter:
-                {
-                    var scenes = projectAdapter.AttachedObject.Scenes;
-                    var idx = Math.Clamp(index, 0, scenes.Count);
-                    scenes.Insert(idx, sceneAdapter.AttachedObject);
-                    return true;
-                }
+            case SceneAdapter:
+                errorMessage = "The opened scene is the tree root and cannot be inserted under another item.";
+                return false;
 
             case EntityAdapter entityAdapter:
+                SynchronizeLoadedSubtree(entityAdapter);
                 switch (parent)
                 {
                     case SceneAdapter parentScene:
@@ -70,12 +67,9 @@ internal sealed partial class DomainModelService(ILoggerFactory? loggerFactory =
         errorMessage = null;
         switch (item)
         {
-            case SceneAdapter sceneAdapter when parent is ProjectAdapter projectAdapter:
-                {
-                    var project = projectAdapter.AttachedObject;
-                    _ = project.Scenes.Remove(sceneAdapter.AttachedObject);
-                    return true;
-                }
+            case SceneAdapter:
+                errorMessage = "The opened scene is the tree root and cannot be removed from its hierarchy.";
+                return false;
 
             case EntityAdapter entityAdapter:
                 {
@@ -150,6 +144,21 @@ internal sealed partial class DomainModelService(ILoggerFactory? loggerFactory =
 
             default:
                 return true; // renaming adapters without underlying domain object is a no-op for model
+        }
+    }
+
+    private static void SynchronizeLoadedSubtree(EntityAdapter adapter)
+    {
+        if (!adapter.TryGetLoadedChildren(out var children))
+        {
+            return;
+        }
+
+        adapter.AttachedObject.Entities.Clear();
+        foreach (var child in children.OfType<EntityAdapter>())
+        {
+            SynchronizeLoadedSubtree(child);
+            adapter.AttachedObject.Entities.Add(child.AttachedObject);
         }
     }
 }

@@ -18,7 +18,43 @@
                         Background="{Binding Path=Background, RelativeSource={RelativeSource Mode=TemplatedParent}}"
                         BorderBrush="{Binding Path=BorderBrush, RelativeSource={RelativeSource Mode=TemplatedParent}}"
                         BorderThickness="{Binding Path=BorderThickness, RelativeSource={RelativeSource Mode=TemplatedParent}}">
-                        <ScrollViewer>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Grid
+                            x:Name="PartFilterBar"
+                            Margin="0,0,0,4"
+                            Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <ContentPresenter
+                                VerticalAlignment="Stretch"
+                                VerticalContentAlignment="Stretch"
+                                Content="{TemplateBinding FilterBarAccessoryContent}" />
+                            <Grid Grid.Column="1">
+                                <TextBox
+                                    x:Name="PartFilterTextBox"
+                                    VerticalContentAlignment="Center"
+                                    AutomationProperties.Name="{TemplateBinding FilterBarPlaceholderText}"
+                                    PlaceholderText="{TemplateBinding FilterBarPlaceholderText}"
+                                    Text="{Binding Path=FilterText, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                <FontIcon
+                                    x:Name="PartFilterSearchIcon"
+                                    Margin="0,0,10,0"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    FontFamily="Segoe Fluent Icons"
+                                    FontSize="{ThemeResource ControlContentThemeFontSize}"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Glyph="&#xE721;"
+                                    IsHitTestVisible="False" />
+                            </Grid>
+                        </Grid>
+                        <ScrollViewer Grid.Row="1">
                             <ItemsRepeater x:Name="PartItemsRepeater" ItemsSource="{Binding Path=DisplayedItems, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}">
                                 <ItemsRepeater.ItemTemplate>
                                     <DataTemplate>

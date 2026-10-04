@@ -7,9 +7,9 @@ using Microsoft.Extensions.Logging;
 namespace DroidNet.Controls.Demo.Tree;
 
 /// <summary>
-///     Logging partial methods for <see cref="ProjectLayoutViewModel" />.
+///     Logging partial methods for <see cref="DynamicTreeDemoViewModel" />.
 /// </summary>
-public partial class ProjectLayoutViewModel
+public partial class DynamicTreeDemoViewModel
 {
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -19,15 +19,6 @@ public partial class ProjectLayoutViewModel
 
     private void LogItemAdded(string itemName)
         => LogItemAdded(this.logger, itemName);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Warning,
-        Message = "Scene add rejected. Parent is not a ProjectAdapter: {ParentType}")]
-    private static partial void LogSceneAddRejectedParentNotProject(ILogger logger, string parentType);
-
-    private void LogSceneAddRejectedParentNotProject(object? parent)
-        => LogSceneAddRejectedParentNotProject(this.logger, parent?.ToString() ?? "<null>");
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -64,15 +55,6 @@ public partial class ProjectLayoutViewModel
 
     private void LogRemoveRejectedOrphanItem(ITreeItem item)
         => LogRemoveRejectedOrphanItem(this.logger, item.Label);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Warning,
-        Message = "Remove rejected: Scene parent is not a ProjectAdapter: {ParentType}")]
-    private static partial void LogRemoveRejectedSceneParentNotProject(ILogger logger, string parentType);
-
-    private void LogRemoveRejectedSceneParentNotProject(object? parent)
-        => LogRemoveRejectedSceneParentNotProject(this.logger, parent?.ToString() ?? "<null>");
 
     [LoggerMessage(
         SkipEnabledCheck = true,

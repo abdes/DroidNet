@@ -8,7 +8,7 @@ namespace DroidNet.Controls.Tests.Tree;
 /// A <see cref="DynamicTree" /> item adapter for testing purposes.
 /// </summary>
 internal sealed partial class TestItemAdapter(TestTreeItem node, bool isRoot = false, bool isHidden = false)
-    : TreeItemAdapter(isRoot, isHidden)
+    : TreeItemAdapter(isRoot, isHidden), ICanBeCloned
 {
     /// <inheritdoc/>
     public override string Label
@@ -28,6 +28,14 @@ internal sealed partial class TestItemAdapter(TestTreeItem node, bool isRoot = f
 
     /// <inheritdoc/>
     public override bool ValidateItemName(string name) => !string.IsNullOrWhiteSpace(name);
+
+    /// <inheritdoc />
+    public ITreeItem CloneSelf()
+    {
+        var clone = new TestItemAdapter(new TestTreeItem { Label = node.Label });
+        this.CopyBasePropertiesTo(clone);
+        return clone;
+    }
 
     /// <inheritdoc/>
     protected override int DoGetChildrenCount() => node.Children.Count;

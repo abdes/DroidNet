@@ -90,7 +90,11 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem, ILo
 
         this.childrenLazy
             = new Lazy<Task<ReadOnlyObservableCollection<ITreeItem>>>(this.InitializeChildrenCollectionAsync);
-        this.children.CollectionChanged += (_, args) => this.ChildrenCollectionChanged?.Invoke(this, args);
+        this.children.CollectionChanged += (_, args) =>
+        {
+            this.OnPropertyChanged(nameof(this.ChildrenCount));
+            this.ChildrenCollectionChanged?.Invoke(this, args);
+        };
 
         this.Depth = isHidden ? -1 : 0;
     }

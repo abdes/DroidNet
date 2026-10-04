@@ -33,6 +33,7 @@ internal sealed partial class TreeDisplayHelper(
     private readonly Func<ITreeItem, Task> expandItemAsync = expandItemAsync;
     private readonly TreeDisplayEventCallbacks events = events;
     private readonly int maxDepth = maxDepth;
+    private readonly HashSet<ITreeItem> preapprovedInsertions = [];
 
     private SelectionModel<ITreeItem>? SelectionModel => this.selectionModelProvider();
 
@@ -47,36 +48,58 @@ internal sealed partial class TreeDisplayHelper(
     {
         this.LogInsertItemRequested(targetParent, relativeIndex, item);
 
-        if (!this.ApproveItemBeingAdded(targetParent, item))
+        if (!this.preapprovedInsertions.Remove(item) && !this.ApproveItemBeingAdded(targetParent, item))
         {
             return;
         }
 
-        // Clear selection first to avoid index invalidation during tree mutation
-        this.SelectionModel?.ClearSelection();
+        await this.InsertApprovedItemAsync(item, targetParent, relativeIndex).ConfigureAwait(true);
+    }
 
-        // Ensure target parent is expanded, for two things: to ensure its children collection is
-        // loaded, and to make the new item visible
-        await this.EnsureParentExpandedAsync(targetParent).ConfigureAwait(true);
-
-        // Note 1: that indices must be calculated before insertion.
-        // Note 2: the tree control does not react to changes to the children collection, so we must explicitly update the shown items after insertion.
-        relativeIndex = this.ClampRelativeIndex(targetParent, relativeIndex);
-        var treeInsertIndex = await this.FindShownInsertIndexAsync(targetParent, relativeIndex).ConfigureAwait(true);
-        await targetParent.InsertChildAsync(relativeIndex, item).ConfigureAwait(true);
-        this.shownItems.Insert(treeInsertIndex, item);
-
-        this.LogShownItemsInsert(treeInsertIndex, item);
-
-        // Select the newly added item
-        this.SelectionModel?.SelectItemAt(treeInsertIndex);
-
-        this.events.ItemAdded?.Invoke(new TreeItemAddedEventArgs
+    /// <summary>Approves all roots before dispatching insertions through the owner's virtual mutation API.</summary>
+    /// <param name="items">The detached roots to insert.</param>
+    /// <param name="targetParent">The destination parent.</param>
+    /// <param name="relativeIndex">The starting child index.</param>
+    /// <param name="insertItem">The owner's guarded insertion operation.</param>
+    /// <returns>True when every root was inserted.</returns>
+    public async Task<bool> InsertItemsAsync(IReadOnlyList<ITreeItem> items, ITreeItem targetParent, int relativeIndex, Func<ITreeItem, ITreeItem, int, Task> insertItem)
+    {
+        foreach (var item in items)
         {
-            Parent = targetParent,
-            TreeItem = item,
-            RelativeIndex = relativeIndex,
-        });
+            if (!this.ApproveItemBeingAdded(targetParent, item))
+            {
+                return false;
+            }
+        }
+
+        var selectedItems = this.shownItems.Where(static item => item.IsSelected).ToArray();
+        try
+        {
+            foreach (var item in items)
+            {
+                this.preapprovedInsertions.Add(item);
+                await insertItem(item, targetParent, relativeIndex++).ConfigureAwait(true);
+                if (!ReferenceEquals(item.Parent, targetParent))
+                {
+                    await this.RollbackInsertionsAsync(items, targetParent, selectedItems).ConfigureAwait(true);
+                    return false;
+                }
+            }
+        }
+        catch
+        {
+            await this.RollbackInsertionsAsync(items, targetParent, selectedItems).ConfigureAwait(true);
+            throw;
+        }
+        finally
+        {
+            foreach (var item in items)
+            {
+                _ = this.preapprovedInsertions.Remove(item);
+            }
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -210,14 +233,14 @@ internal sealed partial class TreeDisplayHelper(
     /// <param name="newParent">The target targetParent for the move.</param>
     /// <param name="startIndex">The index at which the first item should be inserted.</param>
     /// <returns>A task that completes when all items are moved.</returns>
-    public async Task MoveItemsAsync(IReadOnlyList<ITreeItem> items, ITreeItem newParent, int startIndex)
+    public async Task<TreeDropResult> MoveItemsAsync(IReadOnlyList<ITreeItem> items, ITreeItem newParent, int startIndex)
     {
         var planNullable = this.ValidateMoveRequest(items, newParent, startIndex);
         if (planNullable is null)
         {
             // Move vetoed by handler; return gracefully without any mutation.
             this.LogMoveRequestVetoed();
-            return;
+            return TreeDropResult.Rejected;
         }
 
         var plan = planNullable.Value;
@@ -236,6 +259,7 @@ internal sealed partial class TreeDisplayHelper(
 
         this.RestoreSelectionAfterMove(selectionSnapshot);
         this.events.ItemMoved?.Invoke(new TreeItemsMovedEventArgs { Moves = moves });
+        return TreeDropResult.Committed(plan.Items);
     }
 
     /// <summary>
@@ -269,7 +293,7 @@ internal sealed partial class TreeDisplayHelper(
             throw new InvalidOperationException("all items must share the same parent to reorder");
         }
 
-        await this.MoveItemsAsync(items, parent, startIndex).ConfigureAwait(true);
+        _ = await this.MoveItemsAsync(items, parent, startIndex).ConfigureAwait(true);
     }
 
     private static List<ITreeItem> FlattenMoveSet(IReadOnlyList<ITreeItem> items)
@@ -361,6 +385,51 @@ internal sealed partial class TreeDisplayHelper(
         var adjustment = originalIndices.Count(kvp => ReferenceEquals(kvp.Key.Parent, targetParent) && kvp.Value < startIndex);
         var adjusted = startIndex - adjustment;
         return adjusted < 0 ? 0 : adjusted;
+    }
+
+    private async Task InsertApprovedItemAsync(ITreeItem item, ITreeItem targetParent, int relativeIndex)
+    {
+        this.SelectionModel?.ClearSelection();
+        await this.EnsureParentExpandedAsync(targetParent).ConfigureAwait(true);
+        relativeIndex = this.ClampRelativeIndex(targetParent, relativeIndex);
+        var treeInsertIndex = await this.FindShownInsertIndexAsync(targetParent, relativeIndex).ConfigureAwait(true);
+        await targetParent.InsertChildAsync(relativeIndex, item).ConfigureAwait(true);
+        this.shownItems.Insert(treeInsertIndex, item);
+        this.LogShownItemsInsert(treeInsertIndex, item);
+        this.SelectionModel?.SelectItemAt(treeInsertIndex);
+        this.events.ItemAdded?.Invoke(new TreeItemAddedEventArgs
+        {
+            Parent = targetParent,
+            TreeItem = item,
+            RelativeIndex = relativeIndex,
+        });
+    }
+
+    private async Task RollbackInsertionsAsync(IReadOnlyList<ITreeItem> items, ITreeItem parent, IReadOnlyList<ITreeItem> selectedItems)
+    {
+        // Compensation undoes only roots inserted by this batch; it is not a new, vetoable delete request.
+        foreach (var item in items.Reverse())
+        {
+            if (!ReferenceEquals(item.Parent, parent))
+            {
+                continue;
+            }
+
+            _ = this.ExtractShownBlock(item);
+            var index = await parent.RemoveChildAsync(item).ConfigureAwait(true);
+            this.events.ItemRemoved?.Invoke(new TreeItemRemovedEventArgs
+            {
+                TreeItem = item,
+                Parent = parent,
+                RelativeIndex = index,
+            });
+        }
+
+        this.SelectionModel?.ClearSelection();
+        foreach (var selected in selectedItems)
+        {
+            this.SelectionModel?.SelectItem(selected);
+        }
     }
 
     private async Task EnsureParentExpandedAsync(ITreeItem parent)
@@ -466,7 +535,7 @@ internal sealed partial class TreeDisplayHelper(
         switch (selection)
         {
             case MultipleSelectionModel<ITreeItem> multipleSelection:
-                selectedItems = new List<ITreeItem>(multipleSelection.SelectedIndices.Count);
+                selectedItems = [with(multipleSelection.SelectedIndices.Count)];
                 foreach (var index in multipleSelection.SelectedIndices)
                 {
                     var item = this.GetShownItemAt(index);

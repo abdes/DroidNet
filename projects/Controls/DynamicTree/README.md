@@ -24,6 +24,14 @@ information.
 - Item Renaming: Supports in-place renaming UI and visual states for validation.
 - Thumbnails & Template Selectors: Per-item thumbnail area with
   `ThumbnailTemplateSelector` support.
+- Optional trailing row content through `TrailingContentTemplateSelector`, with
+  an optional aligned `TrailingContentWidth`; the selector and template are
+  consumer-owned and default to no reserved space.
+- Asynchronous owner hooks for inline rename and drop transactions, plus a
+  generic row `ItemContextRequested` event. The library does not infer domain
+  meaning or supply application-specific actions.
+- `TreeSelectionScope` keeps historical `ShownItems` interactions by default
+  and can opt into range/Select All over currently displayed (filtered) items.
 
 ## Installation
 
@@ -40,28 +48,28 @@ dotnet add package DroidNet.Controls.DynamicTree
 
 1. Import the control namespace in your XAML page:
 
-    ```xml
-    <Page
-        ...
-        xmlns:dnc="using:DroidNet.Controls"
-        ...>
-    ```
+   ```xml
+   <Page
+       ...
+       xmlns:dnc="using:DroidNet.Controls"
+       ...>
+   ```
 
 2. Add a `DynamicTree` to your layout and bind `ItemsSource` to the ViewModel's
    shown items. Provide an `ItemTemplate` that uses `DynamicTreeItem`:
 
-    ```xml
-    <dnc:DynamicTree x:Name="treeView"
-                    ItemsSource="{Binding ShownItems}"
-                    SelectionMode="Multiple"
-                    ThumbnailTemplateSelector="{StaticResource MyThumbnailSelector}">
-        <dnc:DynamicTree.ItemTemplate>
-            <DataTemplate x:DataType="local:TreeItemAdapter">
-                <dnc:DynamicTreeItem ItemAdapter="{Binding}" />
-            </DataTemplate>
-        </dnc:DynamicTree.ItemTemplate>
-    </dnc:DynamicTree>
-    ```
+   ```xml
+   <dnc:DynamicTree x:Name="treeView"
+                   ItemsSource="{Binding ShownItems}"
+                   SelectionMode="Multiple"
+                   ThumbnailTemplateSelector="{StaticResource MyThumbnailSelector}">
+       <dnc:DynamicTree.ItemTemplate>
+           <DataTemplate x:DataType="local:TreeItemAdapter">
+               <dnc:DynamicTreeItem ItemAdapter="{Binding}" />
+           </DataTemplate>
+       </dnc:DynamicTree.ItemTemplate>
+   </dnc:DynamicTree>
+   ```
 
 > **Notes:**
 >
@@ -185,6 +193,41 @@ Visual states (groups):
 Override the control template in XAML to change layout, icons, and animations.
 The control uses an `ItemsRepeater` internally and updates item margins based on
 item depth to provide indentation.
+
+The default item row measures content with a compact minimum height, allowing
+larger text or consumer-owned trailing content to grow the row. Set
+`DynamicTree.TrailingContentTemplateSelector` to a normal WinUI
+`DataTemplateSelector`; it receives the `ITreeItem` and supplies the trailing
+content template. Set `TrailingContentWidth` to a shared DIP width when sibling
+actions need alignment. A null selector collapses the slot and reserves no width;
+with a selector, its shared width can align rows whose selected template is empty.
+At width zero the column is content-measured. The control does not select or drag
+the row when trailing content is used, and keyboard navigation does not consume
+keys from that content.
+
+Applications that commit rename through a document/service override
+`DynamicTreeViewModel.CommitRenameAsync`. The row retains the draft until the
+owner returns `TreeItemRenameResult.Success`; a rejected result keeps the editor
+open and exposes its error as accessible tooltip text. The default implementation
+validates and sets `ITreeItem.Label` for simple standalone trees.
+
+Drag/drop distinguishes `Before`, `Inside`, and `After`. The default
+`DynamicTreeViewModel.CommitDropAsync` applies generic tree moves or duplicates
+without changing the user's clipboard. An application can override the hook to
+validate/commit its domain transaction and reconcile its projection; it must not
+add scene/domain policy to this library. `ItemContextRequested` reports the item,
+realized row anchor and optional pointer position; consumers choose whether and
+how to show a context menu.
+
+`SelectionScope.ShownItems` preserves existing behavior. Consumers may opt into
+`DisplayedItems` for pointer modifiers, Ctrl+A and Ctrl+Shift+I when a filtered
+projection is rendered. Range endpoints use displayed items; selection storage
+and tree mutation indices remain canonical ShownItems items.
+
+Consumers can tune row presentation without replacing the item template using
+`ItemRowHeight`, `ItemFontSize`, `ItemIconSize`, `ItemIconMargin`, and
+`ItemIndentWidth`. These are presentation properties only; the row height is a
+minimum so consumer templates can request more room when needed.
 
 ## Thumbnail Template Selector
 

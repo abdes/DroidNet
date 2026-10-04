@@ -116,46 +116,30 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
                 args =>
                 {
                     this.ItemBeingAdded?.Invoke(this, args);
-                    if (args.Proceed)
-                    {
-                        this.InvalidateClipboardDueToMutation();
-                    }
 
                     return args.Proceed;
                 },
-                args =>
-                {
-                    this.InvalidateClipboardDueToMutation();
-                    this.ItemAdded?.Invoke(this, args);
-                },
+                args => this.ItemAdded?.Invoke(this, args),
                 args =>
                 {
                     this.ItemBeingRemoved?.Invoke(this, args);
-                    if (args.Proceed)
-                    {
-                        this.InvalidateClipboardDueToMutation();
-                    }
 
                     return args.Proceed;
                 },
                 args =>
                 {
-                    this.InvalidateClipboardDueToMutation();
+                    this.InvalidateClipboardIfSourcesAffected([args.TreeItem]);
                     this.ItemRemoved?.Invoke(this, args);
                 },
                 args =>
                 {
                     this.ItemBeingMoved?.Invoke(this, args);
-                    if (args.Proceed)
-                    {
-                        this.InvalidateClipboardDueToMutation();
-                    }
 
                     return args.Proceed;
                 },
                 args =>
                 {
-                    this.InvalidateClipboardDueToMutation();
+                    this.InvalidateClipboardIfSourcesAffected(args.Moves.Select(static move => move.Item));
                     this.ItemMoved?.Invoke(this, args);
                 }),
             this.LoggerFactory);
@@ -289,6 +273,78 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// </remarks>
     public virtual async Task RemoveSelectedItems()
         => await this.DisplayHelper.RemoveSelectedItemsAsync().ConfigureAwait(true);
+
+    /// <summary>Commits a validated inline rename for a tree item.</summary>
+    /// <param name="item">The item captured when rename began.</param>
+    /// <param name="newName">The proposed label.</param>
+    /// <returns>Whether the rename was committed, with optional user-facing rejection text.</returns>
+    public virtual Task<TreeItemRenameResult> CommitRenameAsync(ITreeItem item, string newName)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(newName);
+        if (!this.IsShown(item))
+        {
+            return Task.FromResult(TreeItemRenameResult.Rejected("The item is no longer available in this tree."));
+        }
+
+        var normalizedName = newName.Trim();
+        if (!item.ValidateItemName(normalizedName))
+        {
+            return Task.FromResult(TreeItemRenameResult.Rejected("The name is not valid."));
+        }
+
+        if (!string.Equals(item.Label, normalizedName, StringComparison.Ordinal))
+        {
+            item.Label = normalizedName;
+        }
+
+        return Task.FromResult(TreeItemRenameResult.Success);
+    }
+
+    /// <summary>Commits a drag/drop intent and returns the resulting roots.</summary>
+    /// <remarks>
+    /// Override this method when the backing application must validate or commit domain state
+    /// before changing the tree projection. The base implementation provides ordinary tree move
+    /// and duplicate behavior for adapter-backed trees.
+    /// </remarks>
+    /// <param name="request">The stable source identities and resolved destination.</param>
+    /// <returns>The resulting items, or a rejected result when the request is no longer valid.</returns>
+    public virtual async Task<TreeDropResult> CommitDropAsync(TreeDropRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.Items.Count == 0 || request.Items.Any(item => !this.IsShown(item) || item.IsLocked)
+            || !this.IsShown(request.Parent) || !request.Parent.CanAcceptChildren || (request.Parent.IsLocked && !request.Parent.IsRoot))
+        {
+            return TreeDropResult.Rejected;
+        }
+
+        if (request.Operation == TreeDropOperation.Copy)
+        {
+            var copies = await this.DuplicateItemsAsync(request.Items, request.Parent, request.Index).ConfigureAwait(true);
+            return copies.Count == 0 ? TreeDropResult.Rejected : TreeDropResult.Committed(copies);
+        }
+
+        var result = TreeDropResult.Rejected;
+        void OnMoved(object? sender, TreeItemsMovedEventArgs args)
+        {
+            if (args.Moves.All(move => request.Items.Contains(move.Item)))
+            {
+                result = TreeDropResult.Committed([.. args.Moves.Select(static move => move.Item)]);
+            }
+        }
+
+        this.ItemMoved += OnMoved;
+        try
+        {
+            await this.MoveItemsAsync(request.Items, request.Parent, request.Index).ConfigureAwait(true);
+        }
+        finally
+        {
+            this.ItemMoved -= OnMoved;
+        }
+
+        return result;
+    }
 
     /// <summary>
     ///     Moves an item to a different parent and position within the tree asynchronously.
@@ -849,7 +905,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         foreach (var child in await parent.Children.ConfigureAwait(true))
         {
             this.LogShownItemsInsert(insertIndex, child);
-            this.shownItems.Insert(insertIndex, (TreeItemAdapter)child);
+            this.shownItems.Insert(insertIndex, child);
             ++insertIndex;
 
             if (child.IsExpanded)
@@ -873,7 +929,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     private async Task HideChildrenAsync(ITreeItem itemAdapter)
     {
         this.LogHideChildrenStarted(itemAdapter);
-        var removeIndex = this.shownItems.IndexOf((TreeItemAdapter)itemAdapter) + 1;
+        var removeIndex = this.shownItems.IndexOf(itemAdapter) + 1;
         Debug.Assert(removeIndex != -1, $"expecting item {itemAdapter.Label} to be in the shown list");
 
         await this.HideChildrenRecursiveAsync(itemAdapter).ConfigureAwait(true);

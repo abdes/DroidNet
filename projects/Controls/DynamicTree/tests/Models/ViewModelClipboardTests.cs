@@ -9,6 +9,7 @@ namespace DroidNet.Controls.Tests;
 
 [TestClass]
 [TestCategory("DynamicTree / ViewModel / Clipboard")]
+[OSCondition(OperatingSystems.Windows)]
 public class ViewModelClipboardTests : ViewModelTestBase
 {
     [TestMethod]
@@ -144,7 +145,7 @@ public class ViewModelClipboardTests : ViewModelTestBase
     }
 
     [TestMethod]
-    public async Task Clipboard_AnyMutation_InvalidatesClipboard()
+    public async Task Clipboard_UnrelatedInsertion_PreservesCopiedSources()
     {
         // Arrange
         var source = new TestTreeItemAdapter { Label = "Source" };
@@ -162,13 +163,13 @@ public class ViewModelClipboardTests : ViewModelTestBase
         await viewModel.InsertItemAsync(newItem, root, 0).ConfigureAwait(false);
 
         // Assert
-        _ = viewModel.IsClipboardValid.Should().BeFalse();
+        _ = viewModel.IsClipboardValid.Should().BeTrue();
         _ = viewModel.CurrentClipboardState.Should().Be(ClipboardState.Copied);
-        _ = changes.Should().BeGreaterThanOrEqualTo(1);
+        _ = changes.Should().Be(0);
     }
 
     [TestMethod]
-    public async Task Clipboard_Mutation_ClearsCutMarks()
+    public async Task Clipboard_UnrelatedInsertion_PreservesCutMarks()
     {
         // Arrange
         var cutItem = new TestTreeItemAdapter { Label = "Cut", IsExpanded = true };
@@ -182,14 +183,14 @@ public class ViewModelClipboardTests : ViewModelTestBase
         await viewModel.CutItemsAsync([cutItem]).ConfigureAwait(false);
         _ = cutItem.IsCut.Should().BeTrue();
 
-        // Act: mutate tree to invalidate clipboard
+        // Act: insert an unrelated item without changing the cut source
         var newItem = new TestTreeItemAdapter { Label = "New" };
         await viewModel.InsertItemAsync(newItem, root, 0).ConfigureAwait(false);
 
-        // Assert: clipboard invalidated and cut visual cleared
-        _ = viewModel.IsClipboardValid.Should().BeFalse();
+        // Assert: the staged source is still usable and marked as cut
+        _ = viewModel.IsClipboardValid.Should().BeTrue();
         _ = viewModel.CurrentClipboardState.Should().Be(ClipboardState.Cut);
-        _ = cutItem.IsCut.Should().BeFalse();
+        _ = cutItem.IsCut.Should().BeTrue();
     }
 
     [TestMethod]

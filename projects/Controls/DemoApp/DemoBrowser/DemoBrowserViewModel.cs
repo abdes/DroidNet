@@ -63,7 +63,7 @@ public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTex
         new("vectorbox", "VectorBox", typeof(VectorBoxDemoViewModel)),
         new("output-log", "Output Log", typeof(OutputLogDemoViewModel)),
         new("output-console", "Output Console", typeof(OutputConsoleDemoViewModel)),
-        new("dynamic-tree", "Dynamic Tree", typeof(ProjectLayoutViewModel)),
+        new("dynamic-tree", "Dynamic Tree", typeof(DynamicTreeDemoViewModel)),
         new("menubar", "MenuBar Demo", typeof(MenuBarDemoViewModel)),
         new("menuflyout", "MenuFlyout Demo", typeof(MenuFlyoutDemoViewModel)),
         new("menuitem", "MenuItem Demo", typeof(MenuItemDemoViewModel)),

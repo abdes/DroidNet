@@ -5,6 +5,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
@@ -22,9 +23,13 @@ public partial class DynamicTreeItem
     private bool isContextMenuOpen;
     private ContentPresenter? itemContentPart;
     private TextBlock? itemNameTextBlock;
+    private FontIcon? itemNameErrorGlyph;
     private TextBox? itemNameTextBox;
     private bool newNameIsValid;
+    private bool renameCommitInProgress;
+    private ITreeItem? renameTarget;
     private string? oldItemName;
+    private long renameGeneration;
 
     /// <summary>
     ///     Starts in-place renaming for this tree item.
@@ -32,13 +37,20 @@ public partial class DynamicTreeItem
     /// <returns><see langword="true"/> if rename UI was opened; otherwise <see langword="false"/>.</returns>
     public bool BeginRename()
     {
-        if (this.itemNameTextBlock is null || this.itemNameTextBox is null)
+        this.UpdateAncestorReference();
+        if (this.itemNameTextBlock is null || this.itemNameTextBox is null || this.ItemAdapter is null || this.renameTarget is not null)
         {
             return false;
         }
 
         this.itemNameTextBox.Text = this.ItemAdapter?.Label ?? string.Empty;
-        this.oldItemName = this.ItemAdapter?.Label;
+        this.renameTarget = this.ItemAdapter;
+        this.renameGeneration++;
+        this.oldItemName = this.renameTarget?.Label;
+        this.newNameIsValid = this.renameTarget?.ValidateItemName(this.itemNameTextBox.Text) == true;
+        this.renameCommitInProgress = false;
+        this.SetRenameError(message: null);
+        _ = VisualStateManager.GoToState(this, this.newNameIsValid ? NameIsValidVisualState : NameIsInvalidVisualState, useTransitions: false);
         this.itemNameTextBlock.Visibility = Visibility.Collapsed;
         this.itemNameTextBox.Visibility = Visibility.Visible;
         this.itemNameTextBox.SelectAll();
@@ -61,8 +73,90 @@ public partial class DynamicTreeItem
         return true;
     }
 
+    /// <summary>Commits the current draft and ignores completions belonging to an ended rename session.</summary>
+    /// <returns>A task that completes when the commit operation finishes.</returns>
+    internal async Task CommitRenameDraftAsync()
+    {
+        Debug.Assert(
+            this.itemNameTextBox is not null,
+            "event handler should not be setup if parts are missing");
+
+        if (this.renameCommitInProgress || this.renameTarget is not { } target)
+        {
+            return;
+        }
+
+        this.renameCommitInProgress = true;
+        var generation = this.renameGeneration;
+        var editor = this.itemNameTextBox;
+        editor.IsReadOnly = true;
+
+        try
+        {
+            var trimmed = this.itemNameTextBox.Text.Trim();
+            var result = this.treeControl is { } tree
+                ? await tree.CommitRenameAsync(target, trimmed).ConfigureAwait(true)
+                : await CommitDirectlyAsync(target, trimmed).ConfigureAwait(true);
+
+            if (generation != this.renameGeneration || !ReferenceEquals(this.renameTarget, target)
+                || !ReferenceEquals(this.itemNameTextBox, editor))
+            {
+                return;
+            }
+
+            if (result.Succeeded)
+            {
+                this.EndRename();
+            }
+            else
+            {
+                this.ShowRenameError(editor, result.ErrorMessage);
+            }
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+        {
+            if (generation != this.renameGeneration || !ReferenceEquals(this.renameTarget, target)
+                || !ReferenceEquals(this.itemNameTextBox, editor))
+            {
+                return;
+            }
+
+            this.ShowRenameError(editor, exception.Message);
+        }
+    }
+
+    private static Task<TreeItemRenameResult> CommitDirectlyAsync(ITreeItem item, string name)
+    {
+        if (!item.ValidateItemName(name))
+        {
+            return Task.FromResult(TreeItemRenameResult.Rejected("The name is not valid."));
+        }
+
+        item.Label = name;
+        return Task.FromResult(TreeItemRenameResult.Success);
+    }
+
+    private void ShowRenameError(TextBox editor, string? message)
+    {
+        this.renameCommitInProgress = false;
+        editor.IsReadOnly = false;
+        this.SetRenameError(message);
+        if (this.inPlaceRenamePart is { } popup)
+        {
+            popup.IsOpen = true;
+        }
+
+        _ = VisualStateManager.GoToState(this, NameIsInvalidVisualState, useTransitions: true);
+        _ = editor.Focus(FocusState.Programmatic);
+    }
+
     private void SetupItemNameParts()
     {
+        if (this.renameTarget is not null)
+        {
+            this.CancelRename();
+        }
+
         this.itemNameTextBlock?.DoubleTapped -= this.StartRenameItem;
 
         this.itemContentPart = this.GetTemplateChild(ContentPresenterPart) as ContentPresenter;
@@ -74,9 +168,16 @@ public partial class DynamicTreeItem
         this.inPlaceRenamePart = this.GetTemplateChild(InPlaceRenamePart) as Popup;
         this.itemNameTextBlock = this.GetTemplateChild(ItemNamePart) as TextBlock;
         this.itemNameTextBox = this.GetTemplateChild(ItemNameEditPart) as TextBox;
+        this.itemNameErrorGlyph = this.GetTemplateChild(ItemNameErrorPart) as FontIcon;
         if (this.itemNameTextBlock is not null && this.itemNameTextBox is not null)
         {
             this.itemNameTextBlock.DoubleTapped += this.StartRenameItem;
+            this.itemNameTextBlock.SetBinding(TextBlock.TextProperty, new Microsoft.UI.Xaml.Data.Binding
+            {
+                Source = this.ItemAdapter,
+                Path = new PropertyPath(this.ItemAdapter is TreeItemAdapter ? nameof(TreeItemAdapter.DisplayLabel) : nameof(ITreeItem.Label)),
+                Mode = Microsoft.UI.Xaml.Data.BindingMode.OneWay,
+            });
         }
     }
 
@@ -103,28 +204,7 @@ public partial class DynamicTreeItem
         "Design",
         "CA1031:Do not catch general exception types",
         Justification = "the visual state is used to indicate whether the label is valid or not")]
-    private void TryCommitRename()
-    {
-        Debug.Assert(
-            this.itemNameTextBox is not null,
-            "event handler should not be setup if parts are missing");
-
-        // Update the TreeItemAdapter model object, which could validate the new name and
-        // eventually reject it.
-        try
-        {
-            this.ItemAdapter!.Label = this.itemNameTextBox.Text.Trim();
-            this.EndRename();
-        }
-        catch
-        {
-            var success = VisualStateManager.GoToState(this, "Invalid", useTransitions: true);
-            if (!success)
-            {
-                this.CancelRename();
-            }
-        }
-    }
+    private async void TryCommitRename() => await this.CommitRenameDraftAsync().ConfigureAwait(true);
 
     private void StartRenameItem(object sender, DoubleTappedRoutedEventArgs e)
     {
@@ -136,6 +216,7 @@ public partial class DynamicTreeItem
 
     private void EndRename()
     {
+        this.renameGeneration++;
         Debug.Assert(
             this.itemNameTextBlock is not null && this.itemNameTextBox is not null,
             "event handler should not be setup if parts are missing");
@@ -146,6 +227,11 @@ public partial class DynamicTreeItem
         this.itemNameTextBox.KeyDown -= this.RenameTextBox_KeyDown;
         this.itemNameTextBox.GotFocus -= this.RenameTextBox_GotFocus;
         this.itemNameTextBox.ContextMenuOpening -= this.RenameTextBox_ContextMenuOpening;
+        this.renameTarget = null;
+        this.renameCommitInProgress = false;
+        this.itemNameTextBox.IsReadOnly = false;
+        this.SetRenameError(message: null);
+        _ = VisualStateManager.GoToState(this, NameIsValidVisualState, useTransitions: false);
 
         this.itemNameTextBox.Visibility = Visibility.Collapsed;
         this.itemNameTextBlock.Visibility = Visibility.Visible;
@@ -165,6 +251,7 @@ public partial class DynamicTreeItem
     {
         this.itemNameTextBox!.Text = this.oldItemName;
         this.EndRename();
+        this.SetRenameError(message: null);
         _ = VisualStateManager.GoToState(this, NameIsValidVisualState, useTransitions: true);
     }
 
@@ -173,7 +260,8 @@ public partial class DynamicTreeItem
         _ = sender; // unused
         _ = args; // unused
 
-        this.newNameIsValid = this.ItemAdapter!.ValidateItemName(this.itemNameTextBox!.Text);
+        this.newNameIsValid = this.renameTarget?.ValidateItemName(this.itemNameTextBox!.Text.Trim()) == true;
+        this.SetRenameError(this.newNameIsValid ? null : "The name is not valid.");
         _ = VisualStateManager.GoToState(
             this,
             this.newNameIsValid ? NameIsValidVisualState : NameIsInvalidVisualState,
@@ -197,7 +285,6 @@ public partial class DynamicTreeItem
             case VirtualKey.Enter:
                 if (this.newNameIsValid)
                 {
-                    textBox.LostFocus -= this.RenameTextBox_LostFocus;
                     this.TryCommitRename();
                     e.Handled = true;
                 }
@@ -233,4 +320,13 @@ public partial class DynamicTreeItem
         => this.isContextMenuOpen = true;
 
     private void RenameTextBox_GotFocus(object sender, RoutedEventArgs e) => this.isContextMenuOpen = false;
+
+    private void SetRenameError(string? message)
+    {
+        if (this.itemNameErrorGlyph is { } errorGlyph)
+        {
+            ToolTipService.SetToolTip(errorGlyph, message);
+            AutomationProperties.SetName(errorGlyph, string.IsNullOrWhiteSpace(message) ? string.Empty : message);
+        }
+    }
 }

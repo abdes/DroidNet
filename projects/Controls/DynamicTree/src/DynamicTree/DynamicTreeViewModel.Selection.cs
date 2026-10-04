@@ -16,6 +16,8 @@ namespace DroidNet.Controls;
 /// </summary>
 public abstract partial class DynamicTreeViewModel
 {
+    private ITreeItem? displayedSelectionAnchor;
+
     /// <summary>
     ///     Gets or sets the selection mode for the tree view.
     /// </summary>
@@ -40,11 +42,137 @@ public abstract partial class DynamicTreeViewModel
     /// </summary>
     protected SelectionModel<ITreeItem>? SelectionModel { get; private set; }
 
-    /// <summary>
-    ///     Called when the selection model changes. Sunchronized the selection
-    ///     model with the shown items and their selection state.
-    /// </summary>
-    /// <param name="oldValue">The old selection model.</param>
+    /// <summary>Selects an item using a caller-supplied visible range while storing canonical shown-item selection.</summary>
+    /// <param name="item">The target item.</param>
+    /// <param name="displayedItems">The current rendered item order.</param>
+    /// <param name="isControlDown">Whether selection should be additive/toggle.</param>
+    /// <param name="isShiftDown">Whether to select the displayed range from the prior anchor.</param>
+    public void SelectDisplayedItem(ITreeItem item, IReadOnlyList<ITreeItem> displayedItems, bool isControlDown, bool isShiftDown)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(displayedItems);
+        if (this.SelectionMode == SelectionMode.None || !this.shownItems.Contains(item) || !displayedItems.Contains(item))
+        {
+            return;
+        }
+
+        if (this.SelectionMode == SelectionMode.Single)
+        {
+            this.SelectionModel?.ClearAndSelectItem(item);
+            this.displayedSelectionAnchor = item;
+            return;
+        }
+
+        var selection = this.SelectionModel;
+        if (selection is null)
+        {
+            return;
+        }
+
+        if (isShiftDown)
+        {
+            var anchor = this.displayedSelectionAnchor is { } currentAnchor && displayedItems.Contains(currentAnchor)
+                ? currentAnchor
+                : selection.SelectedItem is { } selected && displayedItems.Contains(selected) ? selected : item;
+            var first = FindDisplayedIndex(displayedItems, anchor);
+            var last = FindDisplayedIndex(displayedItems, item);
+            if (!isControlDown)
+            {
+                selection.ClearSelection();
+            }
+
+            for (var index = Math.Min(first, last); index <= Math.Max(first, last); index++)
+            {
+                selection.SelectItem(displayedItems[index]);
+            }
+
+            this.displayedSelectionAnchor = anchor;
+            return;
+        }
+
+        if (isControlDown)
+        {
+            if (item.IsSelected)
+            {
+                selection.ClearSelection(item);
+            }
+            else
+            {
+                selection.SelectItem(item);
+            }
+        }
+        else
+        {
+            selection.ClearAndSelectItem(item);
+        }
+
+        this.displayedSelectionAnchor = item;
+
+        static int FindDisplayedIndex(IReadOnlyList<ITreeItem> items, ITreeItem target)
+        {
+            for (var index = 0; index < items.Count; index++)
+            {
+                if (ReferenceEquals(items[index], target))
+                {
+                    return index;
+                }
+            }
+
+            return -1;
+        }
+    }
+
+    /// <summary>Toggles selection of the items currently displayed by the control.</summary>
+    /// <param name="displayedItems">The current rendered item order.</param>
+    public void ToggleDisplayedSelection(IReadOnlyList<ITreeItem> displayedItems)
+    {
+        ArgumentNullException.ThrowIfNull(displayedItems);
+        if (this.SelectionMode != SelectionMode.Multiple || this.SelectionModel is not { } selection)
+        {
+            return;
+        }
+
+        if (displayedItems.Count > 0 && displayedItems.All(static item => item.IsSelected))
+        {
+            foreach (var item in displayedItems)
+            {
+                selection.ClearSelection(item);
+            }
+
+            return;
+        }
+
+        foreach (var item in displayedItems.Where(this.shownItems.Contains))
+        {
+            selection.SelectItem(item);
+        }
+    }
+
+    /// <summary>Inverts selection only among the items currently displayed by the control.</summary>
+    /// <param name="displayedItems">The current rendered item order.</param>
+    public void InvertDisplayedSelection(IReadOnlyList<ITreeItem> displayedItems)
+    {
+        ArgumentNullException.ThrowIfNull(displayedItems);
+        if (this.SelectionMode != SelectionMode.Multiple || this.SelectionModel is not { } selection)
+        {
+            return;
+        }
+
+        foreach (var item in displayedItems.Where(this.shownItems.Contains))
+        {
+            if (item.IsSelected)
+            {
+                selection.ClearSelection(item);
+            }
+            else
+            {
+                selection.SelectItem(item);
+            }
+        }
+    }
+
+    /// <summary>Synchronizes the replacement selection model with the shown items.</summary>
+    /// <param name="oldValue">The previous selection model.</param>
     protected virtual void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue) =>
         this.SyncSelectionModelWithItems();
 
@@ -299,7 +427,7 @@ public abstract partial class DynamicTreeViewModel
         protected override int GetItemCount() => this.model.ShownItemsCount;
 
         /// <inheritdoc />
-        protected override int IndexOf(ITreeItem item) => this.model.ShownIndexOf((TreeItemAdapter)item);
+        protected override int IndexOf(ITreeItem item) => this.model.ShownIndexOf(item);
     }
 
     /// <summary>
@@ -320,6 +448,6 @@ public abstract partial class DynamicTreeViewModel
         protected override int GetItemCount() => model.ShownItemsCount;
 
         /// <inheritdoc />
-        protected override int IndexOf(ITreeItem item) => model.ShownIndexOf((TreeItemAdapter)item);
+        protected override int IndexOf(ITreeItem item) => model.ShownIndexOf(item);
     }
 }

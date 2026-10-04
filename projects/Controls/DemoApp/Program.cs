@@ -168,8 +168,8 @@ public static partial class Program
         container.Register<OutputLogDemoViewModel>(Reuse.Transient);
         container.Register<OutputConsoleDemoView>(Reuse.Transient);
         container.Register<OutputConsoleDemoViewModel>(Reuse.Singleton);
-        container.Register<ProjectLayoutView>(Reuse.Transient);
-        container.Register<ProjectLayoutViewModel>(Reuse.Transient);
+        container.Register<DynamicTreeDemoView>(Reuse.Transient);
+        container.Register<DynamicTreeDemoViewModel>(Reuse.Transient);
         container.Register<InPlaceEditDemoView>(Reuse.Transient);
         container.Register<InPlaceEditDemoViewModel>(Reuse.Transient);
         container.Register<NumberBoxDemoView>(Reuse.Transient);
@@ -236,7 +236,7 @@ public static partial class Program
                         new Route()
                         {
                             Path = "dynamic-tree",
-                            ViewModelType = typeof(ProjectLayoutViewModel),
+                            ViewModelType = typeof(DynamicTreeDemoViewModel),
                         },
                         new Route()
                         {

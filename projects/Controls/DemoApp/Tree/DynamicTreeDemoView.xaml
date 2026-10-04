@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <Page
-    x:Class="DroidNet.Controls.Demo.Tree.ProjectLayoutView"
+    x:Class="DroidNet.Controls.Demo.Tree.DynamicTreeDemoView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:cm="using:DroidNet.Controls.Menus"
@@ -9,14 +9,48 @@
     xmlns:ctkConverters="using:CommunityToolkit.WinUI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dnc="using:DroidNet.Controls"
+    xmlns:local="using:DroidNet.Controls.Demo.Tree"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:tm="using:DroidNet.TimeMachine.Changes"
     KeyboardAcceleratorPlacementMode="Hidden"
-    Loaded="ProjectLayoutView_OnLoaded"
+    Loaded="DynamicTreeDemoView_OnLoaded"
     mc:Ignorable="d">
     <Page.Resources>
-        <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
-        <ctkConverters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/DynamicTree/FilterBarStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
+            <ctkConverters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+            <local:LockStateToGlyphConverter x:Key="LockStateToGlyphConverter" />
+            <local:LockStateToActionConverter x:Key="LockStateToActionConverter" />
+
+            <DataTemplate x:Key="TreeEntityActionTemplate" x:DataType="dnc:TreeItemAdapter">
+                <Button
+                    Width="40"
+                    MinWidth="40"
+                    MinHeight="24"
+                    Margin="0,2"
+                    Padding="0"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    HorizontalContentAlignment="Center"
+                    VerticalContentAlignment="Center"
+                    AutomationProperties.Name="{x:Bind IsLocked, Mode=OneWay, Converter={StaticResource LockStateToActionConverter}}"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    CanDrag="False"
+                    Click="EntityLockButton_OnClick">
+                    <FontIcon
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        FontFamily="Segoe Fluent Icons"
+                        FontSize="16"
+                        Glyph="{x:Bind IsLocked, Mode=OneWay, Converter={StaticResource LockStateToGlyphConverter}}" />
+                </Button>
+            </DataTemplate>
+            <local:TreeItemTrailingContentSelector x:Key="TreeItemTrailingContentSelector" EntityActionTemplate="{StaticResource TreeEntityActionTemplate}" />
+        </ResourceDictionary>
     </Page.Resources>
 
     <Page.KeyboardAccelerators>
@@ -31,10 +65,17 @@
         <KeyboardAccelerator Key="Delete" Invoked="DeleteInvoked" />
     </Page.KeyboardAccelerators>
 
-    <Grid Padding="4" HorizontalAlignment="Left">
+    <Grid
+        x:Name="LayoutRootGrid"
+        Padding="8"
+        ColumnSpacing="8"
+        SizeChanged="LayoutRootGrid_OnSizeChanged">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="400" />
-            <ColumnDefinition Width="*" />
+            <ColumnDefinition
+                x:Name="TreePanelColumn"
+                Width="4*"
+                MinWidth="0" />
+            <ColumnDefinition x:Name="HistoryPanelColumn" Width="*" />
         </Grid.ColumnDefinitions>
         <!--  Add Error row at the top, then the content and toolbar below  -->
         <Grid.RowDefinitions>
@@ -86,7 +127,7 @@
                 </dnc:ToolBarButton>
             </Grid>
         </Border>
-        <Grid Grid.Row="2">
+        <Grid x:Name="TreeToolbarGrid" Grid.Row="2">
             <Grid.Resources>
                 <Style TargetType="AppBarButton">
                     <Setter Property="Width" Value="40" />
@@ -98,14 +139,15 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition x:Name="ToolbarSpacerColumn" Width="3*" />
+                <ColumnDefinition x:Name="ToolbarItemsColumn" Width="2*" />
             </Grid.ColumnDefinitions>
             <dnc:ToolBar
+                x:Name="TreeToolbar"
                 Grid.Column="1"
+                HorizontalAlignment="Stretch"
                 DefaultLabelPosition="Collapsed"
-                IsCompact="False"
-                OverflowButtonVisibility="Collapsed">
+                IsCompact="False">
                 <dnc:ToolBar.PrimaryItems>
                     <dnc:ToolBarButton Command="{x:Bind ViewModel.CutCommand}" Label="Cut">
                         <dnc:ToolBarButton.Icon>
@@ -142,12 +184,6 @@
 
                     <dnc:ToolBarSeparator />
 
-                    <dnc:ToolBarButton Command="{x:Bind ViewModel.AddSceneCommand}" Label="Add Scene">
-                        <dnc:ToolBarButton.Icon>
-                            <SymbolIconSource Symbol="Add" />
-                        </dnc:ToolBarButton.Icon>
-                    </dnc:ToolBarButton>
-
                     <dnc:ToolBarButton Command="{x:Bind ViewModel.AddEntityCommand}" Label="Add Entity">
                         <dnc:ToolBarButton.Icon>
                             <FontIconSource Glyph="&#xECC8;" />
@@ -171,54 +207,36 @@
             </dnc:ToolBar>
             <!--  toolbar grid doesn't show the error; error is now at the top row  -->
         </Grid>
-        <!--  Main content: filter toolbar + tree in left column  -->
+        <!--  Main content: presentation options and tree in left column  -->
         <Grid Grid.Row="1" Grid.Column="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!--  Filter row: menu button + text filter (stretch) + reset  -->
             <Grid
                 Grid.Row="0"
-                Padding="4"
-                VerticalAlignment="Center"
+                Margin="4,0,4,4"
                 ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-
-                <cm:MenuButton
-                    Grid.Column="0"
-                    Padding="6"
-                    Chrome="Transparent"
-                    CornerRadius="4"
-                    MenuSource="{x:Bind ViewModel.FilterMenu, Mode=OneWay}"
-                    ToolTipService.ToolTip="Filter">
-                    <FontIcon
-                        VerticalAlignment="Center"
-                        FontFamily="Segoe Fluent Icons"
-                        FontSize="16"
-                        Glyph="&#xE71C;" />
-                </cm:MenuButton>
-
-                <TextBox
+                <TextBlock
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Text="The opened scene is the root; scene switching belongs in the Content Browser."
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="NoWrap"
+                    ToolTipService.ToolTip="The opened scene is the root; scene switching belongs in the Content Browser." />
+                <ToggleButton
+                    x:Name="TreeDensityToggle"
                     Grid.Column="1"
-                    HorizontalAlignment="Stretch"
-                    PlaceholderText="Filter by label"
-                    Text="{x:Bind ViewModel.LabelFilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-
-                <dnc:ToolBarButton
-                    Grid.Column="2"
-                    Command="{x:Bind ViewModel.ClearLabelFilterCommand}"
-                    ToolBarLabelPosition="Collapsed"
-                    ToolTipService.ToolTip="Reset filter">
-                    <dnc:ToolBarButton.Icon>
-                        <SymbolIconSource Symbol="Cancel" />
-                    </dnc:ToolBarButton.Icon>
-                </dnc:ToolBarButton>
+                    MinWidth="128"
+                    MinHeight="32"
+                    Click="TreeDensityToggle_OnClick"
+                    Content="Compact rows" />
             </Grid>
 
             <Border
@@ -228,28 +246,67 @@
                 BorderThickness="1"
                 CornerRadius="3">
                 <dnc:DynamicTree
+                    x:Name="SceneTree"
+                    FilterBarInputStyle="{StaticResource FilterBarInputStyle}"
+                    FilterBarPlaceholderText="Filter by label"
+                    FilterText="{x:Bind ViewModel.LabelFilterText, Mode=TwoWay}"
+                    IsFilterBarEnabled="True"
                     IsFilteringEnabled="True"
+                    ItemFontSize="14"
+                    ItemIconMargin="4,0"
+                    ItemIconSize="24"
+                    ItemIndentWidth="34"
+                    ItemRowHeight="40"
                     ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
-                    ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
+                    TrailingContentTemplateSelector="{StaticResource TreeItemTrailingContentSelector}"
+                    TrailingContentWidth="64"
+                    ViewModel="{x:Bind ViewModel, Mode=OneWay}">
+                    <dnc:DynamicTree.FilterBarAccessoryContent>
+                        <cm:MenuButton
+                            x:Name="FilterMenuButton"
+                            Margin="0,0,4,0"
+                            AutomationProperties.Name="Filter types"
+                            CornerRadius="4"
+                            MenuSource="{x:Bind ViewModel.FilterMenu, Mode=OneWay}"
+                            Style="{StaticResource FilterBarButtonStyle}"
+                            ToolTipService.ToolTip="Filter types">
+                            <FontIcon
+                                FontFamily="Segoe Fluent Icons"
+                                FontSize="{ThemeResource ControlContentThemeFontSize}"
+                                Glyph="&#xE71C;" />
+                        </cm:MenuButton>
+                    </dnc:DynamicTree.FilterBarAccessoryContent>
+                </dnc:DynamicTree>
             </Border>
         </Grid>
-        <StackPanel
+        <Expander
+            x:Name="HistoryPanel"
             Grid.Row="1"
             Grid.Column="1"
-            Width="300"
-            Padding="32,10"
-            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1">
-            <ItemsRepeater ItemsSource="{x:Bind ViewModel.UndoStack, Mode=OneWay}">
-                <DataTemplate x:DataType="tm:IChange">
-                    <TextBlock Text="{x:Bind Key}" />
-                </DataTemplate>
-            </ItemsRepeater>
-            <ItemsRepeater ItemsSource="{x:Bind ViewModel.RedoStack, Mode=OneWay}">
-                <DataTemplate x:DataType="tm:IChange">
-                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Key}" />
-                </DataTemplate>
-            </ItemsRepeater>
-        </StackPanel>
+            Header="Change history"
+            IsExpanded="False">
+            <StackPanel Padding="12">
+                <TextBlock
+                    Margin="0,0,0,4"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Text="Undo" />
+                <ItemsRepeater ItemsSource="{x:Bind ViewModel.UndoStack, Mode=OneWay}">
+                    <DataTemplate x:DataType="tm:IChange">
+                        <TextBlock Text="{x:Bind Key}" />
+                    </DataTemplate>
+                </ItemsRepeater>
+                <TextBlock
+                    Margin="0,8,0,4"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Text="Redo" />
+                <ItemsRepeater ItemsSource="{x:Bind ViewModel.RedoStack, Mode=OneWay}">
+                    <DataTemplate x:DataType="tm:IChange">
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Key}" />
+                    </DataTemplate>
+                </ItemsRepeater>
+            </StackPanel>
+        </Expander>
     </Grid>
 </Page>

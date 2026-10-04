@@ -47,9 +47,13 @@
             <Setter.Value>
                 <ControlTemplate TargetType="local:DynamicTreeItem">
                     <Grid x:Name="PartRootGrid">
-                        <Grid x:Name="PartContentGrid">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="0" />
+                        </Grid.ColumnDefinitions>
+                        <Grid x:Name="PartContentGrid" MinHeight="{Binding ItemRowHeight, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}">
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="30" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -57,17 +61,19 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <Border
-                                Width="{StaticResource CellContentWidth}"
-                                Height="{StaticResource CellContentHeight}"
-                                Margin="{StaticResource DynamicTreeColumnMargin}"
+                                Width="{Binding ItemIconSize, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
+                                Height="{Binding ItemIconSize, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
+                                Margin="{Binding ItemIconMargin, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
+                                VerticalAlignment="Center"
                                 BorderThickness="0">
                                 <local:Expander Name="PartExpander" IsExpanded="{Binding Path=ItemAdapter.IsExpanded, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay, FallbackValue=False}" />
                             </Border>
                             <Viewbox
                                 Grid.Column="1"
-                                Width="{StaticResource CellContentWidth}"
-                                Height="{StaticResource CellContentHeight}"
-                                Margin="{StaticResource DynamicTreeColumnMargin}">
+                                Width="{Binding ItemIconSize, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
+                                Height="{Binding ItemIconSize, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
+                                Margin="{Binding ItemIconMargin, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
+                                VerticalAlignment="Center">
                                 <ContentPresenter Name="PartThumbnailPresenter">
                                     <local:Thumbnail Content="{Binding Path=ItemAdapter, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}" />
                                 </ContentPresenter>
@@ -77,16 +83,18 @@
                                 Grid.Column="2"
                                 VerticalAlignment="Center"
                                 HorizontalContentAlignment="Stretch">
-                                <Grid>
+                                <Grid MinHeight="{Binding ItemRowHeight, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}">
                                     <!--  Item Name  -->
                                     <TextBlock
                                         Name="PartItemName"
                                         Margin="5"
                                         HorizontalAlignment="Left"
                                         VerticalAlignment="Center"
+                                        FontSize="{Binding ItemFontSize, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
                                         Text="{Binding Path=ItemAdapter.DisplayLabel, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay, FallbackValue='__null__'}"
                                         TextTrimming="CharacterEllipsis"
                                         TextWrapping="NoWrap"
+                                        ToolTipService.ToolTip="{Binding Path=ItemAdapter.Label, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
                                         Visibility="Visible" />
 
                                     <!--  In-place rename part  -->
@@ -120,6 +128,24 @@
                                 </Grid>
                             </ContentPresenter>
                         </Grid>
+                        <ContentPresenter
+                            x:Name="PartTrailingContentPresenter"
+                            Grid.Column="1"
+                            Margin="{StaticResource DynamicTreeItemTrailingContentMargin}"
+                            VerticalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            Content="{Binding TrailingContent, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
+                            ContentTemplate="{Binding TrailingContentTemplate, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
+                            Visibility="Collapsed" />
+                        <Border
+                            x:Name="PartDropIntoIndicator"
+                            Grid.ColumnSpan="2"
+                            Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                            BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                            BorderThickness="2"
+                            CornerRadius="3"
+                            IsHitTestVisible="False"
+                            Visibility="Collapsed" />
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal">

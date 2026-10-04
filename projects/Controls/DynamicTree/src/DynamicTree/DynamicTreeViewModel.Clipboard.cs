@@ -73,6 +73,64 @@ public abstract partial class DynamicTreeViewModel
     /// <returns>A completed task.</returns>
     public Task CopyItemAsync(ITreeItem item) => this.CopyItemsAsync([item]);
 
+    /// <summary>Duplicates shown items at a destination without changing the user's clipboard.</summary>
+    /// <param name="items">The source roots to duplicate.</param>
+    /// <param name="targetParent">The destination parent.</param>
+    /// <param name="insertIndex">The destination child insertion index.</param>
+    /// <returns>The newly inserted roots.</returns>
+    public async Task<IReadOnlyList<ITreeItem>> DuplicateItemsAsync(IReadOnlyList<ITreeItem> items, ITreeItem targetParent, int insertIndex)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(targetParent);
+        if (items.Count == 0)
+        {
+            return [];
+        }
+
+        this.ValidateItemsAreShown(items);
+        if (!this.IsShown(targetParent) || !targetParent.CanAcceptChildren || (targetParent.IsLocked && !targetParent.IsRoot))
+        {
+            return [];
+        }
+
+        var roots = ExtractTopLevelSelection(items);
+        if (roots.Any(root => root.IsLocked))
+        {
+            return [];
+        }
+
+        var originals = await ExpandSelectionWithDescendantsAsync(roots).ConfigureAwait(true);
+        if (originals.Any(static original => original is not ICanBeCloned))
+        {
+            return [];
+        }
+
+        var clones = await CloneSubtreesAsync(originals).ConfigureAwait(true);
+        var rootClones = roots.Select(root => clones[root]).ToArray();
+        if (!await this.DisplayHelper.InsertItemsAsync(rootClones, targetParent, insertIndex, this.InsertItemAsync).ConfigureAwait(true))
+        {
+            return [];
+        }
+
+        foreach (var clone in rootClones.Where(static item => item.IsExpanded))
+        {
+            await this.RestoreExpandedChildrenAsync(clone).ConfigureAwait(true);
+        }
+
+        this.SelectionModel?.ClearSelection();
+        foreach (var clone in rootClones)
+        {
+            this.SelectionModel?.SelectItem(clone);
+        }
+
+        if (rootClones.Length > 0)
+        {
+            _ = this.FocusItem(rootClones[0], RequestOrigin.Programmatic);
+        }
+
+        return Array.AsReadOnly(rootClones);
+    }
+
     /// <summary>
     ///     Cuts the provided items into the clipboard, marking them as cut. Locked items are skipped.
     /// </summary>
@@ -274,6 +332,25 @@ public abstract partial class DynamicTreeViewModel
         return unique;
     }
 
+    private static async Task<Dictionary<ITreeItem, ITreeItem>> CloneSubtreesAsync(IReadOnlyList<ITreeItem> originals)
+    {
+        var clones = new Dictionary<ITreeItem, ITreeItem>();
+        foreach (var original in originals)
+        {
+            clones.Add(original, ((ICanBeCloned)original).CloneSelf());
+        }
+
+        foreach (var original in originals)
+        {
+            if (original.Parent is { } parent && clones.TryGetValue(parent, out var parentClone))
+            {
+                await parentClone.AddChildAsync(clones[original]).ConfigureAwait(true);
+            }
+        }
+
+        return clones;
+    }
+
     private bool IsValidPasteTarget(ITreeItem targetParent)
     {
         foreach (var item in this.clipboardItems)
@@ -310,6 +387,22 @@ public abstract partial class DynamicTreeViewModel
         this.ClearCutMarks();
         this.clipboardIsValid = false;
         this.RaiseClipboardChanged();
+    }
+
+    private void InvalidateClipboardIfSourcesAffected(IEnumerable<ITreeItem> affectedItems)
+    {
+        var affected = affectedItems.ToHashSet();
+        foreach (var source in this.clipboardItems)
+        {
+            for (var current = source; current is not null; current = current.Parent)
+            {
+                if (affected.Contains(current))
+                {
+                    this.InvalidateClipboardDueToMutation();
+                    return;
+                }
+            }
+        }
     }
 
     private void RaiseClipboardChanged()

@@ -20,34 +20,34 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace DroidNet.Controls.Demo.Tree;
 
 /// <summary>
-/// The ViewModel for the <see cref="ProjectLayoutView"/> view.
+/// The ViewModel for a DynamicTree demo whose one opened scene is the tree root.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "must be public for source generated MVVM")]
-public partial class ProjectLayoutViewModel : DynamicTreeViewModel
+public partial class DynamicTreeDemoViewModel : DynamicTreeViewModel
 {
     private static readonly IReadOnlyList<string> FilteringRelevantProperties = [nameof(ITreeItem.Label)];
 
-    private readonly ILogger<ProjectLayoutViewModel> logger;
+    private readonly ILogger<DynamicTreeDemoViewModel> logger;
     private readonly DomainModelService domainModelService;
     private readonly MenuItemData filterLightItem;
     private readonly MenuItemData filterCameraItem;
     private readonly MenuItemData filterGeometryItem;
     private bool isDisposed;
     private bool isUpdatingFilterInputs;
-    private ProjectAdapter? projectAdapter;
     private int nextEntityComponentIndex;
+    private bool isCopyDropInProgress;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ProjectLayoutViewModel"/> class.
+    /// Initializes a new instance of the <see cref="DynamicTreeDemoViewModel"/> class.
     /// </summary>
     /// <param name="loggerFactory">
     ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
     ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
     /// </param>
-    public ProjectLayoutViewModel(ILoggerFactory? loggerFactory = null)
+    public DynamicTreeDemoViewModel(ILoggerFactory? loggerFactory = null)
         : base(loggerFactory)
     {
-        this.logger = loggerFactory?.CreateLogger<ProjectLayoutViewModel>() ?? NullLogger<ProjectLayoutViewModel>.Instance;
+        this.logger = loggerFactory?.CreateLogger<DynamicTreeDemoViewModel>() ?? NullLogger<DynamicTreeDemoViewModel>.Instance;
 
         this.UndoStack = this.History.UndoStack;
         this.RedoStack = this.History.RedoStack;
@@ -120,21 +120,6 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     [ObservableProperty]
     public partial string LabelFilterText { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Gets the project adapter.
-    /// </summary>
-    internal ProjectAdapter? Project
-    {
-        get => this.projectAdapter;
-        private set
-        {
-            if (this.SetProperty(ref this.projectAdapter, value))
-            {
-                this.AddSceneCommand.NotifyCanExecuteChanged();
-            }
-        }
-    }
-
     private HistoryKeeper History => UndoRedo.Default[this];
 
     private bool HasUnlockedSelectedItems { get; set; }
@@ -166,31 +151,80 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     /// </summary>
     /// <param name="item">The tree item to rename.</param>
     /// <param name="newName">The new name to assign to the item.</param>
-    public void RenameItem(ITreeItem item, string newName)
+    public override Task<TreeItemRenameResult> CommitRenameAsync(ITreeItem item, string newName)
     {
         ArgumentNullException.ThrowIfNull(item);
 
         var trimmed = (newName ?? string.Empty).Trim();
         if (!item.ValidateItemName(trimmed))
         {
-            return;
+            return Task.FromResult(TreeItemRenameResult.Rejected("The item name is not valid."));
         }
 
         var oldName = item.Label;
         if (string.Equals(oldName, trimmed, StringComparison.Ordinal))
         {
-            return;
+            return Task.FromResult(TreeItemRenameResult.Success);
         }
 
         item.Label = trimmed;
         if (!this.domainModelService.TryRename(item, trimmed, out var renameErr))
         {
+            item.Label = oldName;
             this.OperationError = renameErr;
+            return Task.FromResult(TreeItemRenameResult.Rejected(renameErr ?? "The item could not be renamed."));
         }
 
         this.History.AddChange(
             $"Rename({oldName} → {trimmed})",
-            () => this.RenameItem(item, oldName));
+            async () =>
+            {
+                var result = await this.CommitRenameAsync(item, oldName).ConfigureAwait(true);
+                if (!result.Succeeded)
+                {
+                    this.OperationError = result.ErrorMessage;
+                }
+            });
+        this.OperationError = null;
+        return Task.FromResult(TreeItemRenameResult.Success);
+    }
+
+    /// <inheritdoc />
+    public override async Task<TreeDropResult> CommitDropAsync(TreeDropRequest request)
+    {
+        if (request.Operation != TreeDropOperation.Copy)
+        {
+            return await base.CommitDropAsync(request).ConfigureAwait(true);
+        }
+
+        this.isCopyDropInProgress = true;
+        TreeDropResult result;
+        try
+        {
+            result = await base.CommitDropAsync(request).ConfigureAwait(true);
+        }
+        finally
+        {
+            this.isCopyDropInProgress = false;
+        }
+
+        if (result.Succeeded)
+        {
+            this.History.BeginChangeSet("Duplicate entities");
+            try
+            {
+                foreach (var item in result.Items)
+                {
+                    this.History.AddChange($"RemoveItemAsync({item.Label})", async () => await this.RemoveItemAsync(item).ConfigureAwait(true));
+                }
+            }
+            finally
+            {
+                this.History.EndChangeSet();
+            }
+        }
+
+        return result;
     }
 
     /// <inheritdoc/>
@@ -357,23 +391,6 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     }
 
 #pragma warning disable CA1822 // Member does not access instance data
-    private string GetNextAvailableSceneName(Project project, string baseName)
-    {
-        if (project is null)
-        {
-            return baseName;
-        }
-
-        var existing = new HashSet<string>(project.Scenes.Select(s => s.Name), StringComparer.OrdinalIgnoreCase);
-        var index = 1;
-        while (existing.Contains(string.Create(CultureInfo.InvariantCulture, $"{baseName} {index}")))
-        {
-            index++;
-        }
-
-        return string.Create(CultureInfo.InvariantCulture, $"{baseName} {index}");
-    }
-
     private string GetNextAvailableEntityName(ITreeItem parent, string baseName)
     {
         var names = Enumerable.Empty<string>();
@@ -533,41 +550,18 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         this.RenameRequested?.Invoke(this, new RenameRequestedEventArgs(item));
     }
 
-    /// <summary>
-    /// Loads the project asynchronously.
-    /// </summary>
+    /// <summary>Loads the demo's currently opened scene as the hierarchy root.</summary>
     [RelayCommand]
-    private async Task LoadProjectAsync()
+    private async Task LoadOpenedSceneAsync()
     {
         this.History.Clear();
 
-        var project = new Project("Sample Project");
-        await ProjectLoaderService.LoadProjectAsync(project).ConfigureAwait(false);
-
-        // Keep the project expanded by default so the tree displays its children at startup.
-        this.Project = new ProjectAdapter(project)
+        var openedScene = new Scene("Scene 1");
+        var sceneAdapter = new SceneAdapter(openedScene)
         {
             IsExpanded = true,
         };
-        await this.InitializeRootAsync(this.Project, skipRoot: false).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Adds a new scene to the project.
-    /// </summary>
-    private bool CanAddScene() => this.Project != null;
-
-    [RelayCommand(CanExecute = nameof(CanAddScene))]
-    private async Task AddScene()
-    {
-        if (this.Project is null)
-        {
-            return;
-        }
-
-        var name = this.GetNextAvailableSceneName(this.Project.AttachedObject, "New Scene");
-        var newScene = new SceneAdapter(new Scene(name));
-        await this.ApplyInsertAsync(newScene, this.Project, 0).ConfigureAwait(false);
+        await this.InitializeRootAsync(sceneAdapter, skipRoot: false).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -630,6 +624,11 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
             this.OperationError = insertErr;
         }
 
+        if (this.isCopyDropInProgress)
+        {
+            return;
+        }
+
         this.History.AddChange(
             $"RemoveItemAsync({args.TreeItem.Label})",
             async () => await this.RemoveItemAsync(args.TreeItem).ConfigureAwait(false));
@@ -649,6 +648,11 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         if (!this.domainModelService.TryRemove(args.TreeItem, args.Parent, out var removeErr))
         {
             this.OperationError = removeErr;
+        }
+
+        if (this.isCopyDropInProgress)
+        {
+            return;
         }
 
         this.History.AddChange(
@@ -746,14 +750,8 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         {
             case SceneAdapter:
                 {
-                    if (args.Parent is not ProjectAdapter)
-                    {
-                        args.Proceed = false;
-                        this.OperationError = "Scenes can only be added to a Project.";
-                        this.LogSceneAddRejectedParentNotProject(args.Parent?.GetType());
-                        return;
-                    }
-
+                    args.Proceed = false;
+                    this.OperationError = "The opened scene is the hierarchy root and cannot be inserted here.";
                     break;
                 }
 
@@ -808,17 +806,6 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         // Only validation should occur here; model mutation must occur in OnItemRemoved after the tree actually removed the item.
         switch (args.TreeItem)
         {
-            case SceneAdapter:
-                if (args.TreeItem.Parent is not ProjectAdapter)
-                {
-                    args.Proceed = false;
-                    this.OperationError = "Scene can only be removed from a Project.";
-                    this.LogRemoveRejectedSceneParentNotProject(args.TreeItem.Parent.GetType());
-                    return;
-                }
-
-                break;
-
             case EntityAdapter:
                 var parentEntity = args.TreeItem.Parent;
                 if (parentEntity is not SceneAdapter and not EntityAdapter)
@@ -842,14 +829,10 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         {
             case SceneAdapter:
                 {
-                    if (args.NewParent is not ProjectAdapter)
-                    {
-                        args.Proceed = false;
-                        args.VetoReason = "Scenes can only be moved under a Project.";
-                        this.OperationError = args.VetoReason;
-                        this.LogMoveRejectedReason(args.VetoReason);
-                    }
-
+                    args.Proceed = false;
+                    args.VetoReason = "The opened scene is the hierarchy root and cannot be moved.";
+                    this.OperationError = args.VetoReason;
+                    this.LogMoveRejectedReason(args.VetoReason);
                     break;
                 }
 

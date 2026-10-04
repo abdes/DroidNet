@@ -6,8 +6,40 @@ using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Controls.Tests.Tree;
 
-internal sealed partial class TestViewModel(ILoggerFactory? loggerFactory = null) : DynamicTreeViewModel(loggerFactory)
+internal partial class TestViewModel(ILoggerFactory? loggerFactory = null) : DynamicTreeViewModel(loggerFactory)
 {
+    public int RenameCommitCount { get; private set; }
+
+    public TreeItemRenameResult? NextRenameResult { get; set; }
+
+    public TaskCompletionSource<TreeItemRenameResult>? PendingRename { get; set; }
+
+    public TaskCompletionSource? RenameCommitStarted { get; set; }
+
+    public Task InitializeAsync(ITreeItem root) => this.InitializeRootAsync(root, skipRoot: false);
+
+    public override async Task<TreeItemRenameResult> CommitRenameAsync(ITreeItem item, string newName)
+    {
+        this.RenameCommitCount++;
+        if (this.PendingRename is { } pending)
+        {
+            this.PendingRename = null;
+            _ = this.RenameCommitStarted?.TrySetResult();
+            return await pending.Task.ConfigureAwait(true);
+        }
+
+        if (this.NextRenameResult is { } result)
+        {
+            this.NextRenameResult = null;
+            if (!result.Succeeded)
+            {
+                return result;
+            }
+        }
+
+        return await base.CommitRenameAsync(item, newName).ConfigureAwait(true);
+    }
+
     /// <summary>
     /// Loads the tree structure asynchronously.
     /// </summary>
