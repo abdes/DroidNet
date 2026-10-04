@@ -53,6 +53,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     // Node-clipboard state: copied node identities plus whether they were cut (moved) rather than copied.
     private readonly List<Guid> clipboardNodeIds = [];
     private bool clipboardIsCut;
+
+    // Adapters expanded by a transient search so their expansion can be restored when search clears.
+    private readonly List<ITreeItem> searchExpandedItems = [];
     private int nextEntityIndex;
     private CancellationTokenSource? loadSceneCts;
     private Guid loadingDocumentId = Guid.Empty;
@@ -751,6 +754,71 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.SelectionModel?.ClearSelection();
         this.SelectionModel?.SelectItem(adapter);
         return this.GetSelectedItems().Contains(adapter);
+    }
+
+    /// <summary>Applies a transient name search, revealing collapsed matches by expanding their ancestor paths.</summary>
+    /// <param name="query">The search text; empty or whitespace clears the search.</param>
+    /// <returns>The number of matching nodes (excluding context-only ancestors).</returns>
+    public async Task<int> SearchAsync(string? query)
+    {
+        if (this.Scene is null)
+        {
+            return 0;
+        }
+
+        var trimmed = (query ?? string.Empty).Trim();
+        if (trimmed.Length == 0)
+        {
+            await this.ClearSearchAsync().ConfigureAwait(true);
+            return 0;
+        }
+
+        var matches = this.nodeAdapterIndex.Values
+            .Where(adapter => adapter.AttachedObject.Name.Contains(trimmed, StringComparison.OrdinalIgnoreCase))
+            .Cast<ITreeItem>()
+            .Concat(this.folderAdapterIndex.Values.Where(folder => folder.Name.Contains(trimmed, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        // Expand scene-graph ancestor paths of matching nodes (top-down) so collapsed descendants
+        // become visible to the filter. Folder grouping is an overlay, so nodes use their actual
+        // scene ancestry rather than their realized adapter Parent (unset while collapsed).
+        this.searchExpandedItems.Clear();
+        foreach (var nodeMatch in matches.OfType<SceneNodeAdapter>())
+        {
+            var path = new List<SceneNodeAdapter>();
+            for (var ancestorNode = nodeMatch.AttachedObject.Parent; ancestorNode is not null; ancestorNode = ancestorNode.Parent)
+            {
+                if (this.nodeAdapterIndex.TryGetValue(ancestorNode.Id, out var ancestor) && !ancestor.IsExpanded)
+                {
+                    path.Add(ancestor);
+                }
+            }
+
+            for (var i = path.Count - 1; i >= 0; i--)
+            {
+                await this.ExpandItemAsync(path[i]).ConfigureAwait(true);
+                this.searchExpandedItems.Add(path[i]);
+            }
+        }
+
+        this.FilterPredicate = item => item.Label.Contains(trimmed, StringComparison.OrdinalIgnoreCase);
+        return matches.Count;
+    }
+
+    /// <summary>Clears the transient search and restores the expansion state it changed.</summary>
+    /// <returns>A task that completes when the search has been cleared.</returns>
+    public async Task ClearSearchAsync()
+    {
+        this.FilterPredicate = null;
+        foreach (var item in this.searchExpandedItems)
+        {
+            if (item.IsExpanded)
+            {
+                await this.CollapseItemAsync(item).ConfigureAwait(true);
+            }
+        }
+
+        this.searchExpandedItems.Clear();
     }
 
     private void OnSingleSelectionChanged(object? sender, PropertyChangedEventArgs args)
