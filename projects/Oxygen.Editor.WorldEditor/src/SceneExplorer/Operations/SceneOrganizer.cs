@@ -553,13 +553,12 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
 
     private static IList<ExplorerEntryData> RequireLayout(Scene scene)
     {
-        if (scene.ExplorerLayout is null)
-        {
-            throw new InvalidOperationException("ExplorerLayout is not initialized.");
-        }
+        // The explorer layout is a lazy overlay over the scene graph: create it from the root
+        // nodes on first use so folder operations work on a freshly loaded, layout-less scene.
+        var layout = scene.ExplorerLayout ?? BuildLayoutFromRootNodes(scene);
 
         // Normalize to ensure folder entries always have a mutable children list for in-place updates.
-        var normalized = NormalizeLayout(scene.ExplorerLayout);
+        var normalized = NormalizeLayout(layout);
         scene.SetExplorerLayout(normalized);
         return normalized;
     }
