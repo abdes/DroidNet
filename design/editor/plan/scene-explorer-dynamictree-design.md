@@ -895,23 +895,30 @@ publishes added with C2/C1/C3, so four tests threw while their defects were mark
   second history authority. Remaining: snapshot Copy landed (C11); the switch-invalidation
   protocol is unwired and the payload still carries source ids, and `plan:568` needs the LLD
   wording. **Work: C50** (plus the `plan:568` wording in the docs pass).
-- [ ] D8 — **not a decision anyone in this thread can make.** The editing-view mask and
-      category-picking surface (`plan:569`) are absent from the installed SDK's
-      `IRuntimeWorldCommands`/`IRuntimeInputCommands`; whether they exist, and whether to build them,
-      belongs to the runtime owner with separate authorization and build evidence — editor-only work
-      does not authorize an engine build. It stays open as a capability gap that blocks native
-      qualification of SE-03, not as work waiting on a ruling here. Scope note from the "Show in
-      Editor & Lock" contract: this gap blocks only the _viewport_ effect of "not shown in editor";
-      the state itself, its persistence, the row treatment and the owning API are all buildable now
-      (C49), so D8 must not be used as a reason to stall the eye/lock feature. Split further by the owner's
-      capability analysis (`design/editor/review/D8-show-in-editor-runtime-capability.md`, 2026-10-05):
-      **D8a** is the editing-view hide mask — a `CompositionView` per-view filter routed through the
-      existing shadow-only path, plus a mandatory depth-prepass fix that currently ignores
-      `kMainViewVisible` — then interop and a managed world command; **D8b** is viewport picking, absent at
-      every layer, which belongs to ED-M09 as a filter carried on pick requests rather than an Explorer
-      side-project. Engine and interop work needs separate authorization and build evidence. Meanwhile the
-      eye stays unavailable to users until the capability flag exists: a toggle that changes persisted state
-      and nothing on screen is worse than no toggle.
+- [x] D8 — **decided by the owner**, partitioned as **D8a** (editing-view hide mask) and **D8b**
+      (viewport picking + category filters). This row does not restate the analysis:
+      [`D8-show-in-editor-runtime-capability.md`](../review/D8-show-in-editor-runtime-capability.md)
+      is the authority for the requirement contract (R1–R8), the ratified design decisions DD1–DD4,
+      the per-team action plans (E1–E5 engine, I1–I4 interop/runtime, W1–W4 editor) and the
+      qualification cases. What binds the plan and this tracker: - **D8a** is a per-view filter on `CompositionView` applied in the ScenePrep view phase
+      (DD1-A), with the **editor sending local hidden roots and the engine resolving the descendant
+      closure** (DD2-A), transported as a revisioned full snapshot per scene activation (DD3-A).
+      Hidden geometry is routed to the **existing shadow-only path, not dropped**: an editor-hidden
+      node still casts shadows, still lights the scene and its camera stays usable (R3, E4), and the
+      **depth prepass must start honouring `kMainViewVisible`** (E2) or a hidden node keeps writing
+      depth behind it. Capture and standalone-validation views render unmasked (R4); the mask never
+      writes scene flags, dirties, records history or requests cooking (R5). - The eye **must not** be routed through `RuntimeSetVisibility`/`SetVisibilityCommand` — that
+      writes authored `kVisible`, strips shadows, diverges the live preview from the saved scene and
+      breaks capture parity. - **D8b** is ED-M09's work: picking does not exist at any layer, and Explorer contributes only the
+      category mask and hidden set as filters carried on each pick request (DD4-A). It is not an
+      Explorer side-project. - Editor status: C49/W1–W4 are **buildable now and unblocked**; the viewport effect waits on
+      I4's capability. Engine and interop work needs separate authorization and build evidence
+      (`design/oxygen/RULES.md`), so it is not scheduled here. - Open question this row cannot settle: the plan previously stated, as an owner directive, that an
+      editor-hidden node **does not cast shadows** — which is the opposite of R3/DD1-A above. R3 is
+      taken as the owner's decision because it is the analysis the owner ratified; if the simpler
+      drop-from-view rule was the later directive, say so, because it removes E2 and the shadow-only
+      routing from the engine plan rather than adding them. Q4 (selection/gizmo treatment for a
+      selected editor-hidden node) is also still listed open in the analysis.
 
 #### Show in Editor & Lock — interaction contract (owner, 2026-10-05)
 
@@ -938,10 +945,11 @@ implemented the way the controls demo app drives it.
   hover subscriptions must be idempotent under row recycling.
 
 What is gated: the Lock half and both states' persistence are pure editor-side work (C49). Applying
-"Not shown in editor" to the viewport needs the editing-view mask the installed SDK does not yet
-expose (D8) — so build the state, its storage, the row UI and a single owning API now, with viewport
-suppression bound to that API when the mask exists, rather than faking it or shipping an eye icon
-that does nothing.
+"Not shown in editor" to the viewport needs the editing-view mask (D8a). Build the state, its storage,
+the row UI and the single owning API now (C49); per owner decision Q2 the eye operates immediately,
+maintaining workspace state and persistence and logging a diagnostic warning while native viewport
+suppression awaits D8a/I4. Inheritance follows **actual scene ancestors only** — logical folders
+never contribute (R1) — and `Show All` clears the current scene's set (W2).
 
 #### Correctness defects — editor/controls
 
