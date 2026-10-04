@@ -82,23 +82,28 @@ public static class ContextMenu
             return;
         }
 
-        // Clean up old host if menu source is being changed or cleared
-        var oldHost = GetMenuHost(element);
-        if (oldHost is not null)
+        // Clean up any existing host and lifecycle subscriptions.
+        DetachHost(element);
+        if (element is FrameworkElement frameworkElement)
         {
-            element.ContextRequested -= OnElementContextRequested;
-            if (element is FrameworkElement fe)
-            {
-                fe.Unloaded -= OnElementUnloaded;
-            }
-
-            oldHost.Opened -= OnHostOpened;
-            oldHost.Closed -= OnHostClosed;
-            oldHost.Dispose();
-            SetMenuHost(element, value: null);
+            frameworkElement.Unloaded -= OnElementUnloaded;
+            frameworkElement.Loaded -= OnElementLoaded;
         }
 
-        if (e.NewValue is not IMenuSource newMenuSource)
+        if (e.NewValue is IMenuSource)
+        {
+            AttachHost(element);
+            if (element is FrameworkElement reloadElement)
+            {
+                reloadElement.Unloaded += OnElementUnloaded;
+                reloadElement.Loaded += OnElementLoaded;
+            }
+        }
+    }
+
+    private static void AttachHost(UIElement element)
+    {
+        if (GetMenuSource(element) is not IMenuSource)
         {
             return;
         }
@@ -117,30 +122,45 @@ public static class ContextMenu
 
         SetMenuHost(element, host);
         element.ContextRequested += OnElementContextRequested;
-
-        if (element is FrameworkElement frameworkElement)
-        {
-            frameworkElement.Unloaded += OnElementUnloaded;
-        }
     }
 
-    private static void OnElementUnloaded(object sender, RoutedEventArgs e)
+    private static void DetachHost(UIElement element)
     {
-        if (sender is not FrameworkElement element)
+        var host = GetMenuHost(element);
+        if (host is null)
         {
             return;
         }
 
-        // Clean up the host when the element is removed from the visual tree
-        var host = GetMenuHost(element);
-        if (host is not null)
+        element.ContextRequested -= OnElementContextRequested;
+        host.Opened -= OnHostOpened;
+        host.Closed -= OnHostClosed;
+        host.Dispose();
+        SetMenuHost(element, value: null);
+    }
+
+    private static void OnElementUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not UIElement element)
         {
-            element.ContextRequested -= OnElementContextRequested;
-            element.Unloaded -= OnElementUnloaded;
-            host.Opened -= OnHostOpened;
-            host.Closed -= OnHostClosed;
-            host.Dispose();
-            SetMenuHost(element, value: null);
+            return;
+        }
+
+        // Dispose the host when the element leaves the visual tree, but keep the lifecycle
+        // subscriptions so OnElementLoaded can recreate the host on re-entry.
+        DetachHost(element);
+    }
+
+    private static void OnElementLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not UIElement element)
+        {
+            return;
+        }
+
+        if (GetMenuHost(element) is null)
+        {
+            AttachHost(element);
         }
     }
 
