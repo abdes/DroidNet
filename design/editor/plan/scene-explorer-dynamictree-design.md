@@ -833,6 +833,22 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` closed. Each entry names owner 
 - [ ] D8 — runtime/native. Editing-view mask + category-picking surface (`plan:569`) absent
       (`IRuntimeWorldCommands`, `IRuntimeInputCommands`); blocks native qualification.
 
+Decisions recorded by the owner (2026-10-04):
+
+- D1 → **preserve-local** is the Explorer reparent default. Normal drops/reparent keep local
+  TRS; explicit "Paste as child (keep world)" may still use preserve-world.
+- D2 → **folder moves reparent**. Moving a node/folder into a folder in a different
+  scene-parent scope reparents it; no grouping-only restriction.
+- D3 → **row-kind selection + primary**: root → Environment, folder → folder summary,
+  mixed → summary, node-only → Component Inspector (update `documents-and-commands.md`).
+- D4 → **persist all workspace state** (hide + lock + category toggles) so reopen restores
+  exactly what was there; settings LLD extends beyond Hide-only.
+- D5 → **copied directional lights reset `AtmosphereSlot = None`** (matches C12).
+- D6 → **keep LastOpenedScene migration + first-scene fallback** and persist/seed
+  `DefaultSceneId` on creation.
+- D7 → **immutable snapshot Copy + scene-bound Cut** (recommended below).
+- D8 → **Unity SceneVisibilityManager-style editor mask + category picking** (below).
+
 #### Correctness defects — editor/controls
 
 Transforms, reparent and native convergence
