@@ -88,9 +88,12 @@ public sealed class SceneExplorerDropTests
     }
 
     [TestMethod]
-    public async Task CommitDropAsync_RejectsCopyDropWithoutCommand()
+    public async Task CommitDropAsync_CopyDropRoutesThroughDuplicateCommand()
     {
         var harness = CreateHarness(out var scene, out _, out var child);
+        _ = harness.Commands
+            .Setup(value => value.DuplicateNodesAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), null, null))
+            .ReturnsAsync(SceneCommandResults.Success<IReadOnlyList<SceneNode>>([child]));
         using var explorer = harness.Build();
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
@@ -98,8 +101,10 @@ public sealed class SceneExplorerDropTests
 
         var result = await explorer.CommitDropAsync(new TreeDropRequest([childAdapter!], explorer.Scene!, 0, TreeDropOperation.Copy)).ConfigureAwait(false);
 
-        _ = result.Succeeded.Should().BeFalse();
-        harness.Commands.VerifyNoOtherCalls();
+        _ = result.Succeeded.Should().BeTrue();
+        harness.Commands.Verify(
+            value => value.DuplicateNodesAsync(It.IsAny<SceneDocumentCommandContext>(), It.Is<IReadOnlyList<Guid>>(ids => ids.SequenceEqual(new[] { child.Id })), null, null),
+            Times.Once);
     }
 
     [TestMethod]

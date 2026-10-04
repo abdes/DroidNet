@@ -1115,8 +1115,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        // Copy-drop (Ctrl-drag) uses the clipboard/duplication path and is not a move command.
-        if (request.Operation == TreeDropOperation.Copy || request.Items.Count == 0)
+        if (request.Items.Count == 0)
         {
             return TreeDropResult.Rejected;
         }
@@ -1129,6 +1128,40 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         var folderIds = request.Items.OfType<FolderAdapter>().Select(folder => folder.Id).ToList();
         var nodeIds = request.Items.OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject.Id).ToList();
+
+        if (request.Operation == TreeDropOperation.Copy)
+        {
+            // Ctrl-drag duplicates through the same deep-copy command used by Paste without
+            // touching the clipboard. Folder copy is not yet supported.
+            if (nodeIds.Count == 0)
+            {
+                return TreeDropResult.Rejected;
+            }
+
+            var (copyParentNodeId, copyParentFolderId) = ResolveDropDestination(request.Parent);
+            IReadOnlyList<SceneNode>? createdNodes;
+            this.suppressNodeMessages = true;
+            try
+            {
+                var duplicate = await this.commandService.DuplicateNodesAsync(context, nodeIds, copyParentNodeId, copyParentFolderId).ConfigureAwait(false);
+                if (!duplicate.Succeeded)
+                {
+                    return TreeDropResult.Rejected;
+                }
+
+                createdNodes = duplicate.Value;
+                await this.ReconcileProjectionAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                this.suppressNodeMessages = false;
+            }
+
+            var created = createdNodes!
+                .Select(node => (ITreeItem)this.nodeAdapterIndex[node.Id])
+                .ToList();
+            return TreeDropResult.Committed(created);
+        }
 
         SceneCommandResult result;
         if (folderIds.Count > 0)
@@ -1144,12 +1177,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
         else if (nodeIds.Count == 1 && this.IsSameParentReorder(request, nodeIds[0]))
         {
-            var (parentFolderId, parentNodeId) = request.Parent switch
-            {
-                FolderAdapter folder => ((Guid?)folder.Id, (Guid?)null),
-                SceneNodeAdapter node => ((Guid?)null, node.AttachedObject.Id),
-                _ => ((Guid?)null, (Guid?)null),
-            };
+            var (parentFolderId, parentNodeId) = ResolveDropDestination(request.Parent);
             result = await this.commandService.ReorderNodesAsync(context, nodeIds[0], parentFolderId, parentNodeId, request.Index).ConfigureAwait(false);
         }
         else
@@ -1176,6 +1204,14 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             .ToList();
         return TreeDropResult.Committed(moved);
     }
+
+    private static (Guid? ParentNodeId, Guid? ParentFolderId) ResolveDropDestination(ITreeItem parent)
+        => parent switch
+        {
+            FolderAdapter folder => (null, folder.Id),
+            SceneNodeAdapter node => (node.AttachedObject.Id, null),
+            _ => (null, null),
+        };
 
     private bool IsSameParentReorder(TreeDropRequest request, Guid nodeId)
     {
