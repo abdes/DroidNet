@@ -51,16 +51,18 @@ public partial class DynamicTreeItem
         this.renameCommitInProgress = false;
         this.SetRenameError(message: null);
         _ = VisualStateManager.GoToState(this, this.newNameIsValid ? NameIsValidVisualState : NameIsInvalidVisualState, useTransitions: false);
-        this.itemNameTextBlock.Visibility = Visibility.Collapsed;
         this.itemNameTextBox.Visibility = Visibility.Visible;
         this.itemNameTextBox.SelectAll();
 
+        // Open the rename popup while the label is still visible so it anchors to the label's
+        // position; only then hide the label underneath it.
 #pragma warning disable IDE0031 // cannot be simplified
         if (this.inPlaceRenamePart != null)
         {
             this.inPlaceRenamePart.IsOpen = true;
         }
 #pragma warning restore IDE0031
+        this.itemNameTextBlock.Visibility = Visibility.Collapsed;
 
         _ = this.itemNameTextBox.Focus(FocusState.Programmatic);
 
