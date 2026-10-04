@@ -90,4 +90,15 @@ public interface IProjectInfo
     /// </value>
     [JsonIgnore]
     public DateTime LastUsedOn { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the stable identity of the project's configured default scene, or <see langword="null"/>
+    ///     when no default is configured.
+    /// </summary>
+    /// <remarks>
+    ///     The default scene is the single scene loaded on fresh project activation. It is resolved by stable ID
+    ///     (surviving rename) and must reference one of the project's discovered scenes; a missing or invalid value
+    ///     requires an explicit choice rather than falling back to last-opened or first-listed.
+    /// </remarks>
+    public Guid? DefaultSceneId { get; set; }
 }

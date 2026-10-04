@@ -50,7 +50,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     private readonly IContainer container;
     private readonly IProjectContextService projectContextService;
     private readonly IProjectManagerService projectManager;
-    private readonly IProjectUsageService projectUsage;
     private readonly IEngineService engineService;
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
@@ -68,7 +67,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     /// <param name="router">The router for navigation within the workspace.</param>
     /// <param name="projectContextService">The active project context service.</param>
     /// <param name="projectManager">The project authoring service.</param>
-    /// <param name="projectUsage">The recent-scene restoration store.</param>
     /// <param name="engineService">The engine service for mounting cooked roots.</param>
     /// <param name="operationResults">The visible operation-result publisher.</param>
     /// <param name="statusReducer">The diagnostic status reducer.</param>
@@ -79,7 +77,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         IRouter router,
         IProjectContextService projectContextService,
         IProjectManagerService projectManager,
-        IProjectUsageService projectUsage,
         IEngineService engineService,
         IOperationResultPublisher operationResults,
         IStatusReducer statusReducer,
@@ -89,7 +86,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         this.container = container;
         this.projectContextService = projectContextService;
         this.projectManager = projectManager;
-        this.projectUsage = projectUsage;
         this.engineService = engineService;
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
@@ -393,7 +389,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             return;
         }
 
-        var scene = await this.ResolveInitialSceneAsync(project, context).ConfigureAwait(true);
+        var scene = this.ResolveInitialScene(project, context);
         if (scene is null)
         {
             return;
@@ -412,38 +408,24 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         }
     }
 
-    private async Task<Oxygen.Editor.World.Scene?> ResolveInitialSceneAsync(IProject project, ProjectContext context)
+    private Oxygen.Editor.World.Scene? ResolveInitialScene(IProject project, ProjectContext context)
     {
+        // Fresh activation may carry an explicit scene request (template StarterScene or a workflow open).
         if (context.InitialSceneAssetUri is { } initialSceneAssetUri
             && TryResolveSceneFromAssetUri(project, initialSceneAssetUri) is { } starterScene)
         {
             return starterScene;
         }
 
-        try
+        // Otherwise the single loaded scene is the project's configured default, resolved by stable ID.
+        // A missing or invalid default is not silently replaced by last-opened or first-listed.
+        if (context.DefaultSceneId is { } defaultSceneId
+            && project.Scenes.FirstOrDefault(scene => scene.Id == defaultSceneId) is { } defaultScene)
         {
-            var usage = await this.projectUsage.GetProjectUsageAsync(context.Name, context.ProjectRoot).ConfigureAwait(true);
-            if (!string.IsNullOrWhiteSpace(usage?.LastOpenedScene))
-            {
-                var lastOpenedScene = usage.LastOpenedScene;
-                var lastOpenedSceneName = System.IO.Path.GetFileNameWithoutExtension(lastOpenedScene);
-                var restored = project.Scenes.FirstOrDefault(scene =>
-                    string.Equals(scene.Name, lastOpenedScene, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(scene.Name, lastOpenedSceneName, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(scene.Id.ToString("D"), lastOpenedScene, StringComparison.OrdinalIgnoreCase));
-
-                if (restored is not null)
-                {
-                    return restored;
-                }
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            this.LogSceneRestorationFailed(ex, context.Name);
+            return defaultScene;
         }
 
-        return project.ActiveScene;
+        return null;
     }
 
     [SuppressMessage(

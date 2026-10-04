@@ -212,8 +212,6 @@ public sealed partial class DocumentManager : IDisposable
 
     private async Task MarkSceneActivatedAsync(World.Scene scene)
     {
-        scene.Project.ActiveScene = scene;
-
         if (this.projectContextService.ActiveProject is not { } project)
         {
             return;

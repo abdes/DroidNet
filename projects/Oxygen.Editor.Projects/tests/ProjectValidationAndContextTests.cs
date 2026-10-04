@@ -270,6 +270,47 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
+    public void ProjectInfo_ShouldRoundTripDefaultSceneId()
+    {
+        var defaultSceneId = Guid.NewGuid();
+        var info = new ProjectInfo("Default", Category.Games, @"C:\Projects\Default")
+        {
+            DefaultSceneId = defaultSceneId,
+        };
+
+        var json = ProjectInfo.ToJson(info);
+        var restored = ProjectInfo.FromJson(json);
+
+        _ = restored.DefaultSceneId.Should().Be(defaultSceneId);
+    }
+
+    [TestMethod]
+    public void ProjectInfo_ShouldOmitUnsetDefaultSceneIdAndReadEmptyAsNull()
+    {
+        var info = new ProjectInfo("No default", Category.Games, @"C:\Projects\NoDefault");
+
+        var json = ProjectInfo.ToJson(info);
+        _ = json.Should().NotContain("DefaultSceneId");
+
+        var restored = ProjectInfo.FromJson(json);
+        _ = restored.DefaultSceneId.Should().BeNull();
+    }
+
+    [TestMethod]
+    public void ProjectContext_ShouldCarryDefaultSceneId()
+    {
+        var defaultSceneId = Guid.NewGuid();
+        var info = new ProjectInfo("Context", Category.Games, @"C:\Projects\Context")
+        {
+            DefaultSceneId = defaultSceneId,
+        };
+
+        var context = ProjectContext.FromProjectInfo(info, [new ProjectSceneInfo(defaultSceneId, "Main")]);
+
+        _ = context.DefaultSceneId.Should().Be(defaultSceneId);
+    }
+
+    [TestMethod]
     public async Task ProjectCreationService_ShouldCreateUniqueProjectIdsFromDescriptorTemplate()
     {
         var fs = new MockFileSystem();

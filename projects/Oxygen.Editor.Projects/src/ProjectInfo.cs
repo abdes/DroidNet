@@ -119,6 +119,9 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     public DateTime LastUsedOn { get; set; }
 
     /// <inheritdoc />
+    public Guid? DefaultSceneId { get; set; }
+
+    /// <inheritdoc />
     public bool Equals(ProjectInfo? other)
         => other is not null && (ReferenceEquals(this, other) || this.Id == other.Id);
 
@@ -165,6 +168,11 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
         var obj = JsonSerializer.Deserialize<ProjectInfo>(json, JsonOptions)
             ?? throw new JsonException("Failed to deserialize ProjectInfo from JSON.");
 
+        if (obj.DefaultSceneId == Guid.Empty)
+        {
+            obj.DefaultSceneId = null;
+        }
+
         return obj.Id == Guid.Empty
             ? throw new JsonException("ProjectInfo JSON is missing required 'Id' property or it is empty.")
             : (IProjectInfo)obj;
@@ -187,6 +195,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
             AuthoringMounts = [.. projectInfo.AuthoringMounts],
             LocalFolderMounts = [.. projectInfo.LocalFolderMounts],
             CookedContentOrder = [.. projectInfo.CookedContentOrder],
+            DefaultSceneId = projectInfo.DefaultSceneId,
         };
         return JsonSerializer.Serialize(descriptor, JsonOptions);
     }
@@ -208,5 +217,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
         public IList<LocalFolderMount> LocalFolderMounts { get; init; } = [];
 
         public IList<CookedContentSource> CookedContentOrder { get; init; } = [];
+
+        public Guid? DefaultSceneId { get; init; }
     }
 }

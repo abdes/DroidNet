@@ -65,6 +65,11 @@ public sealed record ProjectContext
     public Uri? InitialSceneAssetUri { get; init; }
 
     /// <summary>
+    ///     Gets the project's configured default scene identity, or <see langword="null"/> when none is configured.
+    /// </summary>
+    public Guid? DefaultSceneId { get; init; }
+
+    /// <summary>
     ///     Creates a context snapshot from a loaded project.
     /// </summary>
     /// <param name="project">The loaded project.</param>
@@ -99,6 +104,7 @@ public sealed record ProjectContext
             LocalFolderMounts = [.. info.LocalFolderMounts],
             CookedContentOrder = [.. info.CookedContentOrder],
             Scenes = [.. scenes ?? []],
+            DefaultSceneId = info.DefaultSceneId,
         };
     }
 }

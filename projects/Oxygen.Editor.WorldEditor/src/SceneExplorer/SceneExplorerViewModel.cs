@@ -708,9 +708,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        // Update the active scene on the project
-        this.currentProject.ActiveScene = scene;
-
         this.LogDocumentActivated(e.DocumentId);
 
         // Load/switch the scene
@@ -742,9 +739,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         {
             return;
         }
-
-        // Update the active scene on the project
-        this.currentProject.ActiveScene = scene;
 
         // Load the scene data and display it
         await this.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
