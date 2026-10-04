@@ -512,9 +512,8 @@ public partial class AssetsViewModel(
                 string.Equals(scene.Name, args.InvokedItem.DisplayName, StringComparison.OrdinalIgnoreCase));
             if (scene is not null)
             {
-                currentProject.ActiveScene = scene;
-
-                // Request to open the scene document
+                // Request to open the scene document; the document/workspace owner assigns the
+                // accepted ActiveScene only after the scene has loaded.
                 _ = messenger.Send(new OpenSceneRequestMessage(scene));
             }
         }
