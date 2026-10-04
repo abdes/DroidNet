@@ -38,6 +38,9 @@ Detailed milestone plans should include:
   incremental component/VM extraction, preserving existing authoring behavior
   through UI tests and local-only screenshot comparisons. This does not reopen
   ED-M04 or replace milestone delivery plans.
+- [Scene Explorer and generic DynamicTree design implementation](./scene-explorer-dynamictree-design.md):
+  three large slices implementing the brief/showcase, reusable control extensions,
+  atomic hierarchy authoring and workspace protection. No old-UI baseline stage.
 
 ## Milestone Plans
 

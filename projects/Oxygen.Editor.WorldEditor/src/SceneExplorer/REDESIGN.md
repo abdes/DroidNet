@@ -1,5 +1,13 @@
-
 # Scene Explorer Redesign
+
+Status: `historical proposal`
+
+The current execution plan is
+[Scene Explorer and generic DynamicTree design implementation](../../../../design/editor/plan/scene-explorer-dynamictree-design.md).
+It replaces this document's phase/checklist sequence with three large slices
+targeting the design brief and showcase. The owning editor LLDs govern contracts;
+the tree-first mutation, clipboard and history examples below are not instructions
+for the new implementation.
 
 ## 1. Executive Summary
 
@@ -14,19 +22,19 @@ This redesign proposes a clean, SOLID architecture that separates concerns, leve
 The Scene Explorer must reconcile two hierarchies:
 
 1. **Scene Graph (Model)**: The physical transformation hierarchy.
-    - Source of Truth: `Scene.RootNodes` and `SceneNode.Children`.
-    - Determines world position and transformation inheritance.
+   - Source of Truth: `Scene.RootNodes` and `SceneNode.Children`.
+   - Determines world position and transformation inheritance.
 2. **Explorer Layout (UI)**: The visual organization.
-    - Source of Truth: `Scene.ExplorerLayout` (JSON-serializable list of `ExplorerEntryData`).
-    - Allows grouping nodes into **Folders**.
-    - **Constraint**: The Layout is an *overlay*. It cannot violate the Scene Graph. A Folder exists *within* a specific scope (Root or a specific Parent Node). It can only contain nodes that belong to that scope.
+   - Source of Truth: `Scene.ExplorerLayout` (JSON-serializable list of `ExplorerEntryData`).
+   - Allows grouping nodes into **Folders**.
+   - **Constraint**: The Layout is an _overlay_. It cannot violate the Scene Graph. A Folder exists _within_ a specific scope (Root or a specific Parent Node). It can only contain nodes that belong to that scope.
 
 ### 2.2. Folders as UI Artifacts
 
 - Folders do not exist in the Scene Graph.
 - Folders do not affect transformations.
 - Folders are purely for organizing lists of children in the UI.
-- **Rule**: If Node A is in Folder F, and Folder F is "inside" Node B, then Node A *must* be a child of Node B in the Scene Graph.
+- **Rule**: If Node A is in Folder F, and Folder F is "inside" Node B, then Node A _must_ be a child of Node B in the Scene Graph.
 
 ## 3. Architecture
 
@@ -70,7 +78,7 @@ graph TD
   - `DeleteItems(items)`
   - `RenameItem(item, newName)`
 - **Logic**:
-  - When moving a Node to a Folder, it checks if that Folder is in a different Scene Parent. If so, it performs a **Reparent** (Scene Mutation) *and* a **Layout Update**.
+  - When moving a Node to a Folder, it checks if that Folder is in a different Scene Parent. If so, it performs a **Reparent** (Scene Mutation) _and_ a **Layout Update**.
   - Ensures atomicity of operations for Undo/Redo.
 
 ### 3.3. Adapters (The View Model Wrappers)
@@ -98,17 +106,17 @@ Following the Demo App, we leverage `DynamicTreeViewModel.ItemMoved`.
 1. **User Action**: Drags Item A to Item B.
 2. **Tree Control**: Updates UI, fires `ItemMoved`.
 3. **ViewModel**:
-    - Receives `ItemMoved(item, oldParent, newParent, newIndex)`.
-    - Calls `SceneExplorerService.MoveItem(item, newParent, newIndex)`.
+   - Receives `ItemMoved(item, oldParent, newParent, newIndex)`.
+   - Calls `SceneExplorerService.MoveItem(item, newParent, newIndex)`.
 4. **Service**:
-    - Analyzes the move.
-    - **Case 1: Node -> Node**: Reparent in Scene Graph. Remove from old Layout location. Add to new Layout location (defaulting to end or specific index).
-    - **Case 2: Node -> Folder**:
-        - Find the "Scene Parent" of the target Folder.
-        - If different from Node's current parent -> Reparent in Scene Graph.
-        - Update Layout: Move `ExplorerEntryData` to the Folder's children list.
-    - **Case 3: Folder -> Folder**: Update Layout only.
-    - **Validation**: Prevent cycles, prevent moving Folder into itself.
+   - Analyzes the move.
+   - **Case 1: Node -> Node**: Reparent in Scene Graph. Remove from old Layout location. Add to new Layout location (defaulting to end or specific index).
+   - **Case 2: Node -> Folder**:
+     - Find the "Scene Parent" of the target Folder.
+     - If different from Node's current parent -> Reparent in Scene Graph.
+     - Update Layout: Move `ExplorerEntryData` to the Folder's children list.
+   - **Case 3: Folder -> Folder**: Update Layout only.
+   - **Validation**: Prevent cycles, prevent moving Folder into itself.
 5. **Undo/Redo**: The Service returns an `IChange` or records it directly to History.
 
 ### 4.2. Copy / Cut / Paste
@@ -134,8 +142,8 @@ We must strictly follow the `TimeMachine` patterns for robust undo/redo.
 - **Async Support**: All operations should support `ApplyAsync`.
 - **Pattern**:
   - **Do**: Perform the operation immediately (e.g., `Service.MoveItem`).
-  - **Record**: Add an `IChange` to `HistoryKeeper` that knows how to *undo* the operation.
-  - **Undo**: The `IChange` implementation restores the previous state and records a *redo* change.
+  - **Record**: Add an `IChange` to `HistoryKeeper` that knows how to _undo_ the operation.
+  - **Undo**: The `IChange` implementation restores the previous state and records a _redo_ change.
 
 **Example (Async Move)**:
 
@@ -200,7 +208,7 @@ Instead of full "Reconciliation" on every change, we use granular updates:
 - **Q: How to persist Folder expansion?**
   - **A**: `ExplorerEntryData` has `IsExpanded`. Update this property when TreeItem expands/collapses.
 - **Q: What happens to Folders when their parent Node is deleted?**
-  - **A**: They are deleted. Folders are part of the Layout *of* that Node.
+  - **A**: They are deleted. Folders are part of the Layout _of_ that Node.
 - **Q: Can I have a Folder with the same name as a Node?**
   - **A**: Yes, but unique IDs are used internally. Visual ambiguity is a user problem, but we can add validation if needed.
 
@@ -214,13 +222,13 @@ The loading process is critical for correctly overlaying the Layout on the Scene
    - **Folder Entry**: Create `FolderAdapter`. Recursively load children.
    - **Node Entry**:
      - Find `SceneNode` by ID (Optimize: Use a Dictionary lookup, not `AllNodes.FirstOrDefault`).
-     - If found: Create `SceneNodeAdapter`. Recursively load children defined in the *Layout Entry*.
+     - If found: Create `SceneNodeAdapter`. Recursively load children defined in the _Layout Entry_.
      - If not found (Orphaned Layout Entry): Discard or mark as error.
 
 2. **Handle Orphans (Graph-First Fallback)**:
-   - After loading the Layout, identify any `SceneNode` in `Scene.RootNodes` (and their descendants) that was *not* visited.
+   - After loading the Layout, identify any `SceneNode` in `Scene.RootNodes` (and their descendants) that was _not_ visited.
    - Add these "Orphaned Nodes" to the Root of the Adapter Tree (or their correct Scene Parent if the parent is visible).
-   - *Note*: This ensures that if the Layout is out of sync (e.g., node added via script), it still appears in the Explorer.
+   - _Note_: This ensures that if the Layout is out of sync (e.g., node added via script), it still appears in the Explorer.
 
 ### 7.2. Optimization
 
@@ -251,7 +259,7 @@ Use this checklist to track progress and ensure feature parity.
 - [ ] **Create Folder**: Add new folder.
 - [ ] **Rename**: Rename Node (sync to Scene) and Folder (sync to Layout).
 - [ ] **Delete**: Remove Node (sync to Engine) and Folder (remove children or move to parent?).
-  - *Decision*: Deleting a Folder deletes its content (Standard Explorer behavior).
+  - _Decision_: Deleting a Folder deletes its content (Standard Explorer behavior).
 
 ### Drag & Drop (The Complex Part)
 
@@ -361,9 +369,9 @@ These must be bound to commands in the `SceneExplorerViewModel`:
 
 - **Ctrl+G**: Group selected items into a new folder.
 - **Ctrl+Shift+E**: Expand All (Recursive).
-  - *Behavior*: Expands the selected node and all its descendants. If nothing is selected, expands the entire tree.
+  - _Behavior_: Expands the selected node and all its descendants. If nothing is selected, expands the entire tree.
 - **Ctrl+Shift+W**: Collapse All (Recursive).
-  - *Behavior*: Collapses the selected node and all its descendants. If nothing is selected, collapses the entire tree.
+  - _Behavior_: Collapses the selected node and all its descendants. If nothing is selected, collapses the entire tree.
 - **Ctrl+Z**: Undo (Global Application Shortcut, handled by `TimeMachine`).
 - **Ctrl+Y**: Redo (Global Application Shortcut, handled by `TimeMachine`).
 
