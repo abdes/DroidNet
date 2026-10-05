@@ -95,7 +95,5 @@ public class GlobalTestInitializer : VerifyBase
         VerifierSettings.IgnoreMember<IActiveRoute>("Root");
         VerifierSettings.IgnoreMember<IActiveRoute>("Siblings");
         VerifierSettings.IgnoreMember<IActiveRoute>("Parent");
-
-        VerifyDiffPlex.Initialize();
     }
 }

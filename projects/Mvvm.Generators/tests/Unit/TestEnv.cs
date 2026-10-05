@@ -12,14 +12,6 @@ namespace DroidNet.Mvvm.Generators.Tests;
 [ExcludeFromCodeCoverage]
 public class TestEnv : CommonTestEnv
 {
-    [AssemblyInitialize]
-    public static void Init(TestContext context)
-    {
-        _ = context; // unused
-
-        ConfigureVerify();
-    }
-
     [AssemblyCleanup]
     public static void Close()
     {

@@ -21,7 +21,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Verify.DiffPlex" />
         <PackageReference Include="Verify.MSTest" />
     </ItemGroup>
 

@@ -91,9 +91,4 @@ public class CommonTestEnv : VerifyBase
                 r => r.Parent.ImplementationType),
             setup: Setup.With(condition: r => r.Parent.ImplementationType != null));
     }
-
-    /// <summary>
-    ///     Configures Verify for the test environment.
-    /// </summary>
-    protected static void ConfigureVerify() => VerifyDiffPlex.Initialize();
 }

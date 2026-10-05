@@ -23,8 +23,6 @@ public class TestEnv : CommonTestEnv
         ConfigureLogging(TestContainer);
         TestContainer.Register<IViewFor<DemoViewModel>, DemoView>();
         Log.Information("Test session started");
-
-        ConfigureVerify();
     }
 
     [AssemblyCleanup]
