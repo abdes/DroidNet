@@ -6,6 +6,7 @@ using System.Reactive.Linq;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
+using DroidNet.Tests;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI;
@@ -78,6 +79,9 @@ internal sealed partial class DemandFixture : IDisposable
             return new TaskCompletionSource<ContentCookResult>(TaskCreationOptions.RunContinuationsAsynchronously).Task.WaitAsync(token);
         });
         this.Service = new(CreateStatusHosting(), this.Assets.Object, this.pipeline.Object, this.projects, this.Authoring.Documents.Object, this.Authoring.Sync.Object, this.Authoring.Messenger, default, NullLogger<SceneContentDemandService>.Instance);
+        // Demand assertions run without a visual tree; WaitForRenderAsync only completes while a
+        // window produces composition frames, so realize the shared test window up front.
+        _ = VisualUserInterfaceTestsApp.MainWindow;
     }
 
     public SceneAuthoringFixture Authoring { get; } = new();
