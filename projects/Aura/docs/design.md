@@ -9,6 +9,14 @@ window decorations, appearance settings, document tabs, routing integration, and
 shell serves as the top-level container for the application's UI and manages window lifecycle
 events.
 
+The shell keeps Aura's custom title-bar layout inside a minimally templated Windows App SDK
+`TitleBar`. `AutoRefreshDragRegions` tracks layout and DPI changes, and `IsDragRegion` marks
+command panels and document tabs as interactive. Only the first row is registered as the
+window drag surface. Aura still controls row heights, icon margins, menu spacing, caption-button
+reservation, and minimum window width; the SDK's default title-bar visuals are not used.
+The shell detaches title-bar registration when unloaded from a live window. During window
+closure it stops layout observation and does not call `SetTitleBar` on the closed window.
+
 ### Windowing
 
 Coordinates and owns the lifecycle of Aura-managed windows: creation, registration, activation,

@@ -12,11 +12,8 @@ using DroidNet.Mvvm;
 using DroidNet.Mvvm.Generators;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI.Input;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Windows.Foundation;
-using Windows.Graphics;
 using GridLength = Microsoft.UI.Xaml.GridLength;
 
 namespace DroidNet.Aura;
@@ -45,9 +42,8 @@ public sealed partial class MainShellView : INotifyPropertyChanged
     private IDocumentService? cachedDocumentService;
     private DocumentTabPresenter? documentTabPresenter;
 
-    // Last applied passthrough regions (device pixels). Used to avoid re-applying identical regions.
-    private RectInt32[]? lastAppliedPassthroughRegions;
-    private bool passthroughUnavailable;
+    private Window? titleBarWindow;
+    private bool titleBarWindowClosed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainShellView"/> class.
@@ -61,6 +57,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
 
         this.Loaded += (_, _) =>
         {
+            this.TitleBarHost.Content = this.CustomTitleBar;
             this.logger = this.ViewModel?.LoggerFactory?.CreateLogger<MainShellView>() ?? NullLogger<MainShellView>.Instance;
             this.LogLoaded();
 
@@ -74,6 +71,12 @@ public sealed partial class MainShellView : INotifyPropertyChanged
             // ViewModel is now properly set up; Update the logger if the ViewModel changes for consistency
             this.ViewModelChanged -= this.InitializeLogger; // Should not be needed, but ensure no duplicates
             this.ViewModelChanged += this.InitializeLogger;
+            if (this.ViewModel is { } viewModel)
+            {
+                viewModel.PropertyChanged += this.OnShellPropertyChanged;
+            }
+
+            this.UpdateTitleBarHost();
 
             this.ObserveTitleBar(uiContext);
 
@@ -89,7 +92,14 @@ public sealed partial class MainShellView : INotifyPropertyChanged
 
         this.Unloaded += (_, _) =>
         {
+            this.TitleBarHost.Content = null;
             this.ViewModelChanged -= this.InitializeLogger;
+            if (this.ViewModel is { } viewModel)
+            {
+                viewModel.PropertyChanged -= this.OnShellPropertyChanged;
+            }
+
+            this.DetachTitleBarWindow();
 
             this.ForgetTitleBar();
             this.DetachDocumentServiceHandlers();
@@ -109,12 +119,73 @@ public sealed partial class MainShellView : INotifyPropertyChanged
     private void InitializeLogger(object? sender, ViewModelChangedEventArgs<MainShellViewModel> args)
     {
         _ = sender; // unused
-        _ = args; // unused
+        if (args.OldValue is { } oldViewModel)
+        {
+            oldViewModel.PropertyChanged -= this.OnShellPropertyChanged;
+        }
+
+        if (this.ViewModel is { } newViewModel)
+        {
+            newViewModel.PropertyChanged += this.OnShellPropertyChanged;
+        }
 
         this.logger = this.ViewModel?.LoggerFactory.CreateLogger<MainShellView>() ?? NullLogger<MainShellView>.Instance;
 
         // Log that the instance logger was replaced (this helps track log sinks/lifetimes)
         this.LogLoggerInitialized();
+        this.UpdateTitleBarHost();
+    }
+
+    private void OnShellPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        _ = sender;
+        if (args.PropertyName == nameof(MainShellViewModel.ShowCustomTitleBar))
+        {
+            this.UpdateTitleBarHost();
+        }
+    }
+
+    private void UpdateTitleBarHost()
+    {
+        var window = this.ViewModel?.Window;
+        if (!ReferenceEquals(this.titleBarWindow, window))
+        {
+            this.DetachTitleBarWindow();
+            this.titleBarWindow = window;
+            if (window is not null)
+            {
+                window.Closed += this.OnTitleBarWindowClosed;
+            }
+        }
+
+        if (!this.titleBarWindowClosed)
+        {
+            window?.SetTitleBar(this.ViewModel?.ShowCustomTitleBar == true ? this.TitleBarDragSurface : null);
+        }
+    }
+
+    private void OnTitleBarWindowClosed(object sender, WindowEventArgs args)
+    {
+        _ = sender;
+        _ = args;
+        this.titleBarWindowClosed = true;
+        this.ForgetTitleBar();
+    }
+
+    private void DetachTitleBarWindow()
+    {
+        if (this.titleBarWindow is { } window)
+        {
+            if (!this.titleBarWindowClosed)
+            {
+                window.SetTitleBar(null);
+            }
+
+            window.Closed -= this.OnTitleBarWindowClosed;
+            this.titleBarWindow = null;
+        }
+
+        this.titleBarWindowClosed = false;
     }
 
     private void ObserveTitleBar(SynchronizationContext uiContext)
@@ -156,9 +227,6 @@ public sealed partial class MainShellView : INotifyPropertyChanged
             .Select(_ => "SecondaryCommands.SizeChanged");
 
         // Merge the observables and throttle the events
-        // Compute a lightweight key representing the current passthrough geometry and only
-        // emit when that key changes. This short-circuits layout noise that doesn't affect
-        // the regions we apply for non-client input.
         var throttledObservable =
             ObserveWindowSize()
             .Merge(ObserveTitleBarLoaded())
@@ -178,7 +246,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         {
             this.LogThrottledTitlebarEvent(eventType);
 
-            if (!this.IsLoaded)
+            if (!this.IsLoaded || this.titleBarWindowClosed)
             {
                 return; // Skip scheduling when the title bar has already been unloaded (window closing).
             }
@@ -279,9 +347,9 @@ public sealed partial class MainShellView : INotifyPropertyChanged
     /// </code>
     /// <para><b>Note:</b></para>
     /// <para>
-    /// The documents <c>TabStrip</c> is not part of the drag area in the title
-    /// bar, and as such is excluded from the observed layout and from the
-    /// passthrough region calculations.
+    /// The SDK TitleBar host manages interactive regions automatically. The
+    /// document <c>TabStrip</c> and command panels are explicitly non-draggable;
+    /// Aura retains its own row heights and caption-button reservation.
     /// </para>
     /// </remarks>
     private void SetupCustomTitleBar()
@@ -295,10 +363,6 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         var scaleAdjustment = this.CustomTitleBar.XamlRoot.RasterizationScale;
 
         UpdateSystemReservedWidthIfChanged();
-
-        // Configure passthrough regions for interactive elements
-        // Pass the system right inset in device pixels so we can clamp passthrough regions
-        this.ConfigurePassthroughRegions(appWindow, scaleAdjustment);
 
         void UpdateSystemReservedWidthIfChanged()
         {
@@ -389,138 +453,4 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         this.LogSecondaryCommandsInfo(newVisibility, currentlyVisible, windowWidth, requiredWidthToShowSecondary);
     }
 
-    private void ConfigurePassthroughRegions(AppWindow window, double scaleAdjustment)
-    {
-        if (this.passthroughUnavailable)
-        {
-            return;
-        }
-
-        var newRegions = this.ComputeClampedPassthroughRegions(scaleAdjustment, window.TitleBar.RightInset);
-
-        if (RegionsEqual(this.lastAppliedPassthroughRegions, newRegions))
-        {
-            this.LogPassthroughRegionsIdentical();
-            return;
-        }
-
-        try
-        {
-            var nonClientInputSrc = InputNonClientPointerSource.GetForWindowId(window.Id);
-            nonClientInputSrc.SetRegionRects(NonClientRegionKind.Passthrough, [.. newRegions]);
-            this.LogPassthroughRegionsSet(newRegions.Length);
-
-            // Store for later comparison
-            this.lastAppliedPassthroughRegions = newRegions;
-        }
-#pragma warning disable CA1031 // Handle API failures gracefully; log and fallback without crashing design/debug sessions.
-        catch (Exception ex)
-#pragma warning restore CA1031
-        {
-            this.passthroughUnavailable = true;
-            this.lastAppliedPassthroughRegions = null;
-            this.LogPassthroughRegionsFailed(ex);
-        }
-
-        static bool RegionsEqual(RectInt32[]? a, RectInt32[]? b)
-        {
-            if (ReferenceEquals(a, b))
-            {
-                return true;
-            }
-
-            if (a is null && b is null)
-            {
-                return true;
-            }
-
-            if (a is null || b is null)
-            {
-                return false;
-            }
-
-            if (a.Length != b.Length)
-            {
-                return false;
-            }
-
-            for (var i = 0; i < a.Length; ++i)
-            {
-                var x = a[i];
-                var y = b[i];
-                if (x.X != y.X || x.Y != y.Y || x.Width != y.Width || x.Height != y.Height)
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-    }
-
-    private RectInt32[] ComputeClampedPassthroughRegions(double scaleAdjustment, int systemRightInsetDevice)
-    {
-        var passthroughRegions = new List<RectInt32>();
-        AddPassthroughRegion(this.PrimaryCommands, scaleAdjustment, passthroughRegions);
-        AddPassthroughRegion(this.SecondaryCommands, scaleAdjustment, passthroughRegions);
-
-        var clamped = new List<RectInt32>();
-        var deviceWindowWidth = (int)Math.Round(this.ActualWidth * scaleAdjustment);
-        var gap = Math.Max(2, (int)this.SecondaryCommands.Margin.Right);
-        var allowedMaxX = deviceWindowWidth - systemRightInsetDevice - gap;
-
-        foreach (var r in passthroughRegions)
-        {
-            if (r.X >= allowedMaxX)
-            {
-                continue;
-            }
-
-            var right = r.X + r.Width;
-            var clampedWidth = r.Width;
-            if (right > allowedMaxX)
-            {
-                clampedWidth = Math.Max(0, allowedMaxX - r.X);
-            }
-
-            if (clampedWidth > 0)
-            {
-                var cr = new RectInt32(_X: r.X, _Y: r.Y, _Width: clampedWidth, _Height: r.Height);
-                clamped.Add(cr);
-            }
-        }
-
-        this.LogComputedPassthroughRegions(passthroughRegions.Count, clamped);
-
-        return [.. clamped];
-
-        void AddPassthroughRegion(
-           FrameworkElement element,
-           double scaleAdjustment,
-           List<RectInt32> regions)
-        {
-            if (element.Visibility is not Visibility.Visible || element.ActualWidth <= 0)
-            {
-                // Report skipped interactive element for troubleshooting
-                this.LogPassthroughElementSkipped(element.Name ?? element.GetType().Name);
-                return;
-            }
-
-            var transform = element.TransformToVisual(visual: null);
-            var bounds = transform.TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
-
-            var scaledRect = MakeScaledPassthroughRegion(bounds, scaleAdjustment);
-            regions.Add(scaledRect);
-
-            // Converts a <see cref="Rect"/> to a <see cref="Windows.Graphics.RectInt32"/> based on the specified scale.
-            static RectInt32 MakeScaledPassthroughRegion(Rect bounds, double scale)
-               => new()
-               {
-                   X = (int)Math.Round(bounds.X * scale),
-                   Y = (int)Math.Round(bounds.Y * scale),
-                   Width = (int)Math.Round(bounds.Width * scale),
-                   Height = (int)Math.Round(bounds.Height * scale),
-               };
-        }
-    }
 }

@@ -14,6 +14,25 @@
     mc:Ignorable="d">
 
     <UserControl.Resources>
+        <Style x:Key="AuraTitleBarHost" TargetType="TitleBar">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TitleBar">
+                        <Grid x:Name="PART_ContentPresenterGrid">
+                            <ContentPresenter
+                                x:Name="PART_ContentPresenter"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                Content="{TemplateBinding Content}" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="CompactButton" TargetType="Control">
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Background" Value="Transparent" />
@@ -43,82 +62,97 @@
         </Grid.RowDefinitions>
 
         <!--  Custom TitleBar  -->
-        <Grid
-            x:Name="CustomTitleBar"
-            Background="Transparent"
+        <TitleBar
+            x:Name="TitleBarHost"
+            AutoRefreshDragRegions="True"
+            Style="{StaticResource AuraTitleBarHost}"
             Visibility="{x:Bind ViewModel.ShowCustomTitleBar, Mode=OneWay, Converter={StaticResource BoolToVis}, FallbackValue=Visible}">
-            <Grid.RowDefinitions>
-                <RowDefinition x:Name="TitleBarRow" />
-                <RowDefinition x:Name="DocumentTabsRow" />
-            </Grid.RowDefinitions>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition x:Name="IconColumn" Width="Auto" />
-                <ColumnDefinition x:Name="PrimaryCommandsColumn" Width="Auto" />
-                <ColumnDefinition
-                    x:Name="DragColumn"
-                    Width="*"
-                    MinWidth="48" />
-                <ColumnDefinition x:Name="SecondaryCommandsColumn" Width="Auto" />
-                <ColumnDefinition x:Name="SystemReservedRight" Width="0" />
-            </Grid.ColumnDefinitions>
-            <auraControls:AppIcon
-                x:Name="AppIcon"
-                Grid.RowSpan="2"
-                Grid.Column="0"
-                VerticalAlignment="Center"
-                IconSource="{x:Bind ViewModel.IconSource, Mode=OneWay}"
-                Visibility="{x:Bind ViewModel.Context.Decorations.TitleBar.ShowIcon, Mode=OneWay, Converter={StaticResource BoolToVis}, FallbackValue=Visible}" />
-            <StackPanel
-                x:Name="PrimaryCommands"
-                Grid.Column="1"
-                VerticalAlignment="Stretch"
+            <Grid
+                x:Name="CustomTitleBar"
                 Background="Transparent"
-                Orientation="Horizontal"
-                Spacing="12"
-                Visibility="{x:Bind ViewModel.Context.Decorations.Menu, Mode=OneWay, Converter={StaticResource NullToVis}, FallbackValue=Visible}">
-                <!--  Standard persistent menu (when IsCompact=false or null)  -->
-                <cm:MenuBar
+                Visibility="{x:Bind ViewModel.ShowCustomTitleBar, Mode=OneWay, Converter={StaticResource BoolToVis}, FallbackValue=Visible}">
+                <Grid.RowDefinitions>
+                    <RowDefinition x:Name="TitleBarRow" />
+                    <RowDefinition x:Name="DocumentTabsRow" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="IconColumn" Width="Auto" />
+                    <ColumnDefinition x:Name="PrimaryCommandsColumn" Width="Auto" />
+                    <ColumnDefinition
+                        x:Name="DragColumn"
+                        Width="*"
+                        MinWidth="48" />
+                    <ColumnDefinition x:Name="SecondaryCommandsColumn" Width="Auto" />
+                    <ColumnDefinition x:Name="SystemReservedRight" Width="0" />
+                </Grid.ColumnDefinitions>
+                <!--  Only the first row is a window drag surface; document tabs remain client content.  -->
+                <Border
+                    x:Name="TitleBarDragSurface"
+                    Grid.ColumnSpan="5"
+                    IsHitTestVisible="False" />
+                <auraControls:AppIcon
+                    x:Name="AppIcon"
+                    Grid.RowSpan="2"
+                    Grid.Column="0"
+                    VerticalAlignment="Center"
+                    IconSource="{x:Bind ViewModel.IconSource, Mode=OneWay}"
+                    TitleBar.IsDragRegion="True"
+                    Visibility="{x:Bind ViewModel.Context.Decorations.TitleBar.ShowIcon, Mode=OneWay, Converter={StaticResource BoolToVis}, FallbackValue=Visible}" />
+                <StackPanel
+                    x:Name="PrimaryCommands"
+                    Grid.Column="1"
+                    VerticalAlignment="Stretch"
+                    Background="Transparent"
+                    Orientation="Horizontal"
+                    Spacing="12"
+                    TitleBar.IsDragRegion="False"
+                    Visibility="{x:Bind ViewModel.Context.Decorations.Menu, Mode=OneWay, Converter={StaticResource NullToVis}, FallbackValue=Visible}">
+                    <!--  Standard persistent menu (when IsCompact=false or null)  -->
+                    <cm:MenuBar
+                        VerticalAlignment="Top"
+                        MenuSource="{x:Bind ViewModel.MainMenu, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.Context.Decorations.Menu.IsCompact, Mode=OneWay, Converter={StaticResource IsNotCompactToVis}, FallbackValue=Visible}" />
+                    <!--  Compact expandable menu (when IsCompact=true)  -->
+                    <cm:ExpandableMenuBar
+                        VerticalAlignment="Bottom"
+                        MenuSource="{x:Bind ViewModel.MainMenu, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.Context.Decorations.Menu.IsCompact, Mode=OneWay, Converter={StaticResource IsCompactToVis}, FallbackValue=Collapsed}" />
+                </StackPanel>
+                <StackPanel
+                    x:Name="SecondaryCommands"
+                    Grid.Column="3"
+                    Margin="0,0,2,0"
                     VerticalAlignment="Top"
-                    MenuSource="{x:Bind ViewModel.MainMenu, Mode=OneWay}"
-                    Visibility="{x:Bind ViewModel.Context.Decorations.Menu.IsCompact, Mode=OneWay, Converter={StaticResource IsNotCompactToVis}, FallbackValue=Visible}" />
-                <!--  Compact expandable menu (when IsCompact=true)  -->
-                <cm:ExpandableMenuBar
-                    VerticalAlignment="Bottom"
-                    MenuSource="{x:Bind ViewModel.MainMenu, Mode=OneWay}"
-                    Visibility="{x:Bind ViewModel.Context.Decorations.Menu.IsCompact, Mode=OneWay, Converter={StaticResource IsCompactToVis}, FallbackValue=Collapsed}" />
-            </StackPanel>
-            <StackPanel
-                x:Name="SecondaryCommands"
-                Grid.Column="3"
-                Margin="0,0,2,0"
-                VerticalAlignment="Top"
-                Background="Transparent"
-                Orientation="Horizontal"
-                Visibility="Visible">
-                <cm:MenuButton
-                    Height="{x:Bind ViewModel.Context.Decorations.TitleBar.Height, Mode=OneWay, FallbackValue=32}"
-                    Chrome="Transparent"
-                    CornerRadius="5"
-                    MenuSource="{x:Bind ViewModel.SettingsMenu, Mode=OneWay}">
-                    <FontIcon FontSize="16" Glyph="&#xE713;" />
-                </cm:MenuButton>
-            </StackPanel>
-            <!--  Optional Document Tabs row shown under the main title bar  -->
-            <auraControls:TabStrip
-                x:Name="DocumentTabStrip"
-                Grid.Row="1"
-                Grid.Column="1"
-                Grid.ColumnSpan="4"
-                MinHeight="24"
-                DragCoordinator="{x:Bind ViewModel.DragCoordinator, Mode=OneWay}"
-                LoggerFactory="{x:Bind ViewModel.LoggerFactory, Mode=OneWay}"
-                Visibility="{x:Bind ViewModel.Context.Decorations.TitleBar.WithDocumentTabs, Mode=OneWay, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
-            <!--  Empty element to force SystemReservedRight column to reserve space for system caption buttons  -->
-            <Border
-                x:Name="SystemReservedSpacer"
-                Grid.Column="4"
-                Background="Transparent" />
-        </Grid>
+                    Background="Transparent"
+                    Orientation="Horizontal"
+                    TitleBar.IsDragRegion="False"
+                    Visibility="Visible">
+                    <cm:MenuButton
+                        Height="{x:Bind ViewModel.Context.Decorations.TitleBar.Height, Mode=OneWay, FallbackValue=32}"
+                        Chrome="Transparent"
+                        CornerRadius="5"
+                        MenuSource="{x:Bind ViewModel.SettingsMenu, Mode=OneWay}">
+                        <FontIcon FontSize="16" Glyph="&#xE713;" />
+                    </cm:MenuButton>
+                </StackPanel>
+                <!--  Optional Document Tabs row shown under the main title bar  -->
+                <auraControls:TabStrip
+                    x:Name="DocumentTabStrip"
+                    Grid.Row="1"
+                    Grid.Column="1"
+                    Grid.ColumnSpan="4"
+                    MinHeight="24"
+                    DragCoordinator="{x:Bind ViewModel.DragCoordinator, Mode=OneWay}"
+                    LoggerFactory="{x:Bind ViewModel.LoggerFactory, Mode=OneWay}"
+                    TitleBar.IsDragRegion="False"
+                    Visibility="{x:Bind ViewModel.Context.Decorations.TitleBar.WithDocumentTabs, Mode=OneWay, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
+                <!--  Empty element to force SystemReservedRight column to reserve space for system caption buttons  -->
+                <Border
+                    x:Name="SystemReservedSpacer"
+                    Grid.Column="4"
+                    Background="Transparent" />
+            </Grid>
+        </TitleBar>
 
         <!--  Main Content Area  -->
         <Grid Name="ContentLayer" Grid.Row="1">

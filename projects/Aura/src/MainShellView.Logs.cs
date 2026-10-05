@@ -3,10 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
-using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
-using Windows.Graphics;
 
 namespace DroidNet.Aura;
 
@@ -107,95 +105,6 @@ public partial class MainShellView
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Passthrough element skipped: '{ElementId}' (not visible or zero size)")]
-    private static partial void LogPassthroughElementSkipped(ILogger logger, string elementId);
-
-    [Conditional("DEBUG")]
-    private void LogPassthroughElementSkipped(string elementId)
-    {
-        Debug.Assert(this.IsLoaded, "logging can only be done after view is loaded");
-        LogPassthroughElementSkipped(this.logger, elementId);
-    }
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "Passthrough regions: requested={RequestedCount}, clamped={ClampedCount}")]
-    private static partial void LogPassthroughRegionsComputed(ILogger logger, int requestedCount, int clampedCount);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "Clamped regions [{Index}]: {Region}")]
-    private static partial void LogClampedRegion(ILogger logger, int index, string region);
-
-    [Conditional("DEBUG")]
-    private void LogComputedPassthroughRegions(int requestedCount, List<RectInt32> clamped)
-    {
-        Debug.Assert(this.IsLoaded, "logging can only be done after view is loaded");
-        if (!this.logger.IsEnabled(LogLevel.Debug))
-        {
-            return;
-        }
-
-        LogPassthroughRegionsComputed(this.logger, requestedCount, clamped.Count);
-
-        for (var idx = 0; idx < clamped.Count; idx++)
-        {
-            var rr = clamped[idx];
-            var region = string.Format(
-                CultureInfo.InvariantCulture,
-                "{{ X={1}, Y={2}, W={3}, H={4} }}",
-                idx,
-                rr.X,
-                rr.Y,
-                rr.Width,
-                rr.Height);
-            LogClampedRegion(this.logger, idx, region);
-        }
-    }
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "SetRegionRects called with {SetCount} region(s)")]
-    private static partial void LogPassthroughRegionsSet(ILogger logger, int setCount);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "SetRegionRects cleared (no passthrough regions)")]
-    private static partial void LogPassthroughRegionsCleared(ILogger logger);
-
-    [Conditional("DEBUG")]
-    private void LogPassthroughRegionsSet(int setCount)
-    {
-        Debug.Assert(this.IsLoaded, "logging can only be done after view is loaded");
-        if (setCount > 0)
-        {
-            LogPassthroughRegionsSet(this.logger, setCount);
-        }
-        else
-        {
-            LogPassthroughRegionsCleared(this.logger);
-        }
-    }
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Warning,
-        Message = "Failed to configure passthrough regions: {ErrorMessage}")]
-    private static partial void LogPassthroughRegionsFailed(ILogger logger, string errorMessage);
-
-    private void LogPassthroughRegionsFailed(Exception exception)
-    {
-        Debug.Assert(this.IsLoaded, "logging can only be done after view is loaded");
-        LogPassthroughRegionsFailed(this.logger, exception.Message);
-    }
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
         Message = "CustomTitleBar: Layout updated (Scale: {Scale}, System Reserved: {RightInset}, Actual Width: {ActualWidth}, Actual Height: {ActualHeight})")]
     private static partial void LogCustomTitleBarLayout(ILogger logger, double scale, double rightInset, double actualWidth, double actualHeight);
 
@@ -217,19 +126,6 @@ public partial class MainShellView
     {
         Debug.Assert(this.IsLoaded, "logging can only be done after view is loaded");
         LogSystemReservedWidthUnchanged(this.logger, preWidth, newWidth);
-    }
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "ConfigurePassthroughRegions: regions identical - skipping SetRegionRects")]
-    private static partial void LogConfigurePassthroughRegionsRegionsIdentical(ILogger logger);
-
-    [Conditional("DEBUG")]
-    private void LogPassthroughRegionsIdentical()
-    {
-        Debug.Assert(this.IsLoaded, "logging can only be done after view is loaded");
-        LogConfigurePassthroughRegionsRegionsIdentical(this.logger);
     }
 
     [LoggerMessage(
