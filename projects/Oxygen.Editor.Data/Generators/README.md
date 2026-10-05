@@ -13,7 +13,7 @@ See the full specification in `projects/Oxygen.Editor.Data/docs/source-generator
 ## Technology Stack
 
 - Project type: Roslyn Analyzer/Source Generator
-- Target Framework: `netstandard2.0` for the generator; consumes and emits code for `net9.0` projects
+- Target Framework: `netstandard2.0` for the generator; consumes and emits code for `net10.0` projects
 - Languages: C# 13
 - Roslyn SDK: `Microsoft.CodeAnalysis.CSharp` (analyzer/generator APIs)
 - Templates: `Handlebars.Net` (template rendering for generated code)
@@ -98,23 +98,23 @@ Notes:
 
 1. Pack the generator as an analyzer package (CI or release build):
 
-    ```powershell
-    dotnet pack projects/Oxygen.Editor.Data/Generators/src -c Release -o artifacts/packages
-    ```
+   ```powershell
+   dotnet pack projects/Oxygen.Editor.Data/Generators/src -c Release -o artifacts/packages
+   ```
 
 1. Publish to your internal or public NuGet feed (or use a local package source):
 
-    ```powershell
-    dotnet nuget push artifacts/packages\Oxygen.Editor.Data.Generators.*.nupkg --source "<your-feed>" --api-key <key>
-    ```
+   ```powershell
+   dotnet nuget push artifacts/packages\Oxygen.Editor.Data.Generators.*.nupkg --source "<your-feed>" --api-key <key>
+   ```
 
 1. Add the package to a consuming project via PackageReference (this will automatically register the analyzer/generator with the compilation):
 
-    ```xml
-    <ItemGroup>
-    <PackageReference Include="Oxygen.Editor.Data.Generators" Version="<version>" />
-    </ItemGroup>
-    ```
+   ```xml
+   <ItemGroup>
+   <PackageReference Include="Oxygen.Editor.Data.Generators" Version="<version>" />
+   </ItemGroup>
+   ```
 
 This is the recommended approach for CI and end-user projects because the generator is delivered as a lightweight analyzer package and does not add runtime dependencies to the consuming project.
 
@@ -262,4 +262,4 @@ The generator is licensed under the MIT License — see the top-level [LICENSE](
 - Full spec: `projects/Oxygen.Editor.Data/docs/source-generator.md`
 - Generator sources: `projects/Oxygen.Editor.Data/Generators/src`
 - Generator tests: `projects/Oxygen.Editor.Data/Generators/tests`
-*** End Patch
+  *** End Patch

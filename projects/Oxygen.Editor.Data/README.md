@@ -1,7 +1,7 @@
 # Oxygen.Editor.Data
 
-[![.NET](https://img.shields.io/badge/.NET-9.0-512BD4)](https://dotnet.microsoft.com/)
-[![EF Core](https://img.shields.io/badge/EF%20Core-9.0-512BD4)](https://learn.microsoft.com/ef/core/)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
+[![EF Core](https://img.shields.io/badge/EF%20Core-10.0-512BD4)](https://learn.microsoft.com/ef/core/)
 [![SQLite](https://img.shields.io/badge/SQLite-3-003B57)](https://www.sqlite.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](../../../LICENSE)
 
@@ -49,21 +49,22 @@ The module uses Entity Framework Core with SQLite for local-first, zero-configur
 
 ### Core Technologies
 
-- **.NET 9.0** — Target framework (also targets `net9.0-windows10.0.26100.0`)
+- **.NET 10.0** — Target framework (`net10.0-windows10.0.26100.0`)
 - **C# 13** — Language features including primary constructors and collection expressions
-- **Entity Framework Core 9.0** — ORM and database abstraction
+- **Entity Framework Core 10.0** — ORM and database abstraction
 - **SQLite** — Embedded relational database
 
 ### Key Dependencies
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `Microsoft.EntityFrameworkCore` | 9.0+ | Database context and change tracking |
-| `Microsoft.EntityFrameworkCore.Sqlite` | 9.0+ | SQLite provider for EF Core |
-| `Microsoft.EntityFrameworkCore.Design` | 9.0+ | Design-time tools for migrations |
-| `Microsoft.Extensions.Caching.Memory` | 9.0+ | In-memory caching layer |
-| `Testably.Abstractions` | Latest | Filesystem abstraction for testing |
-| `System.CommandLine` | Latest | CLI parsing for design-time factory |
+| Package                                | Version | Purpose                              |
+| -------------------------------------- | ------- | ------------------------------------ |
+| `Microsoft.EntityFrameworkCore`        | 10.0.12 | Database context and change tracking |
+| `Microsoft.EntityFrameworkCore.Sqlite` | 10.0.12 | SQLite provider for EF Core          |
+| `Microsoft.EntityFrameworkCore.Design` | 10.0.12 | Design-time tools for migrations     |
+| `Microsoft.Extensions.Caching.Memory`  | 10.0.12 | In-memory caching layer              |
+| `SQLitePCLRaw.lib.e_sqlite3`           | 2.1.12  | Patched native SQLite library        |
+| `Testably.Abstractions`                | Latest  | Filesystem abstraction for testing   |
+| `System.CommandLine`                   | Latest  | CLI parsing for design-time factory  |
 
 ### Project References
 
@@ -179,8 +180,8 @@ The central EF Core context managing three DbSets:
 
 ### Prerequisites
 
-- .NET 9.0 SDK or later
-- (Optional) EF Core CLI tools: `dotnet tool install --global dotnet-ef`
+- .NET 10.0 SDK selected by the repository's `global.json`
+- (Optional) EF Core CLI tools: `dotnet tool install --global dotnet-ef --version 10.0.12`
 
 ### Installation
 
@@ -408,11 +409,11 @@ The persistence layer uses three primary tables. For detailed documentation, see
 
 ### Quick Reference
 
-| Entity | Purpose | Key Fields |
-|--------|---------|------------|
-| `ProjectUsage` | Project history & state | `Name`, `Location`, `LastUsedOn`, `TimesOpened`, `LastOpenedScene` |
-| `TemplateUsage` | Template usage tracking | `Location`, `LastUsedOn`, `TimesUsed` |
-| `ModuleSetting` | Module configuration | `SettingsModule`, `Name`, `JsonValue` |
+| Entity          | Purpose                 | Key Fields                                                         |
+| --------------- | ----------------------- | ------------------------------------------------------------------ |
+| `ProjectUsage`  | Project history & state | `Name`, `Location`, `LastUsedOn`, `TimesOpened`, `LastOpenedScene` |
+| `TemplateUsage` | Template usage tracking | `Location`, `LastUsedOn`, `TimesUsed`                              |
+| `ModuleSetting` | Module configuration    | `SettingsModule`, `Name`, `JsonValue`                              |
 
 **Entity Relationship:**
 
@@ -489,7 +490,7 @@ The project uses Entity Framework Core migrations for schema versioning. For com
 dotnet ef migrations add <Name> `
   --project projects/Oxygen.Editor.Data/src `
   --startup-project projects/Oxygen.Editor.Data/src `
-  --framework net9.0 `
+  --framework net10.0-windows10.0.26100.0 `
   -- --use-in-memory-db
 ```
 
@@ -499,7 +500,7 @@ dotnet ef migrations add <Name> `
 dotnet ef database update `
   --project projects/Oxygen.Editor.Data/src `
   --startup-project projects/Oxygen.Editor.Data/src `
-  --framework net9.0 `
+  --framework net10.0-windows10.0.26100.0 `
   -- --mode=dev
 ```
 
@@ -515,11 +516,11 @@ dotnet ef migrations list `
 
 The `DesignTimePersistentStateFactory` supports three database resolution modes:
 
-| Argument | Description |
-|----------|-------------|
+| Argument             | Description                                                     |
+| -------------------- | --------------------------------------------------------------- |
 | `--mode <dev\|real>` | Uses `PathFinder` to resolve database location (default: `dev`) |
-| `--use-in-memory-db` | Creates in-memory SQLite database (recommended for migrations) |
-| `--db-path <path>` | Explicit path to database file |
+| `--use-in-memory-db` | Creates in-memory SQLite database (recommended for migrations)  |
+| `--db-path <path>`   | Explicit path to database file                                  |
 
 Use `--use-in-memory-db` for safe migration generation, then apply to file-based DB for testing.
 
@@ -580,7 +581,7 @@ See [`.github/instructions/csharp_coding_style.instructions.md`](../../.github/i
 
 ### Test Strategy
 
-*Note: Test projects are planned but not yet implemented.*
+_Note: Test projects are planned but not yet implemented._
 
 **Planned coverage:**
 
@@ -593,7 +594,7 @@ See [`.github/instructions/csharp_coding_style.instructions.md`](../../.github/i
 - Descriptor generation for persisted properties
 - Diagnostics produced for invalid classes or properties
 - Integration scenarios to ensure descriptors are registered and validator attributes run at runtime
-Be sure to run these tests during changes to the generator itself.
+  Be sure to run these tests during changes to the generator itself.
 
 **Test framework:** MSTest with AwesomeAssertions
 
@@ -626,11 +627,11 @@ Contributions are welcome! This project follows DroidNet repository conventions.
 
 2. **Make changes following coding standards**
 
-     - If you modify the source generator or attribute code, run generator unit tests:
+   - If you modify the source generator or attribute code, run generator unit tests:
 
-         ```powershell
-         dotnet test projects/Oxygen.Editor.Data/Generators/tests
-         ```
+     ```powershell
+     dotnet test projects/Oxygen.Editor.Data/Generators/tests
+     ```
 
 3. **Add tests** (when test infrastructure exists)
 

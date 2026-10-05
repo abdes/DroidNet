@@ -32,7 +32,7 @@ class TestFailurePropagation(unittest.TestCase):
                 start_location=Path(directory), tasks=[invocation],
                 forwarded_arguments={"timeout": timeout}, extra_arguments=arguments,
             )
-            with patch("tooling.scripts.traversal.tasks.invoke_tests.discover_target_frameworks", return_value=["net9.0"]), \
+            with patch("tooling.scripts.traversal.tasks.invoke_tests.discover_target_frameworks", return_value=["net10.0"]), \
                  patch("tooling.scripts.traversal.tasks.invoke_tests.query_msbuild_properties", return_value=(values, None)):
                 return TraversalRunner(TaskRegistry()).run(config)
 
@@ -76,14 +76,14 @@ class BuildConfiguration(unittest.TestCase):
 
     def test_frameworks_and_rids_have_distinct_output_directories(self):
         project = "projects/Collections/src/Collections.csproj"
-        first = self.evaluate(project, target_framework="net9.0")
-        windows = self.evaluate(project, target_framework="net9.0-windows10.0.26100.0")
-        rid = self.evaluate(project, target_framework="net9.0", runtime_identifier="win-x64")
+        first = self.evaluate(project, target_framework="net10.0")
+        windows = self.evaluate(project, target_framework="net10.0-windows10.0.26100.0")
+        rid = self.evaluate(project, target_framework="net10.0", runtime_identifier="win-x64")
         self.assertEqual(len({first["OutputPath"], windows["OutputPath"], rid["OutputPath"]}), 3)
 
     def test_interop_uses_the_repository_artifact_root(self):
         values = self.evaluate("projects/Oxygen.Editor.Interop/src/Oxygen.Editor.Interop.vcxproj")
-        self.assertEqual(Path(values["OutDir"]), ROOT / "artifacts/bin/Oxygen.Editor.Interop/Debug_net9.0")
+        self.assertEqual(Path(values["OutDir"]), ROOT / "artifacts/bin/Oxygen.Editor.Interop/Debug_net10.0")
 
     def test_build_and_explicit_analysis_are_separate(self):
         parent = ROOT / "artifacts/build-streamlining"
@@ -93,7 +93,7 @@ class BuildConfiguration(unittest.TestCase):
             project = folder / "BuildWorkflowProbe.csproj"
             project.write_text(
                 '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>'
-                '<TargetFramework>net9.0</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
+                '<TargetFramework>net10.0</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
                 '</PropertyGroup><ItemGroup><Compile Include="Probe.cs" /></ItemGroup></Project>', encoding="utf-8")
             (folder / "Probe.cs").write_text(
                 'namespace BuildWorkflow; public sealed class Probe { private readonly string text = "x";'
@@ -169,7 +169,7 @@ class SolutionGeneration(unittest.TestCase):
             folder = Path(directory)
             (folder / "Probe.csproj").write_text(
                 '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>'
-                '<TargetFramework>net9.0</TargetFramework></PropertyGroup></Project>', encoding="utf-8")
+                '<TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>', encoding="utf-8")
             subprocess.run([
                 "powershell.exe", "-NoProfile", "-File", str(ROOT / "tooling/GenerateSolution.ps1"),
                 "-Scope", str(folder),

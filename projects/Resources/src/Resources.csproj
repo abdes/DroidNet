@@ -4,7 +4,7 @@
 
     <PropertyGroup>
         <IsPackable>true</IsPackable>
-        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
 
         <Title>Application Resources Helpers</Title>
         <Description>Provides helpers to facilitate locating and using resources defined in the application or any of its dependency assemblies.</Description>

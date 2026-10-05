@@ -18,7 +18,7 @@ This guide provides comprehensive instructions for managing the Oxygen Editor's 
 
 ### Required Software
 
-#### 1. .NET SDK 9.0 or later
+#### 1. .NET SDK 10.0 selected by `global.json`
 
 Verify installation:
 
@@ -33,13 +33,13 @@ If not installed, the repository's `init.ps1` script will install it for you.
 Install globally:
 
 ```powershell
-dotnet tool install --global dotnet-ef
+dotnet tool install --global dotnet-ef --version 10.0.12
 ```
 
 Update existing installation:
 
 ```powershell
-dotnet tool update --global dotnet-ef
+dotnet tool update --global dotnet-ef --version 10.0.12
 ```
 
 Verify installation:
@@ -52,17 +52,12 @@ dotnet ef --version
 
 The following packages are already referenced in `Oxygen.Editor.Data.csproj`:
 
-- `Microsoft.EntityFrameworkCore` (9.0+)
-- `Microsoft.EntityFrameworkCore.Sqlite` (9.0+)
-- `Microsoft.EntityFrameworkCore.Design` (9.0+)
+- `Microsoft.EntityFrameworkCore` (10.0.12)
+- `Microsoft.EntityFrameworkCore.Sqlite` (10.0.12)
+- `Microsoft.EntityFrameworkCore.Design` (10.0.12)
 
-To verify or add packages:
-
-```powershell
-cd projects/Oxygen.Editor.Data/src
-dotnet add package Microsoft.EntityFrameworkCore.Design
-dotnet add package Microsoft.EntityFrameworkCore.Sqlite
-```
+Versions are managed centrally in `Directory.packages.props`. Keep the EF Core
+package family and `Microsoft.Data.Sqlite` aligned when upgrading.
 
 ## Quick Start
 
@@ -103,11 +98,11 @@ The `DesignTimePersistentStateFactory` class enables `dotnet ef` to create a `Pe
 
 The factory supports three mutually exclusive modes for specifying the database location:
 
-| Argument | Description | Use Case |
-|----------|-------------|----------|
-| `--mode <dev\|real>` | Uses `PathFinder` to resolve database location. Default: `dev` | Normal development workflow |
-| `--use-in-memory-db` | Creates in-memory SQLite database | Safe migration generation, testing |
-| `--db-path <path>` | Explicit path to database file | CI/CD, custom database location |
+| Argument             | Description                                                    | Use Case                           |
+| -------------------- | -------------------------------------------------------------- | ---------------------------------- |
+| `--mode <dev\|real>` | Uses `PathFinder` to resolve database location. Default: `dev` | Normal development workflow        |
+| `--use-in-memory-db` | Creates in-memory SQLite database                              | Safe migration generation, testing |
+| `--db-path <path>`   | Explicit path to database file                                 | CI/CD, custom database location    |
 
 **Important:** Only use ONE of these options at a time. Using multiple will throw an `ArgumentException`.
 
@@ -135,7 +130,7 @@ You can then apply migrations to the actual database file later.
 dotnet ef migrations add <DescriptiveName> `
   --project projects/Oxygen.Editor.Data/src `
   --startup-project projects/Oxygen.Editor.Data/src `
-  --framework net9.0 `
+  --framework net10.0-windows10.0.26100.0 `
   -- --use-in-memory-db
 ```
 
@@ -145,7 +140,7 @@ dotnet ef migrations add <DescriptiveName> `
 dotnet ef migrations add <DescriptiveName> `
   --project projects/Oxygen.Editor.Data/src `
   --startup-project projects/Oxygen.Editor.Data/src `
-  --framework net9.0 `
+  --framework net10.0-windows10.0.26100.0 `
   -- --mode=dev
 ```
 
@@ -155,7 +150,7 @@ dotnet ef migrations add <DescriptiveName> `
 dotnet ef migrations add <DescriptiveName> `
   --project projects/Oxygen.Editor.Data/src `
   --startup-project projects/Oxygen.Editor.Data/src `
-  --framework net9.0 `
+  --framework net10.0-windows10.0.26100.0 `
   -- --db-path="F:\path\to\PersistentState.db"
 ```
 
@@ -186,7 +181,7 @@ dotnet ef migrations add <DescriptiveName> `
 dotnet ef database update `
   --project projects/Oxygen.Editor.Data/src `
   --startup-project projects/Oxygen.Editor.Data/src `
-  --framework net9.0 `
+  --framework net10.0-windows10.0.26100.0 `
   -- --mode=dev
 ```
 
@@ -196,7 +191,7 @@ dotnet ef database update `
 dotnet ef database update `
   --project projects/Oxygen.Editor.Data/src `
   --startup-project projects/Oxygen.Editor.Data/src `
-  --framework net9.0 `
+  --framework net10.0-windows10.0.26100.0 `
   -- --db-path="F:\path\to\PersistentState.db"
 ```
 
@@ -206,7 +201,7 @@ dotnet ef database update `
 dotnet ef database update <MigrationName> `
   --project projects/Oxygen.Editor.Data/src `
   --startup-project projects/Oxygen.Editor.Data/src `
-  --framework net9.0 `
+  --framework net10.0-windows10.0.26100.0 `
   -- --db-path="F:\path\to\PersistentState.db"
 ```
 
@@ -230,7 +225,7 @@ dotnet ef migrations remove `
 dotnet ef database update <PreviousMigrationName> `
   --project projects/Oxygen.Editor.Data/src `
   --startup-project projects/Oxygen.Editor.Data/src `
-  --framework net9.0 `
+  --framework net10.0-windows10.0.26100.0 `
   -- --db-path="F:\path\to\PersistentState.db"
 ```
 
@@ -240,7 +235,7 @@ dotnet ef database update <PreviousMigrationName> `
 dotnet ef database update 0 `
   --project projects/Oxygen.Editor.Data/src `
   --startup-project projects/Oxygen.Editor.Data/src `
-  --framework net9.0 `
+  --framework net10.0-windows10.0.26100.0 `
   -- --db-path="F:\path\to\PersistentState.db"
 ```
 
@@ -334,7 +329,7 @@ If you need to manually create the database:
 dotnet ef database update `
   --project projects/Oxygen.Editor.Data/src `
   --startup-project projects/Oxygen.Editor.Data/src `
-  --framework net9.0 `
+  --framework net10.0-windows10.0.26100.0 `
   -- --db-path="F:\path\to\PersistentState.db"
 ```
 
@@ -353,7 +348,7 @@ dotnet ef database drop `
 dotnet ef database update `
   --project projects/Oxygen.Editor.Data/src `
   --startup-project projects/Oxygen.Editor.Data/src `
-  --framework net9.0 `
+  --framework net10.0-windows10.0.26100.0 `
   -- --db-path="F:\path\to\PersistentState.db"
 ```
 
@@ -639,12 +634,12 @@ This repository uses .NET 8+ simplified artifacts output (`UseArtifactsOutput=tr
 
 See [`tooling/ARTIFACTS-README.md`](../../../tooling/ARTIFACTS-README.md) for details.
 
-### Multi-Targeting
+### Target Framework
 
-The project targets both `net9.0` and `net9.0-windows10.0.26100.0`. When running EF tools, specify:
+The data project targets `net10.0-windows10.0.26100.0`. When running EF tools, specify:
 
 ```powershell
---framework net9.0
+--framework net10.0-windows10.0.26100.0
 ```
 
 ### Path Conventions

@@ -3,7 +3,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <IsPackable>true</IsPackable>
-        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
 
         <Title>User Interface for the Routing Debugger App</Title>
         <Description>Provides the view, viewmodels and controls used in the UI for the Routing debugger.</Description>

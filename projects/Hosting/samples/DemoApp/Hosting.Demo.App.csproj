@@ -3,7 +3,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <RootNamespace>$(RootNameSpace).Hosting.Demo</RootNamespace>
-        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
 
         <AssemblyName>DroidNet.Hosting.Demo</AssemblyName>
 

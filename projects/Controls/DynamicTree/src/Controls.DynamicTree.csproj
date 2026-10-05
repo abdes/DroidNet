@@ -3,7 +3,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <IsPackable>true</IsPackable>
-        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
 
         <RootNamespace>$(RootNamespace).Controls</RootNamespace>
         <AssemblyName>DroidNet.Controls.DynamicTree</AssemblyName>

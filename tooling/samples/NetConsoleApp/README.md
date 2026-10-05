@@ -24,11 +24,11 @@ The project has the following structure:
 
 ## Build Output
 
-After building the project, you'll find the output files in the `bin/Debug/net9.0/` folder:
+After building the project, you'll find the output files in the repository's `artifacts/bin/NetConsoleApp/Debug_net10.0-windows10.0.26100.0/` folder:
 
 - **DroidNet.NetConsoleApp.exe**: The executable file containing the compiled code.
 
-Additionally, you'll find the following notable files in the `obj/Debug/net9.0/` folder:
+Additionally, you'll find the following notable files in the repository's `artifacts/obj/NetConsoleApp/Debug_net10.0-windows10.0.26100.0/` folder:
 
 - **NetConsoleApp.AssemblyInfo.cs**: Generated AssemblyInfo.cs.
 - **DroidNet.NetConsoleApp.Version.cs**: Generated assembly version info.
@@ -47,7 +47,7 @@ To use this project template for a real console application, follow these steps 
    ```xml
    <PropertyGroup>
      <OutputType>Exe</OutputType>
-     <TargetFramework>net9.0</TargetFramework>
+     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
 
      <IsPackable>False</IsPackable>
 
@@ -71,7 +71,7 @@ To use this project template for a real console application, follow these steps 
 
      <PropertyGroup>
        <OutputType>Exe</OutputType>
-       <TargetFramework>net9.0</TargetFramework>
+       <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
 
        <IsPackable>False</IsPackable>
 

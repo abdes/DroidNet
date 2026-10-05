@@ -13,8 +13,8 @@ The Oxygen Editor persistent store manages three primary data domains:
 ## Database Technology
 
 - **Provider**: SQLite
-- **ORM**: Entity Framework Core 9.0+
-- **Target Frameworks**: net9.0, net9.0-windows10.0.26100.0
+- **ORM**: Entity Framework Core 10.0.12
+- **Target Framework**: net10.0-windows10.0.26100.0
 - **Database File Location**: Configured via `DroidNet.Config.PathFinder` (dev/production modes)
 
 ## Entity Relationship Diagram
@@ -59,15 +59,15 @@ erDiagram
 
 Tracks usage statistics and state for projects opened in the editor.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `Id` | INTEGER | PRIMARY KEY, AUTOINCREMENT | Unique identifier |
-| `Name` | TEXT(255) | NOT NULL, MIN 1 | Project display name |
-| `Location` | TEXT(2048) | NOT NULL, MIN 1 | Absolute path to project directory |
-| `TimesOpened` | INTEGER | NOT NULL | Counter incremented each time project opens |
-| `LastUsedOn` | TEXT (DateTime) | NOT NULL | Timestamp of most recent project access |
-| `LastOpenedScene` | TEXT(255) | NOT NULL, DEFAULT '' | Path to last active scene (for session restoration) |
-| `ContentBrowserState` | TEXT(2048) | NOT NULL, DEFAULT '' | Serialized UI state for content browser panel |
+| Column                | Type            | Constraints                | Description                                         |
+| --------------------- | --------------- | -------------------------- | --------------------------------------------------- |
+| `Id`                  | INTEGER         | PRIMARY KEY, AUTOINCREMENT | Unique identifier                                   |
+| `Name`                | TEXT(255)       | NOT NULL, MIN 1            | Project display name                                |
+| `Location`            | TEXT(2048)      | NOT NULL, MIN 1            | Absolute path to project directory                  |
+| `TimesOpened`         | INTEGER         | NOT NULL                   | Counter incremented each time project opens         |
+| `LastUsedOn`          | TEXT (DateTime) | NOT NULL                   | Timestamp of most recent project access             |
+| `LastOpenedScene`     | TEXT(255)       | NOT NULL, DEFAULT ''       | Path to last active scene (for session restoration) |
+| `ContentBrowserState` | TEXT(2048)      | NOT NULL, DEFAULT ''       | Serialized UI state for content browser panel       |
 
 **Indexes:**
 
@@ -89,12 +89,12 @@ Tracks usage statistics and state for projects opened in the editor.
 
 Tracks template usage for prioritizing frequently used templates.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `Id` | INTEGER | PRIMARY KEY, AUTOINCREMENT | Unique identifier |
-| `Location` | TEXT(1024) | NOT NULL, MIN 1, UNIQUE | Absolute path to template definition |
-| `LastUsedOn` | TEXT (DateTime) | NOT NULL | Timestamp of most recent template usage |
-| `TimesUsed` | INTEGER | NOT NULL | Counter incremented when template is used |
+| Column       | Type            | Constraints                | Description                               |
+| ------------ | --------------- | -------------------------- | ----------------------------------------- |
+| `Id`         | INTEGER         | PRIMARY KEY, AUTOINCREMENT | Unique identifier                         |
+| `Location`   | TEXT(1024)      | NOT NULL, MIN 1, UNIQUE    | Absolute path to template definition      |
+| `LastUsedOn` | TEXT (DateTime) | NOT NULL                   | Timestamp of most recent template usage   |
+| `TimesUsed`  | INTEGER         | NOT NULL                   | Counter incremented when template is used |
 
 **Indexes:**
 
@@ -115,16 +115,16 @@ Tracks template usage for prioritizing frequently used templates.
 
 Flexible key-value storage for module-specific settings with JSON serialization.
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `Id` | INTEGER | PRIMARY KEY, AUTOINCREMENT | Unique identifier |
-| `SettingsModule` | TEXT(255) | NOT NULL, MIN 1 | Module identifier (e.g., "Docking", "ProjectBrowser") |
-| `Name` | TEXT(255) | NOT NULL, MIN 1 | Setting identifier within module namespace |
-| `Scope` | INTEGER | NOT NULL, DEFAULT 0 | Setting scope (0 = Application, 1 = Project) |
-| `ScopeId` | TEXT(1024) | NULL | Optional scope identifier e.g. project path |
-| `JsonValue` | TEXT(2048) | NULL | JSON-serialized setting value (camelCase convention) |
-| `CreatedAt` | TEXT (DateTime) | NOT NULL, DEFAULT UTC NOW | Record creation timestamp |
-| `UpdatedAt` | TEXT (DateTime) | NOT NULL, DEFAULT UTC NOW | Last modification timestamp |
+| Column           | Type            | Constraints                | Description                                           |
+| ---------------- | --------------- | -------------------------- | ----------------------------------------------------- |
+| `Id`             | INTEGER         | PRIMARY KEY, AUTOINCREMENT | Unique identifier                                     |
+| `SettingsModule` | TEXT(255)       | NOT NULL, MIN 1            | Module identifier (e.g., "Docking", "ProjectBrowser") |
+| `Name`           | TEXT(255)       | NOT NULL, MIN 1            | Setting identifier within module namespace            |
+| `Scope`          | INTEGER         | NOT NULL, DEFAULT 0        | Setting scope (0 = Application, 1 = Project)          |
+| `ScopeId`        | TEXT(1024)      | NULL                       | Optional scope identifier e.g. project path           |
+| `JsonValue`      | TEXT(2048)      | NULL                       | JSON-serialized setting value (camelCase convention)  |
+| `CreatedAt`      | TEXT (DateTime) | NOT NULL, DEFAULT UTC NOW  | Record creation timestamp                             |
+| `UpdatedAt`      | TEXT (DateTime) | NOT NULL, DEFAULT UTC NOW  | Last modification timestamp                           |
 
 **Indexes:**
 
@@ -225,10 +225,10 @@ LIMIT 1
 
 ### Migration History
 
-| Migration | Date | Description |
-|-----------|------|-------------|
-| `20241124075532_InitialCreate` | 2024-11-24 | Initial schema with ProjectsUsage and TemplatesUsageRecords |
-| `20241126135247_AddModuleSetting` | 2024-11-26 | Added Settings table for module configuration |
+| Migration                         | Date       | Description                                                 |
+| --------------------------------- | ---------- | ----------------------------------------------------------- |
+| `20241124075532_InitialCreate`    | 2024-11-24 | Initial schema with ProjectsUsage and TemplatesUsageRecords |
+| `20241126135247_AddModuleSetting` | 2024-11-26 | Added Settings table for module configuration               |
 
 ### Migration Strategy
 

@@ -2,7 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
 
         <Title>Oxygen Editor Schemas</Title>
         <Description>Property descriptor pipeline driven by engine JSON schemas plus editor overlays.</Description>

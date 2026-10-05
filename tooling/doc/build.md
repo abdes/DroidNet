@@ -4,6 +4,11 @@ Use [Visual Studio](#visual-studio), [command-line verification](#command-line-v
 [tests](#tests), or [packaging](#packaging). Engine CMake builds are separate;
 the editor consumes an installed Debug or Release engine SDK.
 
+Runtime projects and tests target .NET 10, with Windows-specific projects retaining
+their Windows SDK target. Source generators and their compiler-facing attribute
+assemblies retain `netstandard2.0`. Use the SDK selected by `global.json`.
+The editor's EF Core packages and SQLite driver are aligned at 10.0.12.
+
 ## Visual Studio
 
 Generate a scoped solution with the project's `open.cmd`, or use

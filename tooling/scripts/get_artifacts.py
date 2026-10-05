@@ -44,7 +44,7 @@ def run(argv: list[str] | None = None) -> int:
         epilog="""Examples:
   get-artifacts -p Oxygen.Editor -c Release
   get-artifacts -p Collections --framework-all -j
-  get-artifacts -p Storage -t net9.0-windows10.0.26100.0 -l
+  get-artifacts -p Storage -t net10.0-windows10.0.26100.0 -l
   get-artifacts -p Oxygen.Editor.Interop/src/Oxygen.Editor.Interop.vcxproj -j
 
 Paths may be absolute, relative to the repository, or relative to projects/.

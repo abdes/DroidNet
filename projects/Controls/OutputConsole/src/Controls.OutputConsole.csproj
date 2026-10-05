@@ -2,7 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
         <IsPackable>true</IsPackable>
-    <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
 
     <RootNamespace>DroidNet.Controls.OutputConsole</RootNamespace>
     <UseWinUI>true</UseWinUI>
