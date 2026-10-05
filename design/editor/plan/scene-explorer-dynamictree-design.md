@@ -1410,11 +1410,21 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
   reports a visible warning instead of silently doing nothing (D-f).
   ~~Outstanding: the eye toggle does not yet record the undo step.~~ **(1) closed 2026-10-05 —
   `SetEditorHiddenAsync` records the batch as one undo step through the command owner without
-  dirtying (C52).** Remaining: (2) the eye/lock row slots in the view (W3) and
-  the `SupportsEditingViewMask` warning fallback binding (W4) are SE-03 UI work; (3) the
-  production composition does not inject the service yet, because no production caller
-  constructs `SceneExplorerViewModel` today; (4) column placement has no owner UI to persist
-  against yet.
+  dirtying (C52).** **(2)–(3) closed 2026-10-05 (`3967b205f`):** the trailing row template carries
+  the eye and lock buttons invoking `ToggleEditorHiddenCommand` / `ToggleEditorLockedCommand` with
+  the row as parameter (never a two-way bind onto adapter state, which would bypass the command
+  owner and its undo step); `EditingViewMaskService` publishes
+  `OXE.SETTINGS.EDITING_VIEW_MASK_UNAVAILABLE` once per scene activation as the ratified Q2 fallback,
+  with `SupportsEditingViewMask` as the single seam the native work flips; and restore is wired into
+  `InitializeLoadedSceneAsync`, so stored state reloads instead of being write-only.
+  **Correction to this row's earlier claim:** it said no production caller constructs
+  `SceneExplorerViewModel`. Wrong — `WorkspaceViewModel.cs:204-207` registers it and the command
+  service in the per-window child container, which resolves app-container singles (proven by
+  `WorkspaceViewModel.cs:174` resolving `PreviewSettingsService`), so the injection is real.
+  Remaining, none of it editor-logic: the **native/interopt implementation of the eye** (D8a E1–E3,
+  I1–I4 — the excluded, separately-authorized task), the proof tests for restore / hide-undo / the
+  once-per-activation warning, a visual review of the chosen eye and lock glyphs, and (4) column
+  placement, which still has no owning UI to persist against.
   `settings-architecture.md:65` records hidden nodes; there is no typed
   storage for per-project Lock state, category/column placement or their
   lifetime, and no single service owns workspace interaction substate, so
