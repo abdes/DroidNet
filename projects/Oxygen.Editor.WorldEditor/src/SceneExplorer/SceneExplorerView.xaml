@@ -37,13 +37,7 @@
                 FolderTemplate="{StaticResource FolderThumbnailTemplate}"
                 SceneTemplate="{StaticResource SceneThumbnailTemplate}" />
 
-            <!--
-                Editor-view row slots. The data context of TrailingContentTemplate is the row's
-                logical item, so state comes from the adapter and the commands are reached through
-                the named tree's view model. Buttons invoke commands rather than toggling adapter
-                properties directly: writing IsLocked/IsHiddenInEditor from the view would bypass
-                the command owner and its single undo step.
-            -->
+            <!--  Every row reserves the slots; only node rows expose editor-state actions.  -->
             <DataTemplate x:Key="RowActionsTemplate" x:DataType="scene:LayoutItemAdapter">
                 <scene:SceneRowActions />
             </DataTemplate>
@@ -75,11 +69,12 @@
             BorderBrush="Red"
             BorderThickness="1"
             CornerRadius="3">
+            <!--  64-DIP slots plus DynamicTree's 4/20-DIP trailing margins.  -->
             <dnc:DynamicTree
                 x:Name="ExplorerTree"
                 ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
                 TrailingContentTemplate="{StaticResource RowActionsTemplate}"
-                TrailingContentWidth="64"
+                TrailingContentWidth="88"
                 ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
         </Border>
         <Grid Grid.Row="1">

@@ -61,7 +61,7 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
     }
 
     /// <summary>
-    /// Gets the eye-slot glyph for the row: red eye when shown, hidden-eye when editor-hidden.
+    /// Gets the Segoe Fluent Icons eye glyph for the row's explicit editor-visibility state.
     /// </summary>
     /// <remarks>
     /// Presentation-only helper so the row template binds one property instead of carrying a
@@ -71,9 +71,7 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
     public string EditorVisibilityGlyph => this.IsHiddenInEditor ? "\uED1A" : "\uE890";
 
     /// <summary>
-    /// Gets the lock-slot glyph: locked shows the closed keyhole (), unlocked the open
-    /// one (). It tracks state instead of staying fixed, which the earlier static glyph
-    /// failed to do.
+    /// Gets the Segoe Fluent Icons lock or unlock glyph for the row's current protection state.
     /// </summary>
     public string EditorLockGlyph => this.IsLocked ? "\uE72E" : "\uE785";
 
@@ -85,13 +83,6 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
 
     /// <summary>Gets a value indicating whether the lock slot is suppressed (locked) and pinned.</summary>
     public bool IsLockSuppressed => this.IsLocked;
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// <c>IsLocked</c> is declared on the control base, so a lock change never notifies the derived
-    /// <see cref="EditorLockGlyph"/> on its own. Repainting the glyph and the suppression flags here
-    /// keeps the row slots live when the command owner flips lock state.
-    /// </remarks>
 
     /// <summary>
     /// Gets or sets a value indicating whether this row is hidden because it, or an actual scene

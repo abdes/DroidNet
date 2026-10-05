@@ -3,6 +3,7 @@
     x:Class="Oxygen.Editor.World.SceneExplorer.SceneRowActions"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    x:Name="ActionsControl"
     IsTabStop="False">
     <!--
         Two fixed slots that never collapse (interaction contract): column widths are constants, and
@@ -21,6 +22,8 @@
             <Setter Property="Padding" Value="0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Setter Property="IsTabStop" Value="False" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
@@ -34,27 +37,74 @@
             x:Name="EyeButton"
             Grid.Column="0"
             AutomationProperties.Name="Show in Editor"
-            Click="EyeButton_OnClick"
+            Command="{Binding CommandOwner.ToggleEditorHiddenCommand, ElementName=ActionsControl}"
+            CommandParameter="{Binding}"
             Style="{StaticResource RowSlotButtonStyle}"
             ToolTipService.ToolTip="Show or hide in the editing viewports"
             Visibility="Collapsed">
             <FontIcon
                 x:Name="EyeGlyph"
                 FontFamily="Segoe Fluent Icons"
-                FontSize="14" />
+                FontSize="14"
+                Glyph="{Binding EditorVisibilityGlyph}" />
         </Button>
         <Button
             x:Name="LockButton"
             Grid.Column="1"
             AutomationProperties.Name="Lock"
-            Click="LockButton_OnClick"
+            Command="{Binding CommandOwner.ToggleEditorLockedCommand, ElementName=ActionsControl}"
+            CommandParameter="{Binding}"
             Style="{StaticResource RowSlotButtonStyle}"
             ToolTipService.ToolTip="Lock or unlock for editing"
             Visibility="Collapsed">
             <FontIcon
                 x:Name="LockGlyph"
                 FontFamily="Segoe Fluent Icons"
-                FontSize="14" />
+                FontSize="14"
+                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                Glyph="{Binding EditorLockGlyph}" />
         </Button>
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="EyeStates">
+                <VisualState x:Name="EyeQuiet" />
+                <VisualState x:Name="EyeAffordance">
+                    <VisualState.Setters>
+                        <Setter Target="EyeButton.Visibility" Value="Visible" />
+                        <Setter Target="EyeButton.Opacity" Value="0.6" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="EyePinned">
+                    <VisualState.Setters>
+                        <Setter Target="EyeButton.Visibility" Value="Visible" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+            <VisualStateGroup x:Name="LockStates">
+                <VisualState x:Name="LockQuiet" />
+                <VisualState x:Name="LockAffordance">
+                    <VisualState.Setters>
+                        <Setter Target="LockButton.Visibility" Value="Visible" />
+                        <Setter Target="LockButton.Opacity" Value="0.6" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="LockPinned">
+                    <VisualState.Setters>
+                        <Setter Target="LockButton.Visibility" Value="Visible" />
+                        <Setter Target="LockGlyph.Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+            <VisualStateGroup x:Name="InputStates">
+                <VisualState x:Name="Passive" />
+                <VisualState x:Name="Interactive">
+                    <VisualState.Setters>
+                        <Setter Target="EyeButton.IsHitTestVisible" Value="True" />
+                        <Setter Target="EyeButton.IsTabStop" Value="True" />
+                        <Setter Target="LockButton.IsHitTestVisible" Value="True" />
+                        <Setter Target="LockButton.IsTabStop" Value="True" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
     </Grid>
 </UserControl>

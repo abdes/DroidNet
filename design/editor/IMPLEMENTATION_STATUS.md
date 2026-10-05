@@ -29,6 +29,15 @@ The reviewer owns final in-editor appearance/usability validation; screenshot
 matrix completion is no longer an implementation gate. Historical milestone
 delivery evidence below is unchanged.
 
+## Scene Explorer row-action maintenance handoff
+
+The [C49 row-action correction](./plan/scene-explorer-dynamictree-design.md) records
+the full-width eye/lock slots, XAML-owned presentation, and safe hover/recycling
+lifetimes. Focused checks pass 27 Unit.UI / 49 Unit, including rendered glyph
+pixels and real hide history/workspace restore. Running-editor visual acceptance
+and native editing-viewport suppression remain outside this evidence; no
+milestone status or historical delivery totals change.
+
 ## 1. Status Vocabulary
 
 | Status      | Meaning                                                                                 |

@@ -2,34 +2,33 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.ComponentModel;
 using DroidNet.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Windows.Foundation;
 
 namespace Oxygen.Editor.World.SceneExplorer;
 
-/// <summary>
-/// The Scene Explorer row's trailing slots: Show in Editor (eye) and Lock, in two fixed columns that
-/// never collapse.
-/// </summary>
+/// <summary>Shows the independent editor-visibility and lock slots of a Scene Explorer node row.</summary>
 /// <remarks>
-/// Implements the interaction contract's quiet/loud matrix. Default state is quiet: when a node is
-/// shown and unlocked, both slots are empty until the pointer enters the row, at which point the eye
-/// and unlock affordances appear at muted opacity. A suppressed state is loud: a hidden node pins
-/// the eye-off icon and a locked node pins the lock icon permanently, regardless of pointer or
-/// selection. Pointer exit removes only the default affordances; a click toggles its own state and
-/// never leaves the sibling pinned. Hover subscriptions are attached to the owning row and removed
-/// on unload, so they are idempotent under <see cref="ItemsRepeater"/> recycling.
+/// XAML owns glyph bindings, commands and visual treatment. This control observes the owning row's
+/// pointer lifetime and node state, detaching both subscriptions when its row is recycled.
 /// </remarks>
 public sealed partial class SceneRowActions : UserControl
 {
-    private const double DefaultAffordanceOpacity = 0.6;
-    private const double SuppressedAffordanceOpacity = 1d;
+    /// <summary>Identifies the explorer that owns the row's commands.</summary>
+    public static readonly DependencyProperty CommandOwnerProperty = DependencyProperty.Register(
+        nameof(CommandOwner),
+        typeof(SceneExplorerViewModel),
+        typeof(SceneRowActions),
+        new PropertyMetadata(null));
 
     private DynamicTreeItem? row;
-    private LayoutItemAdapter? item;
+    private SceneNodeAdapter? item;
     private bool hovered;
 
     /// <summary>Initializes a new instance of the <see cref="SceneRowActions"/> class.</summary>
@@ -41,31 +40,50 @@ public sealed partial class SceneRowActions : UserControl
         this.DataContextChanged += this.OnDataContextChanged;
     }
 
-    /// <summary>Applies the hover policy without changing cell geometry, so slots never shift.</summary>
-    /// <param name="hovered">Whether the owning row currently has the pointer.</param>
-    internal void SetRowHovered(bool hovered) => this.RefreshVisibility(hovered);
+    /// <summary>Gets the explorer resolved from the owning tree.</summary>
+    public SceneExplorerViewModel? CommandOwner => (SceneExplorerViewModel?)this.GetValue(CommandOwnerProperty);
+
+    /// <summary>Updates the row hover lifetime without changing slot geometry.</summary>
+    /// <param name="hovered">Whether the pointer is over the owning row.</param>
+    internal void SetRowHovered(bool hovered)
+    {
+        this.hovered = hovered;
+        this.UpdateAppearance();
+    }
+
+    /// <summary>Updates hover from pointer coordinates relative to the owning row.</summary>
+    /// <param name="position">The pointer position in row coordinates.</param>
+    internal void UpdateRowPointerPosition(Point position)
+        => this.SetRowHovered(this.row is { } owner
+            && position.X >= 0 && position.X < owner.ActualWidth
+            && position.Y >= 0 && position.Y < owner.ActualHeight);
 
     private void OnLoaded(object sender, RoutedEventArgs args)
     {
         _ = sender;
         _ = args;
-        if (this.row is not null)
+        for (var parent = VisualTreeHelper.GetParent(this); parent is not null; parent = VisualTreeHelper.GetParent(parent))
         {
-            return;
-        }
-
-        for (DependencyObject? parent = VisualTreeHelper.GetParent(this); parent is not null; parent = VisualTreeHelper.GetParent(parent))
-        {
-            if (parent is DynamicTreeItem owner)
+            if (parent is DynamicTreeItem owner && this.row is null)
             {
                 this.row = owner;
-                owner.AddHandler(UIElement.PointerEnteredEvent, new PointerEventHandler(this.OnRowPointerEntered), handledEventsToo: true);
-                owner.AddHandler(UIElement.PointerExitedEvent, new PointerEventHandler(this.OnRowPointerExited), handledEventsToo: true);
+                owner.AddHandler(UIElement.PointerEnteredEvent, new PointerEventHandler(this.OnRowPointerChanged), handledEventsToo: true);
+                owner.AddHandler(UIElement.PointerExitedEvent, new PointerEventHandler(this.OnRowPointerChanged), handledEventsToo: true);
+            }
+
+            if (parent is DynamicTree tree)
+            {
+                this.SetBinding(CommandOwnerProperty, new Binding
+                {
+                    Source = tree,
+                    Path = new PropertyPath(nameof(DynamicTree.ViewModel)),
+                    Mode = BindingMode.OneWay,
+                });
                 break;
             }
         }
 
-        this.RefreshVisibility(hovered: this.hovered);
+        this.ObserveItem(this.DataContext as SceneNodeAdapter);
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs args)
@@ -74,134 +92,65 @@ public sealed partial class SceneRowActions : UserControl
         _ = args;
         if (this.row is { } owner)
         {
-            owner.RemoveHandler(UIElement.PointerEnteredEvent, new PointerEventHandler(this.OnRowPointerEntered));
-            owner.RemoveHandler(UIElement.PointerExitedEvent, new PointerEventHandler(this.OnRowPointerExited));
+            owner.RemoveHandler(UIElement.PointerEnteredEvent, new PointerEventHandler(this.OnRowPointerChanged));
+            owner.RemoveHandler(UIElement.PointerExitedEvent, new PointerEventHandler(this.OnRowPointerChanged));
             this.row = null;
         }
 
+        this.ClearValue(CommandOwnerProperty);
         this.hovered = false;
-        this.RefreshVisibility(hovered: false);
+        this.ObserveItem(null);
     }
 
     private void OnDataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
     {
         _ = sender;
-        if (this.item is not null)
+        this.ObserveItem(this.IsLoaded ? args.NewValue as SceneNodeAdapter : null);
+    }
+
+    private void ObserveItem(SceneNodeAdapter? adapter)
+    {
+        if (this.item is { } previous)
         {
-            this.item.PropertyChanged -= this.OnItemPropertyChanged;
+            previous.PropertyChanged -= this.OnItemPropertyChanged;
         }
 
-        this.item = args.NewValue as LayoutItemAdapter;
-        if (this.item is not null)
+        this.item = adapter;
+        if (this.item is { } current)
         {
-            this.item.PropertyChanged += this.OnItemPropertyChanged;
+            current.PropertyChanged += this.OnItemPropertyChanged;
         }
 
-        this.RefreshVisibility(hovered: this.hovered);
+        this.UpdateAppearance();
     }
 
-    private void OnItemPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
-    {
-        // A state flip can move a slot between quiet and pinned, so recompute rather than only
-        // repainting the glyph.
-        _ = sender;
-        _ = args;
-        this.RefreshVisibility(hovered: this.hovered);
-    }
-
-    private void OnRowPointerEntered(object sender, PointerRoutedEventArgs args)
+    private void OnItemPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
         _ = sender;
-        _ = args;
-        this.hovered = true;
-        this.RefreshVisibility(hovered: true);
-    }
-
-    private void OnRowPointerExited(object sender, PointerRoutedEventArgs args)
-    {
-        _ = sender;
-        _ = args;
-        this.hovered = false;
-        this.RefreshVisibility(hovered: false);
-    }
-
-    private void RefreshVisibility(bool hovered)
-    {
-        if (this.item is not { } adapter)
+        if (args.PropertyName is null or "" or nameof(LayoutItemAdapter.IsHiddenInEditor) or nameof(LayoutItemAdapter.IsLocked))
         {
-            this.EyeButton.Visibility = Visibility.Collapsed;
-            this.LockButton.Visibility = Visibility.Collapsed;
-            return;
+            this.UpdateAppearance();
         }
-
-        // Glyph always mirrors state, so a pinned icon shows the warning variant and a hover-
-        // revealed default shows the affordance variant.
-        this.EyeGlyph.Glyph = adapter.EditorVisibilityGlyph;
-        this.LockGlyph.Glyph = adapter.EditorLockGlyph;
-
-        var (eyeVisible, lockVisible, eyeSuppressed, lockSuppressed) = ComputeSlotVisibility(
-            adapter.IsHiddenInEditor,
-            adapter.IsLocked,
-            hovered);
-
-        this.EyeButton.Visibility = eyeVisible ? Visibility.Visible : Visibility.Collapsed;
-        this.LockButton.Visibility = lockVisible ? Visibility.Visible : Visibility.Collapsed;
-
-        // Suppressed states are loud (full opacity warning); hover-revealed defaults are muted
-        // affordances. Opacity only — the slot geometry never changes, so icons cannot shift.
-        this.EyeButton.Opacity = eyeSuppressed ? SuppressedAffordanceOpacity : DefaultAffordanceOpacity;
-        this.LockButton.Opacity = lockSuppressed ? SuppressedAffordanceOpacity : DefaultAffordanceOpacity;
     }
 
-    /// <summary>
-    /// Computes the quiet-default / loud-suppressed matrix for the two slots.
-    /// </summary>
-    /// <param name="hidden">Whether the node is editor-hidden (eye suppressed).</param>
-    /// <param name="locked">Whether the node is locked (lock suppressed).</param>
-    /// <param name="hovered">Whether the owning row has the pointer.</param>
-    /// <returns>
-    /// Visibility and suppression flags for the eye and lock slots. A suppressed slot is always
-    /// visible and loud; a default slot appears only on hover and is muted. The two slots are
-    /// independent, so hiding never pins the lock icon and locking never pins the eye.
-    /// </returns>
-    public static (bool EyeVisible, bool LockVisible, bool EyeSuppressed, bool LockSuppressed) ComputeSlotVisibility(
-        bool hidden,
-        bool locked,
-        bool hovered)
-        => (hidden || hovered, locked || hovered, hidden, locked);
-
-    private void EyeButton_OnClick(object sender, RoutedEventArgs args)
+    private void OnRowPointerChanged(object sender, PointerRoutedEventArgs args)
     {
         _ = sender;
-        _ = args;
-        this.Invoke(static vm => vm.ToggleEditorHiddenCommand, editorHidden: true);
+        if (this.row is { } owner)
+        {
+            // Descendant exit events must not end hover while the pointer is still inside the row.
+            this.UpdateRowPointerPosition(args.GetCurrentPoint(owner).Position);
+        }
     }
 
-    private void LockButton_OnClick(object sender, RoutedEventArgs args)
+    private void UpdateAppearance()
     {
-        _ = sender;
-        _ = args;
-        this.Invoke(static vm => vm.ToggleEditorLockedCommand, editorHidden: false);
-    }
-
-    // Commands are reached through the owning tree's view model rather than by writing adapter
-    // state here: a row action that flipped IsLocked/IsHiddenInEditor directly would bypass the
-    // document command owner and the single undo step it records.
-    private void Invoke(System.Func<SceneExplorerViewModel, System.Windows.Input.ICommand> selector, bool editorHidden)
-    {
-        _ = editorHidden;
-        if (this.item is not { } adapter || this.row is null)
-        {
-            return;
-        }
-
-        for (DependencyObject? parent = VisualTreeHelper.GetParent(this.row); parent is not null; parent = VisualTreeHelper.GetParent(parent))
-        {
-            if (parent is DynamicTree { ViewModel: SceneExplorerViewModel viewModel })
-            {
-                selector(viewModel).Execute(adapter);
-                return;
-            }
-        }
+        var eyeState = this.item?.IsHiddenInEditor == true ? "EyePinned"
+            : this.item is not null && this.hovered ? "EyeAffordance" : "EyeQuiet";
+        var lockState = this.item?.IsLocked == true ? "LockPinned"
+            : this.item is not null && this.hovered ? "LockAffordance" : "LockQuiet";
+        _ = VisualStateManager.GoToState(this, eyeState, useTransitions: false);
+        _ = VisualStateManager.GoToState(this, lockState, useTransitions: false);
+        _ = VisualStateManager.GoToState(this, this.item is not null && this.hovered ? "Interactive" : "Passive", useTransitions: false);
     }
 }

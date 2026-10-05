@@ -1417,8 +1417,9 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       **W3 row slots rewritten (`6ecb6954c`).** The first attempt (`3967b205f`) was rejected by the
       owner: a StackPanel of always-on buttons, a static lock glyph that never changed, and a hidden
       glyph that rendered as a stray link — it ignored the written UI spec. It is replaced by a
-      dedicated `SceneRowActions` control implementing the contract: two fixed 32px columns reserved by
-      `TrailingContentWidth=64` (icons never collapse a slot or shift the row), quiet-by-default /
+      dedicated `SceneRowActions` control implementing the contract: two fixed 32-DIP columns reserved by
+      `TrailingContentWidth=88` (64 DIPs of content plus the tree's 4/20-DIP margins; the original
+      64-DIP allocation clipped the lock slot), quiet-by-default /
       loud-when-suppressed, eye-off and lock pinned permanently for suppressed states independent of
       hover, slots never migrate and their hover lifetimes are independent, hover subscribed on the
       owning row and removed on unload (idempotent under recycling), and vetted Segoe Fluent glyphs
@@ -1433,18 +1434,25 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       Those two are now covered too (`SceneDocumentCommandServiceTests.WorkspaceInteraction.cs`): a
       stored record reloads its hidden/lock ids on scene restore, a record with a different
       `ProjectId` is rejected on the reused path scope, and the mask warning fires exactly once per
-      scene activation and re-arms on the next — unit lane total 320, failed 0. Remaining, not
+      scene activation and re-arms on the next — unit lane total 320, failed 0.
+      **Row-action corrective validation:** the actual Explorer view and realized node rows pass
+      27 focused UI cases, including the eight-state matrix, nonblank pixel captures and
+      opacity-normalized glyph-shape comparisons, accent lock treatment, passive hit testing and
+      tab stops, real hide undo/redo, workspace restore, nested-depth geometry, adapter recycling,
+      and repeated unload/reload. Presentation and command bindings now live in XAML visual states;
+      code-behind owns row hover and subscription lifetimes. Scene/folder rows reserve the same
+      geometry without node-state actions. The related Explorer, editor-hide, workspace and mask
+      regressions pass 49/49. These are rendered-component tests, not OS pointer injection or
+      running-editor acceptance; historical lane totals above are unchanged. Remaining, not
       editor-logic: the **native/interop
       implementation of the eye** (D8a E1–E3, I1–I4 — the excluded, separately-authorized task), a
       visual glyph review in the running editor, and (4) column
       placement, which still has no owning UI to persist against.
-      `settings-architecture.md:65` records hidden nodes; there is no typed
-      storage for per-project Lock state, category/column placement or their
-      lifetime, and no single service owns workspace interaction substate, so
-      lock and column choices cannot survive a session. Scope is decided in D4 —
-      implement one coordinated workspace service with typed settings and
-      project/scene-scoped lifetime, not new fields on scene DTOs. No code
-      exists yet, so this is unimplemented work, not an open question. Lock here
+      Original gap (resolved above except column placement): `settings-architecture.md:65`
+      recorded hidden nodes but lacked typed storage and coordinated ownership of Lock,
+      category/column placement and their lifetime. D4 chose one coordinated workspace
+      service with typed settings and project/scene-scoped lifetime, not new fields on scene DTOs.
+      Lock here
       means the editor-editability lock specified in the "Show in Editor & Lock"
       contract above — orthogonal to viewport suppression and to runtime
       visibility — and the persistence must key on the stable node id, so a

@@ -18,6 +18,7 @@ using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
@@ -30,7 +31,9 @@ namespace Oxygen.Editor.WorldEditor.TestSupport;
 
 internal sealed partial class SceneAuthoringFixture : IDisposable
 {
-    public SceneAuthoringFixture()
+    /// <summary>Initializes a new instance of the <see cref="SceneAuthoringFixture"/> class.</summary>
+    /// <param name="interaction">Optional workspace interaction state shared with the command owner.</param>
+    public SceneAuthoringFixture(WorkspaceInteractionService? interaction = null)
     {
         var info = new ProjectInfo("UI slot fixtures", Category.Games, Path.Combine(Path.GetTempPath(), "Oxygen-UI-Slots"));
         var project = new Mock<IProject>();
@@ -65,7 +68,7 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
         _ = sync.Setup(value => value.CompleteTerminalSyncAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<SyncOutcome>>>(), It.IsAny<CancellationToken>())).Returns((Guid _, Guid _, Func<CancellationToken, Task<SyncOutcome>> action, CancellationToken token) => action(token));
         var documents = this.Documents;
         _ = documents.Setup(value => value.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>())).ReturnsAsync(value: true);
-        this.Commands = new SceneDocumentCommandService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new SceneSelectionService(), sync.Object, Mock.Of<IProjectManagerService>(), documents.Object, default, this.Messenger, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer(), this.Slots.Object, this.Projects, new SceneMutator(NullLogger<SceneMutator>.Instance), new SceneOrganizer(NullLogger<SceneOrganizer>.Instance));
+        this.Commands = new SceneDocumentCommandService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new SceneSelectionService(), sync.Object, Mock.Of<IProjectManagerService>(), documents.Object, default, this.Messenger, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer(), this.Slots.Object, this.Projects, new SceneMutator(NullLogger<SceneMutator>.Instance), new SceneOrganizer(NullLogger<SceneOrganizer>.Instance), interaction);
     }
 
     public ProjectContextService Projects { get; } = new();
