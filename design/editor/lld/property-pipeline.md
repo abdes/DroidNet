@@ -56,14 +56,14 @@ in addition to schema validation.
 
 ## 6. Ownership
 
-| Owner | Responsibility |
-| --- | --- |
-| Engine schemas/cooker | Runtime descriptor definitions, native property dispatch, cooked encodings. |
-| `Oxygen.Editor.Schemas` | Schema/overlay loading, descriptors, typed edits, snapshots, mixed values, reusable apply/session mechanics; no WinUI or native runtime dependency. |
-| WorldEditor commands | Scene targets, domain rules, authoring transaction, revision/history, scene sync intent. |
-| MaterialEditor document service | Material transactions, revisions/history, persistence, explicit cook requests. |
-| Editor.UI and feature UI | Reusable field controls and composition, without independent mutation authority. |
-| Runtime/interop | Stable engine property keys and specialized capabilities on the proper frame phase. |
+| Owner                           | Responsibility                                                                                                                                      |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Engine schemas/cooker           | Runtime descriptor definitions, native property dispatch, cooked encodings.                                                                         |
+| `Oxygen.Editor.Schemas`         | Schema/overlay loading, descriptors, typed edits, snapshots, mixed values, reusable apply/session mechanics; no WinUI or native runtime dependency. |
+| WorldEditor commands            | Scene targets, domain rules, authoring transaction, revision/history, scene sync intent.                                                            |
+| MaterialEditor document service | Material transactions, revisions/history, persistence, explicit cook requests.                                                                      |
+| Editor.UI and feature UI        | Reusable field controls and composition, without independent mutation authority.                                                                    |
+| Runtime/interop                 | Stable engine property keys and specialized capabilities on the proper frame phase.                                                                 |
 
 Descriptors identify engine command keys. They do not store PAK byte offsets
 or implement cooked binary readers/writers. Round-trip tests use supported
@@ -181,19 +181,19 @@ ED-M07A closes these cross-cutting gaps for scene and material properties.
 Earlier ED-M03/04/05 evidence remains scoped to its originally recorded work:
 
 - [ ] All editable V0.1 fields have identity, validation, mutation, persistence,
-  and their required runtime/cook mapping.
+      and their required runtime/cook mapping.
 - [ ] Overlay lint, references, coverage of the declared V0.1 field set,
-  validator agreement, and native-embedding isolation pass.
+      validator agreement, and native-embedding isolation pass.
 - [ ] Mixed values, partial coordinates, and invalid multi-target edits preserve
-  untouched values and never leave partial authoring changes.
+      untouched values and never leave partial authoring changes.
 - [ ] Apply/undo/redo, commit/cancel/no-op, selection changes, deletion, and
-  reopening preserve the documented per-target values and history.
+      reopening preserve the documented per-target values and history.
 - [ ] Revision precedes async work; save A followed by edit B acknowledges A
-  while B stays dirty, including undo/redo and explorer-layout changes.
+      while B stays dirty, including undo/redo and explorer-layout changes.
 - [ ] Offline edits, reconnect, superseded queues, failed replay, activation,
-  and document lifetimes cannot apply stale values to a live scene.
+      and document lifetimes cannot apply stale values to a live scene.
 - [ ] Supported cook/load APIs prove field round-trip without editor-owned PAK
-  offsets. ED-M08 separately qualifies visual parity.
+      offsets. ED-M08 separately qualifies visual parity.
 
 ## 15. Scope Decisions
 

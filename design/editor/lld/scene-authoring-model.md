@@ -153,10 +153,12 @@ field advertises an absent baking workflow.
 ## 7. Editor state and runtime presence
 
 Editor Hide is per-user/project workspace state outside authored content. It
-filters geometry/gizmo representations and descendants in the editing main view
-while retaining light contribution and caster eligibility. Parent hide/show
+filters geometry, shadows and viewport picking (plus descendants) in the
+editing main view; the transform gizmo still renders when the node is selected.
+It retains light contribution and caster eligibility. Parent hide/show
 retains child choices; Show All clears view overrides. It produces no scene
-dirty state, authoring history, cooking request or runtime-role edit. Other
+dirty state, no cooking request and no runtime-role edit; the eye toggle
+records an undo step. Other
 outputs and controlled qualification targets do not consume the mask.
 
 Explorer layout can remain scene-associated UI metadata, but never generates

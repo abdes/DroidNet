@@ -66,27 +66,27 @@ The LLD set is intentionally explicit. If a feature cannot point to one of
 these documents, either the feature is out of scope or the LLD set is missing an
 owner.
 
-| Area | LLD | Covers |
-| --- | --- | --- |
-| Shell, project open, workspace activation | [project-workspace-shell.md](lld/project-workspace-shell.md) | Project Browser startup, project open/create, workspace activation, restoration, project/service boundaries. |
-| Project layout and templates | [project-layout-and-templates.md](lld/project-layout-and-templates.md) | Standard project filesystem layout, authoring mounts, derived roots, and predefined template output rules. |
-| Project services | [project-services.md](lld/project-services.md) | Project metadata, project settings, content roots, project cook scope and policy. |
-| Documents, commands, undo, dirty state | [documents-and-commands.md](lld/documents-and-commands.md) | Generic document abstractions, document lifecycle, command model, undo/redo, dirty state, selection state, command result flow. |
-| Scene authoring domain | [scene-authoring-model.md](lld/scene-authoring-model.md) | Scene graph, components, scene persistence, component completion matrix. |
-| Scene explorer | [scene-explorer.md](lld/scene-explorer.md) | Hierarchy UI, selection presentation, rename/create/delete/reparent UX, drag/drop semantics. |
-| Property inspector | [property-inspector.md](lld/property-inspector.md) | Component editors, field controls, validation presentation, multi-selection behavior. |
-| Property pipeline | [property-pipeline.md](lld/property-pipeline.md) | Shared schema identity, validation, mixed values, revision-aware transactions, undo/edit sessions, and runtime projection. |
-| Material editor | [material-editor.md](lld/material-editor.md) | Scalar material documents, property UI, previews, assignment, save/cook/preview contract. |
-| Environment authoring | [environment-authoring.md](lld/environment-authoring.md) | Atmosphere, sun, exposure, tone mapping, scene render intent. |
-| Content browser and asset identity | [content-browser-asset-identity.md](lld/content-browser-asset-identity.md) | Source/generated/cooked browsing, asset identity, asset picker, missing references. |
-| Asset primitives | [asset-primitives.md](lld/asset-primitives.md) | `Oxygen.Managed.Assets` reusable asset identity, catalog, import/cook primitives, loose index utilities. |
-| Content pipeline | [content-pipeline.md](lld/content-pipeline.md) | Import, descriptor generation, manifest generation, cook, pak, inspect, mount refresh requests. |
-| Live engine sync | [live-engine-sync.md](lld/live-engine-sync.md) | Authoring-to-runtime projection, sync adapters, ordering, sync diagnostics. |
-| Runtime integration | [runtime-integration.md](lld/runtime-integration.md) | Embedded engine lifecycle, settings application, surface leases, views, mounts, input bridge, threading/frame phases. |
-| Standalone runtime validation | [standalone-runtime-validation.md](lld/standalone-runtime-validation.md) | Cooked-output launch/load validation in standalone runtime and parity evidence. |
-| Viewport and tools | [viewport-and-tools.md](lld/viewport-and-tools.md) | Viewport layout, editor camera, frame selected/all, selection, gizmos, overlays. |
-| Settings architecture | [settings-architecture.md](lld/settings-architecture.md) | Editor, project, workspace, scene, runtime, diagnostic override settings. |
-| Diagnostics and operation results | [diagnostics-operation-results.md](lld/diagnostics-operation-results.md) | Operation result model, diagnostic scopes, failure-domain classification, presentation, workspace output/log panel composition. |
+| Area                                      | LLD                                                                        | Covers                                                                                                                          |
+| ----------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Shell, project open, workspace activation | [project-workspace-shell.md](lld/project-workspace-shell.md)               | Project Browser startup, project open/create, workspace activation, restoration, project/service boundaries.                    |
+| Project layout and templates              | [project-layout-and-templates.md](lld/project-layout-and-templates.md)     | Standard project filesystem layout, authoring mounts, derived roots, and predefined template output rules.                      |
+| Project services                          | [project-services.md](lld/project-services.md)                             | Project metadata, project settings, content roots, project cook scope and policy.                                               |
+| Documents, commands, undo, dirty state    | [documents-and-commands.md](lld/documents-and-commands.md)                 | Generic document abstractions, document lifecycle, command model, undo/redo, dirty state, selection state, command result flow. |
+| Scene authoring domain                    | [scene-authoring-model.md](lld/scene-authoring-model.md)                   | Scene graph, components, scene persistence, component completion matrix.                                                        |
+| Scene explorer                            | [scene-explorer.md](lld/scene-explorer.md)                                 | Hierarchy UI, selection presentation, rename/create/delete/reparent UX, drag/drop semantics.                                    |
+| Property inspector                        | [property-inspector.md](lld/property-inspector.md)                         | Component editors, field controls, validation presentation, multi-selection behavior.                                           |
+| Property pipeline                         | [property-pipeline.md](lld/property-pipeline.md)                           | Shared schema identity, validation, mixed values, revision-aware transactions, undo/edit sessions, and runtime projection.      |
+| Material editor                           | [material-editor.md](lld/material-editor.md)                               | Scalar material documents, property UI, previews, assignment, save/cook/preview contract.                                       |
+| Environment authoring                     | [environment-authoring.md](lld/environment-authoring.md)                   | Atmosphere, sun, exposure, tone mapping, scene render intent.                                                                   |
+| Content browser and asset identity        | [content-browser-asset-identity.md](lld/content-browser-asset-identity.md) | Source/generated/cooked browsing, asset identity, asset picker, missing references.                                             |
+| Asset primitives                          | [asset-primitives.md](lld/asset-primitives.md)                             | `Oxygen.Managed.Assets` reusable asset identity, catalog, import/cook primitives, loose index utilities.                        |
+| Content pipeline                          | [content-pipeline.md](lld/content-pipeline.md)                             | Import, descriptor generation, manifest generation, cook, pak, inspect, mount refresh requests.                                 |
+| Live engine sync                          | [live-engine-sync.md](lld/live-engine-sync.md)                             | Authoring-to-runtime projection, sync adapters, ordering, sync diagnostics.                                                     |
+| Runtime integration                       | [runtime-integration.md](lld/runtime-integration.md)                       | Embedded engine lifecycle, settings application, surface leases, views, mounts, input bridge, threading/frame phases.           |
+| Standalone runtime validation             | [standalone-runtime-validation.md](lld/standalone-runtime-validation.md)   | Cooked-output launch/load validation in standalone runtime and parity evidence.                                                 |
+| Viewport and tools                        | [viewport-and-tools.md](lld/viewport-and-tools.md)                         | Viewport layout, editor camera, frame selected/all, selection, gizmos, overlays.                                                |
+| Settings architecture                     | [settings-architecture.md](lld/settings-architecture.md)                   | Editor, project, workspace, scene, runtime, diagnostic override settings.                                                       |
+| Diagnostics and operation results         | [diagnostics-operation-results.md](lld/diagnostics-operation-results.md)   | Operation result model, diagnostic scopes, failure-domain classification, presentation, workspace output/log panel composition. |
 
 Material editing has its own LLD because V0.1 requires scalar material
 authoring. Physics scene editing has no V0.1 LLD because it is out of scope per

@@ -21,24 +21,24 @@ targets that confuse source files with derived output.
 
 ## 2. PRD Traceability
 
-| ID | ED-M06A Coverage |
-| --- | --- |
-| `GOAL-001` | Newly created projects open into a valid workspace with an authored starter scene. |
-| `GOAL-004` | Authored material and scene assets use stable asset identity under declared content roots. |
-| `GOAL-005` | Project layout separates authored content, source media, config, and derived output. |
-| `GOAL-006` | Template, mount, layout, and content-root failures produce visible diagnostics. |
-| `REQ-002` | Project create/open workflows handle valid and invalid projects. |
-| `REQ-017` | Project content roots and mounts define asset identity. |
-| `REQ-018` | Cooked output is separate from authoring data. |
-| `REQ-019` | Cooked output is discoverable without becoming an authoring root. |
-| `REQ-020` | Content Browser exposes project content roots and project-visible folders coherently. |
-| `REQ-021` | Asset references preserve authored identity through mount tokens. |
-| `REQ-022` | Project/template/layout failures produce visible operation results. |
-| `REQ-024` | Diagnostics identify project layout, mount, template, or browser target causes. |
-| `REQ-036` | Content Browser navigation and creation targets are predictable. |
-| `REQ-037` | Scene/material files persist stable asset URIs and not browser-only or derived state. |
-| `SUCCESS-001` | A new project can be created and opened without manual file repair. |
-| `SUCCESS-006` | Content pipeline readiness has a stable project layout and browser foundation. |
+| ID            | ED-M06A Coverage                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------ |
+| `GOAL-001`    | Newly created projects open into a valid workspace with an authored starter scene.         |
+| `GOAL-004`    | Authored material and scene assets use stable asset identity under declared content roots. |
+| `GOAL-005`    | Project layout separates authored content, source media, config, and derived output.       |
+| `GOAL-006`    | Template, mount, layout, and content-root failures produce visible diagnostics.            |
+| `REQ-002`     | Project create/open workflows handle valid and invalid projects.                           |
+| `REQ-017`     | Project content roots and mounts define asset identity.                                    |
+| `REQ-018`     | Cooked output is separate from authoring data.                                             |
+| `REQ-019`     | Cooked output is discoverable without becoming an authoring root.                          |
+| `REQ-020`     | Content Browser exposes project content roots and project-visible folders coherently.      |
+| `REQ-021`     | Asset references preserve authored identity through mount tokens.                          |
+| `REQ-022`     | Project/template/layout failures produce visible operation results.                        |
+| `REQ-024`     | Diagnostics identify project layout, mount, template, or browser target causes.            |
+| `REQ-036`     | Content Browser navigation and creation targets are predictable.                           |
+| `REQ-037`     | Scene/material files persist stable asset URIs and not browser-only or derived state.      |
+| `SUCCESS-001` | A new project can be created and opened without manual file repair.                        |
+| `SUCCESS-006` | Content pipeline readiness has a stable project layout and browser foundation.             |
 
 ## 3. Required LLDs
 
@@ -257,7 +257,7 @@ Tasks:
 
 - Add `IAuthoringTargetResolver` in `Oxygen.Editor.Projects`:
   `ResolveCreateTarget(ProjectContext project, AssetKind assetKind,
-  ContentBrowserSelection? selection) -> AuthoringTarget`.
+ContentBrowserSelection? selection) -> AuthoringTarget`.
 - Use the resolver from scene creation, material creation, and Content Browser
   create actions.
 - Implement rules for project root, authoring mount root, matching kind
@@ -388,15 +388,15 @@ Expected primary touch points:
 
 ## 8. Dependency And Execution Risks
 
-| Risk | Mitigation |
-| --- | --- |
-| Template updates are treated as cosmetic files instead of a project-creation contract. | Validate templates through project creation tests and activation flow. |
-| Template payload accidentally includes `Project.oxy`. | Reject stray payload manifests, write final `Project.oxy` after copy, and assert two projects from the same template have distinct ids. |
-| Scene creation continues to write under old folders. | Use one target resolver for scene creation and assert `Content/Scenes/*.oscene.json`. |
-| Material Editor saves a descriptor but Content Browser/picker does not refresh. | Publish catalog/change notification on save and add picker/provider refresh tests. |
-| Content Browser shows every file under the project as a material candidate. | Material picker consumes kind-filtered identity rows and tests reject non-material files. |
-| Local mount handling silently changes default creation targets. | Local mounts only become create targets when explicitly selected; tests cover explicit and implicit cases. |
-| ED-M07 starts before layout correction lands. | Ledger marks ED-M06A as the next prerequisite before ED-M07 implementation. |
+| Risk                                                                                   | Mitigation                                                                                                                              |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Template updates are treated as cosmetic files instead of a project-creation contract. | Validate templates through project creation tests and activation flow.                                                                  |
+| Template payload accidentally includes `Project.oxy`.                                  | Reject stray payload manifests, write final `Project.oxy` after copy, and assert two projects from the same template have distinct ids. |
+| Scene creation continues to write under old folders.                                   | Use one target resolver for scene creation and assert `Content/Scenes/*.oscene.json`.                                                   |
+| Material Editor saves a descriptor but Content Browser/picker does not refresh.        | Publish catalog/change notification on save and add picker/provider refresh tests.                                                      |
+| Content Browser shows every file under the project as a material candidate.            | Material picker consumes kind-filtered identity rows and tests reject non-material files.                                               |
+| Local mount handling silently changes default creation targets.                        | Local mounts only become create targets when explicitly selected; tests cover explicit and implicit cases.                              |
+| ED-M07 starts before layout correction lands.                                          | Ledger marks ED-M06A as the next prerequisite before ED-M07 implementation.                                                             |
 
 ## 9. Validation Gates
 

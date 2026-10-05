@@ -87,11 +87,13 @@ from Light Cast Shadows. Opaque/masked casting is supported; blended casting and
 authored Shadows Only/Hidden Shadow modes are excluded. Visible off-screen
 casters may remain in shadow submissions.
 
-The eye control, **Hide in editor**, instead masks geometry/gizmo representations
-and descendants in the editing main view. Light contribution/caster eligibility
-remain unchanged. Store its choices in per-user/project workspace state outside
+The eye control, **Hide in editor**, instead masks geometry, shadows and viewport
+picking (plus descendants) in the editing main view; the transform gizmo still
+renders when the node is selected. Light contribution/caster eligibility remain
+unchanged. Store its choices in per-user/project workspace state outside
 authored content. Parent hide/show retains child choices; Show All clears view
-overrides. It never changes scene dirty/history, saved source or cooking demand.
+overrides. The toggle records an undo step and never dirties the scene
+document, changes saved source or requests cooking.
 Derived runtime presence (`IsActive`) is not an authored activation field.
 
 ## 5. Transform

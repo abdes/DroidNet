@@ -494,12 +494,14 @@ requires these observations and cases:
   populated resolver cache; existing role/flag unit tests do not prove this.
 
 Editor-only Hide is separate per-user/project workspace state outside authored
-content. It masks geometry/gizmo representations and descendants only in the
-editing main view while retaining illumination and caster eligibility. Parent
-hide/show preserves child hide choices and Show All clears the view overrides.
-Qualification verifies no source/dirty/history/cook effects and renders its
-controlled targets without workspace masks. Release preserves the current valid
-editing-view choices. Runtime-loaded `IsActive` is derived, not authored state.
+content. It masks geometry, shadows and viewport picking (plus descendants) only
+in the editing main view while retaining illumination and caster eligibility;
+the transform gizmo still renders when the node is selected. Parent hide/show
+preserves child hide choices and Show All clears the view overrides.
+Qualification verifies no source/dirty/cook effects and that the eye toggle is
+undoable, and renders its controlled targets without workspace masks. Release
+preserves the current valid editing-view choices. Runtime-loaded `IsActive` is
+derived, not authored state.
 
 Migrate useful old visibility/caster values to canonical explicit modes; do not
 replace old child intent with new-creation defaults. Historically ineffective
@@ -1029,7 +1031,7 @@ preference or background validation scheduler is added.
 - [ ] Light participation, geometry casting, light shadowing and GPU receiver
       opt-out have independent rendered effects; hidden camera nodes remain usable.
 - [ ] Editor-only Hide preserves illumination/caster eligibility and child
-      choices without source, dirty/history or cook changes. Controlled capture
+      choices without source, dirty or cook changes and with an undo step. Controlled capture
       ignores workspace masks and safely restores the current editing view.
 - [ ] Visibility/hierarchy changes invalidate cached directional membership and
       affected lighting products; authored Hidden and off-screen shadow casters are

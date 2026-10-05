@@ -301,7 +301,8 @@ public interface ISceneDocumentCommandService
         bool preserveWorldTransform,
         Guid? insertAfterNodeId = null);
 
-    /// <summary>Groups node entries into a folder without changing scene parenting or transforms.</summary>
+    /// <summary>Groups node entries into a folder, reparenting with preserve-local pose first when the
+    /// folder's scene scope differs from a node's current scene parent.</summary>
     /// <param name="context">The document command context.</param>
     /// <param name="nodeIds">The nodes to group.</param>
     /// <param name="folderId">The destination folder.</param>

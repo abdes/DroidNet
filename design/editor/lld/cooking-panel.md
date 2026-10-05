@@ -30,21 +30,21 @@ This contract belongs to ED-M07B.5d-f and complements
 
 ## 2. Accepted Interaction Decisions
 
-| Topic | Accepted behavior |
-| --- | --- |
-| Default docking | Bottom, tabbed alongside Content Browser and Logs; rearrange through existing docking. |
-| Organization | Compact list of active, queued, and recent cooks on the left, using status icons beside names; details for one selected cook on the right. |
-| Issues | Directly beneath the selected cook's progress summary, grouped by affected asset. Technical output has its own section within Cooking. |
-| Output | Show the selected run's progress messages and technical output inside Cooking. Understanding a cook never requires switching to the global Logs panel. |
-| Default detail | Current stage and asset counts; full asset list expandable. |
-| Asset failure in a batch | Continue independent work, skip dependent work, collect all issues. A failed cook does not replace published output. |
-| History | Retain this editor session's runs only. No completed history after restart. |
-| Automatic runs | Never open the panel or steal focus. Show active, queued, failed, and warning runs by default; successful automatic runs appear through Show all. |
-| Cancel | Cancel only the selected cook; other queued cooks continue. Show Cancelling until a safe stopping point. |
-| Unsaved inputs | Put Save listed & Cook inline with Unsaved documents; each document name is its Open link. Saving requires explicit action. |
-| Retry | Immediately resubmit the original scope with the latest saved inputs; reuse valid current outputs. |
-| Go to property | Keep Cooking visible and the failed run selected while opening and focusing the affected property. |
-| Visual treatment | Compact rows, clear grouping, restrained status colours, consistent with the editor. |
+| Topic                    | Accepted behavior                                                                                                                                      |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Default docking          | Bottom, tabbed alongside Content Browser and Logs; rearrange through existing docking.                                                                 |
+| Organization             | Compact list of active, queued, and recent cooks on the left, using status icons beside names; details for one selected cook on the right.             |
+| Issues                   | Directly beneath the selected cook's progress summary, grouped by affected asset. Technical output has its own section within Cooking.                 |
+| Output                   | Show the selected run's progress messages and technical output inside Cooking. Understanding a cook never requires switching to the global Logs panel. |
+| Default detail           | Current stage and asset counts; full asset list expandable.                                                                                            |
+| Asset failure in a batch | Continue independent work, skip dependent work, collect all issues. A failed cook does not replace published output.                                   |
+| History                  | Retain this editor session's runs only. No completed history after restart.                                                                            |
+| Automatic runs           | Never open the panel or steal focus. Show active, queued, failed, and warning runs by default; successful automatic runs appear through Show all.      |
+| Cancel                   | Cancel only the selected cook; other queued cooks continue. Show Cancelling until a safe stopping point.                                               |
+| Unsaved inputs           | Put Save listed & Cook inline with Unsaved documents; each document name is its Open link. Saving requires explicit action.                            |
+| Retry                    | Immediately resubmit the original scope with the latest saved inputs; reuse valid current outputs.                                                     |
+| Go to property           | Keep Cooking visible and the failed run selected while opening and focusing the affected property.                                                     |
+| Visual treatment         | Compact rows, clear grouping, restrained status colours, consistent with the editor.                                                                   |
 
 ## 3. Layout
 
@@ -309,13 +309,13 @@ editor validation are separate acceptance steps.
 
 ## 7. Implementation Ownership
 
-| Owner | Responsibility |
-| --- | --- |
-| ContentPipeline coordinator | Cook-specific observable run state, scoped progress, request ownership, capture, cancellation, retries, provenance, and publication. |
-| WorldEditor workspace | Dock registration, run-list/details/output presentation, stable selection and reading position, and property/document navigation. |
-| Document and property pipelines | Ordinary save/conflict commands and shared schema-derived bounds; preserve existing edit/history behavior. |
+| Owner                                               | Responsibility                                                                                                                                                                         |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ContentPipeline coordinator                         | Cook-specific observable run state, scoped progress, request ownership, capture, cancellation, retries, provenance, and publication.                                                   |
+| WorldEditor workspace                               | Dock registration, run-list/details/output presentation, stable selection and reading position, and property/document navigation.                                                      |
+| Document and property pipelines                     | Ordinary save/conflict commands and shared schema-derived bounds; preserve existing edit/history behavior.                                                                             |
 | Shared operation results and logging infrastructure | Immutable finalized outcomes, actionable diagnostic identity, and run-correlated messages available directly in Cooking. Reuse capture/storage without requiring the global Logs view. |
-| Content Browser and typed pickers | Concise current state from the same publication authority and navigation to the relevant Cooking run. |
+| Content Browser and typed pickers                   | Concise current state from the same publication authority and navigation to the relevant Cooking run.                                                                                  |
 
 Run presentation consumes snapshots/events from the owning coordinator. It does
 not infer success from filesystem timestamps or parse free-form log text as the

@@ -9,15 +9,15 @@ casting, light shadowing, receiving and editor-only hiding are independent
 concepts. General activation is a separate lifecycle capability and is not a
 meaning of visibility or runtime-loaded state.
 
-| Control | Canonical behavior |
-| --- | --- |
-| Editor Hide eye | Masks geometry/gizmo representations and descendants in the editing main view; retains illumination and caster eligibility; local workspace state only |
-| Scene Visibility | Inherit / Shown / Hidden source mode; geometry and light eligibility honor the same resolved value |
-| Light Affects Scene | Independent runtime contribution gate; Off stops that light without hiding its fixture or erasing intensity/assignment |
-| Geometry Cast Shadows | Independent Inherit / On / Off; Off removes geometry as an occluder while it remains visible/lit |
-| Light Cast Shadows | Off retains illumination without shadowing from that light; other lights and geometry settings remain unchanged |
-| Geometry Receive Shadows | Independent Inherit / On / Off; Off skips direct-light shadow attenuation, not ambient occlusion or ordinary lighting |
-| Atmosphere assignment | Per-light None / Primary / Secondary, separate from ordinary illumination; defined in the [celestial contract](ED-M08-celestial-light-authoring.md) |
+| Control                  | Canonical behavior                                                                                                                                                                                                             |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Editor Hide eye          | Masks geometry, shadows and viewport picking (plus descendants) in the editing main view; the transform gizmo still renders when the node is selected; retains illumination and caster eligibility; local workspace state only |
+| Scene Visibility         | Inherit / Shown / Hidden source mode; geometry and light eligibility honor the same resolved value                                                                                                                             |
+| Light Affects Scene      | Independent runtime contribution gate; Off stops that light without hiding its fixture or erasing intensity/assignment                                                                                                         |
+| Geometry Cast Shadows    | Independent Inherit / On / Off; Off removes geometry as an occluder while it remains visible/lit                                                                                                                               |
+| Light Cast Shadows       | Off retains illumination without shadowing from that light; other lights and geometry settings remain unchanged                                                                                                                |
+| Geometry Receive Shadows | Independent Inherit / On / Off; Off skips direct-light shadow attenuation, not ambient occlusion or ordinary lighting                                                                                                          |
+| Atmosphere assignment    | Per-light None / Primary / Secondary, separate from ordinary illumination; defined in the [celestial contract](ED-M08-celestial-light-authoring.md)                                                                            |
 
 ## 2. Native flag and authoring semantics
 
@@ -27,11 +27,11 @@ value. At a root, Inherit resolves against scene defaults: Shown, casting On and
 receiving On. New roots use these explicit local defaults; children start Inherit.
 
 | Parent visibility | Child mode | Child effective visibility |
-| --- | --- | --- |
-| Hidden | Shown | Shown |
-| Shown | Hidden | Hidden |
-| Hidden | Inherit | Hidden |
-| Shown | Inherit | Shown |
+| ----------------- | ---------- | -------------------------- |
+| Hidden            | Shown      | Shown                      |
+| Shown             | Hidden     | Hidden                     |
+| Hidden            | Inherit    | Hidden                     |
+| Shown             | Inherit    | Shown                      |
 
 Changing a parent never rewrites child source modes. Reparenting re-resolves
 inherited flags and invalidates affected render/light/capture products. A local
@@ -59,9 +59,10 @@ parent masks its descendants in the editing main view regardless of their
 authored visibility mode. Showing that parent removes its local Hide entry but
 retains individual child entries; Show All clears the scene's view overrides.
 
-Hide never changes authored flags, light properties, source hashes, dirty/history
-state or cooking demand. It retains light contribution and shadow-caster
-eligibility; a roof can be hidden for editing while still shading the room.
+Hide never changes authored flags, light properties, source hashes or cooking
+demand, and never dirties the scene document; the eye toggle is undoable. It
+retains light contribution and shadow-caster eligibility; a roof can be hidden
+for editing while still shading the room.
 Hidden geometry is omitted from editing-main-view rendering/picking, while
 hierarchy selection remains available. Controlled qualification views omit local
 Hide masks and preserve the current editing mask when their session ends.
@@ -128,14 +129,14 @@ Source seams:
 
 ## 6. Eliminated alternatives and industry basis
 
-| Alternative | Reason |
-| --- | --- |
-| One visibility/activation/contribution/shadow switch | Changes unrelated rendering and lifecycle responsibilities together |
-| Unconditional ancestor-AND for native flags | Removes useful explicit local overrides |
-| Light-only hidden-ancestor pruning | Overrides the same resolved flag differently from geometry collection |
-| Editor Hide implemented by authored flag writes | Changes saved/runtime content and lighting instead of editing-view presentation |
-| Treat receiver CPU storage as implementation | No rendered effect exists without the shader consumer |
-| Treat intensity0 or hidden gizmos as light enablement | Conflates magnitude, editor representation and scene participation |
+| Alternative                                           | Reason                                                                          |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------- |
+| One visibility/activation/contribution/shadow switch  | Changes unrelated rendering and lifecycle responsibilities together             |
+| Unconditional ancestor-AND for native flags           | Removes useful explicit local overrides                                         |
+| Light-only hidden-ancestor pruning                    | Overrides the same resolved flag differently from geometry collection           |
+| Editor Hide implemented by authored flag writes       | Changes saved/runtime content and lighting instead of editing-view presentation |
+| Treat receiver CPU storage as implementation          | No rendered effect exists without the shader consumer                           |
+| Treat intensity0 or hidden gizmos as light enablement | Conflates magnitude, editor representation and scene participation              |
 
 Industry systems separate these concerns but use different inheritance and UI
 models. [Unity Scene visibility](https://docs.unity3d.com/6000.0/Documentation/Manual/SceneVisibility.html)

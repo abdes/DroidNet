@@ -14,14 +14,14 @@ overlays are planned for ED-M09. They are intentionally not ED-M02 blockers.
 
 ## 2. PRD Traceability
 
-| ID | Coverage |
-| --- | --- |
-| `REQ-025` | A live embedded viewport renders the active scene. |
-| `REQ-027` | The supported single live viewport layout is stable; multi-viewport layouts are deferred. |
-| `REQ-028` | The supported live viewport presents to the correct editor surface; multi-viewport surface routing is deferred. |
-| `REQ-030` | Partial: ED-M02 verifies the active scene is visibly rendered in the embedded viewport; full preview parity remains ED-M08. |
-| `SUCCESS-003` | Users can see the scene in the editor viewport. |
-| `SUCCESS-005` | Live viewport is stable enough for later authoring work. |
+| ID            | Coverage                                                                                                                    |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `REQ-025`     | A live embedded viewport renders the active scene.                                                                          |
+| `REQ-027`     | The supported single live viewport layout is stable; multi-viewport layouts are deferred.                                   |
+| `REQ-028`     | The supported live viewport presents to the correct editor surface; multi-viewport surface routing is deferred.             |
+| `REQ-030`     | Partial: ED-M02 verifies the active scene is visibly rendered in the embedded viewport; full preview parity remains ED-M08. |
+| `SUCCESS-003` | Users can see the scene in the editor viewport.                                                                             |
+| `SUCCESS-005` | Live viewport is stable enough for later authoring work.                                                                    |
 
 ## 3. Architecture Links
 
@@ -105,17 +105,17 @@ Target invariants:
 
 ## 6. Ownership
 
-| State Or Behavior | Owner |
-| --- | --- |
-| Scene document layout metadata | WorldEditor scene document metadata |
-| Viewport collection and layout selection | `SceneEditorViewModel` |
-| Viewport identity, index, primary flag, clear color | `ViewportViewModel` |
-| `SwapChainPanel` lifetime and size events | `Viewport` WinUI control |
-| Surface lease | `Oxygen.Editor.Runtime` |
-| Engine view ID | Runtime result stored by `ViewportViewModel` |
-| Runtime camera preset calls | `ViewportViewModel` through `IEngineService` |
-| Runtime FPS/logging settings | Scene editor UI through `IEngineService` |
-| Selection/picking/gizmos | ED-M09 LLD scope, not ED-M02 |
+| State Or Behavior                                   | Owner                                        |
+| --------------------------------------------------- | -------------------------------------------- |
+| Scene document layout metadata                      | WorldEditor scene document metadata          |
+| Viewport collection and layout selection            | `SceneEditorViewModel`                       |
+| Viewport identity, index, primary flag, clear color | `ViewportViewModel`                          |
+| `SwapChainPanel` lifetime and size events           | `Viewport` WinUI control                     |
+| Surface lease                                       | `Oxygen.Editor.Runtime`                      |
+| Engine view ID                                      | Runtime result stored by `ViewportViewModel` |
+| Runtime camera preset calls                         | `ViewportViewModel` through `IEngineService` |
+| Runtime FPS/logging settings                        | Scene editor UI through `IEngineService`     |
+| Selection/picking/gizmos                            | ED-M09 LLD scope, not ED-M02                 |
 
 ## 7. Data Contracts
 
@@ -169,16 +169,16 @@ scene editor settings surface is visible.
 
 ED-M02 commands and service calls:
 
-| User/UI Action | Owner | Runtime Interaction |
-| --- | --- | --- |
-| Open scene document | document/workspace | scene sync happens before layout creation. |
-| Restore/change layout | `SceneEditorViewModel` | create/remove viewport VMs. |
-| Viewport loaded | `Viewport` control | attach surface lease, create engine view, resize. |
-| Viewport unloaded/removed | `Viewport` control | destroy engine view, dispose lease. |
-| Pane/window resized | `Viewport` control | debounce and resize surface lease. |
-| Camera preset selected | `ViewportViewModel` | call `SetViewCameraPresetAsync`. |
-| FPS changed | scene editor UI | write `IEngineService.TargetFps`. |
-| Logging verbosity changed | scene editor UI | write `IEngineService.EngineLoggingVerbosity`. |
+| User/UI Action            | Owner                  | Runtime Interaction                               |
+| ------------------------- | ---------------------- | ------------------------------------------------- |
+| Open scene document       | document/workspace     | scene sync happens before layout creation.        |
+| Restore/change layout     | `SceneEditorViewModel` | create/remove viewport VMs.                       |
+| Viewport loaded           | `Viewport` control     | attach surface lease, create engine view, resize. |
+| Viewport unloaded/removed | `Viewport` control     | destroy engine view, dispose lease.               |
+| Pane/window resized       | `Viewport` control     | debounce and resize surface lease.                |
+| Camera preset selected    | `ViewportViewModel`    | call `SetViewCameraPresetAsync`.                  |
+| FPS changed               | scene editor UI        | write `IEngineService.TargetFps`.                 |
+| Logging verbosity changed | scene editor UI        | write `IEngineService.EngineLoggingVerbosity`.    |
 
 Command-based scene mutation, undoable transform tools, and selection tools are
 deferred to ED-M03/ED-M09.
@@ -384,16 +384,16 @@ validation dashboard or independently scheduled full-scene validation is added.
 ### ED-M09 Pass/Fail Gates
 
 - [ ] Navigate each existing mode, lose focus during drag/key hold, close/reopen,
-  and pause for publication: no stuck input, leaked capture, or authored-camera
-  mutation; only the supported single viewport is enabled.
+      and pause for publication: no stuck input, leaked capture, or authored-camera
+      mutation; only the supported single viewport is enabled.
 - [ ] Frame selected/all handles multiple transformed parents, tiny/large finite
-  bounds, missing geometry, camera/light-only and empty scenes as specified.
+      bounds, missing geometry, camera/light-only and empty scenes as specified.
 - [ ] Picking, Ctrl membership, empty clear, icons, hierarchy and inspector agree
-  on selection; stale async results never select a different active scene.
+      on selection; stale async results never select a different active scene.
 - [ ] Translate/rotate/scale, World/Local, multi-selection, snapping, commit/cancel
-  and invalid parent transforms pass through the same command/session path.
-  Each gesture has one undo entry and exact before-value restoration.
+      and invalid parent transforms pass through the same command/session path.
+      Each gesture has one undo entry and exact before-value restoration.
 - [ ] Highlight/icons/gizmo/grid visibility survives expected view operations and
-  never changes saved/cooked scene content. Overlay-off captures match M08 state.
+      never changes saved/cooked scene content. Overlay-off captures match M08 state.
 - [ ] The PRD's 100-node viewport remains responsive; actual user validation
-  records interaction outcomes, not screenshots alone or engine API acceptance.
+      records interaction outcomes, not screenshots alone or engine API acceptance.

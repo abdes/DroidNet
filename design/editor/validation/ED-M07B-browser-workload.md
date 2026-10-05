@@ -21,11 +21,11 @@ frame, with 10 warm-up queries and 100 measured queries per layout. Each query
 checks its resulting asset count. All authored inputs are current and native
 mounting is acknowledged before measurement.
 
-| Layout | Cold catalog/UI | Search feedback p95 |
-| --- | ---: | ---: |
-| List | 1,975.35 ms | 18.42 ms |
-| Tiles | 1,733.12 ms | 19.09 ms |
-| Browser budget | 5,000 ms | 250 ms |
+| Layout         | Cold catalog/UI | Search feedback p95 |
+| -------------- | --------------: | ------------------: |
+| List           |     1,975.35 ms |            18.42 ms |
+| Tiles          |     1,733.12 ms |            19.09 ms |
+| Browser budget |        5,000 ms |              250 ms |
 
 Both tests pass. The provider contains 1,027 representations; the test counts
 1,000 authored inputs separately from built-ins and generated outputs. Captures

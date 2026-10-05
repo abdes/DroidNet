@@ -69,14 +69,14 @@ qualification. Use the recorded build/workload for repeatable results.
 ## 9. Validation Gates
 
 - [ ] Every PRD-required capability has implementation and relevant automated/
-  manual evidence, with no unsupported required field or unresolved scope item.
+      manual evidence, with no unsupported required field or unresolved scope item.
 - [ ] ED-M07A/07B/08/09 gates pass and their evidence matches the qualified build
-  or has documented applicable rerun evidence for changed paths.
+      or has documented applicable rerun evidence for changed paths.
 - [ ] Portable regeneration and all promised save/cook failure guarantees pass.
 - [ ] All PRD workload/interaction/render/lifecycle budgets pass on the recorded
-  configuration; deviations remain failures, not implicit limit changes.
+      configuration; deviations remain failures, not implicit limit changes.
 - [ ] User validates the full workflow and release evidence; saved/published
-  identities and actual native observations are traceable.
+      identities and actual native observations are traceable.
 
 ## 10. Status Ledger Hook
 

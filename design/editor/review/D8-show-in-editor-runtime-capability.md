@@ -15,9 +15,9 @@ In the editor viewport, **a node not shown in the editor does not render and doe
 participate in shadows** — it behaves as if it is not visible in the scene for that
 viewport, without writing `SceneNodeFlags::kVisible` or dirtying the scene document.
 In-game rendering, game viewports, scene serialization and cooked assets are completely
-unaffected. Viewport picking cannot target editor-hidden nodes, but when an editor-hidden
-node is individually selected in the Scene Explorer, its transform gizmo appears in the
-viewport for manipulation.
+unaffected. Viewport picking cannot target editor-hidden nodes, but an editor-hidden node
+stays in the scene graph and, when selected (individually or in a multi-selection),
+its transform gizmo appears in the viewport for manipulation.
 
 Contents: [1 Terminology](#1-the-boundary-that-must-not-blur) ·
 [2 Scope split](#2-what-d8-actually-contains) ·
@@ -38,7 +38,7 @@ Two unrelated states share the word "visible". Conflating them is a defect
 | Meaning                                           | Presentation of the node in the _editing viewport_                                                           | Whether the node renders at runtime               |
 | Owner                                             | WorldEditor workspace service                                                                                | Scene document / authoring commands               |
 | Storage                                           | `WorldEditor/SceneVisibility`, user-local, project-scoped ([settings §5.1](../lld/settings-architecture.md)) | Scene document, cooked output                     |
-| History / dirty / cook                            | None                                                                                                         | Undo step, dirties document, cooks                |
+| History / dirty / cook                            | Undo step; no document dirty; no cook                                                                        | Undo step, dirties document, cooks                |
 | Native representation                             | Per-view filter in `CompositionView`                                                                         | `SceneNodeFlags::kVisible` (tri-state, inherited) |
 | Effect on editor viewport                         | Node is **not visible in the editor viewport**: no geometry, no shadows cast, no viewport picking            | Node dropped from every pass and view             |
 | In-game / game viewports / cooked assets          | **100% visible and unaffected**                                                                              | Node is hidden in-game and in cooked assets       |
@@ -128,17 +128,17 @@ only provides category preferences and hidden-set inputs to ED-M09 pick requests
 
 Normative contract for D8a and D8b:
 
-| ID  | Requirement                                                                                                                                                                                                                                                                          |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| R1  | A node is _editor-hidden_ when it, or any **actual scene ancestor**, is in the scene's local hidden set. Logical folders never contribute.                                                                                                                                           |
-| R2  | In every editing viewport of the active scene, editor-hidden nodes **do not render and do not cast shadows**. They are simply dropped from that view.                                                                                                                                |
-| R3  | Editor-hidden nodes remain **100% visible in-game, in game viewports, in cooked assets, and in capture/validation views**.                                                                                                                                                           |
-| R4  | Changing editor hide never writes `SceneNodeFlags::kVisible`, never dirties the scene document, never records undo/history, and never requests cooking.                                                                                                                              |
-| R5  | The mask is bound to (run, project, scene activation). Applying it to an inactive scene is rejected; unknown node IDs have no rendering effect but are retained so (re)created nodes with that ID are correctly hidden.                                                              |
-| R6  | One mask applies to all editing viewports of the active scene. Non-editing views (capture, thumbnail, standalone validation) remain unmasked.                                                                                                                                        |
-| R7  | Mask updates take effect no later than the next frame presented. Ordering is consistent with preceding world commands.                                                                                                                                                               |
-| R8  | **Picking exclusion**: Editor-hidden nodes cannot be targeted or picked in viewports. Explorer selection of hidden nodes remains fully functional.                                                                                                                                   |
-| R9  | **Gizmo on Explorer selection**: When an editor-hidden node is individually selected in the Scene Explorer, its transform gizmo (translate, rotate, scale per active viewport mode) **must appear** in the viewport at its world transform, even though its geometry remains hidden. |
+| ID  | Requirement                                                                                                                                                                                                                                                                                                                                         |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | A node is _editor-hidden_ when it, or any **actual scene ancestor**, is in the scene's local hidden set. Logical folders never contribute.                                                                                                                                                                                                          |
+| R2  | In every editing viewport of the active scene, editor-hidden nodes **do not render and do not cast shadows**. They are simply dropped from that view.                                                                                                                                                                                               |
+| R3  | Editor-hidden nodes remain **100% visible in-game, in game viewports, in cooked assets, and in capture/validation views**.                                                                                                                                                                                                                          |
+| R4  | Changing editor hide never writes `SceneNodeFlags::kVisible`, never dirties the scene document, and never requests cooking. The eye toggle records an undo step.                                                                                                                                                                                    |
+| R5  | The mask is bound to (run, project, scene activation). Applying it to an inactive scene is rejected; unknown node IDs have no rendering effect but are retained so (re)created nodes with that ID are correctly hidden.                                                                                                                             |
+| R6  | One mask applies to all editing viewports of the active scene. Non-editing views (capture, thumbnail, standalone validation) remain unmasked.                                                                                                                                                                                                       |
+| R7  | Mask updates take effect no later than the next frame presented. Ordering is consistent with preceding world commands.                                                                                                                                                                                                                              |
+| R8  | **Picking exclusion**: Editor-hidden nodes cannot be targeted or picked in viewports. Explorer selection of hidden nodes remains fully functional.                                                                                                                                                                                                  |
+| R9  | **Gizmo on Explorer selection**: An editor-hidden node stays in the scene graph and is selectable and transformable. When selected (individually or in a multi-selection), its transform gizmo (translate, rotate, scale per active viewport mode) **must appear** in the viewport at its world transform, even though its geometry remains hidden. |
 
 ## 5. Design decisions
 
@@ -146,7 +146,7 @@ Normative contract for D8a and D8b:
 
 - **Decision (Approved):** Filter in `CompositionView`, dropped during `PrepareView`.
 - **Implementation:** An editing view passes its list of hidden `NodeHandle`s in `CompositionView`. In `ScenePrepPipeline::PrepareView`, matching nodes are skipped. They produce no geometry, no depth, and no shadow-caster sources for that view. Other views (capture, game) remain unaffected.
-- **Industry Parity Basis:** This follows standard industry architecture. In Unreal Engine (UE5.7), editor viewport actor hiding (`bHiddenEd` / "Hide Selected") completely removes the actor from that editor viewport, including its direct shadows, without mutating runtime `bHidden` or dirtying the level package. In Oxygen, an editor-hidden node simply does not render and does not cast shadows in the editing viewport.
+- **Industry Parity Basis:** This follows standard industry architecture. In Unreal Engine (UE5.7), editor viewport actor hiding (`bHiddenEd` / "Hide Selected") completely removes the actor from that editor viewport, including its direct shadows, without mutating runtime `bHidden` or dirtying the level package, while remaining undoable. In Oxygen, an editor-hidden node simply does not render and does not cast shadows in the editing viewport.
 - **Alternatives Evaluated:**
   - _Node tag / component in scene graph:_ Rejected. Pollutes scene data with transient editor state; leaks into capture views and game runtime.
   - _Late filtering in mesh processors:_ Rejected. Unnecessarily complex; requires plumbing exclusion lists through multiple rendering passes.
@@ -164,7 +164,7 @@ Normative contract for D8a and D8b:
 ### DD4 — Category picking filters and gizmos (D8b)
 
 - **Decision (Approved):** Viewport picking is owned by ED-M09. Category toggles (Mesh, Light, Camera) and hidden-node exclusion are passed as filter arguments on each pick request, rather than stored as native engine state.
-- **Interaction Contract:** Editor-hidden nodes cannot be picked in viewports. When individually selected in Scene Explorer, the viewport renders their transform gizmo at their world transform, allowing spatial manipulation while geometry stays hidden.
+- **Interaction Contract:** Editor-hidden nodes cannot be picked in viewports. They stay in the scene graph and transform normally; when selected (individually or in a multi-selection), the viewport renders their transform gizmo at their world transform, allowing spatial manipulation while geometry stays hidden.
 
 ## 6. Action plans
 
@@ -189,12 +189,12 @@ Normative contract for D8a and D8b:
 
 **Workable now (C49 — completely unblocked):**
 
-| ID  | Task                                                                                                                                                                                                                                              | Files / Area                        | Acceptance                                                                   |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------- |
-| W1  | Implement workspace interaction service owning Show in Editor and Lock state per project/scene; typed `WorldEditor/SceneVisibility` persistence in SQLite via `IEditorSettingsManager` ([settings §5.1](../lld/settings-architecture.md)).        | `WorldEditor/src/Workspace/`        | Persist/reload survives restart; project-scoped; no scene document dirtying. |
-| W2  | Compute effective hide state from actual scene hierarchy (R1); Show All clears only the current scene's set.                                                                                                                                      | `SceneExplorer/` adapters           | Unit tests covering reparenting, folders, and nested hidden roots.           |
-| W3  | Wire Explorer eye slot in DynamicTree per interaction contract (hover/permanent visual matrix).                                                                                                                                                   | `DynamicTree/`, `SceneExplorerView` | Visual states match contract.                                                |
-| W4  | Viewport binding with warning fallback: On mask change, attempt dispatch to `IRuntimeWorldCommands`. If `SupportsEditingViewMask` is false, log a warning: `"Editor hide applied in workspace; viewport suppression pending runtime capability."` | `WorldEditor/src/Services/`         | Eye works cleanly in UI and settings without crashing or throwing.           |
+| ID  | Task                                                                                                                                                                                                                                                                                                                                                                    | Files / Area                        | Acceptance                                                                                                 |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| W1  | Implement workspace interaction service owning Show in Editor and Lock state per project/scene; typed `WorldEditor/SceneVisibility` persistence in SQLite via `IEditorSettingsManager` ([settings §5.1](../lld/settings-architecture.md)). The eye toggle is recorded through the document command owner so it is undoable; Lock stays workspace-only and non-undoable. | `WorldEditor/src/Workspace/`        | Persist/reload survives restart; project-scoped; eye toggle undoes and redoes; no scene document dirtying. |
+| W2  | Compute effective hide state from actual scene hierarchy (R1); Show All clears only the current scene's set.                                                                                                                                                                                                                                                            | `SceneExplorer/` adapters           | Unit tests covering reparenting, folders, and nested hidden roots.                                         |
+| W3  | Wire Explorer eye slot in DynamicTree per interaction contract (hover/permanent visual matrix).                                                                                                                                                                                                                                                                         | `DynamicTree/`, `SceneExplorerView` | Visual states match contract.                                                                              |
+| W4  | Viewport binding with warning fallback: On mask change, attempt dispatch to `IRuntimeWorldCommands`. If `SupportsEditingViewMask` is false, log a warning: `"Editor hide applied in workspace; viewport suppression pending runtime capability."`                                                                                                                       | `WorldEditor/src/Services/`         | Eye works cleanly in UI and settings without crashing or throwing.                                         |
 
 **Gated on D8a runtime availability (I4):**
 
@@ -239,13 +239,14 @@ flowchart TD
 
 ## 8. Qualification
 
-| Test Case                        | Expected Behavior                                                                                                        |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Hide a mesh node in editor       | Mesh geometry and its shadows are absent in the editing viewport. Game viewports and in-game renders retain both.        |
-| Hide a parent node               | Entire descendant subtree and its shadows are absent in editing viewports.                                               |
-| Show parent of hidden child      | Parent reappears; child remains hidden.                                                                                  |
-| Select hidden node in Explorer   | Geometry remains absent in viewport; transform gizmo appears at its location and allows manipulation.                    |
-| Viewport click on hidden node    | Raycast passes through to objects behind it; hidden node is not picked.                                                  |
-| Toggle authored Scene Visibility | Scene document dirties, undo step created, in-game visibility toggled. Operates completely independently of editor hide. |
-| Standalone validation / capture  | Capture view ignores editor hide; renders exact authored scene state.                                                    |
-| Close and reopen project         | Stored editor-hide state is restored from SQLite settings without marking scene document dirty.                          |
+| Test Case                                 | Expected Behavior                                                                                                                      |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Hide a mesh node in editor                | Mesh geometry and its shadows are absent in the editing viewport. Game viewports and in-game renders retain both.                      |
+| Hide a parent node                        | Entire descendant subtree and its shadows are absent in editing viewports.                                                             |
+| Show parent of hidden child               | Parent reappears; child remains hidden.                                                                                                |
+| Select hidden node in Explorer            | Geometry remains absent in viewport; transform gizmo appears at its location and allows manipulation.                                  |
+| Multi-select transform with a hidden node | Hidden node's gizmo participates in the shared multi-selection transform; its geometry stays hidden while other selected nodes render. |
+| Viewport click on hidden node             | Raycast passes through to objects behind it; hidden node is not picked.                                                                |
+| Toggle authored Scene Visibility          | Scene document dirties, undo step created, in-game visibility toggled. Operates completely independently of editor hide.               |
+| Standalone validation / capture           | Capture view ignores editor hide; renders exact authored scene state.                                                                  |
+| Close and reopen project                  | Stored editor-hide state is restored from SQLite settings without marking scene document dirty.                                        |

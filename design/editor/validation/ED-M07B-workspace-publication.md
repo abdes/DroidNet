@@ -17,13 +17,13 @@ reports Current and Mounted.
 The material is assigned to two native scene nodes through document commands.
 A second saved colour is cooked by one of five triggers:
 
-| Trigger | Result |
-| --- | --- |
-| Automatic Save | Both native bindings update; consuming scene remains unsaved |
-| Cook asset | Both bindings update and publication reports mounted |
-| Cook folder | Both bindings update and publication reports mounted |
-| Cook current scene | Both bindings update and publication reports mounted |
-| Cook project | Both bindings update and publication reports mounted |
+| Trigger            | Result                                                       |
+| ------------------ | ------------------------------------------------------------ |
+| Automatic Save     | Both native bindings update; consuming scene remains unsaved |
+| Cook asset         | Both bindings update and publication reports mounted         |
+| Cook folder        | Both bindings update and publication reports mounted         |
+| Cook current scene | Both bindings update and publication reports mounted         |
+| Cook project       | Both bindings update and publication reports mounted         |
 
 All cases preserve material keys, the scene object, scene revision, Undo count
 and dirty state. The picker reports Current and Mounted after replacement.

@@ -42,20 +42,20 @@ and update it without managing generated files or mounts. The
 This table records the starting gaps; the closeout audit records their completed
 implementation and validation.
 
-| Evidence in the committed source | Missing behavior | Task |
-| --- | --- | --- |
-| `SceneDescriptorGenerator.CreateEnvironment` produces only NativeSkyAtmosphereEnvironment; earlier code emits warnings for non-default exposure/tone/background. | Required PostProcess/Background values survive cooking and native loading, rather than being omitted. | 07B.3 |
-| `ContentImportManifestBuilder` writes directly to GetCookedMountRoot; ContentCookScope/Result have no input revision/hash or publication transaction. | Coherent saved input, private staging, safe fixed-root replacement and provenance. | 07B.1/2 |
-| Runtime mount contract is UnmountProjectCookedRoot followed by MountProjectCookedRoot. | Pause/drain, all-root rollback and interrupted-publication recovery. | 07B.2 |
-| ProjectCookScopeProvider derives project/root/output facts; existing Content Browser exposes Cook Asset/Folder/Project. | Define automatic versus explicit triggers, incremental reuse, and visible scope through existing surfaces. | 07B.0/1/5 |
-| AssetIdentityReducer uses file timestamps; opening M_ShinyRed shows NotCooked while its browser row shows COOK. | One dependency/publication status authority across browser, document, picker, and viewport. | 07B.1/5a |
-| Running-editor review: Materials breadcrumb can retain geometry tiles; Filter has no effect; selected rows expose no details. | Correct navigation/query lifetime, working filters, actionable state and source/output details. | 07B.5b |
-| Running-editor review: built-ins and Engine_Generated_BasicShapes outputs appear as separate picker choices; material Cook clips at the current dock width. | Provenance-aware grouping, consistent typed picking, and usable command layouts. | 07B.5c/e/7 |
-| Import UI permits all file types and source copying uses overwrite; Inspect reports only counts/path. | Safe and understandable import decisions, useful result inspection and recovery. | 07B.4/5d/e |
-| User report and source: the node inspector reserves a 2*:3* header/property split; component selection only controls deletion, and multi-node mode hides the list. | Content-sized compact header/list, functional component filtering and All reset, efficient single/multi-node layouts. | 07B.5g |
-| Native discovery locates installed tooling; no qualified artifact-set fingerprint is established by the existing design. | Detect mismatched editor/native/cooker/schema artifacts before unsafe calls. | 07B.4 |
-| [#8](https://github.com/abdes/DroidNet/issues/8): ContentPipelineProcessRunner cancels stream reads/WaitForExitAsync without terminating the child; ImportToolContentPipelineApi cleans the manifest in finally. | Owned worker termination, descendant handling, reader drain and cleanup ordering. | 07B.6 |
-| [#11](https://github.com/abdes/DroidNet/issues/11): SetGeometryCommand constructs built-ins/default material and pak geometry fields, while ProceduralGeometryDescriptorService separately defines generator parameters/bounds/defaults and supports only Cube/Sphere/Plane. The UI exposes eight built-ins. | One engine/content authority for all exposed procedural geometry and live/cooked semantics. | 07B.7 |
+| Evidence in the committed source                                                                                                                                                                                                                                                                             | Missing behavior                                                                                                      | Task       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `SceneDescriptorGenerator.CreateEnvironment` produces only NativeSkyAtmosphereEnvironment; earlier code emits warnings for non-default exposure/tone/background.                                                                                                                                             | Required PostProcess/Background values survive cooking and native loading, rather than being omitted.                 | 07B.3      |
+| `ContentImportManifestBuilder` writes directly to GetCookedMountRoot; ContentCookScope/Result have no input revision/hash or publication transaction.                                                                                                                                                        | Coherent saved input, private staging, safe fixed-root replacement and provenance.                                    | 07B.1/2    |
+| Runtime mount contract is UnmountProjectCookedRoot followed by MountProjectCookedRoot.                                                                                                                                                                                                                       | Pause/drain, all-root rollback and interrupted-publication recovery.                                                  | 07B.2      |
+| ProjectCookScopeProvider derives project/root/output facts; existing Content Browser exposes Cook Asset/Folder/Project.                                                                                                                                                                                      | Define automatic versus explicit triggers, incremental reuse, and visible scope through existing surfaces.            | 07B.0/1/5  |
+| AssetIdentityReducer uses file timestamps; opening M_ShinyRed shows NotCooked while its browser row shows COOK.                                                                                                                                                                                              | One dependency/publication status authority across browser, document, picker, and viewport.                           | 07B.1/5a   |
+| Running-editor review: Materials breadcrumb can retain geometry tiles; Filter has no effect; selected rows expose no details.                                                                                                                                                                                | Correct navigation/query lifetime, working filters, actionable state and source/output details.                       | 07B.5b     |
+| Running-editor review: built-ins and Engine_Generated_BasicShapes outputs appear as separate picker choices; material Cook clips at the current dock width.                                                                                                                                                  | Provenance-aware grouping, consistent typed picking, and usable command layouts.                                      | 07B.5c/e/7 |
+| Import UI permits all file types and source copying uses overwrite; Inspect reports only counts/path.                                                                                                                                                                                                        | Safe and understandable import decisions, useful result inspection and recovery.                                      | 07B.4/5d/e |
+| User report and source: the node inspector reserves a 2*:3* header/property split; component selection only controls deletion, and multi-node mode hides the list.                                                                                                                                           | Content-sized compact header/list, functional component filtering and All reset, efficient single/multi-node layouts. | 07B.5g     |
+| Native discovery locates installed tooling; no qualified artifact-set fingerprint is established by the existing design.                                                                                                                                                                                     | Detect mismatched editor/native/cooker/schema artifacts before unsafe calls.                                          | 07B.4      |
+| [#8](https://github.com/abdes/DroidNet/issues/8): ContentPipelineProcessRunner cancels stream reads/WaitForExitAsync without terminating the child; ImportToolContentPipelineApi cleans the manifest in finally.                                                                                             | Owned worker termination, descendant handling, reader drain and cleanup ordering.                                     | 07B.6      |
+| [#11](https://github.com/abdes/DroidNet/issues/11): SetGeometryCommand constructs built-ins/default material and pak geometry fields, while ProceduralGeometryDescriptorService separately defines generator parameters/bounds/defaults and supports only Cube/Sphere/Plane. The UI exposes eight built-ins. | One engine/content authority for all exposed procedural geometry and live/cooked semantics.                           | 07B.7      |
 
 ## 5. Scope And Non-Scope
 
@@ -538,21 +538,21 @@ its product semantics are settled in 07B.0 before implementation.
 
 - [x] 07B.0 UX review and trigger-policy decision are recorded; PRD/LLDs agree.
 - [x] 07B.1 input/revision/concurrency, dependency freshness, incremental reuse,
-  coalescing and cancellation cases pass.
+      coalescing and cancellation cases pass.
 - [x] 07B.2 publication, rollback, interruption, cancellation and lease cases pass.
 - [x] 07B.3 every required field survives native cook/load observation.
 - [x] 07B.4 mismatch, import conversion/rejection and clean-copy reproduction pass.
 - [x] 07B.6 cancellation owns/drains native workers and descendants (#8).
 - [x] 07B.7 all eleven engine generator names, including the sphere alias, use
-  one semantic authority; every selectable shape passes scene/project cook (#11).
+      one semantic authority; every selectable shape passes scene/project cook (#11).
 - [x] 07B.5a-c shared status, correct browser navigation, source/cooked/built-in
-  presentation and typed assignment before/after cooking pass.
+      presentation and typed assignment before/after cooking pass.
 - [x] 07B.5d-e approved triggers, all four Cook scopes, safe import/save entry
-  points, useful Inspect/Validate, progress/recovery and accessible layouts pass.
+      points, useful Inspect/Validate, progress/recovery and accessible layouts pass.
 - [x] 07B.5g compact single/multi-node inspector, functional component selection
-  and All reset pass without changing property/history/gesture semantics.
+      and All reset pass without changing property/history/gesture semantics.
 - [x] 07B.5f all workflow journeys and recorded UI defects pass through the
-  visible editor, including resumed preview and user validation evidence.
+      visible editor, including resumed preview and user validation evidence.
 
 ## 10. Status Ledger Hook
 

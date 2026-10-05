@@ -3,11 +3,11 @@
 Validated 2026-09-15 with the existing `Oxygen.Cooker.AsyncImportGltf.Tests`
 program and the real asynchronous `AssetLoader`, with content hashes verified.
 
-| Source | Variations | Loaded checks |
-| --- | --- | --- |
-| glTF | External position buffer; 1x/2x unit multiplier; flat/rotated parent hierarchy | World-space vertex positions and normals, winding, geometry/mesh bounds, retained parent, perspective FOV/aspect/clipping distances and position, material RGBA/metalness/roughness, directional light colour/intensity |
-| GLB | Binary position chunk; same scale/hierarchy variations | Same numeric checks through the GLB parser and loaders |
-| FBX | Metres/centimetres; both source handedness cases; flat/rotated parent hierarchy | Converted positions/normals/winding/bounds, retained parent, explicit vertical FOV/aspect/clipping distances, Lambert colour and default scalar values, directional light values |
+| Source | Variations                                                                      | Loaded checks                                                                                                                                                                                                           |
+| ------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| glTF   | External position buffer; 1x/2x unit multiplier; flat/rotated parent hierarchy  | World-space vertex positions and normals, winding, geometry/mesh bounds, retained parent, perspective FOV/aspect/clipping distances and position, material RGBA/metalness/roughness, directional light colour/intensity |
+| GLB    | Binary position chunk; same scale/hierarchy variations                          | Same numeric checks through the GLB parser and loaders                                                                                                                                                                  |
+| FBX    | Metres/centimetres; both source handedness cases; flat/rotated parent hierarchy | Converted positions/normals/winding/bounds, retained parent, explicit vertical FOV/aspect/clipping distances, Lambert colour and default scalar values, directional light values                                        |
 
 Each of the 16 source profiles is copied, including external files, into a new
 source directory with no cooked output. Both copies are imported with the same

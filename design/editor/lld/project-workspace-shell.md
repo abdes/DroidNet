@@ -14,14 +14,14 @@ scene documents, or content pipeline execution.
 
 ## 2. PRD Traceability
 
-| ID | Coverage |
-| --- | --- |
-| `REQ-001` | Project Browser is always the first visible editor experience on normal launch. |
-| `REQ-002` | Recent projects, create/open project, invalid project state, and transition to workspace. |
-| `REQ-003` | Workspace and recent document/layout restoration after project activation, with visible partial failure. |
-| `REQ-022` | User-triggered project workflows expose success/failure results. |
-| `REQ-024` | Open/create failures are not silent log-only failures. |
-| `SUCCESS-001` | V0.1 starts from Project Browser and reaches an authoring workspace without manual file edits. |
+| ID            | Coverage                                                                                                 |
+| ------------- | -------------------------------------------------------------------------------------------------------- |
+| `REQ-001`     | Project Browser is always the first visible editor experience on normal launch.                          |
+| `REQ-002`     | Recent projects, create/open project, invalid project state, and transition to workspace.                |
+| `REQ-003`     | Workspace and recent document/layout restoration after project activation, with visible partial failure. |
+| `REQ-022`     | User-triggered project workflows expose success/failure results.                                         |
+| `REQ-024`     | Open/create failures are not silent log-only failures.                                                   |
+| `SUCCESS-001` | V0.1 starts from Project Browser and reaches an authoring workspace without manual file edits.           |
 
 ## 3. Architecture Links
 
@@ -140,16 +140,16 @@ Target invariants:
 
 ## 6. Ownership
 
-| Owner | Responsibility |
-| --- | --- |
-| `Oxygen.Editor` | application bootstrap, Project Browser startup route, shell-level project activation workflow, workspace window activation, native runtime discovery failure routing |
-| `Oxygen.Editor.ProjectBrowser` | Project Browser pages, create/open/recent-project UX, request construction, inline project workflow result presentation |
-| `Oxygen.Editor.Projects` | project load/create validation and project context creation; no workspace UI and no native interop |
-| `Oxygen.Editor.Runtime` | runtime lifecycle and mount preparation requested after workspace activation; no Project Browser UI and no startup dependency for Project Browser |
-| `Oxygen.Editor.WorldEditor` | workspace composition, initial workspace routes, dock layout, world-editor child container |
-| `Oxygen.Editor.Documents` | recent document restoration contract once a project workspace exists |
-| `Oxygen.Editor.Data` | persistent recent project, layout, placement, and workspace-restoration records |
-| `diagnostics services` | operation result publication, aggregation, and output/log panel correlation |
+| Owner                          | Responsibility                                                                                                                                                       |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Oxygen.Editor`                | application bootstrap, Project Browser startup route, shell-level project activation workflow, workspace window activation, native runtime discovery failure routing |
+| `Oxygen.Editor.ProjectBrowser` | Project Browser pages, create/open/recent-project UX, request construction, inline project workflow result presentation                                              |
+| `Oxygen.Editor.Projects`       | project load/create validation and project context creation; no workspace UI and no native interop                                                                   |
+| `Oxygen.Editor.Runtime`        | runtime lifecycle and mount preparation requested after workspace activation; no Project Browser UI and no startup dependency for Project Browser                    |
+| `Oxygen.Editor.WorldEditor`    | workspace composition, initial workspace routes, dock layout, world-editor child container                                                                           |
+| `Oxygen.Editor.Documents`      | recent document restoration contract once a project workspace exists                                                                                                 |
+| `Oxygen.Editor.Data`           | persistent recent project, layout, placement, and workspace-restoration records                                                                                      |
+| `diagnostics services`         | operation result publication, aggregation, and output/log panel correlation                                                                                          |
 
 ## 7. Data Contracts
 

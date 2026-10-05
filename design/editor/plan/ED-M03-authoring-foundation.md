@@ -14,25 +14,25 @@ foundation that ED-M04 component inspectors must use.
 
 ## 2. PRD Traceability
 
-| ID | Coverage |
-| --- | --- |
-| `GOAL-001` | The V0.1 editor can create usable scene content through real UI workflows. |
-| `GOAL-002` | Scene authoring state is persisted and can be reopened. |
-| `GOAL-006` | Authoring failures are visible and diagnosable. |
-| `REQ-004` | Scene documents open, activate, save, close, and reopen. |
-| `REQ-005` | Partial: command rails support component-bearing primitive/light creation; full component add/remove/edit inspector workflow is ED-M04. |
-| `REQ-006` | Dirty state reflects successful authoring commands and save results. |
-| `REQ-007` | ED-M03-supported scene data saves and reopens. |
-| `REQ-008` | ED-M03-supported mutations request live sync where current engine APIs support it. |
-| `REQ-009` | Partial: ED-M03 supports command-created primitive and light nodes; full V0.1 component completion continues in ED-M04. |
-| `REQ-022` | Save/command/sync failures produce visible operation results or diagnostics. |
-| `REQ-023` | Authoring/runtime sync failures produce useful logs. |
-| `REQ-024` | Diagnostics distinguish document, scene authoring, and live-sync failures. |
-| `REQ-026` | Partial: command-created scene content requests embedded runtime sync; full preview sync coverage is ED-M04/ED-M08. |
-| `REQ-036` | Scene persistence follows the scene authoring model LLD. |
-| `REQ-037` | Supported ED-M03 scene data saves and reopens without manual repair. |
-| `SUCCESS-002` | Supported scene edits survive save/reopen. |
-| `SUCCESS-009` | IMPLEMENTATION_STATUS records concise validation evidence. |
+| ID            | Coverage                                                                                                                                |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `GOAL-001`    | The V0.1 editor can create usable scene content through real UI workflows.                                                              |
+| `GOAL-002`    | Scene authoring state is persisted and can be reopened.                                                                                 |
+| `GOAL-006`    | Authoring failures are visible and diagnosable.                                                                                         |
+| `REQ-004`     | Scene documents open, activate, save, close, and reopen.                                                                                |
+| `REQ-005`     | Partial: command rails support component-bearing primitive/light creation; full component add/remove/edit inspector workflow is ED-M04. |
+| `REQ-006`     | Dirty state reflects successful authoring commands and save results.                                                                    |
+| `REQ-007`     | ED-M03-supported scene data saves and reopens.                                                                                          |
+| `REQ-008`     | ED-M03-supported mutations request live sync where current engine APIs support it.                                                      |
+| `REQ-009`     | Partial: ED-M03 supports command-created primitive and light nodes; full V0.1 component completion continues in ED-M04.                 |
+| `REQ-022`     | Save/command/sync failures produce visible operation results or diagnostics.                                                            |
+| `REQ-023`     | Authoring/runtime sync failures produce useful logs.                                                                                    |
+| `REQ-024`     | Diagnostics distinguish document, scene authoring, and live-sync failures.                                                              |
+| `REQ-026`     | Partial: command-created scene content requests embedded runtime sync; full preview sync coverage is ED-M04/ED-M08.                     |
+| `REQ-036`     | Scene persistence follows the scene authoring model LLD.                                                                                |
+| `REQ-037`     | Supported ED-M03 scene data saves and reopens without manual repair.                                                                    |
+| `SUCCESS-002` | Supported scene edits survive save/reopen.                                                                                              |
+| `SUCCESS-009` | IMPLEMENTATION_STATUS records concise validation evidence.                                                                              |
 
 ## 3. Required LLDs
 
@@ -278,17 +278,17 @@ legacy namespaces is not ED-M03 scope.
 
 ## 8. Dependency And Migration Risks
 
-| Risk | Mitigation |
-| --- | --- |
-| Command service duplicates `SceneExplorerService` and creates two mutation paths. | Reuse/wrap `SceneExplorerService`, `SceneMutator`, and `SceneOrganizer`; do not fork hierarchy logic. |
-| Inspector still mutates directly. | ED-M03 only moves touched ED-M03-owned mutations; ED-M04 completes inspector migration. Document any remaining direct inspector paths. |
-| Live-sync failure rolls back good authoring state. | ED-M03 commands keep successful model mutation and report sync failure as warning/partial success. |
-| Save still triggers brownfield cook behavior. | Tolerate existing behavior but keep scene save command contract separate from cook success. |
-| Selection service breaks existing inspector messenger consumers. | Add adapter messages until inspector consumers migrate. |
-| Undo inverse delegates can recurse or create dirty-state drift. | Centralize dirty updates after command success and cover undo/redo in tests. |
-| DynamicTree in-place rename currently commits by directly setting `ItemAdapter.Label`, so Scene Explorer must observe label changes to keep undo/redo and persistence working. | Accepted bridge for ED-M03 because it tracks loaded adapters only and does not block the milestone. Proper solution is deferred: add a DynamicTree rename-commit hook/override so feature view models can route in-place rename through their command path before mutation. |
-| Existing WorldEditor view models reference `Oxygen.Interop` managed value types. | ED-M03 forbids direct interop behavior calls from UI view models; existing value-type references are acknowledged brownfield and not expanded. |
-| ED-M02 is landed but multi-viewport validation is deferred. | ED-M03 may proceed, but live preview is not used as ED-M03 closure evidence until ED-M02 validation status allows it. |
+| Risk                                                                                                                                                                           | Mitigation                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Command service duplicates `SceneExplorerService` and creates two mutation paths.                                                                                              | **Superseded by the Explorer plan (D-a / C39).** The risk materialized as written: the service stayed a history-less second surface, so it was retired rather than wrapped, and `ISceneDocumentCommandService` became the sole mutation authority. At the time this plan was written the mitigation was to reuse/wrap it and not fork hierarchy logic. |
+| Inspector still mutates directly.                                                                                                                                              | ED-M03 only moves touched ED-M03-owned mutations; ED-M04 completes inspector migration. Document any remaining direct inspector paths.                                                                                                                                                                                                                 |
+| Live-sync failure rolls back good authoring state.                                                                                                                             | ED-M03 commands keep successful model mutation and report sync failure as warning/partial success.                                                                                                                                                                                                                                                     |
+| Save still triggers brownfield cook behavior.                                                                                                                                  | Tolerate existing behavior but keep scene save command contract separate from cook success.                                                                                                                                                                                                                                                            |
+| Selection service breaks existing inspector messenger consumers.                                                                                                               | Add adapter messages until inspector consumers migrate.                                                                                                                                                                                                                                                                                                |
+| Undo inverse delegates can recurse or create dirty-state drift.                                                                                                                | Centralize dirty updates after command success and cover undo/redo in tests.                                                                                                                                                                                                                                                                           |
+| DynamicTree in-place rename currently commits by directly setting `ItemAdapter.Label`, so Scene Explorer must observe label changes to keep undo/redo and persistence working. | Accepted bridge for ED-M03 because it tracks loaded adapters only and does not block the milestone. Proper solution is deferred: add a DynamicTree rename-commit hook/override so feature view models can route in-place rename through their command path before mutation.                                                                            |
+| Existing WorldEditor view models reference `Oxygen.Interop` managed value types.                                                                                               | ED-M03 forbids direct interop behavior calls from UI view models; existing value-type references are acknowledged brownfield and not expanded.                                                                                                                                                                                                         |
+| ED-M02 is landed but multi-viewport validation is deferred.                                                                                                                    | ED-M03 may proceed, but live preview is not used as ED-M03 closure evidence until ED-M02 validation status allows it.                                                                                                                                                                                                                                  |
 
 ## 9. Validation Gates
 

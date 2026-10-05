@@ -752,8 +752,9 @@ Unit/Unit.UI/Integration.UI tests and owning LLDs.
    inputs on Oxygen adapters. Domain Label is read-only presentation until an
    approved command succeeds; remove the post-hoc label-change/history bridge.
 4. Extend the existing document command owner with typed, identity-based
-   hierarchy requests/results. SceneExplorerService orchestrates
-   Mutator/Organizer within that path, not as another history/dirty authority.
+   hierarchy requests/results. It orchestrates Mutator/Organizer within that
+   path; no second history/dirty authority is permitted, and the retired
+   `SceneExplorerService` facade must not be revived (D-a / C39).
    Capture immutable context, selection roots, target/sibling index and
    graph/layout/transform before/after.
 5. Prevalidate the complete batch, commit graph and layout together, advance
@@ -1015,8 +1016,8 @@ defects were marked closed.
       for this, since dropped geometry never reaches the prepass. -
       Editor-hidden nodes stay **fully visible in game, in game viewports, in
       cooked assets and in capture/validation views** (R3/R6). The mask never
-      writes `kVisible`, never dirties, never records history and never cooks
-      (R4) — which is why the eye must never be routed through
+      writes `kVisible`, never dirties and never cooks (R4); the eye toggle
+      records an undo step — which is why the eye must never be routed through
       `RuntimeSetVisibility`/`SetVisibilityCommand`. - Inheritance follows
       **actual scene ancestors only**, never logical folders (R1); the editor
       sends hidden roots and the engine resolves the closure (DD2), as a
@@ -1025,8 +1026,9 @@ defects were marked closed.
       exist at any layer. The Explorer contributes category and hidden-set
       filters on each pick request (DD4); hidden nodes cannot be picked in
       viewports (R8) yet Explorer selection still works, and a hidden node
-      selected individually in the Scene Explorer shows its transform gizmo at
-      its world transform (R9, W7 — owner decision on Q4). - Editor side (C49 /
+      selected (individually or in a multi-selection) in the Scene Explorer
+      shows its transform gizmo at its world transform (R9, W7 — owner decision
+      on Q4). - Editor side (C49 /
       W1–W4) is **unblocked and buildable now**: workspace service,
       `WorldEditor/SceneVisibility` persistence, the eye/lock slots and the
       binding with the `SupportsEditingViewMask` warning fallback (Q2 — the eye
@@ -1574,7 +1576,7 @@ concise validation notes.
    and tools. Use one eligibility owner at all user-authoring entry points;
    undo/redo restores committed state rather than becoming unusable merely
    because a node was later locked.
-4. Apply hide to the editing main-view geometry/gizmo representation only.
+4. Apply hide to the editing main-view geometry, shadows and viewport picking only; the transform gizmo still renders when the node is selected.
    Preserve authored lighting, shadow-caster eligibility and native authored
    visibility. Restore masks after view recreation; qualification views omit
    them. Capture project/document/scene/view generation for every runtime

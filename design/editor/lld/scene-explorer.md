@@ -42,8 +42,11 @@ Useful existing pieces:
 - `SceneOrganizer` owns explorer layout/folder operations and persists
   `ExplorerEntryData` into scene data.
 - `SceneMutator` owns scene graph create/remove/reparent operations.
-- `SceneExplorerService` coordinates mutator, organizer, and
-  `ISceneEngineSync`.
+- `ISceneDocumentCommandService` is the only authoring mutation authority:
+  it drives the mutator and the organizer inside one transaction, records
+  history, advances dirty state and requests live sync. The former
+  `SceneExplorerService` facade was a second, history-less mutation surface
+  and is retired (Explorer plan D-a / C39); nothing may reintroduce it.
 - Selection is already multiple-selection capable and published/requested via
   messenger messages.
 - `HistoryKeeper` records undo/redo entries for several operations.
@@ -79,14 +82,14 @@ Document activated
 
 ## 6. Ownership
 
-| Owner                                       | Responsibility                                                         |
-| ------------------------------------------- | ---------------------------------------------------------------------- |
-| `SceneExplorerViewModel`                    | UI state, tree projection, command invocation, selection presentation. |
-| `SceneExplorerService`                      | Hierarchy/layout orchestration behind commands.                        |
-| `SceneMutator`                              | Scene graph create/delete/reparent invariants.                         |
-| `SceneOrganizer`                            | Layout-only folders and explorer layout persistence.                   |
-| `documents-and-commands.md` command service | Command result, dirty state, undo/redo, shared selection ownership.    |
-| `scene-authoring-model.md`                  | Scene graph/domain data rules.                                         |
+| Owner                                       | Responsibility                                                          |
+| ------------------------------------------- | ----------------------------------------------------------------------- |
+| `SceneExplorerViewModel`                    | UI state, tree projection, command invocation, selection presentation.  |
+| `SceneDocumentCommandService`               | Hierarchy/layout orchestration behind commands; sole history authority. |
+| `SceneMutator`                              | Scene graph create/delete/reparent invariants.                          |
+| `SceneOrganizer`                            | Layout-only folders and explorer layout persistence.                    |
+| `documents-and-commands.md` command service | Command result, dirty state, undo/redo, shared selection ownership.     |
+| `scene-authoring-model.md`                  | Scene graph/domain data rules.                                          |
 
 ## 7. Data Contracts
 
@@ -247,5 +250,7 @@ ED-M03 scene explorer is complete when:
 
 - Multi-select command semantics beyond delete and selection are post-ED-M03
   unless already implemented safely.
-- Copy/paste/duplicate are out of ED-M03 unless explicitly re-scoped.
+- Copy/paste/duplicate are in ED-M03: snapshot Copy transfers within the
+  project, Cut is scene-bound, and `Scene.Node.Duplicate` carries the
+  duplicate intent (see the Explorer plan, section 4).
 - Preserve-world-transform reparenting is not ED-M03 default.

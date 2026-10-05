@@ -110,11 +110,11 @@ The XML files were parsed and agree with their corresponding logs: no failures,
 disabled cases or skipped cases in either recorded CTest run. These are Debug
 runs against `projects/Oxygen.Engine/out/build-ninja`.
 
-| Recorded run | Result | Evidence |
-| --- | --- | --- |
-| Seven native suite targets | 7/7 pass: AssetLoader, FrameContext, ModuleManager, ScriptingComponent, Scripting Module, CompilationService and Bindings | [Log](../../../artifacts/ed-m08/script-runtime/review-fixes-tests.log), [XML](../../../artifacts/ed-m08/script-runtime/review-fixes-tests.xml) |
-| Explicit review regressions | 6/6 pass: three direct-load drains, in-place reload, same-hash executable replacement and failed-publication retry | [Log](../../../artifacts/ed-m08/script-runtime/review-regressions.log), [XML](../../../artifacts/ed-m08/script-runtime/review-regressions.xml) |
-| Direct-load drain baseline | 0/3 pass before the direct-load ticket correction; all three observed premature drain completion while decoding was held | [Failing baseline](../../../artifacts/ed-m08/script-runtime/direct-drain-baseline-tests.log), [passing rerun](../../../artifacts/ed-m08/script-runtime/review-regressions.log) |
+| Recorded run                | Result                                                                                                                    | Evidence                                                                                                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Seven native suite targets  | 7/7 pass: AssetLoader, FrameContext, ModuleManager, ScriptingComponent, Scripting Module, CompilationService and Bindings | [Log](../../../artifacts/ed-m08/script-runtime/review-fixes-tests.log), [XML](../../../artifacts/ed-m08/script-runtime/review-fixes-tests.xml)                                 |
+| Explicit review regressions | 6/6 pass: three direct-load drains, in-place reload, same-hash executable replacement and failed-publication retry        | [Log](../../../artifacts/ed-m08/script-runtime/review-regressions.log), [XML](../../../artifacts/ed-m08/script-runtime/review-regressions.xml)                                 |
+| Direct-load drain baseline  | 0/3 pass before the direct-load ticket correction; all three observed premature drain completion while decoding was held  | [Failing baseline](../../../artifacts/ed-m08/script-runtime/direct-drain-baseline-tests.log), [passing rerun](../../../artifacts/ed-m08/script-runtime/review-regressions.log) |
 
 The three baseline-to-passing cases are
 `AssetLoaderAsyncTest.StopDrainsDirectAssetDecodeAndPublication`,

@@ -41,22 +41,22 @@ policy remains in the project and content-pipeline contracts.
 For every listed setting, this matrix is normative. Implementation must reject
 storing a setting outside its row.
 
-| Setting                                                       | Scope                           | Owning service                                    | Storage                                          | Mutation API                             | Dirties scene?   | Live-applied?                                        |
-| ------------------------------------------------------------- | ------------------------------- | ------------------------------------------------- | ------------------------------------------------ | ---------------------------------------- | ---------------- | ---------------------------------------------------- |
-| `TransformComponent.LocalPosition/Rotation/Scale`             | Scene component                 | `ISceneDocumentCommandService.EditTransformAsync` | scene file (`TransformData`)                     | command                                  | yes              | yes (sync)                                           |
-| `GeometryComponent.Geometry` (URI)                            | Scene component                 | `EditGeometryAsync`                               | `GeometryComponentData.GeometryUri`              | command                                  | yes              | yes                                                  |
-| Material overrides by geometry identity/SlotId                | Scene component                 | Material-slot command                             | Canonical scene override records                 | command                                  | yes              | yes; observed effect qualified in M08                |
-| `PerspectiveCamera.{FOV, Near, Far, AspectMode, FixedAspect}` | Scene component                 | Camera command                                    | Canonical perspective-camera data                | command                                  | yes              | yes; target resize changes only effective view state |
-| Node visibility / geometry cast-receive source modes          | Scene node                      | Property command                                  | Local/Inherit source modes in scene data         | command                                  | yes              | yes                                                  |
-| Directional atmosphere assignment                             | Light component                 | Light command                                     | None/Primary/Secondary in light data             | command                                  | yes              | yes; scene summary is read-only                      |
-| `DirectionalLightComponent.*`                                 | Scene component                 | `EditDirectionalLightAsync`                       | `DirectionalLightData`                           | command                                  | yes              | yes                                                  |
-| `Scene.Environment.*`                                         | Scene                           | `EditSceneEnvironmentAsync`                       | `SceneData.Environment`                          | command                                  | yes              | per-field, see env LLD                               |
-| Preview FPS                                                   | User/project                    | `PreviewSettingsService` → `IEngineService`       | project-scoped SQLite setting                    | preview preference                       | no               | yes (immediate)                                      |
-| Native log verbosity                                          | User/project                    | `PreviewSettingsService` → `IEngineService`       | project-scoped SQLite setting                    | preview preference                       | no               | yes (immediate)                                      |
-| `IEngineSettings` (startup)                                   | Editor preference               | `ISettingsService<IEngineSettings>`               | DroidNet user-local settings                     | `ISettingsService.Save`                  | no               | only on next engine init                             |
-| Workspace docking, recent docs                                | Workspace                       | existing editor data services                     | user-local                                       | workspace services                       | no               | n/a                                                  |
-| Editor Hide / Show All                                        | Workspace per project and scene | WorldEditor workspace-visibility service          | `IEditorSettingsManager`, project-scoped setting | workspace command, not authoring command | no               | editing main-view mask only                          |
-| Project content roots, cook scope                             | Project                         | `Oxygen.Editor.Projects`                          | project metadata                                 | project/content commands                 | no scene changes | ordered mount/publication workflow                   |
+| Setting                                                       | Scope                           | Owning service                                    | Storage                                          | Mutation API                             | Dirties scene?   | Live-applied?                                                    |
+| ------------------------------------------------------------- | ------------------------------- | ------------------------------------------------- | ------------------------------------------------ | ---------------------------------------- | ---------------- | ---------------------------------------------------------------- |
+| `TransformComponent.LocalPosition/Rotation/Scale`             | Scene component                 | `ISceneDocumentCommandService.EditTransformAsync` | scene file (`TransformData`)                     | command                                  | yes              | yes (sync)                                                       |
+| `GeometryComponent.Geometry` (URI)                            | Scene component                 | `EditGeometryAsync`                               | `GeometryComponentData.GeometryUri`              | command                                  | yes              | yes                                                              |
+| Material overrides by geometry identity/SlotId                | Scene component                 | Material-slot command                             | Canonical scene override records                 | command                                  | yes              | yes; observed effect qualified in M08                            |
+| `PerspectiveCamera.{FOV, Near, Far, AspectMode, FixedAspect}` | Scene component                 | Camera command                                    | Canonical perspective-camera data                | command                                  | yes              | yes; target resize changes only effective view state             |
+| Node visibility / geometry cast-receive source modes          | Scene node                      | Property command                                  | Local/Inherit source modes in scene data         | command                                  | yes              | yes                                                              |
+| Directional atmosphere assignment                             | Light component                 | Light command                                     | None/Primary/Secondary in light data             | command                                  | yes              | yes; scene summary is read-only                                  |
+| `DirectionalLightComponent.*`                                 | Scene component                 | `EditDirectionalLightAsync`                       | `DirectionalLightData`                           | command                                  | yes              | yes                                                              |
+| `Scene.Environment.*`                                         | Scene                           | `EditSceneEnvironmentAsync`                       | `SceneData.Environment`                          | command                                  | yes              | per-field, see env LLD                                           |
+| Preview FPS                                                   | User/project                    | `PreviewSettingsService` → `IEngineService`       | project-scoped SQLite setting                    | preview preference                       | no               | yes (immediate)                                                  |
+| Native log verbosity                                          | User/project                    | `PreviewSettingsService` → `IEngineService`       | project-scoped SQLite setting                    | preview preference                       | no               | yes (immediate)                                                  |
+| `IEngineSettings` (startup)                                   | Editor preference               | `ISettingsService<IEngineSettings>`               | DroidNet user-local settings                     | `ISettingsService.Save`                  | no               | only on next engine init                                         |
+| Workspace docking, recent docs                                | Workspace                       | existing editor data services                     | user-local                                       | workspace services                       | no               | n/a                                                              |
+| Editor Hide / Show All                                        | Workspace per project and scene | WorldEditor workspace-visibility service          | `IEditorSettingsManager`, project-scoped setting | workspace command, not authoring command | no               | all editing viewports of the active scene; drops draw and shadow |
+| Project content roots, cook scope                             | Project                         | `Oxygen.Editor.Projects`                          | project metadata                                 | project/content commands                 | no scene changes | ordered mount/publication workflow                               |
 
 The owning service enforces each mutation boundary.
 
@@ -69,12 +69,18 @@ of scene IDs to sets of explicitly editor-hidden authored node IDs. The data
 store is user-local; no Hide state is written to scene documents, authoring
 mounts, cooked output or validation requests.
 
-Hiding a node masks its geometry/gizmo representation and descendants in the
-editing main view. It does not mutate native Scene Visibility, light properties
-or caster eligibility. Showing a parent removes only that parent's local Hide
-entry, leaving child entries intact; Show All clears the current scene's set.
-These commands persist workspace state without authoring history/dirty changes
-or automatic-cooking demand.
+Hiding a node drops it and its actual scene descendants from every editing
+viewport of the active scene: no geometry, no depth and no cast shadow, so the
+node behaves as absent for that viewport. It does not mutate native Scene
+Visibility or light properties, leaves in-game rendering, game viewports,
+serialized content and cooked output untouched, and does not affect
+capture/validation views. A transform gizmo is an editing overlay and is still
+drawn when the hidden node is selected (individually or in a multi-selection)
+in the Scene Explorer; the node stays in the scene graph and transforms
+normally. Showing a parent removes only that parent's local Hide entry, leaving
+child entries intact; Show All clears the current scene's set. These commands
+persist workspace state, record an undo step, and never dirty the scene
+document or request cooking.
 
 Apply the mask through the current runtime view generation and authored-to-native
 node map. A callback for another project, scene activation or view generation is

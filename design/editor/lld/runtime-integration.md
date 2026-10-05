@@ -867,13 +867,15 @@ not qualification instrumentation.
   processing through a visibility flag.
 
 Editor-only Hide is a separate **main-view representation mask**, correlated to
-the current project/document/view lifetime. It hides geometry/gizmo
-representations and descendants in the editing view; it leaves light collection,
-shadow-caster eligibility and other scene outputs unchanged. Keep its per-user/
-project workspace state outside authored assets. Preserve individual child hide
-choices across parent hide/show; Show All clears the view overrides. Do not
-route this feature through authored `SetVisibility` or publish document edits,
-dirty/history changes or cooking demand.
+the current project/document/view lifetime. It hides geometry, shadows and
+viewport picking (plus descendants) in the editing view; the transform gizmo
+still renders when the node is selected and the node stays in the scene graph.
+It leaves light collection, shadow-caster eligibility and other scene outputs
+unchanged. Keep its per-user/project workspace state outside authored assets.
+Preserve individual child hide choices across parent hide/show; Show All clears
+the view overrides. Do not route this feature through authored `SetVisibility`.
+The eye toggle records an undo step and never dirties the document or requests
+cooking.
 
 Visible off-screen casters remain eligible for shadows. Authored Hidden cannot
 cast shadows; editor-only Hide retains eligibility. Blended shadow casting and

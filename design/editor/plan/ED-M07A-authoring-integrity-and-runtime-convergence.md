@@ -35,13 +35,13 @@ Source inspection is against `editor` at `ea395a310` after rebasing. Issues
 [#5](https://github.com/abdes/DroidNet/issues/5) are landed. Their documented
 automated evidence is retained; running-editor replay is not inferred.
 
-| Gap | Concrete source evidence | Owning task |
-| --- | --- | --- |
-| Background falsely shares successful environment sync status | `SceneEngineSync.UpdateEnvironmentAsync` sets BackgroundColor to the overall environment outcome; `SyncEnvironmentSystemsAsync` calls `OxygenWorld.SetEnvironment` without any background RGB argument. | 07A.1 |
-| Camera/light/environment gestures are submitted as separate one-shot edits | `PerspectiveCameraViewModel.ApplyCameraEditAsync`, `DirectionalLightViewModel` edit methods, and `EnvironmentViewModel.ApplyEnvironmentEditAsync` pass `EditSessionToken.OneShot`. | 07A.2 |
-| Rejected camera edit lacks field-level rejection/restore handling | `PerspectiveCameraViewModel.ApplyCameraEditAsync` returns on `!result.Succeeded`; the camera XAML has no field diagnostic binding. The attempted VM value is not refreshed on this path. | 07A.3 |
-| Pending property replay has no saved/current revision or document-lifetime boundary | `PendingPropertySyncQueue` stores scene ID, node ID and entries; `ReplayPendingPropertySyncs` drains before attempting replay and catches failures without retaining failed work. | 07A.4 |
-| Existing evidence does not prove the complete UI/engine chain | `SceneEngineSyncTests.Coalescer_ThrottlesPreviewAndAllowsOneTerminalSyncThroughSyncService` proves the helper's call count, not a camera/light/environment control gesture, field rejection, or presented runtime value. The M04 ledger explicitly records only partial visual evidence. | 07A.6 |
+| Gap                                                                                 | Concrete source evidence                                                                                                                                                                                                                                                                 | Owning task |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| Background falsely shares successful environment sync status                        | `SceneEngineSync.UpdateEnvironmentAsync` sets BackgroundColor to the overall environment outcome; `SyncEnvironmentSystemsAsync` calls `OxygenWorld.SetEnvironment` without any background RGB argument.                                                                                  | 07A.1       |
+| Camera/light/environment gestures are submitted as separate one-shot edits          | `PerspectiveCameraViewModel.ApplyCameraEditAsync`, `DirectionalLightViewModel` edit methods, and `EnvironmentViewModel.ApplyEnvironmentEditAsync` pass `EditSessionToken.OneShot`.                                                                                                       | 07A.2       |
+| Rejected camera edit lacks field-level rejection/restore handling                   | `PerspectiveCameraViewModel.ApplyCameraEditAsync` returns on `!result.Succeeded`; the camera XAML has no field diagnostic binding. The attempted VM value is not refreshed on this path.                                                                                                 | 07A.3       |
+| Pending property replay has no saved/current revision or document-lifetime boundary | `PendingPropertySyncQueue` stores scene ID, node ID and entries; `ReplayPendingPropertySyncs` drains before attempting replay and catches failures without retaining failed work.                                                                                                        | 07A.4       |
+| Existing evidence does not prove the complete UI/engine chain                       | `SceneEngineSyncTests.Coalescer_ThrottlesPreviewAndAllowsOneTerminalSyncThroughSyncService` proves the helper's call count, not a camera/light/environment control gesture, field rejection, or presented runtime value. The M04 ledger explicitly records only partial visual evidence. | 07A.6       |
 
 Already present, therefore not assigned for reimplementation: EnvironmentView
 has sky/sun/exposure/tone/bloom/color-grading/background sections;
@@ -53,12 +53,12 @@ do not replace them merely because the old ledger lacked complete evidence.
 
 GitHub issue ownership (issue reports were rechecked against the rebased source):
 
-| Issue | Current evidence and remaining scope | Owner |
-| --- | --- | --- |
-| [#6](https://github.com/abdes/DroidNet/issues/6) | EngineService.State already returns Faulted when the stored loop task completes; surface waits observe loop exit after #3. No ongoing run observer publishes the original fault/exit result or lifetime-scoped state event. | 07A.7 |
-| [#7](https://github.com/abdes/DroidNet/issues/7) | Scene snapshot writes still call WriteAllTextAsync directly. Material writes already use a same-directory temporary file plus File.Move; shared guarantees, durability/cleanup and boundary failure tests remain. #4 revision acknowledgment is implemented and must be preserved. | 07A.5 |
-| [#9](https://github.com/abdes/DroidNet/issues/9) | Material source edits commit and mark dirty/stale but do not register document history. Schema validation and the #4 authoring lock do not supply undo/redo. | 07A.8 |
-| [#10](https://github.com/abdes/DroidNet/issues/10) | IEngineService exposes concrete OxygenWorld/OxygenInput and feature input/sync constructs or consumes interop payloads. | 07A.0 |
+| Issue                                              | Current evidence and remaining scope                                                                                                                                                                                                                                               | Owner |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| [#6](https://github.com/abdes/DroidNet/issues/6)   | EngineService.State already returns Faulted when the stored loop task completes; surface waits observe loop exit after #3. No ongoing run observer publishes the original fault/exit result or lifetime-scoped state event.                                                        | 07A.7 |
+| [#7](https://github.com/abdes/DroidNet/issues/7)   | Scene snapshot writes still call WriteAllTextAsync directly. Material writes already use a same-directory temporary file plus File.Move; shared guarantees, durability/cleanup and boundary failure tests remain. #4 revision acknowledgment is implemented and must be preserved. | 07A.5 |
+| [#9](https://github.com/abdes/DroidNet/issues/9)   | Material source edits commit and mark dirty/stale but do not register document history. Schema validation and the #4 authoring lock do not supply undo/redo.                                                                                                                       | 07A.8 |
+| [#10](https://github.com/abdes/DroidNet/issues/10) | IEngineService exposes concrete OxygenWorld/OxygenInput and feature input/sync constructs or consumes interop payloads.                                                                                                                                                            | 07A.0 |
 
 Landed foundations to retain: #2 close/discard guards; #3 serialized lifecycle,
 cleanup and loop-ended surface waits; #4 coherent snapshots, per-destination
@@ -498,7 +498,7 @@ There is no autosave scope expansion.
 - [x] 07A.7 active loop observation/state diagnostics and restart tests pass (#6).
 - [x] 07A.8 document-owned material history and session tests pass (#9).
 - [x] 07A.6 field/workflow evidence is complete and the user has validated the
-  visible behavior; native acceptance alone is not presented-state proof.
+      visible behavior; native acceptance alone is not presented-state proof.
 
 ## 10. Status Ledger Hook
 

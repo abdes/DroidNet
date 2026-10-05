@@ -15,17 +15,17 @@ and document rails that ED-M04 component editors must use.
 
 ## 2. PRD Traceability
 
-| ID | Coverage |
-| --- | --- |
-| `REQ-004` | Scene documents can be opened, activated, edited, saved, closed, and reopened. |
-| `REQ-005` | Partial: ED-M03 establishes command rails for component-bearing node creation; full component add/remove/edit inspectors are ED-M04. |
-| `REQ-006` | Dirty state follows successful authoring commands and save results. |
-| `REQ-007` | ED-M03-supported scene data saves and reopens. |
-| `REQ-008` | ED-M03-supported mutations request live sync when the embedded engine is available. |
-| `REQ-009` | Partial: ED-M03 creates supported primitive/light nodes through commands; production component completion continues in ED-M04. |
-| `REQ-022` | Save/command failures produce visible operation results. |
-| `REQ-024` | Diagnostics identify document, authoring, and sync failure domains. |
-| `SUCCESS-002` | Supported scene edits survive save/reopen. |
+| ID            | Coverage                                                                                                                             |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `REQ-004`     | Scene documents can be opened, activated, edited, saved, closed, and reopened.                                                       |
+| `REQ-005`     | Partial: ED-M03 establishes command rails for component-bearing node creation; full component add/remove/edit inspectors are ED-M04. |
+| `REQ-006`     | Dirty state follows successful authoring commands and save results.                                                                  |
+| `REQ-007`     | ED-M03-supported scene data saves and reopens.                                                                                       |
+| `REQ-008`     | ED-M03-supported mutations request live sync when the embedded engine is available.                                                  |
+| `REQ-009`     | Partial: ED-M03 creates supported primitive/light nodes through commands; production component completion continues in ED-M04.       |
+| `REQ-022`     | Save/command failures produce visible operation results.                                                                             |
+| `REQ-024`     | Diagnostics identify document, authoring, and sync failure domains.                                                                  |
+| `SUCCESS-002` | Supported scene edits survive save/reopen.                                                                                           |
 
 ## 3. Architecture Links
 
@@ -55,8 +55,11 @@ Useful existing pieces:
   and inspector undo stacks.
 - Scene explorer selection is published through messenger messages:
   `SceneNodeSelectionChangedMessage` and `SceneNodeSelectionRequestMessage`.
-- Scene explorer operations already use `SceneExplorerService`,
-  `SceneMutator`, `SceneOrganizer`, and `ISceneEngineSync`.
+- Scene explorer operations use `SceneDocumentCommandService`, which drives
+  `SceneMutator` and `SceneOrganizer` and requests `ISceneEngineSync`.
+  `SceneExplorerService` was retired as a second mutation surface
+  (Explorer plan D-a / C39); `RenameItemAsync` and the per-kind delete
+  copies went with it.
 
 Brownfield gaps:
 
@@ -100,14 +103,14 @@ recorded only by this command service; view models must stop writing direct
 
 ## 6. Ownership
 
-| Owner | Responsibility |
-| --- | --- |
-| `Oxygen.Editor.Documents` | Generic document metadata/service lifecycle and events; no ED-M03 changes are expected unless generic document tests reveal a gap. |
-| `Oxygen.Editor.WorldEditor` | Scene document command service, scene document selection service, command orchestration, dirty-state wiring, save workflow, hierarchy command UX. |
-| `Oxygen.Editor.World` | Scene graph and component domain objects, serialization DTOs, domain invariants. |
-| `SceneExplorerService` / successors | Hierarchy command implementation details for create/delete/rename/reparent/folder layout. |
-| `ISceneEngineSync` | Live sync adapter consumed by commands; it does not own authoring state. |
-| Inspector view models | ED-M04 command consumers; in ED-M03 they remain brownfield except where needed for selection/dirty/save reliability. |
+| Owner                                  | Responsibility                                                                                                                                    |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Oxygen.Editor.Documents`              | Generic document metadata/service lifecycle and events; no ED-M03 changes are expected unless generic document tests reveal a gap.                |
+| `Oxygen.Editor.WorldEditor`            | Scene document command service, scene document selection service, command orchestration, dirty-state wiring, save workflow, hierarchy command UX. |
+| `Oxygen.Editor.World`                  | Scene graph and component domain objects, serialization DTOs, domain invariants.                                                                  |
+| `SceneDocumentCommandService` partials | Hierarchy command implementation for create/delete/rename/reparent/folder layout, plus clipboard and native-sync outcomes.                        |
+| `ISceneEngineSync`                     | Live sync adapter consumed by commands; it does not own authoring state.                                                                          |
+| Inspector view models                  | ED-M04 command consumers; in ED-M03 they remain brownfield except where needed for selection/dirty/save reliability.                              |
 
 ## 7. Data Contracts
 
@@ -168,46 +171,87 @@ success path. Stale/no-such-node selection requests may publish a scoped
 
 ## 8. Commands, Services, Or Adapters
 
-`ISceneDocumentCommandService` is the ED-M03 command contract consumed by scene
-editor and scene explorer UI. Its typed methods map one-to-one to the operation
-kinds below, for example:
+`ISceneDocumentCommandService` is the ED-M03 authoring command contract,
+consumed by the scene editor and the scene explorer. It lives in
+`projects/Oxygen.Editor.WorldEditor/src/Documents/Commands/` and **is** the
+source of truth for the method list: this section records the command families
+and the invariants they share, not a mirrored signature index. Each method
+takes a `SceneDocumentCommandContext` plus a typed edit or an identity list,
+and returns `SceneCommandResult` — or `SceneValueCommandResult<T>` where the
+caller needs the entity the command created.
 
-- `CreateNodeAsync`.
-- `CreatePrimitiveAsync`.
-- `CreateLightAsync`.
-- `RenameNodeAsync`.
-- `DeleteNodeHierarchyAsync`.
-- `ReparentNodeAsync`.
-- `CreateExplorerFolderAsync`.
-- `RenameExplorerFolderAsync`.
-- `DeleteExplorerFolderAsync`.
-- `MoveExplorerLayoutItemAsync`.
-- `SaveSceneAsync`.
+Normative invariants for every command below:
+
+- **Single mutation authority.** Every authoring change to a scene document
+  goes through this service. UI adapters call commands; they never mutate the
+  scene graph, the explorer layout or native state directly. The retired
+  `SceneExplorerService` was a second, history-less mutation surface, and its
+  removal is part of this contract.
+- **Identity-based targeting.** Commands address entities by authored `Guid`,
+  never by a UI row, an index or a captured node reference, so a tree rebuild
+  between request and execution cannot aim a mutation at the wrong entity.
+- **Whole-batch prevalidation.** An id batch is validated before anything
+  changes; a stale or ineligible target fails the whole batch with a visible
+  result and no partial mutation is committed.
+- **One undo step per batch.** A batch records one history entry, so one Ctrl+Z
+  reverts one user intent rather than half of it.
+- **Synchronous dirty and revision advance.** Success marks the document dirty
+  and advances its change version before the call returns, so an immediate save
+  sees the edit. The one ratified exception is the editor-view Hide toggle: it
+  records an undo step and never dirties the document, because the user expects
+  Ctrl+Z to reach an accidental hide while saved content, cook demand and source
+  hashes must stay untouched (D8, R4).
+- **Visible failure.** A refused or failed command publishes an operation
+  result with a stable diagnostic code and a user-facing message. Logging a
+  failure alone is a defect: an editor that hides its own errors acts as though
+  nothing happened.
+
+Command families. `SceneOperationKinds` in
+`Oxygen.Managed.Core/src/Diagnostics/` is authoritative for operation kinds,
+and the interface's XMLDoc is authoritative for each method's contract:
+
+| Family                       | Methods                                                                                                                                                                                                                            | Operation kinds                                                                                                       |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Node lifecycle               | `CreateNodeAsync`, `CreatePrimitiveAsync`, `CreateLightAsync`, `RenameNodeAsync`, `DeleteNodesAsync`, `ReparentNodesAsync`, `DuplicateNodesAsync`, `DuplicateNodesFromDataAsync`                                                   | `Scene.Node.Create`, `.CreatePrimitive`, `.CreateLight`, `.Rename`, `.Delete`, `.Reparent`, `.Duplicate`              |
+| Explorer layout              | `CreateFolderAsync`, `RenameFolderAsync`, `DeleteFolderAsync`, `MoveNodesToFolderAsync`, `RemoveNodesFromFolderAsync`, `MoveFolderToParentAsync`, `ReorderNodesAsync`                                                              | `Scene.ExplorerFolder.Create`, `.Rename`, `.Delete`, `Scene.ExplorerLayout.MoveNode`                                  |
+| Component and property edits | `EditTransformAsync`, `EditGeometryAsync`, `EditMaterialSlotAsync`, `EditPerspectiveCameraAsync`, `EditDirectionalLightAsync`, `AddComponentAsync`, `RemoveComponentAsync`, `EditPropertiesAsync`, `EditPropertiesForTargetsAsync` | `Scene.Component.EditTransform`, `.EditGeometry`, `.EditMaterialSlot`, `.EditCamera`, `.EditLight`, `.Add`, `.Remove` |
+| Environment                  | `EditSceneEnvironmentAsync`, `EditSceneEnvironmentPropertiesAsync`                                                                                                                                                                 | `Scene.Environment.Edit`                                                                                              |
+| Scene document               | `SaveSceneAsync`, `SaveSceneCopyAsync`, `ReloadSceneAsync`, `CompleteEditSessionsAsync`, `AcquireCookReadAsync`                                                                                                                    | `Scene.Save`, `Scene.Reload`                                                                                          |
+| Mixed selection              | `DeleteItemsAsync`                                                                                                                                                                                                                 | `Scene.Node.Delete` or `Scene.ExplorerFolder.Delete`, chosen per target row kind                                      |
+
+Two more kinds exist in the vocabulary without a command-service method of
+their own: `Scene.Mutation` labels deferred native world mutations on the
+live-sync path, and the batch/delete entry point reuses the node and folder
+kinds above.
+
+There is deliberately **no** one-to-one method-to-kind mapping.
+`DeleteItemsAsync` dispatches two kinds from the row kind of each target, and
+four layout methods share `Scene.ExplorerLayout.MoveNode`. An earlier revision
+of this section listed method names that no implementation ever had and
+claimed the one-to-one relation; both are dropped here.
 
 `ISceneSelectionService` is a separate document-scoped service for selection
 state. It is not an undoable command service.
 
-ED-M03 command surface:
+Layout and deletion semantics, as ratified by the owner:
 
-| Command | ED-M03 Scope |
-| --- | --- |
-| `Scene.Node.Create` | Create root/child node with default transform. |
-| `Scene.Node.CreatePrimitive` | Create supported procedural primitive node from the quick-add menu. |
-| `Scene.Node.CreateLight` | Create a realtime directional light through the V0.1 command; point/spot authoring is outside this release. |
-| `Scene.Node.Rename` | Rename node and update hierarchy/document state. |
-| `Scene.Node.Delete` | Delete selected node hierarchy and support undo restore. |
-| `Scene.Node.Reparent` | Reparent node/hierarchy; local-transform preservation is the ED-M03 default. |
-| `Scene.ExplorerFolder.Create` | Create a layout-only scene explorer folder. |
-| `Scene.ExplorerFolder.Rename` | Rename a layout-only scene explorer folder. |
-| `Scene.ExplorerFolder.Delete` | Delete a layout-only scene explorer folder and reconcile contained layout items. |
-| `Scene.ExplorerLayout.MoveNode` | Move a node projection into/out of a folder; scene reparent is a separate `Scene.Node.Reparent` command when lineage changes. |
-| `Scene.Save` | Persist a coherent snapshot and acknowledge its revision; newer changes remain dirty. |
+- Explorer folders are grouping constructs. `Scene.ExplorerFolder.Delete`
+  promotes the contained entries in place; it never deletes a node and never
+  changes scene-graph parentage or transforms.
+- `Scene.Node.Delete` deletes each target's subtree, as in the scene graph.
+- Grouping nodes **into** a folder is not a promise that parenting never
+  changes: when the folder's scene scope differs from a node's current scene
+  parent, the command reparents the node with the ratified preserve-local
+  policy and then applies the layout grouping.
 
 Adapters:
 
 - Scene explorer calls hierarchy commands instead of mutating scene graph
   directly.
-- Quick-add calls create commands instead of direct scene mutation.
+- Quick-add calls create commands instead of direct scene mutation. The V0.1
+  menu offers ten primitive shapes and directional, point and spot lights, and
+  every entry maps to a kind in the table above; an unsupported kind fails as a
+  visible create failure rather than a thrown switch arm.
 - Inspector mutation remains brownfield unless ED-M03 touches it; any touched
   path must move to the command surface.
 - Live sync is requested by commands after authoring state changes. A sync
@@ -323,19 +367,19 @@ proof; development qualification observes actual native state and frame output.
 
 Operation kinds:
 
-| Operation Kind | Failure Domain |
-| --- | --- |
-| `Scene.Node.Create` | `SceneAuthoring` / `LiveSync` |
-| `Scene.Node.CreatePrimitive` | `SceneAuthoring` / `LiveSync` |
-| `Scene.Node.CreateLight` | `SceneAuthoring` / `LiveSync` |
-| `Scene.Node.Rename` | `SceneAuthoring` |
-| `Scene.Node.Delete` | `SceneAuthoring` / `LiveSync` |
-| `Scene.Node.Reparent` | `SceneAuthoring` / `LiveSync` |
-| `Scene.ExplorerFolder.Create` | `SceneAuthoring` |
-| `Scene.ExplorerFolder.Rename` | `SceneAuthoring` |
-| `Scene.ExplorerFolder.Delete` | `SceneAuthoring` |
-| `Scene.ExplorerLayout.MoveNode` | `SceneAuthoring` |
-| `Scene.Save` | `Document` |
+| Operation Kind                  | Failure Domain                |
+| ------------------------------- | ----------------------------- |
+| `Scene.Node.Create`             | `SceneAuthoring` / `LiveSync` |
+| `Scene.Node.CreatePrimitive`    | `SceneAuthoring` / `LiveSync` |
+| `Scene.Node.CreateLight`        | `SceneAuthoring` / `LiveSync` |
+| `Scene.Node.Rename`             | `SceneAuthoring`              |
+| `Scene.Node.Delete`             | `SceneAuthoring` / `LiveSync` |
+| `Scene.Node.Reparent`           | `SceneAuthoring` / `LiveSync` |
+| `Scene.ExplorerFolder.Create`   | `SceneAuthoring`              |
+| `Scene.ExplorerFolder.Rename`   | `SceneAuthoring`              |
+| `Scene.ExplorerFolder.Delete`   | `SceneAuthoring`              |
+| `Scene.ExplorerLayout.MoveNode` | `SceneAuthoring`              |
+| `Scene.Save`                    | `Document`                    |
 
 Command failures must publish an operation result when triggered by direct user
 action. Async live-sync failures after a successful command are reported as

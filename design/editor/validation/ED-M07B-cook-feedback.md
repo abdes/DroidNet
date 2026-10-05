@@ -11,12 +11,12 @@ new run title and status agree with its snapshot, with visible indeterminate
 progress when busy. Fast completion is also valid feedback. All eight samples
 meet the 100 ms limit; submitting returns in 0.06-0.30 ms.
 
-| Scope | Changed cook feedback | Unchanged repeat feedback |
-| --- | --- | --- |
-| Asset | 22.35 ms | 13.76 ms |
-| Folder | 18.61 ms | 18.95 ms |
-| CurrentScene | 18.59 ms | 14.69 ms |
-| Project | 13.34 ms | 34.73 ms |
+| Scope        | Changed cook feedback | Unchanged repeat feedback |
+| ------------ | --------------------- | ------------------------- |
+| Asset        | 22.35 ms              | 13.76 ms                  |
+| Folder       | 18.61 ms              | 18.95 ms                  |
+| CurrentScene | 18.59 ms              | 14.69 ms                  |
+| Project      | 13.34 ms              | 34.73 ms                  |
 
 The original full-size no-op folder/project cases delayed feedback for
 20,004/18,385 ms. Cook callbacks now yield away from the submitting context after

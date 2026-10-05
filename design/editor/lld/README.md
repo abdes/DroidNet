@@ -18,29 +18,29 @@ implementation and review, and must trace to [PRD.md](../PRD.md),
 
 ## LLD Set
 
-| LLD | Purpose |
-| --- | --- |
-| [project-workspace-shell.md](./project-workspace-shell.md) | Project Browser startup, project open/create, workspace activation, restoration, shell/project boundaries. |
-| [project-layout-and-templates.md](./project-layout-and-templates.md) | Standard project filesystem layout, authoring mounts, derived roots, and predefined template output rules. |
-| [project-services.md](./project-services.md) | Project metadata, project settings, content roots, project cook scope and policy. |
-| [documents-and-commands.md](./documents-and-commands.md) | Generic document abstractions, document lifecycle, command model, undo/redo, dirty state, selection state, command result flow. |
-| [scene-authoring-model.md](./scene-authoring-model.md) | Authoring scene, component completion, commands, dirty state, persistence. |
-| [scene-explorer.md](./scene-explorer.md) | Hierarchy UI, selection presentation, rename/create/delete/reparent UX, drag/drop semantics. |
-| [property-inspector.md](./property-inspector.md) | Inspector architecture, component editors, field controls, multi-selection behavior. |
-| [property-pipeline.md](./property-pipeline.md) | Canonical schema-property contract, validation, revision/history, mixed values, sessions, and runtime convergence. |
-| [material-editor.md](./material-editor.md) | Scalar material documents, property editing, assignment, save/cook/preview baseline. |
-| [environment-authoring.md](./environment-authoring.md) | Atmosphere, lights, exposure, tone mapping, renderer settings. |
-| [content-browser-asset-identity.md](./content-browser-asset-identity.md) | Content browser states, asset identity, asset picker, missing/broken references. |
-| [asset-primitives.md](./asset-primitives.md) | `Oxygen.Managed.Assets` reusable asset identity, catalog, import/cook primitives, loose index utilities. |
-| [content-pipeline.md](./content-pipeline.md) | Import, descriptors, manifests, cooking, pak, inspect, mount refresh requests. |
-| [content-cooking-workflows.md](./content-cooking-workflows.md) | Before/after-cook browsing and picking, shared status, incremental requests, automatic/explicit triggers, progress and recovery. |
-| [cooking-panel.md](./cooking-panel.md) | Dockable cooking progress, session runs, asset-grouped issues, cancellation, save/retry recovery, and property navigation. |
-| [live-engine-sync.md](./live-engine-sync.md) | Managed-to-native live scene synchronization. |
-| [runtime-integration.md](./runtime-integration.md) | Embedded engine lifecycle, runtime settings, surface leases, views, cooked-root mounts, input bridge, threading/frame phases. |
-| [standalone-runtime-validation.md](./standalone-runtime-validation.md) | Development-only targets, saved-input preparation, native/embedded capture, private protocol/ABI, comparison and cleanup. |
-| [viewport-and-tools.md](./viewport-and-tools.md) | Viewports, camera navigation, tools, overlays, multi-view. |
-| [settings-architecture.md](./settings-architecture.md) | Editor, project, workspace, runtime, scene, and diagnostic settings ownership. |
-| [diagnostics-operation-results.md](./diagnostics-operation-results.md) | Operation results, diagnostics, failure domains, presentation rules. |
+| LLD                                                                      | Purpose                                                                                                                          |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| [project-workspace-shell.md](./project-workspace-shell.md)               | Project Browser startup, project open/create, workspace activation, restoration, shell/project boundaries.                       |
+| [project-layout-and-templates.md](./project-layout-and-templates.md)     | Standard project filesystem layout, authoring mounts, derived roots, and predefined template output rules.                       |
+| [project-services.md](./project-services.md)                             | Project metadata, project settings, content roots, project cook scope and policy.                                                |
+| [documents-and-commands.md](./documents-and-commands.md)                 | Generic document abstractions, document lifecycle, command model, undo/redo, dirty state, selection state, command result flow.  |
+| [scene-authoring-model.md](./scene-authoring-model.md)                   | Authoring scene, component completion, commands, dirty state, persistence.                                                       |
+| [scene-explorer.md](./scene-explorer.md)                                 | Hierarchy UI, selection presentation, rename/create/delete/reparent UX, drag/drop semantics.                                     |
+| [property-inspector.md](./property-inspector.md)                         | Inspector architecture, component editors, field controls, multi-selection behavior.                                             |
+| [property-pipeline.md](./property-pipeline.md)                           | Canonical schema-property contract, validation, revision/history, mixed values, sessions, and runtime convergence.               |
+| [material-editor.md](./material-editor.md)                               | Scalar material documents, property editing, assignment, save/cook/preview baseline.                                             |
+| [environment-authoring.md](./environment-authoring.md)                   | Atmosphere, lights, exposure, tone mapping, renderer settings.                                                                   |
+| [content-browser-asset-identity.md](./content-browser-asset-identity.md) | Content browser states, asset identity, asset picker, missing/broken references.                                                 |
+| [asset-primitives.md](./asset-primitives.md)                             | `Oxygen.Managed.Assets` reusable asset identity, catalog, import/cook primitives, loose index utilities.                         |
+| [content-pipeline.md](./content-pipeline.md)                             | Import, descriptors, manifests, cooking, pak, inspect, mount refresh requests.                                                   |
+| [content-cooking-workflows.md](./content-cooking-workflows.md)           | Before/after-cook browsing and picking, shared status, incremental requests, automatic/explicit triggers, progress and recovery. |
+| [cooking-panel.md](./cooking-panel.md)                                   | Dockable cooking progress, session runs, asset-grouped issues, cancellation, save/retry recovery, and property navigation.       |
+| [live-engine-sync.md](./live-engine-sync.md)                             | Managed-to-native live scene synchronization.                                                                                    |
+| [runtime-integration.md](./runtime-integration.md)                       | Embedded engine lifecycle, runtime settings, surface leases, views, cooked-root mounts, input bridge, threading/frame phases.    |
+| [standalone-runtime-validation.md](./standalone-runtime-validation.md)   | Development-only targets, saved-input preparation, native/embedded capture, private protocol/ABI, comparison and cleanup.        |
+| [viewport-and-tools.md](./viewport-and-tools.md)                         | Viewports, camera navigation, tools, overlays, multi-view.                                                                       |
+| [settings-architecture.md](./settings-architecture.md)                   | Editor, project, workspace, runtime, scene, and diagnostic settings ownership.                                                   |
+| [diagnostics-operation-results.md](./diagnostics-operation-results.md)   | Operation results, diagnostics, failure domains, presentation rules.                                                             |
 
 ## Required LLD Sections
 

@@ -26,16 +26,16 @@ global project state, or log-only failures.
 
 ## 2. PRD Traceability
 
-| ID | Coverage |
-| --- | --- |
-| `GOAL-001` | Establish the V0.1 end-to-end editor entry workflow. |
-| `GOAL-006` | Make project and workspace failures visible and actionable. |
-| `REQ-001` | Normal launch starts at Project Browser. |
-| `REQ-002` | Recent/open/create project workflows handle valid and invalid projects. |
-| `REQ-003` | Workspace restoration is best effort and visibly partial on failure. |
-| `REQ-022` | Project open/create failures produce visible operation results. |
-| `REQ-024` | Failure causes are classified instead of being log-only. |
-| `SUCCESS-001` | A project can be opened or created and the editor workspace appears. |
+| ID            | Coverage                                                                |
+| ------------- | ----------------------------------------------------------------------- |
+| `GOAL-001`    | Establish the V0.1 end-to-end editor entry workflow.                    |
+| `GOAL-006`    | Make project and workspace failures visible and actionable.             |
+| `REQ-001`     | Normal launch starts at Project Browser.                                |
+| `REQ-002`     | Recent/open/create project workflows handle valid and invalid projects. |
+| `REQ-003`     | Workspace restoration is best effort and visibly partial on failure.    |
+| `REQ-022`     | Project open/create failures produce visible operation results.         |
+| `REQ-024`     | Failure causes are classified instead of being log-only.                |
+| `SUCCESS-001` | A project can be opened or created and the editor workspace appears.    |
 
 ## 3. Required LLDs
 
@@ -392,16 +392,16 @@ Expected project/reference changes:
 
 ## 8. Dependency And Migration Risks
 
-| Risk | Mitigation |
-| --- | --- |
+| Risk                                                                                                                                                                                                                 | Mitigation                                                                                                                                                                                                                               |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Existing `Project.oxy` files predate `SchemaVersion = 1` and explicit `AuthoringMounts`, so removing `EnsureDefaultAuthoringMounts` auto-heal will reclassify them as `UnsupportedVersion` or `InvalidContentRoots`. | ED-M01.3 includes a one-time fixture/sample sweep that rewrites in-repo manifests to the V0.1 shape. Manifests authored outside the repo are out of scope and must be recreated or fixed through Project Browser invalid-state recovery. |
-| Project Browser open/create is currently mixed with project persistence and recent usage. | Introduce shell activation coordinator first, then move Project Browser view models one workflow at a time. |
-| `IProjectManagerService.CurrentProject` is used by workspace, Content Browser, and project asset catalog consumers. | Add `IProjectContextService` and migrate all cross-project current-project reads before removing the public active-project contract. |
-| Scene save APIs still live on legacy project manager. | Keep scene save/cook replacement out of ED-M01; do not route new activation work through those APIs. |
-| Removing engine startup from `App.OnLaunched` may hide runtime failures until later. | That is intentional; ED-M01 records Project Browser startup success separately from runtime readiness. ED-M02 owns runtime failure surfaces. |
-| Partial workspace creation can leave a broken window. | Centralize workspace activation and make close-on-failure an explicit coordinator responsibility. |
-| Output-log summary entries could be mistaken for persistent result state. | Keep `IOperationResultStore` in-memory and document adapted log entries as non-authoritative logs. |
-| WinUI UI automation may be expensive early. | Prefer service/coordinator tests first; add UI tests only for stable startup/result surfaces. |
+| Project Browser open/create is currently mixed with project persistence and recent usage.                                                                                                                            | Introduce shell activation coordinator first, then move Project Browser view models one workflow at a time.                                                                                                                              |
+| `IProjectManagerService.CurrentProject` is used by workspace, Content Browser, and project asset catalog consumers.                                                                                                  | Add `IProjectContextService` and migrate all cross-project current-project reads before removing the public active-project contract.                                                                                                     |
+| Scene save APIs still live on legacy project manager.                                                                                                                                                                | Keep scene save/cook replacement out of ED-M01; do not route new activation work through those APIs.                                                                                                                                     |
+| Removing engine startup from `App.OnLaunched` may hide runtime failures until later.                                                                                                                                 | That is intentional; ED-M01 records Project Browser startup success separately from runtime readiness. ED-M02 owns runtime failure surfaces.                                                                                             |
+| Partial workspace creation can leave a broken window.                                                                                                                                                                | Centralize workspace activation and make close-on-failure an explicit coordinator responsibility.                                                                                                                                        |
+| Output-log summary entries could be mistaken for persistent result state.                                                                                                                                            | Keep `IOperationResultStore` in-memory and document adapted log entries as non-authoritative logs.                                                                                                                                       |
+| WinUI UI automation may be expensive early.                                                                                                                                                                          | Prefer service/coordinator tests first; add UI tests only for stable startup/result surfaces.                                                                                                                                            |
 
 ## 9. Validation Gates
 

@@ -130,7 +130,7 @@ identity. See section 8.2.
 | Atmosphere role edit            | Validate unique stored slot occupancy across hidden/off sources; reject conflicts. No promotion, brightest/first-light selection or coupled Sun pointer/boolean representation.                                                             |
 | Scene environment               | Carry exactly the canonical atmosphere, captured-sky lighting, exposure and appearance fields from the owning field tables; invalidate products affected by either atmospheric source.                                                      |
 | Background                      | Preserve its defined display-colour semantics and translucent foreground composition.                                                                                                                                                       |
-| Editor Hide                     | Editing-view representation mask only, retaining lighting and caster eligibility. It never writes source flags or triggers a cook.                                                                                                          |
+| Editor Hide                     | Editing-view representation mask only, retaining lighting and caster eligibility. It never writes source flags or triggers a cook; the eye toggle records an undo step without dirtying the document.                                       |
 
 Physical-camera inputs, general simulation activation and authored hidden-shadow
 modes are not introduced by these mappings. An explicitly selected camera remains

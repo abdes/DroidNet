@@ -65,12 +65,12 @@ A visually moving gizmo is not proof that saved/runtime state changed correctly.
 
 - [ ] All navigation/focus/publication-pause cases leave no stuck input/capture.
 - [ ] Frame selected/all passes geometry, transformed hierarchy, icon-only,
-  missing-bounds and empty-scene cases without authored-camera mutation.
+      missing-bounds and empty-scene cases without authored-camera mutation.
 - [ ] Viewport, tree and inspector agree on selection across stale results/deletion.
 - [ ] All tools/spaces/snapping/multi-selection pass commit/cancel/undo/redo and
-  invalid-transform cases; saved/cooked state agrees with authored results.
+      invalid-transform cases; saved/cooked state agrees with authored results.
 - [ ] Overlay controls do not dirty/persist runtime helpers into scenes and
-  disabling overlays preserves the ED-M08 comparison conditions.
+      disabling overlays preserves the ED-M08 comparison conditions.
 - [ ] User interaction validation passes on the PRD's qualified small project.
 
 ## 10. Status Ledger Hook

@@ -700,6 +700,27 @@ happened. The UI may show Cancelling, but a cancellation token alone is not proo
 that native I/O stopped. Publication is also valid when preview is unavailable;
 no engine startup is required merely to cook saved source.
 
+### Document Read Leases
+
+The lease type is owned here; the gate it holds belongs to the document.
+`CookDocumentReadLease` and `CookDocumentState` live in
+`Oxygen.Editor.ContentPipeline/src/Snapshots/` and define the entire contract
+between cooking and an authoring document. The pipeline never inspects or holds
+a document's own state: the document's owner — the scene command service, the
+material document service — supplies the lease by capturing its saved-source
+facts and holding its existing save gate open while the cook reads them.
+Releasing that gate is the lease's `Dispose`, so a panel that needs cook inputs
+registers an acquire callback with `CookDocumentRegistry` instead of keeping
+cook state of its own. Editing a document while a lease is held stays the
+owner's concern: the owner defers or re-requests, and an unsaved preview keeps
+the document dirty without changing what the saved snapshot the lease names. A
+held lease serializes exactly three things and nothing more: the document's own
+save and save-copy operations, which take the same gate, and a scene
+replacement, which drains admitted mutations before swapping the model.
+Ordinary authoring commands — including undo, redo and selection — are not
+blocked, because the lease guards a saved version plus a recorded preview flag,
+not the live document.
+
 ### Result And UI Contract
 
 Extend the pipeline result with input provenance, the captured/current freshness
@@ -1311,6 +1332,7 @@ input proofs, then cook captured input; reject unreported reads or use the exist
 conflict/retry path. No daemon or universal graph is introduced.
 
 The cook owns one verified native artifact lease across its queries and execution.
+
 Analysis and capture schemas participate in that artifact identity; each report is
 validated against the leased schema and correlated with the submitted job IDs,
 types and logical source paths. Incomplete reports retain source-attributed
