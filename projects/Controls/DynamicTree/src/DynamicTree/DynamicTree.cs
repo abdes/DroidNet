@@ -378,9 +378,16 @@ public partial class DynamicTree : Control
                     return true;
                 }
 
-                // No typeahead to clear: cancel an active cut/clipboard staging.
-                await this.ViewModel.ClearClipboardAsync().ConfigureAwait(true);
-                return true;
+                // Nothing staged to cancel means Escape had nothing to do, and reporting it as
+                // handled would swallow the key from every outer handler (rename box, dialog,
+                // navigation). Only consume it when there is a cut/copy staging to drop.
+                if (this.ViewModel.CurrentClipboardState != ClipboardState.Empty)
+                {
+                    await this.ViewModel.ClearClipboardAsync().ConfigureAwait(true);
+                    return true;
+                }
+
+                return false;
         }
 
         return !isControlDown && this.TryHandleTypeAhead(key);
