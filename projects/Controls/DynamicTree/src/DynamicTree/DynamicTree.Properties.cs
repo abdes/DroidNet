@@ -44,7 +44,8 @@ public partial class DynamicTree
 
     /// <summary>Identifies the interaction scope used by pointer/range selection.</summary>
     public static readonly DependencyProperty SelectionScopeProperty = DependencyProperty.Register(
-        nameof(SelectionScope), typeof(TreeSelectionScope), typeof(DynamicTree), new PropertyMetadata(TreeSelectionScope.ShownItems));
+        nameof(SelectionScope), typeof(TreeSelectionScope), typeof(DynamicTree), new PropertyMetadata(
+            TreeSelectionScope.ShownItems, (d, _) => ((DynamicTree)d).UpdateDisplayedItems()));
 
     /// <summary>Identifies the minimum height of each rendered item row.</summary>
     public static readonly DependencyProperty ItemRowHeightProperty = DependencyProperty.Register(

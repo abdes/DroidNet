@@ -71,9 +71,52 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     public IEnumerable<ITreeItem> ShownItems => this.shownItems;
 
     /// <summary>
+    ///     Gets or sets the collection that interactions address.
+    /// </summary>
+    /// <remarks>
+    ///     The owning control assigns this from its <c>SelectionScope</c> whenever that scope or
+    ///     the displayed source changes, so the view model never has to know about filtering.
+    ///     <see cref="TreeSelectionScope.ShownItems"/> preserves the historical behaviour: keyboard
+    ///     navigation, typeahead and range extension walk <see cref="ShownItems"/>.
+    ///     <see cref="TreeSelectionScope.DisplayedItems"/> restricts them to the displayed
+    ///     projection, so a keyboard user cannot land on a row that the filter hid while pointer
+    ///     selection is already scoped to it.
+    /// </remarks>
+    public TreeSelectionScope InteractionScope { get; set; } = TreeSelectionScope.ShownItems;
+
+    /// <summary>
     ///     Gets the <see cref="ILoggerFactory"/> used to create loggers for this view model.
     /// </summary>
     internal ILoggerFactory? LoggerFactory { get; } = loggerFactory;
+
+    /// <summary>
+    ///     Gets the items keyboard focus, typeahead and range extension may move between.
+    /// </summary>
+    private IReadOnlyList<ITreeItem> NavigableItems
+    {
+        get
+        {
+            if (this.InteractionScope != TreeSelectionScope.DisplayedItems)
+            {
+                return this.shownItems;
+            }
+
+            // FilteredItems degrades to the shown collection when no predicate is installed.
+            var displayed = this.FilteredItems;
+            if (ReferenceEquals(displayed, this.shownItems))
+            {
+                return this.shownItems;
+            }
+
+            var items = new List<ITreeItem>();
+            foreach (var item in displayed)
+            {
+                items.Add(item);
+            }
+
+            return items;
+        }
+    }
 
     /// <summary>
     ///     Gets the item that currently holds logical keyboard focus within the tree.
@@ -929,8 +972,18 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     private async Task HideChildrenAsync(ITreeItem itemAdapter)
     {
         this.LogHideChildrenStarted(itemAdapter);
+        // IndexOf returns -1 when the item is not shown, which makes the derived index 0. The old
+        // guard tested the index against -1, so it could never fire and the real case was silent.
         var removeIndex = this.shownItems.IndexOf(itemAdapter) + 1;
-        Debug.Assert(removeIndex != -1, $"expecting item {itemAdapter.Label} to be in the shown list");
+        if (removeIndex == 0)
+        {
+            // The row is not in the flat shown list at all — a collapsed descendant restored during
+            // a search clear, or a second collapse of an already-hidden branch. Its subtree is
+            // already out of the list, so hiding its children has nothing to do; collapsing is still
+            // recorded on the item itself by the caller.
+            this.LogHideChildrenNotShown(itemAdapter);
+            return;
+        }
 
         await this.HideChildrenRecursiveAsync(itemAdapter).ConfigureAwait(true);
     }

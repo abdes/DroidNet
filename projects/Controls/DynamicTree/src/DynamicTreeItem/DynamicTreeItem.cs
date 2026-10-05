@@ -443,7 +443,23 @@ public partial class DynamicTreeItem : ContentControl
             this.areInteractivePointerHandlersAttached = false;
         }
 
+        this.ResetRecycledRowState();
+    }
+
+    /// <summary>
+    ///     Clears the per-row interaction presentation so a recycled container carries nothing from
+    ///     the row it used to display.
+    /// </summary>
+    /// <remarks>
+    ///     <see cref="ItemsRepeater"/> recycles element containers, and a container that is cleared
+    ///     mid-press, mid-rename or while it carries the drop cue would otherwise hand that state to
+    ///     the next row it is bound to: a stale interactive flag makes the control cancel drags
+    ///     started on that row, and a stale cue points the user at the wrong drop position.
+    /// </remarks>
+    internal void ResetRecycledRowState()
+    {
         this.isInteractivePointerActive = false;
+        this.UpdateDropIndicatorVisual(DynamicTree.DropIndicatorPosition.None);
         if (this.itemNameTextBox?.Visibility == Visibility.Visible)
         {
             this.CancelRename();

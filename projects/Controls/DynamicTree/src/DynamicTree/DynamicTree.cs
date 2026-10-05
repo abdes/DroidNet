@@ -364,6 +364,15 @@ public partial class DynamicTree : Control
                 return false;
 
             case VirtualKey.Escape:
+                // An in-flight internal drag outranks every other Escape meaning: dropping the
+                // drag state here makes the pending Drop event find no sources and report None, so
+                // the tree is left exactly as it was before the drag started.
+                if (this.dragOwner is not null && this.draggedItems is not null)
+                {
+                    this.ClearDragState();
+                    return true;
+                }
+
                 if (this.TryHandleTypeAhead(VirtualKey.Escape))
                 {
                     return true;
@@ -956,6 +965,15 @@ public partial class DynamicTree : Control
         treeItem.Collapse -= this.OnCollapseTreeItem;
         treeItem.DoubleTapped -= this.TreeItem_DoubleTapped;
         treeItem.UpdateTrailingContentTemplate(selector: null, item: null);
+
+        // The control keeps its own reference to the element carrying the drop cue. A rebuild
+        // during a drag (hover-expand changes the collection) recycles that element, and without
+        // this the cue stays painted on whichever row the container is next bound to.
+        treeItem.ResetRecycledRowState();
+        if (ReferenceEquals(this.dropIndicatorElement, element) || ReferenceEquals(this.dropIndicatorElement, treeItem))
+        {
+            this.ClearDropIndicatorVisual();
+        }
     }
 
     private void ItemsRepeater_OnElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
@@ -1056,6 +1074,10 @@ public partial class DynamicTree : Control
         this.DisplayedItems = useFiltered
             ? this.ViewModel.FilteredItems
             : this.ViewModel.ShownItems;
+
+        // Keyboard navigation, typeahead and range extension follow the same scope the pointer
+        // paths already honour, so one control switch describes every interaction surface.
+        this.ViewModel.InteractionScope = this.SelectionScope;
     }
 
     private void ViewModel_OnPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)

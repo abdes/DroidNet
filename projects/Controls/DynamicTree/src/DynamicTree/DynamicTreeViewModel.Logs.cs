@@ -94,6 +94,15 @@ public partial class DynamicTreeViewModel
 
     [LoggerMessage(
         SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "HideChildren: item='{item}' is not in the shown list; its subtree is already hidden.")]
+    private static partial void LogHideChildrenNotShown(ILogger logger, string item);
+
+    private void LogHideChildrenNotShown(ITreeItem item)
+        => LogHideChildrenNotShown(this.logger, item.Label);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Warning,
         Message = "Copy ignored: no clonable items in selection (count={selectionCount})")]
     private static partial void LogCopyIgnoredNoClonableItems(ILogger logger, int selectionCount);
