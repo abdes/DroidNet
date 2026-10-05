@@ -45,6 +45,13 @@ public static class SceneOperationKinds
     public const string NodeDuplicate = "Scene.Node.Duplicate";
 
     /// <summary>
+    /// Hides or shows nodes in the editing viewports ("Show in Editor"). Undoable editor
+    /// presentation state: it never dirties the scene document and never writes authored
+    /// visibility.
+    /// </summary>
+    public const string NodeSetEditorHidden = "Scene.Node.SetEditorHidden";
+
+    /// <summary>
     /// Transform component edit.
     /// </summary>
     public const string EditTransform = "Scene.Component.EditTransform";

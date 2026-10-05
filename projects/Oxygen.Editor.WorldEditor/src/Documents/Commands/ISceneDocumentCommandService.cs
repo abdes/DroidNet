@@ -346,6 +346,26 @@ public interface ISceneDocumentCommandService
         Guid? parentNodeId,
         int index);
 
+    /// <summary>
+    /// Hides or shows nodes in the editing viewports ("Show in Editor"), recording one undo step for
+    /// the batch without dirtying the document.
+    /// </summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="nodeIds">The nodes to hide or show; the batch is one undo step.</param>
+    /// <param name="hidden">When <see langword="true"/>, hide the nodes; when <see langword="false"/>, show them.</param>
+    /// <returns>The command result.</returns>
+    /// <remarks>
+    /// This is the one ratified command that records history without marking the document dirty: the
+    /// user expects Ctrl+Z to reach an accidental hide, while saved content, source hashes and cook
+    /// demand must stay untouched. It never writes <c>SceneNodeFlags::kVisible</c> and never routes
+    /// through authored visibility; the state lives in workspace storage, and the step is applied and
+    /// reverted through this owner so no second history authority exists.
+    /// </remarks>
+    public Task<SceneCommandResult> SetEditorHiddenAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<Guid> nodeIds,
+        bool hidden);
+
     /// <summary>Deep-copies node hierarchies and inserts them under a node, folder, or the scene root.</summary>
     /// <param name="context">The document command context.</param>
     /// <param name="nodeIds">The hierarchy roots to duplicate.</param>

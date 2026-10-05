@@ -55,7 +55,8 @@ public sealed partial class SceneDocumentCommandService(
     IGeometryMaterialSlotProvider materialSlots,
     IProjectContextService projectContexts,
     ISceneMutator sceneMutator,
-    ISceneOrganizer sceneOrganizer) : ISceneDocumentCommandService
+    ISceneOrganizer sceneOrganizer,
+    Oxygen.Editor.World.Workspace.WorkspaceInteractionService? interaction = null) : ISceneDocumentCommandService
 {
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Scene, SemaphoreSlim> SaveGates = [];
 
@@ -69,6 +70,7 @@ public sealed partial class SceneDocumentCommandService(
     private readonly IStatusReducer statusReducer = statusReducer;
     private readonly ISceneMutator sceneMutator = sceneMutator;
     private readonly ISceneOrganizer sceneOrganizer = sceneOrganizer;
+    private readonly Oxygen.Editor.World.Workspace.WorkspaceInteractionService? interaction = interaction;
 
     /// <inheritdoc />
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]

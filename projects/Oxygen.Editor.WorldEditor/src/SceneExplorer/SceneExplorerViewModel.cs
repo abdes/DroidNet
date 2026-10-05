@@ -1695,7 +1695,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// </summary>
     /// <param name="anchor">The row invoked from an eye slot or context menu.</param>
     [RelayCommand]
-    private void ToggleEditorHidden(ITreeItem? anchor)
+    private async Task ToggleEditorHiddenAsync(ITreeItem? anchor)
     {
         if (this.interaction is not { } service)
         {
@@ -1703,10 +1703,16 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        foreach (var nodeId in this.ResolveWorkspaceTargetIds(anchor))
+        var ids = this.ResolveWorkspaceTargetIds(anchor);
+        if (ids.Count == 0 || this.CreateCommandContext() is not { } context)
         {
-            service.SetHidden(nodeId, !service.IsHidden(nodeId));
+            return;
         }
+
+        // One intent, one undo step: the batch target is decided from the first row so a mixed
+        // selection hides or shows uniformly, the way Delete and Reparent batches already do.
+        var hide = !service.IsHidden(ids[0]);
+        _ = await this.commandService.SetEditorHiddenAsync(context, ids, hide).ConfigureAwait(true);
     }
 
     /// <summary>Locks or unlocks the anchor row, or the whole selection, against editing.</summary>
@@ -1726,9 +1732,12 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
     }
 
-    /// <summary>Shows every hidden node of the active scene, leaving locks untouched.</summary>
+    /// <summary>
+    /// Shows every hidden node of the active scene, leaving locks untouched. Recorded as one undo
+    /// step through the command owner, so a mistaken Show All is recoverable.
+    /// </summary>
     [RelayCommand]
-    private void ShowAllInEditor()
+    private async Task ShowAllInEditorAsync()
     {
         if (this.interaction is not { } service)
         {
@@ -1736,7 +1745,19 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        service.ShowAll();
+        var hidden = service.HiddenNodeIds();
+        if (hidden.Count == 0)
+        {
+            return;
+        }
+
+        var context = this.CreateCommandContext();
+        if (context is null)
+        {
+            return;
+        }
+
+        _ = await this.commandService.SetEditorHiddenAsync(context, [.. hidden ], hidden: false).ConfigureAwait(true);
     }
 
     /// <summary>

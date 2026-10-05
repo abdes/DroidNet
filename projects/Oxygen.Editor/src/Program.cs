@@ -276,6 +276,14 @@ public static partial class Program
                 resolver.Resolve<IStatusReducer>(),
                 resolver.Resolve<ILoggerFactory>()),
             Reuse.Singleton);
+        // Editor hide / lock workspace state: one owner, project-scoped typed settings, serialized writes.
+        container.RegisterDelegate(
+            resolver => new Oxygen.Editor.World.Workspace.WorkspaceInteractionService(
+                resolver.Resolve<IEditorSettingsManager>(),
+                resolver.Resolve<IOperationResultPublisher>(),
+                resolver.Resolve<IStatusReducer>(),
+                resolver.Resolve<ILoggerFactory>()),
+            Reuse.Singleton);
         container.Register<EngineShutdownService>(Reuse.Singleton);
         container.RegisterDelegate<IHostedService>(resolver => resolver.Resolve<EngineShutdownService>(), Reuse.Singleton);
 
