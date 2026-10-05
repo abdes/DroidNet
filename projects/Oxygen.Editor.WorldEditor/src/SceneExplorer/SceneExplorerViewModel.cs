@@ -21,12 +21,14 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.SceneExplorer;
 
@@ -44,12 +46,20 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly ISceneEngineSync sceneEngineSync;
     private readonly ISceneSelectionService selectionService;
     private readonly ISceneDocumentCommandService commandService;
+    private readonly IOperationResultPublisher? operationResults;
+    private readonly IStatusReducer? statusReducer;
+    private readonly Workspace.WorkspaceInteractionService? interaction;
     private readonly SceneExplorerProjection projection = new();
 
     // Node-clipboard state: copied node identities plus whether they were cut (moved) rather than copied.
     private readonly List<Guid> clipboardNodeIds = [];
     private readonly List<SceneNodeData> clipboardSnapshots = [];
     private bool clipboardIsCut;
+
+    // Ratified clipboard lifetime (D7): a payload is stamped with the project and scene that
+    // produced it, so a stale payload can never be pasted into another project's scene.
+    private Guid? clipboardProjectId;
+    private Guid? clipboardSceneId;
 
     // Adapters expanded by a transient search so their expansion can be restored when search clears.
     private readonly List<ITreeItem> searchExpandedItems = [];
@@ -77,6 +87,16 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
     ///     recognition process. If <see langword="null" />, logging is disabled.
     /// </param>
+    /// <param name="operationResults">
+    ///     Optional operation-result publisher. When present, a clipboard payload that the lifetime
+    ///     rule discards is reported to the user instead of only disappearing.
+    /// </param>
+    /// <param name="statusReducer">Optional status reducer paired with <paramref name="operationResults"/>.</param>
+    /// <param name="interaction">
+    ///     Optional workspace interaction state owner ("Show in Editor" and Lock). Without it the
+    ///     eye and lock actions report that the workspace service is unavailable rather than
+    ///     silently doing nothing.
+    /// </param>
     public SceneExplorerViewModel(
         IProjectManagerService projectManager,
         IMessenger messenger,
@@ -86,9 +106,19 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         ISceneEngineSync sceneEngineSync,
         ISceneSelectionService selectionService,
         ISceneDocumentCommandService commandService,
-        ILoggerFactory? loggerFactory = null)
+        ILoggerFactory? loggerFactory = null,
+        IOperationResultPublisher? operationResults = null,
+        IStatusReducer? statusReducer = null,
+        Workspace.WorkspaceInteractionService? interaction = null)
         : base(loggerFactory)
     {
+        this.operationResults = operationResults;
+        this.statusReducer = statusReducer;
+        this.interaction = interaction;
+        if (interaction is { } service)
+        {
+            service.StateChanged += this.OnInteractionStateChanged;
+        }
         this.logger = loggerFactory?.CreateLogger<SceneExplorerViewModel>() ??
                       NullLoggerFactory.Instance.CreateLogger<SceneExplorerViewModel>();
         this.projectManager = projectManager;
@@ -286,6 +316,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             this.sceneEngineSync.SceneSynchronized -= this.OnSceneSynchronized;
             this.documentService.DocumentOpened -= this.OnDocumentOpened;
             this.documentService.DocumentActivated -= this.OnDocumentActivated;
+            if (this.interaction is { } service)
+            {
+                service.StateChanged -= this.OnInteractionStateChanged;
+            }
+
             this.messenger.UnregisterAll(this);
 
             // Ensure any in-flight scene load is cancelled and the CTS is disposed.
@@ -503,6 +538,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         this.clipboardIsCut = false;
+        this.StampClipboardOrigin();
 
         this.ClipboardItemStore = [.. items];
         this.ClipboardStateStore = ClipboardState.Copied;
@@ -525,6 +561,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.clipboardNodeIds.AddRange(nodeIds);
         this.clipboardSnapshots.Clear();
         this.clipboardIsCut = true;
+        this.StampClipboardOrigin();
 
         this.ClipboardStateStore = ClipboardState.Cut;
         this.ClearCutMarks();
@@ -546,6 +583,17 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         var context = this.CreateCommandContext();
         if (context is null || this.clipboardNodeIds.Count == 0)
         {
+            return;
+        }
+
+        // Enforce the clipboard lifetime at the only moment it can cause damage: a payload from
+        // another project, or a cut whose scene is gone, must never reach the command service.
+        if (!this.ClipboardLifetimeIsCurrent())
+        {
+            this.InvalidateClipboard(
+                this.clipboardIsCut
+                    ? "The cut was cleared because its source scene is no longer loaded."
+                    : "The clipboard was cleared because the project changed.");
             return;
         }
 
@@ -633,7 +681,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     [RelayCommand(CanExecute = nameof(CanPaste))]
     private Task Paste() => this.PasteItemsAsync(targetParent: null);
 
-    private bool CanPaste() => this.clipboardNodeIds.Count > 0;
+    private bool CanPaste() => this.clipboardNodeIds.Count > 0 && this.ClipboardLifetimeIsCurrent();
 
     /// <inheritdoc />
     protected override void OnClipboardCleared()
@@ -641,6 +689,68 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.clipboardNodeIds.Clear();
         this.clipboardSnapshots.Clear();
         this.clipboardIsCut = false;
+        this.clipboardProjectId = null;
+        this.clipboardSceneId = null;
+    }
+
+    /// <summary>
+    /// Records which project and scene produced the staged payload.
+    /// </summary>
+    private void StampClipboardOrigin()
+    {
+        this.clipboardProjectId = this.projectManager.CurrentProject?.ProjectInfo.Id;
+        this.clipboardSceneId = this.Scene?.AttachedObject.Id;
+    }
+
+    /// <summary>
+    /// Tests the staged payload against the ratified clipboard lifetime without changing anything.
+    /// </summary>
+    /// <remarks>
+    ///     The ratified rule (D7) is that a snapshot Copy survives a scene switch inside one
+    ///     project, a Cut is bound to the scene that staged it, and nothing survives a project
+    ///     switch. An unstamped payload is treated as current, so a test double or a project-less
+    ///     session is not falsely invalidated.
+    /// </remarks>
+    /// <returns><see langword="true"/> when the payload may still be pasted.</returns>
+    private bool ClipboardLifetimeIsCurrent()
+    {
+        var currentProjectId = this.projectManager.CurrentProject?.ProjectInfo.Id;
+        if (this.clipboardProjectId is { } stagedProject && stagedProject != currentProjectId)
+        {
+            return false;
+        }
+
+        return !this.clipboardIsCut
+            || this.clipboardSceneId is not { } stagedScene
+            || this.Scene is null
+            || this.Scene.AttachedObject.Id == stagedScene;
+    }
+
+    /// <summary>
+    /// Drops a payload that outlived its ratified lifetime and tells the user why.
+    /// </summary>
+    /// <param name="reason">The plain-language explanation shown with the warning.</param>
+    private void InvalidateClipboard(string reason)
+    {
+        this.OnClipboardCleared();
+        this.ClipboardStateStore = ClipboardState.Empty;
+        this.ClearCutMarks();
+        this.RaiseClipboardChanged();
+
+        if (this.operationResults is not { } publisher || this.statusReducer is not { } reducer)
+        {
+            return;
+        }
+
+        _ = SceneOperationResults.PublishWarning(
+            publisher,
+            reducer,
+            SceneOperationKinds.NodeDuplicate,
+            FailureDomain.SceneAuthoring,
+            DiagnosticCodes.ScenePrefix + "CLIPBOARD_INVALIDATED",
+            "Clipboard was cleared",
+            reason,
+            new AffectedScope { DocumentId = this.Scene?.AttachedObject.Id });
     }
 
     /// <summary>
@@ -789,6 +899,14 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
     private async Task InitializeLoadedSceneAsync(Scene loadedScene)
     {
+        // A project switch ends the lifetime of any staged payload, so it is dropped as soon as the
+        // new project's scene initializes rather than waiting for a paste attempt to fail.
+        if (this.clipboardProjectId is { } stagedProject
+            && stagedProject != this.projectManager.CurrentProject?.ProjectInfo.Id)
+        {
+            this.InvalidateClipboard("The clipboard was cleared because the project changed.");
+        }
+
         // Build the scene layout from the loaded scene
         this.Scene = new SceneAdapter(loadedScene)
         {
@@ -804,6 +922,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         await this.InitializeRootAsync(this.Scene, skipRoot: false).ConfigureAwait(true);
         this.projection.Rebuild(this.Scene);
+        this.ApplyWorkspaceInteractionState();
         this.PublishSelection(this.selectionService.Reconcile(loadedScene.Id, loadedScene));
     }
 
@@ -1486,5 +1605,177 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         await this.InitializeRootAsync(sceneAdapter, skipRoot: false).ConfigureAwait(true);
         this.projection.Rebuild(sceneAdapter);
+        this.ApplyWorkspaceInteractionState();
+    }
+
+    /// <summary>
+    /// Restores the stored hide and lock state for the active scene and applies it to the rows.
+    /// </summary>
+    /// <param name="project">The project that owns the stored state.</param>
+    /// <returns>The task completing once the restored state is visible.</returns>
+    /// <remarks>
+    /// The composition root calls this: a scene explorer has no business resolving the project
+    /// lifetime it sits inside, and a project-less explorer still supports in-session toggles.
+    /// </remarks>
+    public async Task RestoreWorkspaceInteractionAsync(Projects.ProjectContext project)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        if (this.interaction is not { } service || this.Scene is not { } scene)
+        {
+            return;
+        }
+
+        await service.RestoreAsync(project, scene.AttachedObject.Id).ConfigureAwait(true);
+        this.ApplyWorkspaceInteractionState();
+    }
+
+    /// <summary>
+    /// Projects the workspace interaction state onto the realized rows: the eye slot shows each
+    /// node's explicit hidden entry, the row dimming follows the actual scene-ancestor closure, and
+    /// the lock column mirrors the stored lock set.
+    /// </summary>
+    /// <remarks>
+    /// This reads only workspace state and never calls the command service, so applying it cannot
+    /// dirty a document or record history. A root row keeps its permanent lock; the workspace set
+    /// does not unlock the scene root.
+    /// </remarks>
+    private void ApplyWorkspaceInteractionState()
+    {
+        if (this.interaction is not { } service)
+        {
+            return;
+        }
+
+        foreach (var node in this.projection.Nodes)
+        {
+            var nodeId = node.AttachedObject.Id;
+            var isExplicitlyHidden = service.IsHidden(nodeId);
+            node.IsHiddenInEditor = isExplicitlyHidden;
+            node.IsEffectivelyHiddenInEditor = isExplicitlyHidden || this.HasHiddenSceneAncestor(node.AttachedObject, service);
+            if (!node.IsRoot)
+            {
+                node.IsLocked = service.IsLocked(nodeId);
+            }
+        }
+
+        // Logical folders group nodes; they are never part of the scene-hide closure (contract R1).
+        foreach (var folder in this.projection.Folders)
+        {
+            folder.IsEffectivelyHiddenInEditor = false;
+        }
+    }
+
+    /// <summary>Walks the actual scene ancestry, which is the only chain that can hide a node.</summary>
+    /// <param name="node">The scene node to test.</param>
+    /// <param name="service">The workspace interaction owner.</param>
+    /// <returns><see langword="true"/> when an ancestor of <paramref name="node"/> is hidden.</returns>
+    private bool HasHiddenSceneAncestor(SceneNode node, Workspace.WorkspaceInteractionService service)
+    {
+        for (var parent = node.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (service.IsHidden(parent.Id))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void OnInteractionStateChanged(object? sender, EventArgs args)
+    {
+        _ = sender;
+        _ = args;
+        this.ApplyWorkspaceInteractionState();
+    }
+
+    /// <summary>
+    /// Hides or shows the anchor row — or the whole selection when no anchor is given — in the
+    /// editing viewports. This is workspace state: it never writes authored visibility.
+    /// </summary>
+    /// <param name="anchor">The row invoked from an eye slot or context menu.</param>
+    [RelayCommand]
+    private void ToggleEditorHidden(ITreeItem? anchor)
+    {
+        if (this.interaction is not { } service)
+        {
+            this.ReportWorkspaceStateUnavailable("Hide in editor");
+            return;
+        }
+
+        foreach (var nodeId in this.ResolveWorkspaceTargetIds(anchor))
+        {
+            service.SetHidden(nodeId, !service.IsHidden(nodeId));
+        }
+    }
+
+    /// <summary>Locks or unlocks the anchor row, or the whole selection, against editing.</summary>
+    /// <param name="anchor">The row invoked from a lock slot or context menu.</param>
+    [RelayCommand]
+    private void ToggleEditorLocked(ITreeItem? anchor)
+    {
+        if (this.interaction is not { } service)
+        {
+            this.ReportWorkspaceStateUnavailable("Lock");
+            return;
+        }
+
+        foreach (var nodeId in this.ResolveWorkspaceTargetIds(anchor))
+        {
+            service.SetLocked(nodeId, !service.IsLocked(nodeId));
+        }
+    }
+
+    /// <summary>Shows every hidden node of the active scene, leaving locks untouched.</summary>
+    [RelayCommand]
+    private void ShowAllInEditor()
+    {
+        if (this.interaction is not { } service)
+        {
+            this.ReportWorkspaceStateUnavailable("Show All");
+            return;
+        }
+
+        service.ShowAll();
+    }
+
+    /// <summary>
+    /// Resolves the nodes a workspace interaction acts on: the invoked row when one is given,
+    /// otherwise the current selection. Folder rows carry no node identity and are skipped.
+    /// </summary>
+    /// <param name="anchor">The invoked row, or <see langword="null"/> for the selection.</param>
+    /// <returns>The stable authored ids to toggle.</returns>
+    private IReadOnlyList<Guid> ResolveWorkspaceTargetIds(ITreeItem? anchor)
+    {
+        if (anchor is SceneNodeAdapter single)
+        {
+            return [single.AttachedObject.Id];
+        }
+
+        return [.. this.GetSelectedItems().OfType<SceneNodeAdapter>().Select(node => node.AttachedObject.Id)];
+    }
+
+    /// <summary>
+    /// Reports a workspace interaction that cannot be honoured because its owner is not present.
+    /// A silent no-op would leave the user believing the row responded.
+    /// </summary>
+    /// <param name="action">The action the user invoked.</param>
+    private void ReportWorkspaceStateUnavailable(string action)
+    {
+        if (this.operationResults is not { } publisher || this.statusReducer is not { } reducer)
+        {
+            this.logger.LogWarning("{Action} is unavailable: no workspace interaction service is composed.", action);
+            return;
+        }
+
+        _ = SceneOperationResults.PublishWarning(
+            publisher,
+            reducer,
+            RuntimeOperationKinds.SettingsApply,
+            FailureDomain.Settings,
+            DiagnosticCodes.SettingsPrefix + "WORKSPACE_STATE_UNAVAILABLE",
+            action + " is unavailable",
+            "The workspace interaction service is not composed in this window, so " + action.ToLowerInvariant() + " did nothing.",
+            new AffectedScope { DocumentId = this.Scene?.AttachedObject.Id });
     }
 }

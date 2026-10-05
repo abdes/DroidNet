@@ -20,6 +20,9 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
     protected readonly ObservableCollection<FolderAdapter> Folders = [];
     protected readonly ObservableCollection<ITreeItem> Content = [];
 
+    private bool isHiddenInEditor;
+    private bool isEffectivelyHiddenInEditor;
+
     protected LayoutItemAdapter()
     {
         // Subscribe to changes to keep the base TreeItemAdapter in sync
@@ -36,6 +39,36 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
     /// Gets the current children (Folders and Content) synchronously.
     /// </summary>
     public IEnumerable<ITreeItem> CurrentChildren => this.Folders.Cast<ITreeItem>().Concat(this.Content);
+
+    /// <summary>
+    /// Gets or sets a value indicating whether this row's node is explicitly hidden in the editing
+    /// viewports by the workspace ("Show in Editor").
+    /// </summary>
+    /// <remarks>
+    /// Workspace presentation state only: it never writes authored scene visibility and never
+    /// dirties the document. The Scene Explorer's row template binds the eye slot to this.
+    /// </remarks>
+    public bool IsHiddenInEditor
+    {
+        get => this.isHiddenInEditor;
+        set => _ = this.SetProperty(ref this.isHiddenInEditor, value);
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether this row is hidden because it, or an actual scene
+    /// ancestor, is in the workspace hidden set.
+    /// </summary>
+    /// <remarks>
+    /// Kept separate from <see cref="IsHiddenInEditor"/> because the two mean different things to
+    /// the user: the eye slot reflects the explicit entry (so a child of a hidden parent can be
+    /// shown on its own), while the dimmed row presentation follows the closure. Logical folders
+    /// never contribute to the closure.
+    /// </remarks>
+    public bool IsEffectivelyHiddenInEditor
+    {
+        get => this.isEffectivelyHiddenInEditor;
+        set => _ = this.SetProperty(ref this.isEffectivelyHiddenInEditor, value);
+    }
 
     /// <summary>
     /// Gets standardized Glyph logic: Open Folder if expanded/has items, else generic icon.
