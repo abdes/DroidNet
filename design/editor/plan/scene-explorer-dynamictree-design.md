@@ -1004,8 +1004,8 @@ defects were marked closed.
       owns the behaviour contract (R1–R9), the design decisions (DD1–DD4), the
       per-team action plans (E1–E3 engine, I1–I4 interop/runtime, W1–W7 editor)
       and the qualification cases. This row does not restate them. What binds
-      the plan: - **D8a** is a per-view hidden-node filter on `CompositionView`,
-      culled in `ScenePrepPipeline::PrepareView`. An editor-hidden node **does
+      the plan: - **D8a** is a scene-scoped hidden-node snapshot applied in
+      `ScenePrepPipeline::PrepareView`. An editor-hidden node **does
       not render and does not cast shadows** in editing views (R2) — it is
       dropped, so no draw, no depth, no shadow-caster source; the UE5.7 parity
       basis is `bHiddenEd`, which removes the actor and its direct shadows from

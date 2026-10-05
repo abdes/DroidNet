@@ -39,7 +39,7 @@ Two unrelated states share the word "visible". Conflating them is a defect
 | Owner                                             | WorldEditor workspace service                                                                                | Scene document / authoring commands               |
 | Storage                                           | `WorldEditor/SceneVisibility`, user-local, project-scoped ([settings §5.1](../lld/settings-architecture.md)) | Scene document, cooked output                     |
 | History / dirty / cook                            | Undo step; no document dirty; no cook                                                                        | Undo step, dirties document, cooks                |
-| Native representation                             | Per-view filter in `CompositionView`                                                                         | `SceneNodeFlags::kVisible` (tri-state, inherited) |
+| Native representation                             | Scene-scoped hidden snapshot applied in `PrepareView`                                                        | `SceneNodeFlags::kVisible` (tri-state, inherited) |
 | Effect on editor viewport                         | Node is **not visible in the editor viewport**: no geometry, no shadows cast, no viewport picking            | Node dropped from every pass and view             |
 | In-game / game viewports / cooked assets          | **100% visible and unaffected**                                                                              | Node is hidden in-game and in cooked assets       |
 | Other views (capture, validation, preview parity) | Unaffected (renders fully)                                                                                   | Affected (hidden)                                 |
@@ -90,7 +90,7 @@ only provides category preferences and hidden-set inputs to ED-M09 pick requests
   no translucency and no shadow-caster sources for that view.
 - [`CompositionView`](../../../projects/Oxygen.Engine/src/Oxygen/Vortex/CompositionView.h):
   Represents per-view rendering intent; currently has coarse feature masks
-  (`ViewFeatureMask`) but no per-view node exclusion filter.
+  (`ViewFeatureMask`) but no node exclusion filter.
 
 ### 3.3 Interop
 
@@ -144,8 +144,8 @@ Normative contract for D8a and D8b:
 
 ### DD1 — Where the engine applies the mask
 
-- **Decision (Approved):** Filter in `CompositionView`, dropped during `PrepareView`.
-- **Implementation:** An editing view passes its list of hidden `NodeHandle`s in `CompositionView`. In `ScenePrepPipeline::PrepareView`, matching nodes are skipped. They produce no geometry, no depth, and no shadow-caster sources for that view. Other views (capture, game) remain unaffected.
+- **Decision (Approved):** Carry a scene-scoped hidden snapshot into scene preparation and drop matches during `PrepareView`.
+- **Implementation:** The active scene's editing views share one immutable snapshot of hidden `NodeHandle`s (`std::shared_ptr<const std::vector<scene::NodeHandle>>` plus a revision), threaded through `ScenePrepContext`. In `ScenePrepPipeline::PrepareView`, matching nodes (and their resolved descendant closure) are skipped. They produce no geometry, no depth, and no shadow-caster sources for that view. Other views (capture, game) remain unaffected.
 - **Industry Parity Basis:** This follows standard industry architecture. In Unreal Engine (UE5.7), editor viewport actor hiding (`bHiddenEd` / "Hide Selected") completely removes the actor from that editor viewport, including its direct shadows, without mutating runtime `bHidden` or dirtying the level package, while remaining undoable. In Oxygen, an editor-hidden node simply does not render and does not cast shadows in the editing viewport.
 - **Alternatives Evaluated:**
   - _Node tag / component in scene graph:_ Rejected. Pollutes scene data with transient editor state; leaks into capture views and game runtime.
@@ -170,11 +170,11 @@ Normative contract for D8a and D8b:
 
 ### 6.1 Engine team (D8a)
 
-| ID  | Task                                                                                                                                                                                    | Files / Area                                  | Acceptance                                                                                                         |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| E1  | Add a per-view hidden-node filter to `CompositionView` (borrowed `std::span<const scene::NodeHandle>` of hidden roots plus revision).                                                   | `Vortex/CompositionView.h`, `FrameViewPacket` | Zero overhead when empty; no regression in existing tests.                                                         |
-| E2  | In `ScenePrepPipeline::PrepareView`, resolve descendant closure of hidden roots and skip matching nodes. Dropped nodes emit no render items and no shadow-caster sources for that view. | `ScenePrepPipeline.cpp`, `Extractors.h`       | Unit test: hidden mesh produces no draw calls and no shadow casters in the view; unmasked view still renders them. |
-| E3  | Document the per-view hidden filter in Vortex design documentation, citing the UE5.7 parity basis.                                                                                      | `design/vortex/`                              | Documentation review.                                                                                              |
+| ID  | Task                                                                                                                                                                                             | Files / Area                                                      | Acceptance                                                                                                         |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| E1  | Add a scene-scoped hidden-root snapshot (`std::shared_ptr<const std::vector<scene::NodeHandle>>` plus revision) threaded through `ScenePrepContext`; no borrowed span, no `ResolvedView` change. | `Vortex/ScenePrep/ScenePrepContext.h`, `Vortex/CompositionView.h` | Zero overhead when empty; no regression in existing tests.                                                         |
+| E2  | In `ScenePrepPipeline::PrepareView`, resolve descendant closure of hidden roots and skip matching nodes. Dropped nodes emit no render items and no shadow-caster sources for that view.          | `ScenePrepPipeline.cpp`, `Extractors.h`                           | Unit test: hidden mesh produces no draw calls and no shadow casters in the view; unmasked view still renders them. |
+| E3  | Document the scene-scoped hidden snapshot filter in Vortex design documentation, citing the UE5.7 parity basis.                                                                                  | `design/vortex/`                                                  | Documentation review.                                                                                              |
 
 ### 6.2 Interop and Runtime team (D8a)
 
@@ -220,7 +220,7 @@ flowchart TD
   end
 
   subgraph Engine_D8a [Engine & Runtime: D8a]
-    E1["E1 CompositionView Filter"] --> E2["E2 ScenePrep PrepareView Culling"]
+    E1["E1 Scene-Scoped Hidden Snapshot"] --> E2["E2 ScenePrep PrepareView Culling"]
     E2 --> I1["I1 EditorModule Command"]
     I1 --> I2["I2 NodeRegistry Lookup"]
     I2 --> I3["I3 OxygenWorld Interop"]
