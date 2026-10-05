@@ -95,6 +95,27 @@ public partial class DynamicTree : Control
     /// <remarks>The control does not assign domain meaning or display a menu automatically.</remarks>
     public event EventHandler<TreeItemContextRequestedEventArgs>? ItemContextRequested;
 
+    /// <summary>Settles a realized inline rename before another context action changes selection.</summary>
+    /// <returns>Whether all realized rename drafts committed successfully.</returns>
+    public async Task<bool> SettleRenameAsync()
+    {
+        if (this.itemsRepeater?.ItemsSourceView is not { } source)
+        {
+            return true;
+        }
+
+        for (var index = 0; index < source.Count; index++)
+        {
+            if ((this.itemsRepeater.TryGetElement(index) as FrameworkElement)?.FindName(TreeItemPart) is DynamicTreeItem row
+                && !await row.SettleRenameForContextAsync().ConfigureAwait(true))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /// <summary>Describes the logical position of a drop relative to its target row.</summary>
     internal enum DropZone
     {
@@ -1170,13 +1191,28 @@ public partial class DynamicTree : Control
 
     private void TreeItem_ContextRequested(UIElement sender, ContextRequestedEventArgs args)
     {
+        if (args.Handled)
+        {
+            return;
+        }
+
+        for (var source = args.OriginalSource as DependencyObject; source is not null; source = VisualTreeHelper.GetParent(source))
+        {
+            if (source is TextBox or RichEditBox)
+            {
+                return;
+            }
+        }
+
         if (sender is not FrameworkElement { DataContext: ITreeItem item } element)
         {
             return;
         }
 
         Windows.Foundation.Point? position = args.TryGetPosition(element, out var pointerPosition) ? pointerPosition : null;
-        this.ItemContextRequested?.Invoke(this, new TreeItemContextRequestedEventArgs(item, element, position));
+        var request = new TreeItemContextRequestedEventArgs(item, element, position);
+        this.ItemContextRequested?.Invoke(this, request);
+        args.Handled = request.Handled;
     }
 
     private void OnViewModelChanged(object? sender, ViewModelChangedEventArgs<DynamicTreeViewModel> args)

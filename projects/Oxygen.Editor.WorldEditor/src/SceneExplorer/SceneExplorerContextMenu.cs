@@ -46,6 +46,21 @@ public enum SceneExplorerCommandKind
 
     /// <summary>Collapse the primary row.</summary>
     Collapse,
+
+    /// <summary>Hide every captured node in editing viewports.</summary>
+    Hide,
+
+    /// <summary>Show every captured node in editing viewports.</summary>
+    Show,
+
+    /// <summary>Lock every captured node.</summary>
+    Lock,
+
+    /// <summary>Unlock every captured node.</summary>
+    Unlock,
+
+    /// <summary>Show all nodes of the captured scene in editing viewports.</summary>
+    ShowAll,
 }
 
 /// <summary>

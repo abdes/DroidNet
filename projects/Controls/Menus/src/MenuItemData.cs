@@ -24,6 +24,10 @@ public partial class MenuItemData : ObservableObject
     [ObservableProperty]
     public partial string Text { get; set; } = string.Empty;
 
+    /// <summary>Gets or sets accessible help explaining the action or its disabled reason.</summary>
+    [ObservableProperty]
+    public partial string? HelpText { get; set; }
+
     /// <summary>
     ///     Gets or sets the command to be executed when the menu item is selected.
     /// </summary>

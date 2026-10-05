@@ -228,6 +228,57 @@ public sealed class DocumentCloseWorkflowTests
         fixture.Results.Verify(publisher => publisher.Publish(It.IsAny<OperationResult>()), Times.Once);
     }
 
+    [TestMethod]
+    public async Task ProjectReplacement_LaterWindowVetoPreservesEveryWindow()
+    {
+        var promptCount = 0;
+        var fixture = new Fixture((items, _) =>
+        {
+            foreach (var item in items)
+            {
+                item.IsSelected = false;
+            }
+
+            return Task.FromResult(++promptCount == 1);
+        });
+        var otherWindow = new WindowId(2);
+        var first = await fixture.OpenAsync("First").ConfigureAwait(false);
+        var second = await fixture.OpenAsync("Second", window: otherWindow).ConfigureAwait(false);
+
+        using var transaction = await fixture.Service.PrepareCloseAllWindowsAsync().ConfigureAwait(false);
+
+        _ = transaction.Should().BeNull();
+        _ = fixture.Service.GetOpenDocuments(Window).Should().ContainSingle().Which.Should().BeSameAs(first.Metadata);
+        _ = fixture.Service.GetOpenDocuments(otherWindow).Should().ContainSingle().Which.Should().BeSameAs(second.Metadata);
+        _ = fixture.Participants.Should().OnlyContain(participant => participant.CloseCalls == 0 && !participant.IsPreparing);
+    }
+
+    [TestMethod]
+    public async Task ProjectReplacement_AllWindowsRemainOpenUntilApprovedCommit()
+    {
+        var fixture = new Fixture((items, _) =>
+        {
+            foreach (var item in items)
+            {
+                item.IsSelected = false;
+            }
+
+            return Task.FromResult(true);
+        });
+        var otherWindow = new WindowId(2);
+        var first = await fixture.OpenAsync("First").ConfigureAwait(false);
+        var second = await fixture.OpenAsync("Second", window: otherWindow).ConfigureAwait(false);
+        using var transaction = await fixture.Service.PrepareCloseAllWindowsAsync().ConfigureAwait(false);
+
+        _ = transaction.Should().NotBeNull();
+        _ = first.CloseCalls.Should().Be(0);
+        _ = second.CloseCalls.Should().Be(0);
+        _ = (await transaction!.CommitAsync().ConfigureAwait(false)).Should().BeTrue();
+        _ = fixture.Service.GetOpenDocuments(Window).Should().BeEmpty();
+        _ = fixture.Service.GetOpenDocuments(otherWindow).Should().BeEmpty();
+        _ = fixture.Participants.Should().OnlyContain(participant => participant.CloseCalls == 1);
+    }
+
     private sealed class Fixture
     {
         private readonly DocumentCloseCoordinator coordinator;
@@ -244,12 +295,12 @@ public sealed class DocumentCloseWorkflowTests
 
         public List<Participant> Participants { get; } = [];
 
-        public async Task<Participant> OpenAsync(string title, bool closable = true)
+        public async Task<Participant> OpenAsync(string title, bool closable = true, WindowId? window = null)
         {
             var metadata = new TestDocumentMetadata { Title = title, IsClosable = closable, IsDirty = true };
             var participant = new Participant(metadata);
-            _ = (await this.Service.OpenDocumentAsync(Window, metadata).ConfigureAwait(false)).Should().Be(metadata.DocumentId);
-            this.coordinator.Register(Window, metadata.DocumentId, participant);
+            _ = (await this.Service.OpenDocumentAsync(window ?? Window, metadata).ConfigureAwait(false)).Should().Be(metadata.DocumentId);
+            this.coordinator.Register(window ?? Window, metadata.DocumentId, participant);
             this.Participants.Add(participant);
             return participant;
         }

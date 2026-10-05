@@ -460,6 +460,24 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
     private void RegisterSceneMessages(HostingContext hosting)
     {
+        this.messenger.Register<SceneAuthoringUnloadedMessage>(this, (_, message) =>
+            _ = hosting.Dispatcher.DispatchAsync(() =>
+            {
+                if (this.isDisposed || this.activeScene?.Id != message.DocumentId)
+                {
+                    return;
+                }
+
+                this.items = [];
+                this.SubscribeToComponentCollections();
+                this.activeScene = null;
+                this.selectionContext = this.sceneSelectionService.GetContext(Guid.Empty);
+                this.RefreshPendingLiveSyncState();
+                this.environmentEditor.SetScene(null);
+                this.NotifySelectionRoutingChanged();
+                this.UpdateItemsCollection(this.items);
+            }));
+
         this.messenger.Register<SceneAuthoringLoadedMessage>(this, (_, message) =>
             _ = hosting.Dispatcher.DispatchAsync(() =>
             {

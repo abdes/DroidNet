@@ -27,6 +27,73 @@ public sealed class ContextMenuTests : VisualUserInterfaceTests
     public void RestoreFactory() => ContextMenu.CreateMenuHost = this.originalFactory!;
 
     [TestMethod]
+    public Task Show_KeyboardRequest_UsesAnchorPlacementAndNavigation() => EnqueueAsync(() =>
+    {
+        var trigger = new Button();
+        var harness = new HostHarness();
+        ContextMenu.CreateMenuHost = harness.InitializeHost;
+
+        _ = ContextMenu.Show(trigger, CreateMenuSource("Open"));
+
+        harness.HostMock.Verify(host => host.ShowAt(
+            trigger,
+            It.IsAny<Windows.Foundation.Point>(),
+            MenuNavigationMode.KeyboardInput), Times.Once);
+        ContextMenu.SetMenuSource(trigger, null);
+        return Task.CompletedTask;
+    });
+
+    [TestMethod]
+    public Task Show_PointerOrTouchRequest_UsesCapturedAnchorCoordinates() => EnqueueAsync(() =>
+    {
+        var trigger = new Button();
+        var harness = new HostHarness();
+        ContextMenu.CreateMenuHost = harness.InitializeHost;
+
+        _ = ContextMenu.Show(trigger, CreateMenuSource("Open"), new Windows.Foundation.Point(12, 23));
+
+        harness.HostMock.Verify(host => host.ShowAt(
+            trigger,
+            It.Is<Windows.Foundation.Point>(point => point.X == 13 && point.Y == 24),
+            MenuNavigationMode.PointerInput), Times.Once);
+        ContextMenu.SetMenuSource(trigger, null);
+        return Task.CompletedTask;
+    });
+
+    [TestMethod]
+    public Task Show_PointerRequest_UsesRequestedPositionAndNavigation() => EnqueueAsync(() =>
+    {
+        var trigger = new Button();
+        var harness = new HostHarness();
+        ContextMenu.CreateMenuHost = harness.InitializeHost;
+        var position = new Windows.Foundation.Point(24, 12);
+
+        _ = ContextMenu.Show(trigger, CreateMenuSource("Open"), position);
+
+        harness.HostMock.Verify(host => host.ShowAt(
+            trigger,
+            It.Is<Windows.Foundation.Point>(point => point.X == position.X + 1 && point.Y == position.Y + 1),
+            MenuNavigationMode.PointerInput), Times.Once);
+        ContextMenu.SetMenuSource(trigger, null);
+        return Task.CompletedTask;
+    });
+
+    [TestMethod]
+    public Task Close_RequestsProgrammaticDismissal() => EnqueueAsync(() =>
+    {
+        var trigger = new Button();
+        var harness = new HostHarness();
+        ContextMenu.CreateMenuHost = harness.InitializeHost;
+        ContextMenu.SetMenuSource(trigger, CreateMenuSource("Open"));
+
+        ContextMenu.Close(trigger);
+
+        harness.HostMock.Verify(host => host.Dismiss(MenuDismissKind.Programmatic), Times.Once);
+        ContextMenu.SetMenuSource(trigger, null);
+        return Task.CompletedTask;
+    });
+
+    [TestMethod]
     public Task SetMenuSource_FirstAssignmentCreatesHostWithAdapter() => EnqueueAsync(() =>
     {
         var trigger = new Button();

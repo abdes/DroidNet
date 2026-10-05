@@ -171,6 +171,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         host.Actions.SetRowHovered(false);
         AssertSlot(Button(host.Actions, "EyeButton"), suppressed: false, hovered: false);
         AssertSlot(Button(host.Actions, "LockButton"), locked, hovered: false);
+        host.Fixture.Sync.Verify(value => value.GetDocumentScene(It.IsAny<Oxygen.Editor.World.Documents.SceneDocumentMetadata>()), Times.AtLeastOnce);
         host.Fixture.Sync.VerifyNoOtherCalls();
     });
 
@@ -304,9 +305,9 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
             settings => settings.SaveSettingAsync(
                 WorkspaceInteractionService.Key,
                 It.Is<WorkspaceInteractionService.ProjectInteraction>(state =>
-                    state.SceneId == host.Node.Scene.Id
-                    && state.HiddenNodeIds.Contains(host.Node.Id)
-                    && state.LockedNodeIds.Contains(host.Node.Id)),
+                    state.Scenes.ContainsKey(host.Node.Scene.Id)
+                    && state.Scenes[host.Node.Scene.Id].HiddenNodeIds.Contains(host.Node.Id)
+                    && state.Scenes[host.Node.Scene.Id].LockedNodeIds.Contains(host.Node.Id)),
                 It.IsAny<SettingContext>(),
                 It.IsAny<IProgress<SettingsProgress>>(),
                 It.IsAny<CancellationToken>()),

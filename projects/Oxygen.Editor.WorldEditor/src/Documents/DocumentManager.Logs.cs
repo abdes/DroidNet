@@ -82,4 +82,7 @@ public partial class DocumentManager
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to persist last opened scene {SceneName} for project {ProjectName}.")]
     private partial void LogSceneUsageUpdateFailed(Exception exception, string sceneName, string projectName);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Scene replacement failed for {SceneId}. Reload the previous saved scene if its document was retired.")]
+    private partial void LogSceneReplacementFailed(Exception exception, Guid sceneId);
 }

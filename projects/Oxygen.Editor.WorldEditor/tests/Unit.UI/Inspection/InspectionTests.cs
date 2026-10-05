@@ -160,7 +160,7 @@ public sealed partial class InspectionTests : DroidNet.Tests.VisualUserInterface
         var engine = new Mock<IEngineService>();
         _ = engine.Setup(value => value.ReleaseDocumentSurfacesAsync(It.IsAny<Guid>())).Returns(ValueTask.CompletedTask);
         using var host = new DocumentHostViewModel(documents.Object, views.Object, engine.Object, results, Mock.Of<IStatusReducer>(), container, new DocumentCloseCoordinator(Mock.Of<IDocumentClosePrompt>(), results), Mock.Of<IWindowManagerService>(), windowId);
-        using var manager = new DocumentManager(documents.Object, messenger, projects, Mock.Of<IProjectUsageService>(), Mock.Of<IMaterialDocumentService>(), windowId);
+        using var manager = new DocumentManager(documents.Object, messenger, projects, Mock.Of<IProjectUsageService>(), Mock.Of<IMaterialDocumentService>(), windowId, Mock.Of<IProjectManagerService>(), Mock.Of<Oxygen.Editor.World.Services.ISceneEngineSync>());
         await LoadTestContentAsync(new DocumentHostView { ViewModel = host }).ConfigureAwait(true);
         var scope = new Uri("asset:///Content/Materials");
         _ = (await messenger.Send(new OpenCookedInspectionRequestMessage(project, scope, validate: false)).Response.ConfigureAwait(true)).Should().BeTrue();

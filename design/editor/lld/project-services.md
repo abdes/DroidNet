@@ -181,11 +181,12 @@ absent or unparseable IDs leave the default unset, never guessed.
 Workspace startup honors an explicit activation scene request before the
 configured default. The approved legacy recovery path may migrate a resolvable
 `LastOpenedScene` once when no default exists, persisting the migrated identity.
-Usage history never overrides an existing default. The in-memory first-scene
-recovery accessor is not a startup-selection policy. An invalid/missing default
+Usage history never overrides an existing default. `ActiveScene` is only the
+explicitly accepted editable graph, or null after retirement; it never infers
+a scene from list order. An invalid/missing default
 must remain a visible, recoverable configuration/load failure with explicit
 Open Scene available; it must not silently load a discovered scene. Guarded
-cross-scene replacement qualification remains C30/T8 in the
+cross-scene replacement qualification is closed under C30/T8 in the
 [Explorer plan](../plan/scene-explorer-dynamictree-design.md).
 
 Rules:

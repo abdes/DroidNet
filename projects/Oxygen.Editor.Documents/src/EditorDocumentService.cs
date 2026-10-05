@@ -97,6 +97,55 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null,
         => this.PrepareCloseAsync(windowId, this.GetOpenDocuments(windowId), isWorkspaceClose: true, force: false);
 
     /// <inheritdoc/>
+    public Task<DocumentCloseTransaction?> PrepareCloseDocumentAsync(WindowId windowId, Guid documentId)
+        => this.windowDocs.TryGetValue(windowId, out var documents) && documents.TryGetValue(documentId, out var metadata)
+            ? this.PrepareCloseAsync(windowId, [metadata], isWorkspaceClose: false, force: false)
+            : Task.FromResult<DocumentCloseTransaction?>(null);
+
+    /// <inheritdoc/>
+    public async Task<DocumentCloseTransaction?> PrepareCloseAllWindowsAsync()
+    {
+        var prepared = new List<DocumentCloseTransaction>();
+        var retained = false;
+        try
+        {
+            foreach (var window in this.windowDocs.Keys.ToArray())
+            {
+                var transaction = await this.PrepareCloseAllAsync(window).ConfigureAwait(true);
+                if (transaction is null)
+                {
+                    return null;
+                }
+
+                prepared.Add(transaction);
+            }
+
+            retained = true;
+            return new DocumentCloseTransaction(
+                async () =>
+                {
+                    foreach (var transaction in prepared)
+                    {
+                        if (!await transaction.CommitAsync().ConfigureAwait(true))
+                        {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                },
+                () => prepared.ForEach(transaction => transaction.Dispose()));
+        }
+        finally
+        {
+            if (!retained)
+            {
+                prepared.ForEach(transaction => transaction.Dispose());
+            }
+        }
+    }
+
+    /// <inheritdoc/>
     public Task<IDocumentMetadata?> DetachDocumentAsync(WindowId windowId, Guid documentId)
     {
         if (this.closingWindows.Contains(windowId))

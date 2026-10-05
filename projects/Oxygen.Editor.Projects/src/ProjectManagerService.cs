@@ -102,27 +102,69 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         Justification = "all failures are logged and propagated as false return value")]
     public async Task<bool> LoadProjectAsync(IProjectInfo projectInfo)
     {
+        var staged = await this.StageProjectLoadAsync(projectInfo).ConfigureAwait(true);
+        if (staged is null)
+        {
+            return false;
+        }
+
+        _ = this.AcceptProjectLoad(staged);
+        return true;
+    }
+
+    /// <inheritdoc/>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Project staging preserves the active project and reports source failures.")]
+    public async Task<ProjectLoadSnapshot?> StageProjectLoadAsync(IProjectInfo projectInfo, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(projectInfo);
+        cancellationToken.ThrowIfCancellationRequested();
         Debug.Assert(projectInfo.Location is not null, "should not load a project with an invalid project info");
 
         if (projectInfo.Location == null)
         {
             this.CouldNotLoadProject("__null__", "cannot not load project from `null` location");
-            return false;
+            return null;
         }
 
+        var previousProject = this.CurrentProject;
         var project = new Project(projectInfo) { Name = projectInfo.Name, Id = projectInfo.Id };
         try
         {
             await this.LoadProjectScenesAsync(project).ConfigureAwait(true);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
             this.CouldNotLoadProject(projectInfo.Location, $"failed to load project scenes ({ex.Message})");
-            return false;
+            return null;
         }
 
-        this.CurrentProject = project;
-        return true;
+        return new(this, project, previousProject);
+    }
+
+    /// <inheritdoc/>
+    public bool IsProjectLoadCurrent(ProjectLoadSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return ReferenceEquals(snapshot.Owner, this) && !snapshot.Accepted
+            && ReferenceEquals(snapshot.PreviousProject, this.CurrentProject);
+    }
+
+    /// <inheritdoc/>
+    public IProject AcceptProjectLoad(ProjectLoadSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (!this.IsProjectLoadCurrent(snapshot))
+        {
+            throw new InvalidOperationException("The staged project is not available for activation.");
+        }
+
+        snapshot.Accepted = true;
+        return this.CurrentProject = snapshot.Project;
     }
 
     /// <inheritdoc />

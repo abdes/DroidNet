@@ -55,6 +55,26 @@ public interface IProjectManagerService
     /// </returns>
     public Task<bool> LoadProjectAsync(IProjectInfo projectInfo);
 
+    /// <summary>Reads project and scene metadata without replacing the active project.</summary>
+    /// <param name="projectInfo">The validated project manifest.</param>
+    /// <param name="cancellationToken">Cancels staging without changing the accepted project.</param>
+    /// <returns>Owned project metadata, or null when staging fails.</returns>
+    public Task<ProjectLoadSnapshot?> StageProjectLoadAsync(IProjectInfo projectInfo, CancellationToken cancellationToken = default);
+
+    /// <summary>Tests whether a staged project may still replace the accepted project.</summary>
+    /// <param name="snapshot">The staged project.</param>
+    /// <returns>
+    ///     <see langword="true"/> when the snapshot is owned by this service, not yet accepted, and the
+    ///     accepted project has not changed since staging began.
+    /// </returns>
+    public bool IsProjectLoadCurrent(ProjectLoadSnapshot snapshot);
+
+    /// <summary>Accepts a staged project after the host's document close guards approve replacement.</summary>
+    /// <param name="snapshot">The staged project owned by this service.</param>
+    /// <returns>The newly active project.</returns>
+    /// <exception cref="InvalidOperationException">The snapshot is foreign, already accepted, or stale.</exception>
+    public IProject AcceptProjectLoad(ProjectLoadSnapshot snapshot);
+
     /// <summary>
     /// Loads the entities of a scene asynchronously.
     /// </summary>
@@ -63,6 +83,21 @@ public interface IProjectManagerService
     /// A task that represents the asynchronous operation. The task result contains the loaded scene if successful; otherwise, <see langword="null"/>.
     /// </returns>
     public Task<Scene?> LoadSceneAsync(Scene scene);
+
+    /// <summary>Validates a source without retaining another editable graph or changing the accepted scene.</summary>
+    /// <param name="scene">The scene metadata whose source is required.</param>
+    /// <param name="cancellationToken">Cancels staging without changing authoring or the save baseline.</param>
+    /// <returns>Owned staged data, or null when the source is invalid or unavailable.</returns>
+    public Task<SceneLoadSnapshot?> StageSceneLoadAsync(Scene scene, CancellationToken cancellationToken = default);
+
+    /// <summary>Installs staged data after the document owner approves retiring its previous graph.</summary>
+    /// <param name="snapshot">The still-current staged source owned by this service.</param>
+    /// <returns>The new editable graph.</returns>
+    public Scene AcceptSceneLoad(SceneLoadSnapshot snapshot);
+
+    /// <summary>Replaces a retired editable graph with scene metadata and clears its active identity.</summary>
+    /// <param name="scene">The editable graph whose document lifetime ended.</param>
+    public void RetireScene(Scene scene);
 
     /// <summary>Gets the persisted source identity last acknowledged for a scene.</summary>
     /// <param name="scene">The scene whose saved source is required.</param>

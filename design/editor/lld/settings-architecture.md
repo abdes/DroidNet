@@ -74,9 +74,9 @@ mounts, cooked output or validation requests.
 
 Lock is editor editability state, independent of Hide and authored visibility;
 it is not undoable. Picking categories are inputs to viewport picking, not tree
-filters. The accepted D4 column-placement clause is still unimplemented and
-tracked by C49 in the [Explorer plan](../plan/scene-explorer-dynamictree-design.md);
-the existing settings payload does not provide that UI or qualify it.
+filters. Explorer status indicators use two fixed-width slots, Eye then Lock.
+The chevron/icon/label area fills the remaining width. There is no configurable
+column ordering, resizing or placement state.
 
 Hiding a node drops it and its actual scene descendants from every editing
 viewport of the active scene: no geometry, no depth and no cast shadow, so the

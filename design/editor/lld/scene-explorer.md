@@ -282,5 +282,7 @@ ED-M03 scene explorer is complete when:
   same-project scene switch retains Copy and cancels Cut; a successful project
   switch clears only the Oxygen clipboard. Cancelled switches retain the
   prior payload/staging. These lifetime rules share the command/history owner;
-  guarded-switch implementation and verification remain C30/T8 in the plan.
+  guarded-switch implementation and verification are closed under C30/T8 in
+  the plan. Node/folder/mixed snapshots preserve visual hierarchy and share
+  atomic destination validation, authoring history and lineage-driven reparenting.
 - Preserve-world-transform reparenting is not ED-M03 default.

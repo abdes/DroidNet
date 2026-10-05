@@ -17,8 +17,8 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// <remarks>
 /// These commands are the single authority for explorer hierarchy mutation: each validates the
 /// complete request, commits graph and layout together, advances history and dirty state
-/// synchronously, then requests native convergence. Folders are grouping-only and never change
-/// scene parenting or transforms.
+/// synchronously, then requests native convergence. Folder deletion is grouping-only; folder
+/// moves across scene scopes reparent the affected hierarchies while retaining their local transforms.
 /// </remarks>
 public sealed partial class SceneDocumentCommandService
 {
@@ -654,37 +654,19 @@ public sealed partial class SceneDocumentCommandService
     }
 
     /// <inheritdoc />
-    public Task<SceneCommandResult> MoveFolderToParentAsync(
+    public async Task<SceneCommandResult> MoveFolderToParentAsync(
         SceneDocumentCommandContext context,
         Guid folderId,
         Guid? newParentFolderId)
     {
-        using var authoring = EnterAuthoring(context);
-        if (authoring is null)
+        var captured = this.CaptureExplorerClipboard(context, [], [folderId]);
+        if (!captured.Succeeded || captured.Value is not { } payload)
         {
-            return Task.FromResult(new SceneCommandResult(Succeeded: false));
+            return new SceneCommandResult(Succeeded: false, captured.OperationResultId);
         }
 
-        try
-        {
-            EnsureExplorerLayout(context.Scene);
-            var previousLayout = this.sceneOrganizer.CloneLayout(context.Scene.ExplorerLayout);
-            _ = this.sceneOrganizer.MoveFolderToParent(folderId, newParentFolderId, context.Scene);
-            this.RecordLayoutHistory(context, "Move folder", previousLayout, context.Scene.ExplorerLayout);
-            _ = this.MarkDirtyAsync(context);
-            return Task.FromResult(SceneCommandResult.Success);
-        }
-        catch (Exception ex)
-        {
-            var operationResultId = this.PublishSceneFailure(
-                SceneOperationKinds.ExplorerLayoutMoveNode,
-                DiagnosticCodes.ScenePrefix + "MOVE_FOLDER_FAILED",
-                "Folder was not moved",
-                ex.Message,
-                context,
-                ex);
-            return Task.FromResult(new SceneCommandResult(Succeeded: false, operationResultId));
-        }
+        return await this.PasteExplorerItemsAsync(context, payload, cut: true,
+            parentNodeId: null, newParentFolderId, preserveWorld: false).ConfigureAwait(true);
     }
 
     /// <inheritdoc />

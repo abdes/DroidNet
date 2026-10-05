@@ -14,4 +14,14 @@ public interface IEditorDocumentService : IDocumentService
     /// <param name="windowId">The workspace window.</param>
     /// <returns>A transaction to commit after other close guards approve, or null when vetoed.</returns>
     public Task<DocumentCloseTransaction?> PrepareCloseAllAsync(WindowId windowId);
+
+    /// <summary>Prepares all workspace windows before the host replaces the active project.</summary>
+    /// <returns>A transaction retaining all old documents until committed, or null when any guard vetoes replacement.</returns>
+    public Task<DocumentCloseTransaction?> PrepareCloseAllWindowsAsync();
+
+    /// <summary>Prepares a document for replacement without retiring it until the caller commits.</summary>
+    /// <param name="windowId">The owning workspace.</param>
+    /// <param name="documentId">The document being replaced.</param>
+    /// <returns>The guarded close transaction, or null when unavailable or vetoed.</returns>
+    public Task<DocumentCloseTransaction?> PrepareCloseDocumentAsync(WindowId windowId, Guid documentId);
 }

@@ -68,12 +68,12 @@ public sealed partial class SceneExplorerAuthoringTests
     }
 
     [TestMethod]
-    public async Task CopyItemsAsync_SameProjectSequentialScene_PastesCapturedWorldPoseIntoDestinationOnly()
+    public async Task CopyItemsAsync_SameProjectSequentialScene_PastesCapturedLocalPoseIntoDestinationOnly()
     {
         var harness = new AuthoringHarness(out var sourceScene, out var source);
         var destination = harness.AddScene("Destination");
         var sourceTransform = ArrangeParentedClipboardSource(sourceScene, source);
-        var capturedWorld = SceneTransformMath.WorldMatrix(source);
+        var capturedWorld = SceneTransformMath.LocalMatrix(sourceTransform);
         SceneDocumentCommandContext? pasteContext = null;
         SceneNodeData? pasted = null;
         _ = harness.Commands
@@ -119,7 +119,7 @@ public sealed partial class SceneExplorerAuthoringTests
     }
 
     [TestMethod]
-    public async Task CopyItemsAsync_UnrepresentableRootWorldPose_RetainsPreviousSnapshotWithoutPartialCapture()
+    public async Task CopyItemsAsync_UnrepresentableWorldPose_CapturesEntirePreserveLocalBatch()
     {
         var harness = new AuthoringHarness(out var scene, out var node);
         var parent = new SceneNode(scene) { Name = "Scaled parent" };
@@ -128,10 +128,10 @@ public sealed partial class SceneExplorerAuthoringTests
         child.Components.OfType<TransformComponent>().Single().LocalRotation = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 4f);
         parent.AddChild(child);
         scene.RootNodes.Add(parent);
-        SceneNodeData? pasted = null;
+        IReadOnlyList<SceneNodeData>? pasted = null;
         _ = harness.Commands
             .Setup(value => value.DuplicateNodesFromDataAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<SceneNodeData>>(), null, null, null))
-            .Callback<SceneDocumentCommandContext, IReadOnlyList<SceneNodeData>, Guid?, Guid?, Guid?>((_, data, _, _, _) => pasted = data.Single())
+            .Callback<SceneDocumentCommandContext, IReadOnlyList<SceneNodeData>, Guid?, Guid?, Guid?>((_, data, _, _, _) => pasted = data)
             .ReturnsAsync(SceneCommandResults.Success<IReadOnlyList<SceneNode>>([]));
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
@@ -146,8 +146,9 @@ public sealed partial class SceneExplorerAuthoringTests
         await explorer.PasteItemsAsync(explorer.Scene).ConfigureAwait(false);
 
         _ = pasted.Should().NotBeNull();
-        _ = pasted!.Id.Should().Be(node.Id);
-        _ = pasted.Name.Should().Be("Node", "a rejected new capture must retain the old immutable payload");
+        _ = pasted!.Select(data => data.Id).Should().Equal(node.Id, child.Id);
+        _ = pasted[0].Name.Should().Be("Edited after Copy");
+        _ = pasted[1].Name.Should().Be("Rotated child");
         _ = explorer.CurrentClipboardState.Should().Be(ClipboardState.Copied);
         _ = explorer.UndoStack.Should().BeEmpty();
     }

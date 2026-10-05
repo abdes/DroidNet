@@ -505,7 +505,7 @@ public sealed partial class SceneDocumentCommandService(
     private static SceneAuthoringGate.Operation? EnterAuthoring(SceneDocumentCommandContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        return SceneAuthoringGate.TryEnter(context.Scene);
+        return context.Metadata.IsSceneLoadPending ? null : SceneAuthoringGate.TryEnter(context.Scene);
     }
 
     private static async Task CompletePublicationAsync(Task metadata, Task projection)

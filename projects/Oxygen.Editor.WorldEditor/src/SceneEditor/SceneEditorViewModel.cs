@@ -259,6 +259,10 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.sceneEngineSync.CloseDocument(this.Metadata);
         UndoRedo.GetHistory(this.Metadata.DocumentId).Clear();
         replacement?.Retire();
+        if (this.scene is not null)
+        {
+            this.container.Resolve<Oxygen.Editor.Projects.IProjectManagerService>().RetireScene(this.scene);
+        }
     }
 
     /// <inheritdoc/>

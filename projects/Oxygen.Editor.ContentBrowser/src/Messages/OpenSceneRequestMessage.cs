@@ -11,7 +11,7 @@ namespace Oxygen.Editor.ContentBrowser.Messages;
 ///     Message sent when a scene needs to be opened in the editor.
 /// </summary>
 /// <param name="scene">The <see cref="Scene"/> instance to be opened in the editor.</param>
-public class OpenSceneRequestMessage(Scene scene) : RequestMessage<bool>
+public class OpenSceneRequestMessage(Scene scene) : AsyncRequestMessage<bool>
 {
     /// <summary>
     ///     Gets the <see cref="Scene"/> instance to be opened in the editor.

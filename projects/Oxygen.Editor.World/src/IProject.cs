@@ -26,7 +26,11 @@ public interface IProject : INotifyPropertyChanging, INotifyPropertyChanged
     public IList<Scene> Scenes { get; }
 
     /// <summary>
-    /// Gets or sets the active scene for the project.
+    /// Gets or sets the scene whose editable graph is accepted for editing.
     /// </summary>
+    /// <value>
+    ///     The accepted scene, or <see langword="null"/> when no scene graph is accepted, including
+    ///     after the accepted graph was retired.
+    /// </value>
     public Scene? ActiveScene { get; set; }
 }

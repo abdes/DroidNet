@@ -2,150 +2,224 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using CommunityToolkit.Mvvm.Input;
+using DroidNet.Controls;
+using DroidNet.Controls.Menus;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Windows.Foundation;
+using static DroidNet.Controls.DynamicTreeViewModel;
 
 namespace Oxygen.Editor.World.SceneExplorer;
 
-/// <summary>
-///     A View that shows a hierarchical layout of a <see cref="World.Scene">scene</see>, which
-///     in turn can hold multiple <see cref="World.SceneNode">entities</see>.
-/// </summary>
+/// <summary>A hierarchical authoring view of a scene's nodes and logical folders.</summary>
 [ViewModel(typeof(SceneExplorerViewModel))]
 public sealed partial class SceneExplorerView
 {
-    /// <summary>
-    ///     Initializes a new instance of the <see cref="SceneExplorerView" /> class.
-    /// </summary>
+    private readonly DispatcherTimer contextValidationTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
+    private SceneExplorerViewModel? subscribedViewModel;
+    private FrameworkElement? contextAnchor;
+    private int contextRequestGeneration;
+
+    /// <summary>Initializes a new instance of the <see cref="SceneExplorerView"/> class.</summary>
     public SceneExplorerView()
     {
         this.InitializeComponent();
         this.Loaded += this.SceneExplorerView_Loaded;
         this.Unloaded += this.SceneExplorerView_Unloaded;
+        this.ExplorerTree.ItemContextRequested += this.ExplorerTree_ItemContextRequested;
+        this.ExplorerTree.ContextRequested += this.ExplorerTree_ContextRequested;
+        this.contextValidationTimer.Tick += this.ContextValidationTimer_Tick;
+    }
+
+    private static bool IsTextContext(DependencyObject? source)
+    {
+        for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is TextBox or RichEditBox)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void SceneExplorerView_Loaded(object sender, RoutedEventArgs e)
     {
-        if (this.ViewModel is not null)
+        this.subscribedViewModel = this.ViewModel;
+        if (this.subscribedViewModel is { } model)
         {
-            this.ViewModel.RenameRequested += this.ViewModel_RenameRequested;
+            model.RenameRequested += this.ViewModel_RenameRequested;
+            model.ContextMenuInvalidated += this.ViewModel_ContextMenuInvalidated;
         }
     }
 
     private void SceneExplorerView_Unloaded(object sender, RoutedEventArgs e)
     {
-        if (this.ViewModel is not null)
+        this.CloseContextMenu();
+        if (this.subscribedViewModel is { } model)
         {
-            this.ViewModel.RenameRequested -= this.ViewModel_RenameRequested;
+            model.RenameRequested -= this.ViewModel_RenameRequested;
+            model.ContextMenuInvalidated -= this.ViewModel_ContextMenuInvalidated;
         }
+
+        this.subscribedViewModel = null;
+    }
+
+    private async void ExplorerTree_ItemContextRequested(object? sender, TreeItemContextRequestedEventArgs args)
+    {
+        // Consume synchronously: the asynchronous selection/rename settlement must not bubble a root menu.
+        args.Handled = true;
+        await this.OpenContextMenuAsync(args.Item, args.Anchor, args.Position).ConfigureAwait(true);
+    }
+
+    private async void ExplorerTree_ContextRequested(UIElement sender, ContextRequestedEventArgs args)
+    {
+        if (args.Handled || IsTextContext(args.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+
+        args.Handled = true;
+        Point? position = args.TryGetPosition(this.ExplorerTree, out var pointer) ? pointer : null;
+        await this.OpenContextMenuAsync(null, this.ExplorerTree, position).ConfigureAwait(true);
+    }
+
+    private async Task OpenContextMenuAsync(ITreeItem? item, FrameworkElement anchor, Point? position)
+    {
+        this.CloseContextMenu();
+        var generation = ++this.contextRequestGeneration;
+        var model = this.ViewModel;
+        if (model is null || !await this.ExplorerTree.SettleRenameAsync().ConfigureAwait(true)
+            || !await model.PrepareContextMenuAsync(item).ConfigureAwait(true)
+            || generation != this.contextRequestGeneration || !ReferenceEquals(model, this.ViewModel)
+            || (item is not null && !ReferenceEquals(anchor.DataContext, item)))
+        {
+            return;
+        }
+
+        var source = model.BuildContextMenuSource(item);
+        if (!source.Items.Any())
+        {
+            return;
+        }
+
+        if (item is not null)
+        {
+            _ = model.FocusItem(item, RequestOrigin.Programmatic);
+        }
+
+        var menuAnchor = (anchor.FindName(DynamicTree.TreeItemPart) as FrameworkElement) ?? anchor;
+        if (position is { } pointer && !ReferenceEquals(menuAnchor, anchor))
+        {
+            position = anchor.TransformToVisual(menuAnchor).TransformPoint(pointer);
+        }
+
+        if (menuAnchor is Control control)
+        {
+            _ = control.Focus(FocusState.Programmatic);
+        }
+
+        this.contextAnchor = menuAnchor;
+        menuAnchor.DataContextChanged += this.ContextAnchor_DataContextChanged;
+        menuAnchor.Unloaded += this.ContextAnchor_Unloaded;
+        _ = ContextMenu.Show(menuAnchor, source, position);
+        this.contextValidationTimer.Start();
+    }
+
+    private void CloseContextMenu()
+    {
+        this.contextRequestGeneration++;
+        this.contextValidationTimer.Stop();
+        if (this.contextAnchor is not { } anchor)
+        {
+            return;
+        }
+
+        anchor.DataContextChanged -= this.ContextAnchor_DataContextChanged;
+        anchor.Unloaded -= this.ContextAnchor_Unloaded;
+        ContextMenu.Close(anchor);
+        ContextMenu.SetMenuSource(anchor, null);
+        this.contextAnchor = null;
+    }
+
+    private void ViewModel_ContextMenuInvalidated(object? sender, EventArgs args) => this.CloseContextMenu();
+
+    private void ContextAnchor_DataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args) => this.CloseContextMenu();
+
+    private void ContextAnchor_Unloaded(object sender, RoutedEventArgs args) => this.CloseContextMenu();
+
+    private void ContextValidationTimer_Tick(object? sender, object args)
+    {
+        if (this.contextAnchor is not { } anchor || !ContextMenu.IsOpen(anchor))
+        {
+            this.CloseContextMenu();
+            return;
+        }
+
+        // Project activation and document retirement can happen without a tree selection notification.
+        this.ViewModel?.RefreshContextActions();
     }
 
     private async void ViewModel_RenameRequested(object? sender, RenameRequestedEventArgs? args)
     {
-        var item = args?.Item;
-        if (item is null)
+        this.CloseContextMenu();
+        if (args?.Item is { } item)
         {
-            return;
+            _ = await this.ExplorerTree.BeginRenameAsync(item).ConfigureAwait(true);
         }
-
-        var dialog = new ContentDialog
-        {
-            Title = "Rename",
-            PrimaryButtonText = "OK",
-            CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Primary,
-        };
-
-        var tb = new TextBox() { Text = item.Label };
-        dialog.Content = tb;
-
-        // Pressing Enter commits the draft and closes the dialog, matching the OK button.
-        var confirmed = false;
-        tb.KeyDown += (_, e) =>
-        {
-            if (e.Key == Windows.System.VirtualKey.Enter)
-            {
-                e.Handled = true;
-                confirmed = true;
-                dialog.Hide();
-            }
-        };
-
-        if (this.XamlRoot is not null)
-        {
-            dialog.XamlRoot = this.XamlRoot;
-        }
-
-        var result = await dialog.ShowAsync();
-        if (result != ContentDialogResult.Primary && !confirmed)
-        {
-            return;
-        }
-
-        var newName = tb.Text?.Trim() ?? string.Empty;
-        if (string.Equals(newName, item.Label, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        _ = await this.ViewModel!.CommitRenameAsync(item, newName).ConfigureAwait(false);
     }
+
+    private bool ShouldConsumeWorkspaceAccelerator()
+        => this.contextAnchor is { } anchor && ContextMenu.IsOpen(anchor);
+
+    private bool HasTextFocus()
+        => this.XamlRoot is { } root && IsTextContext(FocusManager.GetFocusedElement(root) as DependencyObject);
 
     private async void UndoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        _ = sender; // unused
-        args.Handled = true;
+        if (this.HasTextFocus())
+        {
+            return;
+        }
 
-        await this.ViewModel!.UndoCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+        args.Handled = true;
+        if (!this.ShouldConsumeWorkspaceAccelerator() && this.ViewModel is { } model)
+        {
+            await model.UndoCommand.ExecuteAsync(null).ConfigureAwait(true);
+        }
     }
 
     private async void RedoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        _ = sender; // unused
-        args.Handled = true;
+        if (this.HasTextFocus())
+        {
+            return;
+        }
 
-        await this.ViewModel!.RedoCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+        args.Handled = true;
+        if (!this.ShouldConsumeWorkspaceAccelerator() && this.ViewModel is { } model)
+        {
+            await model.RedoCommand.ExecuteAsync(null).ConfigureAwait(true);
+        }
     }
 
     private async void DeleteInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        _ = sender; // unused
+        if (this.HasTextFocus())
+        {
+            return;
+        }
+
         args.Handled = true;
-
-        await this.ViewModel!.RemoveSelectedItemsCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
-    }
-
-    // UI event handlers for toolbar buttons added in XAML. These invoke the typed
-    // ViewModel commands directly rather than through reflection.
-    private void NewFolderFromSelection_Click(object? sender, RoutedEventArgs e)
-    {
-        _ = sender;
-        this.ViewModel?.CreateFolderCommand.Execute(null);
-    }
-
-    private void Cut_Click(object? sender, RoutedEventArgs e)
-    {
-        _ = sender;
-        this.ViewModel?.CutCommand.Execute(null);
-    }
-
-    private void Copy_Click(object? sender, RoutedEventArgs e)
-    {
-        _ = sender;
-        this.ViewModel?.CopyCommand.Execute(null);
-    }
-
-    private void Paste_Click(object? sender, RoutedEventArgs e)
-    {
-        _ = sender;
-        this.ViewModel?.PasteCommand.Execute(null);
-    }
-
-    private void Rename_Click(object? sender, RoutedEventArgs e)
-    {
-        _ = sender;
-        this.ViewModel?.RenameSelectedCommand.Execute(null);
+        if (!this.ShouldConsumeWorkspaceAccelerator() && this.ViewModel?.DeleteAction is IAsyncRelayCommand command
+            && command.CanExecute(null))
+        {
+            await command.ExecuteAsync(null).ConfigureAwait(true);
+        }
     }
 }

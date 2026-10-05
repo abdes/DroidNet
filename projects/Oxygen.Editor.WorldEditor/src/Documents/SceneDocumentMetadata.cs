@@ -27,6 +27,9 @@ public class SceneDocumentMetadata(Guid? documentId = null) : BaseDocumentMetada
     /// </summary>
     public SceneViewLayout Layout { get; set; } = SceneViewLayout.OnePane;
 
+    /// <summary>Gets or sets whether the document owner is installing an approved staged source.</summary>
+    internal bool IsSceneLoadPending { get; set; }
+
     /// <inheritdoc/>
     public override bool IsClosable { get => false; set => throw new NotSupportedException(); }
 }

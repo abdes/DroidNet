@@ -18,6 +18,37 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// </summary>
 public interface ISceneDocumentCommandService
 {
+    /// <summary>Captures selected nodes and folders without authoring or reducing mixed selections.</summary>
+    /// <param name="context">The source document.</param>
+    /// <param name="nodeIds">Selected node identities in order.</param>
+    /// <param name="folderIds">Selected folder identities in order.</param>
+    /// <returns>The owned payload, or a published validation failure.</returns>
+    public SceneValueCommandResult<SceneExplorerClipboard> CaptureExplorerClipboard(
+        SceneDocumentCommandContext context, IReadOnlyList<Guid> nodeIds, IReadOnlyList<Guid> folderIds);
+
+    /// <summary>Validates the entire clipboard transaction without mutation.</summary>
+    /// <param name="context">The destination document.</param>
+    /// <param name="payload">The captured payload.</param>
+    /// <param name="cut">Whether original identities are moved rather than duplicated.</param>
+    /// <param name="parentNodeId">Destination scene scope.</param>
+    /// <param name="parentFolderId">Destination grouping.</param>
+    /// <param name="preserveWorld">Explicit preserve-world intent; false is the Explorer default.</param>
+    /// <returns>A disabled reason, or null when the entire batch is valid.</returns>
+    public string? ValidateExplorerPaste(SceneDocumentCommandContext context, SceneExplorerClipboard payload,
+        bool cut, Guid? parentNodeId, Guid? parentFolderId, bool preserveWorld);
+
+    /// <summary>Commits a validated mixed clipboard batch atomically, recording one undo step.</summary>
+    /// <param name="context">The destination document.</param>
+    /// <param name="payload">The captured payload.</param>
+    /// <param name="cut">Whether original identities are moved rather than duplicated.</param>
+    /// <param name="parentNodeId">Destination scene scope.</param>
+    /// <param name="parentFolderId">Destination grouping.</param>
+    /// <param name="preserveWorld">Explicit preserve-world intent; false is the Explorer default.</param>
+    /// <param name="insertAfterNodeId">Optional sibling anchor.</param>
+    /// <returns>The whole transaction's result.</returns>
+    public Task<SceneCommandResult> PasteExplorerItemsAsync(SceneDocumentCommandContext context,
+        SceneExplorerClipboard payload, bool cut, Guid? parentNodeId, Guid? parentFolderId,
+        bool preserveWorld, Guid? insertAfterNodeId = null);
     /// <summary>Acquires the scene's existing save gate and captures its saved-input state on the UI thread.</summary>
     /// <param name="context">The still-current document and scene owner.</param>
     /// <param name="cancellationToken">Cancels waiting for an in-flight save.</param>
@@ -322,7 +353,7 @@ public interface ISceneDocumentCommandService
         IReadOnlyList<Guid> nodeIds,
         Guid folderId);
 
-    /// <summary>Moves an explorer folder to another folder or the scene root (grouping-only, no graph change).</summary>
+    /// <summary>Moves a folder atomically, reparenting its node roots with preserve-local pose when destination lineage changes.</summary>
     /// <param name="context">The document command context.</param>
     /// <param name="folderId">The folder to move.</param>
     /// <param name="newParentFolderId">The destination parent folder, or <see langword="null"/> for the scene root.</param>

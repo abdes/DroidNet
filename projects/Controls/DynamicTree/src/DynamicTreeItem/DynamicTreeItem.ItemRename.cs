@@ -75,6 +75,19 @@ public partial class DynamicTreeItem
         return true;
     }
 
+    /// <summary>Settles a rename before its owner opens another row's context menu.</summary>
+    /// <returns>Whether no uncommitted rename remains.</returns>
+    internal async Task<bool> SettleRenameForContextAsync()
+    {
+        if (this.renameTarget is null)
+        {
+            return true;
+        }
+
+        await this.CommitRenameDraftAsync().ConfigureAwait(true);
+        return this.renameTarget is null;
+    }
+
     /// <summary>Commits the current draft and ignores completions belonging to an ended rename session.</summary>
     /// <returns>A task that completes when the commit operation finishes.</returns>
     internal async Task CommitRenameDraftAsync()

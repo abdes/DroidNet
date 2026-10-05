@@ -58,6 +58,44 @@ public static class ContextMenu
     public static void SetMenuSource(UIElement element, IMenuSource? value)
         => element.SetValue(MenuSourceProperty, value);
 
+    /// <summary>Shows a dynamically captured menu at a pointer position or beside its keyboard anchor.</summary>
+    /// <param name="element">The requesting element, which also owns the host lifetime.</param>
+    /// <param name="source">The source captured for this invocation.</param>
+    /// <param name="position">The pointer position, or null for keyboard placement.</param>
+    /// <returns>Whether the host displayed the menu.</returns>
+    public static bool Show(FrameworkElement element, IMenuSource source, Windows.Foundation.Point? position = null)
+    {
+        SetMenuSource(element, source);
+        // Dynamic owners recapture on every request; the attached listener must not reopen an old snapshot first.
+        element.ContextRequested -= OnElementContextRequested;
+        if (GetMenuHost(element) is not { } host)
+        {
+            return false;
+        }
+
+        var adapter = new ContextMenuRootSurfaceAdapter(element);
+        adapter.SetTrigger(element, position ?? new Windows.Foundation.Point(0, element.ActualHeight));
+        adapter.SetPendingSource(new MenuSourceView(source.Items, source.Services));
+        host.RootSurface = adapter;
+        if (source.Services.InteractionController is { } controller)
+        {
+            controller.OnMenuRequested(MenuInteractionContext.ForRoot(adapter),
+                position is null ? MenuInteractionInputSource.KeyboardInput : MenuInteractionInputSource.PointerInput);
+            return host.IsOpen;
+        }
+
+        return adapter.Show(position is null ? MenuNavigationMode.KeyboardInput : MenuNavigationMode.PointerInput);
+    }
+
+    /// <summary>Dismisses a captured menu without clearing the requesting element's selection.</summary>
+    /// <param name="element">The element owning the menu host.</param>
+    public static void Close(UIElement element) => GetMenuHost(element)?.Dismiss(MenuDismissKind.Programmatic);
+
+    /// <summary>Determines whether the element's context menu is currently open.</summary>
+    /// <param name="element">The element owning the menu host.</param>
+    /// <returns>Whether its host is open.</returns>
+    public static bool IsOpen(UIElement element) => GetMenuHost(element)?.IsOpen == true;
+
     /// <summary>
     ///     Creates the default menu host implementation.
     /// </summary>
@@ -166,6 +204,11 @@ public static class ContextMenu
 
     private static void OnElementContextRequested(object sender, ContextRequestedEventArgs e)
     {
+        if (e.Handled || e.OriginalSource is TextBox)
+        {
+            return;
+        }
+
         if (sender is not UIElement element)
         {
             return;

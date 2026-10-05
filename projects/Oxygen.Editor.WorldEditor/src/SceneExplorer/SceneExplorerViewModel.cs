@@ -6,12 +6,10 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls;
-using DroidNet.Controls.Menus;
 using DroidNet.Controls.Selection;
 using DroidNet.Documents;
 using DroidNet.Routing;
@@ -60,7 +58,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     // Ratified clipboard lifetime (D7): a payload is stamped with the project and scene that
     // produced it, so a stale payload can never be pasted into another project's scene.
     private Guid? clipboardProjectId;
+    private string? clipboardProjectRoot;
     private Guid? clipboardSceneId;
+    private WeakReference<Scene>? clipboardSceneLifetime;
 
     // Transient search expansions recorded by identity: folders/nodes expanded for a match,
     // restored when search clears, and re-applied as transient across a projection rebuild.
@@ -158,6 +158,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.selectionService.SelectionChanged += this.OnSelectionServiceChanged;
         this.SelectionSettled += this.OnTreeSelectionSettled;
         this.commandService = commandService;
+        this.PropertyChanged += this.OnContextOwnerPropertyChanged;
+        this.ClipboardContentChanged += (_, _) => this.RefreshContextActions();
 
         this.UndoStack = this.History.UndoStack;
         this.RedoStack = this.History.RedoStack;
@@ -188,6 +190,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         // Subscribe to document events to load scene when a scene document is opened
         documentService.DocumentOpened += this.OnDocumentOpened;
         documentService.DocumentActivated += this.OnDocumentActivated;
+        this.RegisterSceneLifetime();
     }
 
     /// <summary>
@@ -222,38 +225,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private HistoryKeeper History => this.Scene != null ? UndoRedo.GetHistory(this.Scene.AttachedObject.Id) : UndoRedo.Default[this];
 
     /// <inheritdoc />
-    [RelayCommand(CanExecute = nameof(SceneExplorerViewModel.HasUnlockedSelectedItems))]
+    [RelayCommand(CanExecute = nameof(CanRemoveContextItems))]
     public override async Task RemoveSelectedItems()
     {
-        var context = this.CreateCommandContext();
-        if (context is null)
-        {
-            return;
-        }
-
-        var selectedItems = this.GetSelectedItems();
-        var nodeIds = selectedItems.OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject.Id).ToList();
-        var folderIds = selectedItems.OfType<FolderAdapter>().Select(folder => folder.Id).ToList();
-        if (nodeIds.Count == 0 && folderIds.Count == 0)
-        {
-            return;
-        }
-
-        this.suppressNodeMessages = true;
-        try
-        {
-            var result = await this.commandService.DeleteItemsAsync(context, nodeIds, folderIds).ConfigureAwait(true);
-            if (!result.Succeeded)
-            {
-                return;
-            }
-
-            await this.ReconcileProjectionAsync().ConfigureAwait(true);
-        }
-        finally
-        {
-            this.suppressNodeMessages = false;
-        }
+        await this.ExecuteContextActionAsync(SceneExplorerCommandKind.Delete,
+            this.CaptureExplorerContext(null, background: false)).ConfigureAwait(true);
     }
 
     /// <inheritdoc />
@@ -262,9 +238,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         ArgumentNullException.ThrowIfNull(item);
 
         var context = this.CreateCommandContext();
-        if (context is null)
+        if (context is null || !this.IsCurrentContextRow(item) || this.FindLockedContextRow(item) is not null)
         {
-            return TreeItemRenameResult.Rejected("No scene document is loaded.");
+            return TreeItemRenameResult.Rejected("The row is no longer editable in the loaded scene document.");
         }
 
         var trimmed = (newName ?? string.Empty).Trim();
@@ -348,6 +324,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             this.selectionService.SelectionChanged -= this.OnSelectionServiceChanged;
             this.documentService.DocumentOpened -= this.OnDocumentOpened;
             this.documentService.DocumentActivated -= this.OnDocumentActivated;
+            this.documentService.DocumentClosed -= this.OnSceneDocumentClosed;
+            this.projectClipboardSubscription?.Dispose();
             if (this.interaction is { } service)
             {
                 service.StateChanged -= this.OnInteractionStateChanged;
@@ -377,6 +355,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         this.isDisposed = true;
+        this.RefreshContextActions();
         base.Dispose(disposing);
     }
 
@@ -434,10 +413,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     }
 
     private bool CanRenameSelected()
-        => this.SelectionModel is SingleSelectionModel { SelectedItem.IsLocked: false }
-            || (this.SelectionModel is MultipleSelectionModel<ITreeItem> m
-            && m.SelectedIndices.Count == 1
-            && !m.SelectedItems[0].IsLocked);
+        => this.GetContextDisabledReason(SceneExplorerCommandKind.Rename,
+            this.CaptureExplorerContext(null, background: false)) is null;
 
     [RelayCommand]
     private async Task Undo()
@@ -555,49 +532,60 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <inheritdoc />
     public override Task CopyItemsAsync(IReadOnlyList<ITreeItem> items)
     {
-        var adapters = items.OfType<SceneNodeAdapter>().ToList();
+        if (items.Any(static item => item is not SceneNodeAdapter))
+        {
+            return this.StageExplorerClipboardAsync(items, cut: false);
+        }
+
+        var selectedIds = items.OfType<SceneNodeAdapter>().Select(static row => row.AttachedObject.Id).ToHashSet();
+        var adapters = items.OfType<SceneNodeAdapter>().Where(row =>
+        {
+            for (var parent = row.AttachedObject.Parent; parent is not null; parent = parent.Parent)
+            {
+                if (selectedIds.Contains(parent.Id))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }).ToList();
         if (adapters.Count == 0)
         {
             return Task.CompletedTask;
         }
 
         var snapshots = new List<SceneNodeData>(adapters.Count);
+        var localSnapshots = new List<SceneNodeData>(adapters.Count);
+        this.clipboardWorldPoseAvailable = true;
         foreach (var adapter in adapters)
         {
             var node = adapter.AttachedObject;
             var data = node.Dehydrate();
+            localSnapshots.Add(data);
             if (node.Parent is not null && !node.IgnoreParentTransform)
             {
                 if (!SceneTransformMath.TryPreserveWorldLocal(node, newParent: null, out var position, out var rotation, out var scale))
                 {
-                    if (this.operationResults is { } publisher && this.statusReducer is { } reducer)
-                    {
-                        _ = SceneOperationResults.PublishWarning(
-                            publisher,
-                            reducer,
-                            SceneOperationKinds.NodeDuplicate,
-                            FailureDomain.SceneAuthoring,
-                            DiagnosticCodes.ScenePrefix + "TRANSFORM_UNREPRESENTABLE",
-                            "Nodes were not copied",
-                            "The copied root's world pose cannot be represented without shear.",
-                            new AffectedScope { DocumentId = node.Scene.Id });
-                    }
-
-                    return Task.CompletedTask;
+                    this.clipboardWorldPoseAvailable = false;
                 }
-
-                data = data with
+                else
                 {
-                    Components = data.Components.Select(component => component is TransformData transform
-                        ? transform with { Position = position, Rotation = rotation, Scale = scale }
-                        : component).ToList(),
-                };
+                    data = data with
+                    {
+                        Components = data.Components.Select(component => component is TransformData transform
+                            ? transform with { Position = position, Rotation = rotation, Scale = scale }
+                            : component).ToList(),
+                    };
+                }
             }
 
             snapshots.Add(data);
         }
 
         this.clipboardNodeIds.Clear();
+        this.explorerClipboard = null;
+        this.clipboardLocalSnapshots = localSnapshots;
         this.clipboardSnapshots.Clear();
         this.clipboardNodeIds.AddRange(adapters.Select(adapter => adapter.AttachedObject.Id));
         this.clipboardSnapshots.AddRange(snapshots);
@@ -615,7 +603,17 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <inheritdoc />
     public override Task CutItemsAsync(IReadOnlyList<ITreeItem> items)
     {
-        var eligible = items.Where(item => !item.IsLocked).ToArray();
+        if (items.Any(item => this.FindLockedContextRow(item) is not null))
+        {
+            return Task.CompletedTask;
+        }
+
+        if (items.Any(static item => item is FolderAdapter))
+        {
+            return this.StageExplorerClipboardAsync(items, cut: true);
+        }
+
+        var eligible = items.ToArray();
         var nodeIds = eligible.OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject.Id).ToList();
         if (nodeIds.Count == 0)
         {
@@ -623,6 +621,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         this.clipboardNodeIds.Clear();
+        this.explorerClipboard = null;
         this.clipboardNodeIds.AddRange(nodeIds);
         this.clipboardSnapshots.Clear();
         this.clipboardIsCut = true;
@@ -644,15 +643,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <inheritdoc />
     public override async Task PasteItemsAsync(ITreeItem? targetParent = null, int? insertIndex = null)
     {
-        _ = insertIndex; // Oxygen paste appends/regroups via the command owner; the index is not yet honored.
-        var context = this.CreateCommandContext();
-        if (context is null || this.clipboardNodeIds.Count == 0)
-        {
-            return;
-        }
-
-        // Enforce the clipboard lifetime at the only moment it can cause damage: a payload from
-        // another project, or a cut whose scene is gone, must never reach the command service.
+        _ = insertIndex;
         if (!this.ClipboardLifetimeIsCurrent())
         {
             this.InvalidateClipboard(
@@ -662,100 +653,41 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        // A multi-scope selection has no single destination; reject rather than fall back to the root.
-        if (targetParent is null && this.GetSelectedItems().Count > 1)
-        {
-            return;
-        }
-
-        // A single node target pastes as a sibling (after it); a folder target pastes into the
-        // folder; the scene root pastes at the root.
-        var target = targetParent ?? this.GetSingleSelectionTarget() ?? this.Scene;
-        Guid? insertAfterNodeId;
-        Guid? parentNodeId;
-        Guid? parentFolderId;
-        switch (target)
-        {
-            case SceneNodeAdapter node:
-                insertAfterNodeId = node.AttachedObject.Id;
-                parentNodeId = node.AttachedObject.Parent?.Id;
-                parentFolderId = null;
-                break;
-            case FolderAdapter folder:
-                insertAfterNodeId = null;
-                parentNodeId = null;
-                parentFolderId = folder.Id;
-                break;
-            case SceneAdapter:
-                insertAfterNodeId = null;
-                parentNodeId = null;
-                parentFolderId = null;
-                break;
-            default:
-                return;
-        }
-
-        this.suppressNodeMessages = true;
-        try
-        {
-            if (this.clipboardIsCut)
-            {
-                var result = await this.commandService.ReparentNodesAsync(context, this.clipboardNodeIds, parentNodeId, preserveWorldTransform: false, insertAfterNodeId).ConfigureAwait(true);
-                if (!result.Succeeded)
-                {
-                    return;
-                }
-            }
-            else
-            {
-                var result = await this.commandService.DuplicateNodesFromDataAsync(context, this.clipboardSnapshots, parentNodeId, parentFolderId, insertAfterNodeId).ConfigureAwait(true);
-                if (!result.Succeeded)
-                {
-                    return;
-                }
-            }
-
-            await this.ReconcileProjectionAsync().ConfigureAwait(true);
-
-            // A completed Cut (move) clears the staging; a Copy payload is retained for repeated Paste.
-            if (this.clipboardIsCut)
-            {
-                this.clipboardNodeIds.Clear();
-                this.clipboardIsCut = false;
-                this.ClipboardStateStore = ClipboardState.Empty;
-                this.ClearCutMarks();
-                this.RaiseClipboardChanged();
-            }
-        }
-        finally
-        {
-            this.suppressNodeMessages = false;
-        }
+        await this.ExecuteContextActionAsync(SceneExplorerCommandKind.Paste,
+            this.CaptureExplorerContext(targetParent, background: false)).ConfigureAwait(true);
     }
 
     [RelayCommand(CanExecute = nameof(CanCopy))]
     private Task Copy() => this.CopyItemsAsync(this.GetSelectedItems());
 
-    private bool CanCopy() => this.GetSelectedItems().OfType<SceneNodeAdapter>().Any();
+    private bool CanCopy()
+        => this.GetContextDisabledReason(SceneExplorerCommandKind.Copy, this.CaptureExplorerContext(null, background: false)) is null;
 
     [RelayCommand(CanExecute = nameof(CanCut))]
     private Task Cut() => this.CutItemsAsync(this.GetSelectedItems());
 
-    private bool CanCut() => this.HasUnlockedSelectedItems;
+    private bool CanCut()
+        => this.GetContextDisabledReason(SceneExplorerCommandKind.Cut, this.CaptureExplorerContext(null, background: false)) is null;
 
     [RelayCommand(CanExecute = nameof(CanPaste))]
     private Task Paste() => this.PasteItemsAsync(targetParent: null);
 
-    private bool CanPaste() => this.clipboardNodeIds.Count > 0 && this.ClipboardLifetimeIsCurrent();
+    private bool CanPaste()
+        => this.GetContextDisabledReason(SceneExplorerCommandKind.Paste, this.CaptureExplorerContext(null, background: false)) is null;
 
     /// <inheritdoc />
     protected override void OnClipboardCleared()
     {
+        this.clipboardGeneration++;
+        this.explorerClipboard = null;
+        this.clipboardLocalSnapshots = [];
         this.clipboardNodeIds.Clear();
         this.clipboardSnapshots.Clear();
         this.clipboardIsCut = false;
         this.clipboardProjectId = null;
+        this.clipboardProjectRoot = null;
         this.clipboardSceneId = null;
+        this.clipboardSceneLifetime = null;
     }
 
     /// <summary>
@@ -763,8 +695,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// </summary>
     private void StampClipboardOrigin()
     {
+        this.clipboardGeneration++;
         this.clipboardProjectId = this.projectManager.CurrentProject?.ProjectInfo.Id;
+        this.clipboardProjectRoot = this.projectManager.CurrentProject?.ProjectInfo.Location;
         this.clipboardSceneId = this.Scene?.AttachedObject.Id;
+        this.clipboardSceneLifetime = this.Scene is { } root ? new(root.AttachedObject) : null;
     }
 
     /// <summary>
@@ -785,10 +720,16 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return false;
         }
 
+        if (this.clipboardProjectRoot is { } stagedRoot
+            && !string.Equals(stagedRoot, this.projectManager.CurrentProject?.ProjectInfo.Location, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
         return !this.clipboardIsCut
-            || this.clipboardSceneId is not { } stagedScene
-            || this.Scene is null
-            || this.Scene.AttachedObject.Id == stagedScene;
+            || (this.Scene is { } current && this.clipboardSceneId == current.AttachedObject.Id
+                && this.clipboardSceneLifetime is { } lifetime && lifetime.TryGetTarget(out var original)
+                && ReferenceEquals(original, current.AttachedObject));
     }
 
     /// <summary>
@@ -816,61 +757,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             "Clipboard was cleared",
             reason,
             new AffectedScope { DocumentId = this.Scene?.AttachedObject.Id });
-    }
-
-    /// <summary>
-    /// Builds the context menu for a captured anchor row, resolving each shared action to its typed command.
-    /// </summary>
-    /// <param name="anchor">The row that received the context request.</param>
-    /// <returns>The menu source for the captured context.</returns>
-    public IMenuSource BuildContextMenuSource(ITreeItem anchor)
-    {
-        var context = BuildSelectionContext(this.GetSelectedItems());
-        var primaryIsInFolder = anchor is SceneNodeAdapter node && node.Parent is FolderAdapter;
-        var primaryHasChildren = anchor is LayoutItemAdapter { HasChildren: true };
-        var primaryIsUnlocked = !anchor.IsLocked;
-
-        var entries = SceneExplorerContextMenu.Build(context.Kind, primaryIsInFolder, primaryHasChildren, primaryIsUnlocked);
-
-        var builder = new MenuBuilder();
-        foreach (var entry in entries)
-        {
-            _ = builder.AddMenuItem(entry.Label, this.ResolveMenuCommand(entry.Kind, anchor, entry.IsEnabled));
-        }
-
-        return builder.Build();
-    }
-
-    private ICommand ResolveMenuCommand(SceneExplorerCommandKind kind, ITreeItem anchor, bool isEnabled)
-    {
-        switch (kind)
-        {
-            case SceneExplorerCommandKind.NewNode:
-                return this.AddEntityCommand;
-            case SceneExplorerCommandKind.NewFolder:
-                return this.CreateFolderCommand;
-            case SceneExplorerCommandKind.Rename:
-                return this.RenameSelectedCommand;
-            case SceneExplorerCommandKind.Cut:
-                return this.CutCommand;
-            case SceneExplorerCommandKind.Copy:
-                return this.CopyCommand;
-            case SceneExplorerCommandKind.Paste:
-            case SceneExplorerCommandKind.PasteAsChild:
-                return this.PasteCommand;
-            case SceneExplorerCommandKind.Delete:
-                return this.RemoveSelectedItemsCommand;
-            case SceneExplorerCommandKind.RemoveFromFolder:
-                return new SceneExplorerCommandAdapter(() => _ = this.RemoveFromFolderAsync(anchor), () => isEnabled);
-            case SceneExplorerCommandKind.MoveToSceneRoot:
-                return new SceneExplorerCommandAdapter(() => _ = this.MoveToSceneRootAsync(anchor), () => isEnabled);
-            case SceneExplorerCommandKind.Expand:
-                return new SceneExplorerCommandAdapter(() => _ = this.ExpandItemAsync(anchor), () => anchor is { IsExpanded: false, CanAcceptChildren: true });
-            case SceneExplorerCommandKind.Collapse:
-                return new SceneExplorerCommandAdapter(() => _ = this.CollapseItemAsync(anchor), () => anchor.IsExpanded);
-            default:
-                return new SceneExplorerCommandAdapter(static () => { }, static () => false);
-        }
     }
 
     private async Task RemoveFromFolderAsync(ITreeItem anchor)
@@ -928,7 +814,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         // Only react to scene documents
         var document = this.documentService.GetOpenDocuments(this.windowId).FirstOrDefault(d => d.DocumentId == e.DocumentId);
-        if (document is not SceneDocumentMetadata sceneMetadata)
+        if (document is not SceneDocumentMetadata sceneMetadata || sceneMetadata.IsSceneLoadPending)
         {
             return;
         }
@@ -948,8 +834,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         this.LogDocumentActivated(e.DocumentId);
 
-        // Load/switch the scene
-        await this.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
+        // Scene replacement belongs to the document owner; tab activation must not bypass its
+        // source staging, close guards or previous-graph retirement.
+        var request = this.messenger.Send(new Oxygen.Editor.ContentBrowser.Messages.OpenSceneRequestMessage(scene));
+        if (request.HasReceivedResponse)
+        {
+            _ = await request.Response.ConfigureAwait(true);
+        }
     }
 
     private void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e)
@@ -964,13 +855,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
     private async Task InitializeLoadedSceneAsync(Scene loadedScene)
     {
-        // A project switch ends the lifetime of any staged payload, so it is dropped as soon as the
-        // new project's scene initializes rather than waiting for a paste attempt to fail.
-        if (this.clipboardProjectId is { } stagedProject
-            && stagedProject != this.projectManager.CurrentProject?.ProjectInfo.Id)
-        {
-            this.InvalidateClipboard("The clipboard was cleared because the project changed.");
-        }
+        var previousScene = this.Scene?.AttachedObject;
 
         // A loaded scene starts a fresh view session: a previous scene's transient search
         // expansions and filter predicate must not leak into it, and their adapters are retired
@@ -1012,6 +897,19 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         await this.ApplySelectionContextAsync(
             this.selectionService.GetContext(loadedScene.Id),
             forcePublish: true).ConfigureAwait(true);
+
+        if (!ReferenceEquals(previousScene, loadedScene))
+        {
+            this.ClearCutMarks();
+            this.ClipboardItemStore = [];
+        }
+
+        if ((this.clipboardNodeIds.Count > 0 || this.explorerClipboard is not null) && !this.ClipboardLifetimeIsCurrent())
+        {
+            this.InvalidateClipboard(this.clipboardIsCut
+                ? "The staged Cut was cancelled because its scene lifetime ended."
+                : "The clipboard was cleared because the project changed.");
+        }
     }
 
     /// <summary>
@@ -1099,7 +997,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         if (this.isDisposed || this.loadSceneCts?.IsCancellationRequested == true
             || this.documentService.GetActiveDocumentId(this.windowId) != args.Metadata.DocumentId
             || !ReferenceEquals(this.Scene?.AttachedObject, args.Scene)
-            || !ReferenceEquals(this.CreateCommandContext()?.Metadata, args.Metadata))
+            || !this.documentService.GetOpenDocuments(this.windowId).Any(metadata => ReferenceEquals(metadata, args.Metadata)))
         {
             return;
         }
@@ -1338,6 +1236,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.NotifySelectionDependentCommands();
         this.HasUnlockedSelectedItems = items.Any(static item => !item.IsLocked);
         this.PublishCurrentSelection(this.pendingAuthoritativeContext);
+        this.RefreshContextActions();
     }
 
     private void PublishCurrentSelection(SceneSelectionContext? authoritativeContext = null)
@@ -1724,6 +1623,12 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         var scene = this.Scene.AttachedObject;
+        if (this.documentService.GetOpenDocuments(this.windowId).OfType<SceneDocumentMetadata>()
+            .Any(metadata => metadata.DocumentId == scene.Id && metadata.IsSceneLoadPending))
+        {
+            return null;
+        }
+
         var metadata = this.documentService.GetOpenDocuments(this.windowId)
             .OfType<SceneDocumentMetadata>()
             .FirstOrDefault(document => document.DocumentId == scene.Id);
@@ -1773,7 +1678,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         _ = this.messenger.Send(new SceneAuthoringLoadedMessage(loadedScene, documentMetadata));
         _ = await this.sceneEngineSync.SyncSceneWhenReadyAsync(loadedScene, ct).ConfigureAwait(true);
-        return true;
+        return !ct.IsCancellationRequested
+            && this.documentService.GetOpenDocuments(this.windowId).Any(metadata => ReferenceEquals(metadata, documentMetadata))
+            && ReferenceEquals(this.Scene?.AttachedObject, loadedScene);
     }
 
     private async Task<bool> ApplyReloadedSceneAsync(SceneReloadedMessage message)
@@ -1837,7 +1744,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         SceneCommandResult result;
         if (folderIds.Count > 0)
         {
-            // Folder moves are grouping-only. Support a single-folder drop; reject mixed batches.
+            // The command owner resolves destination folder lineage and performs any required reparent.
             if (folderIds.Count != 1 || nodeIds.Count != 0)
             {
                 return TreeDropResult.Rejected;
@@ -2029,6 +1936,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         _ = sender;
         _ = args;
         this.ApplyWorkspaceInteractionState();
+        this.RefreshContextActions();
     }
 
     /// <summary>

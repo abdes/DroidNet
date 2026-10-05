@@ -105,6 +105,7 @@ public sealed partial class SceneEditorConflictTests
 
         public Fixture(bool active, Oxygen.Editor.World.Workspace.PreviewSettingsService? previewSettings = null, Action? commitInput = null)
         {
+            this.container.RegisterInstance<IProjectManagerService>(Mock.Of<IProjectManagerService>());
             this.Scene = new Scene(Mock.Of<IProject>()) { Name = "Main" };
             this.Replacement = Scene.CreateAndHydrate(this.Scene.Project, this.Scene.Dehydrate());
             this.Metadata = new(this.Scene.Id) { IsDirty = true };

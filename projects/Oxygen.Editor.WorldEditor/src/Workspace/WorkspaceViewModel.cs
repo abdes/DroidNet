@@ -60,6 +60,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     private Oxygen.Editor.World.Workspace.EditingViewMaskService? editingViewMask;
     private ProjectContext? previewProject;
     private IMessenger? messenger;
+    private IProject? initialSceneProject;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="WorkspaceViewModel"/> class.
@@ -197,9 +198,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
         // DocumentManager must be a singleton and resolved immediately to ensure it is always listening for messages
         // even if the router hasn't navigated to any editor yet.
-        childContainer.Register<DocumentManager>(Reuse.Singleton);
-        this.documentManager = childContainer.Resolve<DocumentManager>();
-
         RegisterContentServices(childContainer);
 
         // Register scene-engine synchronization service
@@ -210,6 +208,8 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         _ = childContainer.Resolve<ISceneContentDemandService>();
         childContainer.Register<ISceneSelectionService, SceneSelectionService>(Reuse.Singleton);
         childContainer.Register<ISceneDocumentCommandService, SceneDocumentCommandService>(Reuse.Singleton);
+        childContainer.Register<DocumentManager>(Reuse.Singleton);
+        this.documentManager = childContainer.Resolve<DocumentManager>();
 
         childContainer.Register<SceneExplorerViewModel>(Reuse.Transient);
         childContainer.Register<SceneExplorerView>(Reuse.Transient);
@@ -397,15 +397,18 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             || this.projectManager.CurrentProject is not { } project
             || this.projectContextService.ActiveProject is not { } context
             || project.Scenes.Count == 0
-            || !context.OpenInitialScene)
+            || !context.OpenInitialScene
+            || ReferenceEquals(project, this.initialSceneProject))
         {
             return;
         }
 
+        this.initialSceneProject = project;
+
         // Seed the default scene for projects that predate DefaultSceneId before resolving it.
         await this.MigrateDefaultSceneAsync(project, context).ConfigureAwait(true);
 
-        var scene = this.ResolveInitialScene(project, context);
+        var scene = ResolveInitialScene(project, context);
         if (scene is null)
         {
             return;
@@ -484,7 +487,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             || string.Equals(scene.Id.ToString("D"), lastOpenedScene, StringComparison.OrdinalIgnoreCase));
     }
 
-    private Oxygen.Editor.World.Scene? ResolveInitialScene(IProject project, ProjectContext context)
+    internal static Oxygen.Editor.World.Scene? ResolveInitialScene(IProject project, ProjectContext context)
     {
         // Fresh activation may carry an explicit scene request (template StarterScene or a workflow open).
         if (context.InitialSceneAssetUri is { } initialSceneAssetUri

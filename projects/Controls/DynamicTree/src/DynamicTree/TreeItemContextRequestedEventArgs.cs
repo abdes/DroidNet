@@ -21,4 +21,7 @@ public sealed class TreeItemContextRequestedEventArgs(ITreeItem item, FrameworkE
 
     /// <summary>Gets the pointer position, or null for a keyboard request.</summary>
     public Point? Position { get; } = position;
+
+    /// <summary>Gets or sets whether the owner consumed the request, preventing a background menu.</summary>
+    public bool Handled { get; set; }
 }

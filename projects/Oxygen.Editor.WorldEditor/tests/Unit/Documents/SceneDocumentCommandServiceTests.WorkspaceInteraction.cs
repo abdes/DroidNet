@@ -28,10 +28,10 @@ public sealed partial class SceneDocumentCommandServiceTests
         var settings = new Mock<IEditorSettingsManager>(MockBehavior.Loose);
         var stored = new WorkspaceInteractionService.ProjectInteraction(
             project.ProjectId,
-            sceneId,
-            [hidden],
-            [locked],
-            SceneCategories.All);
+            new Dictionary<Guid, WorkspaceInteractionService.SceneInteraction>
+            {
+                [sceneId] = new([hidden], [locked], SceneCategories.All),
+            });
         _ = settings
             .Setup(s => s.LoadSettingAsync(
                 It.IsAny<SettingKey<WorkspaceInteractionService.ProjectInteraction>>(),
@@ -59,10 +59,10 @@ public sealed partial class SceneDocumentCommandServiceTests
         // copied project must not inherit a stranger's hidden set.
         var stored = new WorkspaceInteractionService.ProjectInteraction(
             Guid.NewGuid(),
-            sceneId,
-            [hidden],
-            [],
-            SceneCategories.All);
+            new Dictionary<Guid, WorkspaceInteractionService.SceneInteraction>
+            {
+                [sceneId] = new([hidden], [], SceneCategories.All),
+            });
         _ = settings
             .Setup(s => s.LoadSettingAsync(
                 It.IsAny<SettingKey<WorkspaceInteractionService.ProjectInteraction>>(),
@@ -75,6 +75,126 @@ public sealed partial class SceneDocumentCommandServiceTests
         await service.RestoreAsync(project, sceneId).ConfigureAwait(false);
 
         _ = service.IsHidden(hidden).Should().BeFalse("a record whose ProjectId differs is rejected");
+    }
+
+    [TestMethod]
+    public async Task WorkspaceInteractionService_SceneSwitchAndRestart_PreservesIndependentStates()
+    {
+        var project = ProjectContext.FromProjectInfo(SlotTestProjectInfo);
+        var sceneA = Guid.NewGuid();
+        var sceneB = Guid.NewGuid();
+        var nodeA = Guid.NewGuid();
+        var nodeB = Guid.NewGuid();
+        WorkspaceInteractionService.ProjectInteraction? stored = null;
+        var settings = new Mock<IEditorSettingsManager>();
+        _ = settings.Setup(value => value.LoadSettingAsync(
+                WorkspaceInteractionService.Key,
+                It.IsAny<SettingContext>(),
+                It.IsAny<IProgress<SettingsProgress>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(() => Task.FromResult(stored));
+        _ = settings.Setup(value => value.SaveSettingAsync(
+                WorkspaceInteractionService.Key,
+                It.IsAny<WorkspaceInteractionService.ProjectInteraction>(),
+                It.IsAny<SettingContext>(),
+                It.IsAny<IProgress<SettingsProgress>>(),
+                It.IsAny<CancellationToken>()))
+            .Callback((
+                SettingKey<WorkspaceInteractionService.ProjectInteraction> _,
+                WorkspaceInteractionService.ProjectInteraction value,
+                SettingContext _,
+                IProgress<SettingsProgress> _,
+                CancellationToken _) => stored = value)
+            .Returns(Task.CompletedTask);
+        var service = new WorkspaceInteractionService(settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        await service.RestoreAsync(project, sceneA).ConfigureAwait(false);
+        service.SetHidden(nodeA, isHidden: true);
+        service.SetCategories(new SceneCategories(false, true, false));
+        await service.RestoreAsync(project, sceneB).ConfigureAwait(false);
+        _ = service.HiddenNodeIds().Should().BeEmpty();
+        _ = service.Categories.Should().Be(SceneCategories.All);
+        service.SetLocked(nodeB, isLocked: true);
+        service.SetCategories(new SceneCategories(true, false, true));
+        await service.RestoreAsync(project, sceneA).ConfigureAwait(false);
+
+        _ = service.IsHidden(nodeA).Should().BeTrue();
+        _ = service.IsLocked(nodeB).Should().BeFalse();
+        _ = service.Categories.Should().Be(new SceneCategories(false, true, false));
+        _ = stored!.Scenes.Keys.Should().BeEquivalentTo([sceneA, sceneB]);
+        var restarted = new WorkspaceInteractionService(settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        await restarted.RestoreAsync(project, sceneB).ConfigureAwait(false);
+        _ = restarted.IsLocked(nodeB).Should().BeTrue();
+        _ = restarted.IsHidden(nodeA).Should().BeFalse();
+        _ = restarted.Categories.Should().Be(new SceneCategories(true, false, true));
+    }
+
+    [TestMethod]
+    public async Task WorkspaceInteractionService_InvalidSavedState_PublishesFailureAndKeepsDefaults()
+    {
+        var project = ProjectContext.FromProjectInfo(SlotTestProjectInfo);
+        var settings = new Mock<IEditorSettingsManager>();
+        _ = settings.Setup(value => value.LoadSettingAsync(
+                WorkspaceInteractionService.Key,
+                It.IsAny<SettingContext>(),
+                It.IsAny<IProgress<SettingsProgress>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkspaceInteractionService.ProjectInteraction(project.ProjectId, null!));
+        var results = new CapturingOperationResultPublisher();
+        var service = new WorkspaceInteractionService(settings.Object, results, new OperationStatusReducer());
+
+        await service.RestoreAsync(project, Guid.NewGuid()).ConfigureAwait(false);
+
+        _ = service.HiddenNodeIds().Should().BeEmpty();
+        _ = service.Categories.Should().Be(SceneCategories.All);
+        _ = results.Published.SelectMany(result => result.Diagnostics).Should()
+            .Contain(diagnostic => diagnostic.Code == DiagnosticCodes.SettingsPrefix + "INVALID_STATE");
+    }
+
+    [TestMethod]
+    public async Task WorkspaceInteractionService_StaleRestoreAfterClear_DoesNotReapplyPriorState()
+    {
+        var project = ProjectContext.FromProjectInfo(SlotTestProjectInfo);
+        var sceneId = Guid.NewGuid();
+        var hidden = Guid.NewGuid();
+        var load = new TaskCompletionSource<WorkspaceInteractionService.ProjectInteraction?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var settings = new Mock<IEditorSettingsManager>();
+        _ = settings.Setup(value => value.LoadSettingAsync(
+                WorkspaceInteractionService.Key,
+                It.IsAny<SettingContext>(),
+                It.IsAny<IProgress<SettingsProgress>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(load.Task);
+        var service = new WorkspaceInteractionService(settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        var restoration = service.RestoreAsync(project, sceneId);
+        service.ClearActiveScene();
+        load.SetResult(new WorkspaceInteractionService.ProjectInteraction(
+            project.ProjectId,
+            new Dictionary<Guid, WorkspaceInteractionService.SceneInteraction>
+            {
+                [sceneId] = new([hidden], [], new SceneCategories(false, false, false)),
+            }));
+
+        await restoration.ConfigureAwait(false);
+
+        _ = service.ActiveSceneId.Should().Be(Guid.Empty);
+        _ = service.IsHidden(hidden).Should().BeFalse();
+        _ = service.Categories.Should().Be(SceneCategories.All);
+    }
+
+    [TestMethod]
+    public async Task WorkspaceInteractionService_ClearActiveScene_ResetsCategoriesWithoutSavingEmptyScene()
+    {
+        var settings = new Mock<IEditorSettingsManager>();
+        var service = new WorkspaceInteractionService(settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        await service.RestoreAsync(ProjectContext.FromProjectInfo(SlotTestProjectInfo), Guid.NewGuid()).ConfigureAwait(false);
+        service.SetCategories(new SceneCategories(false, false, false));
+
+        service.ClearActiveScene();
+
+        _ = service.ActiveSceneId.Should().Be(Guid.Empty);
+        _ = service.Categories.Should().Be(SceneCategories.All);
+        _ = service.HiddenNodeIds().Should().BeEmpty();
     }
 
     [TestMethod]

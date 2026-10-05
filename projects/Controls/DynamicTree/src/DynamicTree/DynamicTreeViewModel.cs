@@ -247,9 +247,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     public async Task InitializeRootAsync(ITreeItem root, bool skipRoot = true)
     {
         this.LogInitializeRoot(root, skipRoot);
-        this.SelectionModel?.ClearSelection();
-        this.LogShownItemsClear();
-        this.shownItems.Clear();
+        this.ClearRoot();
 
         if (!skipRoot)
         {
@@ -268,6 +266,17 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
 
         this.SyncSelectionModelWithItems();
         _ = this.EnsureFocus(RequestOrigin.PointerInput);
+    }
+
+    /// <summary>Releases displayed rows, selection and focus without installing another root.</summary>
+    /// <remarks>The clipboard is retained; its domain owner decides whether a document transition invalidates it.</remarks>
+    public void ClearRoot()
+    {
+        this.SelectionModel?.ClearSelection();
+        this.ClearFocus();
+        this.LogShownItemsClear();
+        this.shownItems.Clear();
+        this.SyncSelectionModelWithItems();
     }
 
     /// <summary>

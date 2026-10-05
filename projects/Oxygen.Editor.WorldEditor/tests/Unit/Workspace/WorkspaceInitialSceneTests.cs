@@ -31,6 +31,27 @@ public sealed class WorkspaceInitialSceneTests
         _ = WorkspaceViewModel.ResolveSceneByNameOrId(project, "Not a scene").Should().BeNull();
     }
 
+    [TestMethod]
+    public void ResolveInitialScene_ConfiguredDefaultWinsOverActiveSceneAndListOrder()
+    {
+        var project = CreateProjectWithScenes(out var first, out var configured, out _);
+        project.ProjectInfo.DefaultSceneId = configured.Id;
+        project.ActiveScene = first;
+
+        _ = WorkspaceViewModel.ResolveInitialScene(project, ProjectContext.FromProject(project)).Should().BeSameAs(configured);
+        _ = project.ProjectInfo.DefaultSceneId.Should().Be(configured.Id);
+    }
+
+    [TestMethod]
+    public void ResolveInitialScene_MissingConfiguredIdentityDoesNotFallBackToActiveOrFirstScene()
+    {
+        var project = CreateProjectWithScenes(out var first, out _, out _);
+        project.ProjectInfo.DefaultSceneId = Guid.NewGuid();
+        project.ActiveScene = first;
+
+        _ = WorkspaceViewModel.ResolveInitialScene(project, ProjectContext.FromProject(project)).Should().BeNull();
+    }
+
     private static Project CreateProjectWithScenes(out Scene byName, out Scene byStem, out Scene byId)
     {
         var project = new Project(new ProjectInfo("Migration", Category.Games, "H:/MigrationTests", "preview.png")) { Name = "Migration" };

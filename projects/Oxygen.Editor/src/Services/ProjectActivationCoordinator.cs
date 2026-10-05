@@ -26,6 +26,7 @@ internal sealed partial class ProjectActivationCoordinator(
     IRecentProjectAdapter recentProjects,
     ITemplateUsageService templateUsage,
     IProjectBrowserService projectBrowser,
+    Oxygen.Editor.Documents.IEditorDocumentService documents,
     IOperationResultPublisher operationResults,
     IStatusReducer statusReducer,
     IExceptionDiagnosticAdapter exceptionAdapter) : IProjectActivationCoordinator, IDisposable
@@ -41,6 +42,7 @@ internal sealed partial class ProjectActivationCoordinator(
     private const string TemplateUsageWarningCode = DiagnosticCodes.ProjectPrefix + "TEMPLATE_USAGE_UPDATE_FAILED";
     private const string SettingsWarningCode = DiagnosticCodes.ProjectPrefix + "SETTINGS_UPDATE_FAILED";
     private readonly SemaphoreSlim gate = new(1, 1);
+    private ProjectLoadSnapshot? stagedProject;
 
     /// <inheritdoc/>
     [SuppressMessage(
@@ -56,6 +58,7 @@ internal sealed partial class ProjectActivationCoordinator(
         await this.gate.WaitAsync(cancellationToken).ConfigureAwait(true);
         try
         {
+            this.stagedProject = null;
             return await this.ActivateCoreAsync(request, cancellationToken).ConfigureAwait(true);
         }
         finally
@@ -139,10 +142,33 @@ internal sealed partial class ProjectActivationCoordinator(
                 },
             };
 
+            if (this.stagedProject is null || !projectManager.IsProjectLoadCurrent(this.stagedProject))
+            {
+                return PublishSuperseded();
+            }
+
+            using var replacement = await documents.PrepareCloseAllWindowsAsync().ConfigureAwait(true);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (replacement is null || this.stagedProject is null
+                || !await replacement.CommitAsync().ConfigureAwait(true))
+            {
+                wasCancelled = true;
+                title = "Project activation cancelled";
+                message = "The current workspace and its clipboard were kept open.";
+                return PublishResult(completed: false);
+            }
+
+            replacement.Dispose();
+            if (!projectManager.IsProjectLoadCurrent(this.stagedProject))
+            {
+                return PublishSuperseded();
+            }
+
+            _ = projectManager.AcceptProjectLoad(this.stagedProject);
             projectContextService.Activate(activationContext.ProjectContext);
-            await this.UpdateRecentProjectsAsync(context, operationId, diagnostics, cancellationToken)
+            await this.UpdateRecentProjectsAsync(context, operationId, diagnostics, CancellationToken.None)
                 .ConfigureAwait(true);
-            await this.UpdateCreationUsageAsync(request, operationId, diagnostics, cancellationToken)
+            await this.UpdateCreationUsageAsync(request, operationId, diagnostics, CancellationToken.None)
                 .ConfigureAwait(true);
 
             try
@@ -217,6 +243,14 @@ internal sealed partial class ProjectActivationCoordinator(
             message = string.IsNullOrWhiteSpace(diagnostic.TechnicalMessage)
                 ? diagnostic.Message
                 : $"{diagnostic.Message} {diagnostic.TechnicalMessage}";
+        }
+
+        OperationResult PublishSuperseded()
+        {
+            wasCancelled = true;
+            title = "Project activation cancelled";
+            message = "Another project became active while this project was loading; the active workspace was kept.";
+            return PublishResult(completed: false);
         }
 
         OperationResult PublishResult(bool completed)
@@ -388,8 +422,8 @@ internal sealed partial class ProjectActivationCoordinator(
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (!await projectManager.LoadProjectAsync(projectInfo).ConfigureAwait(true)
-            || projectManager.CurrentProject is null)
+        this.stagedProject = await projectManager.StageProjectLoadAsync(projectInfo, cancellationToken).ConfigureAwait(true);
+        if (this.stagedProject is null)
         {
             diagnostics.Add(this.CreateDiagnostic(
                 operationId,
@@ -401,7 +435,7 @@ internal sealed partial class ProjectActivationCoordinator(
             return null;
         }
 
-        return ProjectContext.FromProject(projectManager.CurrentProject) with
+        return ProjectContext.FromProject(this.stagedProject.Project) with
         {
             OpenInitialScene = openInitialScene,
             InitialSceneAssetUri = initialSceneAssetUri,

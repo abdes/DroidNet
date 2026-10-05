@@ -61,10 +61,22 @@
         HorizontalAlignment="Stretch"
         VerticalAlignment="Stretch">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
+        <InfoBar
+            Title="Scene unavailable"
+            IsClosable="False"
+            IsOpen="{x:Bind ViewModel.HasUnavailableScene, Mode=OneWay}"
+            Message="The previous scene was closed, but its replacement could not be loaded. Reload the previous saved scene to resume editing."
+            Severity="Error">
+            <InfoBar.ActionButton>
+                <Button Command="{x:Bind ViewModel.ReloadPreviousSceneCommand}" Content="Reload previous saved scene" />
+            </InfoBar.ActionButton>
+        </InfoBar>
         <Border
+            Grid.Row="1"
             Padding="0,3"
             BorderBrush="Red"
             BorderThickness="1"
@@ -77,7 +89,7 @@
                 TrailingContentWidth="88"
                 ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
         </Border>
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <Grid.Resources>
                 <Style TargetType="AppBarButton">
                     <Setter Property="Width" Value="40" />
@@ -96,14 +108,14 @@
                 OverflowButtonVisibility="Collapsed">
                 <dnc:ToolBar.PrimaryItems>
                     <!--  New scene node  -->
-                    <dnc:ToolBarButton Command="{x:Bind ViewModel.AddEntityCommand}" Label="New Node">
+                    <dnc:ToolBarButton Command="{x:Bind ViewModel.NewNodeAction}" Label="New Node">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Add" />
                         </dnc:ToolBarButton.Icon>
                     </dnc:ToolBarButton>
 
                     <!--  New folder from selection  -->
-                    <dnc:ToolBarButton Command="{x:Bind ViewModel.CreateFolderCommand}" Label="New Folder">
+                    <dnc:ToolBarButton Command="{x:Bind ViewModel.NewFolderAction}" Label="New Folder">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Folder" />
                         </dnc:ToolBarButton.Icon>
@@ -112,32 +124,32 @@
                     <dnc:ToolBarSeparator />
 
                     <!--  Rename / Cut / Copy / Paste / Delete  -->
-                    <dnc:ToolBarButton Click="Rename_Click" Label="Rename">
+                    <dnc:ToolBarButton Command="{x:Bind ViewModel.RenameAction}" Label="Rename">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Rename" />
                         </dnc:ToolBarButton.Icon>
                     </dnc:ToolBarButton>
 
-                    <dnc:ToolBarButton Click="Cut_Click" Label="Cut">
+                    <dnc:ToolBarButton Command="{x:Bind ViewModel.CutAction}" Label="Cut">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Cut" />
                         </dnc:ToolBarButton.Icon>
                     </dnc:ToolBarButton>
 
-                    <dnc:ToolBarButton Click="Copy_Click" Label="Copy">
+                    <dnc:ToolBarButton Command="{x:Bind ViewModel.CopyAction}" Label="Copy">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Copy" />
                         </dnc:ToolBarButton.Icon>
                     </dnc:ToolBarButton>
 
-                    <dnc:ToolBarButton Click="Paste_Click" Label="Paste">
+                    <dnc:ToolBarButton Command="{x:Bind ViewModel.PasteAction}" Label="Paste">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Paste" />
                         </dnc:ToolBarButton.Icon>
                     </dnc:ToolBarButton>
 
                     <dnc:ToolBarButton
-                        Command="{x:Bind ViewModel.RemoveSelectedItemsCommand}"
+                        Command="{x:Bind ViewModel.DeleteAction}"
                         Label="Delete"
                         ToolTipService.ToolTip="Delete (Del)">
                         <dnc:ToolBarButton.Icon>
