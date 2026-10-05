@@ -1203,22 +1203,51 @@ Scene lifecycle
 
 Generic tree
 
-- [ ] C32 — `DynamicTree.cs:919` recycling does not fully detach subscriptions /
-      reset drop state.
+- [~] C32 — `DynamicTree.cs:919` recycling does not fully detach subscriptions /
+  reset drop state. **Implementation landed 2026-10-05:** `DynamicTreeItem.ResetRecycledRowState()`
+  now clears the interactive-pointer flag, the drop-into cue and an open rename on the recycled
+  part, and `ItemsRepeater_OnElementClearing` drops the control's `dropIndicatorElement` when
+  the cleared container _is_ the cue carrier (the case a hover-expand rebuild creates mid-drag,
+  which left the cue painted on whichever row the container was next bound to). The stale
+  interactive flag was not cosmetic: `TreeItem_DragStarting` cancels a drag started on a row
+  that still looks mid-press. Proof still owed under T9.
 - [x] C33 — demo compact profile is 28/12 DIP, not required 32/14; comfortable 40.
-- [ ] C34 — `DynamicTreeViewModel.cs:438,694` displayed-scope keyboard/typeahead
-      scan hidden items.
+- [~] C34 — `DynamicTreeViewModel.cs:438,694` displayed-scope keyboard/typeahead
+  scan hidden items. **Implementation landed 2026-10-05:** the view model gained
+  `InteractionScope` and a private `NavigableItems` projection, and every keyboard entry point
+  (next/previous visible, first/last in tree, typeahead) walks it instead of the raw shown
+  list; the control pushes its existing `SelectionScope` into the view model from
+  `UpdateDisplayedItems()`, and `SelectionScope` now has a property-changed callback so the
+  push happens when the scope changes. Out-of-scope focus enters the range at its boundary
+  (Down → first, Up → last) rather than stepping through hidden rows. Default
+  `ShownItems` behaviour is untouched, which is why the existing suites pass unchanged.
+  Selection then inherits the scope through the existing `SelectDisplayedItem` path, honouring
+  "translate displayed range endpoints to items, never use a filtered index as a source index".
+  Proof still owed under T9.
 - [~] C35 — `DynamicTree.cs:1567` Escape clears only typeahead; drag
-  cancellation/restoration absent.
+  cancellation/restoration absent. **Implementation landed 2026-10-05:** Escape now outranks
+  typeahead and clipboard staging while an internal drag is in flight — it calls `ClearDragState()`,
+  which cancels the pending hover-expand, drops the drag sources and clears the cue. Restoration is
+  then automatic rather than a second mechanism: `TreeItem_Drop` bails when `draggedItems` is null,
+  reports `DataPackageOperation.None` and commits nothing, so the tree is exactly as it was before
+  the drag. Proof still owed under T9/T10.
 - [x] C36 — `ContextMenu.cs:119` attached host disposed on unload without Loaded
       recreation.
-- [ ] C38 — `DynamicTreeViewModel.cs:933-934` `HideChildrenAsync` guard is
+- [x] C38 — `DynamicTreeViewModel.cs:933-934` `HideChildrenAsync` guard is
       inert: `removeIndex` is `shownItems.IndexOf(item) + 1`, so a missing item
       yields `0` and `Debug.Assert(removeIndex != -1, "expecting item … to be in the
 shown list")` still passes; the assertion can only fire when `IndexOf`
       returns `-2`, which is unreachable. It must test `removeIndex != 0`. Found
       while closing C27; belongs with the C34/C35 generic-tree work rather than
-      the search group.
+      the search group. **Closed 2026-10-05, and the finding proved itself:** with the guard
+      corrected to `removeIndex != 0`, the WorldEditor unit suite died with
+      `Assertion Failed: expecting item Inner to be in the shown list` — the search-clear path in
+      `SearchAsync_RevealsNodeInsideCollapsedNestedFolders` restores a collapse on a nested folder
+      that is no longer in the flat list. That is a legitimate collapse of an already-hidden branch,
+      so the guard now logs at Debug and returns instead of asserting: the subtree is already out of
+      the shown list, the caller still records the collapsed state on the item, and hiding its
+      children has nothing to do. An inert assertion became a real defect signal and then a handled
+      case; suite is green again (0 failed).
 
 Command surface and result publication (found by the P7 design review, each
 re-verified)
@@ -1365,25 +1394,61 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       (`SceneEngineSync.Pending.cs:204`) already surfaced replay failures, which
       is why only the synchronous path was silent. Remaining half of the class
       is C44.
-- [ ] C49 — workspace interaction persistence exists only for Hide.
-      `settings-architecture.md:65` records hidden nodes; there is no typed
-      storage for per-project Lock state, category/column placement or their
-      lifetime, and no single service owns workspace interaction substate, so
-      lock and column choices cannot survive a session. Scope is decided in D4 —
-      implement one coordinated workspace service with typed settings and
-      project/scene-scoped lifetime, not new fields on scene DTOs. No code
-      exists yet, so this is unimplemented work, not an open question. Lock here
-      means the editor-editability lock specified in the "Show in Editor & Lock"
-      contract above — orthogonal to viewport suppression and to runtime
-      visibility — and the persistence must key on the stable node id, so a
-      renamed or reordered node keeps its state.
-- [ ] C50 — clipboard lifetime is not enforced. Copy carries source ids and
+- [~] C49 — workspace interaction persistence exists only for Hide.
+  **Implementation landed 2026-10-05 (`Workspace/WorkspaceInteractionService.cs`):** one
+  coordinated service owns the typed substate — hidden ids, locked ids and the picking
+  categories — as a single project-scoped `SettingKey<ProjectInteraction>`
+  (`WorldEditor`/`SceneInteraction`) holding per-scene records, written through a serialized
+  queue like the preview preferences. Entries key on the stable authored node id; a stored
+  record whose `ProjectId` differs from the loaded project is ignored, which is the
+  path-reuse rejection the settings LLD requires. The Explorer applies it to realized rows
+  (`LayoutItemAdapter.IsHiddenInEditor` for the explicit entry,
+  `IsEffectivelyHiddenInEditor` for the actual-scene-ancestor closure per R1, folders never
+  contributing; the scene root keeps its permanent lock), and it owns `ToggleEditorHidden`,
+  `ToggleEditorLocked` and `ShowAllInEditor`. It never touches the scene document, so no
+  authoring dirty, cook or `kVisible` write is possible from this path, and a missing service
+  reports a visible warning instead of silently doing nothing (D-f).
+  Outstanding, deliberately not faked: (1) **the eye toggle does not yet record the undo step
+  the owner ratified today — tracked as C52**; (2) the eye/lock row slots in the view (W3) and
+  the `SupportsEditingViewMask` warning fallback binding (W4) are SE-03 UI work; (3) the
+  production composition does not inject the service yet, because no production caller
+  constructs `SceneExplorerViewModel` today; (4) column placement has no owner UI to persist
+  against yet.
+  `settings-architecture.md:65` records hidden nodes; there is no typed
+  storage for per-project Lock state, category/column placement or their
+  lifetime, and no single service owns workspace interaction substate, so
+  lock and column choices cannot survive a session. Scope is decided in D4 —
+  implement one coordinated workspace service with typed settings and
+  project/scene-scoped lifetime, not new fields on scene DTOs. No code
+  exists yet, so this is unimplemented work, not an open question. Lock here
+  means the editor-editability lock specified in the "Show in Editor & Lock"
+  contract above — orthogonal to viewport suppression and to runtime
+  visibility — and the persistence must key on the stable node id, so a
+  renamed or reordered node keeps its state.
+- [x] C50 — clipboard lifetime is not enforced. **Closed 2026-10-05:** the payload is stamped
+      with the project and scene that produced it (`StampClipboardOrigin` on Copy and Cut),
+      `CanPaste` refuses a payload outside its lifetime, and `PasteItemsAsync` re-checks at the only
+      moment damage is possible — before any command reaches the document — clearing the staging and
+      publishing a visible `OXE.SCENE.CLIPBOARD_INVALIDATED` warning. A project switch also drops
+      the payload proactively when the new project's scene initializes. The ratified rule is
+      enforced exactly as decided: snapshot Copy survives a scene switch inside one project, Cut is
+      bound to the scene that staged it, and nothing survives a project switch. Enforcement lives on
+      the one existing intent path, so no second history authority appears. Copy carries source ids and
       live-adapter-derived state instead of an immutable snapshot, Cut is
       scene-bound only by construction, and nothing clears the clipboard on a
       successful project switch, so a stale payload can be pasted into another
       project's scene. Scope is decided in D7 — snapshot at copy time, explicit
       invalidation on project switch, one intent path so no second history
       authority appears.
+- [ ] C52 — the editor-hide toggle must record an undo step (owner ratified 2026-10-05,
+      propagated across `documents-and-commands.md` §8, D8 R4/W1, settings §5.1, live-engine-sync,
+      runtime-integration, scene-authoring-model, property-inspector,
+      standalone-runtime-validation and the ED-M08 rows). Today
+      `WorkspaceInteractionService.SetHidden` writes workspace state only, so Ctrl+Z does not reach
+      an accidental hide. The step must be recorded by the document command owner — never by the
+      workspace service, which would be the second history authority D7 forbids — must not dirty the
+      document, must not change saved source or cook demand, and must undo/redo as one batch per
+      user intent. Lock stays non-undoable: the ratified wording names only the eye toggle.
 - [x] C42 — dead and unsafe public API on the command interface. **Closed
       2026-10-04 (`e4eaf2f44`)**: `RenameItemAsync` deleted from the interface
       and implementation (no callers, no test removed) together with the
