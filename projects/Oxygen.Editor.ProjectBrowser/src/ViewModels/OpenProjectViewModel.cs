@@ -5,7 +5,6 @@
 using System.Collections;
 using System.Collections.ObjectModel;
 using System.Globalization;
-using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI.Collections;
@@ -32,7 +31,6 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
     private const SortDirection DefaultSortDirection = SortDirection.Ascending;
 
     private readonly ILogger logger;
-    private readonly object fileListLock = new();
     private readonly IProjectBrowserService projectBrowser;
     private readonly IProjectActivationCoordinator activationCoordinator;
 
@@ -71,8 +69,6 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
 
         this.storageProvider = storageProvider;
         this.projectBrowser = projectBrowser;
-
-        BindingOperations.EnableCollectionSynchronization(this.FileList, this.fileListLock);
 
         this.AdvancedFileList = new AdvancedCollectionView(this.FileList, isLiveShaping: true);
         this.AdvancedFileList.SortDescriptions.Add(new SortDescription(SortDirection.Descending, new ByFolderOrFileComparer()));
@@ -216,18 +212,10 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
     {
         this.CurrentFolder = await this.storageProvider.GetFolderFromPathAsync(path).ConfigureAwait(true);
         this.FileList.Clear();
-        await Task.Run(
-                async () =>
-                {
-                    await foreach (var item in this.CurrentFolder.GetItemsAsync().ConfigureAwait(true))
-                    {
-                        lock (this.fileListLock)
-                        {
-                            this.FileList.Add(item);
-                        }
-                    }
-                })
-            .ConfigureAwait(true);
+        await foreach (var item in this.CurrentFolder.GetItemsAsync().ConfigureAwait(true))
+        {
+            this.FileList.Add(item);
+        }
     }
 
     /// <summary>
