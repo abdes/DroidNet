@@ -51,8 +51,24 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
     public bool IsHiddenInEditor
     {
         get => this.isHiddenInEditor;
-        set => _ = this.SetProperty(ref this.isHiddenInEditor, value);
+        set
+        {
+            if (this.SetProperty(ref this.isHiddenInEditor, value))
+            {
+                this.OnPropertyChanged(nameof(this.EditorVisibilityGlyph));
+            }
+        }
     }
+
+    /// <summary>
+    /// Gets the eye-slot glyph for the row: red eye when shown, hidden-eye when editor-hidden.
+    /// </summary>
+    /// <remarks>
+    /// Presentation-only helper so the row template binds one property instead of carrying a
+    /// converter. It reflects the explicit entry, not the ancestor closure, which is what lets a
+    /// user see that a dimmed child of a hidden parent has not itself been hidden.
+    /// </remarks>
+    public string EditorVisibilityGlyph => this.IsHiddenInEditor ? "" : "";
 
     /// <summary>
     /// Gets or sets a value indicating whether this row is hidden because it, or an actual scene

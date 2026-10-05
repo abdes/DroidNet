@@ -37,6 +37,43 @@
                 FolderTemplate="{StaticResource FolderThumbnailTemplate}"
                 SceneTemplate="{StaticResource SceneThumbnailTemplate}" />
 
+            <!--
+                Editor-view row slots. The data context of TrailingContentTemplate is the row's
+                logical item, so state comes from the adapter and the commands are reached through
+                the named tree's view model. Buttons invoke commands rather than toggling adapter
+                properties directly: writing IsLocked/IsHiddenInEditor from the view would bypass
+                the command owner and its single undo step.
+            -->
+            <DataTemplate x:Key="RowActionsTemplate" x:DataType="scene:LayoutItemAdapter">
+                <StackPanel Orientation="Horizontal" Spacing="2">
+                    <Button
+                        Width="22"
+                        Height="22"
+                        Padding="0"
+                        AutomationProperties.Name="Toggle Show in Editor"
+                        Command="{Binding ViewModel.ToggleEditorHiddenCommand, ElementName=ExplorerTree}"
+                        CommandParameter="{Binding}"
+                        ToolTipService.ToolTip="Show in Editor">
+                        <FontIcon
+                            FontFamily="{StaticResource SymbolThemeFontFamily}"
+                            FontSize="12"
+                            Glyph="{x:Bind EditorVisibilityGlyph, Mode=OneWay}" />
+                    </Button>
+                    <Button
+                        Width="22"
+                        Height="22"
+                        Padding="0"
+                        AutomationProperties.Name="Toggle lock"
+                        Command="{Binding ViewModel.ToggleEditorLockedCommand, ElementName=ExplorerTree}"
+                        CommandParameter="{Binding}"
+                        ToolTipService.ToolTip="Lock">
+                        <FontIcon
+                            FontFamily="{StaticResource SymbolThemeFontFamily}"
+                            FontSize="12"
+                            Glyph="&#xE72E;" />
+                    </Button>
+                </StackPanel>
+            </DataTemplate>
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -65,7 +102,11 @@
             BorderBrush="Red"
             BorderThickness="1"
             CornerRadius="3">
-            <dnc:DynamicTree ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}" ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
+            <dnc:DynamicTree
+                x:Name="ExplorerTree"
+                ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
+                TrailingContentTemplate="{StaticResource RowActionsTemplate}"
+                ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
         </Border>
         <Grid Grid.Row="1">
             <Grid.Resources>

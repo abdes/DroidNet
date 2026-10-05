@@ -49,6 +49,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly IOperationResultPublisher? operationResults;
     private readonly IStatusReducer? statusReducer;
     private readonly Workspace.WorkspaceInteractionService? interaction;
+    private readonly IProjectContextService? projectContexts;
     private readonly SceneExplorerProjection projection = new();
 
     // Node-clipboard state: copied node identities plus whether they were cut (moved) rather than copied.
@@ -109,12 +110,14 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         ILoggerFactory? loggerFactory = null,
         IOperationResultPublisher? operationResults = null,
         IStatusReducer? statusReducer = null,
-        Workspace.WorkspaceInteractionService? interaction = null)
+        Workspace.WorkspaceInteractionService? interaction = null,
+        IProjectContextService? projectContexts = null)
         : base(loggerFactory)
     {
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
         this.interaction = interaction;
+        this.projectContexts = projectContexts;
         if (interaction is { } service)
         {
             service.StateChanged += this.OnInteractionStateChanged;
@@ -922,6 +925,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         await this.InitializeRootAsync(this.Scene, skipRoot: false).ConfigureAwait(true);
         this.projection.Rebuild(this.Scene);
+
+        // Reload what a previous session stored before the first rows are presented, otherwise the
+        // persistence is write-only and every scene opens with nothing hidden or locked.
+        await this.RestoreWorkspaceInteractionAsync(loadedScene).ConfigureAwait(true);
         this.ApplyWorkspaceInteractionState();
         this.PublishSelection(this.selectionService.Reconcile(loadedScene.Id, loadedScene));
     }
@@ -1609,24 +1616,28 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     }
 
     /// <summary>
-    /// Restores the stored hide and lock state for the active scene and applies it to the rows.
+    /// Loads the stored hide and lock state for a freshly initialized scene and applies it.
     /// </summary>
-    /// <param name="project">The project that owns the stored state.</param>
-    /// <returns>The task completing once the restored state is visible.</returns>
+    /// <param name="loadedScene">The scene model that just became active.</param>
+    /// <returns>The task completing once the restored state is visible on the rows.</returns>
     /// <remarks>
-    /// The composition root calls this: a scene explorer has no business resolving the project
-    /// lifetime it sits inside, and a project-less explorer still supports in-session toggles.
+    /// Without this the persistence is write-only: state saved by a previous session would never
+    /// come back. A project-less explorer (no <see cref="IProjectContextService"/> composed, or no
+    /// active project) simply starts clean, and in-session toggles still work.
     /// </remarks>
-    public async Task RestoreWorkspaceInteractionAsync(Projects.ProjectContext project)
+    private async Task RestoreWorkspaceInteractionAsync(Scene loadedScene)
     {
-        ArgumentNullException.ThrowIfNull(project);
-        if (this.interaction is not { } service || this.Scene is not { } scene)
+        if (this.interaction is not { } service)
         {
             return;
         }
 
-        await service.RestoreAsync(project, scene.AttachedObject.Id).ConfigureAwait(true);
-        this.ApplyWorkspaceInteractionState();
+        if (this.projectContexts?.ActiveProject is not { } project)
+        {
+            return;
+        }
+
+        await service.RestoreAsync(project, loadedScene.Id).ConfigureAwait(true);
     }
 
     /// <summary>

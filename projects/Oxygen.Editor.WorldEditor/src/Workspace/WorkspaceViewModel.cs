@@ -57,6 +57,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     private readonly SemaphoreSlim engineStartupGate = new(initialCount: 1, maxCount: 1);
     private DocumentManager? documentManager;
     private PreviewSettingsService? previewSettings;
+    private Oxygen.Editor.World.Workspace.EditingViewMaskService? editingViewMask;
     private ProjectContext? previewProject;
     private IMessenger? messenger;
 
@@ -172,6 +173,13 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     protected override void OnSetupChildContainer(IContainer childContainer)
     {
         this.previewSettings = childContainer.Resolve<PreviewSettingsService>();
+
+        // Per-window on purpose: it observes this window's workspace hidden set and unsubscribes when
+        // the window closes, so a second window cannot inherit a stale "pending suppression" state.
+        this.editingViewMask = new Oxygen.Editor.World.Workspace.EditingViewMaskService(
+            childContainer.Resolve<Oxygen.Editor.World.Workspace.WorkspaceInteractionService>(),
+            childContainer.Resolve<IOperationResultPublisher>(),
+            childContainer.Resolve<IStatusReducer>()).Start();
         childContainer.Register<IMessenger, StrongReferenceMessenger>(Reuse.Singleton);
 
         // Resolve messenger instance from the child container so the view model can use it.
@@ -241,6 +249,9 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             {
                 this.previewSettings?.Deactivate(project);
             }
+
+            this.editingViewMask?.Dispose();
+            this.editingViewMask = null;
 
             this.publicationRegistration?.Dispose();
             this.publicationRegistration = null;
