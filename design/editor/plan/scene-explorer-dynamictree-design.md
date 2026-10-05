@@ -1606,7 +1606,7 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       `AuthoringChanged` signal is missing; the unproven part is that
       command-driven mutations reach it, moved to T12 instead of staying an
       SE-03 note.
-- [ ] P7 — `documents-and-commands.md:179-184` names five operations that do not
+- [x] P7 — `documents-and-commands.md:179-184` names five operations that do not
       exist in `ISceneDocumentCommandService` (`DeleteNodeHierarchyAsync`,
       `DeleteExplorerFolderAsync`, `CreateExplorerFolderAsync`,
       `RenameExplorerFolderAsync`, `MoveExplorerLayoutItemAsync`; grep across
@@ -1634,7 +1634,7 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       Proposed §8 wording is pending the owner's approval; the one-to-one claim
       at doc:172 is false in both directions (`DeleteItemsAsync` → 2 kinds, four
       layout methods → 1 kind).
-- [ ] P8 — cross-doc consistency pass: four texts still contradict the owner's
+- [x] P8 — cross-doc consistency pass: four texts still contradict the owner's
       recorded D1/D2. The interface XMLDoc says grouping happens "without
       changing scene parenting or transforms"
       (`ISceneDocumentCommandService.cs:317`); the plan's own drop table says
