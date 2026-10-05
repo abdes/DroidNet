@@ -86,6 +86,7 @@ public partial class SceneExplorerViewModel
 
         this.loadSceneCts?.Cancel();
         this.selectionApplyGeneration++;
+        _ = Interlocked.Increment(ref this.searchGeneration);
         this.selectionSyncDepth++;
         try
         {
@@ -95,6 +96,8 @@ public partial class SceneExplorerViewModel
             this.ClearCutMarks();
             this.ClipboardItemStore = [];
             this.FilterPredicate = null;
+            this.SearchText = string.Empty;
+            this.SearchResultCount = 0;
             this.searchExpandedFolderIds.Clear();
             this.searchExpandedNodeIds.Clear();
             this.interaction?.ClearActiveScene();
@@ -105,6 +108,8 @@ public partial class SceneExplorerViewModel
             this.selectionSyncDepth--;
         }
 
+        this.NotifyCategoryAvailabilityChanged();
+        this.OnPropertyChanged(nameof(this.CanChangeCategories));
         this.RefreshContextActions();
         this.NotifySelectionDependentCommands();
     }

@@ -3,18 +3,25 @@
     x:Class="Oxygen.Editor.World.SceneExplorer.SceneExplorerView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dnc="using:DroidNet.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:scene="using:Oxygen.Editor.World.SceneExplorer"
     xmlns:utils="using:Oxygen.Editor.World.Utils"
     KeyboardAcceleratorPlacementMode="Hidden"
+    SizeChanged="OnExplorerSizeChanged"
     mc:Ignorable="d">
 
     <UserControl.Resources>
         <ResourceDictionary>
+            <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+
             <DataTemplate x:Key="SceneThumbnailTemplate" x:DataType="dnc:TreeItemAdapter">
-                <Image Source="{x:Bind utils:ThumbnailGenerator.GenerateRandomImage(24, 24)}" />
+                <SymbolIcon
+                    Width="24"
+                    Height="24"
+                    Symbol="Home" />
             </DataTemplate>
 
             <DataTemplate x:Key="EntityThumbnailTemplate" x:DataType="dnc:TreeItemAdapter">
@@ -41,6 +48,79 @@
             <DataTemplate x:Key="RowActionsTemplate" x:DataType="scene:LayoutItemAdapter">
                 <scene:SceneRowActions />
             </DataTemplate>
+
+            <SolidColorBrush
+                x:Key="ExplorerCategorySelectionBrush"
+                Opacity="0.25"
+                Color="{ThemeResource SystemAccentColor}" />
+            <Style x:Key="ExplorerCategoryToggleStyle" TargetType="ToggleButton">
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="MinHeight" Value="28" />
+                <Setter Property="Padding" Value="8,3" />
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="FontWeight" Value="Normal" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ToggleButton">
+                            <Border
+                                x:Name="CategoryBackground"
+                                Padding="{TemplateBinding Padding}"
+                                Background="Transparent"
+                                CornerRadius="4">
+                                <ContentPresenter
+                                    x:Name="CategoryContent"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Content="{TemplateBinding Content}" />
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal" />
+                                        <VisualState x:Name="PointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="CategoryBackground.Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="CategoryBackground.Background" Value="{ThemeResource ControlFillColorTertiaryBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Disabled" />
+                                        <VisualState x:Name="Checked">
+                                            <VisualState.Setters>
+                                                <Setter Target="CategoryBackground.Background" Value="{StaticResource ExplorerCategorySelectionBrush}" />
+                                                <Setter Target="CategoryContent.Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="CheckedPointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="CategoryBackground.Background" Value="{StaticResource ExplorerCategorySelectionBrush}" />
+                                                <Setter Target="CategoryContent.Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="CheckedPressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="CategoryBackground.Background" Value="{StaticResource ExplorerCategorySelectionBrush}" />
+                                                <Setter Target="CategoryContent.Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="CheckedDisabled">
+                                            <VisualState.Setters>
+                                                <Setter Target="CategoryBackground.Background" Value="{StaticResource ExplorerCategorySelectionBrush}" />
+                                                <Setter Target="CategoryContent.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -57,10 +137,19 @@
     </UserControl.KeyboardAccelerators>
 
     <Grid
-        Padding="4"
+        x:Name="ExplorerRoot"
+        Padding="8"
         HorizontalAlignment="Stretch"
         VerticalAlignment="Stretch">
+        <Grid.Resources>
+            <ResourceDictionary>
+                <ResourceDictionary.MergedDictionaries>
+                    <ResourceDictionary Source="ms-appx:///Microsoft.UI.Xaml/DensityStyles/Compact.xaml" />
+                </ResourceDictionary.MergedDictionaries>
+            </ResourceDictionary>
+        </Grid.Resources>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -75,21 +164,89 @@
                 <Button Command="{x:Bind ViewModel.ReloadPreviousSceneCommand}" Content="Reload previous saved scene" />
             </InfoBar.ActionButton>
         </InfoBar>
-        <Border
+        <StackPanel
             Grid.Row="1"
-            Padding="0,3"
-            BorderBrush="Red"
-            BorderThickness="1"
-            CornerRadius="3">
-            <!--  64-DIP slots plus DynamicTree's 4/20-DIP trailing margins.  -->
-            <dnc:DynamicTree
-                x:Name="ExplorerTree"
-                ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
-                TrailingContentTemplate="{StaticResource RowActionsTemplate}"
-                TrailingContentWidth="88"
-                ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
-        </Border>
-        <Grid Grid.Row="2">
+            Margin="0,8,0,6"
+            Spacing="6">
+            <AutoSuggestBox
+                x:Name="SearchBox"
+                MinHeight="34"
+                AutomationProperties.Name="Search scene hierarchy"
+                PlaceholderText="Find an object..."
+                Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
+                TextChanged="SearchBox_TextChanged">
+                <AutoSuggestBox.QueryIcon>
+                    <FontIcon FontSize="14" Glyph="&#xE721;" />
+                </AutoSuggestBox.QueryIcon>
+            </AutoSuggestBox>
+            <TextBlock
+                x:Name="SearchResultCountText"
+                Margin="8,0"
+                AutomationProperties.LiveSetting="Polite"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Style="{ThemeResource CaptionTextBlockStyle}"
+                Text="{x:Bind ViewModel.SearchResultText, Mode=OneWay}"
+                Visibility="{x:Bind ViewModel.HasSearchQuery, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+            <Grid
+                x:Name="CategoryFilterPanel"
+                ColumnSpacing="4"
+                Visibility="{x:Bind ViewModel.HasAnyCategory, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="{x:Bind ViewModel.MeshCategoryColumnWidth, Mode=OneWay}" />
+                    <ColumnDefinition Width="{x:Bind ViewModel.LightCategoryColumnWidth, Mode=OneWay}" />
+                    <ColumnDefinition Width="{x:Bind ViewModel.CameraCategoryColumnWidth, Mode=OneWay}" />
+                </Grid.ColumnDefinitions>
+                <ToggleButton
+                    x:Name="MeshCategoryButton"
+                    Grid.Column="0"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Center"
+                    AutomationProperties.Name="Filter meshes"
+                    IsChecked="{x:Bind ViewModel.ShowMeshesInExplorer, Mode=TwoWay}"
+                    IsEnabled="{x:Bind ViewModel.CanChangeCategories, Mode=OneWay}"
+                    Style="{StaticResource ExplorerCategoryToggleStyle}"
+                    ToolTipService.ToolTip="Show or hide mesh objects in the Scene Explorer."
+                    Visibility="{x:Bind ViewModel.HasMeshCategory, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <TextBlock Text="Meshes" />
+                </ToggleButton>
+                <ToggleButton
+                    x:Name="LightCategoryButton"
+                    Grid.Column="1"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Center"
+                    AutomationProperties.Name="Filter lights"
+                    IsChecked="{x:Bind ViewModel.ShowLightsInExplorer, Mode=TwoWay}"
+                    IsEnabled="{x:Bind ViewModel.CanChangeCategories, Mode=OneWay}"
+                    Style="{StaticResource ExplorerCategoryToggleStyle}"
+                    ToolTipService.ToolTip="Show or hide light objects in the Scene Explorer."
+                    Visibility="{x:Bind ViewModel.HasLightCategory, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <TextBlock Text="Lights" />
+                </ToggleButton>
+                <ToggleButton
+                    x:Name="CameraCategoryButton"
+                    Grid.Column="2"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Center"
+                    AutomationProperties.Name="Filter cameras"
+                    IsChecked="{x:Bind ViewModel.ShowCamerasInExplorer, Mode=TwoWay}"
+                    IsEnabled="{x:Bind ViewModel.CanChangeCategories, Mode=OneWay}"
+                    Style="{StaticResource ExplorerCategoryToggleStyle}"
+                    ToolTipService.ToolTip="Show or hide camera objects in the Scene Explorer."
+                    Visibility="{x:Bind ViewModel.HasCameraCategory, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <TextBlock Text="Cameras" />
+                </ToggleButton>
+            </Grid>
+        </StackPanel>
+        <!--  64-DIP slots plus DynamicTree's 4/20-DIP trailing margins.  -->
+        <dnc:DynamicTree
+            x:Name="ExplorerTree"
+            Grid.Row="2"
+            IsFilteringEnabled="True"
+            ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
+            TrailingContentTemplate="{StaticResource RowActionsTemplate}"
+            TrailingContentWidth="88"
+            ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
+        <Grid Grid.Row="3">
             <Grid.Resources>
                 <Style TargetType="AppBarButton">
                     <Setter Property="Width" Value="40" />
@@ -159,5 +316,41 @@
                 </dnc:ToolBar.PrimaryItems>
             </dnc:ToolBar>
         </Grid>
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="DensityStates">
+                <VisualState x:Name="Standard">
+                    <VisualState.Setters>
+                        <Setter Target="SearchBox.MinHeight" Value="36" />
+                        <Setter Target="SearchBox.FontSize" Value="14" />
+                        <Setter Target="CategoryFilterPanel.ColumnSpacing" Value="4" />
+                        <Setter Target="MeshCategoryButton.MinHeight" Value="32" />
+                        <Setter Target="MeshCategoryButton.FontSize" Value="14" />
+                        <Setter Target="MeshCategoryButton.Padding" Value="8,4" />
+                        <Setter Target="LightCategoryButton.MinHeight" Value="32" />
+                        <Setter Target="LightCategoryButton.FontSize" Value="14" />
+                        <Setter Target="LightCategoryButton.Padding" Value="8,4" />
+                        <Setter Target="CameraCategoryButton.MinHeight" Value="32" />
+                        <Setter Target="CameraCategoryButton.FontSize" Value="14" />
+                        <Setter Target="CameraCategoryButton.Padding" Value="8,4" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Compact">
+                    <VisualState.Setters>
+                        <Setter Target="SearchBox.MinHeight" Value="32" />
+                        <Setter Target="SearchBox.FontSize" Value="14" />
+                        <Setter Target="CategoryFilterPanel.ColumnSpacing" Value="2" />
+                        <Setter Target="MeshCategoryButton.MinHeight" Value="28" />
+                        <Setter Target="MeshCategoryButton.FontSize" Value="14" />
+                        <Setter Target="MeshCategoryButton.Padding" Value="6,3" />
+                        <Setter Target="LightCategoryButton.MinHeight" Value="28" />
+                        <Setter Target="LightCategoryButton.FontSize" Value="14" />
+                        <Setter Target="LightCategoryButton.Padding" Value="6,3" />
+                        <Setter Target="CameraCategoryButton.MinHeight" Value="28" />
+                        <Setter Target="CameraCategoryButton.FontSize" Value="14" />
+                        <Setter Target="CameraCategoryButton.Padding" Value="6,3" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
     </Grid>
 </UserControl>

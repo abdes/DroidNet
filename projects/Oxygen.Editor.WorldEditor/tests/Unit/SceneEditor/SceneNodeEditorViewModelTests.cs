@@ -12,6 +12,8 @@ using DroidNet.Mvvm;
 using DroidNet.TimeMachine;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Materials;
+using Oxygen.Editor.Data.Services;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
@@ -19,8 +21,10 @@ using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
 
@@ -46,6 +50,31 @@ public sealed class SceneNodeEditorViewModelTests
         _ = sut.HasPendingLiveSyncEdits.Should().BeTrue();
         _ = sut.PendingLiveSyncTitle.Should().Be("Runtime sync pending");
         _ = sut.PendingLiveSyncMessage.Should().Be("2 editor property edits will replay after the scene syncs.");
+    }
+
+    [TestMethod]
+    public async Task LockedSelection_RemainsInspectableAndDisablesAuthoring()
+    {
+        var scene = CreateScene();
+        var parent = new SceneNode(scene) { Name = "Locked Parent" };
+        var child = new SceneNode(scene) { Name = "Child" };
+        child.Components.Clear();
+        parent.AddChild(child);
+        scene.RootNodes.Add(parent);
+        var interaction = new WorkspaceInteractionService(
+            new Mock<IEditorSettingsManager>(MockBehavior.Loose).Object,
+            Mock.Of<IOperationResultPublisher>(),
+            new OperationStatusReducer());
+        await interaction.RestoreAsync(
+            ProjectContext.FromProjectInfo(new ProjectInfo("Inspector lock tests", Category.Games, "H:/InspectorLockTests")),
+            scene.Id).ConfigureAwait(false);
+        interaction.SetLocked(parent.Id, isLocked: true);
+
+        using var sut = CreateSut(Mock.Of<ISceneEngineSync>(), [child], interaction);
+
+        _ = sut.SelectedNode.Should().BeSameAs(child);
+        _ = sut.HasLockedSelection.Should().BeTrue();
+        _ = sut.CanEditSelectedNodes.Should().BeFalse();
     }
 
     [TestMethod]
@@ -135,7 +164,8 @@ public sealed class SceneNodeEditorViewModelTests
 
     private static SceneNodeEditorViewModel CreateSut(
         ISceneEngineSync sceneEngineSync,
-        IList<SceneNode> selectedNodes)
+        IList<SceneNode> selectedNodes,
+        WorkspaceInteractionService? interaction = null)
     {
         var messenger = new StrongReferenceMessenger();
         messenger.Register<SceneNodeSelectionRequestMessage>(
@@ -171,7 +201,8 @@ public sealed class SceneNodeEditorViewModelTests
             new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(),
             Mock.Of<ISceneContentDemandService>(),
             Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(),
-            Mock.Of<Oxygen.Editor.Projects.IProjectContextService>());
+            Mock.Of<Oxygen.Editor.Projects.IProjectContextService>(),
+            interaction: interaction);
     }
 
     private static Scene CreateScene()

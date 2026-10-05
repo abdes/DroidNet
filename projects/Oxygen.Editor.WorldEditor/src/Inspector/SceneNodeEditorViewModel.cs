@@ -22,6 +22,7 @@ using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
+using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
 
@@ -40,6 +41,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private readonly ISceneDocumentCommandService commandService;
     private readonly IDocumentService documentService;
     private readonly ISceneEngineSync sceneEngineSync;
+    private readonly WorkspaceInteractionService? interaction;
     private readonly WindowId windowId;
     private readonly DispatcherQueue? dispatcher;
     private readonly InspectorSelectionObserver selectionObserver;
@@ -73,6 +75,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="contentDemand">The saved-asset preview request owner.</param>
     /// <param name="materialSlots">The current native geometry slot inventories.</param>
     /// <param name="projectContexts">The active project lifetime.</param>
+    /// <param name="interaction">The shared editor lock owner.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
     ///     recognition process. If <see langword="null" />, logging is disabled.
@@ -92,7 +95,8 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         ISceneContentDemandService contentDemand,
         IGeometryMaterialSlotProvider materialSlots,
         IProjectContextService projectContexts,
-        ILoggerFactory? loggerFactory = null)
+        ILoggerFactory? loggerFactory = null,
+        WorkspaceInteractionService? interaction = null)
         : base(loggerFactory)
     {
         this.logger = loggerFactory?.CreateLogger<SceneNodeEditorViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<SceneNodeEditorViewModel>();
@@ -102,6 +106,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.commandService = commandService;
         this.documentService = documentService;
         this.sceneEngineSync = sceneEngineSync;
+        this.interaction = interaction;
         this.sceneSelectionService = selectionService;
         this.windowId = windowId;
         this.VmToViewConverter = vmToViewConverter;
@@ -144,6 +149,12 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             }
         }
 
+        if (interaction is { } interactionService)
+        {
+            interactionService.StateChanged += this.OnWorkspaceInteractionStateChanged;
+        }
+
+        this.NotifyLockEligibilityChanged();
         this.RefreshPendingLiveSyncState();
         this.environmentEditor.SetScene(this.HasEnvironmentView ? this.activeScene : null);
         this.UpdateItemsCollection(this.items);
@@ -192,6 +203,29 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <summary>Gets a value indicating whether a grouping summary or unresolved selection notice is visible.</summary>
     public bool HasSelectionNotice => this.HasSelectionSummary
         || (this.selectionContext.Kind == SceneSelectionKind.Node && !this.HasItems);
+
+    /// <summary>Gets a value indicating whether the current node selection can be authored.</summary>
+    public bool CanEditSelectedNodes => this.items.All(node => this.interaction?.GetLockOwner(node) is null);
+
+    /// <summary>Gets a value indicating whether a lock protects any node in the current selection.</summary>
+    public bool HasLockedSelection => this.items.Any(node => this.interaction?.GetLockOwner(node) is not null);
+
+    /// <summary>Gets the explanation shown when a selected node is protected by a lock.</summary>
+    public string LockedEditingMessage
+    {
+        get
+        {
+            var node = this.items.FirstOrDefault(candidate => this.interaction?.GetLockOwner(candidate) is not null);
+            if (node is null || this.interaction?.GetLockOwner(node) is not { } lockOwner)
+            {
+                return string.Empty;
+            }
+
+            return ReferenceEquals(node, lockOwner)
+                ? $"'{node.Name}' is locked. It remains selectable for inspection, but its properties cannot be changed."
+                : $"'{node.Name}' is protected by locked parent '{lockOwner.Name}'. Its properties cannot be changed.";
+        }
+    }
 
     /// <summary>Gets a value indicating whether the scene environment editor is the active surface.</summary>
     public bool HasEnvironmentView => !this.HasItems
@@ -273,6 +307,11 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         }
 
         this.sceneEngineSync.PendingPropertySyncCountChanged -= this.OnPendingPropertySyncCountChanged;
+        if (this.interaction is { } interactionService)
+        {
+            interactionService.StateChanged -= this.OnWorkspaceInteractionStateChanged;
+        }
+
         this.messenger.UnregisterAll(this);
         WeakReferenceMessenger.Default.UnregisterAll(this);
         this.selectionObserver.Dispose();
@@ -314,6 +353,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
         this.OnPropertyChanged(nameof(this.IsSingleItemSelected));
         this.OnPropertyChanged(nameof(this.SelectedNode));
+        this.NotifyLockEligibilityChanged();
         this.OnPropertyChanged(nameof(this.HasInspectorContent));
         this.OnPropertyChanged(nameof(this.InspectorTitle));
         this.NotifySelectionRoutingChanged();
@@ -378,12 +418,15 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         {
             editor.UpdateValues(selection);
             _ = this.boundEditors.Add(editor);
-            editor.SetInputEnabled(this.PropertyEditors.Contains(editor));
+            editor.SetInputEnabled(this.IsEditorInputEnabled(editor));
         }
 
         this.environmentEditor.UpdateValues(selection);
         this.environmentEditor.SetInputEnabled(this.PropertyEditors.Contains(this.environmentEditor));
     }
+
+    private bool IsEditorInputEnabled(ComponentPropertyEditor editor)
+        => this.PropertyEditors.Contains(editor) && this.CanEditSelectedNodes;
 
     private async Task InspectAtmosphereSource(Guid nodeId)
     {
@@ -623,6 +666,38 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         }
 
         UpdateCount();
+    }
+
+    private void OnWorkspaceInteractionStateChanged(object? sender, EventArgs args)
+    {
+        _ = sender;
+        _ = args;
+
+        void UpdateEligibility()
+        {
+            if (this.isDisposed)
+            {
+                return;
+            }
+
+            this.NotifyLockEligibilityChanged();
+            this.RefreshEditorInputState();
+        }
+
+        if (this.dispatcher is { HasThreadAccess: false })
+        {
+            _ = this.dispatcher.TryEnqueue(UpdateEligibility);
+            return;
+        }
+
+        UpdateEligibility();
+    }
+
+    private void NotifyLockEligibilityChanged()
+    {
+        this.OnPropertyChanged(nameof(this.CanEditSelectedNodes));
+        this.OnPropertyChanged(nameof(this.HasLockedSelection));
+        this.OnPropertyChanged(nameof(this.LockedEditingMessage));
     }
 
     private void RefreshPendingLiveSyncState()

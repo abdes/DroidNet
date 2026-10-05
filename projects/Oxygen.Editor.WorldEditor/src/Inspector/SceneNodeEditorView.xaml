@@ -42,6 +42,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <InfoBar
@@ -84,6 +85,7 @@
                             AllComponentsRequested="OnAllComponentsRequested"
                             HistoryRoot="{x:Bind ViewModel, Mode=OneWay}"
                             IsAllComponentsSelected="{x:Bind ViewModel.IsAllComponentsSelected, Mode=OneWay}"
+                            IsEnabled="{x:Bind ViewModel.CanEditSelectedNodes, Mode=OneWay}"
                             LoggerFactory="{x:Bind ViewModel.LoggerFactory}"
                             Node="{x:Bind ViewModel.SelectedNode, Mode=OneWay}"
                             SelectedComponent="{x:Bind ViewModel.SelectedComponent, Mode=OneWay}"
@@ -178,8 +180,17 @@
                     </ScrollViewer>
                 </StackPanel>
             </Border>
-            <TextBlock
+            <InfoBar
+                Title="Locked for editing"
                 Grid.Row="2"
+                Margin="4,0,4,6"
+                IsClosable="False"
+                IsOpen="{x:Bind ViewModel.HasLockedSelection, Mode=OneWay}"
+                Message="{x:Bind ViewModel.LockedEditingMessage, Mode=OneWay}"
+                Severity="Warning"
+                Visibility="{x:Bind ViewModel.HasLockedSelection, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
+            <TextBlock
+                Grid.Row="3"
                 Margin="8,4"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 Text="{x:Bind ViewModel.UnavailableComponentEditorMessage, Mode=OneWay}"
@@ -187,7 +198,7 @@
                 Visibility="{x:Bind ViewModel.HasUnavailableComponentEditor, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
             <ScrollViewer
                 x:Name="PropertyScroll"
-                Grid.Row="3"
+                Grid.Row="4"
                 Padding="4,0,4,4"
                 HorizontalScrollBarVisibility="Disabled"
                 HorizontalScrollMode="Disabled"
@@ -209,7 +220,7 @@
                 </ItemsRepeater>
             </ScrollViewer>
             <TextBlock
-                Grid.Row="3"
+                Grid.Row="4"
                 Margin="10,20"
                 VerticalAlignment="Top"
                 AutomationProperties.Name="Selection summary"
@@ -218,7 +229,7 @@
                 TextWrapping="Wrap"
                 Visibility="{x:Bind ViewModel.HasSelectionNotice, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
             <local:EnvironmentView
-                Grid.Row="3"
+                Grid.Row="4"
                 ViewModel="{x:Bind ViewModel.EnvironmentEditor}"
                 Visibility="{x:Bind ViewModel.HasEnvironmentView, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
         </Grid>

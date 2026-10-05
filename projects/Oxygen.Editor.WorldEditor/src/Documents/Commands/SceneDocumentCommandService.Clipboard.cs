@@ -94,6 +94,22 @@ public sealed partial class SceneDocumentCommandService
                 : anchor.Parent.Children.IndexOf(anchor) + 1;
         }
 
+        var destinationParent = parentNode
+            ?? (folderSceneParentNodeId is { } parentId ? FindNode(context.Scene, parentId) : null);
+        if (folderSceneParentNodeId.HasValue && destinationParent is null)
+        {
+            return this.DuplicateFailure(
+                DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                "The target folder's scene parent no longer exists.",
+                context);
+        }
+
+        if (destinationParent is not null
+            && this.RejectLockedTargets(context, SceneOperationKinds.NodeDuplicate, [destinationParent]) is { } lockFailure)
+        {
+            return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>(lockFailure.OperationResultId);
+        }
+
         // Resolve every source up front so a stale id cannot leave a partially committed batch.
         var sources = new List<SceneNode>(topLevelIds.Count);
         foreach (var nodeId in topLevelIds)
@@ -222,6 +238,22 @@ public sealed partial class SceneDocumentCommandService
             insertIndex = anchor.Parent is null
                 ? context.Scene.RootNodes.IndexOf(anchor) + 1
                 : anchor.Parent.Children.IndexOf(anchor) + 1;
+        }
+
+        var destinationParent = parentNode
+            ?? (folderSceneParentNodeId is { } parentId ? FindNode(context.Scene, parentId) : null);
+        if (folderSceneParentNodeId.HasValue && destinationParent is null)
+        {
+            return this.DuplicateFailure(
+                DiagnosticCodes.ScenePrefix + "STALE_TARGET",
+                "The target folder's scene parent no longer exists.",
+                context);
+        }
+
+        if (destinationParent is not null
+            && this.RejectLockedTargets(context, SceneOperationKinds.NodeDuplicate, [destinationParent]) is { } lockFailure)
+        {
+            return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>(lockFailure.OperationResultId);
         }
 
         var created = new List<SceneNode>(rootData.Count);

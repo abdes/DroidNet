@@ -6,22 +6,25 @@ using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
-using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Moq;
+using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Inspector;
+using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World;
+using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
 using NumberBox = DroidNet.Controls.NumberBox;
@@ -31,7 +34,37 @@ namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 [TestClass]
 public sealed partial class ComponentFiltersTests : DroidNet.Tests.VisualUserInterfaceTests
 {
+    /// <summary>Gets or sets the current test context.</summary>
     public TestContext TestContext { get; set; } = null!;
+
+    /// <summary>Verifies lock changes and component filtering keep Inspector inputs disabled.</summary>
+    /// <returns>The asynchronous UI regression.</returns>
+    [TestMethod]
+    public Task LockChangeAndComponentFilterKeepInspectorInputsDisabled() => EnqueueAsync(async () =>
+    {
+        var interaction = new WorkspaceInteractionService(
+            Mock.Of<IEditorSettingsManager>(),
+            Mock.Of<IOperationResultPublisher>(),
+            new OperationStatusReducer());
+        using var fixture = new SceneAuthoringFixture(interaction);
+        await interaction.RestoreAsync(
+            ProjectContext.FromProjectInfo(new ProjectInfo("Inspector lock tests", Category.Games, "H:/InspectorLockTests")),
+            fixture.Scene.Id).ConfigureAwait(true);
+        using var model = fixture.CreateInspectorHost("Light", realizeViews: true);
+        var view = new SceneNodeEditorView { ViewModel = model, Width = 420, Height = 600 };
+        await LoadTestContentAsync(view).ConfigureAwait(true);
+
+        var editor = model.PropertyEditors.OfType<DirectionalLightViewModel>().Single();
+        _ = editor.IsInputEnabled.Should().BeTrue();
+        interaction.SetLocked(fixture.Node.Id, isLocked: true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = editor.IsInputEnabled.Should().BeFalse("the lock notification must disable the active component editor");
+
+        model.SelectComponentFilter(typeof(DirectionalLightComponent));
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = model.HasLockedSelection.Should().BeTrue();
+        _ = editor.IsInputEnabled.Should().BeFalse("changing filters must not re-enable a locked component editor");
+    });
 
     /// <summary>All, individual types and repeated toggles change visible sections without authored edits.</summary>
     /// <returns>The asynchronous inspector regression.</returns>

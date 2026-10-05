@@ -5,6 +5,7 @@
 using System.Numerics;
 using AwesomeAssertions;
 using Moq;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.Serialization;
@@ -39,9 +40,11 @@ public sealed partial class SceneDocumentCommandServiceTests
     [TestMethod]
     public async Task RenameNodeAsync_WhenCommitted_RecordsSingleUndoStep()
     {
-        var fixture = CreateFixture();
-        ConfigureHierarchySync(fixture);
+        var (interaction, _) = CreateInteraction();
         var scene = CreateScene();
+        await interaction.RestoreAsync(ProjectContext.FromProjectInfo(SlotTestProjectInfo), scene.Id).ConfigureAwait(false);
+        var fixture = CreateFixture(interaction: interaction);
+        ConfigureHierarchySync(fixture);
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
         var context = CreateContext(scene);
@@ -52,6 +55,11 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = node.Name.Should().Be("Sphere");
         _ = context.Metadata.IsDirty.Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
+        interaction.SetLocked(node.Id, isLocked: true);
+
+        var rejected = await fixture.Sut.RenameNodeAsync(context, node.Id, "Blocked").ConfigureAwait(false);
+        _ = rejected.Succeeded.Should().BeFalse();
+        _ = node.Name.Should().Be("Sphere");
         fixture.Sync.Verify(sync => sync.RenameNodeAsync(scene, node.Id, "Sphere"), Times.Once);
 
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -162,6 +170,29 @@ public sealed partial class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
+    public async Task CreateFolderAsync_WhenParentNodeIsLocked_RejectsWithoutSeedingLayout()
+    {
+        var scene = CreateScene();
+        var parent = new SceneNode(scene) { Name = "Locked Parent" };
+        scene.RootNodes.Add(parent);
+        var context = CreateContext(scene);
+        var (interaction, _) = CreateInteraction();
+        await interaction.RestoreAsync(ProjectContext.FromProjectInfo(SlotTestProjectInfo), scene.Id).ConfigureAwait(false);
+        interaction.SetLocked(parent.Id, isLocked: true);
+        var fixture = CreateFixture(interaction: interaction);
+
+        var result = await fixture.Sut.CreateFolderAsync(context, parentFolderId: null, parentNodeId: parent.Id, "Folder").ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = scene.ExplorerLayout.Should().BeNull();
+        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Results.Published.Should().ContainSingle()
+            .Which.Diagnostics.Should().ContainSingle()
+            .Which.Code.Should().Be(DiagnosticCodes.ScenePrefix + "NODE_LOCKED");
+    }
+
+    [TestMethod]
     public async Task DeleteNodesAsync_DeletesSubtreeAndUndoRestoresExactHierarchy()
     {
         var fixture = CreateFixture();
@@ -189,6 +220,62 @@ public sealed partial class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
+    public async Task DeleteNodesAsync_WhenDescendantIsLocked_RejectsTheWholeSubtree()
+    {
+        var scene = CreateScene();
+        var root = new SceneNode(scene) { Name = "Root" };
+        var child = new SceneNode(scene) { Name = "Locked Child" };
+        root.AddChild(child);
+        scene.RootNodes.Add(root);
+        var context = CreateContext(scene);
+        var (interaction, _) = CreateInteraction();
+        await interaction.RestoreAsync(ProjectContext.FromProjectInfo(SlotTestProjectInfo), scene.Id).ConfigureAwait(false);
+        interaction.SetLocked(child.Id, isLocked: true);
+        var fixture = CreateFixture(interaction: interaction);
+
+        var result = await fixture.Sut.DeleteNodesAsync(context, [root.Id]).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = scene.RootNodes.Should().ContainSingle().Which.Should().BeSameAs(root);
+        _ = root.Children.Should().ContainSingle().Which.Should().BeSameAs(child);
+        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Results.Published.Should().ContainSingle()
+            .Which.Diagnostics.Should().ContainSingle()
+            .Which.Code.Should().Be(DiagnosticCodes.ScenePrefix + "NODE_LOCKED");
+    }
+
+    [TestMethod]
+    public async Task ReparentNodesAsync_WhenDestinationIsLocked_RejectsWithoutMovingNode()
+    {
+        var scene = CreateScene();
+        var source = new SceneNode(scene) { Name = "Source" };
+        var destination = new SceneNode(scene) { Name = "Locked Destination" };
+        scene.RootNodes.Add(source);
+        scene.RootNodes.Add(destination);
+        var context = CreateContext(scene);
+        var (interaction, _) = CreateInteraction();
+        await interaction.RestoreAsync(ProjectContext.FromProjectInfo(SlotTestProjectInfo), scene.Id).ConfigureAwait(false);
+        interaction.SetLocked(destination.Id, isLocked: true);
+        var fixture = CreateFixture(interaction: interaction);
+
+        var result = await fixture.Sut.ReparentNodesAsync(
+            context,
+            [source.Id],
+            destination.Id,
+            preserveWorldTransform: false).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = source.Parent.Should().BeNull();
+        _ = destination.Children.Should().BeEmpty();
+        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Results.Published.Should().ContainSingle()
+            .Which.Diagnostics.Should().ContainSingle()
+            .Which.Code.Should().Be(DiagnosticCodes.ScenePrefix + "NODE_LOCKED");
+    }
+
+    [TestMethod]
     public async Task DeleteFolderAsync_PromotesContainedEntriesWithoutRemovingNodes()
     {
         var fixture = CreateFixture();
@@ -211,6 +298,69 @@ public sealed partial class SceneDocumentCommandServiceTests
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = scene.ExplorerLayout.Should().NotBeNull();
         _ = scene.AllNodes.Should().ContainSingle();
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task DeleteFolderAsync_WhenContainedNodeIsLocked_AllowsPromotionAtAnyFolderDepth(bool nested)
+    {
+        var (interaction, _) = CreateInteraction();
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Locked grouped node" };
+        scene.RootNodes.Add(node);
+        await interaction.RestoreAsync(ProjectContext.FromProjectInfo(SlotTestProjectInfo), scene.Id).ConfigureAwait(false);
+        var fixture = CreateFixture(interaction: interaction);
+        ConfigureHierarchySync(fixture);
+        var context = CreateContext(scene);
+        var outer = await fixture.Sut.CreateFolderAsync(context, parentFolderId: null, parentNodeId: null, "Outer").ConfigureAwait(false);
+        var targetFolderId = outer.Value!;
+        if (nested)
+        {
+            var inner = await fixture.Sut.CreateFolderAsync(context, parentFolderId: outer.Value, parentNodeId: null, "Inner").ConfigureAwait(false);
+            targetFolderId = inner.Value!;
+        }
+
+        _ = (await fixture.Sut.MoveNodesToFolderAsync(context, [node.Id], targetFolderId).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+        interaction.SetLocked(node.Id, isLocked: true);
+        var result = await fixture.Sut.DeleteFolderAsync(context, outer.Value!).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue("folder removal does not edit the locked scene node");
+        _ = scene.AllNodes.Should().ContainSingle().Which.Should().BeSameAs(node);
+        _ = FindFolderEntry(scene.ExplorerLayout, outer.Value).Should().BeNull();
+        if (nested)
+        {
+            _ = FindFolderEntry(scene.ExplorerLayout, targetFolderId)!.Children
+                .Should().Contain(entry => entry.NodeId == node.Id);
+        }
+        else
+        {
+            _ = scene.ExplorerLayout.Should().Contain(entry => entry.NodeId == node.Id);
+        }
+    }
+
+    [TestMethod]
+    public async Task DeleteItemsAsync_MixedBatchWithLockedNodeInsideFolder_DeletesItemsAndPromotesLockedNode()
+    {
+        var (interaction, _) = CreateInteraction();
+        var scene = CreateScene();
+        var lockedNode = new SceneNode(scene) { Name = "Locked grouped node" };
+        var selectedNode = new SceneNode(scene) { Name = "Selected node" };
+        scene.RootNodes.Add(lockedNode);
+        scene.RootNodes.Add(selectedNode);
+        await interaction.RestoreAsync(ProjectContext.FromProjectInfo(SlotTestProjectInfo), scene.Id).ConfigureAwait(false);
+        var fixture = CreateFixture(interaction: interaction);
+        ConfigureHierarchySync(fixture);
+        var context = CreateContext(scene);
+        var folder = await fixture.Sut.CreateFolderAsync(context, parentFolderId: null, parentNodeId: null, "Folder").ConfigureAwait(false);
+        _ = (await fixture.Sut.MoveNodesToFolderAsync(context, [lockedNode.Id], folder.Value!).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+        interaction.SetLocked(lockedNode.Id, isLocked: true);
+        var result = await fixture.Sut.DeleteItemsAsync(context, [selectedNode.Id], [folder.Value!]).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = scene.AllNodes.Should().ContainSingle().Which.Should().BeSameAs(lockedNode);
+        _ = FindFolderEntry(scene.ExplorerLayout, folder.Value).Should().BeNull();
+        _ = scene.ExplorerLayout.Should().Contain(entry => entry.NodeId == lockedNode.Id);
     }
 
     [TestMethod]
@@ -864,6 +1014,30 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = result.Succeeded.Should().BeTrue();
         _ = scene.ExplorerLayout!.Select(entry => entry.NodeId).Should().Equal(b.Id, c.Id, a.Id);
         _ = context.Metadata.IsDirty.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public async Task ReorderNodesAsync_WhenDescendantIsLocked_AllowsReorderingTheParentRow()
+    {
+        var (interaction, _) = CreateInteraction();
+        var scene = CreateScene();
+        var parent = new SceneNode(scene) { Name = "Parent" };
+        var child = new SceneNode(scene) { Name = "Locked child" };
+        var sibling = new SceneNode(scene) { Name = "Sibling" };
+        parent.AddChild(child);
+        scene.RootNodes.Add(parent);
+        scene.RootNodes.Add(sibling);
+        await interaction.RestoreAsync(ProjectContext.FromProjectInfo(SlotTestProjectInfo), scene.Id).ConfigureAwait(false);
+        interaction.SetLocked(child.Id, isLocked: true);
+        var fixture = CreateFixture(interaction: interaction);
+        ConfigureHierarchySync(fixture);
+        var context = CreateContext(scene);
+
+        var result = await fixture.Sut.ReorderNodesAsync(context, parent.Id, parentFolderId: null, parentNodeId: null, index: 2).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue("changing the parent's Explorer row position does not edit its locked child");
+        _ = scene.ExplorerLayout!.Select(entry => entry.NodeId).Should().Equal(sibling.Id, parent.Id);
+        _ = parent.Children.Should().ContainSingle().Which.Should().BeSameAs(child);
     }
 
     [TestMethod]

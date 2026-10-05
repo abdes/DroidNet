@@ -31,10 +31,13 @@ namespace Oxygen.Editor.WorldEditor.TestSupport;
 
 internal sealed partial class SceneAuthoringFixture : IDisposable
 {
+    private readonly WorkspaceInteractionService? interaction;
+
     /// <summary>Initializes a new instance of the <see cref="SceneAuthoringFixture"/> class.</summary>
     /// <param name="interaction">Optional workspace interaction state shared with the command owner.</param>
     public SceneAuthoringFixture(WorkspaceInteractionService? interaction = null)
     {
+        this.interaction = interaction;
         var info = new ProjectInfo("UI slot fixtures", Category.Games, Path.Combine(Path.GetTempPath(), "Oxygen-UI-Slots"));
         var project = new Mock<IProject>();
         _ = project.SetupGet(value => value.ProjectInfo).Returns(info);

@@ -2,17 +2,18 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Numerics;
 using System.Collections.Immutable;
+using System.Numerics;
 using AwesomeAssertions;
 using DroidNet.Controls;
 using Moq;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
-using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -70,6 +71,39 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = node.Components.OfType<PerspectiveCamera>().Single().FieldOfView.Should().Be(90);
         _ = context.History.UndoStack.Should().ContainSingle();
+    }
+
+    [TestMethod]
+    public async Task CameraOneShotPropertyEdit_WhenNodeIsLocked_IsRejected()
+    {
+        var scene = CreateScene();
+        var node = CameraNode(scene, 60);
+        var context = CreateContext(scene);
+        var (interaction, _) = CreateInteraction();
+        await interaction.RestoreAsync(ProjectContext.FromProjectInfo(SlotTestProjectInfo), scene.Id).ConfigureAwait(false);
+        interaction.SetLocked(node.Id, isLocked: true);
+        var fixture = CreateFixture(interaction: interaction);
+        var edit = PropertyEdit.Single(SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegrees, 90f);
+
+        var emptyResult = await fixture.Sut.EditPropertiesForTargetsAsync(
+            context,
+            new Dictionary<Guid, PropertyEdit> { [node.Id] = PropertyEdit.Empty },
+            "Edit Camera",
+            EditSessionToken.OneShot).ConfigureAwait(false);
+        var result = await fixture.Sut.EditPropertiesForTargetsAsync(
+            context,
+            new Dictionary<Guid, PropertyEdit> { [node.Id] = edit },
+            "Edit Camera",
+            EditSessionToken.OneShot).ConfigureAwait(false);
+
+        _ = emptyResult.Succeeded.Should().BeTrue("empty completion notifications remain no-ops");
+        _ = result.Succeeded.Should().BeFalse();
+        _ = node.Components.OfType<PerspectiveCamera>().Single().FieldOfView.Should().Be(60);
+        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Results.Published.Should().ContainSingle()
+            .Which.Diagnostics.Should().ContainSingle()
+            .Which.Code.Should().Be(DiagnosticCodes.ScenePrefix + "NODE_LOCKED");
     }
 
     [TestMethod]

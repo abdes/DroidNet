@@ -181,6 +181,11 @@ public sealed partial class SceneDocumentCommandService(
             .Select(static node => new { Node = node, Transform = node.Components.OfType<TransformComponent>().FirstOrDefault() })
             .Where(static target => target.Transform is not null)
             .ToList();
+        if (this.RejectLockedTargets(context, SceneOperationKinds.EditTransform, targets.Select(static target => target.Node)) is { } lockFailure)
+        {
+            return lockFailure;
+        }
+
         if (targets.Count == 0)
         {
             return this.ValidationFailure(
@@ -216,7 +221,18 @@ public sealed partial class SceneDocumentCommandService(
         EditSessionToken session)
     {
         using var authoring = EnterAuthoring(context);
-        return authoring is null ? new(Succeeded: false) : await this.EditGeometryCoreAsync(context, nodeIds, edit, session).ConfigureAwait(true);
+        if (authoring is null)
+        {
+            return new(Succeeded: false);
+        }
+
+        var targets = ResolveNodes(context.Scene, nodeIds);
+        if (this.RejectLockedTargets(context, SceneOperationKinds.EditGeometry, targets) is { } lockFailure)
+        {
+            return lockFailure;
+        }
+
+        return await this.EditGeometryCoreAsync(context, nodeIds, edit, session).ConfigureAwait(true);
     }
 
     /// <inheritdoc />
@@ -257,6 +273,11 @@ public sealed partial class SceneDocumentCommandService(
             .Select(static node => new { Node = node, Camera = node.Components.OfType<PerspectiveCamera>().FirstOrDefault() })
             .Where(static target => target.Camera is not null)
             .ToList();
+        if (this.RejectLockedTargets(context, SceneOperationKinds.EditPerspectiveCamera, targets.Select(static target => target.Node)) is { } lockFailure)
+        {
+            return lockFailure;
+        }
+
         if (targets.Count == 0)
         {
             return this.ValidationFailure(
@@ -323,6 +344,11 @@ public sealed partial class SceneDocumentCommandService(
             .Select(static node => (node, light: node.Components.OfType<DirectionalLightComponent>().FirstOrDefault()))
             .Where(static target => target.light is not null)
             .ToList();
+        if (this.RejectLockedTargets(context, SceneOperationKinds.EditDirectionalLight, targets.Select(static target => target.node)) is { } lockFailure)
+        {
+            return lockFailure;
+        }
+
         return targets.Count == 0
             ? this.ValidationFailure(
                 SceneOperationKinds.EditDirectionalLight,
@@ -358,6 +384,11 @@ public sealed partial class SceneDocumentCommandService(
                 "The target scene node no longer exists.",
                 context);
             return SceneCommandResults.Failure<GameComponent>(operationResultId);
+        }
+
+        if (this.RejectLockedTargets(context, SceneOperationKinds.AddComponent, [node]) is { } lockFailure)
+        {
+            return SceneCommandResults.Failure<GameComponent>(lockFailure.OperationResultId);
         }
 
         if (!CanAddComponent(node, componentType, out var reason))
@@ -420,6 +451,11 @@ public sealed partial class SceneDocumentCommandService(
                 "Component was not removed",
                 "The target component no longer exists.",
                 context);
+        }
+
+        if (this.RejectLockedTargets(context, SceneOperationKinds.RemoveComponent, [node]) is { } lockFailure)
+        {
+            return lockFailure;
         }
 
         if (component.IsLocked || component is TransformComponent)
@@ -1777,6 +1813,37 @@ public sealed partial class SceneDocumentCommandService(
             message,
             context);
         return new(Succeeded: false, operationResultId) { ValidationCode = code, ValidationMessage = message };
+    }
+
+    private SceneCommandResult? RejectLockedTargets(
+        SceneDocumentCommandContext context,
+        string operationKind,
+        IEnumerable<SceneNode> nodes)
+    {
+        if (this.interaction is not { } service)
+        {
+            return null;
+        }
+
+        foreach (var node in nodes)
+        {
+            if (service.GetLockOwner(node) is not { } lockOwner)
+            {
+                continue;
+            }
+
+            var message = ReferenceEquals(node, lockOwner)
+                ? $"The node '{node.Name}' is locked for editing."
+                : $"The node '{node.Name}' is protected by locked parent '{lockOwner.Name}'.";
+            return this.ValidationFailure(
+                operationKind,
+                DiagnosticCodes.ScenePrefix + "NODE_LOCKED",
+                "The locked node was not changed",
+                message,
+                context);
+        }
+
+        return null;
     }
 
     private Guid PublishLiveSyncWarning(

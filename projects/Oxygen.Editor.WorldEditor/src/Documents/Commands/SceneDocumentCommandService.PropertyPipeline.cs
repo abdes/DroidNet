@@ -157,6 +157,12 @@ public sealed partial class SceneDocumentCommandService
         }
 
         var kind = GetSingleComponentKind(edit);
+        var operationKind = kind is null ? SceneOperationKinds.EditTransform : OperationKindForPropertyKind(kind);
+        if (this.RejectLockedTargets(context, operationKind, ResolveNodes(context.Scene, nodeIds)) is { } lockFailure)
+        {
+            return lockFailure;
+        }
+
         return kind is null
             ? this.ValidationFailure(
                 SceneOperationKinds.EditTransform,

@@ -18,7 +18,9 @@ using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
+using Microsoft.UI.Xaml;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
@@ -49,6 +51,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly Workspace.WorkspaceInteractionService? interaction;
     private readonly IProjectContextService? projectContexts;
     private readonly SceneExplorerProjection projection = new();
+    private readonly SemaphoreSlim searchGate = new(1, 1);
+    private readonly System.Threading.Lock searchLifetimeLock = new();
 
     // Node-clipboard state: copied node identities plus whether they were cut (moved) rather than copied.
     private readonly List<Guid> clipboardNodeIds = [];
@@ -67,6 +71,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly HashSet<Guid> searchExpandedFolderIds = [];
     private readonly HashSet<Guid> searchExpandedNodeIds = [];
     private int nextEntityIndex;
+    private int searchGeneration;
+    private int activeSearchOperations;
+    private bool searchLifetimeStopped;
+    private bool searchGateDisposed;
     private CancellationTokenSource? loadSceneCts;
     private Guid loadingDocumentId = Guid.Empty;
     private bool suppressNodeMessages;
@@ -74,6 +82,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     // Set while the Explorer itself writes selection or applies a foreign selection, so the
     // service echo never re-enters the row-sync path.
     private bool suppressSelectionSync;
+    private bool isApplyingCategoryFilters;
 
     // The authoritative context received while applying a foreign selection: publishing forwards
     // it verbatim so identities whose rows are not realized cannot silently shrink the selection.
@@ -121,6 +130,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     ///     eye and lock actions report that the workspace service is unavailable rather than
     ///     silently doing nothing.
     /// </param>
+    /// <param name="projectContexts">Optional project context used to scope project-owned Explorer state.</param>
     public SceneExplorerViewModel(
         IProjectManagerService projectManager,
         IMessenger messenger,
@@ -143,8 +153,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.projectContexts = projectContexts;
         if (interaction is { } service)
         {
+            this.ApplyCategoryFilters(service.Categories);
             service.StateChanged += this.OnInteractionStateChanged;
         }
+
         this.logger = loggerFactory?.CreateLogger<SceneExplorerViewModel>() ??
                       NullLoggerFactory.Instance.CreateLogger<SceneExplorerViewModel>();
         this.projectManager = projectManager;
@@ -174,6 +186,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         });
         messenger.Register<SceneNodeAddedMessage>(this, this.OnSceneNodeAdded);
         messenger.Register<SceneNodeRemovedMessage>(this, this.OnSceneNodeRemoved);
+        messenger.Register<ComponentAddedMessage>(this, this.OnComponentAdded);
+        messenger.Register<ComponentRemovedMessage>(this, this.OnComponentRemoved);
         messenger.Register<SceneReloadedMessage>(this, (_, message) =>
         {
             if (!this.isDisposed && message.WindowId == this.windowId
@@ -205,6 +219,63 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     [NotifyCanExecuteChangedFor(nameof(SceneExplorerViewModel.RemoveSelectedItemsCommand))]
     public partial bool HasUnlockedSelectedItems { get; set; }
 
+    /// <summary>Gets or sets the transient search text shown by the Explorer.</summary>
+    [ObservableProperty]
+    public partial string SearchText { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the number of matching scene nodes and folders.</summary>
+    [ObservableProperty]
+    public partial int SearchResultCount { get; set; }
+
+    /// <summary>Gets a value indicating whether a non-empty search query is active.</summary>
+    public bool HasSearchQuery => !string.IsNullOrWhiteSpace(this.SearchText);
+
+    /// <summary>Gets the accessible search result summary.</summary>
+    public string SearchResultText => this.SearchResultCount == 0
+        ? "No matches"
+        : string.Create(System.Globalization.CultureInfo.CurrentCulture, $"{this.SearchResultCount} {(this.SearchResultCount == 1 ? "match" : "matches")}");
+
+    /// <summary>Gets or sets whether mesh-category rows are shown in the Scene Explorer.</summary>
+    [ObservableProperty]
+    public partial bool ShowMeshesInExplorer { get; set; } = true;
+
+    /// <summary>Gets or sets whether light-category rows are shown in the Scene Explorer.</summary>
+    [ObservableProperty]
+    public partial bool ShowLightsInExplorer { get; set; } = true;
+
+    /// <summary>Gets or sets whether camera-category rows are shown in the Scene Explorer.</summary>
+    [ObservableProperty]
+    public partial bool ShowCamerasInExplorer { get; set; } = true;
+
+    /// <summary>Gets a value indicating whether the active scene contains a mesh-category node.</summary>
+    public bool HasMeshCategory => this.Scene?.AttachedObject.AllNodes
+        .Any(static node => node.Components.OfType<GeometryComponent>().Any()) == true;
+
+    /// <summary>Gets a value indicating whether the active scene contains a light-category node.</summary>
+    public bool HasLightCategory => this.Scene?.AttachedObject.AllNodes
+        .Any(static node => node.Components.Any(static component =>
+            component is DirectionalLightComponent or PointLightComponent or SpotLightComponent)) == true;
+
+    /// <summary>Gets a value indicating whether the active scene contains a camera-category node.</summary>
+    public bool HasCameraCategory => this.Scene?.AttachedObject.AllNodes
+        .Any(static node => node.Components.Any(static component =>
+            component is PerspectiveCamera or OrthographicCamera)) == true;
+
+    /// <summary>Gets a value indicating whether any filterable category is represented in the scene.</summary>
+    public bool HasAnyCategory => this.HasMeshCategory || this.HasLightCategory || this.HasCameraCategory;
+
+    /// <summary>Gets the mesh column width, or zero when the scene has no mesh-category rows.</summary>
+    public GridLength MeshCategoryColumnWidth => this.HasMeshCategory ? new(1, GridUnitType.Star) : new(0);
+
+    /// <summary>Gets the light column width, or zero when the scene has no light-category rows.</summary>
+    public GridLength LightCategoryColumnWidth => this.HasLightCategory ? new(1, GridUnitType.Star) : new(0);
+
+    /// <summary>Gets the camera column width, or zero when the scene has no camera-category rows.</summary>
+    public GridLength CameraCategoryColumnWidth => this.HasCameraCategory ? new(1, GridUnitType.Star) : new(0);
+
+    /// <summary>Gets a value indicating whether category filters have a loaded workspace owner.</summary>
+    public bool CanChangeCategories => this.interaction is not null && this.Scene is not null;
+
     /// <summary>
     ///     Gets the current scene adapter.
     /// </summary>
@@ -222,13 +293,84 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     [ObservableProperty]
     public partial ReadOnlyObservableCollection<IChange> RedoStack { get; set; }
 
+    /// <summary>Applies a transient name search, revealing collapsed matches by expanding their ancestor paths.</summary>
+    /// <param name="query">The search text; empty or whitespace clears the search.</param>
+    /// <returns>The number of matching nodes (excluding context-only ancestors) plus the folder matches from the authored layout domain.</returns>
+    public async Task<int> SearchAsync(string? query)
+    {
+        if (!this.TryBeginSearchOperation())
+        {
+            return 0;
+        }
+
+        var gateAcquired = false;
+        try
+        {
+            var generation = Interlocked.Increment(ref this.searchGeneration);
+            this.SearchText = query ?? string.Empty;
+            await this.searchGate.WaitAsync().ConfigureAwait(true);
+            gateAcquired = true;
+
+            return await this.SearchCoreAsync(query ?? string.Empty, generation).ConfigureAwait(true);
+        }
+        finally
+        {
+            if (gateAcquired)
+            {
+                this.searchGate.Release();
+            }
+
+            this.EndSearchOperation();
+        }
+    }
+
+    /// <summary>Clears the transient search and restores the expansion state it changed.</summary>
+    /// <returns>A task that completes when the search has been cleared.</returns>
+    public async Task ClearSearchAsync()
+    {
+        if (!this.TryBeginSearchOperation())
+        {
+            return;
+        }
+
+        var gateAcquired = false;
+        try
+        {
+            _ = Interlocked.Increment(ref this.searchGeneration);
+            this.SearchText = string.Empty;
+            this.SearchResultCount = 0;
+            await this.searchGate.WaitAsync().ConfigureAwait(true);
+            gateAcquired = true;
+            if (!this.isDisposed)
+            {
+                await this.ClearSearchCoreAsync().ConfigureAwait(true);
+            }
+        }
+        finally
+        {
+            if (gateAcquired)
+            {
+                this.searchGate.Release();
+            }
+
+            this.EndSearchOperation();
+        }
+    }
+
+    /// <summary>Reports a search failure caught at the asynchronous view event boundary.</summary>
+    /// <param name="exception">The search exception.</param>
+    /// <param name="query">The query that failed.</param>
+    internal void ReportSearchFailure(Exception exception, string query)
+        => LogSearchFailed(this.logger, exception, query);
+
     private HistoryKeeper History => this.Scene != null ? UndoRedo.GetHistory(this.Scene.AttachedObject.Id) : UndoRedo.Default[this];
 
     /// <inheritdoc />
     [RelayCommand(CanExecute = nameof(CanRemoveContextItems))]
     public override async Task RemoveSelectedItems()
     {
-        await this.ExecuteContextActionAsync(SceneExplorerCommandKind.Delete,
+        await this.ExecuteContextActionAsync(
+            SceneExplorerCommandKind.Delete,
             this.CaptureExplorerContext(null, background: false)).ConfigureAwait(true);
     }
 
@@ -254,7 +396,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return TreeItemRenameResult.Success;
         }
 
-        SceneCommandResult result = item switch
+        var result = item switch
         {
             SceneNodeAdapter node => await this.commandService.RenameNodeAsync(context, node.AttachedObject.Id, trimmed).ConfigureAwait(true),
             FolderAdapter folder => await this.RenameFolderAsync(context, folder, trimmed).ConfigureAwait(true),
@@ -264,6 +406,46 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         return result.Succeeded
             ? TreeItemRenameResult.Success
             : TreeItemRenameResult.Rejected(result.ValidationMessage ?? "The rename was rejected.");
+    }
+
+    /// <summary>
+    /// Selects scene nodes by their stable identities: the authoritative context is stored with
+    /// every id the caller named (even ones whose rows are not realized yet), and the rows reveal
+    /// and select whatever resolves. Nothing is published when the rows already carry the
+    /// selection, so an unresolvable batch can never shrink the domain selection.
+    /// </summary>
+    /// <param name="nodeIds">The node identities to select, in stable order; the last is primary.</param>
+    /// <param name="focusPrimary">Whether the Explorer should take keyboard focus after selection.</param>
+    /// <returns>
+    /// A task whose result is <see langword="true" /> when every named identity resolved to a
+    /// selected row (an empty batch is trivially satisfied); <see langword="false" /> when some
+    /// ids remain unrealized or the store changed under the application. The authoritative
+    /// context keeps all named ids either way.
+    /// </returns>
+    public async Task<bool> SetSelectedNodes(IReadOnlyList<Guid> nodeIds, bool focusPrimary = false)
+    {
+        ArgumentNullException.ThrowIfNull(nodeIds);
+        if (this.Scene is not { } sceneAdapter)
+        {
+            return false;
+        }
+
+        var distinctIds = nodeIds.Distinct().ToArray();
+        var context = distinctIds.Length == 0
+            ? SceneSelectionContext.Empty
+            : new SceneSelectionContext(SceneSelectionKind.Node, distinctIds, [], distinctIds[^1], null);
+
+        this.suppressSelectionSync = true;
+        try
+        {
+            this.selectionService.Publish(sceneAdapter.AttachedObject.Id, context, "SceneExplorer");
+        }
+        finally
+        {
+            this.suppressSelectionSync = false;
+        }
+
+        return await this.ApplySelectionContextAsync(context, focusPrimary: focusPrimary).ConfigureAwait(true);
     }
 
     private async Task<SceneCommandResult> RenameFolderAsync(SceneDocumentCommandContext context, FolderAdapter folder, string newName)
@@ -320,6 +502,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         if (disposing)
         {
+            this.StopSearchOperations();
             this.sceneEngineSync.SceneSynchronized -= this.OnSceneSynchronized;
             this.selectionService.SelectionChanged -= this.OnSelectionServiceChanged;
             this.documentService.DocumentOpened -= this.OnDocumentOpened;
@@ -413,7 +596,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     }
 
     private bool CanRenameSelected()
-        => this.GetContextDisabledReason(SceneExplorerCommandKind.Rename,
+        => this.GetContextDisabledReason(
+            SceneExplorerCommandKind.Rename,
             this.CaptureExplorerContext(null, background: false)) is null;
 
     [RelayCommand]
@@ -856,11 +1040,14 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private async Task InitializeLoadedSceneAsync(Scene loadedScene)
     {
         var previousScene = this.Scene?.AttachedObject;
+        _ = Interlocked.Increment(ref this.searchGeneration);
 
         // A loaded scene starts a fresh view session: a previous scene's transient search
         // expansions and filter predicate must not leak into it, and their adapters are retired
         // anyway, so restore could never find them.
         this.FilterPredicate = null;
+        this.SearchText = string.Empty;
+        this.SearchResultCount = 0;
         this.searchExpandedFolderIds.Clear();
         this.searchExpandedNodeIds.Clear();
 
@@ -872,6 +1059,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             IsRoot = true,
             UseLayoutAdapters = true,
         };
+        this.NotifyCategoryAvailabilityChanged();
 
         // Update Undo/Redo stacks for the new scene
         this.UndoStack = this.History.UndoStack;
@@ -887,6 +1075,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             // Reload what a previous session stored before the first rows are presented, otherwise
             // the persistence is write-only and every scene opens with nothing hidden or locked.
             await this.RestoreWorkspaceInteractionAsync(loadedScene).ConfigureAwait(true);
+            this.ApplyExplorerFilter();
             this.ApplyWorkspaceInteractionState();
         }).ConfigureAwait(true);
 
@@ -1026,57 +1215,143 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return false;
         }
 
-        this.FilterPredicate = null;
-        return await this.SetSelectedNodes([nodeId]).ConfigureAwait(true);
+        await this.ClearSearchAsync().ConfigureAwait(true);
+        return await this.SetSelectedNodes([nodeId], focusPrimary: true).ConfigureAwait(true);
     }
 
-    /// <summary>Applies a transient name search, revealing collapsed matches by expanding their ancestor paths.</summary>
-    /// <param name="query">The search text; empty or whitespace clears the search.</param>
-    /// <returns>The number of matching nodes (excluding context-only ancestors) plus the folder matches from the authored layout domain.</returns>
-    public async Task<int> SearchAsync(string? query)
+    private async Task<int> SearchCoreAsync(string query, int generation)
     {
-        if (this.Scene is null)
+        if (generation != Volatile.Read(ref this.searchGeneration))
         {
             return 0;
         }
 
-        var trimmed = (query ?? string.Empty).Trim();
+        if (this.Scene is not { } sceneAdapter)
+        {
+            await this.ClearSearchCoreAsync().ConfigureAwait(true);
+            this.SearchResultCount = 0;
+            return 0;
+        }
+
+        var trimmed = query.Trim();
         if (trimmed.Length == 0)
         {
-            await this.ClearSearchAsync().ConfigureAwait(true);
+            await this.ClearSearchCoreAsync().ConfigureAwait(true);
+            if (generation == Volatile.Read(ref this.searchGeneration))
+            {
+                this.SearchResultCount = 0;
+            }
+
             return 0;
         }
 
-        var scene = this.Scene.AttachedObject;
-        var nodeById = scene.AllNodes.ToDictionary(node => node.Id);
+        return await this.SearchSceneAsync(sceneAdapter, trimmed, generation).ConfigureAwait(true);
+    }
 
+    private async Task<int> SearchSceneAsync(SceneAdapter sceneAdapter, string query, int generation)
+    {
+        var nodeById = sceneAdapter.AttachedObject.AllNodes.ToDictionary(node => node.Id);
         var matchingNodeIds = nodeById.Values
-            .Where(node => node.Name.Contains(trimmed, StringComparison.OrdinalIgnoreCase))
+            .Where(node => this.IsIncludedByCategories(node)
+                && node.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
             .Select(node => node.Id)
             .ToList();
 
-        // Expand the ancestor paths of matching nodes (top-down) so collapsed descendants become
-        // visible to the filter. Accumulate across queries; ClearSearchAsync restores everything
-        // a search expanded.
         foreach (var nodeId in matchingNodeIds)
         {
-            await this.ExpandMatchAncestryAsync(nodeId, nodeById).ConfigureAwait(true);
+            if (!this.IsCurrentSearch(generation, sceneAdapter))
+            {
+                return 0;
+            }
+
+            await this.ExpandMatchAncestryAsync(nodeId, nodeById, generation, sceneAdapter).ConfigureAwait(true);
         }
 
-        // Folder matches are counted from the authored-layout domain so collapsed and unrealized
-        // folders are reported independently of adapter realization.
-        var matchingFolderCount = this.projection.LayoutFolders
-            .Count(folder => folder.Name.Contains(trimmed, StringComparison.OrdinalIgnoreCase));
+        var matchingFolders = this.projection.LayoutFolders
+            .Where(folder => folder.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        foreach (var folder in matchingFolders)
+        {
+            if (!this.IsCurrentSearch(generation, sceneAdapter))
+            {
+                return 0;
+            }
 
-        this.FilterPredicate = item => item.Label.Contains(trimmed, StringComparison.OrdinalIgnoreCase);
-        return matchingNodeIds.Count + matchingFolderCount;
+            if (folder.Id is { } folderId
+                && this.projection.GetFolderLayoutAncestors(folderId) is { } layoutChain)
+            {
+                await this.ExpandLayoutAncestryAsync(layoutChain, generation, sceneAdapter).ConfigureAwait(true);
+            }
+        }
+
+        if (!this.IsCurrentSearch(generation, sceneAdapter))
+        {
+            return 0;
+        }
+
+        // Count from the authored-layout domain so collapsed and unrealized folders remain included.
+        var resultCount = matchingNodeIds.Count + matchingFolders.Length;
+        this.ApplyExplorerFilter(query);
+        this.SearchResultCount = resultCount;
+        return resultCount;
     }
 
-    /// <summary>Clears the transient search and restores the expansion state it changed.</summary>
-    /// <returns>A task that completes when the search has been cleared.</returns>
-    public async Task ClearSearchAsync()
+    private bool TryBeginSearchOperation()
     {
-        this.FilterPredicate = null;
+        lock (this.searchLifetimeLock)
+        {
+            if (this.searchLifetimeStopped || this.isDisposed)
+            {
+                return false;
+            }
+
+            this.activeSearchOperations++;
+            return true;
+        }
+    }
+
+    private void EndSearchOperation()
+    {
+        var disposeSearchGate = false;
+        lock (this.searchLifetimeLock)
+        {
+            this.activeSearchOperations--;
+            if (this.searchLifetimeStopped && this.activeSearchOperations == 0 && !this.searchGateDisposed)
+            {
+                this.searchGateDisposed = true;
+                disposeSearchGate = true;
+            }
+        }
+
+        if (disposeSearchGate)
+        {
+            this.searchGate.Dispose();
+        }
+    }
+
+    private void StopSearchOperations()
+    {
+        var disposeSearchGate = false;
+        lock (this.searchLifetimeLock)
+        {
+            this.searchLifetimeStopped = true;
+            _ = Interlocked.Increment(ref this.searchGeneration);
+            if (this.activeSearchOperations == 0 && !this.searchGateDisposed)
+            {
+                this.searchGateDisposed = true;
+                disposeSearchGate = true;
+            }
+        }
+
+        if (disposeSearchGate)
+        {
+            this.searchGate.Dispose();
+        }
+    }
+
+    private async Task ClearSearchCoreAsync()
+    {
+        this.ApplyExplorerFilter();
         foreach (var folderId in this.searchExpandedFolderIds.ToArray())
         {
             if (this.projection.GetFolder(folderId) is not { } folder)
@@ -1106,22 +1381,90 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.searchExpandedNodeIds.Clear();
     }
 
-    private async Task ExpandMatchAncestryAsync(Guid nodeId, Dictionary<Guid, SceneNode> nodeById)
+    private void ApplyExplorerFilter(string? query = null)
+    {
+        var trimmed = query ?? this.SearchText.Trim();
+        var filterCategories = !this.ShowMeshesInExplorer || !this.ShowLightsInExplorer || !this.ShowCamerasInExplorer;
+        if (trimmed.Length == 0 && !filterCategories)
+        {
+            this.FilterPredicate = null;
+            return;
+        }
+
+        this.FilterPredicate = item =>
+        {
+            if (item is SceneNodeAdapter node && !this.IsIncludedByCategories(node.AttachedObject))
+            {
+                return false;
+            }
+
+            if (item is not SceneNodeAdapter and not FolderAdapter)
+            {
+                return false;
+            }
+
+            return trimmed.Length == 0 || item.Label.Contains(trimmed, StringComparison.OrdinalIgnoreCase);
+        };
+    }
+
+    private bool IsIncludedByCategories(SceneNode node)
+    {
+        var hasCategory = false;
+        var included = false;
+        foreach (var component in node.Components)
+        {
+            switch (component)
+            {
+                case GeometryComponent:
+                    hasCategory = true;
+                    included |= this.ShowMeshesInExplorer;
+                    break;
+                case DirectionalLightComponent or PointLightComponent or SpotLightComponent:
+                    hasCategory = true;
+                    included |= this.ShowLightsInExplorer;
+                    break;
+                case PerspectiveCamera or OrthographicCamera:
+                    hasCategory = true;
+                    included |= this.ShowCamerasInExplorer;
+                    break;
+            }
+        }
+
+        // Uncategorized nodes remain available regardless of the category toggles.
+        return !hasCategory || included;
+    }
+
+    private void UpdateSearchResultCountForCurrentQuery()
+    {
+        var query = this.SearchText.Trim();
+        if (query.Length == 0 || this.Scene is not { } sceneAdapter)
+        {
+            return;
+        }
+
+        var matchingNodeCount = sceneAdapter.AttachedObject.AllNodes.Count(node =>
+            this.IsIncludedByCategories(node) && node.Name.Contains(query, StringComparison.OrdinalIgnoreCase));
+        var matchingFolderCount = this.projection.LayoutFolders.Count(folder =>
+            folder.Name.Contains(query, StringComparison.OrdinalIgnoreCase));
+        this.SearchResultCount = matchingNodeCount + matchingFolderCount;
+    }
+
+    private bool IsCurrentSearch(int generation, SceneAdapter sceneAdapter)
+        => generation == Volatile.Read(ref this.searchGeneration)
+            && !this.isDisposed
+            && ReferenceEquals(this.Scene, sceneAdapter);
+
+    private async Task ExpandMatchAncestryAsync(
+        Guid nodeId,
+        Dictionary<Guid, SceneNode> nodeById,
+        int generation,
+        SceneAdapter sceneAdapter)
     {
         if (this.projection.GetNodeLayoutAncestors(nodeId) is { } layoutChain)
         {
             // The node is seated in the authored layout: expand its visual ancestry (folders and
             // node seats) top-down using the layout position rather than scene parentage alone.
-            foreach (var ancestor in layoutChain)
-            {
-                if (!await this.ExpandSearchAncestorAsync(ancestor).ConfigureAwait(true))
-                {
-                    // An ancestor without a stably addressable adapter blocks the rest of the
-                    // chain; deeper items cannot be made visible reliably.
-                    break;
-                }
-            }
-
+            await this.ExpandLayoutAncestryAsync(layoutChain, generation, sceneAdapter).ConfigureAwait(true);
             return;
         }
 
@@ -1136,17 +1479,45 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         while (ancestors.TryPop(out var ancestorNode))
         {
+            if (!this.IsCurrentSearch(generation, sceneAdapter))
+            {
+                return;
+            }
+
             if (this.projection.GetNode(ancestorNode.Id) is { } ancestor && !ancestor.IsExpanded)
             {
-                await this.ExpandItemAsync(ancestor).ConfigureAwait(true);
                 _ = this.searchExpandedNodeIds.Add(ancestorNode.Id);
+                await this.ExpandItemAsync(ancestor).ConfigureAwait(true);
             }
         }
     }
 
-    private async Task<bool> ExpandSearchAncestorAsync(SceneExplorerProjection.LayoutAncestor ancestor)
+    private async Task ExpandLayoutAncestryAsync(
+        IReadOnlyList<SceneExplorerProjection.LayoutAncestor> layoutChain,
+        int generation,
+        SceneAdapter sceneAdapter)
     {
-        if (ancestor.Id is not { } ancestorId)
+        foreach (var ancestor in layoutChain)
+        {
+            if (!this.IsCurrentSearch(generation, sceneAdapter))
+            {
+                return;
+            }
+
+            // An ancestor without a stably addressable adapter blocks the rest of the chain.
+            if (!await this.ExpandSearchAncestorAsync(ancestor, generation, sceneAdapter).ConfigureAwait(true))
+            {
+                return;
+            }
+        }
+    }
+
+    private async Task<bool> ExpandSearchAncestorAsync(
+        SceneExplorerProjection.LayoutAncestor ancestor,
+        int generation,
+        SceneAdapter sceneAdapter)
+    {
+        if (!this.IsCurrentSearch(generation, sceneAdapter) || ancestor.Id is not { } ancestorId)
         {
             return false;
         }
@@ -1176,7 +1547,39 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         await this.ExpandItemAsync(item).ConfigureAwait(true);
-        return true;
+        return this.IsCurrentSearch(generation, sceneAdapter);
+    }
+
+    partial void OnSearchTextChanged(string value)
+    {
+        _ = value;
+        this.OnPropertyChanged(nameof(this.HasSearchQuery));
+    }
+
+    partial void OnSearchResultCountChanged(int value)
+    {
+        _ = value;
+        this.OnPropertyChanged(nameof(this.SearchResultText));
+    }
+
+    private void NotifyCategoryAvailabilityChanged()
+    {
+        this.OnPropertyChanged(nameof(this.HasMeshCategory));
+        this.OnPropertyChanged(nameof(this.HasLightCategory));
+        this.OnPropertyChanged(nameof(this.HasCameraCategory));
+        this.OnPropertyChanged(nameof(this.HasAnyCategory));
+        this.OnPropertyChanged(nameof(this.MeshCategoryColumnWidth));
+        this.OnPropertyChanged(nameof(this.LightCategoryColumnWidth));
+        this.OnPropertyChanged(nameof(this.CameraCategoryColumnWidth));
+    }
+
+    private void RefreshCategoryPresentation()
+    {
+        _ = Interlocked.Increment(ref this.searchGeneration);
+        this.NotifyCategoryAvailabilityChanged();
+        this.ApplyExplorerFilter();
+        this.UpdateSearchResultCountForCurrentQuery();
+        this.RestartActiveSearch();
     }
 
     private void OnSingleSelectionChanged(object? sender, PropertyChangedEventArgs args)
@@ -1303,46 +1706,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
     }
 
-    /// <summary>
-    /// Selects scene nodes by their stable identities: the authoritative context is stored with
-    /// every id the caller named (even ones whose rows are not realized yet), and the rows reveal
-    /// and select whatever resolves. Nothing is published when the rows already carry the
-    /// selection, so an unresolvable batch can never shrink the domain selection.
-    /// </summary>
-    /// <param name="nodeIds">The node identities to select, in stable order; the last is primary.</param>
-    /// <returns>
-    /// A task whose result is <see langword="true" /> when every named identity resolved to a
-    /// selected row (an empty batch is trivially satisfied); <see langword="false" /> when some
-    /// ids remain unrealized or the store changed under the application. The authoritative
-    /// context keeps all named ids either way.
-    /// </returns>
-    public async Task<bool> SetSelectedNodes(IReadOnlyList<Guid> nodeIds)
-    {
-        ArgumentNullException.ThrowIfNull(nodeIds);
-        if (this.Scene is not { } sceneAdapter)
-        {
-            return false;
-        }
-
-        var distinctIds = nodeIds.Distinct().ToArray();
-        var context = distinctIds.Length == 0
-            ? SceneSelectionContext.Empty
-            : new SceneSelectionContext(SceneSelectionKind.Node, distinctIds, [], distinctIds[^1], null);
-
-        this.suppressSelectionSync = true;
-        try
-        {
-            this.selectionService.Publish(sceneAdapter.AttachedObject.Id, context, "SceneExplorer");
-        }
-        finally
-        {
-            this.suppressSelectionSync = false;
-        }
-
-        return await this.ApplySelectionContextAsync(context).ConfigureAwait(true);
-    }
-
-    private async Task<bool> ApplySelectionContextAsync(SceneSelectionContext context, bool forcePublish = false)
+    private async Task<bool> ApplySelectionContextAsync(
+        SceneSelectionContext context,
+        bool forcePublish = false,
+        bool focusPrimary = false)
     {
         if (this.Scene is not { } sceneAdapter || this.SelectionModel is not { } model)
         {
@@ -1354,7 +1721,42 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         // with the context it captured before the await.
         var generation = ++this.selectionApplyGeneration;
         var documentId = sceneAdapter.AttachedObject.Id;
+        var targets = await this.ResolveSelectionTargetsAsync(sceneAdapter, context).ConfigureAwait(true);
 
+        if (!this.IsCurrentSelectionApplication(generation, sceneAdapter, documentId, context))
+        {
+            return false;
+        }
+
+        var primary = FindPrimaryRow(targets, context);
+
+        // True when every identity the context names resolves to one of the applied rows.
+        var fullyResolved =
+            context.SelectedNodeIds.Count == targets.OfType<SceneNodeAdapter>().Count()
+            && context.SelectedFolderIds.Count == targets.OfType<FolderAdapter>().Count()
+            && (context.Kind != SceneSelectionKind.Scene || targets.OfType<SceneAdapter>().Any());
+
+        if (!forcePublish && this.SelectionMatchesTargets(targets, primary))
+        {
+            // Rows already carry this selection. A changed authoritative context still has to
+            // reach consumers (it may name new folder or unresolvable identities); an identical
+            // one must not re-notify.
+            if (!ReferenceEquals(context, this.lastPublishedContext))
+            {
+                this.PublishCurrentSelection(context);
+            }
+
+            this.FocusSelectionPrimary(primary, focusPrimary);
+            return fullyResolved;
+        }
+
+        this.ApplySelectionTargets(model, targets, primary, context);
+        this.FocusSelectionPrimary(primary, focusPrimary);
+        return fullyResolved;
+    }
+
+    private async Task<List<ITreeItem>> ResolveSelectionTargetsAsync(SceneAdapter sceneAdapter, SceneSelectionContext context)
+    {
         var targets = new List<ITreeItem>();
         if (context.Kind == SceneSelectionKind.Scene)
         {
@@ -1385,39 +1787,33 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             }
         }
 
-        if (generation != this.selectionApplyGeneration
-            || this.isDisposed
-            || !ReferenceEquals(this.Scene, sceneAdapter)
-            || !ReferenceEquals(this.selectionService.GetContext(documentId), context))
-        {
-            return false;
-        }
+        return targets;
+    }
 
-        var primary = FindPrimaryRow(targets, context);
+    private bool IsCurrentSelectionApplication(
+        int generation,
+        SceneAdapter sceneAdapter,
+        Guid documentId,
+        SceneSelectionContext context)
+        => generation == this.selectionApplyGeneration
+            && !this.isDisposed
+            && ReferenceEquals(this.Scene, sceneAdapter)
+            && ReferenceEquals(this.selectionService.GetContext(documentId), context);
 
-        // True when every identity the context names resolves to one of the applied rows.
-        var fullyResolved =
-            context.SelectedNodeIds.Count == targets.OfType<SceneNodeAdapter>().Count()
-            && context.SelectedFolderIds.Count == targets.OfType<FolderAdapter>().Count()
-            && (context.Kind != SceneSelectionKind.Scene || targets.OfType<SceneAdapter>().Any());
-
+    private bool SelectionMatchesTargets(List<ITreeItem> targets, ITreeItem? primary)
+    {
         var current = this.GetSelectedItems();
-        if (!forcePublish
-            && current.Count == targets.Count
+        return current.Count == targets.Count
             && targets.All(current.Contains)
-            && ReferenceEquals(this.ActiveItem, primary))
-        {
-            // Rows already carry this selection. A changed authoritative context still has to
-            // reach consumers (it may name new folder or unresolvable identities); an identical
-            // one must not re-notify.
-            if (!ReferenceEquals(context, this.lastPublishedContext))
-            {
-                this.PublishCurrentSelection(context);
-            }
+            && ReferenceEquals(this.ActiveItem, primary);
+    }
 
-            return fullyResolved;
-        }
-
+    private void ApplySelectionTargets(
+        SelectionModel<ITreeItem> model,
+        IReadOnlyCollection<ITreeItem> targets,
+        ITreeItem? primary,
+        SceneSelectionContext context)
+    {
         // Forward the received context verbatim at settle: republishing rows-only state would let
         // projection visibility silently delete valid domain objects.
         this.pendingAuthoritativeContext = context;
@@ -1437,8 +1833,14 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         {
             this.pendingAuthoritativeContext = null;
         }
+    }
 
-        return fullyResolved;
+    private void FocusSelectionPrimary(ITreeItem? primary, bool focusPrimary)
+    {
+        if (focusPrimary && primary is not null)
+        {
+            _ = this.FocusItem(primary, RequestOrigin.Programmatic);
+        }
     }
 
     /// <summary>
@@ -1539,13 +1941,33 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private void OnSceneNodeAdded(object recipient, SceneNodeAddedMessage message)
     {
         _ = recipient;
+        this.RefreshCategoryPresentation();
         _ = this.RefreshProjectionForNodesAsync(message.Nodes);
     }
 
     private void OnSceneNodeRemoved(object recipient, SceneNodeRemovedMessage message)
     {
         _ = recipient;
+        this.RefreshCategoryPresentation();
         _ = this.RefreshProjectionForNodesAsync(message.Nodes);
+    }
+
+    private void OnComponentAdded(object recipient, ComponentAddedMessage message)
+    {
+        _ = recipient;
+        if (message.Added && this.Scene?.AttachedObject.Id == message.Node.Scene.Id)
+        {
+            this.RefreshCategoryPresentation();
+        }
+    }
+
+    private void OnComponentRemoved(object recipient, ComponentRemovedMessage message)
+    {
+        _ = recipient;
+        if (message.Removed && this.Scene?.AttachedObject.Id == message.Node.Scene.Id)
+        {
+            this.RefreshCategoryPresentation();
+        }
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Messenger callbacks report projection failures instead of losing unobserved task exceptions.")]
@@ -1936,7 +2358,99 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         _ = sender;
         _ = args;
         this.ApplyWorkspaceInteractionState();
+        if (this.interaction is { } service)
+        {
+            this.ApplyCategoryFilters(service.Categories);
+        }
+
+        this.OnPropertyChanged(nameof(this.CanChangeCategories));
         this.RefreshContextActions();
+    }
+
+    partial void OnShowMeshesInExplorerChanged(bool value)
+    {
+        _ = value;
+        this.OnCategoryFilterChanged();
+    }
+
+    partial void OnShowLightsInExplorerChanged(bool value)
+    {
+        _ = value;
+        this.OnCategoryFilterChanged();
+    }
+
+    partial void OnShowCamerasInExplorerChanged(bool value)
+    {
+        _ = value;
+        this.OnCategoryFilterChanged();
+    }
+
+    private void OnCategoryFilterChanged()
+    {
+        if (this.isApplyingCategoryFilters)
+        {
+            return;
+        }
+
+        _ = Interlocked.Increment(ref this.searchGeneration);
+        this.ApplyExplorerFilter();
+        this.UpdateSearchResultCountForCurrentQuery();
+        this.PersistCategoryFilters();
+        this.RestartActiveSearch();
+    }
+
+    private void PersistCategoryFilters()
+    {
+        if (!this.isApplyingCategoryFilters && this.interaction is { } service)
+        {
+            service.SetCategories(new(
+                this.ShowMeshesInExplorer,
+                this.ShowLightsInExplorer,
+                this.ShowCamerasInExplorer));
+        }
+    }
+
+    private void ApplyCategoryFilters(Workspace.SceneCategories categories)
+    {
+        this.isApplyingCategoryFilters = true;
+        try
+        {
+            this.ShowMeshesInExplorer = categories.ShowMeshes;
+            this.ShowLightsInExplorer = categories.ShowLights;
+            this.ShowCamerasInExplorer = categories.ShowCameras;
+        }
+        finally
+        {
+            this.isApplyingCategoryFilters = false;
+        }
+
+        this.ApplyExplorerFilter();
+        this.UpdateSearchResultCountForCurrentQuery();
+        this.RestartActiveSearch();
+    }
+
+    private void RestartActiveSearch()
+    {
+        if (this.HasSearchQuery && !this.isDisposed)
+        {
+            _ = this.RestartActiveSearchAsync(this.SearchText);
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "Background search restarts report failures through the same logger as the view event boundary.")]
+    private async Task RestartActiveSearchAsync(string query)
+    {
+        try
+        {
+            _ = await this.SearchAsync(query).ConfigureAwait(true);
+        }
+        catch (Exception exception)
+        {
+            this.ReportSearchFailure(exception, query);
+        }
     }
 
     /// <summary>
@@ -2007,7 +2521,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        _ = await this.commandService.SetEditorHiddenAsync(context, [.. hidden ], hidden: false).ConfigureAwait(true);
+        _ = await this.commandService.SetEditorHiddenAsync(context, [.. hidden], hidden: false).ConfigureAwait(true);
     }
 
     /// <summary>

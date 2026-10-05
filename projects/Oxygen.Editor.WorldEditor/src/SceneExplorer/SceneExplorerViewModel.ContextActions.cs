@@ -431,7 +431,8 @@ public partial class SceneExplorerViewModel
         }
 
         var manipulates = creation || kind is SceneExplorerCommandKind.Rename or SceneExplorerCommandKind.Cut
-            or SceneExplorerCommandKind.Delete or SceneExplorerCommandKind.RemoveFromFolder or SceneExplorerCommandKind.MoveToSceneRoot;
+            or SceneExplorerCommandKind.Delete or SceneExplorerCommandKind.RemoveFromFolder
+            or SceneExplorerCommandKind.MoveToSceneRoot;
         if (manipulates)
         {
             foreach (var row in targets)
@@ -593,12 +594,9 @@ public partial class SceneExplorerViewModel
     {
         if (row is SceneNodeAdapter node)
         {
-            for (var current = node.AttachedObject; current is not null; current = current.Parent)
+            if (this.interaction?.GetLockOwner(node.AttachedObject) is { } lockOwner)
             {
-                if (this.interaction?.IsLocked(current.Id) == true || this.projection.GetNode(current.Id)?.IsLocked == true)
-                {
-                    return this.projection.GetNode(current.Id) ?? row;
-                }
+                return this.projection.GetNode(lockOwner.Id) ?? row;
             }
         }
 
@@ -844,6 +842,11 @@ public partial class SceneExplorerViewModel
 
     private void OnContextOwnerPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (string.Equals(args.PropertyName, nameof(this.Scene), StringComparison.Ordinal))
+        {
+            this.OnPropertyChanged(nameof(this.CanChangeCategories));
+        }
+
         if (args.PropertyName is nameof(this.Scene) or nameof(this.CurrentClipboardState))
         {
             this.RefreshContextActions();

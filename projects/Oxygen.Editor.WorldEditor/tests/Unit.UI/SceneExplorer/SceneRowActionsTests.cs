@@ -455,6 +455,65 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         }
     });
 
+    /// <summary>Creates a realized Explorer row and its authoring fixture for UI scenarios.</summary>
+    /// <returns>The disposable host with the view-model, scene and realized row.</returns>
+    internal static async Task<RowHost> CreateRowHostAsync()
+    {
+        var settings = CreateInteractionSettings();
+        var interaction = new WorkspaceInteractionService(
+            settings.Object,
+            Mock.Of<IOperationResultPublisher>(),
+            new OperationStatusReducer());
+        SceneAuthoringFixture? fixture = null;
+        SceneExplorerViewModel? viewModel = null;
+        try
+        {
+            fixture = new SceneAuthoringFixture(interaction);
+            var scene = fixture.Scene;
+            var secondaryNode = new SceneNode(scene) { Name = "Secondary" };
+            var childNode = new SceneNode(scene) { Name = "Nested child" };
+            scene.RootNodes.Add(secondaryNode);
+            fixture.Node.AddChild(childNode);
+            var metadata = fixture.Context.Metadata;
+            _ = fixture.Documents.Setup(service => service.GetOpenDocuments(It.IsAny<WindowId>())).Returns([metadata]);
+            _ = fixture.Documents.Setup(service => service.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(metadata.DocumentId);
+            _ = fixture.Sync.Setup(service => service.GetDocumentScene(metadata)).Returns(scene);
+            _ = fixture.Sync.Setup(service => service.RegisterDocument(scene, metadata)).Returns(true);
+            _ = fixture.Sync.Setup(service => service.SyncSceneWhenReadyAsync(scene, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+            viewModel = new SceneExplorerViewModel(
+                Mock.Of<IProjectManagerService>(),
+                fixture.Messenger,
+                Mock.Of<IRouter>(),
+                fixture.Documents.Object,
+                default,
+                fixture.Sync.Object,
+                new SceneSelectionService(),
+                fixture.Commands,
+                interaction: interaction,
+                projectContexts: fixture.Projects);
+            await viewModel.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
+            var adapter = (SceneNodeAdapter)(await viewModel.FindAdapterByNodeIdAsync(fixture.Node.Id).ConfigureAwait(true))!;
+            await viewModel.ExpandItemAsync(adapter).ConfigureAwait(true);
+            var secondaryAdapter = (SceneNodeAdapter)(await viewModel.FindAdapterByNodeIdAsync(secondaryNode.Id).ConfigureAwait(true))!;
+            var childAdapter = (SceneNodeAdapter)(await viewModel.FindAdapterByNodeIdAsync(childNode.Id).ConfigureAwait(true))!;
+            var view = new SceneExplorerView { ViewModel = viewModel };
+            await LoadTestContentAsync(view).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
+            fixture.Sync.Invocations.Clear();
+            var tree = (DynamicTree)view.FindName("ExplorerTree")!;
+            var row = Row(tree, adapter);
+            var host = new RowHost(fixture, viewModel, view, interaction, settings, adapter, secondaryAdapter, childAdapter, tree, row, row.FindDescendant<SceneRowActions>()!);
+            fixture = null;
+            viewModel = null;
+            return host;
+        }
+        finally
+        {
+            viewModel?.Dispose();
+            fixture?.Dispose();
+        }
+    }
+
     private static void AssertSlot(Button button, bool suppressed, bool hovered)
     {
         _ = button.Visibility.Should().Be(suppressed || hovered ? Visibility.Visible : Visibility.Collapsed);
@@ -543,64 +602,19 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         return settings;
     }
 
-    private static async Task<RowHost> CreateRowHostAsync()
-    {
-        var settings = CreateInteractionSettings();
-        var interaction = new WorkspaceInteractionService(
-            settings.Object,
-            Mock.Of<IOperationResultPublisher>(),
-            new OperationStatusReducer());
-        SceneAuthoringFixture? fixture = null;
-        SceneExplorerViewModel? viewModel = null;
-        try
-        {
-            fixture = new SceneAuthoringFixture(interaction);
-            var scene = fixture.Scene;
-            var secondaryNode = new SceneNode(scene) { Name = "Secondary" };
-            var childNode = new SceneNode(scene) { Name = "Nested child" };
-            scene.RootNodes.Add(secondaryNode);
-            fixture.Node.AddChild(childNode);
-            var metadata = fixture.Context.Metadata;
-            _ = fixture.Documents.Setup(service => service.GetOpenDocuments(It.IsAny<WindowId>())).Returns([metadata]);
-            _ = fixture.Documents.Setup(service => service.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(metadata.DocumentId);
-            _ = fixture.Sync.Setup(service => service.GetDocumentScene(metadata)).Returns(scene);
-            _ = fixture.Sync.Setup(service => service.RegisterDocument(scene, metadata)).Returns(true);
-            _ = fixture.Sync.Setup(service => service.SyncSceneWhenReadyAsync(scene, It.IsAny<CancellationToken>())).ReturnsAsync(false);
-            viewModel = new SceneExplorerViewModel(
-                Mock.Of<IProjectManagerService>(),
-                fixture.Messenger,
-                Mock.Of<IRouter>(),
-                fixture.Documents.Object,
-                default,
-                fixture.Sync.Object,
-                new SceneSelectionService(),
-                fixture.Commands,
-                interaction: interaction,
-                projectContexts: fixture.Projects);
-            await viewModel.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
-            var adapter = (SceneNodeAdapter)(await viewModel.FindAdapterByNodeIdAsync(fixture.Node.Id).ConfigureAwait(true))!;
-            await viewModel.ExpandItemAsync(adapter).ConfigureAwait(true);
-            var secondaryAdapter = (SceneNodeAdapter)(await viewModel.FindAdapterByNodeIdAsync(secondaryNode.Id).ConfigureAwait(true))!;
-            var childAdapter = (SceneNodeAdapter)(await viewModel.FindAdapterByNodeIdAsync(childNode.Id).ConfigureAwait(true))!;
-            var view = new SceneExplorerView { ViewModel = viewModel };
-            await LoadTestContentAsync(view).ConfigureAwait(true);
-            await WaitForRenderAsync().ConfigureAwait(true);
-            fixture.Sync.Invocations.Clear();
-            var tree = (DynamicTree)view.FindName("ExplorerTree")!;
-            var row = Row(tree, adapter);
-            var host = new RowHost(fixture, viewModel, view, interaction, settings, adapter, secondaryAdapter, childAdapter, tree, row, row.FindDescendant<SceneRowActions>()!);
-            fixture = null;
-            viewModel = null;
-            return host;
-        }
-        finally
-        {
-            viewModel?.Dispose();
-            fixture?.Dispose();
-        }
-    }
-
-    private sealed record RowHost(
+    /// <summary>Owns the fixture and realized Explorer row used by Scene Explorer UI tests.</summary>
+    /// <param name="Fixture">The scene authoring fixture.</param>
+    /// <param name="ViewModel">The Explorer view-model.</param>
+    /// <param name="View">The loaded Explorer view.</param>
+    /// <param name="Interaction">The workspace interaction state owner.</param>
+    /// <param name="Settings">The settings mock that stores interaction state.</param>
+    /// <param name="Adapter">The primary scene-node adapter.</param>
+    /// <param name="SecondaryAdapter">A second root-node adapter.</param>
+    /// <param name="ChildAdapter">A nested child-node adapter.</param>
+    /// <param name="Tree">The realized Explorer tree.</param>
+    /// <param name="Row">The primary realized row.</param>
+    /// <param name="Actions">The primary row's action controls.</param>
+    internal sealed record RowHost(
         SceneAuthoringFixture Fixture,
         SceneExplorerViewModel ViewModel,
         SceneExplorerView View,
@@ -613,8 +627,10 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         DynamicTreeItem Row,
         SceneRowActions Actions) : IDisposable
     {
+        /// <summary>Gets the primary node used to create the test host.</summary>
         public SceneNode Node => this.Fixture.Node;
 
+        /// <inheritdoc />
         public void Dispose()
         {
             this.ViewModel.Dispose();

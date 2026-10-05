@@ -9,6 +9,7 @@ using Moq;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -45,6 +46,27 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = service.IsHidden(hidden).Should().BeTrue("a stored hidden id reloads on scene restore");
         _ = service.IsLocked(locked).Should().BeTrue("a stored locked id reloads on scene restore");
+    }
+
+    [TestMethod]
+    public async Task WorkspaceInteractionService_GetLockOwner_ResolvesNearestAncestorOnlyInActiveScene()
+    {
+        var project = ProjectContext.FromProjectInfo(SlotTestProjectInfo);
+        var scene = CreateScene();
+        var parent = new SceneNode(scene) { Name = "Locked Parent" };
+        var child = new SceneNode(scene) { Name = "Child" };
+        parent.AddChild(child);
+        scene.RootNodes.Add(parent);
+        var otherSceneNode = new SceneNode(CreateScene()) { Name = "Other Scene Node" };
+
+        var settings = new Mock<IEditorSettingsManager>(MockBehavior.Loose);
+        var service = new WorkspaceInteractionService(settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        await service.RestoreAsync(project, scene.Id).ConfigureAwait(false);
+        service.SetLocked(parent.Id, isLocked: true);
+
+        _ = service.GetLockOwner(child).Should().BeSameAs(parent);
+        _ = service.GetLockOwner(parent).Should().BeSameAs(parent);
+        _ = service.GetLockOwner(otherSceneNode).Should().BeNull("an inactive scene must not inherit the active scene's lock state");
     }
 
     [TestMethod]

@@ -69,6 +69,61 @@ public sealed partial class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
+    public async Task AddComponentAsync_WhenAncestorIsLocked_DeniesWithoutChangingAuthoringState()
+    {
+        var scene = CreateScene();
+        var parent = new SceneNode(scene) { Name = "Locked Parent" };
+        var child = new SceneNode(scene) { Name = "Child" };
+        parent.AddChild(child);
+        scene.RootNodes.Add(parent);
+        var context = CreateContext(scene);
+        var (interaction, _) = CreateInteraction();
+        await interaction.RestoreAsync(ProjectContext.FromProjectInfo(SlotTestProjectInfo), scene.Id).ConfigureAwait(false);
+        interaction.SetLocked(parent.Id, isLocked: true);
+        var fixture = CreateFixture(interaction: interaction);
+
+        var result = await fixture.Sut.AddComponentAsync(context, child.Id, typeof(GeometryComponent)).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = child.Components.OfType<GeometryComponent>().Should().BeEmpty();
+        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Results.Published.Should().ContainSingle()
+            .Which.Diagnostics.Should().ContainSingle()
+            .Which.Code.Should().Be(DiagnosticCodes.ScenePrefix + "NODE_LOCKED");
+    }
+
+    [TestMethod]
+    public async Task EditTransformAsync_WhenAncestorIsLocked_DeniesWithoutChangingTransform()
+    {
+        var scene = CreateScene();
+        var parent = new SceneNode(scene) { Name = "Locked Parent" };
+        var child = new SceneNode(scene) { Name = "Child" };
+        parent.AddChild(child);
+        scene.RootNodes.Add(parent);
+        var context = CreateContext(scene);
+        var originalPosition = child.Components.OfType<TransformComponent>().Single().LocalPosition;
+        var (interaction, _) = CreateInteraction();
+        await interaction.RestoreAsync(ProjectContext.FromProjectInfo(SlotTestProjectInfo), scene.Id).ConfigureAwait(false);
+        interaction.SetLocked(parent.Id, isLocked: true);
+        var fixture = CreateFixture(interaction: interaction);
+
+        var result = await fixture.Sut.EditTransformAsync(
+            context,
+            [child.Id],
+            PositionXEdit(12f),
+            EditSessionToken.OneShot).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = child.Components.OfType<TransformComponent>().Single().LocalPosition.Should().Be(originalPosition);
+        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Results.Published.Should().ContainSingle()
+            .Which.Diagnostics.Should().ContainSingle()
+            .Which.Code.Should().Be(DiagnosticCodes.ScenePrefix + "NODE_LOCKED");
+    }
+
+    [TestMethod]
     public async Task EditGeometryAsync_WhenGeometryIsCleared_RejectsUnsavableState()
     {
         var fixture = CreateFixture();

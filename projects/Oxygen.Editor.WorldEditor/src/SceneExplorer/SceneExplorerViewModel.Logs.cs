@@ -20,6 +20,9 @@ public partial class SceneExplorerViewModel
     [LoggerMessage(Level = LogLevel.Error, Message = "Scene Explorer projection update failed for document {DocumentId}.")]
     private static partial void LogProjectionUpdateFailed(ILogger logger, Exception exception, Guid documentId);
 
+    [LoggerMessage(Level = LogLevel.Error, Message = "Scene Explorer search failed for query {SearchQuery}.")]
+    private static partial void LogSearchFailed(ILogger logger, Exception exception, string searchQuery);
+
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,

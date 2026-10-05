@@ -20,6 +20,7 @@ public sealed class SceneExplorerProjection
     private readonly HashSet<ITreeItem> trackedItems = [];
     private readonly List<LayoutFolder> layoutFolders = [];
     private readonly Dictionary<Guid, LayoutAncestor[]> nodeLayoutChains = [];
+    private readonly Dictionary<Guid, LayoutAncestor[]> folderLayoutChains = [];
     private readonly Dictionary<ITreeItem, ITreeItem> parentAdapters = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>Gets the indexed node adapters.</summary>
@@ -61,6 +62,15 @@ public sealed class SceneExplorerProjection
     /// <returns>The ancestors from the layout root down to the node's parent, or <see langword="null"/> when the node has no layout seat.</returns>
     public IReadOnlyList<LayoutAncestor>? GetNodeLayoutAncestors(Guid nodeId)
         => this.nodeLayoutChains.TryGetValue(nodeId, out var chain) ? chain : null;
+
+    /// <summary>
+    /// Gets the top-down authored-layout ancestor chain for the given folder identity, independent
+    /// of realization and expansion state.
+    /// </summary>
+    /// <param name="folderId">The folder identity.</param>
+    /// <returns>The ancestors from the layout root down to the folder's parent.</returns>
+    public IReadOnlyList<LayoutAncestor>? GetFolderLayoutAncestors(Guid folderId)
+        => this.folderLayoutChains.TryGetValue(folderId, out var chain) ? chain : null;
 
     /// <summary>Gets the realized projection ancestors without loading collapsed child collections.</summary>
     /// <param name="item">The adapter whose ancestors are requested.</param>
@@ -112,6 +122,7 @@ public sealed class SceneExplorerProjection
         this.folderAdapters.Clear();
         this.layoutFolders.Clear();
         this.nodeLayoutChains.Clear();
+        this.folderLayoutChains.Clear();
         this.parentAdapters.Clear();
         this.ClearTracked();
     }
@@ -218,6 +229,11 @@ public sealed class SceneExplorerProjection
                     }
 
                     this.layoutFolders.Add(new LayoutFolder(entry.FolderId, entry.Name ?? FolderAdapter.FallbackName));
+                    if (entry.FolderId is { } stableFolderId)
+                    {
+                        this.folderLayoutChains[stableFolderId] = [.. chain];
+                    }
+
                     chain.Add(new LayoutAncestor(IsFolder: true, entry.FolderId));
                     if (entry.Children is { } folderChildren)
                     {

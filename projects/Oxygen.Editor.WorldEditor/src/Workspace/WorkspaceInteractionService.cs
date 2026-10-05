@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -63,7 +64,7 @@ public sealed partial class WorkspaceInteractionService(
     /// <summary>Raised whenever the hidden or locked set for the active scene changes.</summary>
     public event EventHandler? StateChanged;
 
-    /// <summary>Gets the picking categories applied to viewport pick requests and Explorer filters.</summary>
+    /// <summary>Gets the category filters applied to Scene Explorer rows.</summary>
     public SceneCategories Categories { get; private set; } = SceneCategories.All;
 
     /// <summary>Gets the scene whose state this service currently presents.</summary>
@@ -128,6 +129,28 @@ public sealed partial class WorkspaceInteractionService(
     /// <returns><see langword="true"/> when the node is locked.</returns>
     public bool IsLocked(Guid nodeId) => this.lockedNodeIds.Contains(nodeId);
 
+    /// <summary>Finds the closest locked node that protects <paramref name="node"/> from editing.</summary>
+    /// <param name="node">The selected scene node.</param>
+    /// <returns>The node itself or an ancestor that is locked; otherwise, <see langword="null"/>.</returns>
+    public SceneNode? GetLockOwner(SceneNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        if (node.Scene.Id != this.activeSceneId)
+        {
+            return null;
+        }
+
+        for (var current = (SceneNode?)node; current is not null; current = current.Parent)
+        {
+            if (this.IsLocked(current.Id))
+            {
+                return current;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Gets a snapshot of the explicitly hidden node ids of the active scene.</summary>
     /// <returns>The hidden ids in no particular order.</returns>
     public IReadOnlyCollection<Guid> HiddenNodeIds() => [.. this.hiddenNodeIds];
@@ -178,8 +201,8 @@ public sealed partial class WorkspaceInteractionService(
         this.ScheduleSave();
     }
 
-    /// <summary>Applies the picking category filter.</summary>
-    /// <param name="categories">The accepted categories.</param>
+    /// <summary>Applies the Scene Explorer category filters.</summary>
+    /// <param name="categories">The category visibility preferences.</param>
     public void SetCategories(SceneCategories categories)
     {
         if (categories == this.Categories)
@@ -303,8 +326,10 @@ public sealed partial class WorkspaceInteractionService(
                 || entry.Value.HiddenNodeIds is null || entry.Value.LockedNodeIds is null || entry.Value.Categories is null))
         {
             this.ReportFailure(
-                project, "INVALID_STATE", "Editor interaction state was not restored",
-                "The saved workspace state is invalid. Scene visibility, locks and picking categories use their defaults.",
+                project,
+                "INVALID_STATE",
+                "Editor interaction state was not restored",
+                "The saved workspace state is invalid. Scene visibility, locks and Explorer category filters use their defaults.",
                 new InvalidDataException("Workspace interaction state contains an invalid scene record."));
             return;
         }
@@ -349,17 +374,17 @@ public sealed partial class WorkspaceInteractionService(
     /// <summary>The saved interaction state for one scene.</summary>
     /// <param name="HiddenNodeIds">Nodes hidden in the editing viewports.</param>
     /// <param name="LockedNodeIds">Nodes locked against editing.</param>
-    /// <param name="Categories">The picking category filter.</param>
+    /// <param name="Categories">The Scene Explorer category filter.</param>
     internal sealed record SceneInteraction(
         IReadOnlyList<Guid> HiddenNodeIds,
         IReadOnlyList<Guid> LockedNodeIds,
         SceneCategories Categories);
 }
 
-/// <summary>The node categories an editor interaction applies to.</summary>
-/// <param name="ShowMeshes">Whether mesh rows participate.</param>
-/// <param name="ShowLights">Whether light rows participate.</param>
-/// <param name="ShowCameras">Whether camera rows participate.</param>
+/// <summary>The Scene Explorer node categories to display.</summary>
+/// <param name="ShowMeshes">Whether mesh-category rows are displayed.</param>
+/// <param name="ShowLights">Whether light-category rows are displayed.</param>
+/// <param name="ShowCameras">Whether camera-category rows are displayed.</param>
 public sealed record SceneCategories(bool ShowMeshes, bool ShowLights, bool ShowCameras)
 {
     /// <summary>Gets the filter that includes every category.</summary>

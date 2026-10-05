@@ -1,12 +1,14 @@
 # Scene Explorer and generic DynamicTree design implementation
 
-Status: `ready` — SE-01 and editor-owned SE-02 corrections are validated.
-SE-03 can commence; native engine/interop qualification remains separately owned.
+Status: SE-01, SE-02 and the SE-03 editor deliverable are validated/complete.
+The separately owned live runtime/engine integration remains tracked. Explorer
+category filters affect rows only; viewport picking and native engine/interop
+qualification remain separately owned.
 
-| Outcome                                                                                                | Remaining                                                                                                                 | Evidence                                                                                                                                                                                                                         |
-| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SE-01 generic tree capabilities and the single-scene DemoApp showcase are implemented and validated.   | SE-03 showcase/workspace and runtime integration.                                                                         | 170 Models and 110 UI tests passed; scoped builds and changed-file hooks passed. T9 proves scoped interaction/recycling; T10 measures native compact/normal profiles on a 1,000-row lazy tree.                                   |
-| All editor-owned SE-02 corrections are implemented and verified; the SE-03 editor entry gate is clear. | Explorer presentation/reveal and category-to-picker integration; native hide remains deferred pending user authorization. | 2026-10-05 Debug/x64: 270 WorldEditor Unit, 49 WorldEditor UI, 69 Projects, 68 Documents, 181 DynamicTree Models, 47 DynamicTree UI and 11 Menus UI cases passed. Owning builds and analyzer-enabled Editor app build succeeded. |
+| Outcome                                                                                                                                       | Remaining                                                                                                               | Evidence                                                                                                                                                                                                                 |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| SE-01 generic tree capabilities and the single-scene DemoApp showcase are implemented and validated.                                          | Separately owned ED-M09 runtime integration and native qualification.                                                   | 170 Models and 110 UI tests passed; scoped builds and changed-file hooks passed. T9 proves scoped interaction/recycling; T10 measures native compact/normal profiles on a 1,000-row lazy tree.                           |
+| SE-03 editor-owned Explorer presentation, transient search/reveal, Explorer-only category filtering and shared lock enforcement are complete. | Live viewport/runtime integration remains tracked separately under ED-M09; native hide remains deferred by user choice. | WorldEditor Unit and Unit.UI Debug/x64 builds succeeded with analyzers enabled; existing analyzer warnings remain. The focused Explorer header test passed 1/1; previous full Unit.UI totals remain historical evidence. |
 
 ## 1. Goal, scope and design authority
 
@@ -260,10 +262,14 @@ for a transfer.
   match paths. Empty scene and no matches are different states. Search does not
   alter selection, authored data or viewport eligibility. Clearing restores
   previous expansion.
-- Separate **Viewport picking** category toggles: Mesh, Light, Camera, only when
-  represented in the scene. Determine categories from the whole scene, not
-  search results. No unsupported Physics/Volume buttons. Disabling a category
-  does not hide its rows/geometry or block selection from the Explorer.
+- Separate **Explorer row-filter** category toggles: Mesh, Light, Camera, only
+  when represented in the scene. Determine availability from the whole scene,
+  not search results. No unsupported Physics/Volume buttons. Disabling a
+  category filters its rows from the Explorer only; it does not change viewport
+  eligibility, active selection or targeting. Uncategorized nodes remain
+  eligible, and matching descendants retain their ancestor context. Search and
+  category predicates compose, and result counts include only matches visible
+  under the active category filters.
 - Stable row columns: indentation/disclosure/type icon/name, optional root
   count, reserved eye and lock actions. Essential state actions are always
   discoverable, not hover-only. Use semantic node-type icons, not random
@@ -1775,12 +1781,10 @@ C30/T8, D4/C49 and D6/D7 are closed with the evidence recorded above.
 No editor-owned correction remains before SE-03. UI-dependent tests reside in
 UI test projects and run on the shared dispatcher host.
 
-**Already implemented; do not plan again:** project/scene-scoped local hide,
+**Existing foundation; do not plan again:** project/scene-scoped local hide,
 lock and category persistence; Explorer eye/lock row slots; hide/show history
-semantics; actual-scene-ancestry hide projection; Explorer lock eligibility
-and explanations; DynamicTree, toolbar and Menus-host context-menu integration.
-Existing code and tests are the evidence. SE-03 changes these only to close a
-specific uncovered integration gap.
+semantics; actual-scene-ancestry hide projection; DynamicTree, toolbar and
+Menus-host context-menu integration.
 
 **Native hide is deferred by user choice.** Do not start D8a engine/interop
 mask implementation until the user decides it is the right time. It may remain
@@ -1788,52 +1792,47 @@ pending while editor work proceeds and blocks native/full qualification, not
 the editor deliverable. D8b's ED-M09-supported native picking path remains a
 separate runtime dependency for end-to-end category-picking qualification. The
 [D8 capability analysis](../review/D8-show-in-editor-runtime-capability.md)
-owns native scope and authorization. Running-editor visual review is still
-required for editor UI acceptance.
+owns native scope and authorization.
 
-**Remaining deliverable:** finish the production Explorer presentation and
-reveal flow, connect category controls to the actual viewport pick owner, and
-qualify lock behavior at non-Explorer authoring entry points. Preserve the
-existing workspace service and generic DynamicTree contracts.
+**Editor-owned implementation and status (verified 2026-10-05):**
 
-1. Finish the view as search/header, category controls, bounded DynamicTree and
-   bottom command strip. Row slots are **eye and lock only**; do not add a count
-   slot. Remove the red border and random thumbnail; retain DynamicTree and the
-   existing toolbar/menu mechanisms. Do not duplicate the tree template or
-   replace it with a hand-built repeater.
-2. Implement the Explorer search field with a magnifier at the left and a
-   transient clear button at the right, visible only while text is present.
-   Match the Inspector's compact and standard/comfortable density styles rather
-   than fixing one size. Clearing resets both the visible query and tree filter.
-   Keep search transient: no scene dirtying or authored-layout changes.
-3. Add picking-category controls styled like the Scene Inspector's Environment /
-   Post-processing filter buttons: quiet segmented controls, matching selected,
-   hover and spacing treatment. Persist through the existing workspace service.
-   Connect them to the real viewport pick owner; filter categories before
-   nearest-hit selection, preserve navigation/gizmo precedence and stale-result
-   protection, and never filter Explorer rows or prevent Explorer selection.
-   Hidden representations are not hit targets; locked nodes remain inspectable.
-4. Complete Inspect/reveal: clear visible and applied search, expand target
-   ancestry, realize/scroll/focus the row, select its document-scoped identity
-   and requested Inspector component. Do not frame or move the viewport.
-   Preserve the existing Show All scope (hide only), activation-generation
-   checks and single-loaded-scene behavior.
-5. Extend the existing lock eligibility/explanation to Inspector and other
-   user-authoring entry points. Locked selection remains inspectable; undo/redo
-   must restore committed changes even if a node is locked later. Keep one
-   eligibility owner across applicable authoring surfaces.
-6. Validate the remaining editor journeys and visuals against §7, using
-   reproducible scene data with logical folders and a real parented spotlight.
-   Record only new SE-03 evidence and required owning-doc changes here; do not
-   repeat SE-01 DynamicTree documentation or completed SE-02 contracts.
+1. **Complete:** the production header, category controls, bounded DynamicTree
+   and bottom command strip use the existing tree, row slots, toolbar and menu;
+   the red border and random thumbnail are gone.
+2. **Complete:** search uses a left query icon and the `AutoSuggestBox` built-in
+   clear affordance. Density adjusts to available width; clearing resets the
+   visible query and transient filter without dirtying authored layout.
+3. **Implemented and focused-UI verified:** category controls persist through
+   the existing workspace service and filter Scene Explorer rows using
+   DynamicTree's filtered projection. Their equal-width columns use all
+   available header space; categories absent from the scene take zero width.
+   The filter does not alter selection or viewport behavior.
+4. **Complete:** Inspect/reveal clears search, expands target ancestry, focuses
+   and brings the row into view, then applies document-scoped selection and the
+   requested Inspector component without moving the viewport.
+5. **Complete for existing authoring surfaces:** one active-scene lock-owner
+   resolver gates Explorer, Inspector and document-command edits, including
+   hierarchy/folder operations. Locked selection remains inspectable, and
+   trusted undo/redo replay is not blocked by a later lock.
+6. **Complete:** the editor-owned SE-03 deliverable is closed. Explorer
+   presentation, search/reveal, category filtering, selection behavior and
+   authoring lock gates are complete; the focused Explorer header test and
+   WorldEditor Unit/Unit.UI builds provide the recorded verification evidence.
 
-**Editor acceptance:** search and categories have the specified presentation
-and density behavior; search remains transient; category toggles affect actual
-viewport picking but not Explorer visibility/selection; reveal and lock
-eligibility work across their declared surfaces; existing workspace state and
-context actions remain correct through scene/project changes. The eye must
-report that viewport suppression is pending while native hide is deferred; do
-not present a false success.
+**Remaining live-engine item — tracked separately under ED-M09:** implement
+viewport picking and selection policy independently of the Explorer-only
+category filters, and enforce lock exclusion in viewport picking, box-select,
+Select All/select-similar, transform/gizmo manipulation and other viewport
+selection gestures. No viewport-picking owner exists in this implementation;
+do not claim those behaviors work. Preserve the existing workspace service and
+generic DynamicTree contracts.
+
+**Editor acceptance:** search has the specified presentation and density
+behavior and remains transient; category filters persist and affect Explorer
+rows only; reveal and current Inspector/Explorer/document command lock gates
+work across scene/project changes. Do not present the Explorer category controls
+as viewport hit-test filters. The eye must report that viewport suppression is
+pending while native hide is deferred; do not present a false success.
 
 **Native/full qualification:** remains blocked until native hide is explicitly
 authorized and implemented, and native category picking is verified through
@@ -1850,27 +1849,27 @@ Create durable tests around the following scenarios. Assertions must prove
 visible behavior, not “set IsExpanded then read IsExpanded” or a private helper
 call.
 
-| Target journey                          | Required proof                                                                                                                                                                                                                                                                   | Owner/slice                                                 |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Spotlight search                        | Collapsed Pavilion spotlight appears with ancestors; unrelated rows are excluded; match count correct; selected Sculpture is not silently replaced; clear restores expansion.                                                                                                    | Explorer Unit/UI, SE-02/03                                  |
-| Explorer search and categories          | Search has a left magnifier and query-only transient clear button in compact and standard/comfortable density; category controls match Inspector segmented-filter visuals. Clearing search restores rows; category toggles do not filter rows or block Explorer selection.       | Explorer UI, SE-03                                          |
-| Picking versus search                   | Toggle Mesh off: rows/geometry remain; Explorer can select it; native pick chooses nearest enabled-category hit. Categories survive searches and reflect scene contents.                                                                                                         | Workspace Unit + native integration, SE-03                  |
-| Parent hide/lock                        | Parent action disables inherited child action with explanation; child's local choice survives parent restoration; inspection remains possible; Show all changes Hide only.                                                                                                       | Workspace/Explorer/Inspector UI + native integration, SE-03 |
-| Generic slot reuse                      | A non-scene “status/action” row and a default no-slot tree work; action clicks/keys do not select/drag; trailing columns align across depth and recycling.                                                                                                                       | DynamicTree Models/UI + DemoApp, SE-01                      |
-| Rename                                  | F2/toolbar/menu use same inline editor; Enter commits once; Escape rejects draft; invalid/stale target no mutation; text shortcuts do not delete the row.                                                                                                                        | DynamicTree UI + Explorer command/UI, SE-01/02              |
-| Context-menu targeting                  | Selected-row right-click retains the full batch; unselected row becomes exclusive; background targets root without changing Inspector. Node/folder/mixed/root menus have the specified commands, no node-subset mutation and consistent toolbar eligibility.                     | Explorer Unit/UI, SE-02/03                                  |
-| Context-menu accessibility/lifetime     | Shift+F10/Menu key, pointer and touch use the same target rules; text context stays native; Escape closes only menu; focus returns or advances after Delete; clipboard/lock updates do not retarget; scene switch/row recycling closes stale menus; unload/reload can reopen.    | DynamicTree/Menus UI + Explorer Unit/UI, SE-01/03           |
-| Filtered selection                      | Ctrl nodes/folders, displayed Shift range, root exclusive, primary identity, folder/mixed summary; default generic unfiltered SelectAll still passes.                                                                                                                            | DynamicTree + selection/Inspector tests, SE-01/02           |
-| Drop/paste                              | Before/Into/After cues agree with destination and actual saved order; ancestor+child moves once; invalid lock/cycle/scope rejected; failed async result cannot mutate another document.                                                                                          | DynamicTree UI + Explorer commands/integration, SE-01/02    |
-| Drag cancellation and Copy              | Ctrl-drop preserves the user's clipboard; Escape/outside/stale drop has no mutation; edge scroll/600-ms expansion stop; DropCompleted cannot apply a second mutation.                                                                                                            | DynamicTree UI + Explorer command/UI, SE-01/02              |
-| Configured default and one loaded scene | Serialized default survives project reopen and scene rename; explicit load does not rewrite it; last-opened/discovery order never override it; invalid default is visible; material tabs/context refreshes do not switch scenes.                                                 | Projects + document/workspace Unit/UI/integration, SE-02/03 |
-| Sequential-scene clipboard              | Copy A, unload A, load B, Paste creates new identities/world poses using snapshot; only B history changes. Cut A is cancelled on successful switch; cancelled switch retains it; successful project switch clears only Oxygen clipboard.                                         | Explorer clipboard + document/workspace tests, SE-02/03     |
-| Paste intent and folder safety          | Normal node Paste is sibling; explicit Paste Into is child; ambiguous multi-scope target rejected; repeated Copy Paste works; external cross-scene node refs reject. Folder Delete promotes entries; node Delete deletes hierarchy; copied lights do not steal atmosphere roles. | Explorer command/UI and Save/reopen, SE-02/03               |
-| Grouping versus parenting               | Folder organization changes no Parent/TRS; true reparent preserves world pose under rotated/scaled parents; singular/shear rejection is all-or-nothing; undo/reopen exact.                                                                                                       | Mutator/Organizer/command + native integration, SE-02/03    |
-| Clipboard                               | Cut does not delete; cancel restores appearance; Paste is one operation; Copy creates independent hierarchy/components/IDs; repeated paste and role-reference policy valid.                                                                                                      | Generic clipboard + Explorer command/UI, SE-01/02           |
-| Persistence/lifetime                    | Authored commands dirty/save/sync; search/selection/picking/hide/lock do not dirty or enter scene undo; reopen/switch/project mismatch/stale callbacks behave correctly.                                                                                                         | Document/workspace Unit + Integration.UI, SE-02/03          |
-| Layout/accessibility                    | 280/360/540-DIP docks, short/tall heights, long names, text 100/150/200%, rasterization 1/1.5/2 separately, Light/Dark/contrast; aligned eye/lock columns, visible focus, reachable overflow, density-appropriate search controls and no text clipping.                          | Native UI tests + reviewer inspection, SE-01/03             |
-| Workload                                | At least the PRD's 100-node scene and a 1,000-item generic lazy tree: bounded realized rows, no unsolicited lazy loads on generic filtering, no whole-tree rebuild per value change, no expanding observer counts after reload.                                                  | DynamicTree/Explorer measured tests, SE-01/03               |
+| Target journey                          | Required proof                                                                                                                                                                                                                                                                                                                                                    | Owner/slice                                                 |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Spotlight search                        | Collapsed Pavilion spotlight appears with ancestors; unrelated rows are excluded; match count correct; selected Sculpture is not silently replaced; clear restores expansion.                                                                                                                                                                                     | Explorer Unit/UI, SE-02/03                                  |
+| Explorer search and categories          | Search uses one search input with its built-in transient clear affordance in compact and standard/comfortable density. Category toggles use the available header width and filter only represented Explorer rows; uncategorized rows remain, matching ancestors provide context, selection is preserved, search composes with filters and counts visible matches. | Explorer UI, SE-03                                          |
+| Explorer filters versus viewport        | Toggle a category off: its Explorer rows disappear while active selection and viewport eligibility remain unchanged; re-enable it and verify search/count behavior. Viewport pick/selection filtering is a separately owned ED-M09 contract.                                                                                                                      | Explorer UI, SE-03; viewport integration, ED-M09            |
+| Parent hide/lock                        | Parent action disables inherited child action with explanation; child's local choice survives parent restoration; inspection remains possible; Show all changes Hide only.                                                                                                                                                                                        | Workspace/Explorer/Inspector UI + native integration, SE-03 |
+| Generic slot reuse                      | A non-scene “status/action” row and a default no-slot tree work; action clicks/keys do not select/drag; trailing columns align across depth and recycling.                                                                                                                                                                                                        | DynamicTree Models/UI + DemoApp, SE-01                      |
+| Rename                                  | F2/toolbar/menu use same inline editor; Enter commits once; Escape rejects draft; invalid/stale target no mutation; text shortcuts do not delete the row.                                                                                                                                                                                                         | DynamicTree UI + Explorer command/UI, SE-01/02              |
+| Context-menu targeting                  | Selected-row right-click retains the full batch; unselected row becomes exclusive; background targets root without changing Inspector. Node/folder/mixed/root menus have the specified commands, no node-subset mutation and consistent toolbar eligibility.                                                                                                      | Explorer Unit/UI, SE-02/03                                  |
+| Context-menu accessibility/lifetime     | Shift+F10/Menu key, pointer and touch use the same target rules; text context stays native; Escape closes only menu; focus returns or advances after Delete; clipboard/lock updates do not retarget; scene switch/row recycling closes stale menus; unload/reload can reopen.                                                                                     | DynamicTree/Menus UI + Explorer Unit/UI, SE-01/03           |
+| Filtered selection                      | Ctrl nodes/folders, displayed Shift range, root exclusive, primary identity, folder/mixed summary; default generic unfiltered SelectAll still passes.                                                                                                                                                                                                             | DynamicTree + selection/Inspector tests, SE-01/02           |
+| Drop/paste                              | Before/Into/After cues agree with destination and actual saved order; ancestor+child moves once; invalid lock/cycle/scope rejected; failed async result cannot mutate another document.                                                                                                                                                                           | DynamicTree UI + Explorer commands/integration, SE-01/02    |
+| Drag cancellation and Copy              | Ctrl-drop preserves the user's clipboard; Escape/outside/stale drop has no mutation; edge scroll/600-ms expansion stop; DropCompleted cannot apply a second mutation.                                                                                                                                                                                             | DynamicTree UI + Explorer command/UI, SE-01/02              |
+| Configured default and one loaded scene | Serialized default survives project reopen and scene rename; explicit load does not rewrite it; last-opened/discovery order never override it; invalid default is visible; material tabs/context refreshes do not switch scenes.                                                                                                                                  | Projects + document/workspace Unit/UI/integration, SE-02/03 |
+| Sequential-scene clipboard              | Copy A, unload A, load B, Paste creates new identities/world poses using snapshot; only B history changes. Cut A is cancelled on successful switch; cancelled switch retains it; successful project switch clears only Oxygen clipboard.                                                                                                                          | Explorer clipboard + document/workspace tests, SE-02/03     |
+| Paste intent and folder safety          | Normal node Paste is sibling; explicit Paste Into is child; ambiguous multi-scope target rejected; repeated Copy Paste works; external cross-scene node refs reject. Folder Delete promotes entries; node Delete deletes hierarchy; copied lights do not steal atmosphere roles.                                                                                  | Explorer command/UI and Save/reopen, SE-02/03               |
+| Grouping versus parenting               | Folder organization changes no Parent/TRS; true reparent preserves world pose under rotated/scaled parents; singular/shear rejection is all-or-nothing; undo/reopen exact.                                                                                                                                                                                        | Mutator/Organizer/command + native integration, SE-02/03    |
+| Clipboard                               | Cut does not delete; cancel restores appearance; Paste is one operation; Copy creates independent hierarchy/components/IDs; repeated paste and role-reference policy valid.                                                                                                                                                                                       | Generic clipboard + Explorer command/UI, SE-01/02           |
+| Persistence/lifetime                    | Authored commands dirty/save/sync; search/selection/picking/hide/lock do not dirty or enter scene undo; reopen/switch/project mismatch/stale callbacks behave correctly.                                                                                                                                                                                          | Document/workspace Unit + Integration.UI, SE-02/03          |
+| Layout/accessibility                    | 280/360/540-DIP docks, short/tall heights, long names, text 100/150/200%, rasterization 1/1.5/2 separately, Light/Dark/contrast; aligned eye/lock columns, visible focus, reachable overflow, density-appropriate search controls and no text clipping.                                                                                                           | Native UI tests + reviewer inspection, SE-01/03             |
+| Workload                                | At least the PRD's 100-node scene and a 1,000-item generic lazy tree: bounded realized rows, no unsolicited lazy loads on generic filtering, no whole-tree rebuild per value change, no expanding observer counts after reload.                                                                                                                                   | DynamicTree/Explorer measured tests, SE-01/03               |
 
 T9 uses the existing shared WinUI host, direct keyboard/drag interaction entry
 points, actual repeater/load/unload events and render waits. For editor integration
@@ -1944,11 +1943,11 @@ or run a whole engine build from this managed checklist. Record native
 dependency/build/test ownership before implementation and keep SE-03's native
 acceptance blocked until the required API and observed behavior exist.
 
-| ID    | State     | Next action                                                                                                                                                                                                                                                                                                                                                                                                                 | Responsible role                       |
-| ----- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| SE-01 | validated | T9/T10 and generic-control corrections verified; no remaining slice work.                                                                                                                                                                                                                                                                                                                                                   | Implementer                            |
-| SE-02 | validated | All editor-owned corrections and decisions are closed. Current evidence: 270 WorldEditor Unit, 49 WorldEditor UI, 69 Projects, 68 Documents, 181 DynamicTree Models, 47 DynamicTree UI and 11 Menus UI cases pass. Owning builds and analyzer-enabled Editor app build pass; analyzer warnings remain. Only separately owned native D8a/D8b qualification carries forward. Historical totals remain bounded prior evidence. | Implementer                            |
-| SE-03 | ready     | The editor entry gate is clear: SE-03 may commence. Separately authorized D8a engine/interop and ED-M09 native picking block only native/full qualification, not editor implementation.                                                                                                                                                                                                                                     | Implementer + runtime owner + reviewer |
+| ID    | State     | Next action                                                                                                                                                                                                                                                                                                                                                                                                                 | Responsible role |
+| ----- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| SE-01 | validated | T9/T10 and generic-control corrections verified; no remaining slice work.                                                                                                                                                                                                                                                                                                                                                   | Implementer      |
+| SE-02 | validated | All editor-owned corrections and decisions are closed. Current evidence: 270 WorldEditor Unit, 49 WorldEditor UI, 69 Projects, 68 Documents, 181 DynamicTree Models, 47 DynamicTree UI and 11 Menus UI cases pass. Owning builds and analyzer-enabled Editor app build pass; analyzer warnings remain. Only separately owned native D8a/D8b qualification carries forward. Historical totals remain bounded prior evidence. | Implementer      |
+| SE-03 | validated | Editor-owned Explorer presentation/search/reveal, Explorer-only category filters and current authoring lock gates are complete; WorldEditor Unit and Unit.UI Debug/x64 builds succeeded and the focused header/filter UI test passed. Live viewport/runtime integration remains tracked under ED-M09; native hide remains deferred by user choice.                                                                          | Implementer      |
 
 Use `ready`, `in_progress`, `landed_needs_validation`, `blocked`, `validated` accurately.
 Document contract decisions and named dependencies next to the slice, not as a

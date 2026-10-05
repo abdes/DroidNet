@@ -72,15 +72,26 @@ public sealed partial class InspectorBindingTests
         using var nativeHost = new ScaledXamlHost();
         await nativeHost.LoadAsync(scroller, 1, this.TestContext.CancellationToken).ConfigureAwait(true);
         var section = view.FindDescendant<PropertiesExpander>()!;
-        var item = view.FindName(field == "Color" ? "ColorField" : "DiskScaleField");
-        _ = section.BringItemIntoView(item);
+
+        // The expander's ItemsRepeater virtualizes: an unrealized item is not in the namescope, so
+        // view.FindName returns null for it and BringItemIntoView cannot index it. Resolve the
+        // declared instance from Items and realize it before walking its card.
+        var item = section.Items.OfType<Oxygen.Editor.World.Inspector.Controls.InspectorRgbField>()
+            .Single(candidate => string.Equals(
+                candidate.Name,
+                string.Equals(field, "Color", StringComparison.Ordinal) ? "ColorField" : "DiskScaleField",
+                StringComparison.Ordinal));
+        _ = section.BringItemIntoView(item).Should().BeTrue("the declared field must realize in its expander");
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var card = item is Oxygen.Editor.World.Inspector.Controls.InspectorRgbField rgb ? (PropertyCard)rgb.Content : (PropertyCard)item;
+        var card = (PropertyCard)item.Content;
         var vector = card.FindDescendant<VectorBox>()!;
-        var red = (NumberBox)await FindInspectorControlAsync(scroller, () => vector.FindDescendant<NumberBox>(input => input.Name == "PartNumberBoxX"),
-            $"{field}.R", this.TestContext.CancellationToken).ConfigureAwait(true);
+        var red = (NumberBox)await FindInspectorControlAsync(
+            scroller,
+            () => vector.FindDescendant<NumberBox>(input => string.Equals(input.Name, "PartNumberBoxX", StringComparison.Ordinal)),
+            $"{field}.R",
+            this.TestContext.CancellationToken).ConfigureAwait(true);
         var light = fixture.Node.Components.OfType<DirectionalLightComponent>().Single();
-        Vector3 Read() => field == "Color" ? light.Color : light.AtmosphereDiskLuminanceScaleRgb;
+        Vector3 Read() => string.Equals(field, "Color", StringComparison.Ordinal) ? light.Color : light.AtmosphereDiskLuminanceScaleRgb;
         var original = Read();
 
         await EnterTextAsync(red, "0.25").ConfigureAwait(true);

@@ -81,7 +81,7 @@ public sealed partial class SceneNodeEditorViewModel
                 editor.UpdateValues(this.items.ToArray());
             }
 
-            editor.SetInputEnabled(this.PropertyEditors.Contains(editor));
+            editor.SetInputEnabled(this.IsEditorInputEnabled(editor));
         }
     }
 

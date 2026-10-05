@@ -118,17 +118,20 @@ public sealed class SceneExplorerSearchTests
     {
         var harness = CreateHarness();
         var scene = harness.Scene;
+        var collapsedFolderId = Guid.NewGuid();
+        var matchingFolderId = Guid.NewGuid();
+        var unresolvedFolderId = Guid.NewGuid();
         scene.SetExplorerLayout(
             [
                 new ExplorerEntryData
                 {
                     Type = "Folder",
-                    FolderId = Guid.NewGuid(),
+                    FolderId = collapsedFolderId,
                     Name = "Alpha",
                     IsExpanded = false,
                     Children =
                     [
-                        new ExplorerEntryData { Type = "Folder", FolderId = Guid.NewGuid(), Name = "ZebraRealized", IsExpanded = false },
+                        new ExplorerEntryData { Type = "Folder", FolderId = matchingFolderId, Name = "ZebraRealized", IsExpanded = false },
                     ],
                 },
                 new ExplorerEntryData
@@ -137,7 +140,7 @@ public sealed class SceneExplorerSearchTests
                     NodeId = Guid.NewGuid(), // unknown to the scene graph: this seat never realizes
                     Children =
                     [
-                        new ExplorerEntryData { Type = "Folder", FolderId = Guid.NewGuid(), Name = "ZebraAuthored" },
+                        new ExplorerEntryData { Type = "Folder", FolderId = unresolvedFolderId, Name = "ZebraAuthored" },
                     ],
                 },
             ]);
@@ -148,8 +151,16 @@ public sealed class SceneExplorerSearchTests
         var count = await explorer.SearchAsync("Zebra").ConfigureAwait(false);
 
         _ = count.Should().Be(2, "folder matches must be counted from the authored layout domain, not only from realized adapters");
+        var collapsed = await explorer.FindFolderAdapterAsync(collapsedFolderId).ConfigureAwait(false);
+        var matching = await explorer.FindFolderAdapterAsync(matchingFolderId).ConfigureAwait(false);
+        _ = collapsed!.IsExpanded.Should().BeTrue("search must reveal collapsed ancestors of a matching folder");
+        _ = matching.Should().NotBeNull();
+        _ = explorer.ShownItems.Contains(matching!).Should().BeTrue("the matching folder must be visible after its ancestors expand");
+        _ = (await explorer.FindFolderAdapterAsync(unresolvedFolderId).ConfigureAwait(false))
+            .Should().BeNull("a folder beneath an unrealized node seat remains authored but cannot be shown");
 
         await explorer.ClearSearchAsync().ConfigureAwait(false);
+        _ = collapsed.IsExpanded.Should().BeFalse("clearing search must restore the authored collapsed ancestor");
     }
 
     [TestMethod]

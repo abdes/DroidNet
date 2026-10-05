@@ -45,6 +45,22 @@ public sealed partial class SceneDocumentCommandService
         }
 
         var phase = session.State;
+        var editsWithValues = edits.Where(static pair => pair.Value.Count > 0).ToArray();
+        if ((phase == EditSessionState.Open || (session.IsOneShot && phase == EditSessionState.Committed))
+            && editsWithValues.Length > 0)
+        {
+            var kind = editsWithValues.Select(static pair => GetSingleComponentKind(pair.Value)).FirstOrDefault(static value => value is not null);
+            if (!string.Equals(kind, SceneEnvironmentKind, StringComparison.Ordinal))
+            {
+                var targetNodes = ResolveNodes(context.Scene, editsWithValues.Select(static pair => pair.Key).ToArray());
+                var operationKind = kind is null ? SceneOperationKinds.EditTransform : OperationKindForPropertyKind(kind);
+                if (this.RejectLockedTargets(context, operationKind, targetNodes) is { } lockFailure)
+                {
+                    return lockFailure;
+                }
+            }
+        }
+
         var snapshot = new PropertySnapshot(edits);
         return await this.ApplyPropertyGestureAsync(context, snapshot, label, session, phase).ConfigureAwait(true);
     }
@@ -248,7 +264,8 @@ public sealed partial class SceneDocumentCommandService
 
         if (string.Equals(kind, DirectionalLightKind, StringComparison.Ordinal)
             && ValidateDirectionalLightCandidates(context.Scene, requested.PerNode.ToDictionary(
-                pair => pair.Key, pair => BuildDirectionalLightEditFromPropertyEdit(pair.Value))) is { } candidateFailure)
+                pair => pair.Key,
+                pair => BuildDirectionalLightEditFromPropertyEdit(pair.Value))) is { } candidateFailure)
         {
             return this.ValidationFailure(OperationKindForPropertyKind(kind), candidateFailure.Code,
                 candidateFailure.Title, candidateFailure.Message, context);

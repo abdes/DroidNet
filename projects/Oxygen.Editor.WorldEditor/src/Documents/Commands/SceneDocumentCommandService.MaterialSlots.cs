@@ -58,6 +58,11 @@ public sealed partial class SceneDocumentCommandService
         }
 
         var nodes = ResolveNodes(context.Scene, nodeIds);
+        if (this.RejectLockedTargets(context, SceneOperationKinds.EditMaterialSlot, nodes) is { } lockFailure)
+        {
+            return lockFailure;
+        }
+
         var geometries = nodes.Select(static node => node.Components.OfType<GeometryComponent>().FirstOrDefault()).ToArray();
         if (nodeIds.Count == 0 || nodeIds.Distinct().Count() != nodeIds.Count || nodes.Count != nodeIds.Count
             || geometries.Any(geometry => geometry?.Geometry?.Uri != target.GeometryUri)

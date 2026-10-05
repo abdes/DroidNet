@@ -8,6 +8,7 @@ using DroidNet.Controls.Menus;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
@@ -46,6 +47,35 @@ public sealed partial class SceneExplorerView
         }
 
         return false;
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "Search is an async void UI event boundary; failures are logged instead of becoming unhandled dispatcher exceptions.")]
+    private async void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput || this.ViewModel is not { } model)
+        {
+            return;
+        }
+
+        var query = sender.Text;
+        try
+        {
+            _ = await model.SearchAsync(query).ConfigureAwait(true);
+        }
+        catch (Exception exception)
+        {
+            model.ReportSearchFailure(exception, query);
+        }
+    }
+
+    private void OnExplorerSizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        _ = sender;
+
+        _ = VisualStateManager.GoToState(this, args.NewSize.Width < 360 ? "Compact" : "Standard", useTransitions: false);
     }
 
     private void SceneExplorerView_Loaded(object sender, RoutedEventArgs e)
