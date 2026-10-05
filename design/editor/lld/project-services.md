@@ -173,6 +173,21 @@ V0.1 required fields:
 - `AuthoringMounts`: persisted project-relative authoring roots.
 - `LocalFolderMounts`: persisted absolute local roots.
 
+Optional `DefaultSceneId : Guid?` is the stable configured scene identity,
+persisted in the manifest and propagated through `ProjectContext`. Creation
+reads the copied starter scene's serialized ID and records it as the default;
+absent or unparseable IDs leave the default unset, never guessed.
+
+Workspace startup honors an explicit activation scene request before the
+configured default. The approved legacy recovery path may migrate a resolvable
+`LastOpenedScene` once when no default exists, persisting the migrated identity.
+Usage history never overrides an existing default. The in-memory first-scene
+recovery accessor is not a startup-selection policy. An invalid/missing default
+must remain a visible, recoverable configuration/load failure with explicit
+Open Scene available; it must not silently load a discovered scene. Guarded
+cross-scene replacement qualification remains C30/T8 in the
+[Explorer plan](../plan/scene-explorer-dynamictree-design.md).
+
 Rules:
 
 - `AuthoringMounts` must be explicit in V0.1 project manifests created by the

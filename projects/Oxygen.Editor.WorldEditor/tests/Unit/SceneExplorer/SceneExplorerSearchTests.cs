@@ -251,6 +251,55 @@ public sealed class SceneExplorerSearchTests
         await explorer.ClearSearchAsync().ConfigureAwait(false);
     }
 
+    [TestMethod]
+    public async Task ReconcileDuringSearch_KeepsTransientExpansionUnauthoredAndRestorable()
+    {
+        var harness = CreateHarness();
+        var scene = harness.Scene;
+        var find = new SceneNode(scene) { Name = "FindMe" };
+        var other = new SceneNode(scene) { Name = "Other" };
+        scene.RootNodes.Add(find);
+        scene.RootNodes.Add(other);
+        var folderId = Guid.NewGuid();
+        scene.SetExplorerLayout(
+            [
+                new ExplorerEntryData
+                {
+                    Type = "Folder",
+                    FolderId = folderId,
+                    Name = "Collapsed",
+                    IsExpanded = false,
+                    Children = [new ExplorerEntryData { Type = "Node", NodeId = find.Id }],
+                },
+                new ExplorerEntryData { Type = "Node", NodeId = other.Id },
+            ]);
+        using var explorer = harness.Build();
+
+        await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
+
+        var layoutBefore = JsonSerializer.Serialize(scene.ExplorerLayout);
+        _ = (await explorer.SearchAsync("FindMe").ConfigureAwait(false)).Should().Be(1);
+        var folder = await explorer.FindFolderAdapterAsync(folderId).ConfigureAwait(false);
+        _ = folder!.IsExpanded.Should().BeTrue("search expands the collapsed match ancestry");
+
+        _ = harness.Commands
+            .Setup(value => value.CreateNodeAsync(It.IsAny<SceneDocumentCommandContext>(), null, null, It.IsAny<string>()))
+            .ReturnsAsync(SceneCommandResults.Success(new SceneNode(scene) { Name = "Added" }));
+        await explorer.AddEntityCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+
+        var rebuiltFolder = await explorer.FindFolderAdapterAsync(folderId).ConfigureAwait(false);
+        _ = rebuiltFolder.Should().NotBeNull();
+        _ = ReferenceEquals(rebuiltFolder, folder).Should().BeFalse("the command rebuild retires the old adapters");
+        _ = rebuiltFolder!.IsExpanded.Should().BeTrue("the transient search expansion must survive the rebuild on the fresh adapter");
+        _ = JsonSerializer.Serialize(scene.ExplorerLayout).Should().Be(layoutBefore, "restoring expansion during reconcile must not re-author entry.IsExpanded");
+
+        await explorer.ClearSearchAsync().ConfigureAwait(false);
+
+        _ = rebuiltFolder.IsExpanded.Should().BeFalse("clearing after a rebuild restores the prior collapsed view through the live adapter");
+        _ = JsonSerializer.Serialize(scene.ExplorerLayout).Should().Be(layoutBefore, "clearing after a rebuild must still author nothing");
+        _ = harness.Metadata.IsDirty.Should().BeFalse();
+    }
+
     private static Harness CreateHarness()
     {
         var project = new Project(new ProjectInfo("Search", Category.Games, "H:/SearchTests", "preview.png")) { Name = "Search" };
@@ -281,6 +330,8 @@ public sealed class SceneExplorerSearchTests
             _ = sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), this.Metadata)).Returns(value: true);
             _ = sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
             this.Sync = sync;
+
+            this.Commands = new Mock<ISceneDocumentCommandService>(MockBehavior.Strict);
         }
 
         public Project Project { get; }
@@ -295,6 +346,8 @@ public sealed class SceneExplorerSearchTests
 
         public Mock<ISceneEngineSync> Sync { get; }
 
+        public Mock<ISceneDocumentCommandService> Commands { get; }
+
         public SceneExplorerViewModel Build()
             => new(
                 this.Manager.Object,
@@ -304,6 +357,6 @@ public sealed class SceneExplorerSearchTests
                 default,
                 this.Sync.Object,
                 new SceneSelectionService(),
-                Mock.Of<ISceneDocumentCommandService>());
+                this.Commands.Object);
     }
 }

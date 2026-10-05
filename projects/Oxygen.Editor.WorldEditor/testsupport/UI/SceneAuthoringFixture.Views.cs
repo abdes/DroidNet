@@ -51,7 +51,7 @@ internal sealed partial class SceneAuthoringFixture
         _ = materials.SetupGet(value => value.Results).Returns(System.Reactive.Linq.Observable.Return<IReadOnlyList<MaterialPickerResult>>([]));
         _ = materials.Setup(value => value.RefreshAsync(It.IsAny<MaterialPickerFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         var dispatcher = VisualUserInterfaceTestsApp.DispatcherQueue;
-        return new(new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) }, new ViewModelToView(locator.Object), this.Messenger, commandService ?? this.Commands, this.Documents.Object, default, assetProvider ?? catalog.Object, materials.Object, this.Sync.Object, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>(), this.Slots.Object, this.Projects);
+        return new(new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) }, new ViewModelToView(locator.Object), this.Messenger, commandService ?? this.Commands, this.Documents.Object, default, assetProvider ?? catalog.Object, materials.Object, this.Sync.Object, this.Selection, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>(), this.Slots.Object, this.Projects);
     }
 
     public void ConfigureObservedSync(SceneEngineSync throttle, List<DateTimeOffset> previews, Action terminal)

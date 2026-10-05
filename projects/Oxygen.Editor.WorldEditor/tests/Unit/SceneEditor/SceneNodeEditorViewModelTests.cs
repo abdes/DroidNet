@@ -142,6 +142,16 @@ public sealed class SceneNodeEditorViewModelTests
             recipient: new object(),
             handler: (_, message) => message.Reply(selectedNodes));
 
+        var scene = selectedNodes[0].Scene;
+        var metadata = new SceneDocumentMetadata(scene.Id) { Title = scene.Name };
+        var documents = new Mock<IDocumentService>();
+        _ = documents.Setup(service => service.GetOpenDocuments(It.IsAny<Microsoft.UI.WindowId>()))
+            .Returns(new IDocumentMetadata[] { metadata });
+        _ = documents.Setup(service => service.GetActiveDocumentId(It.IsAny<Microsoft.UI.WindowId>()))
+            .Returns(metadata.DocumentId);
+        var selectionService = new Oxygen.Editor.WorldEditor.Documents.Selection.SceneSelectionService();
+        selectionService.SetSelection(scene.Id, selectedNodes.ToArray(), "Test");
+
         return new SceneNodeEditorViewModel(
             new HostingContext
             {
@@ -152,11 +162,12 @@ public sealed class SceneNodeEditorViewModelTests
             new ViewModelToView(new Mock<IViewLocator>().Object),
             messenger,
             new Mock<ISceneDocumentCommandService>().Object,
-            new Mock<IDocumentService>().Object,
+            documents.Object,
             default,
             Oxygen.Testing.AssetStatusFixture.EmptyProvider,
             new Mock<IMaterialPickerService>().Object,
             sceneEngineSync,
+            selectionService,
             new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(),
             Mock.Of<ISceneContentDemandService>(),
             Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(),

@@ -208,10 +208,19 @@
                     </ItemsRepeater.ItemTemplate>
                 </ItemsRepeater>
             </ScrollViewer>
+            <TextBlock
+                Grid.Row="3"
+                Margin="10,20"
+                VerticalAlignment="Top"
+                AutomationProperties.Name="Selection summary"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="{x:Bind ViewModel.SelectionSummaryText, Mode=OneWay}"
+                TextWrapping="Wrap"
+                Visibility="{x:Bind ViewModel.HasSelectionNotice, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
             <local:EnvironmentView
                 Grid.Row="3"
                 ViewModel="{x:Bind ViewModel.EnvironmentEditor}"
-                Visibility="{x:Bind ViewModel.HasItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=True}" />
+                Visibility="{x:Bind ViewModel.HasEnvironmentView, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
         </Grid>
     </Grid>
 </UserControl>

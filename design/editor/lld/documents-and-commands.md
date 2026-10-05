@@ -150,24 +150,53 @@ Minimum fields:
 
 ### Selection State
 
-Document-scoped selection model:
+Document-scoped selection model, owned by one document-scoped service
+(`ISceneSelectionService` in WorldEditor) as the single authority:
 
-- selected scene node IDs in stable order.
-- primary selected node ID, if any.
-- selection source (`SceneExplorer`, `Inspector`, later `Viewport`).
-- timestamp/revision for stale event filtering.
+- row-kind context: `Empty`, `Scene` (root row), `Node`, `Folder` or `Mixed`.
+- ordered selected scene-node IDs and ordered selected explorer-folder IDs.
+- explicit primary identity: a primary node ID or primary folder ID — the row
+  the user last explicitly activated, never inferred from row order.
+- selection source (`SceneExplorer`, `Command`, `Reconcile`, `Clear`, later
+  `Viewport`) carried with every change notification.
 
-Selection is identity-based. UI adapters may hold object references, but shared
-selection state is node ID based so it survives tree rebuilds.
+Published contexts are immutable snapshots: the service does not retain writable
+caller-owned identity collections. Scoped Inspector messages carry the document
+ID and the stored snapshot; a queued message for an inactive document or a
+superseded snapshot cannot change the Inspector.
 
-The primary selected node is the last explicitly selected node. If a tree
-rebuild removes it, the selection service uses the first surviving selected ID
-in the previous stable order.
+Selection is identity-based. UI adapters may hold object references, but
+shared selection state is ID based so it survives tree rebuilds. IDs whose
+rows are not currently realized remain authoritative: they re-attach to their
+replacement rows after a rebuild, scene switch or row insertion, instead of
+being dropped because a projection happened not to show them.
 
-Selection changes are not scene mutations. They do not mark the document dirty,
-do not create undo/redo entries, and do not publish operation results on the
-success path. Stale/no-such-node selection requests may publish a scoped
-`SceneAuthoring` diagnostic.
+Writers publish the whole classified context in one write. Every store change
+raises `SelectionChanged(documentId, context, source)`; consumers (Explorer
+rows, Inspector routing, later the viewport) reconcile from that notification
+and forward the stored context rather than reconstructing it. A node-only
+view of the selection is a projection for node consumers (gizmo, picking),
+not a replacement for the context.
+
+Folder-only and mixed batches present a grouping summary; consumers must not
+reduce them to their node subset and present that as a component edit. The
+scene root row is exclusive: it never shares a selection with node or folder
+rows, and it never participates in range or select-all selection.
+
+The primary selected row is the last explicitly activated row. If a tree
+rebuild removes it, the selection service falls back to the first surviving
+node ID in the previous stable order, then the first surviving folder ID if no
+node survives. Reconciliation prunes deleted nodes and folders, preserves a
+surviving folder primary, and retains the existing snapshot when nothing changes.
+An unresolved node selection remains a node selection: the Inspector shows an
+unavailable-selection notice rather than exposing scene-environment edits.
+
+Selection changes are not scene mutations. They do not mark the document
+dirty, do not create undo/redo entries, and do not publish operation results
+on the success path. Revealing a collapsed row for selection expands its
+ancestors as transient view state and never writes authored expansion.
+Stale/no-such-node selection requests may publish a scoped `SceneAuthoring`
+diagnostic.
 
 ## 8. Commands, Services, Or Adapters
 

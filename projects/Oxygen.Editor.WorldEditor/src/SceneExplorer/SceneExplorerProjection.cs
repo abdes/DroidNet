@@ -20,6 +20,7 @@ public sealed class SceneExplorerProjection
     private readonly HashSet<ITreeItem> trackedItems = [];
     private readonly List<LayoutFolder> layoutFolders = [];
     private readonly Dictionary<Guid, LayoutAncestor[]> nodeLayoutChains = [];
+    private readonly Dictionary<ITreeItem, ITreeItem> parentAdapters = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>Gets the indexed node adapters.</summary>
     public IReadOnlyCollection<SceneNodeAdapter> Nodes => this.nodeAdapters.Values;
@@ -61,6 +62,21 @@ public sealed class SceneExplorerProjection
     public IReadOnlyList<LayoutAncestor>? GetNodeLayoutAncestors(Guid nodeId)
         => this.nodeLayoutChains.TryGetValue(nodeId, out var chain) ? chain : null;
 
+    /// <summary>Gets the realized projection ancestors without loading collapsed child collections.</summary>
+    /// <param name="item">The adapter whose ancestors are requested.</param>
+    /// <returns>The ancestor adapters in root-to-parent order.</returns>
+    public IReadOnlyList<ITreeItem> GetAncestors(ITreeItem item)
+    {
+        var ancestors = new Stack<ITreeItem>();
+        while (this.parentAdapters.TryGetValue(item, out var parent))
+        {
+            ancestors.Push(parent);
+            item = parent;
+        }
+
+        return ancestors.ToArray();
+    }
+
     /// <summary>Rebuilds the node and folder indexes from the realized adapter tree without force-loading collapsed subtrees, and reindexes the authored layout domain.</summary>
     /// <param name="sceneAdapter">The scene adapter rooting the tree.</param>
     public void Rebuild(SceneAdapter sceneAdapter)
@@ -68,10 +84,12 @@ public sealed class SceneExplorerProjection
         this.Clear();
         this.Track(sceneAdapter);
 
-        var stack = new Stack<ITreeItem>(sceneAdapter.RootItems);
+        var stack = new Stack<(ITreeItem Item, ITreeItem Parent)>(
+            sceneAdapter.RootItems.Select(item => (item, (ITreeItem)sceneAdapter)));
         while (stack.Count > 0)
         {
-            var item = stack.Pop();
+            var (item, parent) = stack.Pop();
+            this.parentAdapters[item] = parent;
             this.Track(item);
             this.Index(item);
 
@@ -79,7 +97,7 @@ public sealed class SceneExplorerProjection
             {
                 foreach (var child in layoutItem.CurrentChildren)
                 {
-                    stack.Push(child);
+                    stack.Push((child, item));
                 }
             }
         }
@@ -94,6 +112,7 @@ public sealed class SceneExplorerProjection
         this.folderAdapters.Clear();
         this.layoutFolders.Clear();
         this.nodeLayoutChains.Clear();
+        this.parentAdapters.Clear();
         this.ClearTracked();
     }
 
@@ -101,6 +120,11 @@ public sealed class SceneExplorerProjection
     /// <param name="item">The adapter to index.</param>
     public void Index(ITreeItem item)
     {
+        if (item.Parent is { } parent)
+        {
+            this.parentAdapters[item] = parent;
+        }
+
         switch (item)
         {
             case SceneNodeAdapter node:
@@ -116,6 +140,7 @@ public sealed class SceneExplorerProjection
     /// <param name="item">The adapter to unindex.</param>
     public void Unindex(ITreeItem item)
     {
+        _ = this.parentAdapters.Remove(item);
         switch (item)
         {
             case SceneNodeAdapter node:

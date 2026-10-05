@@ -39,20 +39,29 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
     /// <summary>Rebuilds the tree while restoring the supplied expansion state.</summary>
     /// <param name="expandedFolderIds">The folders to expand after rebuilding.</param>
     /// <param name="preserveNodeExpansion">Whether to retain node expansion from the model.</param>
+    /// <param name="transientlyExpandedFolderIds">
+    ///     Folders whose expansion is transient consumer state (for example a search reveal): the
+    ///     rebuilt adapter is marked transient before the expansion is applied, so restoring the
+    ///     expanded view never writes <c>entry.IsExpanded</c> into the authored layout.
+    /// </param>
     /// <returns>The asynchronous rebuild task.</returns>
-    public async Task ReloadChildrenAsync(ISet<Guid>? expandedFolderIds = null, bool preserveNodeExpansion = false)
+    public async Task ReloadChildrenAsync(
+        ISet<Guid>? expandedFolderIds = null,
+        bool preserveNodeExpansion = false,
+        ISet<Guid>? transientlyExpandedFolderIds = null)
     {
         this.ClearChildren();
         this.rootItemsCache.Clear();
-        await this.RebuildTreeAsync(expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
+        await this.RebuildTreeAsync(expandedFolderIds, preserveNodeExpansion, transientlyExpandedFolderIds).ConfigureAwait(true);
     }
 
     /// <summary>
     /// Retrieves the IDs of all currently expanded folders in the UI tree.
     /// Uses the internal cache to avoid deadlocks on the UI thread.
     /// </summary>
+    /// <param name="transientOnly">Whether to include only transiently expanded folders.</param>
     /// <returns>The identities of expanded folders.</returns>
-    public ISet<Guid> GetExpandedFolderIds()
+    public ISet<Guid> GetExpandedFolderIds(bool transientOnly = false)
     {
         var expanded = new HashSet<Guid>();
 
@@ -64,7 +73,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
             var item = stack.Pop();
             if (item is FolderAdapter folder)
             {
-                if (folder.IsExpanded)
+                if (folder.IsExpanded && (!transientOnly || folder.IsExpansionTransient))
                 {
                     expanded.Add(folder.Id);
                 }
@@ -100,19 +109,10 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
         await this.RebuildTreeAsync().ConfigureAwait(true);
     }
 
-    private static void PopulateMissingChildren(SceneNodeAdapter parentAdapter)
-    {
-        // If a node is created from fallback, it might have children that are also not in the layout.
-        // We need to show them.
-        foreach (var childNode in parentAdapter.AttachedObject.Children)
-        {
-            var childAdapter = new SceneNodeAdapter(childNode);
-            PopulateMissingChildren(childAdapter); // Recurse
-            parentAdapter.AddContent(childAdapter);
-        }
-    }
-
-    private async Task RebuildTreeAsync(ISet<Guid>? expandedFolderIds = null, bool preserveNodeExpansion = false)
+    private async Task RebuildTreeAsync(
+        ISet<Guid>? expandedFolderIds = null,
+        bool preserveNodeExpansion = false,
+        ISet<Guid>? transientlyExpandedFolderIds = null)
     {
         var layout = this.AttachedObject.ExplorerLayout;
         var seenNodeIds = new HashSet<Guid>();
@@ -130,19 +130,48 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
 
             foreach (var entry in layout)
             {
-                await this.ProcessLayoutEntryAsync(entry, this, nodesById, seenNodeIds, seenFolderIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
+                await this.ProcessLayoutEntryAsync(entry, this, nodesById, seenNodeIds, seenFolderIds, expandedFolderIds, preserveNodeExpansion, transientlyExpandedFolderIds).ConfigureAwait(true);
             }
         }
 
-        // 2. Fallback for Root Nodes not in Layout (The "Unassigned Guests")
+        // Layout is an overlay, not a filter: newly created descendants without layout seats
+        // still belong in the hierarchy. Already seated nodes keep their authored placement.
+        var realizedNodes = new Dictionary<Guid, SceneNodeAdapter>();
+        var pending = new Stack<ITreeItem>(this.rootItemsCache);
+        while (pending.TryPop(out var item))
+        {
+            if (item is SceneNodeAdapter nodeAdapter)
+            {
+                realizedNodes.Add(nodeAdapter.AttachedObject.Id, nodeAdapter);
+            }
+
+            if (item is LayoutItemAdapter layoutItem)
+            {
+                foreach (var child in layoutItem.CurrentChildren)
+                {
+                    pending.Push(child);
+                }
+            }
+        }
+
         foreach (var node in this.AttachedObject.RootNodes)
         {
-            if (seenNodeIds.Add(node.Id))
-            {
-                var adapter = new SceneNodeAdapter(node);
-                PopulateMissingChildren(adapter);
-                this.AddChildSafe(adapter);
-            }
+            this.PopulateUnseatedNodes(node, this, realizedNodes);
+        }
+    }
+
+    private void PopulateUnseatedNodes(SceneNode node, ITreeItem parent, Dictionary<Guid, SceneNodeAdapter> realizedNodes)
+    {
+        if (!realizedNodes.TryGetValue(node.Id, out var adapter))
+        {
+            adapter = new SceneNodeAdapter(node);
+            realizedNodes.Add(node.Id, adapter);
+            this.AddToParent(parent, adapter);
+        }
+
+        foreach (var child in node.Children)
+        {
+            this.PopulateUnseatedNodes(child, adapter, realizedNodes);
         }
     }
 
@@ -153,7 +182,8 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
         HashSet<Guid> seenNodeIds,
         HashSet<Guid> seenFolderIds,
         ISet<Guid>? expandedFolderIds,
-        bool preserveNodeExpansion)
+        bool preserveNodeExpansion,
+        ISet<Guid>? transientlyExpandedFolderIds = null)
     {
         // Case A: Folder
         if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase))
@@ -169,6 +199,13 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
 
             var folder = new FolderAdapter(entry);
 
+            // A transient (search-driven) expansion must be marked before it is applied, or the
+            // expanded view would be re-authored into the layout entry on this rebuild.
+            if (transientlyExpandedFolderIds?.Contains(entry.FolderId ?? Guid.Empty) == true)
+            {
+                folder.SetExpansionTransient(true);
+            }
+
             // Restore expansion state
             if (expandedFolderIds?.Contains(entry.FolderId ?? Guid.Empty) == true || entry.IsExpanded == true)
             {
@@ -180,7 +217,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
             {
                 foreach (var childEntry in entry.Children)
                 {
-                    await this.ProcessLayoutEntryAsync(childEntry, folder, nodesById, seenNodeIds, seenFolderIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
+                    await this.ProcessLayoutEntryAsync(childEntry, folder, nodesById, seenNodeIds, seenFolderIds, expandedFolderIds, preserveNodeExpansion, transientlyExpandedFolderIds).ConfigureAwait(true);
                 }
             }
 
@@ -210,7 +247,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
             {
                 foreach (var childEntry in entry.Children)
                 {
-                    await this.ProcessLayoutEntryAsync(childEntry, adapter, nodesById, seenNodeIds, seenFolderIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(true);
+                    await this.ProcessLayoutEntryAsync(childEntry, adapter, nodesById, seenNodeIds, seenFolderIds, expandedFolderIds, preserveNodeExpansion, transientlyExpandedFolderIds).ConfigureAwait(true);
                 }
             }
 

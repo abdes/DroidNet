@@ -62,12 +62,21 @@ The owning service enforces each mutation boundary.
 
 ### 5.1 Workspace visibility storage and lifetime
 
-WorldEditor owns the typed `WorldEditor/SceneVisibility` setting through the
+WorldEditor owns the typed `WorldEditor/SceneInteraction` setting through
+`WorkspaceInteractionService` and the
 existing `IEditorSettingsManager`. Use `SettingContext.Project` with the
 canonical project root. The versioned payload contains the project ID and a map
-of scene IDs to sets of explicitly editor-hidden authored node IDs. The data
-store is user-local; no Hide state is written to scene documents, authoring
+of scene IDs to explicit hidden-node IDs, locked-node IDs and picking-category
+preferences. Identity is the stable authored node ID, not its name or row.
+One coordinated service serializes writes and suppresses stale project/scene
+restoration. The data store is user-local; no interaction state is written to scene documents, authoring
 mounts, cooked output or validation requests.
+
+Lock is editor editability state, independent of Hide and authored visibility;
+it is not undoable. Picking categories are inputs to viewport picking, not tree
+filters. The accepted D4 column-placement clause is still unimplemented and
+tracked by C49 in the [Explorer plan](../plan/scene-explorer-dynamictree-design.md);
+the existing settings payload does not provide that UI or qualify it.
 
 Hiding a node drops it and its actual scene descendants from every editing
 viewport of the active scene: no geometry, no depth and no cast shadow, so the

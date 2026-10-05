@@ -7,12 +7,24 @@ using Oxygen.Editor.World;
 namespace Oxygen.Editor.WorldEditor.Documents.Selection;
 
 /// <summary>
-/// Owns document-scoped scene selection state.
+/// Owns document-scoped scene selection state. This is the single selection
+/// authority: writers publish a classified <see cref="SceneSelectionContext"/>
+/// (row kinds, ordered identities, explicit primary) and subscribers observe
+/// every change through <see cref="SelectionChanged"/>.
 /// </summary>
 public interface ISceneSelectionService
 {
     /// <summary>
-    /// Sets the selected scene-node identities for a document.
+    /// Raised after any selection write for any document, carrying the document
+    /// identity, the stored context and the writer's source tag. The Explorer
+    /// consumes this to reconcile its rows with selections made by other panels
+    /// without echoing its own writes.
+    /// </summary>
+    event EventHandler<SceneSelectionChangedEventArgs>? SelectionChanged;
+
+    /// <summary>
+    /// Sets the selected scene-node identities for a document, classified as a
+    /// node selection with the last node as primary.
     /// </summary>
     /// <param name="documentId">The document identity.</param>
     /// <param name="nodes">The selected nodes in stable selection order.</param>
@@ -42,12 +54,13 @@ public interface ISceneSelectionService
     public void Clear(Guid documentId);
 
     /// <summary>
-    /// Sets the full selection context (kind, identities and primary) for a document.
+    /// Publishes the full selection context (kind, ordered identities and explicit
+    /// primary) as the document's selection state in one write.
     /// </summary>
     /// <param name="documentId">The document identity.</param>
     /// <param name="context">The classified selection context.</param>
     /// <param name="source">The selection source.</param>
-    public void SetContext(Guid documentId, SceneSelectionContext context, string source);
+    public void Publish(Guid documentId, SceneSelectionContext context, string source);
 
     /// <summary>
     /// Gets the last selection context for a document.

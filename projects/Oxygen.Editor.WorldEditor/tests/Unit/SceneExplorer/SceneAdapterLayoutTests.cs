@@ -39,7 +39,8 @@ public sealed class SceneAdapterLayoutTests
         _ = children.Should().ContainSingle("a duplicate layout entry must not realize a second adapter for the same node");
         var parentAdapter = children[0].Should().BeOfType<SceneNodeAdapter>().Which;
         _ = parentAdapter.AttachedObject.Should().BeSameAs(parent);
-        _ = parentAdapter.CurrentChildren.Should().BeEmpty("the skipped duplicate must not recurse into its layout children");
+        _ = parentAdapter.CurrentChildren.Should().ContainSingle("the unseated scene child is realized under its scene parent");
+        _ = parentAdapter.CurrentChildren.Single().Should().BeOfType<SceneNodeAdapter>().Which.AttachedObject.Should().BeSameAs(child);
         _ = adapter.RootItems.Should().ContainSingle();
     }
 
@@ -118,6 +119,46 @@ public sealed class SceneAdapterLayoutTests
         _ = nested.CurrentChildren.Should().ContainSingle().Which.Should().BeOfType<SceneNodeAdapter>().Which.AttachedObject.Should().BeSameAs(nodeB);
         _ = folder.CurrentChildren.ElementAt(1).Should().BeOfType<SceneNodeAdapter>().Which.AttachedObject.Should().BeSameAs(nodeA);
         _ = children[1].Should().BeOfType<SceneNodeAdapter>().Which.AttachedObject.Should().BeSameAs(nodeC);
+    }
+
+    [TestMethod]
+    public async Task Children_UnseatedDescendantOfSeatedParent_IsRealizedWithoutMutatingLayout()
+    {
+        var scene = CreateScene();
+        var parent = new SceneNode(scene) { Name = "Parent" };
+        var child = new SceneNode(scene) { Name = "Child" };
+        scene.RootNodes.Add(parent);
+        parent.AddChild(child);
+        var parentEntry = new ExplorerEntryData { Type = "Node", NodeId = parent.Id };
+        scene.SetExplorerLayout([parentEntry]);
+        var adapter = SceneAdapter.BuildLayoutTree(scene);
+
+        var children = await adapter.Children.ConfigureAwait(false);
+
+        var parentAdapter = children.Single().Should().BeOfType<SceneNodeAdapter>().Which;
+        _ = parentAdapter.CurrentChildren.Single().Should().BeOfType<SceneNodeAdapter>().Which.AttachedObject.Should().BeSameAs(child);
+        _ = parentEntry.Children.Should().BeNull("projection fallback is not an authored layout mutation");
+    }
+
+    [TestMethod]
+    public async Task Children_UnseatedParentWithSeatedChild_DoesNotDuplicateChild()
+    {
+        var scene = CreateScene();
+        var parent = new SceneNode(scene) { Name = "Parent" };
+        var child = new SceneNode(scene) { Name = "Child" };
+        scene.RootNodes.Add(parent);
+        parent.AddChild(child);
+        scene.SetExplorerLayout([new ExplorerEntryData { Type = "Node", NodeId = child.Id }]);
+        var adapter = SceneAdapter.BuildLayoutTree(scene);
+
+        _ = await adapter.Children.ConfigureAwait(false);
+
+        var projection = new SceneExplorerProjection();
+        projection.Rebuild(adapter);
+        _ = projection.Nodes.Should().HaveCount(2);
+        _ = projection.GetNode(child.Id).Should().NotBeNull();
+        _ = projection.GetNode(parent.Id)!.CurrentChildren.Should().BeEmpty("the child keeps its existing layout seat");
+        projection.Clear();
     }
 
     private static Scene CreateScene()

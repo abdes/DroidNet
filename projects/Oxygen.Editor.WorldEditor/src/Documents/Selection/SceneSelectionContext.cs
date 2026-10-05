@@ -41,6 +41,30 @@ public sealed record SceneSelectionContext(
     Guid? PrimaryNodeId,
     Guid? PrimaryFolderId)
 {
+    /// <summary>Gets the selected node identities captured independently of the caller's collection.</summary>
+    public IReadOnlyList<Guid> SelectedNodeIds { get; } = Array.AsReadOnly(SelectedNodeIds.ToArray());
+
+    /// <summary>Gets the selected folder identities captured independently of the caller's collection.</summary>
+    public IReadOnlyList<Guid> SelectedFolderIds { get; } = Array.AsReadOnly(SelectedFolderIds.ToArray());
+
     /// <summary>Gets an empty selection context.</summary>
     public static SceneSelectionContext Empty { get; } = new(SceneSelectionKind.Empty, [], [], null, null);
+
+    /// <summary>
+    /// Classifies a selection from the presence of each row kind, so every
+    /// producer labels a node/folder/root/mixed batch the same way.
+    /// </summary>
+    /// <param name="hasScene">Whether the scene root row is part of the selection.</param>
+    /// <param name="hasFolder">Whether one or more explorer folders are selected.</param>
+    /// <param name="hasNode">Whether one or more scene nodes are selected.</param>
+    /// <returns>The selection kind for the combination.</returns>
+    public static SceneSelectionKind Classify(bool hasScene, bool hasFolder, bool hasNode) =>
+        (hasScene, hasFolder, hasNode) switch
+        {
+            (true, false, false) => SceneSelectionKind.Scene,
+            (false, false, true) => SceneSelectionKind.Node,
+            (false, true, false) => SceneSelectionKind.Folder,
+            (false, false, false) => SceneSelectionKind.Empty,
+            _ => SceneSelectionKind.Mixed,
+        };
 }

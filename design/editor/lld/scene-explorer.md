@@ -105,6 +105,11 @@ Explorer items are projections:
 Only `SceneNodeAdapter` maps to runtime scene graph data. Folders never become
 scene nodes.
 
+The authored layout is a placement overlay, not a visibility filter. Nodes
+without layout seats, including newly created descendants, remain visible under
+their scene-graph parent. Already seated nodes retain their authored placement
+and appear only once.
+
 Deleting a folder is a layout operation only: its entries re-attach to the
 deleted folder's own parent entry, no node is deleted, and scene-graph parentage
 and world transforms are unchanged — including where the grouping followed a
@@ -112,17 +117,36 @@ lineage-driven reparent. Deleting a node deletes its subtree.
 
 ### Selection Projection
 
-Scene explorer selection publishes:
+The Explorer is one writer to the single document-scoped selection service,
+and publishes the full classified context (see
+`documents-and-commands.md` § Selection State):
 
 - document ID.
-- ordered selected node IDs.
-- primary selected node ID.
+- row kind: scene root, node, folder or mixed.
+- ordered selected node IDs and ordered selected folder IDs.
+- explicit primary identity: the last activated row, node or folder.
 - source = `SceneExplorer`.
 
-Scene explorer may keep selected adapter references locally, but shared
-selection is ID-based.
+The Explorer may keep selected adapter references locally, but shared
+selection is ID-based. Selection follows identities, not rows: a command
+reveal, viewport pick or restore may name a node whose row is not realized
+yet; the Explorer reveals (expanding ancestors as transient view state, never
+authored) and re-selects when it resolves, and unresolved IDs remain
+authoritative rather than being dropped by a rebuild, switch or filtered
+projection. The Explorer subscribes to the service's change notification and
+reconciles its rows from foreign writes without echoing its own.
 
-The primary selected node is the last explicitly selected node. If a tree
+Projection refill suppresses intermediate selection publications and restores
+the latest stored context, including foreign writes made during refill. Folder
+expansion caused by selection reveal stays transient across adapter replacement,
+just like search reveal.
+
+The scene root row is exclusive: selecting it clears node/folder rows and
+select-all or range selection never adds it. Folder-only and mixed selections
+publish a grouping summary to the Inspector; they never reduce to the node
+subset as a component edit nor to an empty list as the scene selection.
+
+The primary selected row is the last explicitly activated row. If a tree
 rebuild removes it, the selection service keeps the first surviving selected ID
 in the previous stable order.
 
@@ -253,4 +277,10 @@ ED-M03 scene explorer is complete when:
 - Copy/paste/duplicate are in ED-M03: snapshot Copy transfers within the
   project, Cut is scene-bound, and `Scene.Node.Duplicate` carries the
   duplicate intent (see the Explorer plan, section 4).
+  Copy captures immutable authored values, not source adapters or source-only
+  IDs; successful Paste retains the snapshot for repeated use. A successful
+  same-project scene switch retains Copy and cancels Cut; a successful project
+  switch clears only the Oxygen clipboard. Cancelled switches retain the
+  prior payload/staging. These lifetime rules share the command/history owner;
+  guarded-switch implementation and verification remain C30/T8 in the plan.
 - Preserve-world-transform reparenting is not ED-M03 default.

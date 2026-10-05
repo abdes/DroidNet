@@ -62,12 +62,35 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private Guid? clipboardProjectId;
     private Guid? clipboardSceneId;
 
-    // Adapters expanded by a transient search so their expansion can be restored when search clears.
-    private readonly List<ITreeItem> searchExpandedItems = [];
+    // Transient search expansions recorded by identity: folders/nodes expanded for a match,
+    // restored when search clears, and re-applied as transient across a projection rebuild.
+    private readonly HashSet<Guid> searchExpandedFolderIds = [];
+    private readonly HashSet<Guid> searchExpandedNodeIds = [];
     private int nextEntityIndex;
     private CancellationTokenSource? loadSceneCts;
     private Guid loadingDocumentId = Guid.Empty;
     private bool suppressNodeMessages;
+
+    // Set while the Explorer itself writes selection or applies a foreign selection, so the
+    // service echo never re-enters the row-sync path.
+    private bool suppressSelectionSync;
+
+    // The authoritative context received while applying a foreign selection: publishing forwards
+    // it verbatim so identities whose rows are not realized cannot silently shrink the selection.
+    private SceneSelectionContext? pendingAuthoritativeContext;
+
+    // Increments per selection application so an await-crossed application can detect that a
+    // newer request, document switch or store write has superseded it.
+    private int selectionApplyGeneration;
+
+    // Depth counter for projection-sync windows: while a tree reload/refill clears selection
+    // outside any batch, the settled publishes must not run — they would overwrite the
+    // authoritative context the rebuild is about to restore.
+    private int selectionSyncDepth;
+
+    // The exact context instance last published, so an identical re-application never re-notifies
+    // consumers while a genuinely changed context notifies even when the visible rows match.
+    private SceneSelectionContext? lastPublishedContext;
 
     private bool isDisposed;
 
@@ -132,6 +155,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.sceneEngineSync = sceneEngineSync;
         this.sceneEngineSync.SceneSynchronized += this.OnSceneSynchronized;
         this.selectionService = selectionService;
+        this.selectionService.SelectionChanged += this.OnSelectionServiceChanged;
+        this.SelectionSettled += this.OnTreeSelectionSettled;
         this.commandService = commandService;
 
         this.UndoStack = this.History.UndoStack;
@@ -292,8 +317,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.selectionService.Clear(sceneId);
         if (this.Scene?.AttachedObject.Id == sceneId)
         {
-            this.SelectionModel?.ClearSelection();
-            this.PublishSelection([]);
+            this.WithSelectionBatch(() =>
+            {
+                this.SetActiveItem(null);
+                this.SelectionModel?.ClearSelection();
+            });
         }
     }
 
@@ -317,6 +345,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         if (disposing)
         {
             this.sceneEngineSync.SceneSynchronized -= this.OnSceneSynchronized;
+            this.selectionService.SelectionChanged -= this.OnSelectionServiceChanged;
             this.documentService.DocumentOpened -= this.OnDocumentOpened;
             this.documentService.DocumentActivated -= this.OnDocumentActivated;
             if (this.interaction is { } service)
@@ -943,6 +972,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             this.InvalidateClipboard("The clipboard was cleared because the project changed.");
         }
 
+        // A loaded scene starts a fresh view session: a previous scene's transient search
+        // expansions and filter predicate must not leak into it, and their adapters are retired
+        // anyway, so restore could never find them.
+        this.FilterPredicate = null;
+        this.searchExpandedFolderIds.Clear();
+        this.searchExpandedNodeIds.Clear();
+
         // Build the scene layout from the loaded scene
         this.Scene = new SceneAdapter(loadedScene)
         {
@@ -956,14 +992,45 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.UndoStack = this.History.UndoStack;
         this.RedoStack = this.History.RedoStack;
 
-        await this.InitializeRootAsync(this.Scene, skipRoot: false).ConfigureAwait(true);
-        this.projection.Rebuild(this.Scene);
+        // The refill clears the previous scene's selected rows; keep that inside a sync window so
+        // it cannot publish over the stored document selection, then restore by identity outside it.
+        await this.WithProjectionSyncAsync(async () =>
+        {
+            await this.InitializeRootAsync(this.Scene, skipRoot: false).ConfigureAwait(true);
+            this.projection.Rebuild(this.Scene);
 
-        // Reload what a previous session stored before the first rows are presented, otherwise the
-        // persistence is write-only and every scene opens with nothing hidden or locked.
-        await this.RestoreWorkspaceInteractionAsync(loadedScene).ConfigureAwait(true);
-        this.ApplyWorkspaceInteractionState();
-        this.PublishSelection(this.selectionService.Reconcile(loadedScene.Id, loadedScene));
+            // Reload what a previous session stored before the first rows are presented, otherwise
+            // the persistence is write-only and every scene opens with nothing hidden or locked.
+            await this.RestoreWorkspaceInteractionAsync(loadedScene).ConfigureAwait(true);
+            this.ApplyWorkspaceInteractionState();
+        }).ConfigureAwait(true);
+
+        // Restore the stored document selection by identity: pruning gone nodes, then revealing and
+        // reselecting the adapters that resolve. forcePublish makes the switch itself a visible
+        // selection change, so panels following the loaded document converge on its own selection.
+        _ = this.selectionService.Reconcile(loadedScene.Id, loadedScene);
+        await this.ApplySelectionContextAsync(
+            this.selectionService.GetContext(loadedScene.Id),
+            forcePublish: true).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Runs a projection refill with selection publishing suppressed: the refill clears selected
+    /// rows outside any batch, and letting that publish through would overwrite the authoritative
+    /// context with a spurious empty one before the caller can restore it.
+    /// </summary>
+    private async Task WithProjectionSyncAsync(Func<Task> refill)
+    {
+        ArgumentNullException.ThrowIfNull(refill);
+        this.selectionSyncDepth++;
+        try
+        {
+            await refill().ConfigureAwait(true);
+        }
+        finally
+        {
+            this.selectionSyncDepth--;
+        }
     }
 
     private async Task<CancellationToken> BeginSceneLoadAsync()
@@ -1056,34 +1123,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     private async Task<bool> InspectNodeAsync(Guid nodeId)
     {
-        if (this.Scene is null || this.projection.GetNode(nodeId) is not { } adapter)
+        if (this.Scene is null || this.projection.GetNode(nodeId) is null)
         {
             return false;
         }
 
         this.FilterPredicate = null;
-        var ancestorPath = new Stack<ITreeItem>();
-        for (var parent = adapter.Parent; parent is not null; parent = parent.Parent)
-        {
-            ancestorPath.Push(parent);
-        }
-
-        while (ancestorPath.TryPop(out var ancestor))
-        {
-            if (ancestor.CanAcceptChildren && !ancestor.IsExpanded)
-            {
-                await this.ExpandItemAsync(ancestor).ConfigureAwait(true);
-            }
-        }
-
-        if (!this.ShownItems.Contains(adapter))
-        {
-            return false;
-        }
-
-        this.SelectionModel?.ClearSelection();
-        this.SelectionModel?.SelectItem(adapter);
-        return this.GetSelectedItems().Contains(adapter);
+        return await this.SetSelectedNodes([nodeId]).ConfigureAwait(true);
     }
 
     /// <summary>Applies a transient name search, revealing collapsed matches by expanding their ancestor paths.</summary>
@@ -1133,22 +1179,33 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     public async Task ClearSearchAsync()
     {
         this.FilterPredicate = null;
-        foreach (var item in this.searchExpandedItems)
+        foreach (var folderId in this.searchExpandedFolderIds.ToArray())
         {
-            if (item.IsExpanded)
+            if (this.projection.GetFolder(folderId) is not { } folder)
             {
-                await this.CollapseItemAsync(item).ConfigureAwait(true);
+                continue;
+            }
+
+            if (folder.IsExpanded)
+            {
+                await this.CollapseItemAsync(folder).ConfigureAwait(true);
             }
 
             // Clear the transient flag only after the search expansion is undone so the authored
             // layout entry never observes a search-driven expansion write.
-            if (item is FolderAdapter folder)
+            folder.SetExpansionTransient(false);
+        }
+
+        foreach (var nodeId in this.searchExpandedNodeIds.ToArray())
+        {
+            if (this.projection.GetNode(nodeId) is { IsExpanded: true } node)
             {
-                folder.SetExpansionTransient(false);
+                await this.CollapseItemAsync(node).ConfigureAwait(true);
             }
         }
 
-        this.searchExpandedItems.Clear();
+        this.searchExpandedFolderIds.Clear();
+        this.searchExpandedNodeIds.Clear();
     }
 
     private async Task ExpandMatchAncestryAsync(Guid nodeId, Dictionary<Guid, SceneNode> nodeById)
@@ -1184,7 +1241,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             if (this.projection.GetNode(ancestorNode.Id) is { } ancestor && !ancestor.IsExpanded)
             {
                 await this.ExpandItemAsync(ancestor).ConfigureAwait(true);
-                this.searchExpandedItems.Add(ancestor);
+                _ = this.searchExpandedNodeIds.Add(ancestorNode.Id);
             }
         }
     }
@@ -1210,12 +1267,17 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         if (item is FolderAdapter folder)
         {
             // Search expansion is transient: it must not write the authored layout entry or
-            // dirty the document.
+            // dirty the document. It is recorded by identity so a projection rebuild can
+            // re-apply it as transient instead of baking the expanded view into the layout.
             folder.SetExpansionTransient(true);
+            _ = this.searchExpandedFolderIds.Add(folder.Id);
+        }
+        else
+        {
+            _ = this.searchExpandedNodeIds.Add(ancestorId);
         }
 
         await this.ExpandItemAsync(item).ConfigureAwait(true);
-        this.searchExpandedItems.Add(item);
         return true;
     }
 
@@ -1229,59 +1291,56 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        this.NotifySelectionDependentCommands();
-        this.HasUnlockedSelectedItems = this.SelectionModel?.SelectedItem?.IsLocked == false;
-        this.PublishCurrentSelection();
+        // Item-level notifications arrive mid-transaction; the settled pass publishes once with
+        // the complete membership and final active identity.
+        if (this.IsSelectionBatchActive)
+        {
+            return;
+        }
+
+        this.UpdateSelectionDependentState();
     }
 
     private void OnMultipleSelectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
-        if (this.SelectionModel is not MultipleSelectionModel multipleSelectionModel)
+        if (this.SelectionModel is not MultipleSelectionModel)
         {
             return;
         }
 
-        this.NotifySelectionDependentCommands();
-
-        var unlockedSelectedItems = false;
-        foreach (var index in multipleSelectionModel.SelectedIndices)
+        if (this.IsSelectionBatchActive)
         {
-            var item = this.GetShownItemAt(index);
-            unlockedSelectedItems = !item.IsLocked;
-            if (unlockedSelectedItems)
-            {
-                break;
-            }
+            return;
         }
 
-        this.HasUnlockedSelectedItems = unlockedSelectedItems;
-        this.PublishCurrentSelection();
+        this.UpdateSelectionDependentState();
     }
 
-    private void PublishSelection(IReadOnlyList<SceneNode> selected)
+    private void OnTreeSelectionSettled(object? sender, EventArgs args)
     {
-        if (this.Scene is not { } sceneAdapter)
+        _ = sender;
+        _ = args;
+        this.UpdateSelectionDependentState();
+    }
+
+    /// <summary>Recomputes selection-derived state and publishes membership with primary once.</summary>
+    private void UpdateSelectionDependentState()
+    {
+        // Inside a projection-sync window (tree reload/refill clears selection outside any
+        // batch) publishing would overwrite the authoritative context with a spurious empty
+        // one; the window owner publishes the restored state itself when it closes.
+        if (this.selectionSyncDepth > 0)
         {
             return;
         }
 
-        var sceneId = sceneAdapter.AttachedObject.Id;
-        this.selectionService.SetSelection(sceneId, selected, "SceneExplorer");
-        this.selectionService.SetContext(
-            sceneId,
-            selected.Count == 0
-                ? SceneSelectionContext.Empty
-                : new SceneSelectionContext(
-                    SceneSelectionKind.Node,
-                    selected.Select(node => node.Id).ToList(),
-                    [],
-                    selected[^1].Id,
-                    null),
-            "SceneExplorer");
-        _ = this.messenger.Send(new SceneNodeSelectionChangedMessage([.. selected]));
+        var items = this.GetSelectedItems();
+        this.NotifySelectionDependentCommands();
+        this.HasUnlockedSelectedItems = items.Any(static item => !item.IsLocked);
+        this.PublishCurrentSelection(this.pendingAuthoritativeContext);
     }
 
-    private void PublishCurrentSelection()
+    private void PublishCurrentSelection(SceneSelectionContext? authoritativeContext = null)
     {
         if (this.Scene is not { } sceneAdapter)
         {
@@ -1289,38 +1348,266 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         var items = this.GetSelectedItems();
-        var context = BuildSelectionContext(items);
+
+        // Foreign selections forward the received context verbatim: re-deriving it from the rows
+        // that happened to resolve would silently shrink the authoritative selection.
+        var context = authoritativeContext ?? BuildSelectionContext(items, this.ActiveItem);
         var nodes = items.OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject).ToList();
 
-        var sceneId = sceneAdapter.AttachedObject.Id;
-        this.selectionService.SetContext(sceneId, context, "SceneExplorer");
-        this.selectionService.SetSelection(sceneId, nodes, "SceneExplorer");
-        _ = this.messenger.Send(new SceneNodeSelectionChangedMessage([.. nodes]));
+        this.suppressSelectionSync = true;
+        try
+        {
+            this.selectionService.Publish(sceneAdapter.AttachedObject.Id, context, "SceneExplorer");
+        }
+        finally
+        {
+            this.suppressSelectionSync = false;
+        }
+
+        this.lastPublishedContext = context;
+        _ = this.messenger.Send(new SceneNodeSelectionChangedMessage([.. nodes], context, sceneAdapter.AttachedObject.Id));
     }
 
-    internal static SceneSelectionContext BuildSelectionContext(IReadOnlyList<ITreeItem> items)
+    /// <summary>
+    /// Reconciles this Explorer's rows with a selection the service stored from another source
+    /// (viewport picking, an external panel, a command reveal). Own echoes and other documents
+    /// are ignored; the resolved row set is republished as the Explorer's classification.
+    /// </summary>
+    private void OnSelectionServiceChanged(object? sender, SceneSelectionChangedEventArgs args)
+    {
+        _ = sender;
+        if (this.suppressSelectionSync
+            || string.Equals(args.Source, "SceneExplorer", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (this.isDisposed || this.selectionSyncDepth > 0
+            || this.Scene is not { } sceneAdapter || sceneAdapter.AttachedObject.Id != args.DocumentId)
+        {
+            return;
+        }
+
+        _ = this.ApplyForeignSelectionAsync(args);
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Selection event callbacks log failures at the task boundary instead of losing unobserved exceptions.")]
+    private async Task ApplyForeignSelectionAsync(SceneSelectionChangedEventArgs args)
+    {
+        try
+        {
+            _ = await this.ApplySelectionContextAsync(args.Context).ConfigureAwait(true);
+        }
+        catch (Exception exception)
+        {
+            LogSelectionApplyFailed(this.logger, exception, args.DocumentId);
+        }
+    }
+
+    /// <summary>
+    /// Selects scene nodes by their stable identities: the authoritative context is stored with
+    /// every id the caller named (even ones whose rows are not realized yet), and the rows reveal
+    /// and select whatever resolves. Nothing is published when the rows already carry the
+    /// selection, so an unresolvable batch can never shrink the domain selection.
+    /// </summary>
+    /// <param name="nodeIds">The node identities to select, in stable order; the last is primary.</param>
+    /// <returns>
+    /// A task whose result is <see langword="true" /> when every named identity resolved to a
+    /// selected row (an empty batch is trivially satisfied); <see langword="false" /> when some
+    /// ids remain unrealized or the store changed under the application. The authoritative
+    /// context keeps all named ids either way.
+    /// </returns>
+    public async Task<bool> SetSelectedNodes(IReadOnlyList<Guid> nodeIds)
+    {
+        ArgumentNullException.ThrowIfNull(nodeIds);
+        if (this.Scene is not { } sceneAdapter)
+        {
+            return false;
+        }
+
+        var distinctIds = nodeIds.Distinct().ToArray();
+        var context = distinctIds.Length == 0
+            ? SceneSelectionContext.Empty
+            : new SceneSelectionContext(SceneSelectionKind.Node, distinctIds, [], distinctIds[^1], null);
+
+        this.suppressSelectionSync = true;
+        try
+        {
+            this.selectionService.Publish(sceneAdapter.AttachedObject.Id, context, "SceneExplorer");
+        }
+        finally
+        {
+            this.suppressSelectionSync = false;
+        }
+
+        return await this.ApplySelectionContextAsync(context).ConfigureAwait(true);
+    }
+
+    private async Task<bool> ApplySelectionContextAsync(SceneSelectionContext context, bool forcePublish = false)
+    {
+        if (this.Scene is not { } sceneAdapter || this.SelectionModel is not { } model)
+        {
+            return false;
+        }
+
+        // Reveal awaits can hop a thread; a newer selection request, a document switch or a newer
+        // store write supersedes this application. It must then apply nothing, and publish nothing,
+        // with the context it captured before the await.
+        var generation = ++this.selectionApplyGeneration;
+        var documentId = sceneAdapter.AttachedObject.Id;
+
+        var targets = new List<ITreeItem>();
+        if (context.Kind == SceneSelectionKind.Scene)
+        {
+            targets.Add(sceneAdapter);
+        }
+
+        foreach (var nodeId in context.SelectedNodeIds)
+        {
+            if (this.projection.GetNode(nodeId) is { } nodeAdapter)
+            {
+                await this.RevealRowAsync(nodeAdapter).ConfigureAwait(true);
+                if (this.ShownItems.Contains(nodeAdapter))
+                {
+                    targets.Add(nodeAdapter);
+                }
+            }
+        }
+
+        foreach (var folderId in context.SelectedFolderIds)
+        {
+            if (this.projection.GetFolder(folderId) is { } folderAdapter)
+            {
+                await this.RevealRowAsync(folderAdapter).ConfigureAwait(true);
+                if (this.ShownItems.Contains(folderAdapter))
+                {
+                    targets.Add(folderAdapter);
+                }
+            }
+        }
+
+        if (generation != this.selectionApplyGeneration
+            || this.isDisposed
+            || !ReferenceEquals(this.Scene, sceneAdapter)
+            || !ReferenceEquals(this.selectionService.GetContext(documentId), context))
+        {
+            return false;
+        }
+
+        var primary = FindPrimaryRow(targets, context);
+
+        // True when every identity the context names resolves to one of the applied rows.
+        var fullyResolved =
+            context.SelectedNodeIds.Count == targets.OfType<SceneNodeAdapter>().Count()
+            && context.SelectedFolderIds.Count == targets.OfType<FolderAdapter>().Count()
+            && (context.Kind != SceneSelectionKind.Scene || targets.OfType<SceneAdapter>().Any());
+
+        var current = this.GetSelectedItems();
+        if (!forcePublish
+            && current.Count == targets.Count
+            && targets.All(current.Contains)
+            && ReferenceEquals(this.ActiveItem, primary))
+        {
+            // Rows already carry this selection. A changed authoritative context still has to
+            // reach consumers (it may name new folder or unresolvable identities); an identical
+            // one must not re-notify.
+            if (!ReferenceEquals(context, this.lastPublishedContext))
+            {
+                this.PublishCurrentSelection(context);
+            }
+
+            return fullyResolved;
+        }
+
+        // Forward the received context verbatim at settle: republishing rows-only state would let
+        // projection visibility silently delete valid domain objects.
+        this.pendingAuthoritativeContext = context;
+        try
+        {
+            this.WithSelectionBatch(() =>
+            {
+                this.SetActiveItem(primary);
+                model.ClearSelection();
+                foreach (var target in targets)
+                {
+                    model.SelectItem(target);
+                }
+            });
+        }
+        finally
+        {
+            this.pendingAuthoritativeContext = null;
+        }
+
+        return fullyResolved;
+    }
+
+    /// <summary>
+    /// Expands a row's collapsed ancestors so the row enters <see cref="DynamicTreeViewModel.ShownItems"/>.
+    /// Folder ancestors are revealed as transient: selecting an object is a view action and must not
+    /// author layout expansion or dirty the document.
+    /// </summary>
+    private async Task RevealRowAsync(ITreeItem item)
+    {
+        if (this.ShownItems.Contains(item))
+        {
+            return;
+        }
+
+        // Adapter.Parent is unset until lazy children load; the projection retains the full
+        // realized placement even under collapsed folders and node seats.
+        foreach (var ancestor in this.projection.GetAncestors(item))
+        {
+            if (ancestor.CanAcceptChildren && !ancestor.IsExpanded)
+            {
+                if (ancestor is FolderAdapter folder)
+                {
+                    folder.SetExpansionTransient(true);
+                }
+
+                await this.ExpandItemAsync(ancestor).ConfigureAwait(true);
+            }
+        }
+    }
+
+    private static ITreeItem? FindPrimaryRow(IReadOnlyList<ITreeItem> targets, SceneSelectionContext context)
+    {
+        if (context.Kind == SceneSelectionKind.Scene)
+        {
+            return targets.FirstOrDefault(static target => target is SceneAdapter);
+        }
+
+        if (context.PrimaryFolderId is { } folderId)
+        {
+            return targets.FirstOrDefault(target => target is FolderAdapter folder && folder.Id == folderId);
+        }
+
+        if (context.PrimaryNodeId is { } nodeId)
+        {
+            return targets.FirstOrDefault(target => target is SceneNodeAdapter node && node.AttachedObject.Id == nodeId);
+        }
+
+        return null;
+    }
+
+    internal static SceneSelectionContext BuildSelectionContext(IReadOnlyList<ITreeItem> items, ITreeItem? activeItem = null)
     {
         if (items.Count == 0)
         {
             return SceneSelectionContext.Empty;
         }
 
-        var hasScene = items.Any(item => item is SceneAdapter);
-        var hasFolder = items.Any(item => item is FolderAdapter);
-        var hasNode = items.Any(item => item is SceneNodeAdapter);
-
-        var kind = (hasScene, hasFolder, hasNode) switch
-        {
-            (true, false, false) => SceneSelectionKind.Scene,
-            (false, false, true) => SceneSelectionKind.Node,
-            (false, true, false) => SceneSelectionKind.Folder,
-            (false, false, false) => SceneSelectionKind.Empty,
-            _ => SceneSelectionKind.Mixed,
-        };
+        var hasScene = items.Any(static item => item is SceneAdapter);
+        var hasFolder = items.Any(static item => item is FolderAdapter);
+        var hasNode = items.Any(static item => item is SceneNodeAdapter);
+        var kind = SceneSelectionContext.Classify(hasScene, hasFolder, hasNode);
 
         var nodeIds = items.OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject.Id).ToList();
         var folderIds = items.OfType<FolderAdapter>().Select(folder => folder.Id).ToList();
-        var primary = items[^1];
+
+        // The explicit active row is the primary identity; selection order is only the fallback
+        // when no interactive selection established an active row (programmatic restores).
+        var primary = activeItem is not null && items.Contains(activeItem) ? activeItem : items[^1];
 
         return new SceneSelectionContext(
             kind,
@@ -1339,59 +1626,45 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             _ => [],
         };
 
-    private async void OnSceneNodeAdded(object recipient, SceneNodeAddedMessage message)
+    /// <summary>
+    /// The scene root row is exclusive: selecting it alone is the scene context, and it can never
+    /// share a selection with node or folder rows (Explorer contract, section 4 of the plan).
+    /// </summary>
+    /// <inheritdoc />
+    protected override bool AllowsCoSelection(ITreeItem candidate, IReadOnlyList<ITreeItem> currentlySelected)
+        => candidate is not SceneAdapter && !currentlySelected.Any(static item => item is SceneAdapter);
+
+    /// <inheritdoc />
+    protected override bool IsIncludedInBulk(ITreeItem item) => item is not SceneAdapter;
+
+    private void OnSceneNodeAdded(object recipient, SceneNodeAddedMessage message)
     {
         _ = recipient;
-        if (this.suppressNodeMessages || this.Scene is null)
+        _ = this.RefreshProjectionForNodesAsync(message.Nodes);
+    }
+
+    private void OnSceneNodeRemoved(object recipient, SceneNodeRemovedMessage message)
+    {
+        _ = recipient;
+        _ = this.RefreshProjectionForNodesAsync(message.Nodes);
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Messenger callbacks report projection failures instead of losing unobserved task exceptions.")]
+    private async Task RefreshProjectionForNodesAsync(IList<SceneNode> nodes)
+    {
+        if (this.isDisposed || this.suppressNodeMessages || this.Scene is not { } sceneAdapter
+            || !nodes.Any(node => ReferenceEquals(node.Scene, sceneAdapter.AttachedObject)))
         {
             return;
         }
 
-        foreach (var node in message.Nodes.Where(node => ReferenceEquals(node.Scene, this.Scene.AttachedObject)))
+        try
         {
-            if (this.projection.ContainsNode(node.Id))
-            {
-                continue;
-            }
-
-            var parent = node.Parent is null
-                ? this.Scene
-                : this.projection.GetNode(node.Parent.Id) as ITreeItem ?? this.Scene;
-
-            var adapter = new SceneNodeAdapter(node);
-            await this.ApplyExternalTreeChangeAsync(async () => await this.InsertItemAsync(adapter, parent, 0).ConfigureAwait(true)).ConfigureAwait(true);
-            this.projection.Index(adapter);
-            this.projection.Track(adapter);
+            await this.ReconcileProjectionAsync().ConfigureAwait(true);
         }
-    }
-
-    private async void OnSceneNodeRemoved(object recipient, SceneNodeRemovedMessage message)
-    {
-        _ = recipient;
-        if (this.suppressNodeMessages || this.Scene is null)
+        catch (Exception ex)
         {
-            return;
-        }
-
-        foreach (var node in message.Nodes.Where(node => ReferenceEquals(node.Scene, this.Scene.AttachedObject)))
-        {
-            if (this.projection.GetNode(node.Id) is not { } adapter)
-            {
-                continue;
-            }
-
-            await this.ApplyExternalTreeChangeAsync(async () => await this.RemoveItemAsync(adapter).ConfigureAwait(true)).ConfigureAwait(true);
-            this.projection.Unindex(adapter);
-            this.projection.Untrack(adapter);
-        }
-    }
-
-    private async Task ApplyExternalTreeChangeAsync(Func<Task> action)
-    {
-        using var authoring = this.EnterTreeAuthoring();
-        if (authoring is not null)
-        {
-            await action().ConfigureAwait(true);
+            LogProjectionUpdateFailed(this.logger, ex, sceneAdapter.AttachedObject.Id);
         }
     }
 
@@ -1640,12 +1913,37 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        var expandedFolderIds = sceneAdapter.GetExpandedFolderIds();
-        await sceneAdapter.ReloadChildrenAsync(expandedFolderIds, preserveNodeExpansion: true).ConfigureAwait(true);
+        // Replacing adapters must not publish intermediate empty selection over the store.
+        await this.WithProjectionSyncAsync(async () =>
+        {
+            var expandedFolderIds = sceneAdapter.GetExpandedFolderIds();
+            await sceneAdapter.ReloadChildrenAsync(
+                expandedFolderIds,
+                preserveNodeExpansion: true,
+                transientlyExpandedFolderIds: sceneAdapter.GetExpandedFolderIds(transientOnly: true)).ConfigureAwait(true);
 
-        await this.InitializeRootAsync(sceneAdapter, skipRoot: false).ConfigureAwait(true);
-        this.projection.Rebuild(sceneAdapter);
-        this.ApplyWorkspaceInteractionState();
+            await this.InitializeRootAsync(sceneAdapter, skipRoot: false).ConfigureAwait(true);
+            this.projection.Rebuild(sceneAdapter);
+            this.ApplyWorkspaceInteractionState();
+            _ = this.selectionService.Reconcile(sceneAdapter.AttachedObject.Id, sceneAdapter.AttachedObject);
+
+            // Re-apply the recorded transient search expansion on the fresh adapters (folders were
+            // re-expanded as transient during the reload; node seats need their runtime expansion).
+            foreach (var nodeId in this.searchExpandedNodeIds.ToArray())
+            {
+                if (this.projection.GetNode(nodeId) is { IsExpanded: false } node)
+                {
+                    await this.ExpandItemAsync(node).ConfigureAwait(true);
+                }
+            }
+        }).ConfigureAwait(true);
+
+        // A foreign writer may change selection while the refill awaits. Restore the latest
+        // authoritative context, never the snapshot from before the refill.
+        if (ReferenceEquals(this.Scene, sceneAdapter))
+        {
+            await this.ApplySelectionContextAsync(this.selectionService.GetContext(sceneAdapter.AttachedObject.Id)).ConfigureAwait(true);
+        }
     }
 
     /// <summary>

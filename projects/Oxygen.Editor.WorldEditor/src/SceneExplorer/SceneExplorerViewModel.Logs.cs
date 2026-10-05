@@ -14,6 +14,12 @@ namespace Oxygen.Editor.World.SceneExplorer;
 /// </summary>
 public partial class SceneExplorerViewModel
 {
+    [LoggerMessage(Level = LogLevel.Error, Message = "Scene Explorer selection update failed for document {DocumentId}.")]
+    private static partial void LogSelectionApplyFailed(ILogger logger, Exception exception, Guid documentId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Scene Explorer projection update failed for document {DocumentId}.")]
+    private static partial void LogProjectionUpdateFailed(ILogger logger, Exception exception, Guid documentId);
+
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,

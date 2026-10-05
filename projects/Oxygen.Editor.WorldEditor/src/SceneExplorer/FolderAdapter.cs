@@ -56,6 +56,9 @@ public sealed class FolderAdapter : LayoutItemAdapter, ICanBeCloned
         set => throw new NotSupportedException("Folder name is read-only presentation; rename through the document command owner.");
     }
 
+    /// <summary>Gets a value indicating whether expansion is view-only state.</summary>
+    internal bool IsExpansionTransient => this.isExpansionTransient;
+
     /// <inheritdoc />
     public ITreeItem CloneSelf()
     {

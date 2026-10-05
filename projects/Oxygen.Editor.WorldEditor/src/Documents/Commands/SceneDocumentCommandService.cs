@@ -1706,7 +1706,8 @@ public sealed partial class SceneDocumentCommandService(
 
         this.selectionService.SetSelection(context.DocumentId, [node], "Command");
         _ = this.messenger.Send(new SceneNodeAddedMessage([node]));
-        _ = this.messenger.Send(new SceneNodeSelectionChangedMessage([node]));
+
+        _ = this.messenger.Send(new SceneNodeSelectionChangedMessage([node], this.selectionService.GetContext(context.DocumentId), context.DocumentId));
     }
 
     private void PublishNodeRemoved(SceneDocumentCommandContext context, SceneNode node)
@@ -1718,7 +1719,10 @@ public sealed partial class SceneDocumentCommandService(
 
         var selection = this.selectionService.Reconcile(context.DocumentId, context.Scene);
         _ = this.messenger.Send(new SceneNodeRemovedMessage([node]));
-        _ = this.messenger.Send(new SceneNodeSelectionChangedMessage([.. selection]));
+
+        // Reconcile keeps the row-kind classification of the surviving batch; the message must
+        // carry that same context, not a node-only reconstruction of it.
+        _ = this.messenger.Send(new SceneNodeSelectionChangedMessage([.. selection], this.selectionService.GetContext(context.DocumentId), context.DocumentId));
     }
 
     private Guid PublishSceneFailure(
