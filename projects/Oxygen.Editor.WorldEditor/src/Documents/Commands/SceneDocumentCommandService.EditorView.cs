@@ -68,13 +68,15 @@ public sealed partial class SceneDocumentCommandService
 
         var label = hidden ? $"Hide {affected.Length} node(s) in editor" : $"Show {affected.Length} node(s) in editor";
 
-        // Forward: the affected ids take `hidden`; reverse restores the state they had before, which
-        // for this batch is uniformly the opposite value.
+        // The recorded step applies the inverse FIRST, matching the layout-history contract: after a
+        // forward hide the next undo must SHOW the ids, so toShow carries the batch and toHide is empty
+        // (and vice versa after a forward show). Getting this backwards makes undo re-apply the forward
+        // state — which is exactly what the failing undo test caught.
         this.RecordEditorHiddenHistory(
             context,
             label,
-            hidden ? affected : [],
-            hidden ? [] : affected);
+            toHide: hidden ? [] : affected,
+            toShow: hidden ? affected : []);
 
         return Task.FromResult(SceneCommandResult.Success);
     }

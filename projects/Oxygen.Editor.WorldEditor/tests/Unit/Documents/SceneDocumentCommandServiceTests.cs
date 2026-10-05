@@ -1301,7 +1301,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         return new(metadata.DocumentId, metadata, scene, new HistoryKeeper(scene));
     }
 
-    private static Fixture CreateFixture(ISceneEngineSync? synchronization = null, IProjectManagerService? projectManager = null, Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService? automaticCooking = null)
+    private static Fixture CreateFixture(ISceneEngineSync? synchronization = null, IProjectManagerService? projectManager = null, Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService? automaticCooking = null, Oxygen.Editor.World.Workspace.WorkspaceInteractionService? interaction = null)
     {
         var sync = new Mock<ISceneEngineSync>(MockBehavior.Strict);
         long sequence = 0;
@@ -1327,9 +1327,21 @@ public sealed partial class SceneDocumentCommandServiceTests
             WeakReferenceMessenger.Default,
             results,
             new OperationStatusReducer(), inventories.Object, projects,
-            new SceneMutator(NullLogger<SceneMutator>.Instance), new SceneOrganizer(NullLogger<SceneOrganizer>.Instance));
+            new SceneMutator(NullLogger<SceneMutator>.Instance), new SceneOrganizer(NullLogger<SceneOrganizer>.Instance), interaction);
 
-        return new(sut, sync, documentService, results, inventories, projects);
+        return new(sut, sync, documentService, results, inventories, projects, interaction);
+    }
+
+    /// <summary>Builds a workspace interaction owner over an in-memory settings store.</summary>
+    /// <returns>A fresh service and the mock settings manager backing it.</returns>
+    private static (Oxygen.Editor.World.Workspace.WorkspaceInteractionService Service, Mock<Oxygen.Editor.Data.Services.IEditorSettingsManager> Settings) CreateInteraction()
+    {
+        var settings = new Mock<Oxygen.Editor.Data.Services.IEditorSettingsManager>(MockBehavior.Loose);
+        var service = new Oxygen.Editor.World.Workspace.WorkspaceInteractionService(
+            settings.Object,
+            new CapturingOperationResultPublisher(),
+            new OperationStatusReducer());
+        return (service, settings);
     }
 
     private sealed record Fixture(
@@ -1338,7 +1350,8 @@ public sealed partial class SceneDocumentCommandServiceTests
         Mock<IDocumentService> DocumentService,
         CapturingOperationResultPublisher Results,
         Mock<IGeometryMaterialSlotProvider> Inventories,
-        ProjectContextService Projects);
+        ProjectContextService Projects,
+        Oxygen.Editor.World.Workspace.WorkspaceInteractionService? Interaction = null);
 
     private sealed class CapturingOperationResultPublisher : IOperationResultPublisher
     {
