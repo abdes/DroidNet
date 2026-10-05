@@ -42,6 +42,7 @@ internal static partial class Program
             var opening = await CookOutputReadLease.AcquireAsync(root.Path, CancellationToken.None).ConfigureAwait(false);
             root.AcceptVerification(opening, NativeInventoryFixture.Read(root.Path));
         }
+
         var replacements = staging.SealRoots();
         var roots = baseline.Roots.Where(root => !replacements.Any(replacement => replacement.Name == root.Name)).Concat(replacements).ToImmutableArray();
         var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, project.ProjectId, operation.OperationId,

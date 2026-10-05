@@ -237,8 +237,8 @@ public sealed partial class SceneDocumentCommandService
         var target = new SceneEnvironmentPropertyTarget(context.Scene.Environment);
         PropertyApply.ApplyToTarget(target, edit, SceneEnvironment.ById);
         var after = target.Value;
-        var postProcessEdited = edit.Ids.Any(static id => id.Pointer.StartsWith("/post_process/", StringComparison.Ordinal));
-        var skyEdited = edit.Ids.Any(static id => id.Pointer.StartsWith("/sky_atmosphere/", StringComparison.Ordinal));
+        var postProcessEdited = edit.Ids.Any(static id => id.JsonPointer.StartsWith("/post_process/", StringComparison.Ordinal));
+        var skyEdited = edit.Ids.Any(static id => id.JsonPointer.StartsWith("/sky_atmosphere/", StringComparison.Ordinal));
 
         var atmosphereEnabled = edit.Contains(SceneEnvironment.AtmosphereEnabled.Id)
             ? OptionalEditValues.Supplied<bool>(after.AtmosphereEnabled)

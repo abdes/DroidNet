@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Documents.Commands;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -20,7 +21,7 @@ public sealed partial class SceneDocumentCommandService
         var selectedNodes = nodeIds.ToHashSet();
         var selectedFolders = folderIds.ToHashSet();
         if (authoring is null || nodeIds.Any(id => FindNode(context.Scene, id) is null)
-            || folderIds.Any(id => FindClipboardEntry(layout, null, id) is null))
+            || folderIds.Any(id => FindClipboardEntry(layout, nodeId: null, id) is null))
         {
             return SceneCommandResults.Failure<SceneExplorerClipboard>(this.PublishSceneFailure(
                 SceneOperationKinds.NodeDuplicate, DiagnosticCodes.ScenePrefix + "STALE_TARGET",
@@ -68,7 +69,7 @@ public sealed partial class SceneDocumentCommandService
         var worldSnapshots = new List<SceneNodeData>();
         foreach (var node in roots)
         {
-            if (!SceneTransformMath.TryPreserveWorldLocal(node, null, out var position, out var rotation, out var scale))
+            if (!SceneTransformMath.TryPreserveWorldLocal(node, newParent: null, out var position, out var rotation, out var scale))
             {
                 break;
             }
@@ -96,8 +97,8 @@ public sealed partial class SceneDocumentCommandService
         }
 
         var layout = this.CreateCompleteClipboardLayout(context.Scene);
-        var destination = parentFolderId is { } folderId ? FindClipboardEntry(layout, null, folderId)
-            : parentNodeId is { } nodeId ? FindClipboardEntry(layout, nodeId, null) : null;
+        var destination = parentFolderId is { } folderId ? FindClipboardEntry(layout, nodeId: null, folderId)
+            : parentNodeId is { } nodeId ? FindClipboardEntry(layout, nodeId, folderId: null) : null;
         if ((parentFolderId.HasValue || parentNodeId.HasValue) && destination is null)
         {
             return "The destination no longer exists.";
@@ -211,7 +212,7 @@ public sealed partial class SceneDocumentCommandService
 
         var before = this.sceneOrganizer.CloneLayout(context.Scene.ExplorerLayout);
         var after = this.CreateCompleteClipboardLayout(context.Scene);
-        var anchor = insertAfterNodeId is { } anchorId ? FindClipboardEntry(after, anchorId, null) : null;
+        var anchor = insertAfterNodeId is { } anchorId ? FindClipboardEntry(after, anchorId, folderId: null) : null;
         if (insertAfterNodeId.HasValue && anchor is null)
         {
             return this.ValidationFailure(SceneOperationKinds.NodeDuplicate, DiagnosticCodes.ScenePrefix + "STALE_TARGET",
@@ -220,8 +221,8 @@ public sealed partial class SceneDocumentCommandService
 
         var scopeId = parentFolderId is { } folder ? FindFolderSceneParentNodeId(after, folder).NodeId : parentNodeId;
         var scope = scopeId is { } id ? FindNode(context.Scene, id) : null;
-        var destination = parentFolderId is { } folderId ? FindClipboardEntry(after, null, folderId)!.EnsureChildren()
-            : scopeId is { } nodeId ? FindClipboardEntry(after, nodeId, null)!.EnsureChildren() : after;
+        var destination = parentFolderId is { } folderId ? FindClipboardEntry(after, nodeId: null, folderId)!.EnsureChildren()
+            : scopeId is { } nodeId ? FindClipboardEntry(after, nodeId, folderId: null)!.EnsureChildren() : after;
         var map = new Dictionary<Guid, Guid>();
         SceneNodeData Remap(SceneNodeData data)
         {
@@ -372,7 +373,7 @@ public sealed partial class SceneDocumentCommandService
         {
             foreach (var node in nodes)
             {
-                var entry = FindClipboardEntry(container, node.Id, null);
+                var entry = FindClipboardEntry(container, node.Id, folderId: null);
                 if (entry is null)
                 {
                     entry = new ExplorerEntryData { NodeId = node.Id };

@@ -375,6 +375,7 @@ public sealed class AssetCookStatusTests
                     [new(source.AssetUri, source.SourceAbsolutePath, source.SourceRelativePath,
                         Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source.SourceAbsolutePath))))]);
         }
+
         public Task<NativeCompatibilityResult> VerifyNativeAsync(Guid operation, CancellationToken token) => this.native.VerifyAsync(operation, token);
     }
 }

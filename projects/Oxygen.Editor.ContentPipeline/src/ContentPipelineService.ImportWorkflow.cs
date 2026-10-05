@@ -95,7 +95,7 @@ public sealed partial class ContentPipelineService
     {
         var source = Path.GetFullPath(request.SourcePath);
         var input = new ContentCookInput(new Uri(source), ContentCookAssetKind.ForeignSource, target.MountName,
-            Path.GetFileName(source), source, null, ContentCookInputRole.Primary);
+            Path.GetFileName(source), source, OutputVirtualPath: null, ContentCookInputRole.Primary);
         var recipe = this.manifestBuilder.BuildModelJob(input, [], request.Name, target.CreateLayout(source), request.Provenance);
         var discovery = new SceneImportSourceDiscovery(cookDocuments, this.cookCoordinator, this.engineContentPipelineApi);
         if (CookInputResolver.FindAuthoringSourceUri(operation.Project, source) is not null)

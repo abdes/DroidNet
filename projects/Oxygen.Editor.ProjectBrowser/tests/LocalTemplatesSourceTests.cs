@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
-using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.ProjectBrowser.Tests;
@@ -121,9 +121,36 @@ public class LocalTemplatesSourceTests
         return string.Empty;
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "MA0051:Method is too long", Justification = "has several json text constants")]
     private static string CreateTempTemplate()
     {
         var root = Path.Combine(Path.GetTempPath(), "OxygenTemplateTests", Guid.NewGuid().ToString("N"));
+        const string StarterSceneJson =
+            """
+            {
+              "Id": "bc749567-e334-418d-962f-1d84defe30a9",
+              "Name": "Main",
+              "RootNodes": []
+            }
+            """;
+        const string StarterMaterialJson =
+            """
+            {
+              "name": "Default",
+              "alpha_mode": "opaque",
+              "parameters": {
+                "base_color": [
+                  1,
+                  1,
+                  1,
+                  1
+                ],
+                "metalness": 0,
+                "roughness": 0.5,
+                "double_sided": false
+              }
+            }
+            """;
         const string TemplateJson =
             """
             {
@@ -188,33 +215,12 @@ public class LocalTemplatesSourceTests
         File.WriteAllText(Path.Combine(root, "Media", "Icon.png"), "icon");
         File.WriteAllText(Path.Combine(root, "Media", "Preview.png"), "preview");
         File.WriteAllText(
-            Path.Combine(root, "Content", "Scenes", "Main.oscene.json"),
-            """
-            {
-              "Id": "bc749567-e334-418d-962f-1d84defe30a9",
-              "Name": "Main",
-              "RootNodes": []
-            }
-            """);
+            Path.Combine(
+                root, "Content", "Scenes", "Main.oscene.json"),
+            StarterSceneJson);
         File.WriteAllText(
             Path.Combine(root, "Content", "Materials", "Default.omat.json"),
-            """
-            {
-              "name": "Default",
-              "alpha_mode": "opaque",
-              "parameters": {
-                "base_color": [
-                  1,
-                  1,
-                  1,
-                  1
-                ],
-                "metalness": 0,
-                "roughness": 0.5,
-                "double_sided": false
-              }
-            }
-            """);
+            StarterMaterialJson);
         File.WriteAllText(Path.Combine(root, "Template.json"), TemplateJson);
         return root;
     }

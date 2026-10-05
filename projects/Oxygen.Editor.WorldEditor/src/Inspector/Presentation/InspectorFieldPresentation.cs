@@ -41,7 +41,7 @@ public sealed partial class InspectorFieldPresentation : ObservableObject
         this.Group = group;
         this.Applicability = applicability;
         var scopeName = scope == InspectorPropertyScope.PostProcessing ? "Post-processing" : "Environment";
-        this.SearchText = InspectorSearchModel.Normalize($"{scopeName} {label} {description} {aliases} {property.Pointer}");
+        this.SearchText = InspectorSearchModel.Normalize($"{scopeName} {label} {description} {aliases} {property.JsonPointer}");
     }
 
     /// <summary>Gets the presentation identity.</summary>

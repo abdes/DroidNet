@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 
 namespace Oxygen.Editor.Schemas.Bindings;
@@ -40,7 +38,7 @@ public sealed class PropertyBinding<T> : INotifyPropertyChanged
     private bool isMixed;
 
     /// <summary>
-    /// Initializes a new binding.
+    /// Initializes a new instance of the <see cref="PropertyBinding{T}"/> class.
     /// </summary>
     /// <param name="descriptor">The descriptor.</param>
     public PropertyBinding(PropertyDescriptor<T> descriptor)
@@ -193,4 +191,6 @@ public sealed class PropertyBinding<T> : INotifyPropertyChanged
 /// <typeparam name="T">The value type.</typeparam>
 /// <param name="OldValue">The value before the assignment.</param>
 /// <param name="NewValue">The requested new value.</param>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "tightly linked types")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "tightly linked types")]
 public sealed record PropertyBindingChangedEventArgs<T>(T OldValue, T NewValue);

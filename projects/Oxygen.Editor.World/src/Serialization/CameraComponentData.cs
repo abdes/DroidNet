@@ -31,5 +31,4 @@ public abstract record CameraComponentData : ComponentData
 
     /// <summary>Gets the authored ISO sensitivity.</summary>
     public float Iso { get; init; } = CameraComponent.DefaultIso;
-
 }

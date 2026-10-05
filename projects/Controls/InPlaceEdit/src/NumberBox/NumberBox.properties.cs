@@ -41,43 +41,6 @@ public partial class NumberBox
     /// <summary>Identifies the reserved width of a nonempty qualifier.</summary>
     public static readonly DependencyProperty QualifierMinimumWidthProperty = RegisterLabelLayoutProperty(nameof(QualifierMinimumWidth), typeof(double), 0d);
 
-    /// <summary>Gets or sets whether an external label stacks above its value at narrow widths.</summary>
-    public bool AutoStackLabel { get => (bool)this.GetValue(AutoStackLabelProperty); set => this.SetValue(AutoStackLabelProperty, value); }
-
-    /// <summary>Gets or sets the external label width in DIPs, or NaN for proportional columns.</summary>
-    public double LabelWidth { get => (double)this.GetValue(LabelWidthProperty); set => this.SetValue(LabelWidthProperty, value); }
-
-    /// <summary>
-    /// Gets or sets the label's share of horizontal space after spacing, between zero and one (exclusive).
-    /// NaN retains the <see cref="LabelWidth"/> policy; a ratio uses that width only as the auto-stacking minimum.
-    /// Proportional labels stay on one line and trim with an ellipsis; value annotations share the remaining column.
-    /// </summary>
-    public double LabelWidthRatio { get => (double)this.GetValue(LabelWidthRatioProperty); set => this.SetValue(LabelWidthRatioProperty, value); }
-
-    /// <summary>Gets or sets the minimum usable value-region width in DIPs.</summary>
-    public double EditorMinimumWidth { get => (double)this.GetValue(EditorMinimumWidthProperty); set => this.SetValue(EditorMinimumWidthProperty, value); }
-
-    /// <summary>Gets or sets the horizontal label gap in DIPs.</summary>
-    public double LabelSpacing { get => (double)this.GetValue(LabelSpacingProperty); set => this.SetValue(LabelSpacingProperty, value); }
-
-    /// <summary>Gets or sets the vertical label gap in DIPs.</summary>
-    public double LabelRowSpacing { get => (double)this.GetValue(LabelRowSpacingProperty); set => this.SetValue(LabelRowSpacingProperty, value); }
-
-    /// <summary>Gets or sets the read-only prefix outside the value field.</summary>
-    public string Prefix { get => (string)this.GetValue(PrefixProperty); set => this.SetValue(PrefixProperty, value); }
-
-    /// <summary>Gets or sets the read-only qualifier outside the value field.</summary>
-    public string Qualifier { get => (string)this.GetValue(QualifierProperty); set => this.SetValue(QualifierProperty, value); }
-
-    /// <summary>Gets or sets the reserved qualifier width in DIPs.</summary>
-    public double QualifierMinimumWidth { get => (double)this.GetValue(QualifierMinimumWidthProperty); set => this.SetValue(QualifierMinimumWidthProperty, value); }
-
-    /// <summary>Gets the label placement selected during measurement.</summary>
-    public LabelPosition ActualLabelPosition { get; private set; }
-
-    private static DependencyProperty RegisterLabelLayoutProperty(string name, Type type, object defaultValue)
-        => DependencyProperty.Register(name, type, typeof(NumberBox), new PropertyMetadata(defaultValue, static (d, _) => ((NumberBox)d).UpdateLabelPosition()));
-
     /// <summary>
     ///     Identifies the <see cref="IsIndeterminate" /> dependency property.
     /// </summary>
@@ -219,6 +182,40 @@ public partial class NumberBox
         typeof(NumberBox),
         new PropertyMetadata(defaultValue: null, static (d, e) => ((NumberBox)d).OnLoggerFactoryChanged((ILoggerFactory?)e.NewValue)));
 
+    /// <summary>Gets or sets a value indicating whether an external label stacks above its value at narrow widths.</summary>
+    public bool AutoStackLabel { get => (bool)this.GetValue(AutoStackLabelProperty); set => this.SetValue(AutoStackLabelProperty, value); }
+
+    /// <summary>Gets or sets the external label width in DIPs, or NaN for proportional columns.</summary>
+    public double LabelWidth { get => (double)this.GetValue(LabelWidthProperty); set => this.SetValue(LabelWidthProperty, value); }
+
+    /// <summary>
+    /// Gets or sets the label's share of horizontal space after spacing, between zero and one (exclusive).
+    /// NaN retains the <see cref="LabelWidth"/> policy; a ratio uses that width only as the auto-stacking minimum.
+    /// Proportional labels stay on one line and trim with an ellipsis; value annotations share the remaining column.
+    /// </summary>
+    public double LabelWidthRatio { get => (double)this.GetValue(LabelWidthRatioProperty); set => this.SetValue(LabelWidthRatioProperty, value); }
+
+    /// <summary>Gets or sets the minimum usable value-region width in DIPs.</summary>
+    public double EditorMinimumWidth { get => (double)this.GetValue(EditorMinimumWidthProperty); set => this.SetValue(EditorMinimumWidthProperty, value); }
+
+    /// <summary>Gets or sets the horizontal label gap in DIPs.</summary>
+    public double LabelSpacing { get => (double)this.GetValue(LabelSpacingProperty); set => this.SetValue(LabelSpacingProperty, value); }
+
+    /// <summary>Gets or sets the vertical label gap in DIPs.</summary>
+    public double LabelRowSpacing { get => (double)this.GetValue(LabelRowSpacingProperty); set => this.SetValue(LabelRowSpacingProperty, value); }
+
+    /// <summary>Gets or sets the read-only prefix outside the value field.</summary>
+    public string Prefix { get => (string)this.GetValue(PrefixProperty); set => this.SetValue(PrefixProperty, value); }
+
+    /// <summary>Gets or sets the read-only qualifier outside the value field.</summary>
+    public string Qualifier { get => (string)this.GetValue(QualifierProperty); set => this.SetValue(QualifierProperty, value); }
+
+    /// <summary>Gets or sets the reserved qualifier width in DIPs.</summary>
+    public double QualifierMinimumWidth { get => (double)this.GetValue(QualifierMinimumWidthProperty); set => this.SetValue(QualifierMinimumWidthProperty, value); }
+
+    /// <summary>Gets the label placement selected during measurement.</summary>
+    public LabelPosition ActualLabelPosition { get; private set; }
+
     /// <summary>Gets or sets a value indicating whether fractional trailing zeros are omitted, retaining a leading zero.</summary>
     public bool TrimTrailingZeros
     {
@@ -350,6 +347,9 @@ public partial class NumberBox
         get => (ILoggerFactory?)this.GetValue(LoggerFactoryProperty);
         set => this.SetValue(LoggerFactoryProperty, value);
     }
+
+    private static DependencyProperty RegisterLabelLayoutProperty(string name, Type type, object defaultValue)
+        => DependencyProperty.Register(name, type, typeof(NumberBox), new PropertyMetadata(defaultValue, static (d, _) => ((NumberBox)d).UpdateLabelPosition()));
 
     private static void OnValuePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {

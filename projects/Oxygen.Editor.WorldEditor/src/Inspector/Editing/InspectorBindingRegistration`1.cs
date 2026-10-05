@@ -89,7 +89,7 @@ internal sealed class InspectorBindingRegistration<T> : IDisposable
             return;
         }
 
-        this.coordinator?.Submit(PropertyEdit.Single(this.binding.Id, args.NewValue));
+        this.coordinator?.Submit(PropertyEdit.SingleEdit(this.binding.Id, args.NewValue));
     }
 
     private void OnBindingChanged(object? sender, PropertyChangedEventArgs args) => this.changed?.Invoke();

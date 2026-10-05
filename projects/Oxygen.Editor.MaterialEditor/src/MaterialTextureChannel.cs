@@ -15,7 +15,7 @@ public sealed partial class MaterialTextureChannel : ObservableObject
 {
     private readonly Action<MaterialTextureChannel, string?> selectionChanged;
     private string? selectedVirtualPath;
-    private IReadOnlyList<MaterialTextureChoice> choices = [new(null, "(None)", true)];
+    private IReadOnlyList<MaterialTextureChoice> choices = [new(VirtualPath: null, "(None)", IsAvailable: true)];
 
     /// <summary>Initializes a texture channel row.</summary>
     /// <param name="channel">The native material schema field.</param>
@@ -81,7 +81,7 @@ public sealed partial class MaterialTextureChannel : ObservableObject
     /// <param name="selectedVirtualPath">The source's current path.</param>
     public void Refresh(IReadOnlyList<MaterialTextureChoice> available, string? selectedVirtualPath)
     {
-        var choices = new List<MaterialTextureChoice>(available.Count + 2) { new(null, "(None)", true) };
+        var choices = new List<MaterialTextureChoice>(available.Count + 2) { new(VirtualPath: null, "(None)", true) };
         choices.AddRange(available);
         if (selectedVirtualPath is not null
             && !choices.Any(choice => string.Equals(choice.VirtualPath, selectedVirtualPath, StringComparison.Ordinal)))
@@ -98,5 +98,4 @@ public sealed partial class MaterialTextureChannel : ObservableObject
         this.OnPropertyChanged(nameof(this.WarningText));
         this.OnPropertyChanged(nameof(this.WarningVisibility));
     }
-
 }

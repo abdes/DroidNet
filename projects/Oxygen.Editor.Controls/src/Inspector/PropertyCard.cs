@@ -47,19 +47,19 @@ public partial class PropertyCard : ContentControl
     public static readonly DependencyProperty PrefixProperty = RegisterLayoutProperty(nameof(Prefix), typeof(string), string.Empty);
 
     /// <summary>Identifies compound editors whose stacked annotation belongs in the header.</summary>
-    public static readonly DependencyProperty IsCompoundProperty = RegisterLayoutProperty(nameof(IsCompound), typeof(bool), false);
+    public static readonly DependencyProperty IsCompoundProperty = RegisterLayoutProperty(nameof(IsCompound), typeof(bool), defaultValue: false);
 
     /// <summary>Identifies whether a composition supplies its own navigation instead of a property header.</summary>
-    public static readonly DependencyProperty IsHeaderVisibleProperty = RegisterLayoutProperty(nameof(IsHeaderVisible), typeof(bool), true);
+    public static readonly DependencyProperty IsHeaderVisibleProperty = RegisterLayoutProperty(nameof(IsHeaderVisible), typeof(bool), defaultValue: true);
 
     /// <summary>Identifies the shared reserved scalar suffix slot.</summary>
     public static readonly DependencyProperty QualifierMinimumWidthProperty = RegisterLayoutProperty(nameof(QualifierMinimumWidth), typeof(double), 24d);
 
     /// <summary>Identifies a value-group accessory, such as a color swatch.</summary>
-    public static readonly DependencyProperty LeadingContentProperty = RegisterLayoutProperty(nameof(LeadingContent), typeof(object), null);
+    public static readonly DependencyProperty LeadingContentProperty = RegisterLayoutProperty(nameof(LeadingContent), typeof(object), defaultValue: null);
 
     /// <summary>Identifies scalar compositions whose label and annotations are owned by their NumberBox.</summary>
-    public static readonly DependencyProperty UseEditorLabelProperty = RegisterLayoutProperty(nameof(UseEditorLabel), typeof(bool), false);
+    public static readonly DependencyProperty UseEditorLabelProperty = RegisterLayoutProperty(nameof(UseEditorLabel), typeof(bool), defaultValue: false);
 
     /// <summary>Gets or sets whether a single NumberBox supplies the interactive property label.</summary>
     public bool UseEditorLabel { get => (bool)this.GetValue(UseEditorLabelProperty); set => this.SetValue(UseEditorLabelProperty, value); }
@@ -190,6 +190,7 @@ public partial class PropertyCard : ContentControl
             {
                 this.leading?.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             }
+
             var accessoryWidth = this.LeadingContent is null ? 0 : (this.leading?.DesiredSize.Width ?? 0) + 4;
             var minimum = Math.Max(this.EditorMinimumWidth * scale, this.editor.DesiredSize.Width) + annotationWidth + prefixWidth + accessoryWidth;
             var width = availableSize.Width - this.Padding.Left - this.Padding.Right;

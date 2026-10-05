@@ -81,7 +81,7 @@ public sealed partial class GeometryViewModel
             var inventory = await this.materialSlots.ReadAsync(project, geometryUri, request.Token).ConfigureAwait(true);
             if (request.IsCancellationRequested || !this.IsCurrentSelection(nodes)
                 || !ReferenceEquals(project, this.projectContexts.ActiveProject)
-                || nodes.Any(node => node.Components.OfType<GeometryComponent>().FirstOrDefault()?.Geometry?.Uri != geometryUri))
+                || nodes.Exists(node => node.Components.OfType<GeometryComponent>().FirstOrDefault()?.Geometry?.Uri != geometryUri))
             {
                 return;
             }
@@ -95,10 +95,9 @@ public sealed partial class GeometryViewModel
             var selected = this.SelectedMaterialSlot?.Target;
             var labels = inventory.Slots.GroupBy(static slot => slot.DisplayName, StringComparer.Ordinal)
                 .ToDictionary(static group => group.Key, static group => group.Count(), StringComparer.Ordinal);
-            this.MaterialSlots = inventory.Slots.Select((slot, index) => new MaterialSlotChoice(
+            this.MaterialSlots = [.. inventory.Slots.Select((slot, index) => new MaterialSlotChoice(
                 new(geometryUri, slot.SlotId, inventory.LayoutRevision),
-                string.IsNullOrWhiteSpace(slot.DisplayName) ? $"Slot {index + 1}"
-                    : labels[slot.DisplayName] > 1 ? $"{slot.DisplayName} ({index + 1})" : slot.DisplayName)).ToArray();
+                string.IsNullOrWhiteSpace(slot.DisplayName) ? $"Slot {index + 1}" : labels[slot.DisplayName] > 1 ? $"{slot.DisplayName} ({index + 1})" : slot.DisplayName))];
             this.SelectedMaterialSlot = this.MaterialSlots.FirstOrDefault(slot => selected is not null && slot.Target.GeometryUri == selected.GeometryUri && slot.Target.SlotId == selected.SlotId)
                 ?? this.MaterialSlots.FirstOrDefault();
             var slotIds = inventory.Slots.Select(static slot => slot.SlotId).ToHashSet();

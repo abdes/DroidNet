@@ -13,19 +13,19 @@ namespace Oxygen.Editor.World.Inspector.Controls;
 public sealed partial class AssetPickerContent : UserControl
 {
     /// <summary>Identifies the existing stable catalog groups.</summary>
-    public static readonly DependencyProperty GroupsProperty = Register<object>(nameof(Groups), null);
+    public static readonly DependencyProperty GroupsProperty = Register<object>(nameof(Groups), defaultValue: null);
 
     /// <summary>Identifies the typed material rather than geometry row template.</summary>
-    public static readonly DependencyProperty IsMaterialProperty = Register<bool>(nameof(IsMaterial), false, OnKindChanged);
+    public static readonly DependencyProperty IsMaterialProperty = Register<bool>(nameof(IsMaterial), defaultValue: false, OnKindChanged);
 
     /// <summary>Identifies whether the owning catalog has a notice.</summary>
-    public static readonly DependencyProperty HasNoticeProperty = Register<bool>(nameof(HasNotice), false);
+    public static readonly DependencyProperty HasNoticeProperty = Register<bool>(nameof(HasNotice), defaultValue: false);
 
     /// <summary>Identifies the owning catalog's notice.</summary>
     public static readonly DependencyProperty NoticeTextProperty = Register<string>(nameof(NoticeText), string.Empty);
 
     /// <summary>Identifies the owning catalog's retry action.</summary>
-    public static readonly DependencyProperty RetryCommandProperty = Register<ICommand>(nameof(RetryCommand), null);
+    public static readonly DependencyProperty RetryCommandProperty = Register<ICommand>(nameof(RetryCommand), defaultValue: null);
 
     /// <summary>Initializes a new instance of the <see cref="AssetPickerContent"/> class.</summary>
     public AssetPickerContent()

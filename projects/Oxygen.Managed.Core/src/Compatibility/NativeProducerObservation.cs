@@ -11,5 +11,5 @@ namespace Oxygen.Managed.Core.Compatibility;
 public sealed record NativeProducerObservation(long Revision, string? Fingerprint, ImmutableArray<DiagnosticRecord> Diagnostics)
 {
     /// <summary>Gets the initial state before discovery or a native operation.</summary>
-    public static NativeProducerObservation Unknown { get; } = new(0, null, []);
+    public static NativeProducerObservation Unknown { get; } = new(0, Fingerprint: null, []);
 }

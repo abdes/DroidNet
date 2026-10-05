@@ -33,7 +33,7 @@ internal static class EnvironmentFieldCatalog
             Sky("AerialScatteringStrength", "/sky_atmosphere/aerial_scattering_strength", "Scattering strength", "AerialPerspective", "Aerial Strength"),
             Sky("AerialPerspectiveStartDepthMeters", "/sky_atmosphere/aerial_perspective_start_depth_meters", "Start distance", "AerialPerspective", "Aerial Start"),
             Sky("HeightFogContribution", "/sky_atmosphere/height_fog_contribution", "Height fog contribution", "AerialPerspective", "Height Fog"),
-            new("Sources", SceneDocumentCommandService.DirectionalLight.AtmosphereSlot.Id, InspectorPropertyScope.Environment, "AtmosphereLights", null, "Sources", "Atmosphere Lights Primary and secondary directional light sources.", $"Sun Binding Sun Reference atmosphere_light_slot azimuth elevation direction angular diameter disk luminance transmittance primary secondary SunAzimuth SunElevation AngularSizeRadians DiskScale {string.Join(' ', SourceFields.SelectMany(static entry => entry.Properties).Select(static property => property.Pointer))}"),
+            new("Sources", SceneDocumentCommandService.DirectionalLight.AtmosphereSlot.Id, InspectorPropertyScope.Environment, "AtmosphereLights", group: null, "Sources", "Atmosphere Lights Primary and secondary directional light sources.", $"Sun Binding Sun Reference atmosphere_light_slot azimuth elevation direction angular diameter disk luminance transmittance primary secondary SunAzimuth SunElevation AngularSizeRadians DiskScale {string.Join(' ', SourceFields.SelectMany(static entry => entry.Properties).Select(static property => property.JsonPointer))}"),
             Exposure("ExposureEnabled", "exposure_enabled", "Enabled"),
             Exposure("ExposureMode", "exposure_mode", "Mode", aliases: "Manual ManualCamera Auto"),
             Exposure("ManualExposureEv", "manual_exposure_ev", "Manual EV", applicability: InspectorFieldApplicability.ManualExposure, aliases: "ManualExposure EV100"),
@@ -61,7 +61,7 @@ internal static class EnvironmentFieldCatalog
             Post("Saturation", "saturation", "Saturation", "ColorGrading", "Color and lens-style post-process adjustments.", InspectorFieldApplicability.ToneMapping),
             Post("Contrast", "contrast", "Contrast", "ColorGrading", "Color and lens-style post-process adjustments.", InspectorFieldApplicability.ToneMapping),
             Post("VignetteIntensity", "vignette_intensity", "Vignette", "ColorGrading", "Color and lens-style post-process adjustments.", InspectorFieldApplicability.ToneMapping),
-            new("BackgroundColor", SceneDocumentCommandService.SceneEnvironment.BackgroundColor.Id, InspectorPropertyScope.Environment, "Background", null, "Color", "Background Fallback color when atmosphere rendering is disabled.", "BackgroundColor Linear RGB"),
+            new("BackgroundColor", SceneDocumentCommandService.SceneEnvironment.BackgroundColor.Id, InspectorPropertyScope.Environment, "Background", group: null, "Color", "Background Fallback color when atmosphere rendering is disabled.", "BackgroundColor Linear RGB"),
         ]);
 
     private static ReadOnlyCollection<AtmosphereSourceFieldIdentity> CreateSourceFields()
@@ -127,7 +127,7 @@ internal static class EnvironmentFieldCatalog
             new PropertyId(SceneDocumentCommandService.SceneEnvironmentKind, $"/post_process/{pointer}"),
             InspectorPropertyScope.PostProcessing,
             section,
-            null,
+group: null,
             label,
             $"{section} {description}",
             $"{key} {aliases}",

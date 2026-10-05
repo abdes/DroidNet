@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Editor.WorldEditor.Documents.Commands;
+
+namespace Oxygen.Editor.World.Documents.Commands;
 
 /// <summary>
 /// Factory helpers for scene command results that carry values.
@@ -15,7 +17,7 @@ public static class SceneCommandResults
     /// <typeparam name="T">The produced value type.</typeparam>
     /// <param name="value">The produced value.</param>
     /// <returns>The command result.</returns>
-    public static SceneValueCommandResult<T> Success<T>(T value) => new(true, value);
+    public static SceneValueCommandResult<T> Success<T>(T value) => new(Succeeded: true, value);
 
     /// <summary>
     /// Creates a failed result.
@@ -23,5 +25,5 @@ public static class SceneCommandResults
     /// <typeparam name="T">The produced value type.</typeparam>
     /// <param name="operationResultId">The visible operation-result identity, when one was published.</param>
     /// <returns>The command result.</returns>
-    public static SceneValueCommandResult<T> Failure<T>(Guid? operationResultId = null) => new(false, default, operationResultId);
+    public static SceneValueCommandResult<T> Failure<T>(Guid? operationResultId = null) => new(Succeeded: false, default, operationResultId);
 }

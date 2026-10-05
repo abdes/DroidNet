@@ -35,11 +35,13 @@ public sealed class ContextMenuTests : VisualUserInterfaceTests
 
         _ = ContextMenu.Show(trigger, CreateMenuSource("Open"));
 
-        harness.HostMock.Verify(host => host.ShowAt(
+        harness.HostMock.Verify(
+            host => host.ShowAt(
             trigger,
             It.IsAny<Windows.Foundation.Point>(),
-            MenuNavigationMode.KeyboardInput), Times.Once);
-        ContextMenu.SetMenuSource(trigger, null);
+            MenuNavigationMode.KeyboardInput),
+            Times.Once);
+        ContextMenu.SetMenuSource(trigger, value: null);
         return Task.CompletedTask;
     });
 
@@ -52,11 +54,13 @@ public sealed class ContextMenuTests : VisualUserInterfaceTests
 
         _ = ContextMenu.Show(trigger, CreateMenuSource("Open"), new Windows.Foundation.Point(12, 23));
 
-        harness.HostMock.Verify(host => host.ShowAt(
+        harness.HostMock.Verify(
+            host => host.ShowAt(
             trigger,
             It.Is<Windows.Foundation.Point>(point => point.X == 13 && point.Y == 24),
-            MenuNavigationMode.PointerInput), Times.Once);
-        ContextMenu.SetMenuSource(trigger, null);
+            MenuNavigationMode.PointerInput),
+            Times.Once);
+        ContextMenu.SetMenuSource(trigger, value: null);
         return Task.CompletedTask;
     });
 
@@ -70,11 +74,13 @@ public sealed class ContextMenuTests : VisualUserInterfaceTests
 
         _ = ContextMenu.Show(trigger, CreateMenuSource("Open"), position);
 
-        harness.HostMock.Verify(host => host.ShowAt(
+        harness.HostMock.Verify(
+            host => host.ShowAt(
             trigger,
             It.Is<Windows.Foundation.Point>(point => point.X == position.X + 1 && point.Y == position.Y + 1),
-            MenuNavigationMode.PointerInput), Times.Once);
-        ContextMenu.SetMenuSource(trigger, null);
+            MenuNavigationMode.PointerInput),
+            Times.Once);
+        ContextMenu.SetMenuSource(trigger, value: null);
         return Task.CompletedTask;
     });
 
@@ -89,7 +95,7 @@ public sealed class ContextMenuTests : VisualUserInterfaceTests
         ContextMenu.Close(trigger);
 
         harness.HostMock.Verify(host => host.Dismiss(MenuDismissKind.Programmatic), Times.Once);
-        ContextMenu.SetMenuSource(trigger, null);
+        ContextMenu.SetMenuSource(trigger, value: null);
         return Task.CompletedTask;
     });
 

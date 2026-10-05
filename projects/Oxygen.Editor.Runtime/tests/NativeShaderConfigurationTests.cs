@@ -19,7 +19,7 @@ public sealed class NativeShaderConfigurationTests
         using var fixture = new Fixture();
         var settings = new EngineSettings();
         settings.Renderer.PathFinder.WorkspaceRootPath = fixture.Root;
-        var config = NativeEngineSession.CreateConfig(settings, null, fixture.RuntimeLibrary);
+        var config = NativeEngineSession.CreateConfig(settings, editorCVarsArchivePath: null, fixture.RuntimeLibrary);
         _ = config.Engine.PathFinder.ShaderLibraryPath.Should().Be(fixture.Archive);
         _ = config.Renderer.PathFinder.ShaderLibraryPath.Should().Be(fixture.Archive);
         _ = settings.Engine.PathFinder.ShaderLibraryPath.Should().BeNull();
@@ -34,7 +34,7 @@ public sealed class NativeShaderConfigurationTests
         var settings = new EngineSettings();
         settings.Engine.PathFinder.ShaderLibraryPath = "custom/engine.bin";
         settings.Renderer.PathFinder.ShaderLibraryPath = "custom/renderer.bin";
-        var config = NativeEngineSession.CreateConfig(settings, null, fixture.RuntimeLibrary);
+        var config = NativeEngineSession.CreateConfig(settings, editorCVarsArchivePath: null, fixture.RuntimeLibrary);
         _ = config.Engine.PathFinder.ShaderLibraryPath.Should().Be("custom/engine.bin");
         _ = config.Renderer.PathFinder.ShaderLibraryPath.Should().Be("custom/renderer.bin");
     }
@@ -45,7 +45,7 @@ public sealed class NativeShaderConfigurationTests
     {
         using var fixture = new Fixture();
         File.Delete(fixture.Archive);
-        Action configure = () => _ = NativeEngineSession.CreateConfig(new EngineSettings(), null, fixture.RuntimeLibrary);
+        Action configure = () => _ = NativeEngineSession.CreateConfig(new EngineSettings(), editorCVarsArchivePath: null, fixture.RuntimeLibrary);
         _ = configure.Should().Throw<FileNotFoundException>().Which.FileName.Should().Be(fixture.Archive);
     }
 

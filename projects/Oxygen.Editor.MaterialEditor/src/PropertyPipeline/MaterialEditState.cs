@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.MaterialEditor.PropertyPipeline;
 using Oxygen.Managed.Assets.Authoring.Materials;
 
 namespace Oxygen.Editor.MaterialEditor;

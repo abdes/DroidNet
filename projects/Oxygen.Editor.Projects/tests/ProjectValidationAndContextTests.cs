@@ -4,13 +4,13 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
+using DroidNet.Storage;
+using DroidNet.Storage.Native;
 using DroidNet.TestHelpers;
 using Moq;
 using Oxygen.Editor.Data.Models;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.World;
-using DroidNet.Storage;
-using DroidNet.Storage.Native;
 using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.Projects.Tests;
@@ -130,7 +130,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
         var resolver = new AuthoringTargetResolver();
         var context = CreateContext("Project");
 
-        var target = resolver.ResolveCreateTarget(context, AuthoringAssetKind.Material, null);
+        var target = resolver.ResolveCreateTarget(context, AuthoringAssetKind.Material, selection: null);
 
         _ = target.ProjectRelativeFolder.Should().Be("Content/Materials");
         _ = target.FolderAssetUri.Should().Be(new Uri("asset:///Content/Materials"));
@@ -523,15 +523,15 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
         var document = new Mock<IDocument>();
 
         storage.Setup(s => s.Normalize("project")).Returns(@"C:\Project");
-        storage.Setup(s => s.FolderExistsAsync(@"C:\Project")).ReturnsAsync(true);
+        storage.Setup(s => s.FolderExistsAsync(@"C:\Project")).ReturnsAsync(value: true);
         storage.Setup(s => s.NormalizeRelativeTo(@"C:\Project", Constants.ProjectFileName))
             .Returns(@"C:\Project\Project.oxy");
-        storage.Setup(s => s.DocumentExistsAsync(@"C:\Project\Project.oxy")).ReturnsAsync(true);
+        storage.Setup(s => s.DocumentExistsAsync(@"C:\Project\Project.oxy")).ReturnsAsync(value: true);
         storage.Setup(s => s.GetDocumentFromPathAsync(@"C:\Project\Project.oxy", It.IsAny<CancellationToken>()))
             .ReturnsAsync(document.Object);
         storage.Setup(s => s.NormalizeRelativeTo(@"C:\Project", "Content"))
             .Returns(@"C:\Project\Content");
-        storage.Setup(s => s.FolderExistsAsync(@"C:\Project\Content")).ReturnsAsync(true);
+        storage.Setup(s => s.FolderExistsAsync(@"C:\Project\Content")).ReturnsAsync(value: true);
 
         return (storage, document);
     }

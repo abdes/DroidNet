@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
-using Oxygen.Managed.Core;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World;
 

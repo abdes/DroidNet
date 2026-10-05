@@ -457,6 +457,7 @@ public sealed class SceneDescriptorGeneratorTests
         _ = document.RootElement.GetProperty("environment").GetProperty("post_process_volume")
             .GetProperty("exposure_mode").GetInt32().Should().Be((int)ExposureMode.Auto);
     }
+
     /// <summary>Cooked scenes retain the captured skylight supplied by the live editor.</summary>
     /// <param name="atmosphereEnabled">Whether the captured source contains an atmosphere.</param>
     /// <returns>The asynchronous descriptor check.</returns>
@@ -601,6 +602,7 @@ public sealed class SceneDescriptorGeneratorTests
             }
         }
     }
+
     /// <summary>Rejects invalid saved Aerial Start values with a stable property navigation target.</summary>
     /// <param name="value">The saved invalid value.</param>
     /// <returns>The asynchronous test operation.</returns>

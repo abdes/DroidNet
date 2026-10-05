@@ -254,7 +254,7 @@ public abstract partial class DynamicTreeViewModel
             if (multipleSelection.SelectedIndices.Count == included.Length)
             {
                 multipleSelection.ClearSelection();
-                this.SetActiveItem(null);
+                this.SetActiveItem(item: null);
             }
             else
             {
@@ -274,7 +274,7 @@ public abstract partial class DynamicTreeViewModel
         {
             if (ReferenceEquals(this.ActiveItem, item))
             {
-                this.SetActiveItem(null);
+                this.SetActiveItem(item: null);
             }
 
             this.SelectionModel?.ClearSelection(item);
@@ -295,7 +295,7 @@ public abstract partial class DynamicTreeViewModel
 
         this.WithSelectionBatch(() =>
         {
-            this.SetActiveItem(null);
+            this.SetActiveItem(item: null);
             this.SelectionModel?.ClearSelection();
         });
     }
@@ -483,7 +483,7 @@ public abstract partial class DynamicTreeViewModel
             {
                 if (ReferenceEquals(this.ActiveItem, item))
                 {
-                    this.SetActiveItem(null);
+                    this.SetActiveItem(item: null);
                 }
 
                 selection.ClearSelection(item);
@@ -558,7 +558,7 @@ public abstract partial class DynamicTreeViewModel
             {
                 if (ReferenceEquals(this.ActiveItem, args.Item))
                 {
-                    this.SetActiveItem(null);
+                    this.SetActiveItem(item: null);
                 }
 
                 sm.ClearSelection(args.Item);
@@ -677,7 +677,7 @@ public abstract partial class DynamicTreeViewModel
     {
         if (this.ActiveItem is { IsSelected: false })
         {
-            this.SetActiveItem(null);
+            this.SetActiveItem(item: null);
         }
     }
 

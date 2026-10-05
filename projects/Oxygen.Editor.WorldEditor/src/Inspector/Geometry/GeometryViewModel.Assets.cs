@@ -87,6 +87,7 @@ public sealed partial class GeometryViewModel
         {
             _ = this.RefreshMaterialSlotsAsync();
         }
+
         if (!this.IsMixed && Uri.TryCreate(this.SelectedAssetUriString, UriKind.Absolute, out var selected)
             && assets.FirstOrDefault(asset => asset.IdentityUri == selected || asset.CookedUri == selected) is { } current)
         {

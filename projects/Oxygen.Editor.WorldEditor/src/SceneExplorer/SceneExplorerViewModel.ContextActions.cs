@@ -59,8 +59,8 @@ public partial class SceneExplorerViewModel
         if (!this.contextToolbarCommands.TryGetValue(kind, out var command))
         {
             command = new AsyncRelayCommand(
-                () => this.ExecuteContextActionAsync(kind, this.CaptureExplorerContext(null, background: false)),
-                () => this.GetContextDisabledReason(kind, this.CaptureExplorerContext(null, background: false)) is null);
+                () => this.ExecuteContextActionAsync(kind, this.CaptureExplorerContext(anchor: null, background: false)),
+                () => this.GetContextDisabledReason(kind, this.CaptureExplorerContext(anchor: null, background: false)) is null);
             this.contextToolbarCommands.Add(kind, command);
         }
 
@@ -183,7 +183,7 @@ public partial class SceneExplorerViewModel
 
     private bool CanRemoveContextItems()
         => this.GetContextDisabledReason(SceneExplorerCommandKind.Delete,
-            this.CaptureExplorerContext(null, background: false)) is null;
+            this.CaptureExplorerContext(anchor: null, background: false)) is null;
 
     private Task StageExplorerClipboardAsync(IReadOnlyList<ITreeItem> items, bool cut)
     {
@@ -566,7 +566,6 @@ public partial class SceneExplorerViewModel
                             break;
                         }
                     }
-
                 }
 
                 for (var current = resolvedParent; current is not null; current = current.Parent)
@@ -686,7 +685,7 @@ public partial class SceneExplorerViewModel
             case SceneExplorerCommandKind.MoveToSceneRoot:
                 result = target!.Parent is FolderAdapter sourceFolder && ((SceneNodeAdapter)target).AttachedObject.Parent is null
                     ? await this.commandService.RemoveNodesFromFolderAsync(context.Document, nodes, sourceFolder.Id).ConfigureAwait(true)
-                    : await this.commandService.ReparentNodesAsync(context.Document, nodes, null, preserveWorldTransform: false).ConfigureAwait(true);
+                    : await this.commandService.ReparentNodesAsync(context.Document, nodes, newParentNodeId: null, preserveWorldTransform: false).ConfigureAwait(true);
                 break;
             case SceneExplorerCommandKind.Expand:
                 await this.ExpandItemAsync(context.Anchor!).ConfigureAwait(true);
@@ -758,6 +757,7 @@ public partial class SceneExplorerViewModel
             parentId = node?.AttachedObject.Id;
             node = null;
         }
+
         if (node is null && folder is not null)
         {
             for (var owner = folder.Parent; owner is not null; owner = owner.Parent)
@@ -769,6 +769,7 @@ public partial class SceneExplorerViewModel
                 }
             }
         }
+
         return (parentId, folder?.Id, !asChild ? node?.AttachedObject.Id : null);
     }
 

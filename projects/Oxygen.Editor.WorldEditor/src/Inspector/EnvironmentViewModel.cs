@@ -114,7 +114,7 @@ public sealed class EnvironmentViewModel : ComponentPropertyEditor, IDisposable,
     {
         if (items.Count > 0)
         {
-            this.SetScene(null);
+            this.SetScene(value: null);
         }
         else
         {

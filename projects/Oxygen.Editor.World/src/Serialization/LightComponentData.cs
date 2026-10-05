@@ -25,7 +25,6 @@ public abstract record LightComponentData : ComponentData
     /// </summary>
     public Vector3 Color { get; init; } = Vector3.One;
 
-
     /// <summary>
     /// Gets a value indicating whether the light casts shadows.
     /// </summary>

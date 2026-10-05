@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -248,7 +248,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
             return;
         }
 
-        var edit = PropertyEdit.Single(SceneDocumentCommandService.Geometry.GeometryUri, newUri);
+        var edit = PropertyEdit.SingleEdit(SceneDocumentCommandService.Geometry.GeometryUri, newUri);
         var result = await this.commandService.EditPropertiesAsync(
             context,
             nodes.ConvertAll(static node => node.Id),

@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -36,7 +36,6 @@ public sealed partial class MaterialDocumentService(
     IOperationResultPublisher? operationResults = null,
     ILoggerFactory? loggerFactory = null) : IMaterialDocumentService, IMaterialPropertyEditService
 {
-
     private readonly IMaterialSourcePathResolver pathResolver = pathResolver ?? throw new ArgumentNullException(nameof(pathResolver));
     private readonly IMaterialCookService cookService = cookService ?? throw new ArgumentNullException(nameof(cookService));
     private readonly IOperationResultPublisher? operationResults = operationResults;

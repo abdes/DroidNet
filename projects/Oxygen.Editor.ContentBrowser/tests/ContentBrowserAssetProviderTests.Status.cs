@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -194,8 +194,8 @@ public sealed partial class ContentBrowserAssetProviderTests
         _ = item.CookStatus!.Freshness.Should().Be(AssetCookFreshness.Unknown);
         _ = item.CookStatus.OutputAvailability.Should().Be(CookedOutputAvailability.Unknown);
         _ = item.CookedPath.Should().BeNull();
-        _ = AssetStatusPresentation.GetText(item.CookStatus, null).Should().Be("Status unavailable");
-        _ = AssetStatusPresentation.GetDescription(item.CookStatus, null).Should().Be(failure);
+        _ = AssetStatusPresentation.GetText(item.CookStatus, activity: null).Should().Be("Status unavailable");
+        _ = AssetStatusPresentation.GetDescription(item.CookStatus, activity: null).Should().Be(failure);
     }
 
     /// <summary>Awaitable shutdown drains a cancelled status read before its owner removes retained output.</summary>

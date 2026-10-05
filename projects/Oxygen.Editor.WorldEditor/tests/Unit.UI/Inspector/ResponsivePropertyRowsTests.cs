@@ -203,6 +203,7 @@ public sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
         {
             InspectorRgbPresentation.Configure(vector);
         }
+
         AutomationProperties.SetName(vector, kind == "position" ? "Position, metres" : $"{kind}, RGB");
         var card = new PropertyCard
         {

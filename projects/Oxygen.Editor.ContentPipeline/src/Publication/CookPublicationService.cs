@@ -51,7 +51,7 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
         {
             var snapshot = result.InputSnapshot ?? throw new InvalidOperationException("Publication requires captured saved inputs.");
             var sealedRoots = staging.SealRoots();
-            if (sealedRoots.Any(root => !provenance.Roots.Any(proof => proof.Mount == root.Name && proof.SourceKey == root.SourceKey
+            if (sealedRoots.Any(root => !provenance.Roots.Any(proof => string.Equals(proof.Mount, root.Name, StringComparison.Ordinal) && proof.SourceKey == root.SourceKey
                 && string.Equals(proof.IndexSha256, root.IndexSha256, StringComparison.OrdinalIgnoreCase))))
             {
                 throw new InvalidDataException("Product provenance does not describe the final validated candidate roots.");
@@ -180,7 +180,7 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
     {
         var names = selected.AuthoringMounts.Select(static mount => mount.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var owned = baseline.Roots.Where(root => root.Owner == CookPublicationRootOwner.Project && names.Contains(root.Name)).ToArray();
-        var products = baseline.ProductState.Products.Where(product => product.Outputs.All(output => owned.Any(root => root.Name == output.RootMount))).ToImmutableArray();
+        var products = baseline.ProductState.Products.Where(product => product.Outputs.All(output => owned.Any(root => string.Equals(root.Name, output.RootMount, StringComparison.Ordinal)))).ToImmutableArray();
         return new(CookPublicationDocument.CurrentVersion, selected.ProjectId, operation.OperationId, DateTimeOffset.UtcNow,
             CookPublicationDocument.ConfigurationIdentity(selected), libraries.OrderBindings(owned), products, baseline.Document?.CookInputs);
     }
@@ -190,8 +190,8 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
     {
         coordinator.VerifyWriter(operation);
         var document = BuildMetadataDocument(operation, operation.Project, baseline, libraries);
-        if ((baseline.Document is { } current && current.MountConfigurationIdentity == document.MountConfigurationIdentity
-                && current.Roots.SequenceEqual(document.Roots)) || (baseline.Document is null && document.Roots.IsEmpty))
+        if ((baseline.Document is { } current && string.Equals(current.MountConfigurationIdentity, document.MountConfigurationIdentity
+, StringComparison.Ordinal) && current.Roots.SequenceEqual(document.Roots)) || (baseline.Document is null && document.Roots.IsEmpty))
         {
             return result;
         }

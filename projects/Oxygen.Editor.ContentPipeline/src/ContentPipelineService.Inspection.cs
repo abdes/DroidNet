@@ -126,8 +126,6 @@ public sealed partial class ContentPipelineService
             .GroupBy(static association => association.CookedAssetUri)
             .Where(static group => group.Take(2).Count() == 1)
             .Select(static group => group.Single()).ToArray();
-
-
     }
 
     private static bool IsInspectedAssetInScope(CookedAssetEntry asset, InspectionRoot root, IReadOnlyList<CookedAssetProvenance> provenance)

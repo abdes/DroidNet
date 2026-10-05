@@ -9,9 +9,9 @@ namespace Oxygen.Editor.ContentBrowser.AssetIdentity;
 /// </summary>
 public interface IContentBrowserAssetProvider
 {
-    IObservable<IReadOnlyList<ContentBrowserAssetItem>> Items { get; }
+    public IObservable<IReadOnlyList<ContentBrowserAssetItem>> Items { get; }
 
-    Task RefreshAsync(AssetBrowserFilter filter, CancellationToken cancellationToken = default);
+    public Task RefreshAsync(AssetBrowserFilter filter, CancellationToken cancellationToken = default);
 
-    Task<ContentBrowserAssetItem?> ResolveAsync(Uri uri, CancellationToken cancellationToken = default);
+    public Task<ContentBrowserAssetItem?> ResolveAsync(Uri uri, CancellationToken cancellationToken = default);
 }

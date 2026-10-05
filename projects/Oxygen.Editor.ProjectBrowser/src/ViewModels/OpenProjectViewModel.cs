@@ -10,14 +10,14 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI.Collections;
 using DroidNet.Routing;
+using DroidNet.Storage;
+using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Editor.ProjectBrowser.Activation;
 using Oxygen.Editor.ProjectBrowser.Projects;
-using DroidNet.Storage;
-using DroidNet.Storage.Native;
+using Oxygen.Managed.Core.Diagnostics;
 #pragma warning disable IDE0001 // Simplify Names
 using IStorageItem = DroidNet.Storage.IStorageItem;
 #pragma warning restore IDE0001 // Simplify Names

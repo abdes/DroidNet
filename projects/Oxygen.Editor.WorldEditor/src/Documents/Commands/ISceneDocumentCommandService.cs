@@ -34,8 +34,13 @@ public interface ISceneDocumentCommandService
     /// <param name="parentFolderId">Destination grouping.</param>
     /// <param name="preserveWorld">Explicit preserve-world intent; false is the Explorer default.</param>
     /// <returns>A disabled reason, or null when the entire batch is valid.</returns>
-    public string? ValidateExplorerPaste(SceneDocumentCommandContext context, SceneExplorerClipboard payload,
-        bool cut, Guid? parentNodeId, Guid? parentFolderId, bool preserveWorld);
+    public string? ValidateExplorerPaste(
+        SceneDocumentCommandContext context,
+        SceneExplorerClipboard payload,
+        bool cut,
+        Guid? parentNodeId,
+        Guid? parentFolderId,
+        bool preserveWorld);
 
     /// <summary>Commits a validated mixed clipboard batch atomically, recording one undo step.</summary>
     /// <param name="context">The destination document.</param>
@@ -46,9 +51,15 @@ public interface ISceneDocumentCommandService
     /// <param name="preserveWorld">Explicit preserve-world intent; false is the Explorer default.</param>
     /// <param name="insertAfterNodeId">Optional sibling anchor.</param>
     /// <returns>The whole transaction's result.</returns>
-    public Task<SceneCommandResult> PasteExplorerItemsAsync(SceneDocumentCommandContext context,
-        SceneExplorerClipboard payload, bool cut, Guid? parentNodeId, Guid? parentFolderId,
-        bool preserveWorld, Guid? insertAfterNodeId = null);
+    public Task<SceneCommandResult> PasteExplorerItemsAsync(
+        SceneDocumentCommandContext context,
+        SceneExplorerClipboard payload,
+        bool cut,
+        Guid? parentNodeId,
+        Guid? parentFolderId,
+        bool preserveWorld,
+        Guid? insertAfterNodeId = null);
+
     /// <summary>Acquires the scene's existing save gate and captures its saved-input state on the UI thread.</summary>
     /// <param name="context">The still-current document and scene owner.</param>
     /// <param name="cancellationToken">Cancels waiting for an in-flight save.</param>

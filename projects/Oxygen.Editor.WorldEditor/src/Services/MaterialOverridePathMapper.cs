@@ -15,8 +15,8 @@ internal static class MaterialOverridePathMapper
             return null;
         }
 
-        if (!materialUri.IsAbsoluteUri || materialUri.Scheme != AssetUriHelper.Scheme
-            || materialUri.Query.Length != 0 || materialUri.Fragment.Length != 0)
+        if (!materialUri.IsAbsoluteUri || !string.Equals(materialUri.Scheme, AssetUriHelper.Scheme
+, StringComparison.Ordinal) || materialUri.Query.Length != 0 || materialUri.Fragment.Length != 0)
         {
             throw new ArgumentException("A material requires an absolute asset URI without query or fragment.", nameof(materialUri));
         }

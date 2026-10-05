@@ -26,5 +26,4 @@ public sealed record PointLightData : LightComponentData
     /// Gets the source radius, in meters.
     /// </summary>
     public float SourceRadius { get; init; }
-
 }

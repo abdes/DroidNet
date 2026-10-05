@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using DroidNet.Storage;
+using Oxygen.Editor.MaterialEditor.PropertyPipeline;
 using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -43,7 +44,7 @@ public sealed partial class MaterialDocumentServiceTests
         using var workspace = new TempWorkspace();
         var service = CreateService(workspace);
         var original = await service.CreateAsync(new Uri("asset:///Content/Materials/Original.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = await service.EditPropertiesAsync(original.DocumentId, PropertyEdit.Single(MaterialDescriptors.Roughness, 0.8f), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await service.EditPropertiesAsync(original.DocumentId, PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, 0.8f), this.TestContext.CancellationToken).ConfigureAwait(false);
         var copyUri = await service.SaveCopyAsync(original.DocumentId, new Uri("asset:///Content/Materials/Copy.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var copy = await service.OpenAsync(copyUri, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = copy.MaterialGuid.Should().NotBe(original.MaterialGuid);
@@ -68,9 +69,9 @@ public sealed partial class MaterialDocumentServiceTests
         var original = await service.CreateAsync(new Uri("asset:///Content/Materials/Reload.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var externalWriter = CreateService(workspace);
         var external = await externalWriter.OpenAsync(original.MaterialUri, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = await externalWriter.EditPropertiesAsync(external.DocumentId, PropertyEdit.Single(MaterialDescriptors.Roughness, 0.2f), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await externalWriter.EditPropertiesAsync(external.DocumentId, PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, 0.2f), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await externalWriter.SaveAsync(external.DocumentId, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = await service.EditPropertiesAsync(original.DocumentId, PropertyEdit.Single(MaterialDescriptors.Roughness, 0.8f), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await service.EditPropertiesAsync(original.DocumentId, PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, 0.8f), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var reloaded = await service.ReloadAsync(original.DocumentId, this.TestContext.CancellationToken).ConfigureAwait(false);
 

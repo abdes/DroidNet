@@ -4,10 +4,10 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
-using Oxygen.Managed.Core;
+using DroidNet.Storage;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Utils;
-using DroidNet.Storage;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects;
 
@@ -101,14 +101,14 @@ public sealed class ProjectCreationService(
                 .ConfigureAwait(false);
             await this.ValidateTemplateDescriptorAsync(templateFolder, sourceFolder, templateDescriptor, cancellationToken)
                 .ConfigureAwait(false);
-            if (await this.ContainsProjectManifestAsync(sourceFolder, cancellationToken).ConfigureAwait(false))
+            if (await ContainsProjectManifestAsync(sourceFolder, cancellationToken).ConfigureAwait(false))
             {
                 return ProjectCreationResult.Failure(
                     projectRoot,
                     $"Project template source folder must not contain '{Constants.ProjectFileName}'.");
             }
 
-            var missingFolder = await this.FindMissingRequiredTemplateFolderAsync(sourceFolder, cancellationToken)
+            var missingFolder = await FindMissingRequiredTemplateFolderAsync(sourceFolder, cancellationToken)
                 .ConfigureAwait(false);
             if (missingFolder is not null)
             {
@@ -122,13 +122,13 @@ public sealed class ProjectCreationService(
             rootCreated = !await projectFolder.ExistsAsync().ConfigureAwait(false);
             await projectFolder.CreateAsync(cancellationToken).ConfigureAwait(false);
 
-            await this.CopyTemplatePayloadAsync(sourceFolder, projectFolder, createdItems, cancellationToken)
+            await CopyTemplatePayloadAsync(sourceFolder, projectFolder, createdItems, cancellationToken)
                 .ConfigureAwait(false);
-            await this.EnsureRequiredFolderSkeletonAsync(projectFolder, createdItems, cancellationToken)
+            await EnsureRequiredFolderSkeletonAsync(projectFolder, createdItems, cancellationToken)
                 .ConfigureAwait(false);
             var defaultSceneId = await this.ReadStarterSceneIdAsync(projectFolder, templateDescriptor, cancellationToken)
                 .ConfigureAwait(false);
-            await this.WriteProjectManifestAsync(projectFolder, request, templateDescriptor, defaultSceneId, cancellationToken)
+            await WriteProjectManifestAsync(projectFolder, request, templateDescriptor, defaultSceneId, cancellationToken)
                 .ConfigureAwait(false);
 
             var validationResult = await validation.ValidateAsync(projectRoot, cancellationToken).ConfigureAwait(false);
@@ -195,11 +195,29 @@ public sealed class ProjectCreationService(
         }
     }
 
-    [SuppressMessage(
-        "Performance",
-        "CA1822:Mark members as static",
-        Justification = "Instance helper keeps the recursive template-copy workflow grouped with this service.")]
-    private async Task CopyTemplatePayloadAsync(
+    private static Guid? TryReadSceneId(string sceneJson)
+    {
+        // The scene schema requires an identity; tolerate payloads without one so creation
+        // leaves the default unset instead of guessing an identity for the starter scene.
+        try
+        {
+            using var document = JsonDocument.Parse(sceneJson);
+            var root = document.RootElement;
+            return root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty(SceneIdPropertyName, out var idProperty)
+                && idProperty.ValueKind == JsonValueKind.String
+                && Guid.TryParse(idProperty.GetString(), out var sceneId)
+                && sceneId != Guid.Empty
+                ? sceneId
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static async Task CopyTemplatePayloadAsync(
         IFolder templateFolder,
         IFolder projectFolder,
         ICollection<IStorageItem> createdItems,
@@ -210,7 +228,7 @@ public sealed class ProjectCreationService(
             var destination = await projectFolder.GetFolderAsync(folder.Name, cancellationToken).ConfigureAwait(false);
             await destination.CreateAsync(cancellationToken).ConfigureAwait(false);
             createdItems.Add(destination);
-            await this.CopyTemplatePayloadAsync(folder, destination, createdItems, cancellationToken)
+            await CopyTemplatePayloadAsync(folder, destination, createdItems, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -231,7 +249,7 @@ public sealed class ProjectCreationService(
         }
     }
 
-    private async Task WriteProjectManifestAsync(
+    private static async Task WriteProjectManifestAsync(
         IFolder projectFolder,
         ProjectCreationRequest request,
         TemplateDescriptor templateDescriptor,
@@ -280,7 +298,7 @@ public sealed class ProjectCreationService(
             return null;
         }
 
-        var relativePath = this.ResolveTemplateAssetRelativePath(
+        var relativePath = ResolveTemplateAssetRelativePath(
             descriptor,
             descriptor.StarterScene.AssetUri,
             descriptor.StarterScene.RelativePath,
@@ -296,28 +314,6 @@ public sealed class ProjectCreationService(
 
         var sceneJson = await sceneDocument.ReadAllTextAsync(cancellationToken).ConfigureAwait(false);
         return TryReadSceneId(sceneJson);
-    }
-
-    private static Guid? TryReadSceneId(string sceneJson)
-    {
-        // The scene schema requires an identity; tolerate payloads without one so creation
-        // leaves the default unset instead of guessing an identity for the starter scene.
-        try
-        {
-            using var document = JsonDocument.Parse(sceneJson);
-            var root = document.RootElement;
-            return root.ValueKind == JsonValueKind.Object
-                && root.TryGetProperty(SceneIdPropertyName, out var idProperty)
-                && idProperty.ValueKind == JsonValueKind.String
-                && Guid.TryParse(idProperty.GetString(), out var sceneId)
-                && sceneId != Guid.Empty
-                ? sceneId
-                : null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
     }
 
     private async Task ValidateTemplateDescriptorAsync(
@@ -375,7 +371,7 @@ public sealed class ProjectCreationService(
             throw new InvalidDataException("Project template StarterScene is required.");
         }
 
-        var starterSceneRelativePath = this.ResolveTemplateAssetRelativePath(
+        var starterSceneRelativePath = ResolveTemplateAssetRelativePath(
             descriptor,
             descriptor.StarterScene.AssetUri,
             descriptor.StarterScene.RelativePath,
@@ -386,7 +382,7 @@ public sealed class ProjectCreationService(
         foreach (var starterContent in descriptor.StarterContent)
         {
             RequireDescriptorText(starterContent.Kind, "StarterContent.Kind");
-            var relativePath = this.ResolveTemplateAssetRelativePath(
+            var relativePath = ResolveTemplateAssetRelativePath(
                 descriptor,
                 starterContent.AssetUri,
                 starterContent.RelativePath,
@@ -432,7 +428,7 @@ public sealed class ProjectCreationService(
         }
     }
 
-    private string ResolveTemplateAssetRelativePath(
+    private static string ResolveTemplateAssetRelativePath(
         TemplateDescriptor descriptor,
         Uri assetUri,
         string? declaredRelativePath,
@@ -453,12 +449,8 @@ public sealed class ProjectCreationService(
         var mountName = assetPath[..slash];
         var mountRelativePath = NormalizeTemplatePath(assetPath[(slash + 1)..]);
         var mount = descriptor.AuthoringMounts.FirstOrDefault(mount =>
-            string.Equals(mount.Name, mountName, StringComparison.OrdinalIgnoreCase));
-        if (mount is null)
-        {
-            throw new InvalidDataException($"Project template {fieldName} URI targets unknown authoring mount '{mountName}'.");
-        }
-
+            string.Equals(mount.Name, mountName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidDataException($"Project template {fieldName} URI targets unknown authoring mount '{mountName}'.");
         var expectedRelativePath = NormalizeTemplatePath(Path.Combine(mount.RelativePath, mountRelativePath));
         if (!string.IsNullOrWhiteSpace(declaredRelativePath))
         {
@@ -555,53 +547,6 @@ public sealed class ProjectCreationService(
     private static string NormalizeTemplatePath(string path)
         => path.Replace('\\', '/').Trim().Trim('/');
 
-    private async Task<string?> FindMissingRequiredTemplateFolderAsync(IFolder sourceFolder, CancellationToken cancellationToken)
-    {
-        foreach (var relativePath in RequiredTemplateFolders)
-        {
-            var folder = await GetNestedFolderAsync(sourceFolder, relativePath, cancellationToken).ConfigureAwait(false);
-            if (!await folder.ExistsAsync().ConfigureAwait(false))
-            {
-                return relativePath;
-            }
-        }
-
-        return null;
-    }
-
-    private async Task EnsureRequiredFolderSkeletonAsync(
-        IFolder projectFolder,
-        ICollection<IStorageItem> createdItems,
-        CancellationToken cancellationToken)
-    {
-        foreach (var relativePath in RequiredTemplateFolders)
-        {
-            _ = await EnsureNestedFolderAsync(projectFolder, relativePath, createdItems, cancellationToken)
-                .ConfigureAwait(false);
-        }
-    }
-
-    private async Task<bool> ContainsProjectManifestAsync(IFolder folder, CancellationToken cancellationToken)
-    {
-        await foreach (var document in folder.GetDocumentsAsync(cancellationToken).ConfigureAwait(false))
-        {
-            if (string.Equals(document.Name, Constants.ProjectFileName, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        await foreach (var child in folder.GetFoldersAsync(cancellationToken).ConfigureAwait(false))
-        {
-            if (await this.ContainsProjectManifestAsync(child, cancellationToken).ConfigureAwait(false))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     private static async Task<IFolder> GetNestedFolderAsync(
         IFolder root,
         string relativePath,
@@ -636,6 +581,53 @@ public sealed class ProjectCreationService(
         }
 
         return current;
+    }
+
+    private static async Task<string?> FindMissingRequiredTemplateFolderAsync(IFolder sourceFolder, CancellationToken cancellationToken)
+    {
+        foreach (var relativePath in RequiredTemplateFolders)
+        {
+            var folder = await GetNestedFolderAsync(sourceFolder, relativePath, cancellationToken).ConfigureAwait(false);
+            if (!await folder.ExistsAsync().ConfigureAwait(false))
+            {
+                return relativePath;
+            }
+        }
+
+        return null;
+    }
+
+    private static async Task EnsureRequiredFolderSkeletonAsync(
+        IFolder projectFolder,
+        ICollection<IStorageItem> createdItems,
+        CancellationToken cancellationToken)
+    {
+        foreach (var relativePath in RequiredTemplateFolders)
+        {
+            _ = await EnsureNestedFolderAsync(projectFolder, relativePath, createdItems, cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private static async Task<bool> ContainsProjectManifestAsync(IFolder folder, CancellationToken cancellationToken)
+    {
+        await foreach (var document in folder.GetDocumentsAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (string.Equals(document.Name, Constants.ProjectFileName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        await foreach (var child in folder.GetFoldersAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (await ContainsProjectManifestAsync(child, cancellationToken).ConfigureAwait(false))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private sealed record TemplateDescriptor(

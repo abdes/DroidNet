@@ -275,6 +275,7 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
         {
             catalog.Dispose();
         }
+
         publication?.Dispose();
 
         lock (this.notificationLock)
@@ -486,6 +487,7 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
             {
                 registration.Dispose();
             }
+
             retiredPublication?.Dispose();
 
             this.PublishChanges(notifications);
@@ -618,7 +620,6 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
         public IAssetCatalog Catalog { get; } = catalog;
 
         public IDisposable? Subscription { get; set; }
-
 
         public IReadOnlyList<AssetRecord> Initial { get; set; } = [];
 

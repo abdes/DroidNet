@@ -2,8 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Managed.Core;
 using Oxygen.Editor.World;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects;
 
@@ -33,12 +33,12 @@ public sealed class AuthoringTargetResolver : IAuthoringTargetResolver
                 var localRelativeSelection = GetLocalMountRelativeSelection(localMount.Name, selected);
                 if (string.IsNullOrWhiteSpace(localRelativeSelection))
                 {
-                    return CreateLocalMountTarget(localMount.Name, kindFolder, null);
+                    return CreateLocalMountTarget(localMount.Name, kindFolder, fallbackReason: null);
                 }
 
                 if (IsKindFolderSelection(localRelativeSelection, kindFolder))
                 {
-                    return CreateLocalMountTarget(localMount.Name, localRelativeSelection, null);
+                    return CreateLocalMountTarget(localMount.Name, localRelativeSelection, fallbackReason: null);
                 }
 
                 return CreateLocalMountTarget(localMount.Name, kindFolder, AuthoringTargetFallbackReason.KindMismatch);
@@ -52,6 +52,15 @@ public sealed class AuthoringTargetResolver : IAuthoringTargetResolver
             return CreateProjectMountTarget(defaultMount, kindFolder, AuthoringTargetFallbackReason.NoSelection);
         }
 
+        return ResolveAuthoringMountTarget(project, selected, kindFolder, defaultMount);
+    }
+
+    private static AuthoringTarget ResolveAuthoringMountTarget(
+        ProjectContext project,
+        string selected,
+        string kindFolder,
+        ProjectMountPoint defaultMount)
+    {
         foreach (var mount in project.AuthoringMounts.OrderByDescending(static mount => mount.RelativePath.Length))
         {
             var mountPath = NormalizeProjectPath(mount.RelativePath);
@@ -62,7 +71,7 @@ public sealed class AuthoringTargetResolver : IAuthoringTargetResolver
 
             if (string.Equals(selected, mountPath, StringComparison.OrdinalIgnoreCase))
             {
-                return CreateProjectMountTarget(mount, kindFolder, null);
+                return CreateProjectMountTarget(mount, kindFolder, fallbackReason: null);
             }
 
             if (selected.StartsWith(mountPath + "/", StringComparison.OrdinalIgnoreCase))
@@ -70,7 +79,7 @@ public sealed class AuthoringTargetResolver : IAuthoringTargetResolver
                 var mountRelative = selected[(mountPath.Length + 1)..];
                 if (IsKindFolderSelection(mountRelative, kindFolder))
                 {
-                    return CreateProjectMountTarget(mount.Name, selected, ToAssetFolderUri(mount.Name, mountRelative), false, null);
+                    return CreateProjectMountTarget(mount.Name, selected, ToAssetFolderUri(mount.Name, mountRelative), isExplicitLocalMount: false, fallbackReason: null);
                 }
 
                 return CreateProjectMountTarget(mount, kindFolder, AuthoringTargetFallbackReason.KindMismatch);
@@ -121,7 +130,7 @@ public sealed class AuthoringTargetResolver : IAuthoringTargetResolver
             mount.Name,
             projectRelativeFolder,
             ToAssetFolderUri(mount.Name, kindFolder),
-            false,
+isExplicitLocalMount: false,
             fallbackReason);
     }
 
@@ -146,7 +155,7 @@ public sealed class AuthoringTargetResolver : IAuthoringTargetResolver
             mountName,
             mountRelativeFolder,
             ToAssetFolderUri(mountName, mountRelativeFolder),
-            true,
+isExplicitLocalMount: true,
             fallbackReason);
 
     private static string GetLocalMountRelativeSelection(string mountName, string selected)

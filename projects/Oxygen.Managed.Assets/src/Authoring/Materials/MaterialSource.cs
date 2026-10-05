@@ -140,8 +140,8 @@ public sealed record MaterialSource
         }
 
         var pbr = this.PbrMetallicRoughness;
-        MaterialTextureRef? baseColor = channel == "base_color"
-            ? virtualPath is null ? null : new(virtualPath)
+        MaterialTextureRef? baseColor = string.Equals(channel, "base_color"
+, StringComparison.Ordinal) ? virtualPath is null ? null : new(virtualPath)
             : pbr.BaseColorTexture;
         return this with
         {
@@ -149,11 +149,11 @@ public sealed record MaterialSource
             PbrMetallicRoughness = new MaterialPbrMetallicRoughness(
                 pbr.BaseColorR, pbr.BaseColorG, pbr.BaseColorB, pbr.BaseColorA,
                 pbr.MetallicFactor, pbr.RoughnessFactor, baseColor, pbr.MetallicRoughnessTexture),
-            NormalTexture = channel == "normal"
-                ? virtualPath is null ? null : new(virtualPath, this.NormalScale)
+            NormalTexture = string.Equals(channel, "normal"
+, StringComparison.Ordinal) ? virtualPath is null ? null : new(virtualPath, this.NormalScale)
                 : this.NormalTexture,
-            OcclusionTexture = channel == "ambient_occlusion"
-                ? virtualPath is null ? null : new(virtualPath, this.OcclusionStrength)
+            OcclusionTexture = string.Equals(channel, "ambient_occlusion"
+, StringComparison.Ordinal) ? virtualPath is null ? null : new(virtualPath, this.OcclusionStrength)
                 : this.OcclusionTexture,
         };
     }
@@ -192,7 +192,7 @@ public sealed record MaterialSource
         var alpha = descriptor.TryGetProperty("alpha_mode", out var mode) ? mode.GetString() : "opaque";
         if (alpha is "masked" or "blended")
         {
-            return alpha == "masked" ? MaterialAlphaMode.Mask : MaterialAlphaMode.Blend;
+            return string.Equals(alpha, "masked", StringComparison.Ordinal) ? MaterialAlphaMode.Mask : MaterialAlphaMode.Blend;
         }
 
         // Native alpha modes override surface domains; opaque leaves the domain intact.

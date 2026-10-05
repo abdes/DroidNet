@@ -9,6 +9,7 @@ using DroidNet.Storage;
 using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.MaterialEditor.PropertyPipeline;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
@@ -271,7 +272,7 @@ public sealed partial class MaterialDocumentServiceTests
 
         var result = await ((IMaterialPropertyEditService)service).EditPropertiesAsync(
             created.DocumentId,
-            PropertyEdit.Single(MaterialDescriptors.AlphaMode, MaterialAlphaMode.Mask),
+            PropertyEdit.SingleEdit(MaterialDescriptors.AlphaMode, MaterialAlphaMode.Mask),
             cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         var save = await service.SaveAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         await service.CloseAsync(created.DocumentId, discard: false, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -294,7 +295,7 @@ public sealed partial class MaterialDocumentServiceTests
         var publisher = new RecordingOperationPublisher();
         var service = new MaterialDocumentService(Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new TestResolver(workspace.Root), new RecordingCookService(), workspace.CookDocuments, CreateFileStore(), publisher);
         var created = await service.CreateAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
-        var edit = PropertyEdit.Single(MaterialDescriptors.Metalness, 2.0f);
+        var edit = PropertyEdit.SingleEdit(MaterialDescriptors.Metalness, 2.0f);
 
         var result = await ((IMaterialPropertyEditService)service).EditPropertiesAsync(created.DocumentId, edit, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         var save = await service.SaveAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -324,7 +325,7 @@ public sealed partial class MaterialDocumentServiceTests
 
         var result = await ((IMaterialPropertyEditService)service).EditPropertiesAsync(
             created.DocumentId,
-            PropertyEdit.Single(MaterialDescriptors.Metalness, created.Source.PbrMetallicRoughness.MetallicFactor),
+            PropertyEdit.SingleEdit(MaterialDescriptors.Metalness, created.Source.PbrMetallicRoughness.MetallicFactor),
             cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         var cookResult = await service.CookAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -349,7 +350,7 @@ public sealed partial class MaterialDocumentServiceTests
 
         var result = await ((IMaterialPropertyEditService)service).EditPropertiesAsync(
             created.DocumentId,
-            PropertyEdit.Single(unknown, 0.25f),
+            PropertyEdit.SingleEdit(unknown, 0.25f),
             cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         var save = await service.SaveAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         await service.CloseAsync(created.DocumentId, discard: false, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -469,10 +470,10 @@ public sealed partial class MaterialDocumentServiceTests
 
         foreach (var descriptor in MaterialDescriptors.Catalog.ById.Values)
         {
-            var schemaPath = ResolveSchemaCoveragePath(engine, descriptor.Id.Pointer);
+            var schemaPath = ResolveSchemaCoveragePath(engine, descriptor.Id.JsonPointer);
             _ = schemaPath.Should().NotBeNull($"descriptor {descriptor.Id} must point at the engine material schema");
 
-            var annotationPath = ResolveAnnotationPath(annotations, descriptor.Id.Pointer);
+            var annotationPath = ResolveAnnotationPath(annotations, descriptor.Id.JsonPointer);
             _ = annotationPath.Should().NotBeNull($"descriptor {descriptor.Id} must be backed by the material editor overlay");
             var annotation = annotations[annotationPath!];
             _ = annotation.Renderer.Should().Be(descriptor.Annotation.Renderer, $"descriptor {descriptor.Id} should use the overlay renderer");

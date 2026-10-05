@@ -4,11 +4,11 @@
 
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using Oxygen.Managed.Assets.Model;
-using Oxygen.Managed.Core;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Assets.Model;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World;
 
@@ -128,7 +128,7 @@ public partial class GeometryComponent : GameComponent
         {
             // During dehydration, Geometry must be set to a valid reference.
             // A geometry component without geometry should not be left for serialization by its owning SceneNode.
-            Debug.Assert(false, "Cannot dehydrate GeometryComponent with null Geometry reference.");
+            Debug.Assert(condition: false, "Cannot dehydrate GeometryComponent with null Geometry reference.");
             throw new InvalidOperationException("Cannot dehydrate GeometryComponent with null Geometry reference.");
         }
 

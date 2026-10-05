@@ -4,6 +4,7 @@
 
 using System.Security.Cryptography;
 using AwesomeAssertions;
+using Oxygen.Editor.MaterialEditor.PropertyPipeline;
 using Oxygen.Editor.Schemas;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
@@ -74,7 +75,7 @@ public sealed partial class MaterialDocumentServiceTests
         var service = CreateService(workspace);
         var document = await service.CreateAsync(new Uri("asset:///Content/Materials/PreviewCapture.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var session = service.BeginEditSession(document.DocumentId, "Roughness");
-        _ = await service.PreviewPropertiesAsync(session, PropertyEdit.Single(MaterialDescriptors.Roughness, 0.25f), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await service.PreviewPropertiesAsync(session, PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, 0.25f), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         using var reads = await workspace.CookDocuments.AcquireAsync([document.SourcePath], this.TestContext.CancellationToken).ConfigureAwait(false);
 

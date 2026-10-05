@@ -15,9 +15,9 @@ public sealed partial class DocumentManager
     public Task<bool> ReloadPreviousSceneAsync()
     {
         if (this.previousSavedScene is not { } previous || this.projectManager.CurrentProject is not { } project
-            || project.ProjectInfo.Id != previous.ProjectId
-            || !string.Equals(project.ProjectInfo.Location, previous.ProjectRoot, StringComparison.OrdinalIgnoreCase)
-            || project.Scenes.FirstOrDefault(scene => scene.Id == previous.SceneId) is not { } scene)
+            || project.ProjectInfo.Id != previous.projectId
+            || !string.Equals(project.ProjectInfo.Location, previous.projectRoot, StringComparison.OrdinalIgnoreCase)
+            || project.Scenes.FirstOrDefault(scene => scene.Id == previous.sceneId) is not { } scene)
         {
             return Task.FromResult(false);
         }

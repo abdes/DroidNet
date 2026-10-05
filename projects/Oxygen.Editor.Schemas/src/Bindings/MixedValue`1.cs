@@ -2,9 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace Oxygen.Editor.Schemas.Bindings;
 
@@ -20,12 +18,13 @@ namespace Oxygen.Editor.Schemas.Bindings;
 /// <param name="Value">The representative value when not mixed; the
 /// first node's value when mixed (callers usually treat it as a
 /// placeholder).</param>
+[StructLayout(LayoutKind.Auto)]
 public readonly record struct MixedValue<T>(bool HasValue, bool IsMixed, T Value)
 {
     /// <summary>
-    /// The "no contributing nodes" state.
+    /// Gets the "no contributing nodes" state.
     /// </summary>
-    public static MixedValue<T> Empty { get; } = new(false, false, default!);
+    public static MixedValue<T> Empty { get; } = new(HasValue: false, IsMixed: false, default!);
 
     /// <summary>
     /// Folds a sequence of values into a mixed-value state.
@@ -57,6 +56,6 @@ public readonly record struct MixedValue<T>(bool HasValue, bool IsMixed, T Value
             }
         }
 
-        return first ? Empty : new MixedValue<T>(true, mixed, representative);
+        return first ? Empty : new MixedValue<T>(HasValue: true, mixed, representative);
     }
 }

@@ -45,6 +45,6 @@ internal sealed class SceneNodeSelectionChangedMessage(
 
         return orderedIds.Length == 0
             ? SceneSelectionContext.Empty
-            : new SceneSelectionContext(SceneSelectionKind.Node, orderedIds, [], orderedIds[^1], null);
+            : new SceneSelectionContext(SceneSelectionKind.Node, orderedIds, [], orderedIds[^1], PrimaryFolderId: null);
     }
 }

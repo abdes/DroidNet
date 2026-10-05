@@ -88,8 +88,8 @@ public sealed class TextureImportDialogView : UserControl
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs args)
     {
         _ = sender;
-        if (args.PropertyName == nameof(TextureImportDialogViewModel.DestinationFolder)
-            && !string.Equals(this.destination.Text, this.viewModel.DestinationFolder, StringComparison.Ordinal))
+        if (string.Equals(args.PropertyName, nameof(TextureImportDialogViewModel.DestinationFolder)
+, StringComparison.Ordinal) && !string.Equals(this.destination.Text, this.viewModel.DestinationFolder, StringComparison.Ordinal))
         {
             this.destination.Text = this.viewModel.DestinationFolder;
         }

@@ -14,5 +14,5 @@ public interface IMaterialSourcePathResolver
     /// </summary>
     /// <param name="materialUri">The material source asset URI.</param>
     /// <returns>The resolved source location.</returns>
-    MaterialSourceLocation Resolve(Uri materialUri);
+    public MaterialSourceLocation Resolve(Uri materialUri);
 }

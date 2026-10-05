@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Controls;
 using DroidNet.TimeMachine;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.World;
@@ -48,11 +47,11 @@ public sealed partial class SceneDocumentCommandService
 
         if (target.SlotId == Guid.Empty || target.LayoutRevision is not { Length: 64 }
             || !target.LayoutRevision.All(Uri.IsHexDigit) || target.GeometryUri is not { IsAbsoluteUri: true }
-            || target.GeometryUri.Scheme != AssetUris.Scheme
-            || target.GeometryUri.Query.Length != 0 || target.GeometryUri.Fragment.Length != 0
+            || !string.Equals(target.GeometryUri.Scheme, AssetUris.Scheme
+, StringComparison.Ordinal) || target.GeometryUri.Query.Length != 0 || target.GeometryUri.Fragment.Length != 0
             || newMaterialUri is not null && (!newMaterialUri.IsAbsoluteUri
-                || newMaterialUri.Scheme != AssetUris.Scheme || newMaterialUri.AbsolutePath == "/__uninitialized__"
-                || newMaterialUri.Query.Length != 0 || newMaterialUri.Fragment.Length != 0))
+                || !string.Equals(newMaterialUri.Scheme, AssetUris.Scheme, StringComparison.Ordinal) || string.Equals(newMaterialUri.AbsolutePath, "/__uninitialized__"
+, StringComparison.Ordinal) || newMaterialUri.Query.Length != 0 || newMaterialUri.Fragment.Length != 0))
         {
             return this.SlotFailure(context, "Select an existing material slot and a valid material asset.");
         }
@@ -101,9 +100,8 @@ public sealed partial class SceneDocumentCommandService
             return this.SlotFailure(context, "Cook or refresh the geometry before editing its material slots.", SceneDiagnosticCodes.MaterialSlotInventoryUnavailable);
         }
 
-        if (inventory.GeometryUri != target.GeometryUri || inventory.LayoutRevision != target.LayoutRevision
-            || !inventory.Slots.Any(slot => slot.SlotId == target.SlotId)
-            || geometries.Any(geometry => geometry!.OverrideSlots.OfType<MaterialsSlot>().Count(slot => SameSlot(slot.Target, target)) > 1))
+        if (inventory.GeometryUri != target.GeometryUri || !string.Equals(inventory.LayoutRevision, target.LayoutRevision, StringComparison.Ordinal) || !inventory.Slots.Any(slot => slot.SlotId == target.SlotId)
+            || geometries.Any(geometry => geometry!.OverrideSlots.OfType<MaterialsSlot>().Where(slot => SameSlot(slot.Target, target)).Skip(1).Any()))
         {
             return this.SlotFailure(context, "The observed slot changed or has conflicting overrides. Refresh its inventory before editing.");
         }

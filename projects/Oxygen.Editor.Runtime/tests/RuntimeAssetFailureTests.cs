@@ -82,9 +82,13 @@ public sealed class RuntimeAssetFailureTests
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), target, "Scene", this.TestContext.CancellationToken).ConfigureAwait(false);
         var node = Guid.NewGuid();
         var slot = Guid.NewGuid();
-        var current = new RuntimeWorldRequest(Guid.NewGuid(), target,
+        var current = new RuntimeWorldRequest(
+            Guid.NewGuid(),
+            target,
             new RuntimeSetMaterialOverride(node, "/Content/Sphere.ogeo", slot, new string('a', 64), "/Content/Red.omat", MaterialSlotAssignmentIntent.RetainedAssignment));
-        var foreign = new RuntimeWorldRequest(Guid.NewGuid(), target,
+        var foreign = new RuntimeWorldRequest(
+            Guid.NewGuid(),
+            target,
             new RuntimeSetMaterialOverride(node, "/Content/Cube.ogeo", slot, new string('a', 64), "/Content/Blue.omat", MaterialSlotAssignmentIntent.RetainedAssignment));
         _ = sut.Execute(current, this.TestContext.CancellationToken);
         _ = sut.Execute(foreign, this.TestContext.CancellationToken);

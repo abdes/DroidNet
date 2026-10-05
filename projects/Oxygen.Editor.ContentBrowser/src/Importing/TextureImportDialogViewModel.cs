@@ -171,9 +171,9 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
             {
                 var root = Path.GetFullPath(Path.Combine(this.project.ProjectRoot, mount.RelativePath));
                 var relative = Path.GetRelativePath(root, selected).Replace('\\', '/');
-                if (!Path.IsPathRooted(relative) && relative != ".." && !relative.StartsWith("../", StringComparison.Ordinal))
+                if (!Path.IsPathRooted(relative) && !string.Equals(relative, "..", StringComparison.Ordinal) && !relative.StartsWith("../", StringComparison.Ordinal))
                 {
-                    this.DestinationFolder = "/" + mount.Name + (relative == "." ? string.Empty : "/" + relative);
+                    this.DestinationFolder = "/" + mount.Name + (string.Equals(relative, ".", StringComparison.Ordinal) ? string.Empty : "/" + relative);
                     this.Revalidate();
                     return;
                 }

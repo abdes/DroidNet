@@ -89,6 +89,7 @@ public sealed class CookDocumentRegistryTests
         _ = acquired.Should().BeFalse();
         _ = reads.Documents.Should().ContainSingle();
     }
+
     /// <summary>Updates are deduplicated, snapshots remain immutable, and owners of the same path stay independent.</summary>
     [TestMethod]
     public void StateSnapshotsRetainIndependentOwnersWithoutReadingSource()

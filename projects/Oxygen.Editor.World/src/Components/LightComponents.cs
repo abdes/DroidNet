@@ -40,7 +40,6 @@ public abstract partial class LightComponent : GameComponent
         set => _ = this.SetProperty(ref this.color, value);
     }
 
-
     /// <summary>
     /// Gets or sets a value indicating whether this light casts shadows.
     /// </summary>
@@ -102,6 +101,7 @@ public abstract partial class LightComponent : GameComponent
         {
             throw new ArgumentException(error, nameof(data));
         }
+
         base.Hydrate(data);
 
         if (data is not LightComponentData light)

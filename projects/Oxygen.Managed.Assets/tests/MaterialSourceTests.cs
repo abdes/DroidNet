@@ -151,7 +151,7 @@ public sealed class MaterialSourceTests
         _ = output["textures"]!["base_color"]!["uv_transform"]!["scale"]![0]!.GetValue<float>().Should().Be(2f);
         _ = output["textures"]!["normal"]!["virtual_path"]!.GetValue<string>().Should().Be("/Art/Normal.otex");
 
-        var cleared = edited.WithTextureReference("normal", null);
+        var cleared = edited.WithTextureReference("normal", virtualPath: null);
         var clearedJson = MaterialSourceWriter.ToJson(cleared);
         _ = clearedJson["textures"]!.AsObject().ContainsKey("normal").Should().BeFalse();
         _ = clearedJson["textures"]!["base_color"]!["uv_set"]!.GetValue<int>().Should().Be(2);

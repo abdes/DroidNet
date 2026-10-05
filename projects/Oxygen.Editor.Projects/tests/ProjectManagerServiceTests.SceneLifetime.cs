@@ -174,6 +174,7 @@ public partial class ProjectManagerServiceTests
         _ = service.CurrentProject.Should().BeSameAs(accepted);
         _ = accepted.ProjectInfo.Id.Should().Be(newerInfo.Id);
     }
+
     private sealed class SceneLifetimeWorkspace : IDisposable
     {
         private readonly DirectoryInfo directory = Directory.CreateDirectory(

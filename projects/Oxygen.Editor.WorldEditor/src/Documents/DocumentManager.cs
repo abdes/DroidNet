@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.Messaging;
-using DroidNet.Documents;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
@@ -35,7 +34,7 @@ public sealed partial class DocumentManager : IDisposable
     private readonly Oxygen.Managed.Core.Diagnostics.IStatusReducer? statusReducer;
     private long sceneRequestId;
     private bool disposed;
-    private (Guid ProjectId, string? ProjectRoot, Guid SceneId)? previousSavedScene;
+    private (Guid projectId, string? projectRoot, Guid sceneId)? previousSavedScene;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DocumentManager"/> class.
@@ -94,7 +93,7 @@ public sealed partial class DocumentManager : IDisposable
     public void Dispose()
     {
         this.disposed = true;
-        Interlocked.Increment(ref this.sceneRequestId);
+        _ = Interlocked.Increment(ref this.sceneRequestId);
         this.messenger.UnregisterAll(this);
         GC.SuppressFinalize(this);
     }
@@ -126,6 +125,7 @@ public sealed partial class DocumentManager : IDisposable
         {
             return false;
         }
+
         SceneDocumentMetadata? incoming = null;
         var installed = false;
         var retired = false;
@@ -293,9 +293,7 @@ public sealed partial class DocumentManager : IDisposable
         => string.Equals(left.ToString(), right.ToString(), StringComparison.OrdinalIgnoreCase);
 
     private void OnOpenSceneRequested(object recipient, OpenSceneRequestMessage message)
-    {
-        message.Reply(this.OpenSceneAsync(message.Scene));
-    }
+        => message.Reply(this.OpenSceneAsync(message.Scene));
 
     private async Task<bool> OpenInspectionAsync(OpenCookedInspectionRequestMessage request)
     {

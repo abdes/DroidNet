@@ -63,7 +63,7 @@ public sealed partial class ExposureSectionView
 
     private void NumberEditCompleted(object? sender, NumberBoxEditSessionEventArgs args) => this.ViewModel?.EditOwner.CompleteEditSession(args);
 
-    private void ClearMeteringMask_Click(object sender, RoutedEventArgs args) => this.ViewModel?.SetMeteringMask(null);
+    private void ClearMeteringMask_Click(object sender, RoutedEventArgs args) => this.ViewModel?.SetMeteringMask(textureUri: null);
 
     private void MeteringMaskItem_Click(object sender, RoutedEventArgs args)
     {

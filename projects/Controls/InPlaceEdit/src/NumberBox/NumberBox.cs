@@ -151,10 +151,7 @@ public partial class NumberBox : Control
         {
             this.DetachRootPointerPressedHandler();
             this.CompleteActiveEditSessionOnUnload();
-            if (this.rootGrid is not null)
-            {
-                this.rootGrid.InputCursor = null;
-            }
+            this.rootGrid?.InputCursor = null;
 
             this.defaultCursor?.Dispose();
             this.dragCursor?.Dispose();

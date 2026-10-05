@@ -4,16 +4,16 @@
 
 using System.Security.Cryptography;
 using System.Text.Json;
-using DroidNet.Storage;
-using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Publication;
-using Oxygen.Editor.ContentPipeline.Incremental;
 using AwesomeAssertions;
+using DroidNet.Storage;
 using DroidNet.Storage.Native;
 using Moq;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Discovery;
+using Oxygen.Editor.ContentPipeline.Incremental;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Catalog;
@@ -128,7 +128,7 @@ public sealed partial class CookedLibraryBrowserTests
             var index = await CookedIndexSnapshot.ReadAsync(this.ProjectOutput, token).ConfigureAwait(false);
             var roots = libraries.OrderBindings([new(CookPublicationRootOwner.Project, "Content", this.sourceKey, index.Fingerprint, null)]);
             var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, project.ProjectId, Guid.NewGuid(),
-                DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(project), roots, [], null);
+                DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(project), roots, [], CookInputs: null);
             using var gate = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, token).ConfigureAwait(false);
             var previous = await this.files.ReadAsync(CookPublicationPaths.Head(project.ProjectRoot), token).ConfigureAwait(false);
             var path = CookPublicationPaths.Document(project.ProjectRoot, document.OperationId);

@@ -125,5 +125,4 @@ public abstract partial class CameraComponent : GameComponent
             throw new ArgumentOutOfRangeException(nameof(value), value, $"{field} must be finite and positive.");
         }
     }
-
 }

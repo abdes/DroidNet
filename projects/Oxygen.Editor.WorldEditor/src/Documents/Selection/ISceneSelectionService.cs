@@ -20,7 +20,7 @@ public interface ISceneSelectionService
     /// consumes this to reconcile its rows with selections made by other panels
     /// without echoing its own writes.
     /// </summary>
-    event EventHandler<SceneSelectionChangedEventArgs>? SelectionChanged;
+    public event EventHandler<SceneSelectionChangedEventArgs>? SelectionChanged;
 
     /// <summary>
     /// Sets the selected scene-node identities for a document, classified as a

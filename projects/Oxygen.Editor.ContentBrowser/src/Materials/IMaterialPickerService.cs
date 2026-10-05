@@ -12,7 +12,7 @@ public interface IMaterialPickerService
     /// <summary>
     /// Gets the latest material picker result snapshot.
     /// </summary>
-    IObservable<IReadOnlyList<MaterialPickerResult>> Results { get; }
+    public IObservable<IReadOnlyList<MaterialPickerResult>> Results { get; }
 
     /// <summary>
     /// Refreshes material picker results for a filter.
@@ -20,7 +20,7 @@ public interface IMaterialPickerService
     /// <param name="filter">The picker filter.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The refresh task.</returns>
-    Task RefreshAsync(MaterialPickerFilter filter, CancellationToken cancellationToken = default);
+    public Task RefreshAsync(MaterialPickerFilter filter, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Resolves one material assignment row, including missing assignments.
@@ -28,5 +28,5 @@ public interface IMaterialPickerService
     /// <param name="materialUri">The material assignment URI.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The material picker row, or <see langword="null"/> when the URI is invalid.</returns>
-    Task<MaterialPickerResult?> ResolveAsync(Uri materialUri, CancellationToken cancellationToken = default);
+    public Task<MaterialPickerResult?> ResolveAsync(Uri materialUri, CancellationToken cancellationToken = default);
 }

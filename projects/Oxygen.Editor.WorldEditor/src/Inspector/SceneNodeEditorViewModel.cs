@@ -516,7 +516,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                 this.activeScene = null;
                 this.selectionContext = this.sceneSelectionService.GetContext(Guid.Empty);
                 this.RefreshPendingLiveSyncState();
-                this.environmentEditor.SetScene(null);
+                this.environmentEditor.SetScene(value: null);
                 this.NotifySelectionRoutingChanged();
                 this.UpdateItemsCollection(this.items);
             }));

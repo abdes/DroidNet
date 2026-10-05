@@ -131,12 +131,12 @@ public sealed class MaterialSchemaValidator
     {
         if (evaluation.IsValid)
         {
-            return new MaterialValidationResult(true, Source, []);
+            return new MaterialValidationResult(IsValid: true, Source, []);
         }
 
         var errors = new List<string>();
         FlattenErrors(evaluation, errors);
-        return new MaterialValidationResult(false, Source, errors);
+        return new MaterialValidationResult(IsValid: false, Source, errors);
     }
 
     private static void FlattenErrors(EvaluationResults node, List<string> errors)

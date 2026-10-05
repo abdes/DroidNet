@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -8,8 +8,8 @@ using System.Security.Cryptography;
 using CommunityToolkit.Mvvm.Messaging;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Messages;
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Materials;

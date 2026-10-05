@@ -126,16 +126,16 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
             }
             else if (light.AtmosphereSlot != AtmosphereLightSlot.None)
             {
-                edits.Add(node.Id, PropertyEdit.Single(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None));
+                edits.Add(node.Id, PropertyEdit.SingleEdit(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None));
             }
         }
 
-        var rotationMask = PropertyEdit.Single(SceneDocumentCommandService.Transform.RotationX, 0f);
+        var rotationMask = PropertyEdit.SingleEdit(SceneDocumentCommandService.Transform.RotationX, 0f);
         rotationMask.Set(SceneDocumentCommandService.Transform.RotationY, 0f);
         rotationMask.Set(SceneDocumentCommandService.Transform.RotationZ, 0f);
-        var lightMask = PropertyEdit.Single(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None);
+        var lightMask = PropertyEdit.SingleEdit(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None);
         lightMask.Set(SceneDocumentCommandService.DirectionalLight.AngularSizeRadians, 0f);
-        lightMask.Set(SceneDocumentCommandService.DirectionalLight.UsePerPixelAtmosphereTransmittance, false);
+        lightMask.Set(SceneDocumentCommandService.DirectionalLight.UsePerPixelAtmosphereTransmittance, value: false);
         lightMask.Set(SceneDocumentCommandService.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, Vector3.One);
         context.History.BeginChangeSet("Reset Atmosphere Lights");
         try
@@ -199,7 +199,7 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
                 continue;
             }
 
-            var edit = PropertyEdit.Single(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, light.AtmosphereSlot);
+            var edit = PropertyEdit.SingleEdit(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, light.AtmosphereSlot);
             edit.Set(SceneDocumentCommandService.DirectionalLight.AngularSizeRadians, light.AngularSizeRadians);
             edit.Set(SceneDocumentCommandService.DirectionalLight.UsePerPixelAtmosphereTransmittance, light.UsePerPixelAtmosphereTransmittance);
             edit.Set(SceneDocumentCommandService.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, light.AtmosphereDiskLuminanceScaleRgb);
@@ -238,7 +238,7 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
             this.isApplyingEditorValues = false;
         }
 
-        this.ApplyAtmosphereAssignment(slot, null);
+        this.ApplyAtmosphereAssignment(slot, selected: null);
     }
 
     partial void OnSelectedSunChanged(SunLightOption? value)
@@ -278,12 +278,12 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
         var edits = new Dictionary<Guid, PropertyEdit>();
         if (current is not null)
         {
-            edits[current.Id] = PropertyEdit.Single(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None);
+            edits[current.Id] = PropertyEdit.SingleEdit(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None);
         }
 
         if (selected is { } selectedId)
         {
-            edits[selectedId] = PropertyEdit.Single(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, slot);
+            edits[selectedId] = PropertyEdit.SingleEdit(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot, slot);
         }
 
         if (edits.Count > 0)

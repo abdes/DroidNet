@@ -5,10 +5,10 @@
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Controls;
+using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
 using Oxygen.Managed.Assets.Filesystem;
 using Oxygen.Managed.Core;
-using DroidNet.Storage;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 

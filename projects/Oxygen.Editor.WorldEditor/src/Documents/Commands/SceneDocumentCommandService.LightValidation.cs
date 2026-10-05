@@ -17,7 +17,11 @@ public sealed partial class SceneDocumentCommandService
         foreach (var (nodeId, edit) in edits)
         {
             var source = FindNode(scene, nodeId)?.Components.OfType<DirectionalLightComponent>().FirstOrDefault();
-            if (source is null) continue;
+            if (source is null)
+            {
+                continue;
+            }
+
             var candidate = new DirectionalLightComponent { Name = source.Name };
             candidate.Hydrate(source.Dehydrate());
             ApplyDirectionalLightEdit(candidate, edit);
@@ -26,13 +30,16 @@ public sealed partial class SceneDocumentCommandService
             {
                 return new("LIGHT_CANDIDATE_INVALID", "Light was not edited", error, IsFailure: true);
             }
+
             candidates[nodeId] = data;
             assignmentChanged |= data.AtmosphereSlot != source.AtmosphereSlot;
         }
+
         if (assignmentChanged && LightValidation.ValidateScene(scene, candidates) is { } conflict)
         {
             return new("LIGHT_ATMOSPHERE_SLOT_OCCUPIED", "Light was not edited", conflict, IsFailure: true);
         }
+
         return null;
     }
 }

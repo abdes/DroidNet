@@ -7,6 +7,7 @@ using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
+using Oxygen.Editor.World.Documents.Commands;
 using Oxygen.Managed.Core.Diagnostics;
 
 #pragma warning disable IDE0130 // Authoring commands use the established WorldEditor namespace across this assembly.

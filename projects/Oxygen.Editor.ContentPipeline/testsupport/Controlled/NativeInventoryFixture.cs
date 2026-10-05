@@ -51,6 +51,7 @@ internal static partial class NativeInventoryFixture
                 : !SHA256.HashData(File.ReadAllBytes(path)).AsSpan().SequenceEqual(member.Digest.Span) ? "digest_mismatch" : null;
             if (reason is not null) { issues.Add(new { relative_path = member.Path, reason }); }
         }
+
         var expected = members.Select(static member => member.Path).ToHashSet(StringComparer.Ordinal);
         foreach (var path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
         {
@@ -58,6 +59,7 @@ internal static partial class NativeInventoryFixture
             if (relative is not ("container.index.bin" or ".generation.lock") && !expected.Contains(relative))
             { issues.Add(new { relative_path = relative, reason = "unexpected" }); }
         }
+
         if (forceFailure) { issues.Add(new { relative_path = "controlled-missing.bin", reason = "missing" }); }
         return JsonSerializer.Serialize(new
         {

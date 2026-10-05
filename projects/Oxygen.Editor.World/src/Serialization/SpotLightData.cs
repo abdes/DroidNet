@@ -27,7 +27,6 @@ public sealed record SpotLightData : LightComponentData
     /// </summary>
     public float SourceRadius { get; init; }
 
-
     /// <summary>
     /// Gets the inner cone angle, in radians.
     /// </summary>

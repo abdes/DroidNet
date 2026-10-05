@@ -116,7 +116,7 @@ public sealed partial class SceneExplorerView
 
         args.Handled = true;
         Point? position = args.TryGetPosition(this.ExplorerTree, out var pointer) ? pointer : null;
-        await this.OpenContextMenuAsync(null, this.ExplorerTree, position).ConfigureAwait(true);
+        await this.OpenContextMenuAsync(item: null, this.ExplorerTree, position).ConfigureAwait(true);
     }
 
     private async Task OpenContextMenuAsync(ITreeItem? item, FrameworkElement anchor, Point? position)
@@ -173,7 +173,7 @@ public sealed partial class SceneExplorerView
         anchor.DataContextChanged -= this.ContextAnchor_DataContextChanged;
         anchor.Unloaded -= this.ContextAnchor_Unloaded;
         ContextMenu.Close(anchor);
-        ContextMenu.SetMenuSource(anchor, null);
+        ContextMenu.SetMenuSource(anchor, value: null);
         this.contextAnchor = null;
     }
 
@@ -220,7 +220,7 @@ public sealed partial class SceneExplorerView
         args.Handled = true;
         if (!this.ShouldConsumeWorkspaceAccelerator() && this.ViewModel is { } model)
         {
-            await model.UndoCommand.ExecuteAsync(null).ConfigureAwait(true);
+            await model.UndoCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         }
     }
 
@@ -234,7 +234,7 @@ public sealed partial class SceneExplorerView
         args.Handled = true;
         if (!this.ShouldConsumeWorkspaceAccelerator() && this.ViewModel is { } model)
         {
-            await model.RedoCommand.ExecuteAsync(null).ConfigureAwait(true);
+            await model.RedoCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         }
     }
 
@@ -247,9 +247,9 @@ public sealed partial class SceneExplorerView
 
         args.Handled = true;
         if (!this.ShouldConsumeWorkspaceAccelerator() && this.ViewModel?.DeleteAction is IAsyncRelayCommand command
-            && command.CanExecute(null))
+            && command.CanExecute(parameter: null))
         {
-            await command.ExecuteAsync(null).ConfigureAwait(true);
+            await command.ExecuteAsync(parameter: null).ConfigureAwait(true);
         }
     }
 }

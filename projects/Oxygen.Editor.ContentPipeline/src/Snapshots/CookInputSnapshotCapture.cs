@@ -149,7 +149,7 @@ public sealed partial class CookInputSnapshotCapture(ICookDocumentRegistry docum
                 var source = streams[input.SourcePath];
                 source.Position = 0;
                 var hash = Convert.ToHexString(await SHA256.HashDataAsync(source, cancellationToken).ConfigureAwait(false));
-                captured[input.SourcePath] = new(hash, true, ReadNativeMetadata(input.SourcePath, source));
+                captured[input.SourcePath] = new(hash, Exists: true, ReadNativeMetadata(input.SourcePath, source));
                 source.Position = 0;
                 var destination = Path.Combine(attemptRoot, input.RelativePath);
                 Directory.CreateDirectory(Path.GetDirectoryName(destination)!);

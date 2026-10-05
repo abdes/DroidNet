@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -545,7 +545,7 @@ internal sealed partial class TransformEditController(
         var descriptor = TransformDescriptor(property);
         var edits = session.Nodes.ToDictionary(
             static node => node.Id,
-            node => PropertyEdit.Single(
+            node => PropertyEdit.SingleEdit(
                 descriptor.TypedId,
                 expression.Apply(session.OriginalValues[node.Id])));
         var empty = EmptyEdit();

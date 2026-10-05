@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Oxygen.Editor.ContentPipeline.Publication;
 using Moq;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Managed.Assets.Catalog;
@@ -99,7 +99,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         await File.WriteAllBytesAsync(Path.Combine(ownedRoot, CookedGeneration.MarkerFileName), [], this.TestContext.CancellationToken).ConfigureAwait(false);
         var project = projects.ActiveProject!;
         var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, project.ProjectId, Guid.NewGuid(), DateTimeOffset.UtcNow,
-            CookPublicationDocument.ConfigurationIdentity(project), [new(CookPublicationRootOwner.Project, "Content", sourceKey, new string('0', 64), null)], [], null);
+            CookPublicationDocument.ConfigurationIdentity(project), [new(CookPublicationRootOwner.Project, "Content", sourceKey, new string('0', 64), LibraryPath: null)], [], CookInputs: null);
         var files = new DroidNet.Storage.Native.NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem());
         using var gate = await CookOutputLease.AcquireWriteAsync(workspace.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
         var documentPath = CookPublicationPaths.Document(workspace.Root, document.OperationId);

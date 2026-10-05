@@ -2,9 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json.Nodes;
 
 namespace Oxygen.Editor.Schemas;
@@ -15,6 +12,11 @@ namespace Oxygen.Editor.Schemas;
 /// </summary>
 public static class EditorSchemaOverlay
 {
+    /// <summary>
+    /// The reserved annotation keyword namespace prefix.
+    /// </summary>
+    public const string AnnotationPrefix = "x-editor-";
+
     /// <summary>
     /// Standard JSON Schema composition keywords that the overlay is
     /// allowed to use for structure. Anything outside this set, that does
@@ -33,11 +35,6 @@ public static class EditorSchemaOverlay
         "properties",
         "items",
     };
-
-    /// <summary>
-    /// The reserved annotation keyword namespace prefix.
-    /// </summary>
-    public const string AnnotationPrefix = "x-editor-";
 
     /// <summary>
     /// Extracts editor annotations indexed by JSON Pointer.
@@ -61,7 +58,7 @@ public static class EditorSchemaOverlay
     /// <param name="overlay">The overlay schema document.</param>
     /// <returns>The list of violations as
     /// <c>(jsonPointer, offendingKeyword)</c> tuples.</returns>
-    public static IReadOnlyList<(string Pointer, string Keyword)> LintAnnotationNamespace(JsonObject overlay)
+    public static IReadOnlyList<(string pointer, string keyword)> LintAnnotationNamespace(JsonObject overlay)
     {
         ArgumentNullException.ThrowIfNull(overlay);
         var violations = new List<(string, string)>();
@@ -98,12 +95,9 @@ public static class EditorSchemaOverlay
         var coveragePaths = new List<string>();
         CollectCoveragePaths(engineSchema, engineSchema, string.Empty, annotations, coveragePaths, []);
 
-        return coveragePaths
-            .Where(path => !hidden.Contains(path))
-            .Where(path => !HasCompleteAnnotation(annotations, path))
-            .Distinct(StringComparer.Ordinal)
-            .Order(StringComparer.Ordinal)
-            .ToList();
+        return [.. coveragePaths
+            .Where(path => !hidden.Contains(path) && !HasCompleteAnnotation(annotations, path)).Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)];
     }
 
     private static void Walk(JsonObject node, string pointer, Dictionary<string, EditorAnnotation> result)

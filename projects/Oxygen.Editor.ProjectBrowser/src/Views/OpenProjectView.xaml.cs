@@ -5,12 +5,12 @@
 using System.Diagnostics;
 using System.Globalization;
 using DroidNet.Mvvm.Generators;
+using DroidNet.Storage;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
-using DroidNet.Storage;
 using WinRT;
 
 namespace Oxygen.Editor.ProjectBrowser.Views;
@@ -107,7 +107,7 @@ public sealed partial class OpenProjectView
         if (sender is ScrollViewer listScrollViewer && this.headerScrollViewer is not null)
         {
             // Sync the header scroll viewer to match the list's horizontal offset
-            this.headerScrollViewer.ChangeView(listScrollViewer.HorizontalOffset, null, null, true);
+            this.headerScrollViewer.ChangeView(listScrollViewer.HorizontalOffset, verticalOffset: null, zoomFactor: null, disableAnimation: true);
         }
     }
 

@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -14,6 +14,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.MaterialEditor.PropertyPipeline;
 using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Windows.ApplicationModel.DataTransfer;
@@ -165,7 +166,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         {
             if (this.SetProperty(ref this.normalScale, value))
             {
-                this.ApplyEdit(PropertyEdit.Single(MaterialDescriptors.NormalScale, value));
+                this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.NormalScale, value));
             }
         }
     }
@@ -178,7 +179,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         {
             if (this.SetProperty(ref this.occlusionStrength, value))
             {
-                this.ApplyEdit(PropertyEdit.Single(MaterialDescriptors.AmbientOcclusion, value));
+                this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.AmbientOcclusion, value));
             }
         }
     }
@@ -358,23 +359,23 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.assetStatusLifetime.Dispose();
     }
 
-    partial void OnBaseColorRChanged(float value) => this.ApplyColorEdit(PropertyEdit.Single(MaterialDescriptors.BaseColorR, value));
+    partial void OnBaseColorRChanged(float value) => this.ApplyColorEdit(PropertyEdit.SingleEdit(MaterialDescriptors.BaseColorR, value));
 
-    partial void OnBaseColorGChanged(float value) => this.ApplyColorEdit(PropertyEdit.Single(MaterialDescriptors.BaseColorG, value));
+    partial void OnBaseColorGChanged(float value) => this.ApplyColorEdit(PropertyEdit.SingleEdit(MaterialDescriptors.BaseColorG, value));
 
-    partial void OnBaseColorBChanged(float value) => this.ApplyColorEdit(PropertyEdit.Single(MaterialDescriptors.BaseColorB, value));
+    partial void OnBaseColorBChanged(float value) => this.ApplyColorEdit(PropertyEdit.SingleEdit(MaterialDescriptors.BaseColorB, value));
 
-    partial void OnBaseColorAChanged(float value) => this.ApplyColorEdit(PropertyEdit.Single(MaterialDescriptors.BaseColorA, value));
+    partial void OnBaseColorAChanged(float value) => this.ApplyColorEdit(PropertyEdit.SingleEdit(MaterialDescriptors.BaseColorA, value));
 
-    partial void OnMetallicFactorChanged(float value) => this.ApplyEdit(PropertyEdit.Single(MaterialDescriptors.Metalness, value));
+    partial void OnMetallicFactorChanged(float value) => this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.Metalness, value));
 
-    partial void OnRoughnessFactorChanged(float value) => this.ApplyEdit(PropertyEdit.Single(MaterialDescriptors.Roughness, value));
+    partial void OnRoughnessFactorChanged(float value) => this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, value));
 
-    partial void OnAlphaModeChanged(string value) => this.ApplyEdit(PropertyEdit.Single(MaterialDescriptors.AlphaMode, ToMaterialAlphaMode(value)));
+    partial void OnAlphaModeChanged(string value) => this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.AlphaMode, ToMaterialAlphaMode(value)));
 
-    partial void OnAlphaCutoffChanged(float value) => this.ApplyEdit(PropertyEdit.Single(MaterialDescriptors.AlphaCutoff, value));
+    partial void OnAlphaCutoffChanged(float value) => this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.AlphaCutoff, value));
 
-    partial void OnDoubleSidedChanged(bool value) => this.ApplyEdit(PropertyEdit.Single(MaterialDescriptors.DoubleSided, value));
+    partial void OnDoubleSidedChanged(bool value) => this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.DoubleSided, value));
 
     [RelayCommand]
     private async Task SaveMaterialAsync()
@@ -553,6 +554,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             _ = source.TextureReferences.TryGetValue(channel.Channel, out var virtualPath);
             channel.Refresh(this.availableTextureChoices, virtualPath);
         }
+
         this.IsDirty = value.IsDirty;
         this.OnPropertyChanged(nameof(this.BaseColorBrush));
         this.OnPropertyChanged(nameof(this.BaseColorColor));

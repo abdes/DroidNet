@@ -26,6 +26,7 @@ internal static class LooseCookedIndexFixture
             offsets.Add(value, offset);
             return offset;
         }
+
         foreach (var asset in document.Assets) { _ = Add(asset.DescriptorRelativePath); _ = Add(asset.VirtualPath); }
         foreach (var file in document.Files) { _ = Add(file.RelativePath); }
         var header = new byte[LooseCookedIndex.HeaderSize];
@@ -73,6 +74,7 @@ internal static class LooseCookedIndexFixture
             BinaryPrimitives.WriteUInt32LittleEndian(entry.AsSpan(77), references.KeyCount);
             destination.Write(entry);
         }
+
         foreach (var file in document.Files)
         {
             var entry = new byte[LooseCookedIndex.FileRecordSize];

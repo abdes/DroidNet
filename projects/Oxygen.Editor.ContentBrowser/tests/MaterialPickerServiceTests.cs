@@ -2,14 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Authoring.Materials;
-using Oxygen.Managed.Assets.Model;
+using CommunityToolkit.Mvvm.Messaging;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.World;
-using CommunityToolkit.Mvvm.Messaging;
+using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Assets.Model;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 

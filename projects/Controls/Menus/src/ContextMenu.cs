@@ -66,6 +66,7 @@ public static class ContextMenu
     public static bool Show(FrameworkElement element, IMenuSource source, Windows.Foundation.Point? position = null)
     {
         SetMenuSource(element, source);
+
         // Dynamic owners recapture on every request; the attached listener must not reopen an old snapshot first.
         element.ContextRequested -= OnElementContextRequested;
         if (GetMenuHost(element) is not { } host)
@@ -79,7 +80,8 @@ public static class ContextMenu
         host.RootSurface = adapter;
         if (source.Services.InteractionController is { } controller)
         {
-            controller.OnMenuRequested(MenuInteractionContext.ForRoot(adapter),
+            controller.OnMenuRequested(
+                MenuInteractionContext.ForRoot(adapter),
                 position is null ? MenuInteractionInputSource.KeyboardInput : MenuInteractionInputSource.PointerInput);
             return host.IsOpen;
         }
@@ -141,7 +143,7 @@ public static class ContextMenu
 
     private static void AttachHost(UIElement element)
     {
-        if (GetMenuSource(element) is not IMenuSource)
+        if (GetMenuSource(element) is null)
         {
             return;
         }

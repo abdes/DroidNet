@@ -2,11 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace Oxygen.Editor.Schemas;
 
 /// <summary>
@@ -37,7 +32,7 @@ public sealed class CommitGroupController
     public static readonly TimeSpan DefaultWheelIdleDelay = TimeSpan.FromMilliseconds(250);
 
     private readonly Dictionary<string, ActiveSession> active = new(StringComparer.Ordinal);
-    private readonly object gate = new();
+    private readonly Lock gate = new();
 
     /// <summary>
     /// Begins a session keyed by an arbitrary string (e.g. property
@@ -123,6 +118,7 @@ public sealed class CommitGroupController
         ArgumentNullException.ThrowIfNull(commitAction);
 
         var cts = new CancellationTokenSource();
+        CancellationTokenSource? previousIdleCancellation;
         lock (this.gate)
         {
             if (!this.active.TryGetValue(key, out var s))
@@ -131,9 +127,20 @@ public sealed class CommitGroupController
                 return;
             }
 
-            s.IdleCancellation?.Cancel();
-            s.IdleCancellation?.Dispose();
+            previousIdleCancellation = s.IdleCancellation;
             s.IdleCancellation = cts;
+        }
+
+        if (previousIdleCancellation is not null)
+        {
+            try
+            {
+                await previousIdleCancellation.CancelAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                previousIdleCancellation.Dispose();
+            }
         }
 
         try
@@ -215,57 +222,4 @@ public sealed class CommitGroupController
 
         public CancellationTokenSource? IdleCancellation { get; set; }
     }
-}
-
-/// <summary>
-/// Handle to a single in-flight commit-group session.
-/// </summary>
-public sealed class CommitGroupSession
-{
-    /// <summary>
-    /// Initializes a new session handle.
-    /// </summary>
-    /// <param name="key">The session key.</param>
-    /// <param name="nodes">The captured node set.</param>
-    /// <param name="before">The pre-edit snapshot.</param>
-    /// <param name="label">The history label.</param>
-    public CommitGroupSession(string key, IReadOnlyList<Guid> nodes, PropertySnapshot before, string label)
-    {
-        this.Key = key;
-        this.Nodes = nodes;
-        this.Before = before;
-        this.Label = label;
-    }
-
-    /// <summary>
-    /// Gets the session key.
-    /// </summary>
-    public string Key { get; }
-
-    /// <summary>
-    /// Gets the captured node set.
-    /// </summary>
-    public IReadOnlyList<Guid> Nodes { get; }
-
-    /// <summary>
-    /// Gets the pre-edit snapshot.
-    /// </summary>
-    public PropertySnapshot Before { get; }
-
-    /// <summary>
-    /// Gets the history label.
-    /// </summary>
-    public string Label { get; }
-
-    /// <summary>
-    /// Gets or sets the most recent preview snapshot. The
-    /// <see cref="CommitGroupController.Close"/> method assigns
-    /// <see cref="After"/> from this value at commit time.
-    /// </summary>
-    public PropertySnapshot? LastPreview { get; set; }
-
-    /// <summary>
-    /// Gets the post-edit snapshot. Set by <see cref="CommitGroupController.Close"/>.
-    /// </summary>
-    public PropertySnapshot? After { get; internal set; }
 }

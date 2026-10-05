@@ -121,7 +121,7 @@ public sealed class SceneEnvironmentEditOwner : ObservableObject, IInspectorEdit
         }
         else if (this.Scene is not null && this.IsInputEnabled)
         {
-            this.coordinator?.Submit(PropertyEdit.Single(property, value));
+            this.coordinator?.Submit(PropertyEdit.SingleEdit(property, value));
         }
     }
 }

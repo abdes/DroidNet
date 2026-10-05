@@ -476,7 +476,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
 
             var color = light.Color;
             color[axis] = value;
-            perTarget[node.Id] = PropertyEdit.Single(SceneDocumentCommandService.DirectionalLight.Color, color);
+            perTarget[node.Id] = PropertyEdit.SingleEdit(SceneDocumentCommandService.DirectionalLight.Color, color);
         }
 
         this.edits?.Submit(perTarget);
@@ -507,7 +507,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     {
         if (sender is PropertyBinding<Vector3> binding)
         {
-            this.ApplyLightEdit(PropertyEdit.Single(binding.Id, args.NewValue));
+            this.ApplyLightEdit(PropertyEdit.SingleEdit(binding.Id, args.NewValue));
         }
     }
 
@@ -534,7 +534,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
 
             var scale = light.AtmosphereDiskLuminanceScaleRgb;
             scale[axis] = value;
-            perTarget[node.Id] = PropertyEdit.Single(SceneDocumentCommandService.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, scale);
+            perTarget[node.Id] = PropertyEdit.SingleEdit(SceneDocumentCommandService.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, scale);
         }
 
         this.edits?.Submit(perTarget);
@@ -544,7 +544,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     {
         if (sender is PropertyBinding<Vector3> binding)
         {
-            this.ApplyLightEdit(PropertyEdit.Single(binding.Id, args.NewValue));
+            this.ApplyLightEdit(PropertyEdit.SingleEdit(binding.Id, args.NewValue));
         }
     }
 
@@ -583,7 +583,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
         foreach (var node in this.selectedItems.Where(node => node.Components.Any(component => component is DirectionalLightComponent)))
         {
             var angles = TransformConverter.QuaternionToEulerDegrees(DirectionalLightOrientation.LocalRotation(node, azimuth, elevation));
-            var edit = PropertyEdit.Single(SceneDocumentCommandService.Transform.RotationX, angles.X);
+            var edit = PropertyEdit.SingleEdit(SceneDocumentCommandService.Transform.RotationX, angles.X);
             edit.Set(SceneDocumentCommandService.Transform.RotationY, angles.Y);
             edit.Set(SceneDocumentCommandService.Transform.RotationZ, angles.Z);
             perTarget[node.Id] = edit;

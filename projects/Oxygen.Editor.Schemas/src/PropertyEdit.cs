@@ -3,8 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace Oxygen.Editor.Schemas;
 
@@ -29,7 +27,7 @@ public sealed class PropertyEdit : IEnumerable<KeyValuePair<PropertyId, object?>
     private readonly Dictionary<PropertyId, object?> entries;
 
     /// <summary>
-    /// Initializes a new, empty edit.
+    /// Initializes a new instance of the <see cref="PropertyEdit"/> class representing an empty edit.
     /// </summary>
     public PropertyEdit()
     {
@@ -42,6 +40,11 @@ public sealed class PropertyEdit : IEnumerable<KeyValuePair<PropertyId, object?>
     }
 
     /// <summary>
+    /// Gets an empty edit. Convenient for cancelled or no-op operations.
+    /// </summary>
+    public static PropertyEdit Empty { get; } = new();
+
+    /// <summary>
     /// Gets the number of entries in the edit.
     /// </summary>
     public int Count => this.entries.Count;
@@ -52,18 +55,13 @@ public sealed class PropertyEdit : IEnumerable<KeyValuePair<PropertyId, object?>
     public IReadOnlyCollection<PropertyId> Ids => this.entries.Keys;
 
     /// <summary>
-    /// An empty edit. Convenient for cancelled or no-op operations.
-    /// </summary>
-    public static PropertyEdit Empty { get; } = new();
-
-    /// <summary>
     /// Creates a single-entry edit.
     /// </summary>
     /// <typeparam name="T">The value type.</typeparam>
     /// <param name="id">The property id.</param>
     /// <param name="value">The value.</param>
     /// <returns>The new edit.</returns>
-    public static PropertyEdit Single<T>(PropertyId<T> id, T value)
+    public static PropertyEdit SingleEdit<T>(PropertyId<T> id, T value)
     {
         var edit = new PropertyEdit();
         edit.Set(id, value);
@@ -77,14 +75,6 @@ public sealed class PropertyEdit : IEnumerable<KeyValuePair<PropertyId, object?>
     /// <param name="id">The property id.</param>
     /// <param name="value">The value.</param>
     public void Set<T>(PropertyId<T> id, T value) => this.entries[id.Id] = value;
-
-    /// <summary>
-    /// Adds or replaces a raw entry. Internal escape hatch for the schema
-    /// layer; prefer <see cref="Set{T}"/>.
-    /// </summary>
-    /// <param name="id">The property id.</param>
-    /// <param name="value">The value, boxed.</param>
-    internal void SetRaw(PropertyId id, object? value) => this.entries[id] = value;
 
     /// <summary>
     /// Tries to retrieve a typed value.
@@ -153,4 +143,12 @@ public sealed class PropertyEdit : IEnumerable<KeyValuePair<PropertyId, object?>
 
     /// <inheritdoc />
     public override string ToString() => $"PropertyEdit[{this.Count}]: {string.Join(", ", this.entries.Keys.Select(static id => id.Qualified()))}";
+
+    /// <summary>
+    /// Adds or replaces a raw entry. Internal escape hatch for the schema
+    /// layer; prefer <see cref="Set{T}"/>.
+    /// </summary>
+    /// <param name="id">The property id.</param>
+    /// <param name="value">The value, boxed.</param>
+    internal void SetRaw(PropertyId id, object? value) => this.entries[id] = value;
 }

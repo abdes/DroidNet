@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -7,15 +7,15 @@ using System.Runtime.CompilerServices;
 using AwesomeAssertions;
 using DroidNet.Storage;
 using DroidNet.Storage.Native;
-using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Publication;
-using Testably.Abstractions;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Discovery;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Catalog;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 

@@ -6,6 +6,7 @@ using System.Text.Json;
 using CommunityToolkit.Mvvm.Messaging;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Documents.Commands;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core.Diagnostics;
 

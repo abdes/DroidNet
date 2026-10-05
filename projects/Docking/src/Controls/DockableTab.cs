@@ -199,8 +199,8 @@ public sealed partial class DockableTab : Control
     }
 
     private void UpdateSelectionState() => _ = this.IsSelected
-            ? this.DispatcherQueue.TryEnqueue(() => VisualStateManager.GoToState(this, "Selected", true))
-            : this.DispatcherQueue.TryEnqueue(() => VisualStateManager.GoToState(this, "Unselected", true));
+            ? this.DispatcherQueue.TryEnqueue(() => VisualStateManager.GoToState(this, "Selected", useTransitions: true))
+            : this.DispatcherQueue.TryEnqueue(() => VisualStateManager.GoToState(this, "Unselected", useTransitions: true));
 
     private void OnPointerEntered(object sender, PointerRoutedEventArgs args)
         => this.DispatcherQueue.TryEnqueue(() => VisualStateManager.GoToState(this, "PointerOver", useTransitions: true));

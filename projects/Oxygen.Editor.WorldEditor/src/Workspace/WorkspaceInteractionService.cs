@@ -9,7 +9,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -321,9 +320,8 @@ public sealed partial class WorkspaceInteractionService(
             return;
         }
 
-        if (stored.Scenes is null
-            || stored.Scenes.Any(static entry => entry.Value is null
-                || entry.Value.HiddenNodeIds is null || entry.Value.LockedNodeIds is null || entry.Value.Categories is null))
+        if (stored.Scenes?.Any(static entry => entry.Value is null
+                || entry.Value.HiddenNodeIds is null || entry.Value.LockedNodeIds is null || entry.Value.Categories is null) != false)
         {
             this.ReportFailure(
                 project,
@@ -388,5 +386,5 @@ public sealed partial class WorkspaceInteractionService(
 public sealed record SceneCategories(bool ShowMeshes, bool ShowLights, bool ShowCameras)
 {
     /// <summary>Gets the filter that includes every category.</summary>
-    public static SceneCategories All { get; } = new(true, true, true);
+    public static SceneCategories All { get; } = new(ShowMeshes: true, ShowLights: true, ShowCameras: true);
 }

@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Storage;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using DroidNet.Storage;
 
 namespace Oxygen.Editor.ProjectBrowser.Views;
 

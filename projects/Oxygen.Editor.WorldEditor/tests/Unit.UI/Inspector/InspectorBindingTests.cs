@@ -154,9 +154,11 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             {
                 await Task.Delay(TimeSpan.FromSeconds(captureSeconds), this.TestContext.CancellationToken).ConfigureAwait(true);
             }
+
             RaiseNumberEvent(input, "CancelEdit");
             _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         }
+
         _ = card.FindDescendants().OfType<ColorPicker>().Should().BeEmpty();
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
         await InspectorCapture.SaveIfRequestedAsync(card, $"sky-luminance-{width}").ConfigureAwait(true);
@@ -239,6 +241,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         {
             await Task.Delay(TimeSpan.FromSeconds(captureSeconds), this.TestContext.CancellationToken).ConfigureAwait(true);
         }
+
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
         await InspectorCapture.SaveIfRequestedAsync(section, $"background-{width}-{theme}").ConfigureAwait(true);
     });
@@ -320,6 +323,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             _ = card.Margin.Should().Be(new Thickness(0));
             _ = card.Padding.Should().Be(new Thickness(0));
         }
+
         var disclosureHeader = primary.FindDescendant<ToggleButton>(toggle => toggle.Name == "ExpanderHeader")!;
         var disclosureGap = source.TransformToVisual(primary).TransformPoint(default).Y
             - disclosureHeader.TransformToVisual(primary).TransformPoint(default).Y - disclosureHeader.ActualHeight;
@@ -346,6 +350,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
                 _ = iconCenter.Should().BeApproximately(referenceCenter, 1);
             }
         }
+
         var sectionResources = view.SectionView("AtmosphereLights").Resources;
         var headerToggles = section.FindDescendants().OfType<ToggleButton>().Where(toggle => ReferenceEquals(toggle.Style, sectionResources["QuietInspectorToggle"])).ToArray();
         _ = headerToggles.Should().NotBeEmpty();
@@ -353,6 +358,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         {
             _ = ((Microsoft.UI.Xaml.Media.SolidColorBrush)toggle.Background).Color.A.Should().Be(0);
         }
+
         var selector = (CommunityToolkit.WinUI.Controls.Segmented)view.FindName("ScenePropertyScopeSelector");
         var scopes = selector.Items.OfType<CommunityToolkit.WinUI.Controls.SegmentedItem>().ToArray();
         _ = scopes.Max(item => item.ActualWidth).Should().BeApproximately(scopes.Min(item => item.ActualWidth), 1);

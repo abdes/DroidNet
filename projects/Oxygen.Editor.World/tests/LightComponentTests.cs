@@ -99,6 +99,7 @@ public sealed class LightComponentTests
             nameof(DirectionalLightComponent.DistanceFadeoutFraction),
         ]);
     }
+
     [TestMethod]
     public void CompleteDirectionalValues_RoundTripAndInvalidHydrationIsAtomic()
     {

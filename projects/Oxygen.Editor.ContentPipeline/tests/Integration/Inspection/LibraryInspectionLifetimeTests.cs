@@ -58,6 +58,7 @@ public sealed class LibraryInspectionLifetimeTests
                 {
                     _ = writer.ProjectRoot.Should().Be(workspace.Root);
                 }
+
                 drain.SetResult();
                 await failure.Which.DrainCompletion.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
             }

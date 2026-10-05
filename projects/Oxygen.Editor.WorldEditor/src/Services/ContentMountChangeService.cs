@@ -104,5 +104,4 @@ public sealed class ContentMountChangeService(IContentCookCoordinator coordinato
             throw new OperationCanceledException("The project configuration changed before this mount operation started.");
         }
     }
-
 }

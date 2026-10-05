@@ -77,7 +77,7 @@ public sealed class ProjectContextService : IProjectContextService
 
         public void Dispose()
         {
-            var target = Interlocked.Exchange(ref this.owner, null);
+            var target = Interlocked.Exchange(ref this.owner, value: null);
             target?.Unsubscribe(observer);
         }
     }

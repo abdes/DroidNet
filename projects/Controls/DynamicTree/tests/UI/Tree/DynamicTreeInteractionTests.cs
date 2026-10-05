@@ -136,7 +136,7 @@ public sealed partial class DynamicTreeBasicTests
 
         // WinUI cannot synthesize a routed pointer press on the action content in this host.
         typeof(TreeItemControl).GetField("isInteractivePointerActive", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(row, true);
+            .SetValue(row, value: true);
         _ = row.IsInteractiveActionInProgress.Should().BeTrue();
         control.SetDropIndicatorVisual(row, DynamicTree.DropZone.Inside);
         var cleared = false;

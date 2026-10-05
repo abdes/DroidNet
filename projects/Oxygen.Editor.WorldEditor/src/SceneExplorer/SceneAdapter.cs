@@ -203,7 +203,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
             // expanded view would be re-authored into the layout entry on this rebuild.
             if (transientlyExpandedFolderIds?.Contains(entry.FolderId ?? Guid.Empty) == true)
             {
-                folder.SetExpansionTransient(true);
+                folder.SetExpansionTransient(transient: true);
             }
 
             // Restore expansion state

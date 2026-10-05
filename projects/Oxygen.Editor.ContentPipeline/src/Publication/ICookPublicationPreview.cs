@@ -27,5 +27,4 @@ public interface ICookPublicationPreview : IAsyncDisposable
     /// <param name="publication">The borrowed committed snapshot.</param>
     /// <returns>Completion of catalog and observer updates.</returns>
     public Task CommittedAsync(CookPublicationReadLease publication);
-
 }

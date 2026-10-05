@@ -15,11 +15,11 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
+using Oxygen.Editor.World.Documents.Commands;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
 using Oxygen.Managed.Assets.Model;
@@ -619,7 +619,7 @@ public sealed partial class SceneDocumentCommandService(
         };
 
     private static List<SceneNode> ResolveNodes(Scene scene, IReadOnlyList<Guid> nodeIds)
-        => nodeIds.Select(id => FindNode(scene, id)).OfType<SceneNode>().ToList();
+        => [.. nodeIds.Select(id => FindNode(scene, id)).OfType<SceneNode>()];
 
     private static SceneNode? FindNode(Scene scene, Guid nodeId)
     {
@@ -1320,19 +1320,31 @@ public sealed partial class SceneDocumentCommandService(
         var edits = targets.ToDictionary(target => target.node.Id, _ => edit);
         if (ValidateDirectionalLightCandidates(context.Scene, edits) is { } invalid)
         {
-            return this.ValidationFailure(SceneOperationKinds.EditDirectionalLight,
-                invalid.Code, invalid.Title, invalid.Message, context);
+            return this.ValidationFailure(
+                SceneOperationKinds.EditDirectionalLight,
+                invalid.Code,
+                invalid.Title,
+                invalid.Message,
+                context);
         }
+
         var before = targets.ConvertAll(static target => DirectionalLightState.Capture(target.node, target.light!));
-        foreach (var (_, light) in targets) ApplyDirectionalLightEdit(light!, edit);
+        foreach (var (_, light) in targets)
+        {
+            ApplyDirectionalLightEdit(light!, edit);
+        }
+
         var after = targets.ConvertAll(static target => DirectionalLightState.Capture(target.node, target.light!));
         this.RecordDirectionalLightHistory(context, new(before), new(after));
-        var nodes = targets.Select(static target => target.node).ToList();
-        var payloads = targets.ToDictionary(target => target.node.Id,
+        var nodes = targets.ConvertAll(static target => target.node);
+        var payloads = targets.ToDictionary(
+            target => target.node.Id,
             target => BuildDirectionalLightPropertyEntries(edit, target.light!));
         var metadataUpdate = this.MarkDirtyAsync(context, out var revision);
         var operationResultId = await CompletePublicationAsync(metadataUpdate, this.SyncEditedNodesAsync(
-            context, nodes, SceneOperationKinds.EditDirectionalLight,
+            context,
+            nodes,
+            SceneOperationKinds.EditDirectionalLight,
             node => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, payloads[node.Id], revision))).ConfigureAwait(true);
         return new SceneCommandResult(Succeeded: true, operationResultId);
     }
@@ -1466,7 +1478,7 @@ public sealed partial class SceneDocumentCommandService(
         var metadataUpdate = this.MarkDirtyAsync(context, out var revision);
         _ = await CompletePublicationAsync(metadataUpdate, this.SyncEditedNodesAsync(
             context,
-            states.Select(static state => state.Node).ToList(),
+            [.. states.Select(static state => state.Node)],
             SceneOperationKinds.EditPerspectiveCamera,
             node => this.sceneEngineSync.UpdatePropertiesAsync(context.Scene, node, payloads[node.Id], revision))).ConfigureAwait(true);
     }
@@ -1975,7 +1987,6 @@ public sealed partial class SceneDocumentCommandService(
             this.Light.DistanceFadeoutFraction = this.DistanceFadeoutFraction;
         }
     }
-
 
     private sealed record DirectionalLightSceneState(IReadOnlyList<DirectionalLightState> Targets);
 }

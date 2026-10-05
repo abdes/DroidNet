@@ -9,13 +9,16 @@ using Windows.UI.ViewManagement;
 
 namespace DroidNet.Controls;
 
+/// <summary>
+/// Layout- and measurement-related implementation for the NumberBox control.
+/// </summary>
 public partial class NumberBox
 {
     private readonly UISettings layoutSettings = new();
     private FrameworkElement? valueGroup;
     private TextBlock? prefixTextBlock;
     private TextBlock? qualifierTextBlock;
-    private (LabelPosition Position, double LabelWidth, double ValueWidth, bool Compact)? appliedLabelLayout;
+    private (LabelPosition position, double labelWidth, double valueWidth, bool compact)? appliedLabelLayout;
 
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
@@ -23,6 +26,9 @@ public partial class NumberBox
         this.UpdateLabelLayout(availableSize.Width);
         return base.MeasureOverride(availableSize);
     }
+
+    private static ColumnDefinition ValueColumn(double minimumWidth)
+        => new() { Width = new GridLength(1, GridUnitType.Star), MinWidth = minimumWidth };
 
     private void UpdateLabelPosition()
     {
@@ -163,7 +169,4 @@ public partial class NumberBox
         Grid.SetRow(this.labelTextBlock!, labelOnTop ? 0 : 1);
         Grid.SetRow(this.valueGroup!, labelOnTop ? 1 : 0);
     }
-
-    private static ColumnDefinition ValueColumn(double minimumWidth)
-        => new() { Width = new GridLength(1, GridUnitType.Star), MinWidth = minimumWidth };
 }

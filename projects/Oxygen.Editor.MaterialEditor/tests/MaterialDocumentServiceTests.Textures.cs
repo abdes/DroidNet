@@ -4,6 +4,7 @@
 
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Oxygen.Editor.MaterialEditor.PropertyPipeline;
 using Oxygen.Editor.Schemas;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
@@ -50,7 +51,7 @@ public sealed partial class MaterialDocumentServiceTests
         _ = service.Redo(material.DocumentId).Succeeded.Should().BeTrue();
         _ = service.GetDocument(material.DocumentId).Source.TextureReferences["base_color"].Should().Be("/Content/Textures/New.otex");
 
-        var cleared = await service.EditTextureAsync(material.DocumentId, "normal", null, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var cleared = await service.EditTextureAsync(material.DocumentId, "normal", virtualPath: null, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = cleared.Succeeded.Should().BeTrue();
         _ = (await service.SaveAsync(material.DocumentId, this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
         await service.CloseAsync(material.DocumentId, discard: false, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -83,11 +84,11 @@ public sealed partial class MaterialDocumentServiceTests
 
         var normal = await service.EditPropertiesAsync(
             material.DocumentId,
-            PropertyEdit.Single(MaterialDescriptors.NormalScale, 0.75f),
+            PropertyEdit.SingleEdit(MaterialDescriptors.NormalScale, 0.75f),
             this.TestContext.CancellationToken).ConfigureAwait(false);
         var occlusion = await service.EditPropertiesAsync(
             material.DocumentId,
-            PropertyEdit.Single(MaterialDescriptors.AmbientOcclusion, 0.4f),
+            PropertyEdit.SingleEdit(MaterialDescriptors.AmbientOcclusion, 0.4f),
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = normal.Succeeded.Should().BeTrue();

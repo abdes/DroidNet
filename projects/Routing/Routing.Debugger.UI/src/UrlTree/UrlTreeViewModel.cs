@@ -55,7 +55,7 @@ public partial class UrlTreeViewModel : TreeViewModelBase, IDisposable
     /// <inheritdoc/>
     public void Dispose()
     {
-        this.Dispose(true);
+        this.Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
 

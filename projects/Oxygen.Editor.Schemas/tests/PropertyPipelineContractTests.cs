@@ -32,8 +32,8 @@ public sealed class PropertyPipelineContractTests
         var nodeId = Guid.NewGuid();
         var target = new Target { X = 1.0f };
         var descriptors = new Dictionary<PropertyId, PropertyDescriptor> { [X.Id] = XDescriptor };
-        var before = new PropertySnapshot(new Dictionary<Guid, PropertyEdit> { [nodeId] = PropertyEdit.Single(X, 1.0f) });
-        var after = new PropertySnapshot(new Dictionary<Guid, PropertyEdit> { [nodeId] = PropertyEdit.Single(X, 5.0f) });
+        var before = new PropertySnapshot(new Dictionary<Guid, PropertyEdit> { [nodeId] = PropertyEdit.SingleEdit(X, 1.0f) });
+        var after = new PropertySnapshot(new Dictionary<Guid, PropertyEdit> { [nodeId] = PropertyEdit.SingleEdit(X, 5.0f) });
         var op = new PropertyOp([nodeId], before, after, "Set X");
         var resolver = new TargetResolver(nodeId, target);
 
@@ -78,7 +78,7 @@ public sealed class PropertyPipelineContractTests
     public void ApplyToTargetFailsWithPropertyIdWhenDescriptorIsMissing()
     {
         var target = new Target { X = 1.0f };
-        var edit = PropertyEdit.Single(X, 2.0f);
+        var edit = PropertyEdit.SingleEdit(X, 2.0f);
 
         var act = () => PropertyApply.ApplyToTarget(
             target,
@@ -101,11 +101,11 @@ public sealed class PropertyPipelineContractTests
         var nodeId = Guid.NewGuid();
         var before = new PropertySnapshot(new Dictionary<Guid, PropertyEdit>
         {
-            [nodeId] = PropertyEdit.Single(X, 1.0f),
+            [nodeId] = PropertyEdit.SingleEdit(X, 1.0f),
         });
         var after = new PropertySnapshot(new Dictionary<Guid, PropertyEdit>
         {
-            [nodeId] = PropertyEdit.Single(X, 2.0f),
+            [nodeId] = PropertyEdit.SingleEdit(X, 2.0f),
         });
         _ = controller.Begin("test#/x", [nodeId], before, "Set X");
         var fired = false;

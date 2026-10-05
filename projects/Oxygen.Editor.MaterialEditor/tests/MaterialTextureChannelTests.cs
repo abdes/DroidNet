@@ -14,7 +14,7 @@ public sealed class MaterialTextureChannelTests
     {
         var changes = new List<string?>();
         var channel = new MaterialTextureChannel("base_color", "Base color", (_, path) => changes.Add(path));
-        var available = new MaterialTextureChoice("/Content/Textures/Available.otex", "Available", true);
+        var available = new MaterialTextureChoice("/Content/Textures/Available.otex", "Available", IsAvailable: true);
         const string missing = "/Content/Textures/Missing.otex";
 
         channel.Refresh([available], missing);

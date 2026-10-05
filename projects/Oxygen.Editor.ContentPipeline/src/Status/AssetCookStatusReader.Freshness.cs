@@ -4,8 +4,8 @@
 
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Incremental;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.ContentPipeline.Snapshots;
 
 namespace Oxygen.Editor.ContentPipeline.Status;
 
@@ -19,11 +19,12 @@ public sealed partial class AssetCookStatusReader
         var unknown = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
         foreach (var root in previous.Roots)
         {
-            if (publication.UnavailableRoots.Any(binding => binding.Name == root.Mount)
+            if (publication.UnavailableRoots.Any(binding => string.Equals(binding.Name, root.Mount, StringComparison.Ordinal))
                 || publication.FindProjectRoot(root.Mount) is not { } path)
             {
                 continue;
             }
+
             try
             {
                 var current = await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false);
@@ -42,7 +43,7 @@ public sealed partial class AssetCookStatusReader
 
                 var members = current.Index.Assets.Select(static asset => asset.DescriptorRelativePath)
                     .Concat(current.Index.Files.Select(static file => file.RelativePath)).ToHashSet(StringComparer.Ordinal);
-                foreach (var output in previous.Products.SelectMany(static product => product.Outputs).Where(output => output.RootMount == root.Mount))
+                foreach (var output in previous.Products.SelectMany(static product => product.Outputs).Where(output => string.Equals(output.RootMount, root.Mount, StringComparison.Ordinal)))
                 {
                     if (output.Asset.DescriptorRelativePath is { } descriptor && members.Contains(descriptor) && IsPresentFile(Path.Combine(path, descriptor)))
                     {

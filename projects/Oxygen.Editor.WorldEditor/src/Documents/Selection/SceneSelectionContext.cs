@@ -48,7 +48,7 @@ public sealed record SceneSelectionContext(
     public IReadOnlyList<Guid> SelectedFolderIds { get; } = Array.AsReadOnly(SelectedFolderIds.ToArray());
 
     /// <summary>Gets an empty selection context.</summary>
-    public static SceneSelectionContext Empty { get; } = new(SceneSelectionKind.Empty, [], [], null, null);
+    public static SceneSelectionContext Empty { get; } = new(SceneSelectionKind.Empty, [], [], PrimaryNodeId: null, PrimaryFolderId: null);
 
     /// <summary>
     /// Classifies a selection from the presence of each row kind, so every

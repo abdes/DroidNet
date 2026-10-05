@@ -31,28 +31,28 @@ public sealed partial class InspectorRgbField : UserControl
     public static readonly DependencyProperty BlueProperty = Register<float>(nameof(Blue), 0f, OnPresentationChanged);
 
     /// <summary>Identifies red-channel mixed state.</summary>
-    public static readonly DependencyProperty RedIsMixedProperty = Register<bool>(nameof(RedIsMixed), false);
+    public static readonly DependencyProperty RedIsMixedProperty = Register<bool>(nameof(RedIsMixed), defaultValue: false);
 
     /// <summary>Identifies green-channel mixed state.</summary>
-    public static readonly DependencyProperty GreenIsMixedProperty = Register<bool>(nameof(GreenIsMixed), false);
+    public static readonly DependencyProperty GreenIsMixedProperty = Register<bool>(nameof(GreenIsMixed), defaultValue: false);
 
     /// <summary>Identifies blue-channel mixed state.</summary>
-    public static readonly DependencyProperty BlueIsMixedProperty = Register<bool>(nameof(BlueIsMixed), false);
+    public static readonly DependencyProperty BlueIsMixedProperty = Register<bool>(nameof(BlueIsMixed), defaultValue: false);
 
     /// <summary>Identifies multiplier presentation, which never offers a color picker.</summary>
-    public static readonly DependencyProperty IsMultiplierProperty = Register<bool>(nameof(IsMultiplier), false, OnKindChanged);
+    public static readonly DependencyProperty IsMultiplierProperty = Register<bool>(nameof(IsMultiplier), defaultValue: false, OnKindChanged);
 
     /// <summary>Identifies the existing per-channel formatting mask.</summary>
     public static readonly DependencyProperty ComponentMaskProperty = Register<string>(nameof(ComponentMask), "~.###");
 
     /// <summary>Identifies the borrowed edit-session owner for picker lifetime protection.</summary>
-    public static readonly DependencyProperty EditOwnerProperty = Register<IInspectorEditSessionOwner>(nameof(EditOwner), null, OnOwnerChanged);
+    public static readonly DependencyProperty EditOwnerProperty = Register<IInspectorEditSessionOwner>(nameof(EditOwner), defaultValue: null, OnOwnerChanged);
 
     /// <summary>Identifies the current validation text.</summary>
     public static readonly DependencyProperty ErrorTextProperty = Register<string>(nameof(ErrorText), string.Empty);
 
     /// <summary>Identifies whether current validation text is visible.</summary>
-    public static readonly DependencyProperty HasErrorProperty = Register<bool>(nameof(HasError), false, OnPresentationChanged);
+    public static readonly DependencyProperty HasErrorProperty = Register<bool>(nameof(HasError), defaultValue: false, OnPresentationChanged);
 
     /// <summary>Identifies the existing editor/diagnostic spacing.</summary>
     public static readonly DependencyProperty DiagnosticSpacingProperty = Register<double>(nameof(DiagnosticSpacing), 4d);
@@ -67,7 +67,7 @@ public sealed partial class InspectorRgbField : UserControl
     public static readonly DependencyProperty SwatchCornerRadiusProperty = Register<CornerRadius>(nameof(SwatchCornerRadius), new CornerRadius(2), OnAccessoryChanged);
 
     /// <summary>Identifies a consumer-specific existing swatch border brush.</summary>
-    public static readonly DependencyProperty SwatchBorderBrushProperty = Register<Brush>(nameof(SwatchBorderBrush), null, OnAccessoryChanged);
+    public static readonly DependencyProperty SwatchBorderBrushProperty = Register<Brush>(nameof(SwatchBorderBrush), defaultValue: null, OnAccessoryChanged);
 
     private Button? swatch;
     private Border? swatchBorder;

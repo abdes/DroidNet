@@ -55,7 +55,6 @@ public sealed partial class SpotLightComponent : LightComponent
         set => _ = this.SetProperty(ref this.sourceRadius, value);
     }
 
-
     /// <summary>
     /// Gets or sets the inner cone angle, in radians.
     /// </summary>

@@ -5,8 +5,8 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Oxygen.Editor.Projects;
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;

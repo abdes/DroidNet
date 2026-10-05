@@ -35,7 +35,7 @@ public sealed class SceneSelectionService : ISceneSelectionService
                 orderedIds,
                 [],
                 orderedIds[^1],
-                null);
+PrimaryFolderId: null);
 
         this.PublishCore(documentId, context, source);
     }

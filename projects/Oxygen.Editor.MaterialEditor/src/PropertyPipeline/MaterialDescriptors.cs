@@ -2,11 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Generic;
-using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Editor.Schemas;
+using Oxygen.Managed.Assets.Authoring.Materials;
 
-namespace Oxygen.Editor.MaterialEditor;
+namespace Oxygen.Editor.MaterialEditor.PropertyPipeline;
 
 /// <summary>
 /// Schema-driven property descriptors for <c>oxygen.material-descriptor.schema.json</c>.

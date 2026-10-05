@@ -26,8 +26,8 @@ public sealed partial class CookPublicationService
         var saved = await projectManager.LoadProjectInfoAsync(operation.Project.ProjectRoot).ConfigureAwait(false)
             ?? throw new InvalidDataException("The saved project is unavailable.");
         if (saved.Id != operation.Project.ProjectId
-            || CookPublicationDocument.ConfigurationIdentity(ProjectContext.FromProjectInfo(saved, []))
-                != CookPublicationDocument.ConfigurationIdentity(operation.Project))
+            || !string.Equals(CookPublicationDocument.ConfigurationIdentity(ProjectContext.FromProjectInfo(saved, []))
+, CookPublicationDocument.ConfigurationIdentity(operation.Project), StringComparison.Ordinal))
         {
             throw new DroidNet.Storage.StorageWriteConflictException("The saved content configuration changed. Reopen the project before cooking or mounting it.");
         }
@@ -42,5 +42,4 @@ public sealed partial class CookPublicationService
         await CookPublicationTransaction.RecoverInterruptedMutationsAsync(project, files, projectManager, gate,
             currentOperation: null, cancellationToken).ConfigureAwait(false);
     }
-
 }

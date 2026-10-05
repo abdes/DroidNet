@@ -15,7 +15,7 @@ public sealed class BindingProxy : DependencyObject
     /// Backing dependency property for the Data property.
     /// </summary>
     public static readonly DependencyProperty DataProperty =
-        DependencyProperty.Register("Data", typeof(object), typeof(BindingProxy), new PropertyMetadata(null));
+        DependencyProperty.Register("Data", typeof(object), typeof(BindingProxy), new PropertyMetadata(defaultValue: null));
 
     /// <summary>
     /// Gets or sets an arbitrary object to expose into templates.

@@ -25,7 +25,7 @@ public sealed partial class SceneRowActions : UserControl
         nameof(CommandOwner),
         typeof(SceneExplorerViewModel),
         typeof(SceneRowActions),
-        new PropertyMetadata(null));
+        new PropertyMetadata(defaultValue: null));
 
     private DynamicTreeItem? row;
     private SceneNodeAdapter? item;
@@ -99,7 +99,7 @@ public sealed partial class SceneRowActions : UserControl
 
         this.ClearValue(CommandOwnerProperty);
         this.hovered = false;
-        this.ObserveItem(null);
+        this.ObserveItem(adapter: null);
     }
 
     private void OnDataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)

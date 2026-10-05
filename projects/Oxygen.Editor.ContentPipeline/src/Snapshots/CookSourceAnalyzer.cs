@@ -224,7 +224,7 @@ internal sealed partial class CookSourceAnalyzer(
         var textureDiagnostics = input.Kind == ContentCookAssetKind.Material
             ? await this.ValidateMaterialTextureSourcesAsync(input, cancellationToken).ConfigureAwait(false)
             : [];
-        return new(input, recipes.BuildJob(input, [], settings), managed.ToImmutable(), null) { Diagnostics = textureDiagnostics };
+        return new(input, recipes.BuildJob(input, [], settings), managed.ToImmutable(), Scene: null) { Diagnostics = textureDiagnostics };
     }
 
     private async Task<ImmutableArray<DiagnosticRecord>> ValidateMaterialTextureSourcesAsync(ContentCookInput input, CancellationToken cancellationToken)
@@ -252,7 +252,7 @@ internal sealed partial class CookSourceAnalyzer(
 
             if (textures.ValueKind != JsonValueKind.Object)
             {
-                diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, "<unknown>", input.SourceAbsolutePath, "material texture bindings are invalid", null));
+                diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, "<unknown>", input.SourceAbsolutePath, "material texture bindings are invalid", details: null));
                 return diagnostics.ToImmutable();
             }
 
@@ -265,7 +265,7 @@ internal sealed partial class CookSourceAnalyzer(
                     : null;
                 if (string.IsNullOrWhiteSpace(virtualPath))
                 {
-                    diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, binding.Name, input.SourceAbsolutePath, "binding has no valid virtual_path", null));
+                    diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, binding.Name, input.SourceAbsolutePath, "binding has no valid virtual_path", details: null));
                     continue;
                 }
 
@@ -273,14 +273,14 @@ internal sealed partial class CookSourceAnalyzer(
                     || virtualPath.IndexOf('/', 1) < 2
                     || !virtualPath.EndsWith(".otex", StringComparison.Ordinal))
                 {
-                    diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, binding.Name, virtualPath, "path is not a canonical named texture", null));
+                    diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, binding.Name, virtualPath, "path is not a canonical named texture", details: null));
                     continue;
                 }
 
                 var textureDescriptorPath = this.ResolveTextureDescriptorPath(virtualPath);
                 if (textureDescriptorPath is null || !File.Exists(textureDescriptorPath))
                 {
-                    diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, binding.Name, textureDescriptorPath ?? virtualPath, "texture descriptor is missing", null));
+                    diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, binding.Name, textureDescriptorPath ?? virtualPath, "texture descriptor is missing", details: null));
                     continue;
                 }
 
@@ -295,7 +295,7 @@ internal sealed partial class CookSourceAnalyzer(
                         : null;
                     if (string.IsNullOrWhiteSpace(source))
                     {
-                        diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, binding.Name, textureDescriptorPath, "texture descriptor has no source image", null));
+                        diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, binding.Name, textureDescriptorPath, "texture descriptor has no source image", details: null));
                         continue;
                     }
 
@@ -304,7 +304,7 @@ internal sealed partial class CookSourceAnalyzer(
                         : Path.GetFullPath(Path.Combine(Path.GetDirectoryName(textureDescriptorPath)!, source));
                     if (!File.Exists(imagePath))
                     {
-                        diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, binding.Name, imagePath, "source image is missing", null));
+                        diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, binding.Name, imagePath, "source image is missing", details: null));
                     }
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException)

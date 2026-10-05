@@ -371,7 +371,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     {
         await this.ExecuteContextActionAsync(
             SceneExplorerCommandKind.Delete,
-            this.CaptureExplorerContext(null, background: false)).ConfigureAwait(true);
+            this.CaptureExplorerContext(anchor: null, background: false)).ConfigureAwait(true);
     }
 
     /// <inheritdoc />
@@ -433,7 +433,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         var distinctIds = nodeIds.Distinct().ToArray();
         var context = distinctIds.Length == 0
             ? SceneSelectionContext.Empty
-            : new SceneSelectionContext(SceneSelectionKind.Node, distinctIds, [], distinctIds[^1], null);
+            : new SceneSelectionContext(SceneSelectionKind.Node, distinctIds, [], distinctIds[^1], PrimaryFolderId: null);
 
         this.suppressSelectionSync = true;
         try
@@ -477,7 +477,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         {
             this.WithSelectionBatch(() =>
             {
-                this.SetActiveItem(null);
+                this.SetActiveItem(item: null);
                 this.SelectionModel?.ClearSelection();
             });
         }
@@ -598,7 +598,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private bool CanRenameSelected()
         => this.GetContextDisabledReason(
             SceneExplorerCommandKind.Rename,
-            this.CaptureExplorerContext(null, background: false)) is null;
+            this.CaptureExplorerContext(anchor: null, background: false)) is null;
 
     [RelayCommand]
     private async Task Undo()
@@ -845,19 +845,19 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private Task Copy() => this.CopyItemsAsync(this.GetSelectedItems());
 
     private bool CanCopy()
-        => this.GetContextDisabledReason(SceneExplorerCommandKind.Copy, this.CaptureExplorerContext(null, background: false)) is null;
+        => this.GetContextDisabledReason(SceneExplorerCommandKind.Copy, this.CaptureExplorerContext(anchor: null, background: false)) is null;
 
     [RelayCommand(CanExecute = nameof(CanCut))]
     private Task Cut() => this.CutItemsAsync(this.GetSelectedItems());
 
     private bool CanCut()
-        => this.GetContextDisabledReason(SceneExplorerCommandKind.Cut, this.CaptureExplorerContext(null, background: false)) is null;
+        => this.GetContextDisabledReason(SceneExplorerCommandKind.Cut, this.CaptureExplorerContext(anchor: null, background: false)) is null;
 
     [RelayCommand(CanExecute = nameof(CanPaste))]
     private Task Paste() => this.PasteItemsAsync(targetParent: null);
 
     private bool CanPaste()
-        => this.GetContextDisabledReason(SceneExplorerCommandKind.Paste, this.CaptureExplorerContext(null, background: false)) is null;
+        => this.GetContextDisabledReason(SceneExplorerCommandKind.Paste, this.CaptureExplorerContext(anchor: null, background: false)) is null;
 
     /// <inheritdoc />
     protected override void OnClipboardCleared()
@@ -1366,7 +1366,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
             // Clear the transient flag only after the search expansion is undone so the authored
             // layout entry never observes a search-driven expansion write.
-            folder.SetExpansionTransient(false);
+            folder.SetExpansionTransient(transient: false);
         }
 
         foreach (var nodeId in this.searchExpandedNodeIds.ToArray())
@@ -1538,7 +1538,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             // Search expansion is transient: it must not write the authored layout entry or
             // dirty the document. It is recorded by identity so a projection rebuild can
             // re-apply it as transient instead of baking the expanded view into the layout.
-            folder.SetExpansionTransient(true);
+            folder.SetExpansionTransient(transient: true);
             _ = this.searchExpandedFolderIds.Add(folder.Id);
         }
         else
@@ -1863,7 +1863,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             {
                 if (ancestor is FolderAdapter folder)
                 {
-                    folder.SetExpansionTransient(true);
+                    folder.SetExpansionTransient(transient: true);
                 }
 
                 await this.ExpandItemAsync(ancestor).ConfigureAwait(true);

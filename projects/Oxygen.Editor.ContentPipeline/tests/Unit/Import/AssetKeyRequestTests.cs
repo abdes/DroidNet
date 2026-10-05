@@ -59,6 +59,7 @@ public sealed class AssetKeyRequestTests
         _ = await work.Should().ThrowAsync<InvalidDataException>().ConfigureAwait(false);
         _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, "dependency-inspection")).Should().BeEmpty();
     }
+
     private const string AssetKeyReport = """
         {"schema":"oxygen.asset-key-map.v1","assets":[{"virtual_path":"/Game/Physics/Materials/Rubber.opmat","asset_key":"5793612a-1c25-ca81-a7a2-8e696378559e"}]}
         """;

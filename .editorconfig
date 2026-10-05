@@ -307,6 +307,8 @@ dotnet_diagnostic.RCS1194.severity = none
 #########################################################################
 ### Stylecop.Analyzers rules
 dotnet_diagnostic.SA1200.severity = none
+dotnet_diagnostic.SA1600.severity = suggestion
+dotnet_diagnostic.SA1601.severity = suggestion
 
 #########################################################################
 ### DotNet Code Analyzer rules

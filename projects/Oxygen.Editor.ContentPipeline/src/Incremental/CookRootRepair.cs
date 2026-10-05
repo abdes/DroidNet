@@ -4,8 +4,8 @@
 
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Inspection;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
@@ -22,8 +22,8 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
         foreach (var mount in mounts)
         {
             var path = publication.FindProjectRoot(mount);
-            var prior = previous.Roots.FirstOrDefault(root => root.Mount == mount);
-            var owners = previous.Products.Where(product => product.Outputs.Any(output => output.RootMount == mount)).ToArray();
+            var prior = previous.Roots.FirstOrDefault(root => string.Equals(root.Mount, mount, StringComparison.Ordinal));
+            var owners = previous.Products.Where(product => product.Outputs.Any(output => string.Equals(output.RootMount, mount, StringComparison.Ordinal))).ToArray();
             if (!inventories.TryGetValue(mount, out var inventory))
             {
                 if (prior is null && path is not null && Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any())
@@ -57,16 +57,16 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
 
             var descriptors = inventory.Assets.Select(static asset => asset.DescriptorPath).ToHashSet(StringComparer.Ordinal);
             descriptors.UnionWith(owners.SelectMany(static product => product.Outputs)
-                .Where(output => output.RootMount == mount && output.Asset.DescriptorRelativePath is not null)
+                .Where(output => string.Equals(output.RootMount, mount, StringComparison.Ordinal) && output.Asset.DescriptorRelativePath is not null)
                 .Select(static output => output.Asset.DescriptorRelativePath!));
             var sharedDamage = inventory.Issues.Any(issue => !descriptors.Contains(issue.RelativePath)
-                || issue.Reason != "digest_mismatch");
+                || !string.Equals(issue.Reason, "digest_mismatch", StringComparison.Ordinal));
             var affected = sharedDamage ? descriptors
-                : descriptors.Where(descriptor => inventory.Issues.Any(issue => issue.RelativePath == descriptor));
+                : descriptors.Where(descriptor => inventory.Issues.Any(issue => string.Equals(issue.RelativePath, descriptor, StringComparison.Ordinal)));
             foreach (var descriptor in affected)
             {
-                var owner = owners.Where(product => product.Outputs.Any(output => output.RootMount == mount
-                    && output.Asset.DescriptorRelativePath == descriptor)).ToArray();
+                var owner = owners.Where(product => product.Outputs.Any(output => string.Equals(output.RootMount, mount
+, StringComparison.Ordinal) && string.Equals(output.Asset.DescriptorRelativePath, descriptor, StringComparison.Ordinal))).ToArray();
                 if (owner.Length != 1)
                 {
                     diagnostics.Add(Failure(Path.Combine(path, descriptor), $"Cannot rebuild '{descriptor}': its source owner is unknown."));
@@ -81,7 +81,7 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
             {
                 var associatedResources = owners.SelectMany(static product => product.AuxiliaryFiles)
                     .Concat(owners.SelectMany(static product => product.Outputs)
-                        .Where(output => output.RootMount == mount && output.Asset.DescriptorRelativePath is not null)
+                        .Where(output => string.Equals(output.RootMount, mount, StringComparison.Ordinal) && output.Asset.DescriptorRelativePath is not null)
                         .Select(static output => output.Asset.DescriptorRelativePath!)).ToHashSet(StringComparer.Ordinal);
                 foreach (var file in inventory.Files.Where(file => file.Value.Kind == Oxygen.Managed.Assets.Persistence.LooseCooked.V3.FileKind.Auxiliary
                     && !associatedResources.Contains(file.Key)))

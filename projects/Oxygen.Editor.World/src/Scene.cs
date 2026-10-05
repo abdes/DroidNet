@@ -81,6 +81,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
         {
             throw new ArgumentException(error, nameof(data));
         }
+
         using (this.SuppressNotifications())
         {
             this.RootNodes.Clear();
@@ -104,6 +105,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
         {
             throw new InvalidOperationException(error);
         }
+
         return new()
         {
             Name = this.Name,

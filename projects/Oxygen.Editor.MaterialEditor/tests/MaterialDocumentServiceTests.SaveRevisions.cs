@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using DroidNet.Storage;
 using DroidNet.Storage.Native;
+using Oxygen.Editor.MaterialEditor.PropertyPipeline;
 using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Assets.Authoring.Materials;
 
@@ -34,7 +35,7 @@ public sealed partial class MaterialDocumentServiceTests
         var save = service.SaveAsync(document.DocumentId, this.TestContext.CancellationToken);
         await captured.Task.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = schemaEdit
-            ? await service.EditPropertiesAsync(document.DocumentId, PropertyEdit.Single(MaterialDescriptors.Metalness, 0.75f), this.TestContext.CancellationToken).ConfigureAwait(false)
+            ? await service.EditPropertiesAsync(document.DocumentId, PropertyEdit.SingleEdit(MaterialDescriptors.Metalness, 0.75f), this.TestContext.CancellationToken).ConfigureAwait(false)
             : await service.EditScalarAsync(document.DocumentId, new MaterialFieldEdit(MaterialFieldKeys.MetallicFactor, 0.75f), this.TestContext.CancellationToken).ConfigureAwait(false);
         release.SetResult();
         var result = await save.ConfigureAwait(false);

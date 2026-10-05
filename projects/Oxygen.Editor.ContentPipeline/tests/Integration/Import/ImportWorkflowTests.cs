@@ -224,6 +224,7 @@ public sealed class ImportWorkflowTests
             external.Delete(recursive: true);
         }
     }
+
     private static readonly string[] TypedImportOutputPaths =
         ["/Content/Materials/Model/Scalar.omat", "/Content/Geometry/Model/Triangle.ogeo", "/Content/Scenes/Model/Model.oscene"];
     private sealed class FailSettingsStore : IAtomicFileStore

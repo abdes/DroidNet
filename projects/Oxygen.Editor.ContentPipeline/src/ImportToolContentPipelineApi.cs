@@ -97,7 +97,7 @@ public sealed partial class ImportToolContentPipelineApi(
         }
         catch (Exception error) when (IsLooseCookedReadFailure(error))
         {
-            return new(cookedRoot, false, null, [], [], [InventoryFailure(cookedRoot, error, ContentPipelineDiagnosticCodes.InspectFailed)]);
+            return new(cookedRoot, Succeeded: false, SourceIdentity: null, [], [], [InventoryFailure(cookedRoot, error, ContentPipelineDiagnosticCodes.InspectFailed)]);
         }
     }
 
@@ -113,7 +113,7 @@ public sealed partial class ImportToolContentPipelineApi(
         }
         catch (Exception error) when (IsLooseCookedReadFailure(error))
         {
-            return new(cookedRoot, false, [InventoryFailure(cookedRoot, error, ContentPipelineDiagnosticCodes.ValidateFailed)]);
+            return new(cookedRoot, Succeeded: false, [InventoryFailure(cookedRoot, error, ContentPipelineDiagnosticCodes.ValidateFailed)]);
         }
     }
 

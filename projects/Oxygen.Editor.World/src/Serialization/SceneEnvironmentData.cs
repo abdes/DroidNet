@@ -23,7 +23,6 @@ public sealed record SceneEnvironmentData
     /// </summary>
     public SkyAtmosphereEnvironmentData SkyAtmosphere { get; init; } = new();
 
-
     /// <summary>
     /// Gets authored post-process parameters mirrored from Oxygen's native PostProcessVolume.
     /// </summary>

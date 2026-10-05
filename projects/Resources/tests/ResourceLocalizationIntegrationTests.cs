@@ -172,6 +172,6 @@ public sealed class ResourceLocalizationIntegrationTests
     private static void ResetResourceExtensionsProvider()
     {
         var providerField = typeof(ResourceExtensions).GetField("provider", BindingFlags.NonPublic | BindingFlags.Static);
-        providerField?.SetValue(null, null);
+        providerField?.SetValue(null, value: null);
     }
 }

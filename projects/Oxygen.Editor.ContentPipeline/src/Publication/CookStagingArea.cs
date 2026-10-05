@@ -107,7 +107,7 @@ internal sealed class CookStagingArea : IAsyncDisposable
             }
 
             var damaged = inventory.Issues.Select(static issue => issue.RelativePath).ToHashSet(StringComparer.Ordinal);
-            var missing = inventory.Issues.Where(static issue => issue.Reason == "missing").Select(static issue => issue.RelativePath).ToHashSet(StringComparer.Ordinal);
+            var missing = inventory.Issues.Where(static issue => string.Equals(issue.Reason, "missing", StringComparison.Ordinal)).Select(static issue => issue.RelativePath).ToHashSet(StringComparer.Ordinal);
             foreach (var (path, expected) in inventory.Files)
             {
                 if (!root.Before.Files.TryGetValue(path, out var actual))
@@ -194,5 +194,4 @@ internal sealed class CookStagingArea : IAsyncDisposable
             ? throw new ArgumentException("Cooking requires distinct mount names that are single directory names.", nameof(mounts))
             : names.Order(StringComparer.Ordinal).ToArray();
     }
-
 }

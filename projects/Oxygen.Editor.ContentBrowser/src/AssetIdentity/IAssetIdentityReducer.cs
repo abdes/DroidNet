@@ -2,8 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.ContentBrowser.AssetIdentity;
 
@@ -12,11 +12,11 @@ namespace Oxygen.Editor.ContentBrowser.AssetIdentity;
 /// </summary>
 public interface IAssetIdentityReducer
 {
-    IReadOnlyList<ContentBrowserAssetItem> Reduce(
+    public IReadOnlyList<ContentBrowserAssetItem> Reduce(
         IReadOnlyList<AssetRecord> records,
         ProjectContext project,
         ProjectCookScope cookScope,
         AssetBrowserFilter filter);
 
-    ContentBrowserAssetItem CreateMissing(Uri uri);
+    public ContentBrowserAssetItem CreateMissing(Uri uri);
 }

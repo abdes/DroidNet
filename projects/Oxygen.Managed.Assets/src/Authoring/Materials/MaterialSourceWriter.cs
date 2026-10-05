@@ -51,6 +51,7 @@ public static class MaterialSourceWriter
                 descriptor["domain"] = material.AlphaMode == MaterialAlphaMode.Blend ? "alpha_blended" : alphaMode;
             }
         }
+
         var parameters = descriptor["parameters"] as JsonObject ?? new JsonObject();
         if (parameters.Parent is null)
         {
@@ -66,6 +67,7 @@ public static class MaterialSourceWriter
         {
             parameters["roughness"] = MaterialSource.UsesGlossiness(originalParameters) ? 1.0f - pbr.RoughnessFactor : pbr.RoughnessFactor;
         }
+
         parameters["double_sided"] = material.DoubleSided;
         parameters["alpha_cutoff"] = material.AlphaCutoff;
         parameters["emissive_color"] = new JsonArray(material.EmissiveColor.X, material.EmissiveColor.Y, material.EmissiveColor.Z);

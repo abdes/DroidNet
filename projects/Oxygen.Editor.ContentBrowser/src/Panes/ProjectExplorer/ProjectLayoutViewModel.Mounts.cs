@@ -125,6 +125,7 @@ public partial class ProjectLayoutViewModel
                 using var selected = await publications.AcquireReadAsync(context, CancellationToken.None).ConfigureAwait(true);
                 outputPaths = selected.ProjectOutputPaths.Distinct(StringComparer.Ordinal).ToArray();
             }
+
             VirtualFolderMountTreeItemAdapter? mount = null;
             try
             {

@@ -55,6 +55,7 @@ internal sealed partial class CookPublicationTransaction
             {
                 throw new InvalidDataException("The recovery journal contains an invalid source bundle.", invalid);
             }
+
             ValidateImage(source.Before);
             ValidateImage(source.After);
             if (!source.Before.Exists || source.Before.Files.IsEmpty || !source.After.Exists || source.After.Files.IsEmpty)

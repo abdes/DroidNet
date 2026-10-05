@@ -80,7 +80,7 @@ public sealed class CookedFolderTreeItemAdapter : TreeItemAdapter
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
-        if (e.PropertyName == nameof(this.IsExpanded))
+        if (string.Equals(e.PropertyName, nameof(this.IsExpanded), StringComparison.Ordinal))
         {
             this.OnPropertyChanged(nameof(this.IconGlyph));
         }

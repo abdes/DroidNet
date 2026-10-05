@@ -75,6 +75,7 @@ public class CameraComponentTests
         _ = recreated.ShutterRate.Should().Be(60f);
         _ = recreated.Iso.Should().Be(200f);
     }
+
     [TestMethod]
     [DataRow(0f)]
     [DataRow(-1f)]

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.SceneExplorer.Operations;
+using Oxygen.Editor.World.Documents.Commands;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -21,6 +21,7 @@ public sealed partial class SceneDocumentCommandService
     /// <param name="nodeIds">The hierarchy roots to duplicate.</param>
     /// <param name="newParentNodeId">The destination parent node, or <see langword="null"/> for root/folder scope.</param>
     /// <param name="newParentFolderId">The destination folder for grouping, or <see langword="null"/> when not grouping.</param>
+    /// <param name="insertAfterNodeId">Optional. If provided, the duplicated nodes will be inserted immediately after this sibling node; if <see langword="null"/> they are appended.</param>
     /// <returns>The created node roots.</returns>
     public async Task<SceneValueCommandResult<IReadOnlyList<SceneNode>>> DuplicateNodesAsync(
         SceneDocumentCommandContext context,
@@ -299,6 +300,22 @@ public sealed partial class SceneDocumentCommandService
         return SceneCommandResults.Success<IReadOnlyList<SceneNode>>(created);
     }
 
+    private static SceneNodeData RemapNodeIds(SceneNodeData data)
+        => data with
+        {
+            Id = Guid.NewGuid(),
+            Components = [.. data.Components.Select(RemapComponentId)],
+            Children = data.Children?.Select(RemapNodeIds).ToList(),
+        };
+
+    private static ComponentData RemapComponentId(ComponentData data)
+        => data switch
+        {
+            // Duplicated lights must not steal the source's Primary/Secondary atmosphere role.
+            DirectionalLightData directional => directional with { Id = Guid.NewGuid(), AtmosphereSlot = AtmosphereLightSlot.None },
+            _ => data with { Id = Guid.NewGuid() },
+        };
+
     private SceneValueCommandResult<IReadOnlyList<SceneNode>> DuplicateFailure(
         string code,
         string message,
@@ -318,20 +335,4 @@ public sealed partial class SceneDocumentCommandService
             await this.SyncNodeSubtreeAsync(context, child).ConfigureAwait(true);
         }
     }
-
-    private static SceneNodeData RemapNodeIds(SceneNodeData data)
-        => data with
-        {
-            Id = Guid.NewGuid(),
-            Components = data.Components.Select(RemapComponentId).ToList(),
-            Children = data.Children?.Select(RemapNodeIds).ToList(),
-        };
-
-    private static ComponentData RemapComponentId(ComponentData data)
-        => data switch
-        {
-            // Duplicated lights must not steal the source's Primary/Secondary atmosphere role.
-            DirectionalLightData directional => directional with { Id = Guid.NewGuid(), AtmosphereSlot = AtmosphereLightSlot.None },
-            _ => data with { Id = Guid.NewGuid() },
-        };
 }

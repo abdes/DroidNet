@@ -5,6 +5,8 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Controls;
 
 namespace DroidNet.Controls.Menus;
 
@@ -106,6 +108,7 @@ public partial class MenuItem
 
         // Update access key immediately so the control participates in AccessKeyManager.
         this.AccessKey = newData?.Mnemonic?.ToString() ?? string.Empty;
+        this.UpdateHelpText();
 
         // Only queue visual state updates if template is already applied.
         // Otherwise, OnApplyTemplate will handle initialization to avoid duplicate updates.
@@ -137,6 +140,10 @@ public partial class MenuItem
     {
         switch (propertyName)
         {
+            case nameof(MenuItemData.HelpText):
+                this.UpdateHelpText();
+                break;
+
             case nameof(MenuItemData.IsEnabled):
             case nameof(MenuItemData.IsExpanded):
             case nameof(MenuItemData.IsInteractive):
@@ -186,5 +193,12 @@ public partial class MenuItem
                 this.UpdateCheckmarkVisualState();
                 break;
         }
+    }
+
+    private void UpdateHelpText()
+    {
+        var helpText = this.ItemData?.HelpText;
+        AutomationProperties.SetHelpText(this, helpText);
+        ToolTipService.SetToolTip(this, helpText);
     }
 }

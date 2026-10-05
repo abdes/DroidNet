@@ -39,7 +39,7 @@ public sealed partial class EditorNativeCompatibilityService
         {
             this.disposed = true;
             this.observationGeneration++;
-            this.observation = new(this.observation.Revision + 1, null, []);
+            this.observation = new(this.observation.Revision + 1, Fingerprint: null, []);
             retired = this.DetachWatchers();
         }
 
@@ -222,7 +222,7 @@ public sealed partial class EditorNativeCompatibilityService
             return false;
         }
 
-        this.observation = new(this.observation.Revision + 1, null, []);
+        this.observation = new(this.observation.Revision + 1, Fingerprint: null, []);
         return true;
     }
 

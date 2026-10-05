@@ -82,7 +82,7 @@ internal sealed partial class EntityRowActions : UserControl
         }
 
         this.hovered = false;
-        this.ObserveItem(null);
+        this.ObserveItem(adapter: null);
     }
 
     private void OnDataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)

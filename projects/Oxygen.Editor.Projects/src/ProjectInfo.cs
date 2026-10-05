@@ -121,16 +121,6 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     /// <inheritdoc />
     public Guid? DefaultSceneId { get; set; }
 
-    /// <inheritdoc />
-    public bool Equals(ProjectInfo? other)
-        => other is not null && (ReferenceEquals(this, other) || this.Id == other.Id);
-
-    /// <inheritdoc />
-    public override bool Equals(object? obj) => this.Equals(obj as ProjectInfo);
-
-    /// <inheritdoc />
-    public override int GetHashCode() => this.Id.GetHashCode();
-
     /// <summary>
     ///     Deserializes a JSON string into a <see cref="ProjectInfo" /> object.
     /// </summary>
@@ -199,6 +189,16 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
         };
         return JsonSerializer.Serialize(descriptor, JsonOptions);
     }
+
+    /// <inheritdoc />
+    public bool Equals(ProjectInfo? other)
+        => other is not null && (ReferenceEquals(this, other) || this.Id == other.Id);
+
+    /// <inheritdoc />
+    public override bool Equals(object? obj) => this.Equals(obj as ProjectInfo);
+
+    /// <inheritdoc />
+    public override int GetHashCode() => this.Id.GetHashCode();
 
     private sealed class ProjectManifestDescriptor
     {

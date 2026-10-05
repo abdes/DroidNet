@@ -54,8 +54,6 @@
 
     <!--  Base MenuItem Style  -->
     <Style x:Key="DefaultMenuItemStyle" TargetType="cm:MenuItem">
-        <Setter Property="AutomationProperties.HelpText" Value="{Binding ItemData.HelpText, RelativeSource={RelativeSource Self}}" />
-        <Setter Property="ToolTipService.ToolTip" Value="{Binding ItemData.HelpText, RelativeSource={RelativeSource Self}}" />
         <Setter Property="Background" Value="{ThemeResource ControlFillColorTransparentBrush}" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
         <Setter Property="Padding" Value="{StaticResource MenuItemPadding}" />

@@ -2,10 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Json.Schema;
@@ -27,7 +23,7 @@ public sealed class EditorSchemaCatalog
     private readonly Dictionary<string, JsonObject> overlayByEngineFileName;
     private readonly Dictionary<string, JsonSchema> builtEngineSchemas = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, JsonSchema> builtMergedSchemas = new(StringComparer.OrdinalIgnoreCase);
-    private readonly object buildGate = new();
+    private readonly Lock buildGate = new();
 
     private EditorSchemaCatalog(
         Dictionary<string, JsonObject> engineByFileName,
@@ -62,22 +58,23 @@ public sealed class EditorSchemaCatalog
             .ToList();
         var overlayFiles = Directory.GetFiles(directory, "*.editor.schema.json", SearchOption.TopDirectoryOnly).ToList();
 
-        var engineByFileName = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
+        var loadedEngineSchemas = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in engineFiles)
         {
-            engineByFileName[Path.GetFileName(path)] = LoadJsonObject(path);
+            loadedEngineSchemas[Path.GetFileName(path)] = LoadJsonObject(path);
         }
 
-        var overlayByEngineFileName = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
+        var loadedOverlaysByEngineFileName = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in overlayFiles)
         {
             var fileName = Path.GetFileName(path);
+
             // Convention: foo.editor.schema.json overlays foo.schema.json
             var engineName = fileName.Replace(".editor.schema.json", ".schema.json", StringComparison.OrdinalIgnoreCase);
-            overlayByEngineFileName[engineName] = LoadJsonObject(path);
+            loadedOverlaysByEngineFileName[engineName] = LoadJsonObject(path);
         }
 
-        return new EditorSchemaCatalog(engineByFileName, overlayByEngineFileName);
+        return new EditorSchemaCatalog(loadedEngineSchemas, loadedOverlaysByEngineFileName);
     }
 
     /// <summary>
@@ -151,6 +148,13 @@ public sealed class EditorSchemaCatalog
         return obj;
     }
 
+    private static JsonObject CloneForValidation(JsonObject schema)
+    {
+        var clone = schema.DeepClone().AsObject();
+        _ = clone.Remove("$id");
+        return clone;
+    }
+
     private JsonSchema GetOrBuildEngineSchema(string engineFileName)
     {
         lock (this.buildGate)
@@ -194,24 +198,13 @@ public sealed class EditorSchemaCatalog
         }
     }
 
-    private static JsonObject CloneForValidation(JsonObject schema)
+    private sealed class InMemorySchemaResolver(Func<string, JsonSchema> resolveByFileName)
     {
-        var clone = schema.DeepClone().AsObject();
-        _ = clone.Remove("$id");
-        return clone;
-    }
+        private readonly Func<string, JsonSchema> resolveByFileName = resolveByFileName;
 
-    private sealed class InMemorySchemaResolver
-    {
-        private readonly Func<string, JsonSchema> resolveByFileName;
-
-        public InMemorySchemaResolver(Func<string, JsonSchema> resolveByFileName)
+        public JsonSchema? Resolve(Uri uri, SchemaRegistry registry)
         {
-            this.resolveByFileName = resolveByFileName;
-        }
-
-        public IBaseDocument? Resolve(Uri uri, SchemaRegistry _)
-        {
+            _ = registry; // unused
             var fileName = Path.GetFileName(uri.LocalPath);
             if (string.IsNullOrEmpty(fileName))
             {

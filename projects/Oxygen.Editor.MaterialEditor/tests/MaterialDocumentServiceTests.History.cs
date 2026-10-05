@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -8,6 +8,7 @@ using AwesomeAssertions;
 using DroidNet.Controls;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.MaterialEditor.PropertyPipeline;
 using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Windows.UI;
@@ -113,7 +114,7 @@ public sealed partial class MaterialDocumentServiceTests
         var session = service.BeginEditSession(document.DocumentId, "Roughness");
         for (var index = 1; index <= 100; index++)
         {
-            _ = (await service.PreviewPropertiesAsync(session, PropertyEdit.Single(MaterialDescriptors.Roughness, index / 100f), this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+            _ = (await service.PreviewPropertiesAsync(session, PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, index / 100f), this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
         }
 
         _ = service.GetDocument(document.DocumentId).Revision.Should().Be(0);
@@ -136,12 +137,12 @@ public sealed partial class MaterialDocumentServiceTests
         var service = CreateService(workspace);
         var document = await service.CreateAsync(new Uri("asset:///Content/Materials/NoOp.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var session = service.BeginEditSession(document.DocumentId, "Roughness");
-        _ = await service.PreviewPropertiesAsync(session, PropertyEdit.Single(MaterialDescriptors.Roughness, 0.9f), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await service.PreviewPropertiesAsync(session, PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, 0.9f), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = service.CompleteEditSession(session, commit: false);
-        _ = (await service.EditPropertiesAsync(document.DocumentId, PropertyEdit.Single(MaterialDescriptors.Roughness, float.NaN), this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeFalse();
+        _ = (await service.EditPropertiesAsync(document.DocumentId, PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, float.NaN), this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeFalse();
         session = service.BeginEditSession(document.DocumentId, "Roughness");
-        _ = await service.PreviewPropertiesAsync(session, PropertyEdit.Single(MaterialDescriptors.Roughness, 0.9f), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = await service.PreviewPropertiesAsync(session, PropertyEdit.Single(MaterialDescriptors.Roughness, 0.5f), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await service.PreviewPropertiesAsync(session, PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, 0.9f), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await service.PreviewPropertiesAsync(session, PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, 0.5f), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = service.CompleteEditSession(session, commit: true);
 
         _ = service.GetDocument(document.DocumentId).Source.Should().BeEquivalentTo(document.Source);
@@ -160,12 +161,12 @@ public sealed partial class MaterialDocumentServiceTests
         var service = CreateService(workspace);
         var first = await service.CreateAsync(new Uri("asset:///Content/Materials/First.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var second = await service.CreateAsync(new Uri("asset:///Content/Materials/Second.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = await service.EditPropertiesAsync(second.DocumentId, PropertyEdit.Single(MaterialDescriptors.Roughness, 0.3f), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await service.EditPropertiesAsync(second.DocumentId, PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, 0.3f), this.TestContext.CancellationToken).ConfigureAwait(false);
         var session = service.BeginEditSession(first.DocumentId, "Roughness");
-        _ = await service.PreviewPropertiesAsync(session, PropertyEdit.Single(MaterialDescriptors.Roughness, 0.9f), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await service.PreviewPropertiesAsync(session, PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, 0.9f), this.TestContext.CancellationToken).ConfigureAwait(false);
         await service.CloseAsync(first.DocumentId, discard: true, this.TestContext.CancellationToken).ConfigureAwait(false);
         var reopened = await service.OpenAsync(first.MaterialUri, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = (await service.PreviewPropertiesAsync(session, PropertyEdit.Single(MaterialDescriptors.Roughness, 0.1f), this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeFalse();
+        _ = (await service.PreviewPropertiesAsync(session, PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, 0.1f), this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeFalse();
         _ = service.CompleteEditSession(session, commit: true);
 
         _ = reopened.DocumentId.Should().NotBe(first.DocumentId);
@@ -184,9 +185,9 @@ public sealed partial class MaterialDocumentServiceTests
         var service = CreateService(workspace);
         var document = await service.CreateAsync(new Uri("asset:///Content/Materials/SaveGesture.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var session = service.BeginEditSession(document.DocumentId, "Roughness");
-        _ = await service.PreviewPropertiesAsync(session, PropertyEdit.Single(MaterialDescriptors.Roughness, 0.9f), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await service.PreviewPropertiesAsync(session, PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, 0.9f), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = (await service.SaveAsync(document.DocumentId, this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
-        _ = (await service.PreviewPropertiesAsync(session, PropertyEdit.Single(MaterialDescriptors.Roughness, 0.1f), this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeFalse();
+        _ = (await service.PreviewPropertiesAsync(session, PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, 0.1f), this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeFalse();
         _ = service.CompleteEditSession(session, commit: true);
         _ = service.GetDocument(document.DocumentId).SavedRevision.Should().Be(1);
         _ = service.GetDocument(document.DocumentId).IsDirty.Should().BeFalse();

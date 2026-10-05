@@ -58,5 +58,4 @@ public sealed record CookDependencyGraph(
 
     /// <summary>Gets source dependencies whose buffer indices are embedded by value during cooking.</summary>
     internal ImmutableDictionary<Uri, ImmutableArray<Uri>> ResourceDependencies { get; init; } = ImmutableDictionary<Uri, ImmutableArray<Uri>>.Empty;
-
 }

@@ -451,6 +451,7 @@ public sealed partial class SceneDocumentCommandService
         {
             AddDirectionalLightDiskScale(entries, Get(edit.AtmosphereDiskLuminanceScaleRgb));
         }
+
         AddOptional(entries, edit.CastsShadows, DirectionalLightField.CastsShadows);
         AddOptional(entries, edit.ShadowBias, DirectionalLightField.ShadowBias);
         AddOptional(entries, edit.ShadowNormalBias, DirectionalLightField.ShadowNormalBias);

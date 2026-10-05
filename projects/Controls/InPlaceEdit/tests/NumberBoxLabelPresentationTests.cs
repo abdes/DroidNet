@@ -43,8 +43,8 @@ public sealed class NumberBoxLabelPresentationTests : VisualUserInterfaceTests
         _ = VisualStateManager.GoToState(number, "Normal", useTransitions: false).Should().BeTrue();
         number.UpdateLayout();
         var partName = compact ? "PartCompactLabelTextBlock" : "PartLabelTextBlock";
-        var label = number.FindDescendant<TextBlock>(part => part.Name == partName)!;
-        var field = number.FindDescendant<Border>(part => part.Name == "PartBackgroundBorder")!;
+        var label = number.FindDescendant<TextBlock>(part => string.Equals(part.Name, partName, StringComparison.Ordinal))!;
+        var field = number.FindDescendant<Border>(part => string.Equals(part.Name, "PartBackgroundBorder", StringComparison.Ordinal))!;
         var labelBounds = Bounds(label, number);
         var fieldBounds = Bounds(field, number);
         var desiredSize = number.DesiredSize;
@@ -63,7 +63,7 @@ public sealed class NumberBoxLabelPresentationTests : VisualUserInterfaceTests
             _ = label.Foreground.Should().BeSameAs(brush);
             _ = brush.Color.Should().Be(Colors.OrangeRed);
             _ = brush.Opacity.Should().Be(1);
-            _ = label.Opacity.Should().BeApproximately(state == "Normal" ? 0.85 : 1, 0.000001);
+            _ = label.Opacity.Should().BeApproximately(string.Equals(state, "Normal", StringComparison.Ordinal) ? 0.85 : 1, 0.000001);
         }
     });
 
@@ -86,8 +86,8 @@ public sealed class NumberBoxLabelPresentationTests : VisualUserInterfaceTests
             AutoStackLabel = true,
         };
         await LoadTestContentAsync(number).ConfigureAwait(true);
-        var label = number.FindDescendant<TextBlock>(part => part.Name == "PartLabelTextBlock")!;
-        var valueGroup = number.FindDescendant<Grid>(part => part.Name == "PartValueGroup")!;
+        var label = number.FindDescendant<TextBlock>(part => string.Equals(part.Name, "PartLabelTextBlock", StringComparison.Ordinal))!;
+        var valueGroup = number.FindDescendant<Grid>(part => string.Equals(part.Name, "PartValueGroup", StringComparison.Ordinal))!;
         foreach (var width in new[] { 480d, 760d, 340d, 480d })
         {
             number.Width = width;

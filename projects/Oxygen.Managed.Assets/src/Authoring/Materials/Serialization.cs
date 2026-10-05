@@ -24,5 +24,4 @@ internal static class Serialization
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
     };
-
 }

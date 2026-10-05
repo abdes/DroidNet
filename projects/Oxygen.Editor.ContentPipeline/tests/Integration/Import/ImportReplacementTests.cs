@@ -72,6 +72,7 @@ public sealed class ImportReplacementTests
                 geometry["buffers"]![0]!["uri"] = "../SourceMedia/DCC/Model/retired.bin";
                 workspace.WriteText("Content/Geometry/AuthoredCube.ogeo.json", geometry.ToJsonString());
             }
+
             using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var runner = new FailImportBatchRunner { Fail = false };
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
@@ -88,6 +89,7 @@ public sealed class ImportReplacementTests
                 damaged[^1] ^= 0xFF;
                 await File.WriteAllBytesAsync(payload, damaged, this.TestContext.CancellationToken).ConfigureAwait(false);
             }
+
             var primary = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/model.gltf");
             var originalBytes = await File.ReadAllBytesAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false);
             var incoming = Path.Combine(external.FullName, "replacement.gltf");

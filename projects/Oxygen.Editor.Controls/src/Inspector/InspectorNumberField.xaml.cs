@@ -24,7 +24,7 @@ public sealed partial class InspectorNumberField : UserControl
     public static readonly DependencyProperty NumberValueProperty = Register<float>(nameof(NumberValue), 0f);
 
     /// <summary>Identifies mixed-value presentation.</summary>
-    public static readonly DependencyProperty IsMixedProperty = Register<bool>(nameof(IsMixed), false);
+    public static readonly DependencyProperty IsMixedProperty = Register<bool>(nameof(IsMixed), defaultValue: false);
 
     /// <summary>Identifies the existing NumberBox mask.</summary>
     public static readonly DependencyProperty MaskProperty = Register<string>(nameof(Mask), "~.###");
@@ -43,17 +43,17 @@ public sealed partial class InspectorNumberField : UserControl
 
     /// <summary>Identifies whether validation text is shown.</summary>
     public static readonly DependencyProperty HasErrorProperty = DependencyProperty.Register(
-        nameof(HasError), typeof(bool), typeof(InspectorNumberField), new PropertyMetadata(false, OnFeedbackChanged));
+        nameof(HasError), typeof(bool), typeof(InspectorNumberField), new PropertyMetadata(defaultValue: false, OnFeedbackChanged));
 
     /// <summary>Identifies current stored-value applicability text.</summary>
     public static readonly DependencyProperty ApplicabilityTextProperty = DependencyProperty.Register(
         nameof(ApplicabilityText), typeof(string), typeof(InspectorNumberField), new PropertyMetadata(string.Empty, OnFeedbackChanged));
 
     /// <summary>Identifies the consumer's scoped property-card style.</summary>
-    public static readonly DependencyProperty CardStyleProperty = Register<Style>(nameof(CardStyle), null);
+    public static readonly DependencyProperty CardStyleProperty = Register<Style>(nameof(CardStyle), defaultValue: null);
 
     /// <summary>Identifies the consumer's scoped numeric style.</summary>
-    public static readonly DependencyProperty NumberStyleProperty = Register<Style>(nameof(NumberStyle), null);
+    public static readonly DependencyProperty NumberStyleProperty = Register<Style>(nameof(NumberStyle), defaultValue: null);
 
     /// <summary>Initializes a new instance of the <see cref="InspectorNumberField"/> class.</summary>
     public InspectorNumberField()

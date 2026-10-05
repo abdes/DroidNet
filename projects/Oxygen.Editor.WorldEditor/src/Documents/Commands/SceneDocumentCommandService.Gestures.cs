@@ -270,6 +270,7 @@ public sealed partial class SceneDocumentCommandService
             return this.ValidationFailure(OperationKindForPropertyKind(kind), candidateFailure.Code,
                 candidateFailure.Title, candidateFailure.Message, context);
         }
+
         return null;
     }
 

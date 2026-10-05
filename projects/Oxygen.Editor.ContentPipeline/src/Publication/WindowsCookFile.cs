@@ -104,5 +104,4 @@ internal static partial class WindowsCookFile
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [LibraryImport("kernel32.dll", EntryPoint = "CreateFileW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     private static partial SafeFileHandle CreateFile(string path, uint access, uint sharing, nint security, uint disposition, uint attributes, nint template);
-
 }

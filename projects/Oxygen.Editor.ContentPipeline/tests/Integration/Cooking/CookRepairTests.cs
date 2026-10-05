@@ -41,6 +41,7 @@ public sealed class CookRepairTests
         {
             await File.WriteAllTextAsync(Path.Combine(root, "Unowned.otex"), "unowned derived bytes", this.TestContext.CancellationToken).ConfigureAwait(false);
         }
+
         var payload = Directory.EnumerateFiles(root, "buffers.data", SearchOption.AllDirectories).Single();
         var bytes = await File.ReadAllBytesAsync(payload, this.TestContext.CancellationToken).ConfigureAwait(false);
         bytes[^1] ^= 0xFF;

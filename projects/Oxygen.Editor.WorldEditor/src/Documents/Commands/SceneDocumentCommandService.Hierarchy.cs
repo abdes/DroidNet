@@ -5,6 +5,7 @@
 using System.Numerics;
 using DroidNet.TimeMachine;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Documents.Commands;
 using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core.Diagnostics;
@@ -433,7 +434,6 @@ public sealed partial class SceneDocumentCommandService
                     return folderLockFailure;
                 }
             }
-
         }
 
         // Seed the layout only after every validation passed, so a rejected delete leaves no mutation behind.
@@ -1166,7 +1166,7 @@ public sealed partial class SceneDocumentCommandService
     {
         if (parent is null)
         {
-            node.SetParent(null);
+            node.SetParent(newParent: null);
             if (!scene.RootNodes.Contains(node))
             {
                 scene.RootNodes.Add(node);

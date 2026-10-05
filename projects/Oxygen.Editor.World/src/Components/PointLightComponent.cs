@@ -53,7 +53,6 @@ public sealed partial class PointLightComponent : LightComponent
         set => _ = this.SetProperty(ref this.sourceRadius, value);
     }
 
-
     /// <inheritdoc/>
     public override void Hydrate(ComponentData data)
     {
@@ -68,7 +67,6 @@ public sealed partial class PointLightComponent : LightComponent
             this.LuminousFluxLumens = light.LuminousFluxLumens;
             this.Range = light.Range;
             this.SourceRadius = light.SourceRadius;
-
         }
     }
 
@@ -87,6 +85,5 @@ public sealed partial class PointLightComponent : LightComponent
             LuminousFluxLumens = this.LuminousFluxLumens,
             Range = this.Range,
             SourceRadius = this.SourceRadius,
-
         };
 }
