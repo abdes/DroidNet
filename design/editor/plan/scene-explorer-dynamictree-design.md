@@ -1394,48 +1394,61 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       (`SceneEngineSync.Pending.cs:204`) already surfaced replay failures, which
       is why only the synchronous path was silent. Remaining half of the class
       is C44.
-- [~] C49 — workspace interaction persistence exists only for Hide.
-  **Implementation landed 2026-10-05 (`Workspace/WorkspaceInteractionService.cs`):** one
-  coordinated service owns the typed substate — hidden ids, locked ids and the picking
-  categories — as a single project-scoped `SettingKey<ProjectInteraction>`
-  (`WorldEditor`/`SceneInteraction`) holding per-scene records, written through a serialized
-  queue like the preview preferences. Entries key on the stable authored node id; a stored
-  record whose `ProjectId` differs from the loaded project is ignored, which is the
-  path-reuse rejection the settings LLD requires. The Explorer applies it to realized rows
-  (`LayoutItemAdapter.IsHiddenInEditor` for the explicit entry,
-  `IsEffectivelyHiddenInEditor` for the actual-scene-ancestor closure per R1, folders never
-  contributing; the scene root keeps its permanent lock), and it owns `ToggleEditorHidden`,
-  `ToggleEditorLocked` and `ShowAllInEditor`. It never touches the scene document, so no
-  authoring dirty, cook or `kVisible` write is possible from this path, and a missing service
-  reports a visible warning instead of silently doing nothing (D-f).
-  ~~Outstanding: the eye toggle does not yet record the undo step.~~ **(1) closed 2026-10-05 —
-  `SetEditorHiddenAsync` records the batch as one undo step through the command owner without
-  dirtying (C52).** **(2)–(3) closed 2026-10-05 (`3967b205f`):** the trailing row template carries
-  the eye and lock buttons invoking `ToggleEditorHiddenCommand` / `ToggleEditorLockedCommand` with
-  the row as parameter (never a two-way bind onto adapter state, which would bypass the command
-  owner and its undo step); `EditingViewMaskService` publishes
-  `OXE.SETTINGS.EDITING_VIEW_MASK_UNAVAILABLE` once per scene activation as the ratified Q2 fallback,
-  with `SupportsEditingViewMask` as the single seam the native work flips; and restore is wired into
-  `InitializeLoadedSceneAsync`, so stored state reloads instead of being write-only.
-  **Correction to this row's earlier claim:** it said no production caller constructs
-  `SceneExplorerViewModel`. Wrong — `WorkspaceViewModel.cs:204-207` registers it and the command
-  service in the per-window child container, which resolves app-container singles (proven by
-  `WorkspaceViewModel.cs:174` resolving `PreviewSettingsService`), so the injection is real.
-  Remaining, none of it editor-logic: the **native/interopt implementation of the eye** (D8a E1–E3,
-  I1–I4 — the excluded, separately-authorized task), the proof tests for restore / hide-undo / the
-  once-per-activation warning, a visual review of the chosen eye and lock glyphs, and (4) column
-  placement, which still has no owning UI to persist against.
-  `settings-architecture.md:65` records hidden nodes; there is no typed
-  storage for per-project Lock state, category/column placement or their
-  lifetime, and no single service owns workspace interaction substate, so
-  lock and column choices cannot survive a session. Scope is decided in D4 —
-  implement one coordinated workspace service with typed settings and
-  project/scene-scoped lifetime, not new fields on scene DTOs. No code
-  exists yet, so this is unimplemented work, not an open question. Lock here
-  means the editor-editability lock specified in the "Show in Editor & Lock"
-  contract above — orthogonal to viewport suppression and to runtime
-  visibility — and the persistence must key on the stable node id, so a
-  renamed or reordered node keeps its state.
+- [x] C49 — workspace interaction persistence exists only for Hide.
+      **Implementation landed 2026-10-05 (`Workspace/WorkspaceInteractionService.cs`):** one
+      coordinated service owns the typed substate — hidden ids, locked ids and the picking
+      categories — as a single project-scoped `SettingKey<ProjectInteraction>`
+      (`WorldEditor`/`SceneInteraction`) holding per-scene records, written through a serialized
+      queue like the preview preferences. Entries key on the stable authored node id; a stored
+      record whose `ProjectId` differs from the loaded project is ignored, which is the
+      path-reuse rejection the settings LLD requires. The Explorer applies it to realized rows
+      (`LayoutItemAdapter.IsHiddenInEditor` for the explicit entry,
+      `IsEffectivelyHiddenInEditor` for the actual-scene-ancestor closure per R1, folders never
+      contributing; the scene root keeps its permanent lock), and it owns `ToggleEditorHidden`,
+      `ToggleEditorLocked` and `ShowAllInEditor`. It never touches the scene document, so no
+      authoring dirty, cook or `kVisible` write is possible from this path, and a missing service
+      reports a visible warning instead of silently doing nothing (D-f).
+      ~~Outstanding: the eye toggle does not yet record the undo step.~~ **(1) closed 2026-10-05 —
+      `SetEditorHiddenAsync` records the batch as one undo step through the command owner without
+      dirtying (C52).** **(2)–(3) closed 2026-10-05:** `EditingViewMaskService` publishes
+      `OXE.SETTINGS.EDITING_VIEW_MASK_UNAVAILABLE` once per scene activation as the ratified Q2 fallback,
+      with `SupportsEditingViewMask` as the single seam the native work flips; and restore is wired into
+      `InitializeLoadedSceneAsync`, so stored state reloads instead of being write-only.
+      **W3 row slots rewritten (`6ecb6954c`).** The first attempt (`3967b205f`) was rejected by the
+      owner: a StackPanel of always-on buttons, a static lock glyph that never changed, and a hidden
+      glyph that rendered as a stray link — it ignored the written UI spec. It is replaced by a
+      dedicated `SceneRowActions` control implementing the contract: two fixed 32px columns reserved by
+      `TrailingContentWidth=64` (icons never collapse a slot or shift the row), quiet-by-default /
+      loud-when-suppressed, eye-off and lock pinned permanently for suppressed states independent of
+      hover, slots never migrate and their hover lifetimes are independent, hover subscribed on the
+      owning row and removed on unload (idempotent under recycling), and vetted Segoe Fluent glyphs
+      shared with the controls-demo. Clicks still route to the command owner, preserving the C52 undo
+      step. **Correction to this row's earlier claim:** it said no production caller constructs
+      `SceneExplorerViewModel`. Wrong — `WorkspaceViewModel.cs:204-207` registers it and the command
+      service in the per-window child container, which resolves app-container singles (proven by
+      `WorkspaceViewModel.cs:174` resolving `PreviewSettingsService`), so the injection is real.
+      **Proven by tests:** undo/redo round-trip, one-step-per-batch, no-dirty, idempotent-no-step,
+      missing-owner visible failure (unit lane 317/0); the full quiet/loud matrix, per-slot pinning,
+      slot independence, and non-collapsing geometry (`SceneRowActionsTests`, UI lane failed 0/skipped 0).
+      Those two are now covered too (`SceneDocumentCommandServiceTests.WorkspaceInteraction.cs`): a
+      stored record reloads its hidden/lock ids on scene restore, a record with a different
+      `ProjectId` is rejected on the reused path scope, and the mask warning fires exactly once per
+      scene activation and re-arms on the next — unit lane total 320, failed 0. Remaining, not
+      editor-logic: the **native/interop
+      implementation of the eye** (D8a E1–E3, I1–I4 — the excluded, separately-authorized task), a
+      visual glyph review in the running editor, and (4) column
+      placement, which still has no owning UI to persist against.
+      `settings-architecture.md:65` records hidden nodes; there is no typed
+      storage for per-project Lock state, category/column placement or their
+      lifetime, and no single service owns workspace interaction substate, so
+      lock and column choices cannot survive a session. Scope is decided in D4 —
+      implement one coordinated workspace service with typed settings and
+      project/scene-scoped lifetime, not new fields on scene DTOs. No code
+      exists yet, so this is unimplemented work, not an open question. Lock here
+      means the editor-editability lock specified in the "Show in Editor & Lock"
+      contract above — orthogonal to viewport suppression and to runtime
+      visibility — and the persistence must key on the stable node id, so a
+      renamed or reordered node keeps its state.
 - [x] C50 — clipboard lifetime is not enforced. **Closed 2026-10-05:** the payload is stamped
       with the project and scene that produced it (`StampClipboardOrigin` on Copy and Cut),
       `CanPaste` refuses a payload outside its lifetime, and `PasteItemsAsync` re-checks at the only
