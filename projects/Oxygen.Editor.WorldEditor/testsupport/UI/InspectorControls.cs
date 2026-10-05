@@ -82,18 +82,24 @@ internal static class InspectorControls
         var offset = 0d;
         FrameworkElement? previous = null;
         var stableFrames = 0;
+        FrameworkElement? lastResolved = null;
+        var everLoaded = false;
+        var captionEverLoaded = false;
         for (var step = 0; step <= 200; step++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var control = resolveControl();
+            lastResolved ??= control;
             if (control is { IsLoaded: true })
             {
+                everLoaded = true;
                 if (control is NumberBox number)
                 {
                     _ = number.ApplyTemplate();
                     var label = number.FindDescendant<TextBlock>(element => string.Equals(element.Name, numberPartName, StringComparison.Ordinal));
                     if (label is { IsLoaded: true })
                     {
+                        captionEverLoaded = true;
                         var center = label.TransformToVisual(scroller).TransformPoint(new Point(label.ActualWidth / 2, label.ActualHeight / 2));
                         var hostCenter = label.TransformToVisual(scroller.XamlRoot.Content).TransformPoint(new Point(label.ActualWidth / 2, label.ActualHeight / 2));
                         var captionIsFullyVisible = !string.Equals(numberPartName, "PartLabelTextBlock", StringComparison.Ordinal)
@@ -132,7 +138,17 @@ internal static class InspectorControls
             }).ConfigureAwait(true);
         }
 
-        throw new InvalidOperationException($"Environment field {fieldName} was not realized.");
+        var state = lastResolved switch
+        {
+            null => "was never found in the inspector tree (check that its section is realized)",
+            _ when !everLoaded => "was found but never loaded",
+            Control { IsEnabled: false } => "was found but IsEnabled=false; a disabled control cannot be typed into, so seed the precondition that enables it",
+            NumberBox => captionEverLoaded
+                ? $"was realized but its caption never became hit-testable within the ScrollViewer (viewport {scroller.ViewportWidth:0}x{scroller.ViewportHeight:0}, scrollable height {scroller.ScrollableHeight:0})"
+                : "was realized but its caption part was never loaded",
+            _ => "was realized but its control kind is not returned by this helper",
+        };
+        throw new InvalidOperationException($"Environment field {fieldName} was not editable: {state}.");
     }
 
     internal static async Task EnterTextAsync(NumberBox number, string value)

@@ -17,6 +17,7 @@ using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldCases;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
 using NumberBox = DroidNet.Controls.NumberBox;
+using Expander = Microsoft.UI.Xaml.Controls.Expander;
 
 namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.Inspector;
 
@@ -66,14 +67,13 @@ public sealed partial class ComponentFieldSynchronizationTests : DroidNet.Tests.
     [DataRow("Light", "CascadeDistance1")]
     [DataRow("Light", "CascadeDistance2")]
     [DataRow("Light", "CascadeDistance3")]
-    [DataRow("Light", "CascadeDistance4")]
     [DataRow("Light", "DistributionExponent")]
     [DataRow("Light", "TransitionFraction")]
     [DataRow("Light", "DistanceFadeoutFraction")]
     public Task NodeFieldControlHistoryAndReopenReachNativeState(string kind, string fieldName) => EnqueueAsync(async () =>
     {
         var field = NativeNodeFields.Single(value => string.Equals(value.Kind, kind, StringComparison.Ordinal) && string.Equals(value.Field, fieldName, StringComparison.Ordinal));
-        var fixture = new NativeSceneFixture(automatic: false, scene => SeedNativeNode(scene, kind));
+        var fixture = new NativeSceneFixture(automatic: false, scene => SeedNativeNode(scene, kind, field.Arrange));
         await using var lifetime = fixture.ConfigureAwait(true);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
@@ -102,6 +102,47 @@ public sealed partial class ComponentFieldSynchronizationTests : DroidNet.Tests.
         await fixture.Context.History.UndoAsync(timeout.Token).ConfigureAwait(true);
         await AssertNodeValuesAsync(fixture, node.Id, before, model, timeout.Token).ConfigureAwait(true);
         await fixture.Context.History.RedoAsync(timeout.Token).ConfigureAwait(true);
+        await AssertNodeValuesAsync(fixture, node.Id, expected, model, timeout.Token).ConfigureAwait(true);
+        await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);
+        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() =>
+        {
+        }).ConfigureAwait(true);
+        await AssertNodeValuesAsync(fixture, node.Id, expected, model, timeout.Token).ConfigureAwait(true);
+        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+    });
+
+    /// <summary>The fourth cascade boundary is displayed disabled because a fifth cascade would be required to edit it, and its stored value survives Save/reopen unchanged.</summary>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    public Task CascadeDistance4IsDisplayedDisabledAndItsStoredBoundarySurvivesReopen() => EnqueueAsync(async () =>
+    {
+        var field = NativeNodeFields.Single(value => string.Equals(value.Kind, "Light", StringComparison.Ordinal) && string.Equals(value.Field, "CascadeDistance4", StringComparison.Ordinal));
+        var fixture = new NativeSceneFixture(automatic: false, scene => SeedNativeNode(scene, "Light", field.Arrange));
+        await using var lifetime = fixture.ConfigureAwait(true);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
+        var node = fixture.Source.RootNodes.Single();
+        using var host = fixture.CreateInspectorHost([node]);
+        var model = host.PropertyEditors.Single(editor => MatchesInspector(editor, "Light"));
+        var view = CreateNumericView(model);
+        var scroller = new ScrollViewer
+        {
+            Content = view,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        };
+        await LoadTestContentAsync(scroller).ConfigureAwait(true);
+        var control = await FindRealizedNodeFieldControlAsync(view, model, field, timeout.Token).ConfigureAwait(true);
+        _ = control.Should().BeAssignableTo<NumberBox>("the stored boundary is displayed through the same field control as editable boundaries");
+        var box = (NumberBox)control;
+        _ = box.IsLoaded.Should().BeTrue("showing non-editable data is intended and hides nothing");
+        _ = box.IsEnabled.Should().BeFalse("the boundary is editable only once a fifth cascade exists, which cascade_count validates out of range");
+        _ = box.NumberValue.Should().BeApproximately(field.ExpectedValue, 0.0001f, "the disabled box shows the stored boundary");
+        _ = model.Should().BeAssignableTo<DirectionalLightViewModel>();
+        _ = ((DirectionalLightViewModel)model).IsCascadeDistance4Applicable.Should().BeFalse("a manual split with the maximal cascade count still leaves the fourth boundary inapplicable");
+        var expected = SourceNodeProperties(node);
+        _ = expected[(field.Component, field.NativeField)].Should().BeApproximately(field.ExpectedValue, 0.0001f);
+        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
         await AssertNodeValuesAsync(fixture, node.Id, expected, model, timeout.Token).ConfigureAwait(true);
         await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() =>
@@ -143,5 +184,28 @@ public sealed partial class ComponentFieldSynchronizationTests : DroidNet.Tests.
         {
             _ = ((InspectorFieldDiagnostic)property.GetValue(model)!).Message.Should().BeEmpty("valid input must have no {0} error", property.Name);
         }
+    }
+
+    private static async Task<FrameworkElement> FindRealizedNodeFieldControlAsync(UserControl view, IPropertyEditor<SceneNode> model, NodeFieldCase field, CancellationToken cancellationToken)
+    {
+        for (var step = 0; step <= 200; step++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var disclosure in view.FindDescendants().OfType<Expander>())
+            {
+                disclosure.IsExpanded = true;
+            }
+
+            if (FindNodeControl(view, model, field) is { IsLoaded: true } control)
+            {
+                return control;
+            }
+
+            _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() =>
+            {
+            }).ConfigureAwait(true);
+        }
+
+        throw new InvalidOperationException($"Node field {field.Field} was never realized after expanding every disclosure.");
     }
 }

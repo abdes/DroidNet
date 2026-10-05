@@ -38,7 +38,7 @@ internal static class NativeSceneData
         scene.RootNodes.Add(node);
     }
 
-    internal static void SeedNativeNode(Scene scene, string kind)
+    internal static void SeedNativeNode(Scene scene, string kind, Action<SceneNode>? arrange = null)
     {
         var node = new SceneNode(scene)
         {
@@ -53,6 +53,7 @@ internal static class NativeSceneData
             _ = node.AddComponent(new DirectionalLightComponent { Name = "Light", CastsShadows = true });
         }
 
+        arrange?.Invoke(node);
         scene.RootNodes.Add(node);
     }
 

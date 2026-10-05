@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Numerics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
@@ -16,7 +17,11 @@ internal static class InspectorFieldCases
 
     internal sealed record EnvironmentFieldCase(string Field, object ControlValue, object ExpectedValue, Func<SceneEnvironmentData, object> ReadSource, Func<RuntimeEnvironmentState, object> ReadNative, bool Automatic = false, string? VectorTag = null, string? VectorAxis = null);
 
-    internal static readonly NodeFieldCase[] NativeNodeFields = [new("Transform", "PositionX", 1, 0, 12f, 12f), new("Transform", "PositionY", 1, 1, 12f, 12f), new("Transform", "PositionZ", 1, 2, 12f, 12f), new("Transform", "RotationX", 1, 3, 30f, 30f), new("Transform", "RotationY", 1, 4, 30f, 30f), new("Transform", "RotationZ", 1, 5, 30f, 30f), new("Transform", "ScaleX", 1, 6, 2f, 2f), new("Transform", "ScaleY", 1, 7, 2f, 2f), new("Transform", "ScaleZ", 1, 8, 2f, 2f), new("Camera", "FieldOfView", 2, 0, 75f, 75f * MathF.PI / 180f), new("Camera", "AspectRatio", 2, 1, 1.5f, 1.5f), new("Camera", "NearPlane", 2, 2, 0.5f, 0.5f), new("Camera", "FarPlane", 2, 3, 2000f, 2000f), new("Light", "ColorR", 3, 0, 0.2f, 0.2f), new("Light", "ColorG", 3, 1, 0.3f, 0.3f), new("Light", "ColorB", 3, 2, 0.4f, 0.4f), new("Light", "AffectsWorld", 3, 3, ControlValue: false, 0), new("Light", "DiskScaleR", 3, 27, 2f, 2f), new("Light", "DiskScaleG", 3, 28, 3f, 3f), new("Light", "DiskScaleB", 3, 29, 4f, 4f), new("Light", "CastsShadows", 3, 5, ControlValue: false, 0), new("Light", "ShadowBias", 3, 6, 0.01f, 0.01f), new("Light", "ShadowNormalBias", 3, 7, 0.04f, 0.04f), new("Light", "ContactShadows", 3, 8, ControlValue: true, 1), new("Light", "ShadowResolutionHint", 3, 9, ShadowResolutionHint.High, 2), new("Light", "ExposureCompensation", 3, 10, 1.5f, 1.5f), new("Light", "IntensityLux", 3, 11, 80000f, 80000f), new("Light", "AngularSizeRadians", 3, 12, 0.02f, 0.02f), new("Light", "UsePerPixelAtmosphereTransmittance", 3, 26, ControlValue: true, 1), new("Light", "AtmosphereSlot", 3, 25, AtmosphereLightSlot.Primary, 1), new("Light", "CascadeCount", 3, 15, 3f, 3), new("Light", "SplitMode", 3, 16, DirectionalCsmSplitMode.ManualDistances, 1), new("Light", "MaxShadowDistance", 3, 17, 200f, 200), new("Light", "CascadeDistance1", 3, 18, 12f, 12), new("Light", "CascadeDistance2", 3, 19, 32f, 32), new("Light", "CascadeDistance3", 3, 20, 90f, 90), new("Light", "CascadeDistance4", 3, 21, 220f, 220), new("Light", "DistributionExponent", 3, 22, 2f, 2), new("Light", "TransitionFraction", 3, 23, 0.2f, 0.2f), new("Light", "DistanceFadeoutFraction", 3, 24, 0.3f, 0.3f),];
+    private static readonly Action<SceneNode> ManualCascadeSplit = static node => SeedManualCascade(node, DirectionalCsmSplitMode.ManualDistances);
+
+    private static readonly Action<SceneNode> ManualStoredFourthBoundary = static node => SeedManualCascade(node, DirectionalCsmSplitMode.ManualDistances, 220f);
+
+    internal static readonly NodeFieldCase[] NativeNodeFields = [new("Transform", "PositionX", 1, 0, 12f, 12f), new("Transform", "PositionY", 1, 1, 12f, 12f), new("Transform", "PositionZ", 1, 2, 12f, 12f), new("Transform", "RotationX", 1, 3, 30f, 30f), new("Transform", "RotationY", 1, 4, 30f, 30f), new("Transform", "RotationZ", 1, 5, 30f, 30f), new("Transform", "ScaleX", 1, 6, 2f, 2f), new("Transform", "ScaleY", 1, 7, 2f, 2f), new("Transform", "ScaleZ", 1, 8, 2f, 2f), new("Camera", "FieldOfView", 2, 0, 75f, 75f * MathF.PI / 180f), new("Camera", "AspectRatio", 2, 1, 1.5f, 1.5f), new("Camera", "NearPlane", 2, 2, 0.5f, 0.5f), new("Camera", "FarPlane", 2, 3, 2000f, 2000f), new("Light", "ColorR", 3, 0, 0.2f, 0.2f), new("Light", "ColorG", 3, 1, 0.3f, 0.3f), new("Light", "ColorB", 3, 2, 0.4f, 0.4f), new("Light", "AffectsWorld", 3, 3, ControlValue: false, 0), new("Light", "DiskScaleR", 3, 27, 2f, 2f), new("Light", "DiskScaleG", 3, 28, 3f, 3f), new("Light", "DiskScaleB", 3, 29, 4f, 4f), new("Light", "CastsShadows", 3, 5, ControlValue: false, 0), new("Light", "ShadowBias", 3, 6, 0.01f, 0.01f), new("Light", "ShadowNormalBias", 3, 7, 0.04f, 0.04f), new("Light", "ContactShadows", 3, 8, ControlValue: true, 1), new("Light", "ShadowResolutionHint", 3, 9, ShadowResolutionHint.High, 2), new("Light", "ExposureCompensation", 3, 10, 1.5f, 1.5f), new("Light", "IntensityLux", 3, 11, 80000f, 80000f), new("Light", "AngularSizeRadians", 3, 12, 0.02f, 0.02f), new("Light", "UsePerPixelAtmosphereTransmittance", 3, 26, ControlValue: true, 1), new("Light", "AtmosphereSlot", 3, 25, AtmosphereLightSlot.Primary, 1), new("Light", "CascadeCount", 3, 15, 3f, 3), new("Light", "SplitMode", 3, 16, DirectionalCsmSplitMode.ManualDistances, 1), new("Light", "MaxShadowDistance", 3, 17, 200f, 200), new("Light", "CascadeDistance1", 3, 18, 12f, 12, ManualCascadeSplit), new("Light", "CascadeDistance2", 3, 19, 32f, 32, ManualCascadeSplit), new("Light", "CascadeDistance3", 3, 20, 90f, 90, ManualCascadeSplit), new("Light", "CascadeDistance4", 3, 21, 220f, 220, ManualStoredFourthBoundary), new("Light", "DistributionExponent", 3, 22, 2f, 2), new("Light", "TransitionFraction", 3, 23, 0.2f, 0.2f), new("Light", "DistanceFadeoutFraction", 3, 24, 0.3f, 0.3f),];
 
     internal static Dictionary<(ushort component, ushort field), float> SourceNodeProperties(SceneNode node)
     {
@@ -57,5 +62,17 @@ internal static class InspectorFieldCases
         }
     }
 
-    internal sealed record NodeFieldCase(string Kind, string Field, ushort Component, ushort NativeField, object ControlValue, float ExpectedValue);
+    /// <summary>Seeds a light in the split mode that makes the edited boundary applicable; the inspector gates boundaries on this precondition.</summary>
+    private static void SeedManualCascade(SceneNode node, DirectionalCsmSplitMode splitMode, float? boundary4 = null)
+    {
+        var light = node.Components.OfType<DirectionalLightComponent>().Single();
+        light.SplitMode = splitMode;
+        if (boundary4 is { } value)
+        {
+            light.MaxShadowDistance = 240f;
+            light.CascadeDistances = new Vector4(8f, 24f, 64f, value);
+        }
+    }
+
+    internal sealed record NodeFieldCase(string Kind, string Field, ushort Component, ushort NativeField, object ControlValue, float ExpectedValue, Action<SceneNode>? Arrange = null);
 }
