@@ -1452,15 +1452,28 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       cross-scope cases asserting parent identity, exact local TRS and world
       matrix unchanged before and after. All four were green on first execution
       — D5 held, so these are guards and no red state was obtainable.
-- [~] T12 — prove command-driven mutations reach the demand service's observers:
-  add/remove a node, child or component through the owning command and
-  assert `RefreshReferenceObservers` re-subscribes the new collection graph
-  and obsolete demands are invalidated, with no stale demand surviving a
-  rename or reparent. Replaces the `AuthoringChanged` "integration note"
-  that P6 retired. Evidence is in but not complete: 8 Unit tests prove the command path
-  mutates the observed collections and re-exposes created sources, green in `9d54484ea`
-  (313/313). Five service-level Unit.UI tests compile and still need one run in a lane
-  that may open the WinUI host.
+- [x] T12 — prove command-driven mutations reach the demand service's observers:
+      add/remove a node, child or component through the owning command and
+      assert `RefreshReferenceObservers` re-subscribes the new collection graph
+      and obsolete demands are invalidated, with no stale demand surviving a
+      rename or reparent. Replaces the `AuthoringChanged` "integration note"
+      that P6 retired. Closed 2026-10-05: 8 Unit tests prove the command path
+      mutates the observed collections and re-exposes created sources, green in `9d54484ea`
+      (313/313), and the five service-level Unit.UI tests ran for the first time and pass
+      (`df463f890`/`1996f30e7`, 14/14). Getting them to run at all exposed a latent harness
+      hang: contentless demand tests awaited a composition tick that never came, because the
+      shared test window is created only lazily — fixed by realizing it in the fixture, one
+      line, no assertion changed, and five pre-existing contentless tests in the same class
+      stopped hanging as a side effect.
+
+- [ ] T13 — the shared inspector field finder is timing-sensitive. While proving the cascade
+      fix, one of six filtered 41-case Integration.UI runs exited 5 with a single test
+      failure; the wrapper does not surface the executable console, so the case could not be
+      identified, and four subsequent runs were clean. Most likely the hit-test visibility
+      gate in `testsupport/UI/InspectorControls.cs:101` racing layout after a scroll. This is
+      recorded rather than papered over: if it recurs, stabilize it with a bounded,
+      condition-based wait on the layout state actually being waited for — not by raising the
+      step bound or the pump delays.
 
 #### Progress-note corrections (reconcile §6 with the above)
 
