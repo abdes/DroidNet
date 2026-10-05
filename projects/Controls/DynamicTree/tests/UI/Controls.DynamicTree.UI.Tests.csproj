@@ -13,6 +13,7 @@
     <ItemGroup>
         <Compile Include="$(ProjectsRoot)\UITests.Shared\tests\TestHostLifecycleTests.cs" Link="TestHostLifecycleTests.cs" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\DynamicTree\src\Controls.DynamicTree.csproj" />
+        <Compile Include="..\..\testsupport\LazyTreeItem.cs" Link="Support\LazyTreeItem.cs" />
     </ItemGroup>
 
     <Import Project="$(ProjectsRoot)\UITests.Shared\src\UITests.Shared.projitems" Label="Shared" />
@@ -25,6 +26,7 @@
     <ItemGroup>
         <Compile Include="$(ProjectsRoot)\Controls\DemoApp\Tree\Model\*.cs" Exclude="$(ProjectsRoot)\Controls\DemoApp\Tree\Model\Scene.cs" Link="Demo\Model\%(Filename)%(Extension)" />
         <Compile Include="$(ProjectsRoot)\Controls\DemoApp\Tree\EntityAdapter.cs" Link="Demo\EntityAdapter.cs" />
+        <Compile Include="$(ProjectsRoot)\Controls\DemoApp\Tree\TreePresentation.cs" Link="Demo\TreePresentation.cs" />
         <Compile Include="$(ProjectsRoot)\Controls\DemoApp\Tree\LockStateTo*Converter.cs" Link="Demo\%(Filename)%(Extension)" />
         <Compile Include="$(ProjectsRoot)\Controls\DemoApp\Tree\EntityRowActions.xaml.cs" Link="Demo\EntityRowActions.xaml.cs" />
         <Page Include="$(ProjectsRoot)\Controls\DemoApp\Tree\EntityRowActions.xaml" Link="Demo\EntityRowActions.xaml" />

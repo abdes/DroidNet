@@ -72,7 +72,7 @@ public sealed partial class DynamicTreeBasicTests
     });
 
     [TestMethod]
-    [DataRow(28d)]
+    [DataRow(32d)]
     [DataRow(40d)]
     public Task DemoColumns_HoverCommandsAndStatusStayAlignedAcrossDepths_Async(double height) => EnqueueAsync(async () =>
     {

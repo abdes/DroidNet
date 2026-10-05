@@ -18,6 +18,7 @@
 
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Controls\DynamicTree\src\Controls.DynamicTree.csproj" />
+        <Compile Include="..\..\testsupport\LazyTreeItem.cs" Link="Support\LazyTreeItem.cs" />
     </ItemGroup>
 
     <!-- Exercise the demo's small domain adapter without depending on the WinUI executable. -->

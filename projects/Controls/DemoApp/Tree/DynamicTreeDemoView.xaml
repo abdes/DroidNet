@@ -227,11 +227,9 @@
                     FilterText="{x:Bind ViewModel.LabelFilterText, Mode=TwoWay}"
                     IsFilterBarEnabled="True"
                     IsFilteringEnabled="True"
-                    ItemFontSize="14"
                     ItemIconMargin="4,0"
                     ItemIconSize="24"
                     ItemIndentWidth="34"
-                    ItemRowHeight="40"
                     ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
                     TrailingContentWidth="120"
                     ViewModel="{x:Bind ViewModel, Mode=OneWay}">

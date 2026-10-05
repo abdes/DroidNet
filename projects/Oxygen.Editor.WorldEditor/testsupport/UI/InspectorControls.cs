@@ -89,6 +89,7 @@ internal static class InspectorControls
         {
             cancellationToken.ThrowIfCancellationRequested();
             var control = resolveControl();
+            scroller.UpdateLayout();
             lastResolved ??= control;
             if (control is { IsLoaded: true })
             {
@@ -101,10 +102,11 @@ internal static class InspectorControls
                     {
                         captionEverLoaded = true;
                         var center = label.TransformToVisual(scroller).TransformPoint(new Point(label.ActualWidth / 2, label.ActualHeight / 2));
-                        var hostCenter = label.TransformToVisual(scroller.XamlRoot.Content).TransformPoint(new Point(label.ActualWidth / 2, label.ActualHeight / 2));
+                        var hostCenter = label.TransformToVisual(visual: null).TransformPoint(new Point(label.ActualWidth / 2, label.ActualHeight / 2));
                         var captionIsFullyVisible = !string.Equals(numberPartName, "PartLabelTextBlock", StringComparison.Ordinal)
                             || (center.Y >= label.ActualHeight && center.Y <= scroller.ViewportHeight - label.ActualHeight);
-                        if (captionIsFullyVisible && VisualTreeHelper.FindElementsInHostCoordinates(hostCenter, scroller).Contains(label))
+                        if (label.ActualWidth > 0 && label.ActualHeight > 0
+                            && captionIsFullyVisible && VisualTreeHelper.FindElementsInHostCoordinates(hostCenter, scroller).Contains(label))
                         {
                             stableFrames = ReferenceEquals(previous, number) ? stableFrames + 1 : 0;
                             previous = number;
@@ -116,9 +118,15 @@ internal static class InspectorControls
                         else
                         {
                             stableFrames = 0;
+                            previous = null;
                             offset = Math.Clamp(scroller.VerticalOffset + center.Y - (scroller.ViewportHeight / 2), 0, scroller.ScrollableHeight);
-                            _ = scroller.ChangeView(horizontalOffset: null, offset, zoomFactor: null, disableAnimation: true);
+                            await ScrollInspectorAsync(scroller, offset, cancellationToken).ConfigureAwait(true);
                         }
+                    }
+                    else
+                    {
+                        stableFrames = 0;
+                        previous = null;
                     }
                 }
                 else
@@ -128,11 +136,12 @@ internal static class InspectorControls
             }
             else
             {
+                stableFrames = 0;
+                previous = null;
                 offset = offset >= scroller.ScrollableHeight ? 0 : Math.Min(scroller.ScrollableHeight, offset + (scroller.ViewportHeight / 3));
-                _ = scroller.ChangeView(horizontalOffset: null, offset, zoomFactor: null, disableAnimation: true);
+                await ScrollInspectorAsync(scroller, offset, cancellationToken).ConfigureAwait(true);
             }
 
-            await Task.Delay(20, cancellationToken).ConfigureAwait(true);
             _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() =>
             {
             }).ConfigureAwait(true);
@@ -329,5 +338,48 @@ internal static class InspectorControls
         }
 
         throw new InvalidOperationException("The sun picker was not realized in the environment inspector.");
+    }
+
+    private static async Task ScrollInspectorAsync(ScrollViewer scroller, double offset, CancellationToken cancellationToken)
+    {
+        var reachableOffset = Math.Clamp(offset, 0, scroller.ScrollableHeight);
+        if (Math.Abs(scroller.VerticalOffset - reachableOffset) <= 0.5)
+        {
+            return;
+        }
+
+        var viewCompleted = false;
+        void ViewChanged(object? sender, ScrollViewerViewChangedEventArgs args) => viewCompleted = !args.IsIntermediate;
+        scroller.ViewChanged += ViewChanged;
+        try
+        {
+            var accepted = scroller.ChangeView(horizontalOffset: null, offset, zoomFactor: null, disableAnimation: true);
+            var previousOffset = scroller.VerticalOffset;
+            var previousHeight = scroller.ScrollableHeight;
+            var stableFrames = 0;
+            for (var frame = 0; frame < 20; frame++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+                scroller.UpdateLayout();
+                stableFrames = Math.Abs(scroller.VerticalOffset - previousOffset) <= 0.5
+                    && Math.Abs(scroller.ScrollableHeight - previousHeight) <= 0.5 ? stableFrames + 1 : 0;
+                previousOffset = scroller.VerticalOffset;
+                previousHeight = scroller.ScrollableHeight;
+
+                // Scroll anchoring can adjust the requested offset while the content lays out.
+                if ((!accepted || viewCompleted) && stableFrames >= 2)
+                {
+                    return;
+                }
+            }
+        }
+        finally
+        {
+            scroller.ViewChanged -= ViewChanged;
+        }
+
+        throw new InvalidOperationException(
+            $"Inspector scroll did not settle at {offset:0.##}; actual offset {scroller.VerticalOffset:0.##}, scrollable height {scroller.ScrollableHeight:0.##}.");
     }
 }

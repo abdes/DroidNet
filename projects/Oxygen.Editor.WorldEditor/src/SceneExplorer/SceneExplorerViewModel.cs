@@ -532,13 +532,46 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return Task.CompletedTask;
         }
 
-        this.clipboardNodeIds.Clear();
-        this.clipboardSnapshots.Clear();
+        var snapshots = new List<SceneNodeData>(adapters.Count);
         foreach (var adapter in adapters)
         {
-            this.clipboardNodeIds.Add(adapter.AttachedObject.Id);
-            this.clipboardSnapshots.Add(adapter.AttachedObject.Dehydrate());
+            var node = adapter.AttachedObject;
+            var data = node.Dehydrate();
+            if (node.Parent is not null && !node.IgnoreParentTransform)
+            {
+                if (!SceneTransformMath.TryPreserveWorldLocal(node, newParent: null, out var position, out var rotation, out var scale))
+                {
+                    if (this.operationResults is { } publisher && this.statusReducer is { } reducer)
+                    {
+                        _ = SceneOperationResults.PublishWarning(
+                            publisher,
+                            reducer,
+                            SceneOperationKinds.NodeDuplicate,
+                            FailureDomain.SceneAuthoring,
+                            DiagnosticCodes.ScenePrefix + "TRANSFORM_UNREPRESENTABLE",
+                            "Nodes were not copied",
+                            "The copied root's world pose cannot be represented without shear.",
+                            new AffectedScope { DocumentId = node.Scene.Id });
+                    }
+
+                    return Task.CompletedTask;
+                }
+
+                data = data with
+                {
+                    Components = data.Components.Select(component => component is TransformData transform
+                        ? transform with { Position = position, Rotation = rotation, Scale = scale }
+                        : component).ToList(),
+                };
+            }
+
+            snapshots.Add(data);
         }
+
+        this.clipboardNodeIds.Clear();
+        this.clipboardSnapshots.Clear();
+        this.clipboardNodeIds.AddRange(adapters.Select(adapter => adapter.AttachedObject.Id));
+        this.clipboardSnapshots.AddRange(snapshots);
 
         this.clipboardIsCut = false;
         this.StampClipboardOrigin();

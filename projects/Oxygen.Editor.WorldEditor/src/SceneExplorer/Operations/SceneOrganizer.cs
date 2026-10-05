@@ -1145,10 +1145,11 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
 
         static ExplorerEntryData NormalizeEntry(ExplorerEntryData entry)
         {
-            // We allow children for both Folders and Nodes (since Nodes can now contain Folders in the layout)
-            var normalizedChildren = entry.Children is null
-                ? []
-                : entry.Children.Select(NormalizeEntry).ToList();
+            var normalizedChildren = entry.Children?.Select(NormalizeEntry).ToList();
+            if (normalizedChildren is null && TypeComparer.Equals(entry.Type, "Folder"))
+            {
+                normalizedChildren = [];
+            }
 
             return entry with { Children = normalizedChildren };
         }

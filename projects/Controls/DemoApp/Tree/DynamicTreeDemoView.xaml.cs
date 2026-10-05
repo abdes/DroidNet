@@ -113,7 +113,7 @@ public sealed partial class DynamicTreeDemoView
         {
             var isNarrow = this.LayoutRootGrid.ActualWidth < 760;
             var isCompact = this.TreeDensityToggle.IsChecked == true;
-            sceneTree.ItemRowHeight = isCompact ? 32 : 40;
+            TreePresentation.ApplyDensity(sceneTree, isCompact, isNarrow);
             var compactFilterStyles = this.compactFilterStyles ??= new ResourceDictionary
             {
                 Source = new Uri("ms-appx:///DroidNet.Controls.DynamicTree/DynamicTree/CompactFilterBarStyles.xaml"),
@@ -130,13 +130,6 @@ public sealed partial class DynamicTreeDemoView
             var filterStyles = isCompact ? compactFilterStyles : this.Resources;
             sceneTree.FilterBarInputStyle = (Style)filterStyles["FilterBarInputStyle"];
             this.FilterMenuButton.Style = (Style)filterStyles["FilterBarButtonStyle"];
-            sceneTree.ItemFontSize = isCompact ? 12 : 14;
-            sceneTree.ItemIconSize = isCompact ? 18 : 24;
-            var iconMargin = isNarrow ? (isCompact ? 1 : 2) : (isCompact ? 2 : 4);
-            sceneTree.ItemIconMargin = new Thickness(iconMargin, 0, iconMargin, 0);
-            sceneTree.ItemIndentWidth = isNarrow
-                ? isCompact ? 18 : 22
-                : isCompact ? 28 : 34;
         }
     }
 

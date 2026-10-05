@@ -239,6 +239,18 @@ Consumers can tune row presentation without replacing the item template using
 `ItemIndentWidth`. These are presentation properties only; the row height is a
 minimum so consumer templates can request more room when needed.
 
+The optional `TreeDensityStyles.xaml` and `CompactTreeDensityStyles.xaml`
+dictionaries (under `ms-appx:///DroidNet.Controls.DynamicTree/DynamicTree/`)
+provide `TreeDensityStyle`. Merge the selected dictionary into the control's
+resources and assign that style. The compact dictionary scopes WinUI's native
+`DensityStyles/Compact.xaml` to this tree; both profiles use
+`ListViewItemMinHeight` and `ControlContentThemeFontSize`, yielding 40/32-DIP
+minimum rows with 14-point labels. Remove the previous density dictionary when
+switching profiles. Local presentation values take precedence over the style.
+The [demo helper](../DemoApp/Tree/TreePresentation.cs) demonstrates switching
+profiles while keeping icon size, icon spacing and responsive indentation
+specific to the custom row composition.
+
 ### Trailing-content examples
 
 A single accessible action needs no selector class:

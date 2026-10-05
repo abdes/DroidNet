@@ -459,17 +459,28 @@ public sealed partial class SceneDocumentCommandService
         }
 
         EnsureExplorerLayout(context.Scene);
-        foreach (var move in moves)
+        var layoutBefore = this.sceneOrganizer.CloneLayout(context.Scene.ExplorerLayout);
+        context.History.BeginChangeSet($"Move {moves.Count} node(s)");
+        try
         {
-            move.ApplyForward(this.sceneMutator, this.sceneOrganizer);
-            if (insertIndex >= 0)
+            foreach (var move in moves)
             {
-                MoveToIndex(newParent is null ? context.Scene.RootNodes : newParent.Children, move.Node, insertIndex);
-                insertIndex++;
+                move.ApplyForward(this.sceneMutator, this.sceneOrganizer);
+                if (insertIndex >= 0)
+                {
+                    MoveToIndex(newParent is null ? context.Scene.RootNodes : newParent.Children, move.Node, insertIndex);
+                    insertIndex++;
+                }
             }
+
+            this.RecordReparentUndo(context, moves);
+            this.RecordLayoutHistory(context, "Move nodes", layoutBefore, context.Scene.ExplorerLayout);
+        }
+        finally
+        {
+            context.History.EndChangeSet();
         }
 
-        this.RecordReparentUndo(context, moves);
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
         // Publish the compensated local TRS before reparenting native with preserve-world
         // disabled, so the native side applies the new local TRS instead of a stale one.
@@ -480,7 +491,7 @@ public sealed partial class SceneDocumentCommandService
             firstOperationResultId ??= await this.PublishSyncOutcomeAsync(context, SceneOperationKinds.NodeReparent, outcome).ConfigureAwait(true);
         }
 
-        await this.sceneEngineSync.ReparentHierarchiesAsync(context.Scene, [.. topLevelIds], newParentNodeId, preserveWorldTransform: false).ConfigureAwait(true);
+        await this.sceneEngineSync.ReparentHierarchiesAsync(context.Scene, [.. topLevelIds], newParent?.Id, preserveWorldTransform: false).ConfigureAwait(true);
         return new SceneCommandResult(Succeeded: true, firstOperationResultId);
     }
 
@@ -778,6 +789,9 @@ public sealed partial class SceneDocumentCommandService
         {
             foreach (var move in moves)
             {
+                move.NewIndex = move.Node.Parent is null
+                    ? context.Scene.RootNodes.IndexOf(move.Node)
+                    : move.Node.Parent.Children.IndexOf(move.Node);
                 context.History.AddChange(
                     $"Move {move.Node.Name}",
                     async () => await this.UndoReparentAsync(context, move).ConfigureAwait(true));
@@ -797,7 +811,7 @@ public sealed partial class SceneDocumentCommandService
             return;
         }
 
-        move.ApplyInverse(this.sceneMutator, this.sceneOrganizer);
+        move.ApplyInverse(this.sceneMutator);
         context.History.AddChange(
             $"Move {move.Node.Name}",
             async () => await this.RedoReparentAsync(context, move).ConfigureAwait(true));
@@ -1024,6 +1038,8 @@ public sealed partial class SceneDocumentCommandService
         TransformSnapshot OldTransform,
         TransformSnapshot? NewTransform)
     {
+        public int NewIndex { get; set; } = -1;
+
         public static ReparentMove Capture(SceneNode node, SceneNode? newParent, bool preserveWorldTransform)
         {
             var transform = node.Components.OfType<TransformComponent>().FirstOrDefault();
@@ -1033,14 +1049,14 @@ public sealed partial class SceneDocumentCommandService
                 : node.Parent.Children.IndexOf(node);
 
             TransformSnapshot? newTransform = null;
-            if (preserveWorldTransform && transform is not null
+            if (!preserveWorldTransform || node.IgnoreParentTransform)
+            {
+                newTransform = oldTransform;
+            }
+            else if (transform is not null
                 && SceneTransformMath.TryPreserveWorldLocal(node, newParent, out var position, out var rotation, out var scale))
             {
                 newTransform = new TransformSnapshot(position, rotation, scale);
-            }
-            else if (!preserveWorldTransform)
-            {
-                newTransform = oldTransform;
             }
 
             return new ReparentMove(node, node.Parent, oldIndex, newParent, oldTransform, newTransform);
@@ -1050,15 +1066,19 @@ public sealed partial class SceneDocumentCommandService
         {
             this.NewTransform?.Apply(this.Node);
             _ = mutator.ReparentNode(this.Node.Id, this.OldParent?.Id, this.NewParent?.Id, this.Node.Scene);
+            if (this.NewIndex >= 0)
+            {
+                MoveToIndex(this.NewParent is null ? this.Node.Scene.RootNodes : this.NewParent.Children, this.Node, this.NewIndex);
+            }
+
             _ = organizer.RemoveNodeFromLayout(this.Node.Id, this.Node.Scene);
         }
 
-        public void ApplyInverse(ISceneMutator mutator, ISceneOrganizer organizer)
+        public void ApplyInverse(ISceneMutator mutator)
         {
             this.OldTransform.Apply(this.Node);
             _ = mutator.ReparentNode(this.Node.Id, this.NewParent?.Id, this.OldParent?.Id, this.Node.Scene);
             MoveToIndex(this.OldParent is null ? this.Node.Scene.RootNodes : this.OldParent.Children, this.Node, this.OldIndex);
-            _ = organizer.RemoveNodeFromLayout(this.Node.Id, this.Node.Scene);
         }
     }
 

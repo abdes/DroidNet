@@ -22,7 +22,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 
 /// <summary>Ensures create and delete authoring go through the document command owner.</summary>
 [TestClass]
-public sealed class SceneExplorerAuthoringTests
+public sealed partial class SceneExplorerAuthoringTests
 {
     [TestMethod]
     public async Task AddEntity_RoutesThroughCreateNodeCommand()
@@ -105,6 +105,7 @@ public sealed class SceneExplorerAuthoringTests
     private sealed class AuthoringHarness
     {
         private readonly Scene scene;
+        private readonly List<SceneDocumentMetadata> openDocuments = [];
 
         public AuthoringHarness(out Scene scene, out SceneNode node)
         {
@@ -121,7 +122,8 @@ public sealed class SceneExplorerAuthoringTests
 
             var documents = new Mock<IDocumentService>();
             var metadata = new SceneDocumentMetadata(scene.Id);
-            _ = documents.Setup(value => value.GetOpenDocuments(It.IsAny<WindowId>())).Returns([metadata]);
+            this.openDocuments.Add(metadata);
+            _ = documents.Setup(value => value.GetOpenDocuments(It.IsAny<WindowId>())).Returns(() => this.openDocuments);
             _ = documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(metadata.DocumentId);
             this.Documents = documents;
 
@@ -141,6 +143,17 @@ public sealed class SceneExplorerAuthoringTests
         public Mock<ISceneEngineSync> Sync { get; }
 
         public Mock<ISceneDocumentCommandService> Commands { get; }
+
+        public Scene AddScene(string name)
+        {
+            var added = new Scene(this.scene.Project) { Name = name };
+            this.scene.Project.Scenes.Add(added);
+            var metadata = new SceneDocumentMetadata(added.Id);
+            this.openDocuments.Add(metadata);
+            _ = this.Sync.Setup(value => value.GetDocumentScene(metadata)).Returns(added);
+            _ = this.Sync.Setup(value => value.RegisterDocument(added, metadata)).Returns(value: true);
+            return added;
+        }
 
         public SceneExplorerViewModel Build()
             => new(

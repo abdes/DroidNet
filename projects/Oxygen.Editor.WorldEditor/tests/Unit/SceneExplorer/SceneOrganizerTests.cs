@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer.Operations;
+using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 
@@ -45,6 +46,25 @@ public class SceneOrganizerTests
         _ = folderEntry.Should().NotBeNull();
         _ = folderEntry!.Children.Should().Contain(entry => entry.Type == "Node" && entry.NodeId == node.Id);
         _ = scene.ExplorerLayout.Should().NotContain(entry => entry.Type == "Node" && entry.NodeId == node.Id, "node entry should have moved out of the root list into the folder");
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void RemoveNodeFromLayout_WithOmittedNodeChildren_PreservesUntouchedEntryShape(bool entryExists)
+    {
+        var scene = CreateScene();
+        var removed = new SceneNode(scene) { Name = "Removed" };
+        var retained = new SceneNode(scene) { Name = "Retained" };
+        scene.RootNodes.Add(removed);
+        scene.RootNodes.Add(retained);
+        scene.SetExplorerLayout([new ExplorerEntryData { NodeId = removed.Id }, new ExplorerEntryData { NodeId = retained.Id }]);
+
+        _ = this.organizer.RemoveNodeFromLayout(entryExists ? removed.Id : Guid.NewGuid(), scene);
+
+        _ = scene.ExplorerLayout.Should().HaveCount(entryExists ? 1 : 2);
+        _ = scene.ExplorerLayout.Should().OnlyContain(entry => entry.Children == null, "removing a node must not materialize omitted children on unrelated entries");
+        _ = scene.ExplorerLayout!.Last().NodeId.Should().Be(retained.Id);
     }
 
     private static Scene CreateScene()

@@ -3,9 +3,9 @@
 Status: `in_progress` — SE-01 validated; SE-02 landed (awaiting review); SE-03
 planned.
 
-| Outcome                                                                                              | Remaining                                                                | Evidence                                                                                                                                                                                                                   |
-| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SE-01 generic tree capabilities and the single-scene DemoApp showcase are implemented and validated. | User demo acceptance; SE-02/03 editor authoring and runtime integration. | Final source review; 151 model and 89 UI tests passed; scoped builds and changed-file hooks passed. Live demo checks cover native compact/comfortable filtering, aligned hover actions, loaded status and copy/paste/undo. |
+| Outcome                                                                                              | Remaining                                                                | Evidence                                                                                                                                                                                                                                                                                   |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| SE-01 generic tree capabilities and the single-scene DemoApp showcase are implemented and validated. | User demo acceptance; SE-02/03 editor authoring and runtime integration. | 170 Models and 110 UI tests passed; scoped builds and changed-file hooks passed. T9 proves scoped interaction/recycling; T10 measures native compact/normal profiles on a 1,000-row lazy tree. Live demo checks cover filtering, aligned hover actions, loaded status and copy/paste/undo. |
 
 ## 1. Goal, scope and design authority
 
@@ -701,18 +701,19 @@ DemoApp consumes the hooks with non-Oxygen data/actions. DynamicTree has no
 Oxygen reference and no alternate application-specific tree implementation.
 
 **Status (updated 2026-10-05 per P1):** SE-01 is **in progress**, not complete
-— C32/C34/C35/C38 and T9 are closed with focused Models/WinUI regression coverage;
-T10's density/workload evidence and user demo acceptance remain open. The direct
+— C32/C34/C35/C38, T9 and T10 are closed with focused Models/WinUI regression
+coverage; user demo acceptance remains open. The direct
 trailing template takes precedence over
 selectors; fixed-width empty slots and recycled content are covered. Demo-owned
 lock/visibility hover commands and loaded-status cells remain aligned across
 depths and densities. Final review corrected passive status content intercepting
 row input and made hover subscriptions idempotent. Debug|x64 builds and analyzer
-invocations succeed with pre-existing control analyzer warnings; 169 Models and
-106 UI tests pass. Exhaustive contrast/DPI/text-scaling and workload
-qualification was not rerun in this closeout; editor/runtime qualification
-remains part of SE-03. No engine build or production editor integration is
-claimed.
+invocations succeed with pre-existing control analyzer warnings; 170 Models and
+110 UI tests pass. Native normal/compact resources, enlarged labels, runtime
+density changes and the 1,000-row lazy workload are verified under T10.
+Exhaustive contrast/DPI qualification was not rerun; editor/runtime
+qualification remains part of SE-03. No engine build or production editor
+integration is claimed for this generic slice.
 
 ### SE-02 — Scene Explorer domain projection and atomic authoring
 
@@ -1542,20 +1543,33 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
 
 #### Test / verification gaps (editor/controls; runtime for native rows)
 
-- [~] T1 — one undo per batch + atomic rejection (mixed delete, multi-root
-  duplication). (Multi-root duplication stale-id rejection is tested;
-  mixed-delete atomicity test pending.)
-- [~] T2 — preserve-world ignored-parent + exact layout/order/TRS undo/redo +
-  native convergence. (Ignored-parent world preservation tested; exact-layout
-  undo/native-convergence pending.)
+- [x] T1 — one undo per batch + atomic rejection (mixed delete, multi-root
+      duplication). Closed 2026-10-05: mixed-delete stale/locked rejection
+      leaves the complete graph/layout/history/native boundary unchanged;
+      successful multi-root duplication replays the whole batch as one undo
+      entry. Exact serialized layout checks also exposed and fixed normalization
+      changing omitted node children into empty arrays.
+- [x] T2 — preserve-world ignored-parent + exact layout/order/TRS undo/redo +
+      native convergence. Closed 2026-10-05: reparent, same-/cross-scope grouping
+      and reorder tests assert exact saved layout, parent identity, local TRS,
+      world pose and one history entry through undo/redo. Synchronization-boundary
+      assertions capture destination parent and TRS on every replay. Four
+      `HierarchyNativeSynchronizationTests` cases reuse the existing three-node
+      native fixture and query all nine local TRS values at initial state,
+      commit, undo and redo. The native query API exposes local TRS, not parent
+      identity/world pose; those assertions remain managed/boundary evidence.
 - [x] T3 — rename reaches native; delete-undo recreates the subtree.
       (`RenameNodeAsync_WhenCommitted_RecordsSingleUndoStep` verifies the native
       rename call; `DeleteNodesAsync_Undo_RecreatesFullSubtreeInNative` verifies
       `CreateNodeAsync` twice, root + child.)
-- [ ] T4 — immutable snapshots, sequential-scene Copy, repeated Copy Paste,
-      Escape cancels Cut.
+- [x] T4 — immutable snapshots, sequential-scene Copy, repeated Copy Paste,
+      Escape cancels Cut. Closed 2026-10-05: source edits after capture leave
+      collapsed descendants/components and captured world poses unchanged;
+      Copy survives a document switch and repeated Paste retains its snapshot.
+      Escape cancels Cut without authoring and preserves reusable Copy intent.
+      The ready command/clipboard batch passes in the full 334-case Unit lane.
 - [ ] T5 — folder/mixed selection reaches the right Inspector; external
-      selection reconciles.
+      selection reconciles. Blocked by C16–C19.
 - [x] T6 — search multi-query restoration, folder ancestry, no authored
       expansion writes.
       (`SearchAsync_RestoresExpansionAcrossSuccessiveQueriesWithoutAuthoringLayout`
@@ -1564,9 +1578,9 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       `SearchAsync_RevealsNodeInsideCollapsedNestedFolders` covers nested visual
       folder ancestry.)
 - [ ] T7 — context-menu captured context, keyboard/touch, stale dismissal,
-      toolbar parity.
+      toolbar parity. Blocked by C20–C23.
 - [ ] T8 — single loaded scene: guarded replacement, material-tab retention,
-      configured default.
+      configured default. Blocked by C30.
 - [x] T9 — generic recycling detach, displayed-scope keyboard, reload/reattach,
       Escape cancel. **Closed 2026-10-05:** focused in-process regressions in
       `ViewModelDisplayedScopeTests`, `ViewModelExpansionTests` and
@@ -1579,7 +1593,23 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       keyboard handler is reattached idempotently on load.
       Coverage adds 18 Models cases and 17 UI cases relative to the committed tree.
       Full Debug|x64 lanes pass, 169/169 Models and 106/106 UI, with no skipped cases.
-- [ ] T10 — 32/40 density profiles + measured 1,000-item lazy-tree workload.
+- [x] T10 — 32/40 density profiles + measured 1,000-item lazy-tree workload.
+      Closed 2026-10-05: normal/compact tree styles consume WinUI's
+      `ListViewItemMinHeight` and `ControlContentThemeFontSize`; compact scopes
+      native `DensityStyles/Compact.xaml` to the tree. Actual rows measure
+      32/40 DIP with 14-point labels at widths 300/600 and a 320-DIP viewport.
+      Four UI cases cover recycled rows, profile switching, enlarged labels,
+      end/middle/top scrolling and two reloads with unchanged observer counts.
+      Maximum realized rows are 15 compact / 12 normal (limits 64 / 52), not
+      1,000; three scrolls measured 71–112 ms in the full lane run.
+      The Models workload measures initialization 9.46 ms, filtering 5.68 ms
+      and 50 edits plus one refresh 7.23 ms; edits trigger no immediate predicate
+      evaluations, and the refresh evaluates exactly 1,000 loaded items.
+      Both lanes assert zero collapsed-branch loads; Models additionally asserts
+      zero shown-source changes, stable item identities and observer release
+      across filter cycles/disposal. Timings are observations, not
+      machine-dependent pass thresholds. Full lanes pass 170 Models / 110 UI;
+      the demo builds and uses the same tested density helper.
 - [x] T11 — D5's layout-only qualifier was untested beyond the flat root-folder
       case: folder Delete inside a nested folder, and inside a folder whose
       grouping followed a D2 reparent, must both promote entries without
@@ -1604,18 +1634,22 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       line, no assertion changed, and five pre-existing contentless tests in the same class
       stopped hanging as a side effect.
 
-- [ ] T13 — the shared inspector field finder is timing-sensitive. While proving the cascade
-      fix, one of six filtered 41-case Integration.UI runs exited 5 with a single test
-      failure; the wrapper does not surface the executable console, so the case could not be
-      identified, and four subsequent runs were clean. Most likely the hit-test visibility
-      gate in `testsupport/UI/InspectorControls.cs:101` racing layout after a scroll. This is
-      recorded rather than papered over: if it recurs, stabilize it with a bounded,
-      condition-based wait on the layout state actually being waited for — not by raising the
-      step bound or the pump delays.
+- [x] T13 — stabilize the shared inspector field finder. Closed 2026-10-05:
+      hit testing uses host coordinates even when the content root is offset;
+      layout is updated before sampling nonzero caption bounds, and unstable
+      candidates reset the visibility gate. A bounded wait observes the final
+      `ViewChanged` event plus stable offset/extent instead of a fixed delay or
+      exact requested offset (scroll anchoring can adjust it).
+      Six small pending-scroll/layout regressions cover value/label captions
+      from three offsets; cancellation propagates. They and existing cascade
+      presentation cases pass 18/18. All 39 native component-field cases pass
+      with the same finder, alongside four native hierarchy cases (43/43).
+      Existing fixtures only; no global pointer/keyboard injection or exclusive
+      workstation use.
 
 #### Progress-note corrections (reconcile §6 with the above)
 
-- [x] P1 — §6 keeps SE-01 in progress for T10 and user demo acceptance;
+- [x] P1 — §6 keeps SE-01 in progress for user demo acceptance; T10 is closed.
       C32/C34/C35/C38 and T9 are closed with regression evidence. (C33/C36
       had already closed, so the original "until C32–C36" range was too wide.)
 - [x] P2 — condition met (C8/C9/C10 closed); the §6 atomic graph+layout claim is
@@ -1851,11 +1885,11 @@ or run a whole engine build from this managed checklist. Record native
 dependency/build/test ownership before implementation and keep SE-03's native
 acceptance blocked until the required API and observed behavior exist.
 
-| ID    | State                   | Next action                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Responsible role                       |
-| ----- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
-| SE-01 | in_progress             | Finish density/workload evidence under T10, then seek demo acceptance (P1).                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Implementer + user                     |
-| SE-02 | landed_needs_validation | Corrected per P5: the steps landed, the slice is not validated. Closed with evidence 2026-10-04: transforms/reparent, atomicity (C8-C10), clipboard (C11-C15), selection-adjacent drop routing (C6/C13), search and layout domain (C24-C27, T6) — 277/277 unit tests. Still open: selection C16-C19 and context menu C20-C23 (gated on D3), scene replacement C30, creation seed C31, reconcile-during-search C37, gaps T4/T5/T7/T8/T12, approvals D3-D8. The `AuthoringChanged` item is not deferred to SE-03 — see the P6 restatement in §6 and T12. | Implementer                            |
-| SE-03 | planned                 | Connect target UI, workspace state and supported native mask/picking; qualify workflows.                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Implementer + runtime owner + reviewer |
+| ID    | State                   | Next action                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Responsible role                       |
+| ----- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| SE-01 | in_progress             | T9/T10 verified; seek user demo acceptance (P1).                                                                                                                                                                                                                                                                                                                                                                                                                                             | Implementer + user                     |
+| SE-02 | landed_needs_validation | The slice is not fully validated. T1/T2/T4/T6/T11/T12/T13 are closed with bounded command, observer and native-field evidence; the current full Unit lane passes 334/334, and scoped native hierarchy/inspector cases pass 43/43. Still open: selection C16-C19 and context menu C20-C23 (gated on D3), scene replacement C30, creation seed C31, reconcile-during-search C37, blocked gaps T5/T7/T8, approvals D3-D8. The `AuthoringChanged` item is covered by T12, not deferred to SE-03. | Implementer                            |
+| SE-03 | planned                 | Connect target UI, workspace state and supported native mask/picking; qualify workflows.                                                                                                                                                                                                                                                                                                                                                                                                     | Implementer + runtime owner + reviewer |
 
 Use `in_progress`, `landed_needs_validation`, `blocked`, `validated` accurately.
 Document contract decisions and named dependencies next to the slice, not as a
