@@ -110,6 +110,27 @@ public sealed partial class ViewModelExpansionTests : ViewModelTestBase, IDispos
 
     [TestMethod]
     [TestCategory($"{nameof(DynamicTree)} / ViewModel / Collapse")]
+    public async Task CollapseItemAsync_AlreadyHiddenBranch_PreservesShownItems()
+    {
+        var leaf = new TestTreeItemAdapter { Label = "Leaf" };
+        var inner = new TestTreeItemAdapter([leaf]) { Label = "Inner", IsExpanded = true };
+        var outer = new TestTreeItemAdapter([inner]) { Label = "Outer", IsExpanded = true };
+        var sibling = new TestTreeItemAdapter { Label = "Sibling" };
+        var root = new TestTreeItemAdapter([outer, sibling], isRoot: true) { Label = "Root", IsExpanded = true };
+        await this.viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+        await this.viewModel.CollapseItemAsync(outer).ConfigureAwait(false);
+        var shown = this.viewModel.ShownItems.ToArray();
+
+        await this.viewModel.CollapseItemAsync(inner).ConfigureAwait(false);
+
+        _ = inner.IsExpanded.Should().BeFalse();
+        _ = this.viewModel.ShownItems.Should().Equal(shown);
+        await this.viewModel.ExpandItemAsync(outer).ConfigureAwait(false);
+        _ = this.viewModel.ShownItems.Should().Equal(root, outer, inner, sibling);
+    }
+
+    [TestMethod]
+    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Collapse")]
     public async Task CollapseItemAsync_ShouldCollapseItemIfNotAlreadyCollapsed()
     {
         // Arrange

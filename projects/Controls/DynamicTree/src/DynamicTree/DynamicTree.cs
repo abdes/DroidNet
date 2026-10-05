@@ -95,10 +95,16 @@ public partial class DynamicTree : Control
     /// <remarks>The control does not assign domain meaning or display a menu automatically.</remarks>
     public event EventHandler<TreeItemContextRequestedEventArgs>? ItemContextRequested;
 
-    private enum DropZone
+    /// <summary>Describes the logical position of a drop relative to its target row.</summary>
+    internal enum DropZone
     {
+        /// <summary>Insert before the target.</summary>
         Before,
+
+        /// <summary>Insert as a child of the target.</summary>
         Inside,
+
+        /// <summary>Insert after the target.</summary>
         After,
     }
 
@@ -143,6 +149,126 @@ public partial class DynamicTree : Control
         return viewModel?.IsShown(item) == true
             ? await viewModel.CommitRenameAsync(item, newName).ConfigureAwait(true)
             : TreeItemRenameResult.Rejected("The item is no longer available in this tree.");
+    }
+
+    /// <summary>Stages an internal drag without changing the tree's structure.</summary>
+    /// <param name="item">The primary dragged item.</param>
+    /// <param name="isCopy">Whether the drag initially requests a copy.</param>
+    /// <returns>True when unlocked sources could be staged.</returns>
+    internal bool BeginDrag(ITreeItem item, bool isCopy)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        this.deferredSelection = false;
+        this.deferredSelectionItem = null;
+        if (this.ViewModel?.IsShown(item) != true)
+        {
+            return false;
+        }
+
+        var items = this.GetDragItems(item);
+        if (items.Count == 0 || items.Exists(static dragged => dragged.IsLocked))
+        {
+            return false;
+        }
+
+        this.dragOwner = this;
+        this.draggedItems = items;
+        this.dragIsCopy = isCopy;
+        return true;
+    }
+
+    /// <summary>Commits a valid pending drag, or rejects a drop after cancellation.</summary>
+    /// <param name="target">The target row.</param>
+    /// <param name="zone">The drop position relative to the target.</param>
+    /// <returns>The accepted operation, or None when the drop is rejected.</returns>
+    internal async Task<DataPackageOperation> CompleteDragAsync(ITreeItem target, DropZone zone)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        var isCopyIntent = this.IsCopyIntentCurrent();
+        var isCopyAllowed = isCopyIntent && this.CanCopyDraggedItems();
+        if ((isCopyIntent && !isCopyAllowed) || !this.IsValidDropTarget(target, zone))
+        {
+            this.ClearDragState();
+            return DataPackageOperation.None;
+        }
+
+        this.CancelHoverExpand();
+        this.ClearDropIndicatorVisual();
+        var owner = this.ViewModel!;
+        var sources = this.draggedItems!.ToArray();
+        try
+        {
+            var result = await ProcessDropAsync(owner, sources, target, zone, isCopyAllowed).ConfigureAwait(true);
+            if (!result.Succeeded || !ReferenceEquals(this.ViewModel, owner)
+                || result.Items.Count == 0 || result.Items[0] is not { } first)
+            {
+                return DataPackageOperation.None;
+            }
+
+            _ = owner.FocusItem(first, RequestOrigin.PointerInput);
+            return isCopyAllowed ? DataPackageOperation.Copy : DataPackageOperation.Move;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+        {
+            if (this.logger is ILogger logger)
+            {
+                DropRejectedLog(logger, exception);
+            }
+
+            return DataPackageOperation.None;
+        }
+        finally
+        {
+            this.ClearDragState();
+        }
+    }
+
+    /// <summary>Schedules expansion while a drag hovers over a collapsed parent.</summary>
+    /// <param name="target">The hovered parent.</param>
+    internal void ScheduleHoverExpand(ITreeItem target)
+    {
+        if (ReferenceEquals(this.hoverExpandTarget, target) && this.hoverExpandTimer?.IsEnabled == true)
+        {
+            return;
+        }
+
+        this.hoverExpandTarget = target;
+
+        this.hoverExpandTimer ??= new DispatcherTimer
+        {
+            Interval = HoverExpandDelay,
+        };
+
+        this.hoverExpandTimer.Tick -= this.OnHoverExpandTick;
+        this.hoverExpandTimer.Tick += this.OnHoverExpandTick;
+        this.hoverExpandTimer.Stop();
+        this.hoverExpandTimer.Start();
+    }
+
+    /// <summary>Updates the pending drag's cue carrier and position.</summary>
+    /// <param name="element">The realized target row.</param>
+    /// <param name="zone">The position to display.</param>
+    internal void SetDropIndicatorVisual(FrameworkElement element, DropZone zone)
+    {
+        var position = zone switch
+        {
+            DropZone.Before => DropIndicatorPosition.Before,
+            DropZone.After => DropIndicatorPosition.After,
+            DropZone.Inside => DropIndicatorPosition.Inside,
+            _ => DropIndicatorPosition.None,
+        };
+
+        if (!ReferenceEquals(this.dropIndicatorElement, element))
+        {
+            this.ClearDropIndicatorVisual();
+            this.dropIndicatorElement = element;
+        }
+
+        SetDropIndicator(element, position);
+        if (element is DynamicTreeItem treeItem)
+        {
+            treeItem.UpdateDropIndicatorVisual(position);
+        }
     }
 
     /// <summary>
@@ -355,7 +481,7 @@ public partial class DynamicTree : Control
                     }
                     else
                     {
-                        this.ViewModel.SelectItemCommand.Execute(new(item, RequestOrigin.KeyboardInput, isControlDown, isShiftDown));
+                        this.SelectItem(item, isControlDown, isShiftDown, RequestOrigin.KeyboardInput);
                     }
 
                     return true;
@@ -601,6 +727,9 @@ public partial class DynamicTree : Control
 
     private void OnLoaded(object? sender, RoutedEventArgs args)
     {
+        this.itemsRepeater?.RemoveHandler(KeyDownEvent, new KeyEventHandler(this.ItemsRepeater_OnKeyDown));
+        this.itemsRepeater?.AddHandler(KeyDownEvent, new KeyEventHandler(this.ItemsRepeater_OnKeyDown), handledEventsToo: true);
+
         // Subscribe to view model change notifications and attach to any existing ViewModel
         this.ViewModelChanged += this.OnViewModelChanged;
         this.OnViewModelChanged(this, new ViewModelChangedEventArgs<DynamicTreeViewModel>(oldValue: null));
@@ -612,6 +741,10 @@ public partial class DynamicTree : Control
 
         // Remove subscriptions to the ViewModel
         this.ViewModel?.PropertyChanged -= this.ViewModel_OnPropertyChanged;
+        if (this.ViewModel is { } viewModel)
+        {
+            viewModel.DisplayedInteractionItems = null;
+        }
 
         // Stop listening to the ViewModelChanged event while unloaded
         this.ViewModelChanged -= this.OnViewModelChanged;
@@ -1050,6 +1183,10 @@ public partial class DynamicTree : Control
     {
         // Detach any handlers from the previous ViewModel
         args.OldValue?.PropertyChanged -= this.ViewModel_OnPropertyChanged;
+        if (args.OldValue is { } oldViewModel)
+        {
+            oldViewModel.DisplayedInteractionItems = null;
+        }
 
         // Attach handlers to the new ViewModel
         if (this.ViewModel is not null)
@@ -1078,12 +1215,14 @@ public partial class DynamicTree : Control
             hasPredicate: hasPredicate,
             displayedSource: useFiltered ? nameof(DynamicTreeViewModel.FilteredItems) : nameof(DynamicTreeViewModel.ShownItems));
 
-        this.DisplayedItems = useFiltered
+        var displayedItems = useFiltered
             ? this.ViewModel.FilteredItems
             : this.ViewModel.ShownItems;
+        this.DisplayedItems = displayedItems;
 
         // Keyboard navigation, typeahead and range extension follow the same scope the pointer
         // paths already honour, so one control switch describes every interaction surface.
+        this.ViewModel.DisplayedInteractionItems = displayedItems;
         this.ViewModel.InteractionScope = this.SelectionScope;
     }
 
@@ -1256,16 +1395,11 @@ public partial class DynamicTree : Control
             return;
         }
 
-        var items = this.GetDragItems(item);
-        if (items.Count == 0 || items.Exists(static dragged => dragged.IsLocked))
+        if (!this.BeginDrag(item, IsControlKeyDown()))
         {
             args.Cancel = true;
             return;
         }
-
-        this.dragOwner = this;
-        this.draggedItems = items;
-        this.dragIsCopy = IsControlKeyDown();
 
         args.Data.RequestedOperation = this.dragIsCopy ? DataPackageOperation.Copy : DataPackageOperation.Move;
         args.Data.SetData("application/vnd.droidnet.dynamictree", this.dragIsCopy ? "copy" : "move");
@@ -1333,32 +1467,10 @@ public partial class DynamicTree : Control
         var isCopy = isCopyAllowed;
         args.AcceptedOperation = isCopy ? DataPackageOperation.Copy : DataPackageOperation.Move;
         args.Handled = true;
-        this.CancelHoverExpand();
-        this.ClearDropIndicatorVisual();
-
         var deferral = args.GetDeferral();
-        var owner = this.ViewModel!;
-        var sources = this.draggedItems.ToArray();
         try
         {
-            var result = await ProcessDropAsync(owner, sources, target, zone, isCopy).ConfigureAwait(true);
-            if (result.Succeeded && ReferenceEquals(this.ViewModel, owner) && result.Items.Count > 0 && result.Items[0] is { } first)
-            {
-                _ = owner.FocusItem(first, RequestOrigin.PointerInput);
-            }
-            else
-            {
-                args.AcceptedOperation = DataPackageOperation.None;
-            }
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
-        {
-            if (this.logger is ILogger logger)
-            {
-                DropRejectedLog(logger, exception);
-            }
-
-            args.AcceptedOperation = DataPackageOperation.None;
+            args.AcceptedOperation = await this.CompleteDragAsync(target, zone).ConfigureAwait(true);
         }
         finally
         {
@@ -1415,7 +1527,11 @@ public partial class DynamicTree : Control
         return this.ViewModel?.ShownItems.ToArray() ?? [];
     }
 
-    private void SelectItem(ITreeItem item, bool isControlDown, bool isShiftDown)
+    private void SelectItem(
+        ITreeItem item,
+        bool isControlDown,
+        bool isShiftDown,
+        RequestOrigin origin = RequestOrigin.PointerInput)
     {
         if (this.ViewModel is null)
         {
@@ -1428,7 +1544,7 @@ public partial class DynamicTree : Control
             return;
         }
 
-        this.ViewModel.SelectItemCommand.Execute(new(item, RequestOrigin.PointerInput, isControlDown, isShiftDown));
+        this.ViewModel.SelectItemCommand.Execute(new(item, origin, isControlDown, isShiftDown));
     }
 
     private List<ITreeItem> GetDragItems(ITreeItem primary)
@@ -1454,17 +1570,28 @@ public partial class DynamicTree : Control
         target = null;
         zone = DropZone.Inside;
 
-        if (!ReferenceEquals(this.dragOwner, this) || this.draggedItems is null || this.ViewModel is null)
-        {
-            return false;
-        }
-
         if (sender is not FrameworkElement { DataContext: ITreeItem item } element)
         {
             return false;
         }
 
         zone = GetDropZone(element, args);
+
+        if (!this.IsValidDropTarget(item, zone))
+        {
+            return false;
+        }
+
+        target = item;
+        return true;
+    }
+
+    private bool IsValidDropTarget(ITreeItem item, DropZone zone)
+    {
+        if (!ReferenceEquals(this.dragOwner, this) || this.draggedItems is null || this.ViewModel?.IsShown(item) != true)
+        {
+            return false;
+        }
 
         if (this.draggedItems.Exists(dragged => ReferenceEquals(dragged, item)))
         {
@@ -1493,33 +1620,12 @@ public partial class DynamicTree : Control
             return false;
         }
 
-        target = item;
         return true;
     }
 
     private bool IsCopyIntentCurrent() => IsControlKeyDown() || this.dragIsCopy;
 
     private bool CanCopyDraggedItems() => this.draggedItems is { Count: > 0 } && this.draggedItems.TrueForAll(item => item is ICanBeCloned);
-
-    private void ScheduleHoverExpand(ITreeItem target)
-    {
-        if (ReferenceEquals(this.hoverExpandTarget, target) && this.hoverExpandTimer?.IsEnabled == true)
-        {
-            return;
-        }
-
-        this.hoverExpandTarget = target;
-
-        this.hoverExpandTimer ??= new DispatcherTimer
-        {
-            Interval = HoverExpandDelay,
-        };
-
-        this.hoverExpandTimer.Tick -= this.OnHoverExpandTick;
-        this.hoverExpandTimer.Tick += this.OnHoverExpandTick;
-        this.hoverExpandTimer.Stop();
-        this.hoverExpandTimer.Start();
-    }
 
     private void CancelHoverExpand()
     {
@@ -1555,29 +1661,6 @@ public partial class DynamicTree : Control
         this.dragOwner = null;
         this.draggedItems = null;
         this.ClearDropIndicatorVisual();
-    }
-
-    private void SetDropIndicatorVisual(FrameworkElement element, DropZone zone)
-    {
-        var position = zone switch
-        {
-            DropZone.Before => DropIndicatorPosition.Before,
-            DropZone.After => DropIndicatorPosition.After,
-            DropZone.Inside => DropIndicatorPosition.Inside,
-            _ => DropIndicatorPosition.None,
-        };
-
-        if (!ReferenceEquals(this.dropIndicatorElement, element))
-        {
-            this.ClearDropIndicatorVisual();
-            this.dropIndicatorElement = element;
-        }
-
-        SetDropIndicator(element, position);
-        if (element is DynamicTreeItem treeItem)
-        {
-            treeItem.UpdateDropIndicatorVisual(position);
-        }
     }
 
     private void ClearDropIndicatorVisual()

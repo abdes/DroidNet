@@ -71,16 +71,17 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     public IEnumerable<ITreeItem> ShownItems => this.shownItems;
 
     /// <summary>
-    ///     Gets or sets the collection that interactions address.
+    ///     Gets or sets the scope that keyboard focus and typeahead address.
     /// </summary>
     /// <remarks>
-    ///     The owning control assigns this from its <c>SelectionScope</c> whenever that scope or
-    ///     the displayed source changes, so the view model never has to know about filtering.
+    ///     The owning control assigns this from its <c>SelectionScope</c> and supplies its displayed source
+    ///     whenever that scope or source changes. Standalone displayed-scope navigation uses <see cref="FilteredItems"/>.
     ///     <see cref="TreeSelectionScope.ShownItems"/> preserves the historical behaviour: keyboard
-    ///     navigation, typeahead and range extension walk <see cref="ShownItems"/>.
+    ///     navigation and typeahead walk <see cref="ShownItems"/>.
     ///     <see cref="TreeSelectionScope.DisplayedItems"/> restricts them to the displayed
     ///     projection, so a keyboard user cannot land on a row that the filter hid while pointer
-    ///     selection is already scoped to it.
+    ///     selection is already scoped to it. The control uses <see cref="SelectDisplayedItem"/> for selection ranges;
+    ///     direct view-model selection commands retain their unfiltered semantics.
     /// </remarks>
     public TreeSelectionScope InteractionScope { get; set; } = TreeSelectionScope.ShownItems;
 
@@ -89,10 +90,13 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// </summary>
     internal ILoggerFactory? LoggerFactory { get; } = loggerFactory;
 
+    /// <summary>Gets or sets the owning control's displayed source, when one is attached.</summary>
+    internal IEnumerable<ITreeItem>? DisplayedInteractionItems { get; set; }
+
     /// <summary>
-    ///     Gets the items keyboard focus, typeahead and range extension may move between.
+    ///     Gets the items keyboard focus and typeahead may move between.
     /// </summary>
-    private IReadOnlyList<ITreeItem> NavigableItems
+    private IList<ITreeItem> NavigableItems
     {
         get
         {
@@ -102,7 +106,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
             }
 
             // FilteredItems degrades to the shown collection when no predicate is installed.
-            var displayed = this.FilteredItems;
+            var displayed = this.DisplayedInteractionItems ?? this.FilteredItems;
             if (ReferenceEquals(displayed, this.shownItems))
             {
                 return this.shownItems;
@@ -480,19 +484,32 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <returns><see langword="true" /> if focus moved; otherwise, <see langword="false" />.</returns>
     public bool FocusNextVisibleItem(RequestOrigin origin)
     {
-        if (!this.EnsureFocus(origin))
+        var items = this.NavigableItems;
+        if (items.Count == 0)
+        {
+            this.FocusedItem = null;
+            return false;
+        }
+
+        if (this.InteractionScope != TreeSelectionScope.DisplayedItems && !this.EnsureFocus(origin))
         {
             return false;
         }
 
-        Debug.Assert(this.FocusedItem is not null, "EnsureFocus should guarantee FocusedItem is not null");
-        var currentIndex = this.shownItems.IndexOf(this.FocusedItem.Item);
-        if (currentIndex == -1 || currentIndex >= this.shownItems.Count - 1)
+        var currentIndex = this.FocusedItem is { } focused ? items.IndexOf(focused.Item) : -1;
+        if (currentIndex == -1)
+        {
+            // Enter the scope at its boundary when focus is absent or filtered out.
+            this.FocusedItem = new(items[0], origin);
+            return true;
+        }
+
+        if (currentIndex >= items.Count - 1)
         {
             return false;
         }
 
-        this.FocusedItem = new(this.shownItems[currentIndex + 1], origin);
+        this.FocusedItem = new(items[currentIndex + 1], origin);
         return true;
     }
 
@@ -503,19 +520,31 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <returns><see langword="true" /> if focus moved; otherwise, <see langword="false" />.</returns>
     public bool FocusPreviousVisibleItem(RequestOrigin origin)
     {
-        if (!this.EnsureFocus(origin))
+        var items = this.NavigableItems;
+        if (items.Count == 0)
+        {
+            this.FocusedItem = null;
+            return false;
+        }
+
+        if (this.InteractionScope != TreeSelectionScope.DisplayedItems && !this.EnsureFocus(origin))
         {
             return false;
         }
 
-        Debug.Assert(this.FocusedItem is not null, "EnsureFocus should guarantee FocusedItem is not null");
-        var currentIndex = this.shownItems.IndexOf(this.FocusedItem.Item);
+        var currentIndex = this.FocusedItem is { } focused ? items.IndexOf(focused.Item) : -1;
+        if (currentIndex == -1)
+        {
+            this.FocusedItem = new(items[^1], origin);
+            return true;
+        }
+
         if (currentIndex <= 0)
         {
             return false;
         }
 
-        this.FocusedItem = new(this.shownItems[currentIndex - 1], origin);
+        this.FocusedItem = new(items[currentIndex - 1], origin);
         return true;
     }
 
@@ -572,14 +601,14 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <returns><see langword="true" /> if focus moved; otherwise, <see langword="false" />.</returns>
     public bool FocusFirstVisibleItemInTree(RequestOrigin origin)
     {
-        if (this.shownItems.Count == 0)
+        var items = this.NavigableItems;
+        if (items.Count == 0)
         {
             this.FocusedItem = null;
             return false;
         }
 
-        Debug.Assert(this.FocusedItem is not null, "EnsureFocus should guarantee FocusedItem is not null");
-        this.FocusedItem = new(this.shownItems[0], origin);
+        this.FocusedItem = new(items[0], origin);
         return true;
     }
 
@@ -590,13 +619,14 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <returns><see langword="true" /> if focus moved; otherwise, <see langword="false" />.</returns>
     public bool FocusLastVisibleItemInTree(RequestOrigin origin)
     {
-        if (this.shownItems.Count == 0)
+        var items = this.NavigableItems;
+        if (items.Count == 0)
         {
             this.FocusedItem = null;
             return false;
         }
 
-        this.FocusedItem = new(this.shownItems[^1], origin);
+        this.FocusedItem = new(items[^1], origin);
         return true;
     }
 
@@ -685,27 +715,28 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
 
     /// <summary>
     ///     Ensures there is a focused item by preferring the current focus, then the selected item,
-    ///     and finally the first shown item.
+    ///     and finally the first item in the interaction scope.
     /// </summary>
     /// <param name="origin">The origin of the focus request (pointer, keyboard, or programmatic).</param>
     /// <returns><see langword="true" /> if a focusable item was found; otherwise, <see langword="false" />.</returns>
     protected internal bool EnsureFocus(RequestOrigin origin)
     {
-        if (this.focusedItem is not null && this.shownItems.Contains(this.focusedItem.Item))
+        var items = this.NavigableItems;
+        if (this.focusedItem is not null && items.Contains(this.focusedItem.Item))
         {
             return true;
         }
 
         var selected = this.SelectionModel?.SelectedItem;
-        if (selected is not null && this.shownItems.Contains(selected))
+        if (selected is not null && items.Contains(selected))
         {
             this.FocusedItem = new(selected, origin);
             return true;
         }
 
-        if (this.shownItems.Count > 0)
+        if (items.Count > 0)
         {
-            this.FocusedItem = new(this.shownItems[0], origin);
+            this.FocusedItem = new(items[0], origin);
             return true;
         }
 
@@ -721,12 +752,13 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <returns><see langword="true"/> if a matching item was found and focused; otherwise <see langword="false"/>.</returns>
     protected internal bool FocusNextByPrefix(string text, RequestOrigin origin)
     {
-        if (this.shownItems.Count == 0)
+        if (string.IsNullOrWhiteSpace(text))
         {
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(text))
+        var items = this.NavigableItems;
+        if (items.Count == 0)
         {
             return false;
         }
@@ -734,10 +766,10 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         var startIndex = 0;
         if (this.FocusedItem is { Item: { } focused })
         {
-            var focusedIndex = this.shownItems.IndexOf(focused);
+            var focusedIndex = items.IndexOf(focused);
             if (focusedIndex >= 0)
             {
-                startIndex = (focusedIndex + 1) % this.shownItems.Count;
+                startIndex = (focusedIndex + 1) % items.Count;
             }
         }
 
@@ -745,10 +777,10 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         var bestOffset = int.MaxValue;
         ITreeItem? bestItem = null;
 
-        for (var offset = 0; offset < this.shownItems.Count; offset++)
+        for (var offset = 0; offset < items.Count; offset++)
         {
-            var index = (startIndex + offset) % this.shownItems.Count;
-            var item = this.shownItems[index];
+            var index = (startIndex + offset) % items.Count;
+            var item = items[index];
 
             var score = GetTypeAheadScore(item.Label, text, out var matchedCount);
             if (matchedCount == 0)
@@ -1047,10 +1079,11 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
 
     private ITreeItem? FindSibling(ITreeItem? parent, bool first)
     {
+        var items = this.NavigableItems;
         ITreeItem? target = null;
-        for (var index = 0; index < this.shownItems.Count; index++)
+        for (var index = 0; index < items.Count; index++)
         {
-            var item = this.shownItems[index];
+            var item = items[index];
             if (!ReferenceEquals(item.Parent, parent))
             {
                 continue;

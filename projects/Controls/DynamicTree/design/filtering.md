@@ -15,13 +15,36 @@ The DynamicTree control provides a filtering feature that allows dynamic, predic
 
 ### Filtering vs. Shown Items
 
-| Aspect | ShownItems | FilteredItems |
-|--------|-----------|---------------|
-| **Definition** | All expanded items in tree structure | Subset of `ShownItems` matching filter predicate |
-| **Mutability** | Modified by expand/collapse/move operations | Read-only view; never mutated directly |
-| **Selection** | All operations target `ShownItems` | Selection commands operate on `ShownItems` even when filtering enabled |
-| **Indices** | Used for all move/reorder operations | Display-only; not used for mutation operations |
-| **Events** | All tree events reference `ShownItems` | No filtering-specific events |
+| Aspect         | ShownItems                                                | FilteredItems                                                              |
+| -------------- | --------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **Definition** | All expanded items in tree structure                      | Subset of `ShownItems` matching filter predicate                           |
+| **Mutability** | Modified by expand/collapse/move operations               | Read-only view; never mutated directly                                     |
+| **Selection**  | Canonical selection storage and default interaction scope | Optional displayed interaction scope; endpoints resolve to canonical items |
+| **Indices**    | Used for all move/reorder operations                      | Display-only; not used for mutation operations                             |
+| **Events**     | All tree events reference `ShownItems`                    | No filtering-specific events                                               |
+
+### Interaction Scope
+
+`DynamicTree.SelectionScope` defaults to `ShownItems`, preserving historical
+pointer, keyboard and typeahead behavior. Opting into `DisplayedItems` restricts
+arrow navigation, Home/End (including Ctrl variants), initial focus, typeahead,
+selection ranges, Ctrl+A and Ctrl+Shift+I to the rendered projection. Ancestors
+included by hierarchical closure remain navigable.
+
+Down from an absent or filtered-out focus enters at the first displayed item;
+Up enters at the last. Navigation stops at either boundary. An empty displayed
+projection has no focusable rows, and typeahead with no displayed match leaves
+focus unchanged.
+
+The control supplies its actual displayed source to the view model. With
+`IsFilteringEnabled = false`, displayed interactions use `ShownItems` even when
+`FilterPredicate` is retained. Standalone view-model users can set
+`InteractionScope = DisplayedItems` to navigate `FilteredItems`; without a
+predicate, this is equivalent to navigating `ShownItems`.
+
+Displayed indices never become mutation or selection-storage indices. The
+control resolves range endpoints to items using `SelectDisplayedItem`; direct
+view-model selection commands retain their unfiltered semantics.
 
 ### Hierarchical Closure
 
@@ -73,9 +96,9 @@ public Predicate<ITreeItem>? FilterPredicate { get; set; }
 
 #### Behavior
 
-| Value | Effect |
-|-------|--------|
-| `null` (default) | All items pass filter; `FilteredItems` equals `ShownItems` |
+| Value              | Effect                                                                   |
+| ------------------ | ------------------------------------------------------------------------ |
+| `null` (default)   | All items pass filter; `FilteredItems` equals `ShownItems`               |
 | Non-null predicate | Only items where `predicate(item) == true` are included (with ancestors) |
 
 #### Side Effects
@@ -99,13 +122,13 @@ public IEnumerable<ITreeItem> FilteredItems { get; }
 
 #### Characteristics
 
-| Aspect | Details |
-|--------|---------|
-| **Type** | `IEnumerable<ITreeItem>` (backed by `FilteredObservableCollection<ITreeItem>`) |
-| **Lazy creation** | First access creates the internal filtered collection |
-| **Observable** | Implements `INotifyCollectionChanged`; can bind to UI |
-| **Order** | Pre-order traversal (same as `ShownItems`) |
-| **Thread-safety** | Not thread-safe; must access on UI thread |
+| Aspect            | Details                                                                        |
+| ----------------- | ------------------------------------------------------------------------------ |
+| **Type**          | `IEnumerable<ITreeItem>` (backed by `FilteredObservableCollection<ITreeItem>`) |
+| **Lazy creation** | First access creates the internal filtered collection                          |
+| **Observable**    | Implements `INotifyCollectionChanged`; can bind to UI                          |
+| **Order**         | Pre-order traversal (same as `ShownItems`)                                     |
+| **Thread-safety** | Not thread-safe; must access on UI thread                                      |
 
 ### DynamicTreeViewModel Methods
 
@@ -120,12 +143,12 @@ public void RefreshFiltering()
 
 #### When to Call
 
-| Scenario | Automatic? | Manual Call Needed? |
-|----------|-----------|---------------------|
-| `FilterPredicate` changed | ✅ Yes | No |
-| Item property changed | ✅ Yes (if `FilteredItems` accessed) | No |
-| `ShownItems` collection changed | ✅ Yes (if `FilteredItems` accessed) | No |
-| External data model changed without property notifications | ❌ No | ✅ Yes |
+| Scenario                                                   | Automatic?                           | Manual Call Needed? |
+| ---------------------------------------------------------- | ------------------------------------ | ------------------- |
+| `FilterPredicate` changed                                  | ✅ Yes                               | No                  |
+| Item property changed                                      | ✅ Yes (if `FilteredItems` accessed) | No                  |
+| `ShownItems` collection changed                            | ✅ Yes (if `FilteredItems` accessed) | No                  |
+| External data model changed without property notifications | ❌ No                                | ✅ Yes              |
 
 ### DynamicTree Control Properties
 
@@ -141,10 +164,10 @@ public bool IsFilteringEnabled { get; set; }
 
 #### Behavior
 
-| Value | Rendered Items | Use Case |
-|-------|---------------|----------|
-| `false` (default) | `ShownItems` | Normal tree view; no filtering |
-| `true` | `FilteredItems` | Filtered tree view; matches predicate with ancestors |
+| Value             | Rendered Items  | Use Case                                             |
+| ----------------- | --------------- | ---------------------------------------------------- |
+| `false` (default) | `ShownItems`    | Normal tree view; no filtering                       |
+| `true`            | `FilteredItems` | Filtered tree view; matches predicate with ancestors |
 
 **Important**: Setting `IsFilteringEnabled = true` when `FilterPredicate == null` renders the same items as when disabled, but with minor performance overhead.
 
@@ -181,11 +204,11 @@ Typical: O(n) because d is usually small (< 10)
 
 The filtered view automatically refreshes in response to:
 
-| Trigger | Detection Method | Refresh Scope |
-|---------|-----------------|---------------|
-| **ShownItems collection changes** | Subscribes to `CollectionChanged` | Full recompute of closure |
-| **Item property changes** | Subscribes to `PropertyChanged` on each item | Full recompute of closure |
-| **FilterPredicate changes** | Property setter | Full recompute of closure |
+| Trigger                           | Detection Method                             | Refresh Scope             |
+| --------------------------------- | -------------------------------------------- | ------------------------- |
+| **ShownItems collection changes** | Subscribes to `CollectionChanged`            | Full recompute of closure |
+| **Item property changes**         | Subscribes to `PropertyChanged` on each item | Full recompute of closure |
+| **FilterPredicate changes**       | Property setter                              | Full recompute of closure |
 
 **Performance Consideration**: Property changes trigger full re-evaluation because any property might affect the predicate. Predicate should be fast (avoid I/O, async, or expensive computations).
 
@@ -279,12 +302,12 @@ private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
 
 **Critical Rule**: All tree mutation operations (move, remove, copy, cut, paste) operate on `ShownItems`, **not** `FilteredItems`.
 
-| Operation | Target Collection | Example Impact |
-|-----------|------------------|----------------|
-| `MoveItemAsync` | `ShownItems` | Can move items not visible in filtered view |
-| `RemoveItemAsync` | `ShownItems` | Can remove items not visible in filtered view |
-| `SelectAllCommand` | `ShownItems` | Selects all items, including filtered-out ones |
-| `ExpandItemAsync` | `ShownItems` | Expands items regardless of filter |
+| Operation          | Target Collection | Example Impact                                 |
+| ------------------ | ----------------- | ---------------------------------------------- |
+| `MoveItemAsync`    | `ShownItems`      | Can move items not visible in filtered view    |
+| `RemoveItemAsync`  | `ShownItems`      | Can remove items not visible in filtered view  |
+| `SelectAllCommand` | `ShownItems`      | Selects all items, including filtered-out ones |
+| `ExpandItemAsync`  | `ShownItems`      | Expands items regardless of filter             |
 
 **Rationale**: Filtering is a **view-only projection**. The tree structure and operations remain consistent regardless of current filter state.
 
@@ -330,20 +353,20 @@ The filter predicate is called frequently:
 
 **Best Practices**:
 
-| Do | Don't |
-|----|-------|
-| Use simple property checks | Perform I/O operations |
-| Cache expensive computations in item properties | Make network requests |
-| Use string comparisons with `StringComparison` | Use regex without caching |
-| Return quickly for non-matches | Perform deep tree traversals |
+| Do                                              | Don't                        |
+| ----------------------------------------------- | ---------------------------- |
+| Use simple property checks                      | Perform I/O operations       |
+| Cache expensive computations in item properties | Make network requests        |
+| Use string comparisons with `StringComparison`  | Use regex without caching    |
+| Return quickly for non-matches                  | Perform deep tree traversals |
 
 ## Testing Coverage
 
-| Test Category | Test File | Coverage |
-|---------------|-----------|----------|
-| **ViewModel filtering logic** | `ViewModelFilteringTests.cs` | Null predicate, matches with ancestors, no matches, property change refresh |
-| **UI rendering** | `DynamicTreeFilteringTests.cs` | Disabled filtering, enabled filtering, pre-order preservation |
-| **Selection with filtering** | `DynamicTreeFilteringTests.cs` | Select all operates on unfiltered items |
+| Test Category                 | Test File                      | Coverage                                                                    |
+| ----------------------------- | ------------------------------ | --------------------------------------------------------------------------- |
+| **ViewModel filtering logic** | `ViewModelFilteringTests.cs`   | Null predicate, matches with ancestors, no matches, property change refresh |
+| **UI rendering**              | `DynamicTreeFilteringTests.cs` | Disabled filtering, enabled filtering, pre-order preservation               |
+| **Selection with filtering**  | `DynamicTreeFilteringTests.cs` | Select all operates on unfiltered items                                     |
 
 ## Configuration & Extensibility
 
@@ -351,13 +374,13 @@ The filter predicate is called frequently:
 
 The filtering is implemented using `FilteredObservableCollection<T>` from the `DroidNet.Collections` library:
 
-| Configuration | Value in DynamicTree | Reason |
-|--------------|---------------------|---------|
-| **Source collection** | `ShownItems` | Filter visible items only |
-| **Filter predicate** | `item => includedItems.Contains(item)` | Closure computed separately for efficiency |
-| **Relevant properties** | `null` | Manual refresh; view model controls all updates |
-| **Observe source changes** | `false` | Manual subscription to `CollectionChanged` |
-| **Observe item changes** | `false` | Manual subscription to `PropertyChanged` per item |
+| Configuration              | Value in DynamicTree                   | Reason                                            |
+| -------------------------- | -------------------------------------- | ------------------------------------------------- |
+| **Source collection**      | `ShownItems`                           | Filter visible items only                         |
+| **Filter predicate**       | `item => includedItems.Contains(item)` | Closure computed separately for efficiency        |
+| **Relevant properties**    | `null`                                 | Manual refresh; view model controls all updates   |
+| **Observe source changes** | `false`                                | Manual subscription to `CollectionChanged`        |
+| **Observe item changes**   | `false`                                | Manual subscription to `PropertyChanged` per item |
 
 **Rationale for Manual Refresh**: Hierarchical closure must be recomputed globally, not incrementally, so automatic observation is disabled in favor of explicit control.
 
@@ -425,13 +448,13 @@ partial void OnSearchTextChanged(string value)
 
 ## Performance Characteristics
 
-| Metric | Complexity | Notes |
-|--------|-----------|-------|
-| **Closure computation** | O(n × d) | n = items, d = max depth; typically O(n) for shallow trees |
-| **Property change refresh** | O(n × d) | Full recompute on any property change |
-| **Collection change handling** | O(1) per item | Subscription management only |
-| **Memory overhead** | O(n) | Two sets: `includedItems`, `observedItems` |
-| **First access** | O(n) | Creates filtered collection, computes closure, subscribes to all items |
+| Metric                         | Complexity    | Notes                                                                  |
+| ------------------------------ | ------------- | ---------------------------------------------------------------------- |
+| **Closure computation**        | O(n × d)      | n = items, d = max depth; typically O(n) for shallow trees             |
+| **Property change refresh**    | O(n × d)      | Full recompute on any property change                                  |
+| **Collection change handling** | O(1) per item | Subscription management only                                           |
+| **Memory overhead**            | O(n)          | Two sets: `includedItems`, `observedItems`                             |
+| **First access**               | O(n)          | Creates filtered collection, computes closure, subscribes to all items |
 
 **Optimization Tip**: For large trees (>1000 items), consider debouncing property changes or using more specific property observation.
 

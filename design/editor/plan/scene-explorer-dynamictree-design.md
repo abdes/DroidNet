@@ -700,17 +700,16 @@ batch order, filtered range/index correctness, focus and recycled rows. Controls
 DemoApp consumes the hooks with non-Oxygen data/actions. DynamicTree has no
 Oxygen reference and no alternate application-specific tree implementation.
 
-**Status (corrected 2026-10-04 per P1):** SE-01 is **in progress**, not complete
-— C32 (recycling detach / drop-state reset), C34 (displayed-scope keyboard and
-typeahead), C35 (drag cancellation), C38 (inert `HideChildrenAsync` guard) and
-the T9/T10 verification gaps remain open. What is done below stands; the
-completion claim did not. The direct trailing template takes precedence over
+**Status (updated 2026-10-05 per P1):** SE-01 is **in progress**, not complete
+— C32/C34/C35/C38 and T9 are closed with focused Models/WinUI regression coverage;
+T10's density/workload evidence and user demo acceptance remain open. The direct
+trailing template takes precedence over
 selectors; fixed-width empty slots and recycled content are covered. Demo-owned
 lock/visibility hover commands and loaded-status cells remain aligned across
 depths and densities. Final review corrected passive status content intercepting
-row input and made hover subscriptions idempotent. The UI project builds without
-warnings with analyzers enabled; 151 model and 89 UI tests pass. User demo
-acceptance remains pending. Exhaustive contrast/DPI/text-scaling and workload
+row input and made hover subscriptions idempotent. Debug|x64 builds and analyzer
+invocations succeed with pre-existing control analyzer warnings; 169 Models and
+106 UI tests pass. Exhaustive contrast/DPI/text-scaling and workload
 qualification was not rerun in this closeout; editor/runtime qualification
 remains part of SE-03. No engine build or production editor integration is
 claimed.
@@ -1203,34 +1202,52 @@ Scene lifecycle
 
 Generic tree
 
-- [~] C32 — `DynamicTree.cs:919` recycling does not fully detach subscriptions /
-  reset drop state. **Implementation landed 2026-10-05:** `DynamicTreeItem.ResetRecycledRowState()`
-  now clears the interactive-pointer flag, the drop-into cue and an open rename on the recycled
-  part, and `ItemsRepeater_OnElementClearing` drops the control's `dropIndicatorElement` when
-  the cleared container _is_ the cue carrier (the case a hover-expand rebuild creates mid-drag,
-  which left the cue painted on whichever row the container was next bound to). The stale
-  interactive flag was not cosmetic: `TreeItem_DragStarting` cancels a drag started on a row
-  that still looks mid-press. Proof still owed under T9.
+- [x] C32 — `DynamicTree.cs:919` recycling does not fully detach subscriptions /
+      reset drop state. **Implementation landed 2026-10-05:** `DynamicTreeItem.ResetRecycledRowState()`
+      now clears the interactive-pointer flag, the drop-into cue and an open rename on the recycled
+      part, and `ItemsRepeater_OnElementClearing` drops the control's `dropIndicatorElement` when
+      the cleared container _is_ the cue carrier (the case a hover-expand rebuild creates mid-drag,
+      which left the cue painted on whichever row the container was next bound to). The stale
+      interactive flag was not cosmetic: `TreeItem_DragStarting` cancels a drag started on a row
+      that still looks mid-press. Managed proof added 2026-10-05:
+      `Recycling_ClearsInteractionStateAndDetachesExpansionHandler_Async` clears an
+      actual repeater container mid-rename with a drop cue and seeded interactive-pointer
+      state, proves the old row can no longer expand through the tree, and verifies
+      newly prepared rows can expand again.
 - [x] C33 — demo compact profile is 28/12 DIP, not required 32/14; comfortable 40.
-- [~] C34 — `DynamicTreeViewModel.cs:438,694` displayed-scope keyboard/typeahead
-  scan hidden items. **Implementation landed 2026-10-05:** the view model gained
-  `InteractionScope` and a private `NavigableItems` projection, and every keyboard entry point
-  (next/previous visible, first/last in tree, typeahead) walks it instead of the raw shown
-  list; the control pushes its existing `SelectionScope` into the view model from
-  `UpdateDisplayedItems()`, and `SelectionScope` now has a property-changed callback so the
-  push happens when the scope changes. Out-of-scope focus enters the range at its boundary
-  (Down → first, Up → last) rather than stepping through hidden rows. Default
-  `ShownItems` behaviour is untouched, which is why the existing suites pass unchanged.
-  Selection then inherits the scope through the existing `SelectDisplayedItem` path, honouring
-  "translate displayed range endpoints to items, never use a filtered index as a source index".
-  Proof still owed under T9.
-- [~] C35 — `DynamicTree.cs:1567` Escape clears only typeahead; drag
-  cancellation/restoration absent. **Implementation landed 2026-10-05:** Escape now outranks
-  typeahead and clipboard staging while an internal drag is in flight — it calls `ClearDragState()`,
-  which cancels the pending hover-expand, drops the drag sources and clears the cue. Restoration is
-  then automatic rather than a second mechanism: `TreeItem_Drop` bails when `draggedItems` is null,
-  reports `DataPackageOperation.None` and commits nothing, so the tree is exactly as it was before
-  the drag. Proof still owed under T9/T10.
+- [x] C34 — `DynamicTreeViewModel.cs:438,694` displayed-scope keyboard/typeahead
+      scan hidden items. **Implementation landed 2026-10-05:** the view model gained
+      `InteractionScope` and a private `NavigableItems` projection, and every keyboard entry point
+      (next/previous visible, first/last in tree, typeahead) walks it instead of the raw shown
+      list; the control pushes its existing `SelectionScope` into the view model from
+      `UpdateDisplayedItems()`, and `SelectionScope` now has a property-changed callback so the
+      push happens when the scope changes. Out-of-scope focus enters the range at its boundary
+      (Down → first, Up → last) rather than stepping through hidden rows. Default
+      `ShownItems` behaviour is untouched, which is why the existing suites pass unchanged.
+      Selection then inherits the scope through the existing `SelectDisplayedItem` path, honouring
+      "translate displayed range endpoints to items, never use a filtered index as a source index".
+      Review on 2026-10-05 found the five flat-list call-sites had reverted despite
+      the helper surviving; they are restored. Plain Home/End sibling navigation and
+      initial focus also use the scope. The control supplies its actual displayed source,
+      so a retained predicate does not restrict navigation when rendering filtering is
+      disabled, and keyboard range selection uses `SelectDisplayedItem`.
+      `ViewModelDisplayedScopeTests` now has 17 cases covering boundaries, both
+      directions, absent/hidden focus, empty projections, typeahead wrapping, filter
+      removal and the historical default. Nine UI cases prove keyboard routing,
+      filtering/scope changes, typeahead, ranges and SelectAll.
+- [x] C35 — `DynamicTree.cs:1567` Escape clears only typeahead; drag
+      cancellation/restoration absent. **Implementation landed 2026-10-05:** Escape now outranks
+      typeahead and clipboard staging while an internal drag is in flight — it calls `ClearDragState()`,
+      which cancels the pending hover-expand, drops the drag sources and clears the cue. Restoration is
+      then automatic rather than a second mechanism: `TreeItem_Drop` bails when `draggedItems` is null,
+      reports `DataPackageOperation.None` and commits nothing, so the tree is exactly as it was before
+      the drag. Managed proof added 2026-10-05: move/copy cancellation clears the cue,
+      prevents the 600 ms hover expansion, rejects a subsequent drop without structural
+      or selection changes, and preserves typeahead/clipboard Escape ordering.
+      Uncancelled move/copy cases prove the extracted internal drag lifecycle still
+      commits. These exercise the same logical lifecycle used by the event handlers.
+      Already-completed hover expansion is
+      presentation state and is not rolled back by cancellation.
 - [x] C36 — `ContextMenu.cs:119` attached host disposed on unload without Loaded
       recreation.
 - [x] C38 — `DynamicTreeViewModel.cs:933-934` `HideChildrenAsync` guard is
@@ -1247,7 +1264,10 @@ shown list")` still passes; the assertion can only fire when `IndexOf`
       so the guard now logs at Debug and returns instead of asserting: the subtree is already out of
       the shown list, the caller still records the collapsed state on the item, and hiding its
       children has nothing to do. An inert assertion became a real defect signal and then a handled
-      case; suite is green again (0 failed).
+      case; suite is green again (0 failed). Generic regression
+      `CollapseItemAsync_AlreadyHiddenBranch_PreservesShownItems` now also proves
+      that collapsing a hidden nested branch does not remove unrelated shown rows
+      and that re-expanding the outer branch respects the inner collapsed state.
 
 Command surface and result publication (found by the P7 design review, each
 re-verified)
@@ -1489,7 +1509,7 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       rather than a loophole. Failures are visible under the new `Scene.Node.SetEditorHidden` kind
       (`AUTHORING_SUSPENDED`, `WORKSPACE_STATE_UNAVAILABLE`), and Explorer hide/show and Show All
       route through it. WorldEditor unit suite green; **no test yet exercises undo/redo of the
-      step**, so that proof belongs with T9/T10 and is not claimed here.
+      step**, so that proof belongs with SE-02 command verification and is not claimed here.
 - [x] C42 — dead and unsafe public API on the command interface. **Closed
       2026-10-04 (`e4eaf2f44`)**: `RenameItemAsync` deleted from the interface
       and implementation (no callers, no test removed) together with the
@@ -1547,8 +1567,18 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       toolbar parity.
 - [ ] T8 — single loaded scene: guarded replacement, material-tab retention,
       configured default.
-- [ ] T9 — generic recycling detach, displayed-scope keyboard, reload/reattach,
-      Escape cancel.
+- [x] T9 — generic recycling detach, displayed-scope keyboard, reload/reattach,
+      Escape cancel. **Closed 2026-10-05:** focused in-process regressions in
+      `ViewModelDisplayedScopeTests`, `ViewModelExpansionTests` and
+      `DynamicTreeInteractionTests` cover these contracts using the existing shared
+      WinUI host. Actual repeater clearing/preparation verifies row reset and handler
+      detach/reattach; direct keyboard/drag dispatch verifies displayed navigation,
+      Escape ordering, hover cancellation and mutation-free cancelled drops.
+      Two unload/reload cycles verify focus observers and displayed navigation;
+      view-model replacement releases the prior displayed source. The repeater
+      keyboard handler is reattached idempotently on load.
+      Coverage adds 18 Models cases and 17 UI cases relative to the committed tree.
+      Full Debug|x64 lanes pass, 169/169 Models and 106/106 UI, with no skipped cases.
 - [ ] T10 — 32/40 density profiles + measured 1,000-item lazy-tree workload.
 - [x] T11 — D5's layout-only qualifier was untested beyond the flat root-folder
       case: folder Delete inside a nested folder, and inside a folder whose
@@ -1585,9 +1615,9 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
 
 #### Progress-note corrections (reconcile §6 with the above)
 
-- [x] P1 — §6 closure statement rewritten as an in-progress status naming
-      C32/C34/C35/C38 and T9/T10. (C33/C36 had already closed, so the original
-      "until C32–C36" range was too wide.)
+- [x] P1 — §6 keeps SE-01 in progress for T10 and user demo acceptance;
+      C32/C34/C35/C38 and T9 are closed with regression evidence. (C33/C36
+      had already closed, so the original "until C32–C36" range was too wide.)
 - [x] P2 — condition met (C8/C9/C10 closed); the §6 atomic graph+layout claim is
       kept and cited.
 - [x] P3 — §6 claim downgraded to "partly in place", naming C30 (no
@@ -1749,8 +1779,9 @@ call.
 | Layout/accessibility                    | 280/360/540-DIP docks, short/tall heights, long names, text 100/150/200%, rasterization 1/1.5/2 separately, Light/Dark/contrast; aligned state columns, visible focus, reachable overflow, no text clipping.                                                                     | Native UI tests + reviewer inspection, SE-01/03             |
 | Workload                                | At least the PRD's 100-node scene and a 1,000-item generic lazy tree: bounded realized rows, no unsolicited lazy loads on generic filtering, no whole-tree rebuild per value change, no expanding observer counts after reload.                                                  | DynamicTree/Explorer measured tests, SE-01/03               |
 
-Use actual render waits and real header/automation/native input for interaction
-tests. Test within the tree's bounded ScrollViewer; do not wrap it in another
+T9 uses the existing shared WinUI host, direct keyboard/drag interaction entry
+points, actual repeater/load/unload events and render waits. For editor integration
+interaction tests, use real header/automation/native input. Test within the tree's bounded ScrollViewer; do not wrap it in another
 unconstrained scroller or treat virtualization as proven by a small example.
 
 Visual review compares the **new native UI to the brief and showcase**, never to
@@ -1822,7 +1853,7 @@ acceptance blocked until the required API and observed behavior exist.
 
 | ID    | State                   | Next action                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Responsible role                       |
 | ----- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
-| SE-01 | in_progress             | Close C32/C34/C35/C38 and T9/T10, then seek demo acceptance (P1).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Implementer + user                     |
+| SE-01 | in_progress             | Finish density/workload evidence under T10, then seek demo acceptance (P1).                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Implementer + user                     |
 | SE-02 | landed_needs_validation | Corrected per P5: the steps landed, the slice is not validated. Closed with evidence 2026-10-04: transforms/reparent, atomicity (C8-C10), clipboard (C11-C15), selection-adjacent drop routing (C6/C13), search and layout domain (C24-C27, T6) — 277/277 unit tests. Still open: selection C16-C19 and context menu C20-C23 (gated on D3), scene replacement C30, creation seed C31, reconcile-during-search C37, gaps T4/T5/T7/T8/T12, approvals D3-D8. The `AuthoringChanged` item is not deferred to SE-03 — see the P6 restatement in §6 and T12. | Implementer                            |
 | SE-03 | planned                 | Connect target UI, workspace state and supported native mask/picking; qualify workflows.                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Implementer + runtime owner + reviewer |
 

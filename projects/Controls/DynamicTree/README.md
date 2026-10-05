@@ -223,9 +223,16 @@ realized row anchor and optional pointer position; consumers choose whether and
 how to show a context menu.
 
 `SelectionScope.ShownItems` preserves existing behavior. Consumers may opt into
-`DisplayedItems` for pointer modifiers, Ctrl+A and Ctrl+Shift+I when a filtered
-projection is rendered. Range endpoints use displayed items; selection storage
-and tree mutation indices remain canonical ShownItems items.
+`DisplayedItems` for pointer modifiers, keyboard focus (including Home/End),
+typeahead, keyboard selection ranges, Ctrl+A and Ctrl+Shift+I. The scope follows
+the rendered source: disabling filtering exposes all shown rows even if a
+predicate is retained. Range endpoints use displayed items; selection storage
+and tree mutation indices remain canonical ShownItems items. See
+[interaction scope](design/filtering.md#interaction-scope).
+
+Escape cancels a pending internal drag before clearing typeahead or clipboard
+staging. Cleared rows discard rename, interactive-pointer and drop-cue state
+before reuse. See [drag cancellation and recycling](design/tree-mutation-ui.md#36-cancellation-and-recycling).
 
 Consumers can tune row presentation without replacing the item template using
 `ItemRowHeight`, `ItemFontSize`, `ItemIconSize`, `ItemIconMargin`, and

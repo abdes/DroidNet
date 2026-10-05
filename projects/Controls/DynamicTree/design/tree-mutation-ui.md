@@ -17,10 +17,10 @@ This document describes the tree mutation operations implemented in `DynamicTree
 
 An item is **shown** if it appears in the `ShownItems` collection. This is the **central visibility constraint**:
 
-| State | Meaning | Parent Status | Operations Allowed |
-|-------|---------|---------------|-------------------|
-| **Shown** | Item is in `ShownItems` | Parent is expanded AND all ancestors are expanded | Can be selected, dragged, moved |
-| **Not Shown** | Item is NOT in `ShownItems` | Parent is collapsed OR ancestors are collapsed | Cannot be moved directly; invisible to user |
+| State         | Meaning                     | Parent Status                                     | Operations Allowed                          |
+| ------------- | --------------------------- | ------------------------------------------------- | ------------------------------------------- |
+| **Shown**     | Item is in `ShownItems`     | Parent is expanded AND all ancestors are expanded | Can be selected, dragged, moved             |
+| **Not Shown** | Item is NOT in `ShownItems` | Parent is collapsed OR ancestors are collapsed    | Cannot be moved directly; invisible to user |
 
 **Critical implication**: Move operations require that items being moved are shown (in `ShownItems`), as the selection model, UI feedback, and index calculations depend on visibility.
 
@@ -28,11 +28,11 @@ An item is **shown** if it appears in the `ShownItems` collection. This is the *
 
 The parent-child relationship has three distinct states:
 
-| State | Parent.IsExpanded | Children Loaded | Parent Property | Behavior |
-|-------|---|---|---|---|
-| **Never expanded** | `false` | No | Children have `Parent == null` | Parent.Children await will load children on first access |
-| **Expanded** | `true` | Yes | Children have `Parent == parent` | All children visible in tree; can be moved |
-| **Collapsed after expansion** | `false` | Yes | Children have `Parent == parent` | Children exist in structure but not in `ShownItems`; can be moved if parent expands |
+| State                         | Parent.IsExpanded | Children Loaded | Parent Property                  | Behavior                                                                            |
+| ----------------------------- | ----------------- | --------------- | -------------------------------- | ----------------------------------------------------------------------------------- |
+| **Never expanded**            | `false`           | No              | Children have `Parent == null`   | Parent.Children await will load children on first access                            |
+| **Expanded**                  | `true`            | Yes             | Children have `Parent == parent` | All children visible in tree; can be moved                                          |
+| **Collapsed after expansion** | `false`           | Yes             | Children have `Parent == parent` | Children exist in structure but not in `ShownItems`; can be moved if parent expands |
 
 **Critical implication**: You must never assume a child's `Parent` property is already set before accessing it. Before any move operation, you must ensure the parent is expanded so children are loaded and `Parent` pointers are established.
 
@@ -40,12 +40,12 @@ The parent-child relationship has three distinct states:
 
 The selection model stores indices into `ShownItems`. Any mutation to `ShownItems` (insert/remove/reorder) invalidates selection indices:
 
-| Operation | Selection State | Action Required |
-|-----------|---|---|
-| **Single item insertion** | Any | Clear selection BEFORE computing new index; restore after insertion |
-| **Single item removal** | Any | Clear selection BEFORE removal; update indices after |
-| **Batch insertions** | Any | Save selected items (not indices); clear selection; recompute all indices; restore selection |
-| **Batch removals** | Any | Save selected indices (descending order); clear selection; remove items; restore selection to valid index |
+| Operation                 | Selection State | Action Required                                                                                           |
+| ------------------------- | --------------- | --------------------------------------------------------------------------------------------------------- |
+| **Single item insertion** | Any             | Clear selection BEFORE computing new index; restore after insertion                                       |
+| **Single item removal**   | Any             | Clear selection BEFORE removal; update indices after                                                      |
+| **Batch insertions**      | Any             | Save selected items (not indices); clear selection; recompute all indices; restore selection              |
+| **Batch removals**        | Any             | Save selected indices (descending order); clear selection; remove items; restore selection to valid index |
 
 **Critical implication**: Never use old selection indices after mutating `ShownItems`. Always clear first, save what you need, mutate, recompute, restore.
 
@@ -53,23 +53,23 @@ The selection model stores indices into `ShownItems`. Any mutation to `ShownItem
 
 ### 1.1 Move vs. Reorder
 
-| Operation | Definition | Preserves | Notes |
-|-----------|-----------|-----------|--------|
-| **Reorder** | Change position of item(s) under the **same parent** | Parent, depth, hierarchy | Affects only shown-item indices within the parent |
-| **Reparent** | Change the **parent** of item(s) | Item order relative to other moved items, hierarchical structure if moved as a group | Affects depth if new parent is at different depth; may create gaps in sibling order |
-| **Move** | Combination of reorder and/or reparent in a single atomic operation | See above | API-level concept that encompasses both scenarios |
+| Operation    | Definition                                                          | Preserves                                                                            | Notes                                                                               |
+| ------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| **Reorder**  | Change position of item(s) under the **same parent**                | Parent, depth, hierarchy                                                             | Affects only shown-item indices within the parent                                   |
+| **Reparent** | Change the **parent** of item(s)                                    | Item order relative to other moved items, hierarchical structure if moved as a group | Affects depth if new parent is at different depth; may create gaps in sibling order |
+| **Move**     | Combination of reorder and/or reparent in a single atomic operation | See above                                                                            | API-level concept that encompasses both scenarios                                   |
 
 ### 1.2 Visibility & Realizability
 
 Before any move operation, the following must be true:
 
-| Precondition | Must Hold | Why | How to Ensure |
-|---|---|---|---|
-| **Item is shown** | `ShownItems.Contains(item)` | Selection model, UI, index calculations depend on it | Throw if not shown (caller must ensure parent chain is expanded) |
-| **Current parent is realized** | `item.Parent != null` | Child needs to be in parent's children collection to remove | Caller responsibility; if parent never expanded, item has no parent |
-| **New parent is shown** | `ShownItems.Contains(newParent)` | Need to find insertion index in `ShownItems` | Caller responsibility; throw if not shown |
-| **New parent is expanded** | `newParent.IsExpanded == true` | Need to insert into parent's children; shown children need loading | Auto-expand before insertion (matches `InsertItemAsync` pattern) |
-| **New parent children are loaded** | Parent.Children has been awaited | Inserting requires knowing sibling count and order | Awaiting Parent.Children during expansion loads them |
+| Precondition                       | Must Hold                        | Why                                                                | How to Ensure                                                       |
+| ---------------------------------- | -------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| **Item is shown**                  | `ShownItems.Contains(item)`      | Selection model, UI, index calculations depend on it               | Throw if not shown (caller must ensure parent chain is expanded)    |
+| **Current parent is realized**     | `item.Parent != null`            | Child needs to be in parent's children collection to remove        | Caller responsibility; if parent never expanded, item has no parent |
+| **New parent is shown**            | `ShownItems.Contains(newParent)` | Need to find insertion index in `ShownItems`                       | Caller responsibility; throw if not shown                           |
+| **New parent is expanded**         | `newParent.IsExpanded == true`   | Need to insert into parent's children; shown children need loading | Auto-expand before insertion (matches `InsertItemAsync` pattern)    |
+| **New parent children are loaded** | Parent.Children has been awaited | Inserting requires knowing sibling count and order                 | Awaiting Parent.Children during expansion loads them                |
 
 ### 1.2b Auto-Expansion of Move Targets
 
@@ -112,11 +112,11 @@ await newParent.InsertChildAsync(index, item).ConfigureAwait(true);
 
 #### Benefits & Trade-offs
 
-| Aspect | Benefit | Trade-off |
-|--------|---------|-----------|
-| **User Experience** | Drag-drop onto collapsed folder auto-opens it; more intuitive | If user expands wrong folder by mistake, children become visible |
-| **API Simplicity** | Caller doesn't need to manually expand target | Caller may not be aware expansion occurred; should be logged |
-| **Performance** | Single operation instead of expand + move | Expansion loading children is async; adds latency to move |
+| Aspect                 | Benefit                                                         | Trade-off                                                                          |
+| ---------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| **User Experience**    | Drag-drop onto collapsed folder auto-opens it; more intuitive   | If user expands wrong folder by mistake, children become visible                   |
+| **API Simplicity**     | Caller doesn't need to manually expand target                   | Caller may not be aware expansion occurred; should be logged                       |
+| **Performance**        | Single operation instead of expand + move                       | Expansion loading children is async; adds latency to move                          |
 | **Selection Behavior** | Expansion happens before move, so selection model remains valid | Expanded items now visible; if children were selected elsewhere, they're now shown |
 
 #### UI Feedback During Auto-Expansion
@@ -173,12 +173,12 @@ public interface ITreeItem
 
 #### Implementation Notes
 
-| Aspect | Details |
-|--------|--------|
-| **Default value** | `TreeItemAdapter` base class returns `true` by default |
-| **Usage** | Checked during move validation and drag-drop target validation |
-| **Leaf items** | Override to return `false` for items that should never have children |
-| **Dynamic behavior** | Can be implemented dynamically based on item type or current state |
+| Aspect               | Details                                                              |
+| -------------------- | -------------------------------------------------------------------- |
+| **Default value**    | `TreeItemAdapter` base class returns `true` by default               |
+| **Usage**            | Checked during move validation and drag-drop target validation       |
+| **Leaf items**       | Override to return `false` for items that should never have children |
+| **Dynamic behavior** | Can be implemented dynamically based on item type or current state   |
 
 ### 2.2 DynamicTreeViewModel Move API
 
@@ -198,15 +198,15 @@ public interface ITreeItem
 public Task MoveItemAsync(ITreeItem item, ITreeItem newParent, int newIndex)
 ```
 
-| Phase | Actions |
-|-------|--------|
+| Phase          | Actions                                                                                  |
+| -------------- | ---------------------------------------------------------------------------------------- |
 | **Validation** | Verifies item and newParent are shown; checks `CanAcceptChildren`; prevents cyclic moves |
-| **Event** | Fires `ItemBeingMoved` event; handlers can veto or adjust target |
-| **Detachment** | Removes item from current parent's children and from `ShownItems` (with descendants) |
-| **Expansion** | Auto-expands target parent if collapsed |
-| **Insertion** | Inserts item into new parent's children and into `ShownItems` |
-| **Selection** | Updates selection to maintain focus on moved item |
-| **Completion** | Fires `ItemMoved` event with move details |
+| **Event**      | Fires `ItemBeingMoved` event; handlers can veto or adjust target                         |
+| **Detachment** | Removes item from current parent's children and from `ShownItems` (with descendants)     |
+| **Expansion**  | Auto-expands target parent if collapsed                                                  |
+| **Insertion**  | Inserts item into new parent's children and into `ShownItems`                            |
+| **Selection**  | Updates selection to maintain focus on moved item                                        |
+| **Completion** | Fires `ItemMoved` event with move details                                                |
 
 #### Method: MoveItemsAsync (Multi-Item)
 
@@ -221,16 +221,16 @@ public Task MoveItemAsync(ITreeItem item, ITreeItem newParent, int newIndex)
 public Task MoveItemsAsync(IReadOnlyList<ITreeItem> items, ITreeItem newParent, int startIndex)
 ```
 
-| Phase | Actions |
-|-------|--------|
-| **Validation** | Verifies all items are shown; checks for duplicates; validates target |
-| **Deduplication** | Removes descendants if their ancestors are also in the move set |
-| **Events** | Fires `ItemBeingMoved` for each item; any veto cancels entire operation |
-| **Detachment** | Removes all items atomically from their current parents |
+| Phase                | Actions                                                                        |
+| -------------------- | ------------------------------------------------------------------------------ |
+| **Validation**       | Verifies all items are shown; checks for duplicates; validates target          |
+| **Deduplication**    | Removes descendants if their ancestors are also in the move set                |
+| **Events**           | Fires `ItemBeingMoved` for each item; any veto cancels entire operation        |
+| **Detachment**       | Removes all items atomically from their current parents                        |
 | **Index Adjustment** | Adjusts `startIndex` if moving within same parent to prevent off-by-one errors |
-| **Expansion** | Auto-expands target parent once (not per-item) |
-| **Insertion** | Inserts all items sequentially at adjusted indices |
-| **Completion** | Fires single `ItemMoved` event with all move details |
+| **Expansion**        | Auto-expands target parent once (not per-item)                                 |
+| **Insertion**        | Inserts all items sequentially at adjusted indices                             |
+| **Completion**       | Fires single `ItemMoved` event with all move details                           |
 
 #### Method: ReorderItemAsync (Single Item)
 
@@ -397,19 +397,19 @@ public async Task PasteItemsAsync(ITreeItem? targetParent = null, int? insertInd
 
 - **Behavior Summary**
 
-    | Clipboard State | Paste Action |
-    |-----------------|-------------|
-    | **Copied** | Clones items and inserts at target; originals remain unchanged |
-    | **Cut** | Moves items to target using `MoveItemsAsync`; clears cut markings |
-    | **Empty** | Throws `InvalidOperationException` |
+  | Clipboard State | Paste Action                                                      |
+  | --------------- | ----------------------------------------------------------------- |
+  | **Copied**      | Clones items and inserts at target; originals remain unchanged    |
+  | **Cut**         | Moves items to target using `MoveItemsAsync`; clears cut markings |
+  | **Empty**       | Throws `InvalidOperationException`                                |
 
 - **Clipboard Properties**
 
-    | Property | Type | Description |
-    |----------|------|-------------|
-    | `CurrentClipboardState` | `ClipboardState` | Current state: `Empty`, `Copied`, or `Cut` |
-    | `ClipboardItems` | `IReadOnlyList<ITreeItem>` | Items currently in clipboard |
-    | `IsClipboardValid` | `bool` | Whether clipboard items still exist in tree |
+  | Property                | Type                       | Description                                 |
+  | ----------------------- | -------------------------- | ------------------------------------------- |
+  | `CurrentClipboardState` | `ClipboardState`           | Current state: `Empty`, `Copied`, or `Cut`  |
+  | `ClipboardItems`        | `IReadOnlyList<ITreeItem>` | Items currently in clipboard                |
+  | `IsClipboardValid`      | `bool`                     | Whether clipboard items still exist in tree |
 
 ## 3. Drag-Drop Implementation
 
@@ -417,11 +417,11 @@ public async Task PasteItemsAsync(ITreeItem? targetParent = null, int? insertInd
 
 The control defines three drop zones for each tree item:
 
-| Zone | Position | Indicator | Target Parent | Insert Index |
-|------|----------|-----------|---------------|-------------|
-| **Before** | Top 25% of item height | Line above item | Item's parent | Index of target item |
+| Zone       | Position                  | Indicator             | Target Parent      | Insert Index             |
+| ---------- | ------------------------- | --------------------- | ------------------ | ------------------------ |
+| **Before** | Top 25% of item height    | Line above item       | Item's parent      | Index of target item     |
 | **Inside** | Middle 50% of item height | Highlight around item | Target item itself | End of target's children |
-| **After** | Bottom 25% of item height | Line below item | Item's parent | Index of target item + 1 |
+| **After**  | Bottom 25% of item height | Line below item       | Item's parent      | Index of target item + 1 |
 
 **Drop Zone Constant**: `DropReorderBand = 0.25` (fraction of item height for Before/After zones)
 
@@ -429,24 +429,25 @@ The control defines three drop zones for each tree item:
 
 Before showing drop indicators, the control validates the target:
 
-| Check | Purpose |
-|-------|--------|
-| **Not dragging onto self** | Prevents no-op |
-| **Not dragging onto descendant** | Prevents cyclic relationships |
-| **Target accepts children** | For Inside zone only; checks `CanAcceptChildren` |
-| **Copy capability** | If Ctrl held, verifies all dragged items implement `ICanBeCloned` |
-| **Common parent for reorder** | For Before/After zones, verifies all dragged items share the target's parent |
+| Check                            | Purpose                                                                      |
+| -------------------------------- | ---------------------------------------------------------------------------- |
+| **Not dragging onto self**       | Prevents no-op                                                               |
+| **Not dragging onto descendant** | Prevents cyclic relationships                                                |
+| **Target accepts children**      | For Inside zone only; checks `CanAcceptChildren`                             |
+| **Copy capability**              | If Ctrl held, verifies all dragged items implement `ICanBeCloned`            |
+| **Common parent for reorder**    | For Before/After zones, verifies all dragged items share the target's parent |
 
 ### 3.3 Hover-Expand Behavior
 
 When dragging over a collapsed folder in the Inside zone:
 
-| Timing | Action |
-|--------|--------|
-| **Immediate** | Shows drop indicator for Inside zone |
-| **600ms hover** | Auto-expands the folder to reveal its children |
-| **Drag leave** | Cancels hover timer; folder remains collapsed |
-| **Drop** | If not yet expanded, auto-expands during move operation |
+| Timing                 | Action                                                  |
+| ---------------------- | ------------------------------------------------------- |
+| **Immediate**          | Shows drop indicator for Inside zone                    |
+| **600ms hover**        | Auto-expands the folder to reveal its children          |
+| **Drag leave**         | Cancels hover timer; folder remains collapsed           |
+| **Escape before drop** | Cancels pending hover expansion and clears the drop cue |
+| **Drop**               | If not yet expanded, auto-expands during move operation |
 
 **Hover Delay Constant**: `HoverExpandDelay = TimeSpan.FromMilliseconds(600)`
 
@@ -472,12 +473,28 @@ Item templates bind to this property to show/hide visual indicators based on the
 
 The control detects copy intent in two ways:
 
-| Method | Detection | Visual Feedback |
-|--------|-----------|----------------|
-| **Ctrl key** | `IsControlKeyDown()` during drag-over | System cursor changes to copy cursor |
-| **Drag flag** | Set during `DragStarting` if Alt+Drag | Maintained throughout drag session |
+| Method        | Detection                             | Visual Feedback                      |
+| ------------- | ------------------------------------- | ------------------------------------ |
+| **Ctrl key**  | `IsControlKeyDown()` during drag-over | System cursor changes to copy cursor |
+| **Drag flag** | Set during `DragStarting` if Alt+Drag | Maintained throughout drag session   |
 
 When copy intent is detected, drop executes `CopyItemsAsync` followed by `PasteItemsAsync` instead of `MoveItemsAsync`.
+
+### 3.6 Cancellation and Recycling
+
+Escape cancels a staged internal move or copy before typeahead or clipboard
+handling. Cancellation drops the pending sources, stops the hover-expand timer
+and clears the cue. A subsequent drop is rejected with `DataPackageOperation.None`
+without invoking the owner's mutation hook. Structure, selection and clipboard
+staging remain unchanged by cancellation; an expansion that already completed
+is not rolled back.
+
+When an `ItemsRepeater` container clears, the tree detaches its row handlers and
+discards its cue-carrier reference if that container carried the cue. The row
+resets interactive-pointer state, closes rename without committing the draft,
+and removes drop presentation before reuse. Prepared rows receive fresh handlers.
+Unloading and reloading the tree also reattaches its keyboard and view-model
+observers without accumulating subscriptions.
 
 ## 4. Visibility Constraints
 
@@ -507,12 +524,12 @@ Hidden descendants (under collapsed parents) cannot be selected, so multi-item m
 
 ### 4.2 Implication for Drag-Drop UI
 
-| Scenario | Can Initiate Drag? | Can Drag Multiple? | Why |
-|----------|---|---|---|
-| User clicks visible item | ✅ Yes | If multiple visible items selected | Item is in ShownItems and rendered |
-| User clicks hidden item | ❌ No (impossible) | N/A | Hidden item not rendered; no pointer event |
-| User drags with parent collapsed | ❌ No | Children remain unselectable | Parent collapse hides children from selection |
-| Multi-select across collapsed boundary | ❌ No (partial) | Only drag shown items | Hidden descendants cannot be selected |
+| Scenario                               | Can Initiate Drag? | Can Drag Multiple?                 | Why                                           |
+| -------------------------------------- | ------------------ | ---------------------------------- | --------------------------------------------- |
+| User clicks visible item               | ✅ Yes             | If multiple visible items selected | Item is in ShownItems and rendered            |
+| User clicks hidden item                | ❌ No (impossible) | N/A                                | Hidden item not rendered; no pointer event    |
+| User drags with parent collapsed       | ❌ No              | Children remain unselectable       | Parent collapse hides children from selection |
+| Multi-select across collapsed boundary | ❌ No (partial)    | Only drag shown items              | Hidden descendants cannot be selected         |
 
 **Implementation rule for drag handlers**: Filter the selected items to only those shown before attempting move:
 
@@ -544,11 +561,11 @@ When items are moved, descendants that were selected but hidden during the move 
 
 The control supports keyboard shortcuts for tree manipulation:
 
-| Shortcut | Action | Implementation |
-|----------|--------|---------------|
-| **Ctrl+C** | Copy selected items | Calls `CopyItemsAsync` |
-| **Ctrl+X** | Cut selected items | Calls `CutItemsAsync` |
-| **Ctrl+V** | Paste to focused item | Calls `PasteItemsAsync` |
+| Shortcut   | Action                | Implementation                   |
+| ---------- | --------------------- | -------------------------------- |
+| **Ctrl+C** | Copy selected items   | Calls `CopyItemsAsync`           |
+| **Ctrl+X** | Cut selected items    | Calls `CutItemsAsync`            |
+| **Ctrl+V** | Paste to focused item | Calls `PasteItemsAsync`          |
 | **Delete** | Remove selected items | Calls `RemoveItemAsync` for each |
 
 Keyboard-initiated moves use the same validation and event flow as drag-drop operations.
@@ -559,20 +576,20 @@ Keyboard-initiated moves use the same validation and event flow as drag-drop ope
 
 The API uses **child indices** (positions in `ITreeItem.Children` collections), NOT indices into `ShownItems`:
 
-| Index Type | Used In | Coordinate Space | Example |
-|------------|---------|------------------|------|
-| **Child Index** | All move/reorder APIs, event args | Parent's children collection | Item is 3rd child of its parent → index = 2 |
-| **Shown Index** | Internal to view model | `ShownItems` flat list | Item is 15th visible item → shown index = 14 |
+| Index Type      | Used In                           | Coordinate Space             | Example                                      |
+| --------------- | --------------------------------- | ---------------------------- | -------------------------------------------- |
+| **Child Index** | All move/reorder APIs, event args | Parent's children collection | Item is 3rd child of its parent → index = 2  |
+| **Shown Index** | Internal to view model            | `ShownItems` flat list       | Item is 15th visible item → shown index = 14 |
 
 ### Insertion Point Semantics
 
 The `newIndex` parameter in move operations represents an **insertion point** in the target parent's children, evaluated **before** any items are detached:
 
-| Scenario | Behavior |
-|----------|----------|
-| **Move to different parent** | Index directly specifies position in target parent |
-| **Move within same parent** | Index is automatically adjusted to account for removal, preventing off-by-one errors |
-| **Batch move within same parent** | Internal logic detaches all items first, then recomputes insertion indices |
+| Scenario                          | Behavior                                                                             |
+| --------------------------------- | ------------------------------------------------------------------------------------ |
+| **Move to different parent**      | Index directly specifies position in target parent                                   |
+| **Move within same parent**       | Index is automatically adjusted to account for removal, preventing off-by-one errors |
+| **Batch move within same parent** | Internal logic detaches all items first, then recomputes insertion indices           |
 
 **Example**: Moving item at child index 2 to child index 4 within the same parent:
 
@@ -586,84 +603,84 @@ The `newIndex` parameter in move operations represents an **insertion point** in
 
 Drag-drop is implemented using WinUI 3's drag-drop APIs:
 
-| Event | Handler | Purpose |
-|-------|---------|--------|
-| `DragStarting` | `TreeItem_DragStarting` | Captures dragged items; sets data package |
-| `DragOver` | `TreeItem_DragOver` | Computes drop zone; validates target; shows indicators |
-| `DragLeave` | `TreeItem_DragLeave` | Clears indicators; cancels hover-expand |
-| `Drop` | `TreeItem_Drop` | Executes move or copy; focuses result |
+| Event          | Handler                 | Purpose                                                |
+| -------------- | ----------------------- | ------------------------------------------------------ |
+| `DragStarting` | `TreeItem_DragStarting` | Captures dragged items; sets data package              |
+| `DragOver`     | `TreeItem_DragOver`     | Computes drop zone; validates target; shows indicators |
+| `DragLeave`    | `TreeItem_DragLeave`    | Clears indicators; cancels hover-expand                |
+| `Drop`         | `TreeItem_Drop`         | Executes move or copy; focuses result                  |
 
 ### State Management
 
-| Field | Purpose |
-|-------|--------|
-| `dragOwner` | Reference to tree that initiated the drag |
-| `draggedItems` | List of items being dragged |
-| `dragIsCopy` | Whether drag is a copy operation |
-| `hoverExpandTimer` | Timer for auto-expanding hovered folders |
-| `dropIndicatorElement` | Currently highlighted drop target |
+| Field                  | Purpose                                   |
+| ---------------------- | ----------------------------------------- |
+| `dragOwner`            | Reference to tree that initiated the drag |
+| `draggedItems`         | List of items being dragged               |
+| `dragIsCopy`           | Whether drag is a copy operation          |
+| `hoverExpandTimer`     | Timer for auto-expanding hovered folders  |
+| `dropIndicatorElement` | Currently highlighted drop target         |
 
 ## 8. Operation Flow Summary
 
 ### Single Item Move
 
-| Phase | Actions |
-|-------|--------|
-| **1. Validation** | Check item shown; check target shown and accepts children; fire `ItemBeingMoved` |
-| **2. Capture State** | Record original indices; save selection state |
-| **3. Detach** | Remove item from current parent; remove from `ShownItems` with descendants |
-| **4. Expansion** | Auto-expand target if collapsed |
-| **5. Insertion** | Insert item in target parent; insert in `ShownItems` at computed position |
-| **6. Selection** | Restore selection on moved item |
-| **7. Events** | Fire `ItemMoved` with move details |
+| Phase                | Actions                                                                          |
+| -------------------- | -------------------------------------------------------------------------------- |
+| **1. Validation**    | Check item shown; check target shown and accepts children; fire `ItemBeingMoved` |
+| **2. Capture State** | Record original indices; save selection state                                    |
+| **3. Detach**        | Remove item from current parent; remove from `ShownItems` with descendants       |
+| **4. Expansion**     | Auto-expand target if collapsed                                                  |
+| **5. Insertion**     | Insert item in target parent; insert in `ShownItems` at computed position        |
+| **6. Selection**     | Restore selection on moved item                                                  |
+| **7. Events**        | Fire `ItemMoved` with move details                                               |
 
 ### Batch Move
 
-| Phase | Actions |
-|-------|--------|
-| **1. Validation** | Check all items shown; deduplicate ancestors; fire `ItemBeingMoved` for each |
-| **2. Index Adjustment** | If moving within same parent, adjust `startIndex` for removal offset |
-| **3. Detach** | Remove all items atomically; remove from `ShownItems` |
-| **4. Expansion** | Auto-expand target once |
-| **5. Insertion** | Insert all items sequentially; insert in `ShownItems` |
-| **6. Selection** | Select first moved item |
-| **7. Events** | Fire single `ItemMoved` with all moves |
+| Phase                   | Actions                                                                      |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| **1. Validation**       | Check all items shown; deduplicate ancestors; fire `ItemBeingMoved` for each |
+| **2. Index Adjustment** | If moving within same parent, adjust `startIndex` for removal offset         |
+| **3. Detach**           | Remove all items atomically; remove from `ShownItems`                        |
+| **4. Expansion**        | Auto-expand target once                                                      |
+| **5. Insertion**        | Insert all items sequentially; insert in `ShownItems`                        |
+| **6. Selection**        | Select first moved item                                                      |
+| **7. Events**           | Fire single `ItemMoved` with all moves                                       |
 
 ### Drag-Drop
 
-| Phase | Actions |
-|-------|--------|
-| **1. Start** | `DragStarting`: Capture selected items; set data package |
-| **2. Over** | `DragOver`: Compute drop zone; validate target; show indicator; schedule hover-expand |
-| **3. Leave** | `DragLeave`: Clear indicators; cancel hover-expand |
-| **4. Drop** | `Drop`: Detect copy intent; call `MoveItemsAsync` or `CopyItemsAsync` + `PasteItemsAsync` |
+| Phase        | Actions                                                                                   |
+| ------------ | ----------------------------------------------------------------------------------------- |
+| **1. Start** | `DragStarting`: Capture selected items; set data package                                  |
+| **2. Over**  | `DragOver`: Compute drop zone; validate target; show indicator; schedule hover-expand     |
+| **3. Leave** | `DragLeave`: Clear indicators; cancel hover-expand                                        |
+| **4. Drop**  | `Drop`: Detect copy intent; call `MoveItemsAsync` or `CopyItemsAsync` + `PasteItemsAsync` |
 
 ### Copy-Paste
 
-| Phase | Actions |
-|-------|--------|
-| **1. Copy** | Expand to include descendants; filter clonable items; store in clipboard |
+| Phase        | Actions                                                                       |
+| ------------ | ----------------------------------------------------------------------------- |
+| **1. Copy**  | Expand to include descendants; filter clonable items; store in clipboard      |
 | **2. Paste** | Clone each item recursively; insert clones at target using `InsertChildAsync` |
 
 ### Cut-Paste
 
-| Phase | Actions |
-|-------|--------|
-| **1. Cut** | Mark items with `IsCut = true`; store in clipboard |
+| Phase        | Actions                                                                |
+| ------------ | ---------------------------------------------------------------------- |
+| **1. Cut**   | Mark items with `IsCut = true`; store in clipboard                     |
 | **2. Paste** | Call `MoveItemsAsync` to relocate; clear cut markings; clear clipboard |
 
 ## 9. Implementation Status
 
 All described features are implemented and tested:
 
-| Feature | Status | Test Coverage |
-|---------|--------|---------------|
-| **Move operations** | ✅ Complete | `ViewModelMoveTests.cs` |
-| **Reorder operations** | ✅ Complete | Covered in move tests |
-| **Clipboard (copy/cut/paste)** | ✅ Complete | `ViewModelClipboardTests.cs` |
-| **Drag-drop UI** | ✅ Complete | `DynamicTreeDragDropTests.cs` |
-| **Events** | ✅ Complete | Event tests in move/clipboard tests |
-| **Validation** | ✅ Complete | Test coverage for all validation rules |
+| Feature                        | Status      | Test Coverage                          |
+| ------------------------------ | ----------- | -------------------------------------- |
+| **Move operations**            | ✅ Complete | `ViewModelMoveTests.cs`                |
+| **Reorder operations**         | ✅ Complete | Covered in move tests                  |
+| **Clipboard (copy/cut/paste)** | ✅ Complete | `ViewModelClipboardTests.cs`           |
+| **Drag-drop UI**               | ✅ Complete | `DynamicTreeDragDropTests.cs`          |
+| **Events**                     | ✅ Complete | Event tests in move/clipboard tests    |
+| **Validation**                 | ✅ Complete | Test coverage for all validation rules |
 
 ## 10. API Surface
 
@@ -757,8 +774,8 @@ await viewModel.PasteItemsAsync(targetParent, insertIndex: 0);
 
 ## 12. Configuration Constants
 
-| Constant | Value | Purpose |
-|----------|-------|--------|
-| `DropReorderBand` | `0.25` | Fraction of item height for Before/After drop zones |
-| `HoverExpandDelay` | `600ms` | Delay before auto-expanding hovered folder during drag |
-| `TypeAheadResetDelay` | `1000ms` | Timeout for type-ahead search reset |
+| Constant              | Value    | Purpose                                                |
+| --------------------- | -------- | ------------------------------------------------------ |
+| `DropReorderBand`     | `0.25`   | Fraction of item height for Before/After drop zones    |
+| `HoverExpandDelay`    | `600ms`  | Delay before auto-expanding hovered folder during drag |
+| `TypeAheadResetDelay` | `1000ms` | Timeout for type-ahead search reset                    |

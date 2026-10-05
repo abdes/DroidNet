@@ -11,6 +11,8 @@ The **typeahead focus** feature enables users to quickly navigate the tree by ty
 - **Smart scoring**: Prefers contiguous matches, word boundaries, and shorter labels
 - **Auto-reset buffer**: Clears the search buffer after 1 second of inactivity
 - **Wrapping search**: Starts from the currently focused item and wraps around the tree
+- **Interaction scope**: Searches shown items by default, or the rendered projection
+  when the control opts into [displayed interactions](filtering.md#interaction-scope)
 
 ## User Experience
 
@@ -27,22 +29,27 @@ The **typeahead focus** feature enables users to quickly navigate the tree by ty
 
 ### Buffer Management
 
-| Key | Action | Buffer State |
-|-----|--------|--------------|
-| `A-Z`, `0-9` | Append character to buffer | Character added, timer restarted |
-| `Backspace` | Remove last character | Last character removed, timer restarted |
-| `Escape` | Clear buffer | Buffer emptied, timer stopped |
-| *(1 second idle)* | Auto-reset | Buffer emptied automatically |
+| Key               | Action                     | Buffer State                            |
+| ----------------- | -------------------------- | --------------------------------------- |
+| `A-Z`, `0-9`      | Append character to buffer | Character added, timer restarted        |
+| `Backspace`       | Remove last character      | Last character removed, timer restarted |
+| `Escape`          | Clear buffer               | Buffer emptied, timer stopped           |
+| _(1 second idle)_ | Auto-reset                 | Buffer emptied automatically            |
 
 ### Special Behaviors
 
-| Scenario | Behavior |
-|----------|----------|
-| **Control key pressed** | Typeahead disabled (Control+key handled by other features) |
-| **Shift key pressed** | Typeahead still active (Shift does not affect character input) |
-| **No match found** | Focus remains unchanged, buffer retained |
-| **Empty buffer + Backspace** | Keystroke not handled (falls through to other handlers) |
-| **Empty buffer + Escape** | Keystroke not handled |
+| Scenario                     | Behavior                                                       |
+| ---------------------------- | -------------------------------------------------------------- |
+| **Control key pressed**      | Typeahead disabled (Control+key handled by other features)     |
+| **Shift key pressed**        | Typeahead still active (Shift does not affect character input) |
+| **No match found**           | Focus remains unchanged, buffer retained                       |
+| **Empty buffer + Backspace** | Keystroke not handled (falls through to other handlers)        |
+| **Empty buffer + Escape**    | Falls through to clipboard staging or outer handlers           |
+
+Escape routing first cancels an in-flight internal drag, then clears the
+typeahead buffer, then clears clipboard staging. Cancelling a drag does not
+consume either of the latter states; subsequent Escape presses handle them in
+that order. The buffer table above describes Escape when no drag is pending.
 
 ## Implementation Architecture
 
@@ -197,12 +204,12 @@ flowchart TD
 
 ## Scoring Examples
 
-| Query | Label | Match | Score Breakdown | Total |
-|-------|-------|-------|-----------------|-------|
-| "abc" | "ABC" | ✅ | 3×10 (chars) + 2×6 (contiguous) + 4 (start) + 100 (full) - 3 (length) | **133** |
-| "abc" | "A_B_C" | ✅ | 3×10 (chars) + 4 (start) + 2×3 (boundaries) + 100 (full) - 5 (length) | **135** |
-| "abc" | "AlphaBetaCode" | ✅ | 3×10 (chars) + 4 (start) + 3 (boundary) + 100 (full) - 50 (max penalty) | **87** |
-| "abc" | "XYZ" | ❌ | No match | **0** |
+| Query | Label           | Match | Score Breakdown                                                         | Total   |
+| ----- | --------------- | ----- | ----------------------------------------------------------------------- | ------- |
+| "abc" | "ABC"           | ✅    | 3×10 (chars) + 2×6 (contiguous) + 4 (start) + 100 (full) - 3 (length)   | **133** |
+| "abc" | "A_B_C"         | ✅    | 3×10 (chars) + 4 (start) + 2×3 (boundaries) + 100 (full) - 5 (length)   | **135** |
+| "abc" | "AlphaBetaCode" | ✅    | 3×10 (chars) + 4 (start) + 3 (boundary) + 100 (full) - 50 (max penalty) | **87**  |
+| "abc" | "XYZ"           | ❌    | No match                                                                | **0**   |
 
 **Winner**: "A_B_C" (135) beats "ABC" (133) due to word boundary bonuses.
 
@@ -298,7 +305,7 @@ Tree:
 **User actions**:
 
 1. Press `A` → Focuses "Alpha" (buffer = "A")
-2. *(wait 1 second)* → Buffer auto-clears
+2. _(wait 1 second)_ → Buffer auto-clears
 3. Press `B` → Focuses "Beta" (buffer = "B", not "AB")
 
 ### Example 4: Correction with Backspace
@@ -333,31 +340,31 @@ Tree:
 
 ### Current Constraints
 
-| Constraint | Description |
-|------------|-------------|
-| **Visible items only** | Searches only items currently in `ShownItems` (collapsed children excluded) |
-| **Label-based matching** | Uses `ITreeItem.Label` property; ignores other metadata |
-| **Case-insensitive** | All matching is case-insensitive |
-| **No regex support** | Simple character subsequence matching only |
-| **No special characters** | Only A-Z and 0-9 supported (no punctuation, spaces, etc.) |
+| Constraint                | Description                                                                 |
+| ------------------------- | --------------------------------------------------------------------------- |
+| **Visible items only**    | Searches only items currently in `ShownItems` (collapsed children excluded) |
+| **Label-based matching**  | Uses `ITreeItem.Label` property; ignores other metadata                     |
+| **Case-insensitive**      | All matching is case-insensitive                                            |
+| **No regex support**      | Simple character subsequence matching only                                  |
+| **No special characters** | Only A-Z and 0-9 supported (no punctuation, spaces, etc.)                   |
 
 ### Keyboard Conflicts
 
-| Key | Priority | Notes |
-|-----|----------|-------|
-| **Control+key** | Other features win | Typeahead disabled when Control pressed |
-| **Alt+key** | Other features win | Typeahead not invoked with Alt modifier |
-| **Shift+key** | Typeahead wins | Shift does not affect character input |
-| **Space** | Selection/expansion | Space not captured by typeahead |
+| Key             | Priority            | Notes                                   |
+| --------------- | ------------------- | --------------------------------------- |
+| **Control+key** | Other features win  | Typeahead disabled when Control pressed |
+| **Alt+key**     | Other features win  | Typeahead not invoked with Alt modifier |
+| **Shift+key**   | Typeahead wins      | Shift does not affect character input   |
+| **Space**       | Selection/expansion | Space not captured by typeahead         |
 
 ### Performance Considerations
 
-| Scenario | Performance | Notes |
-|----------|-------------|-------|
-| **Small trees (<100 items)** | Instant | Negligible overhead |
-| **Medium trees (100-1000 items)** | <1ms | Linear scan acceptable |
-| **Large trees (>1000 items)** | 1-5ms | May introduce slight lag on each keystroke |
-| **Very large trees (>10,000 items)** | 5-50ms | Noticeable delay possible |
+| Scenario                             | Performance | Notes                                      |
+| ------------------------------------ | ----------- | ------------------------------------------ |
+| **Small trees (<100 items)**         | Instant     | Negligible overhead                        |
+| **Medium trees (100-1000 items)**    | <1ms        | Linear scan acceptable                     |
+| **Large trees (>1000 items)**        | 1-5ms       | May introduce slight lag on each keystroke |
+| **Very large trees (>10,000 items)** | 5-50ms      | Noticeable delay possible                  |
 
 **Optimization**: The linear scan is unavoidable because ShownItems can change dynamically (expansion/filtering). A cached index would require invalidation on every tree mutation.
 
@@ -383,14 +390,14 @@ Tree:
 
 ### Potential Improvements
 
-| Enhancement | Priority | Complexity | Benefit |
-|-------------|----------|------------|---------|
-| **Extended characters** | Medium | Low | Support punctuation, spaces (e.g., "proj set" matches "Project Settings") |
-| **Visual feedback** | High | Medium | Display current search buffer in UI overlay |
-| **Search history** | Low | Medium | Allow up/down arrows to cycle through recent searches |
-| **Configurable delay** | Low | Low | Allow apps to customize the 1-second reset timeout |
-| **Prefix-only mode** | Low | Low | Option to match only at word starts (disable fuzzy matching) |
-| **Sound feedback** | Low | Low | Audio cue on successful match or no-match |
+| Enhancement             | Priority | Complexity | Benefit                                                                   |
+| ----------------------- | -------- | ---------- | ------------------------------------------------------------------------- |
+| **Extended characters** | Medium   | Low        | Support punctuation, spaces (e.g., "proj set" matches "Project Settings") |
+| **Visual feedback**     | High     | Medium     | Display current search buffer in UI overlay                               |
+| **Search history**      | Low      | Medium     | Allow up/down arrows to cycle through recent searches                     |
+| **Configurable delay**  | Low      | Low        | Allow apps to customize the 1-second reset timeout                        |
+| **Prefix-only mode**    | Low      | Low        | Option to match only at word starts (disable fuzzy matching)              |
+| **Sound feedback**      | Low      | Low        | Audio cue on successful match or no-match                                 |
 
 ### Visual Feedback Mockup
 
@@ -411,22 +418,22 @@ Tree:
 
 ### Control Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| *(none)* | - | Typeahead is always enabled; no opt-out property |
+| Property | Type | Description                                      |
+| -------- | ---- | ------------------------------------------------ |
+| _(none)_ | -    | Typeahead is always enabled; no opt-out property |
 
 ### ViewModel Methods
 
-| Method | Parameters | Returns | Description |
-|--------|-----------|---------|-------------|
-| `FocusNextByPrefix` | `string text, RequestOrigin origin` | `bool` | Searches for best match, focuses if found |
+| Method              | Parameters                          | Returns | Description                               |
+| ------------------- | ----------------------------------- | ------- | ----------------------------------------- |
+| `FocusNextByPrefix` | `string text, RequestOrigin origin` | `bool`  | Searches for best match, focuses if found |
 
 ### Events
 
 Typeahead uses the standard focus events:
 
-| Event | When Fired | Notes |
-|-------|------------|-------|
+| Event                | When Fired             | Notes                                    |
+| -------------------- | ---------------------- | ---------------------------------------- |
 | `FocusedItemChanged` | After successful match | `Origin` = `RequestOrigin.KeyboardInput` |
 
 ## Integration with Other Features
