@@ -68,7 +68,30 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
     /// converter. It reflects the explicit entry, not the ancestor closure, which is what lets a
     /// user see that a dimmed child of a hidden parent has not itself been hidden.
     /// </remarks>
-    public string EditorVisibilityGlyph => this.IsHiddenInEditor ? "" : "";
+    public string EditorVisibilityGlyph => this.IsHiddenInEditor ? "\uED1A" : "\uE890";
+
+    /// <summary>
+    /// Gets the lock-slot glyph: locked shows the closed keyhole (), unlocked the open
+    /// one (). It tracks state instead of staying fixed, which the earlier static glyph
+    /// failed to do.
+    /// </summary>
+    public string EditorLockGlyph => this.IsLocked ? "\uE72E" : "\uE785";
+
+    /// <summary>
+    /// Gets a value indicating whether the eye slot is suppressed (editor-hidden): its warning
+    /// icon pins permanently, independent of hover, per the interaction contract.
+    /// </summary>
+    public bool IsEditorHiddenSuppressed => this.IsHiddenInEditor;
+
+    /// <summary>Gets a value indicating whether the lock slot is suppressed (locked) and pinned.</summary>
+    public bool IsLockSuppressed => this.IsLocked;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <c>IsLocked</c> is declared on the control base, so a lock change never notifies the derived
+    /// <see cref="EditorLockGlyph"/> on its own. Repainting the glyph and the suppression flags here
+    /// keeps the row slots live when the command owner flips lock state.
+    /// </remarks>
 
     /// <summary>
     /// Gets or sets a value indicating whether this row is hidden because it, or an actual scene
@@ -161,6 +184,19 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
         {
             this.OnPropertyChanged(nameof(this.IconGlyph));
             this.OnIsExpandedChanged(this.IsExpanded);
+        }
+
+        // IsLocked is declared on the control base, so a lock flip never notifies the derived
+        // glyph/suppression members on its own; repainting them keeps the row slots live. The same
+        // for the eye's suppression flag.
+        if (string.Equals(e.PropertyName, nameof(this.IsLocked), StringComparison.Ordinal))
+        {
+            this.OnPropertyChanged(nameof(this.EditorLockGlyph));
+            this.OnPropertyChanged(nameof(this.IsLockSuppressed));
+        }
+        else if (string.Equals(e.PropertyName, nameof(this.IsHiddenInEditor), StringComparison.Ordinal))
+        {
+            this.OnPropertyChanged(nameof(this.IsEditorHiddenSuppressed));
         }
     }
 

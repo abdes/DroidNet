@@ -45,34 +45,7 @@
                 the command owner and its single undo step.
             -->
             <DataTemplate x:Key="RowActionsTemplate" x:DataType="scene:LayoutItemAdapter">
-                <StackPanel Orientation="Horizontal" Spacing="2">
-                    <Button
-                        Width="22"
-                        Height="22"
-                        Padding="0"
-                        AutomationProperties.Name="Toggle Show in Editor"
-                        Command="{Binding ViewModel.ToggleEditorHiddenCommand, ElementName=ExplorerTree}"
-                        CommandParameter="{Binding}"
-                        ToolTipService.ToolTip="Show in Editor">
-                        <FontIcon
-                            FontFamily="{StaticResource SymbolThemeFontFamily}"
-                            FontSize="12"
-                            Glyph="{x:Bind EditorVisibilityGlyph, Mode=OneWay}" />
-                    </Button>
-                    <Button
-                        Width="22"
-                        Height="22"
-                        Padding="0"
-                        AutomationProperties.Name="Toggle lock"
-                        Command="{Binding ViewModel.ToggleEditorLockedCommand, ElementName=ExplorerTree}"
-                        CommandParameter="{Binding}"
-                        ToolTipService.ToolTip="Lock">
-                        <FontIcon
-                            FontFamily="{StaticResource SymbolThemeFontFamily}"
-                            FontSize="12"
-                            Glyph="&#xE72E;" />
-                    </Button>
-                </StackPanel>
+                <scene:SceneRowActions />
             </DataTemplate>
         </ResourceDictionary>
     </UserControl.Resources>
@@ -106,6 +79,7 @@
                 x:Name="ExplorerTree"
                 ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
                 TrailingContentTemplate="{StaticResource RowActionsTemplate}"
+                TrailingContentWidth="64"
                 ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
         </Border>
         <Grid Grid.Row="1">

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.World.SceneExplorer.SceneRowActions"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+    <!--
+        Two fixed slots that never collapse (interaction contract): column widths are constants, and
+        visibility of the button content is switched without touching layout, so a neighbouring icon,
+        the label or the row geometry cannot shift when a state changes or the pointer moves.
+        Slot 0 = Show in Editor (eye), slot 1 = Lock. Passive by default; content is the only hit
+        target and the grid itself does not intercept row input.
+    -->
+    <UserControl.Resources>
+        <Style
+            x:Key="RowSlotButtonStyle"
+            BasedOn="{StaticResource DefaultButtonStyle}"
+            TargetType="Button">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+    </UserControl.Resources>
+    <Grid x:Name="Slots" VerticalAlignment="Center">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="32" />
+            <ColumnDefinition Width="32" />
+        </Grid.ColumnDefinitions>
+        <Button
+            x:Name="EyeButton"
+            Grid.Column="0"
+            AutomationProperties.Name="Show in Editor"
+            Click="EyeButton_OnClick"
+            Style="{StaticResource RowSlotButtonStyle}"
+            ToolTipService.ToolTip="Show or hide in the editing viewports"
+            Visibility="Collapsed">
+            <FontIcon
+                x:Name="EyeGlyph"
+                FontFamily="Segoe Fluent Icons"
+                FontSize="14" />
+        </Button>
+        <Button
+            x:Name="LockButton"
+            Grid.Column="1"
+            AutomationProperties.Name="Lock"
+            Click="LockButton_OnClick"
+            Style="{StaticResource RowSlotButtonStyle}"
+            ToolTipService.ToolTip="Lock or unlock for editing"
+            Visibility="Collapsed">
+            <FontIcon
+                x:Name="LockGlyph"
+                FontFamily="Segoe Fluent Icons"
+                FontSize="14" />
+        </Button>
+    </Grid>
+</UserControl>
