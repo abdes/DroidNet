@@ -27,7 +27,9 @@ internal static class SceneLoaderService
                         Entities =
                         [
                             new Entity("Crate") { Geometry = new GeometryComponent() },
-                            new Entity("Marker"),
+
+                            // Seeded suppressed state: the pinned warning icon must survive hover.
+                            new Entity("Marker") { IsVisible = false },
                         ],
                     },
                 ],

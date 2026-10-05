@@ -5,6 +5,14 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:DroidNet.Controls.Demo.Tree"
     IsTabStop="False">
+    <!--
+        Demo mirror of the Scene Explorer "Show in Editor & Lock" interaction contract: two
+        fixed-width slots that never collapse (slot 0 = Show/Hide eye, slot 1 = Lock), plus a
+        passive demo-only status cell. Default states are quiet: their affordances appear on row
+        hover at muted opacity. Suppressed states (hidden, locked) pin their icon permanently,
+        regardless of hover or selection, and passive icons never intercept row input until the
+        row is hovered. Slots and their visual state groups are independent; see the code-behind.
+    -->
     <UserControl.Resources>
         <local:LockStateToGlyphConverter x:Key="LockGlyph" />
         <local:LockStateToActionConverter x:Key="LockAction" />
@@ -21,6 +29,8 @@
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Setter Property="IsTabStop" Value="False" />
         </Style>
     </UserControl.Resources>
     <Grid x:Name="Cells" VerticalAlignment="Center">
@@ -30,27 +40,32 @@
             <ColumnDefinition Width="32" />
         </Grid.ColumnDefinitions>
         <Button
-            x:Name="LockButton"
-            AutomationProperties.Name="{Binding IsLocked, Converter={StaticResource LockAction}}"
-            Click="LockButton_OnClick"
-            Style="{StaticResource RowActionStyle}"
-            Visibility="Collapsed">
-            <FontIcon
-                FontFamily="Segoe Fluent Icons"
-                FontSize="16"
-                Glyph="{Binding IsLocked, Converter={StaticResource LockGlyph}}" />
-        </Button>
-        <Button
             x:Name="VisibilityButton"
-            Grid.Column="1"
+            Grid.Column="0"
             AutomationProperties.Name="{Binding VisibilityAction}"
             Click="VisibilityButton_OnClick"
             Style="{StaticResource RowActionStyle}"
+            ToolTipService.ToolTip="Show or hide the entity in the editor viewports"
             Visibility="Collapsed">
             <FontIcon
                 FontFamily="Segoe Fluent Icons"
                 FontSize="16"
                 Glyph="{Binding VisibilityGlyph}" />
+        </Button>
+        <Button
+            x:Name="LockButton"
+            Grid.Column="1"
+            AutomationProperties.Name="{Binding IsLocked, Converter={StaticResource LockAction}}"
+            Click="LockButton_OnClick"
+            Style="{StaticResource RowActionStyle}"
+            ToolTipService.ToolTip="Lock or unlock the entity for editing"
+            Visibility="Collapsed">
+            <FontIcon
+                x:Name="LockIcon"
+                FontFamily="Segoe Fluent Icons"
+                FontSize="16"
+                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                Glyph="{Binding IsLocked, Converter={StaticResource LockGlyph}}" />
         </Button>
         <Grid Grid.Column="2" IsHitTestVisible="False">
             <FontIcon
@@ -62,5 +77,47 @@
                 FontSize="16"
                 Glyph="{Binding LoadedGlyph}" />
         </Grid>
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="EyeStates">
+                <VisualState x:Name="EyeQuiet" />
+                <VisualState x:Name="EyeAffordance">
+                    <VisualState.Setters>
+                        <Setter Target="VisibilityButton.Visibility" Value="Visible" />
+                        <Setter Target="VisibilityButton.Opacity" Value="0.6" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="EyePinned">
+                    <VisualState.Setters>
+                        <Setter Target="VisibilityButton.Visibility" Value="Visible" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+            <VisualStateGroup x:Name="LockStates">
+                <VisualState x:Name="LockQuiet" />
+                <VisualState x:Name="LockAffordance">
+                    <VisualState.Setters>
+                        <Setter Target="LockButton.Visibility" Value="Visible" />
+                        <Setter Target="LockButton.Opacity" Value="0.6" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="LockPinned">
+                    <VisualState.Setters>
+                        <Setter Target="LockButton.Visibility" Value="Visible" />
+                        <Setter Target="LockIcon.Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+            <VisualStateGroup x:Name="InputStates">
+                <VisualState x:Name="Passive" />
+                <VisualState x:Name="Interactive">
+                    <VisualState.Setters>
+                        <Setter Target="VisibilityButton.IsHitTestVisible" Value="True" />
+                        <Setter Target="VisibilityButton.IsTabStop" Value="True" />
+                        <Setter Target="LockButton.IsHitTestVisible" Value="True" />
+                        <Setter Target="LockButton.IsTabStop" Value="True" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
     </Grid>
 </UserControl>
