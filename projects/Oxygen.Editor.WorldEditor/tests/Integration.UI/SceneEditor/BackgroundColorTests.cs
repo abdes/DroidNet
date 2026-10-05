@@ -12,6 +12,7 @@ using DroidNet.Hosting.WinUI;
 using DroidNet.Storage.Native;
 using DroidNet.Tests;
 using DroidNet.TimeMachine;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI;
@@ -30,6 +31,8 @@ using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
+using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldCases;
+using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
 using Color = Windows.UI.Color;
 
@@ -133,10 +136,14 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto
             };
             await LoadTestContentAsync(scroller).ConfigureAwait(true);
-            view.FindDescendant<ToggleSwitch>()!.IsOn = false;
+            var atmosphereCase = NativeEnvironmentFields.Single(static value => string.Equals(value.Field, "AtmosphereEnabled", StringComparison.Ordinal));
+            var atmosphereToggle = (ToggleSwitch)await FindEnvironmentFieldControlAsync(view, scroller, model, atmosphereCase, cancellationToken).ConfigureAwait(true);
+            _ = atmosphereToggle.Tag.Should().Be("AtmosphereEnabled", "the Sky Atmosphere enable switch is the control under test");
+            atmosphereToggle.IsOn = false;
             await model.PendingEdits.ConfigureAwait(true);
             var original = await ReadNativeBackgroundAsync(engine, target, cancellationToken).ConfigureAwait(true);
             _ = original.AtmosphereEnabled.Should().BeFalse();
+            ((TextBox)view.FindName("ScenePropertySearchBox")).Text = string.Empty;
             await EditBackgroundPickerAsync(view, scroller, cancellationToken).ConfigureAwait(true);
             await model.PendingEdits.ConfigureAwait(true);
             var expected = scene.Environment.BackgroundColor;
@@ -153,9 +160,12 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
 
     private static async Task EditBackgroundPickerAsync(EnvironmentView view, ScrollViewer scroller, CancellationToken cancellationToken)
     {
-        var vector = await FindVisibleVectorAsync(view, scroller, "BackgroundColor").ConfigureAwait(true);
-        var button = ((Grid)vector.Parent).Children.OfType<Button>().Single();
-        var flyout = (Flyout)button.Flyout;
+        _ = await FindVisibleVectorAsync(view, scroller, "BackgroundColor").ConfigureAwait(true);
+        // The restructured inspector hosts the swatch as PropertyCard leading content, so the picker button is an
+        // owned accessory of the background field rather than a sibling of the vector box.
+        var button = view.FindDescendant<Button>(element => string.Equals(AutomationProperties.GetName(element), "Pick background color", StringComparison.Ordinal));
+        _ = button.Should().NotBeNull("the swatch realizes as leading content of the background field");
+        var flyout = (Flyout)button!.Flyout;
         var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         flyout.Closed += (_, _) => closed.TrySetResult();
         flyout.ShowAt(button);
