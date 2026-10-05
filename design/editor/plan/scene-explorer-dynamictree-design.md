@@ -1408,8 +1408,9 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
   `ToggleEditorLocked` and `ShowAllInEditor`. It never touches the scene document, so no
   authoring dirty, cook or `kVisible` write is possible from this path, and a missing service
   reports a visible warning instead of silently doing nothing (D-f).
-  Outstanding, deliberately not faked: (1) **the eye toggle does not yet record the undo step
-  the owner ratified today — tracked as C52**; (2) the eye/lock row slots in the view (W3) and
+  ~~Outstanding: the eye toggle does not yet record the undo step.~~ **(1) closed 2026-10-05 —
+  `SetEditorHiddenAsync` records the batch as one undo step through the command owner without
+  dirtying (C52).** Remaining: (2) the eye/lock row slots in the view (W3) and
   the `SupportsEditingViewMask` warning fallback binding (W4) are SE-03 UI work; (3) the
   production composition does not inject the service yet, because no production caller
   constructs `SceneExplorerViewModel` today; (4) column placement has no owner UI to persist
@@ -1440,7 +1441,7 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       project's scene. Scope is decided in D7 — snapshot at copy time, explicit
       invalidation on project switch, one intent path so no second history
       authority appears.
-- [ ] C52 — the editor-hide toggle must record an undo step (owner ratified 2026-10-05,
+- [x] C52 — the editor-hide toggle must record an undo step (owner ratified 2026-10-05,
       propagated across `documents-and-commands.md` §8, D8 R4/W1, settings §5.1, live-engine-sync,
       runtime-integration, scene-authoring-model, property-inspector,
       standalone-runtime-validation and the ED-M08 rows). Today
@@ -1449,6 +1450,15 @@ false)` (`SceneExplorerService.cs:272`), which **discards** contained entries
       workspace service, which would be the second history authority D7 forbids — must not dirty the
       document, must not change saved source or cook demand, and must undo/redo as one batch per
       user intent. Lock stays non-undoable: the ratified wording names only the eye toggle.
+      **Closed 2026-10-05 (`985e7c1db`):** `SetEditorHiddenAsync` enters the same authoring gate as
+      every mutation, targets authored ids, skips ids already in the requested state so an
+      idempotent request records no step, applies the batch through the workspace service and
+      registers one undo step per batch using the layout history's forward/reverse ping-pong. It
+      calls neither `MarkDirtyAsync` nor live sync — which is what makes it the ratified exception
+      rather than a loophole. Failures are visible under the new `Scene.Node.SetEditorHidden` kind
+      (`AUTHORING_SUSPENDED`, `WORKSPACE_STATE_UNAVAILABLE`), and Explorer hide/show and Show All
+      route through it. WorldEditor unit suite green; **no test yet exercises undo/redo of the
+      step**, so that proof belongs with T9/T10 and is not claimed here.
 - [x] C42 — dead and unsafe public API on the command interface. **Closed
       2026-10-04 (`e4eaf2f44`)**: `RenameItemAsync` deleted from the interface
       and implementation (no callers, no test removed) together with the
