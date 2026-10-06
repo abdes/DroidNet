@@ -1,8 +1,8 @@
 # ED-M08 — Runtime parity and standalone qualification
 
-Status: **in progress — M08.1 validated; M08.F1 format cutover and editor authoring implemented; F1 qualification open**
+Status: **in progress — M08.1 and M08.F1 validated; M08.2 native rendering is next**
 
-Current: **[M08.F1 descriptor-local references](ED-M08.F1-descriptor-local-references.md)**, before M08.2. M08.1's native analysis, editor cutover and maintained-project migration are validated. M08.F1's format cutovers and editor scene-reference authoring are implemented and committed. User reference-authoring checks pass; the live mount-tree correction is user-validated and closed. Its [remaining work](ED-M08.F1-descriptor-local-references.md#remaining-work) is final managed/UI qualification, maintained-project cook/package qualification, origin-first/cache-reuse evidence, load-cost measurement and the F1 result record. Existing native tests cover ordered-layer acceptance.
+Current: **M08.2 native rendering and view behavior.** M08.1 and [M08.F1 descriptor-local references](ED-M08.F1-descriptor-local-references.md) are validated. F1 closes on 2026-10-06 with user reference-authoring/live mount-tree checks, the user's Main/Lantern scene packaged and rendered from its PAK alone, and five existing focused native origin/binding/cache cases passing. [Closure evidence and approved scope](ED-M08.F1-descriptor-local-references.md#closure-verification) retain failing/unrun checks without claiming passes; final managed/UI qualification and load-cost measurement are non-blocking by user decision. M08.2–M08.8 remain unchanged.
 See [owners](#2-implementation-document-map), [remaining increments](#m081-remaining-increments)
 and [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
@@ -469,11 +469,10 @@ rejection. Cook and inspect through native tools, never managed binary decoding.
 
 ### M08.F1 — Descriptor-local reference format
 
-Status: **in progress — native/managed cutover and editor scene-reference
-authoring implemented; F1 qualification remains open**. Depends on M08.1.9; prerequisite for M08.2 and subsequent
+Status: **validated — closed on 2026-10-06**. Depends on M08.1.9; prerequisite for M08.2 and subsequent
 qualification. The [format plan](ED-M08.F1-descriptor-local-references.md) owns
 execution, version changes, recooking and its
-[remaining work](ED-M08.F1-descriptor-local-references.md#remaining-work). Data
+[closure verification](ED-M08.F1-descriptor-local-references.md#closure-verification). Data
 and Cooker own the wire contract and packaging behavior; this milestone
 introduces no compatibility reader.
 
@@ -707,8 +706,8 @@ each run. Native example use/content refresh follows the maintained
 ## 7. Exit checklist
 
 - [ ] Canonical formats/migration and every required producer/loader mapping pass.
-      M08.1 is validated and M08.F1 implements the native and managed format
-      cutovers; its editor scene-reference authoring and qualification are open.
+      M08.1 and M08.F1 are validated; remaining M08 producer/loader mappings
+      retain their later slice owners.
 - [ ] Engine fixes have native tests and rendered evidence outside the editor.
 - [ ] Editor authoring/history/Save/cook/live delivery and workspace Hide pass.
 - [ ] M08.4 inspector field coverage and usability audit pass, with user walkthrough acceptance.

@@ -89,12 +89,12 @@ are assigned to 07A/07B, with no new M04 closure action. M08 still requires its
 joint review with the recorded ED-M02 evidence.
 
 Within ED-M08, execute M08.1 → [M08.F1 descriptor-local references](plan/ED-M08.F1-descriptor-local-references.md)
-→ M08.2–M08.8. The format cutover and editor scene-reference authoring are
-implemented and focused-tested; its
-[remaining work](plan/ED-M08.F1-descriptor-local-references.md#remaining-work) is
-maintained-project cook/package qualification, origin-first/cache-reuse evidence,
-load-cost measurement and the final F1 result record, before the remaining
-rendering and editor parity work.
+→ M08.2–M08.8. M08.F1 is validated and closed on 2026-10-06: editor workflow checks,
+the user's Main/Lantern scene packaged and rendered from its PAK alone, and
+focused native origin/binding/cache evidence pass. Its
+[closure record](plan/ED-M08.F1-descriptor-local-references.md#closure-verification)
+retains the user's non-blocking managed/UI and load-cost decisions.
+M08.2 rendering and subsequent editor parity work are next.
 
 ## 4. Milestone Roadmap
 
