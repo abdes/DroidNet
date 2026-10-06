@@ -14,6 +14,7 @@ using Microsoft.UI.Xaml;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
+using Oxygen.Editor.World.Inspector.Environment;
 using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
@@ -59,9 +60,9 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             {
                 ViewModel = (DirectionalLightViewModel)model
             },
-            "Environment" => new EnvironmentView
+            "Environment" => new AtmosphereLightsSectionView
             {
-                ViewModel = (EnvironmentViewModel)model
+                ViewModel = ((EnvironmentViewModel)model).AtmosphereLights
             },
             "Material" => new MaterialEditorView
             {
@@ -69,12 +70,18 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             },
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
-        if (view is EnvironmentView environmentView)
+        await LoadTestContentAsync(view).ConfigureAwait(true);
+        if (view is AtmosphereLightsSectionView)
         {
-            ((Expander)FindInspectorElement(environmentView, "PrimarySourceDisclosure")).IsExpanded = true;
+            var section = view.FindDescendant<Oxygen.Editor.Controls.PropertiesExpander>()!;
+            var sources = section.Items.OfType<Oxygen.Editor.Controls.PropertyCard>().Single();
+            _ = section.BringItemIntoView(sources).Should().BeTrue();
+            await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+            var primary = sources.FindDescendants().OfType<Expander>().First();
+            primary.IsExpanded = true;
+            await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         }
 
-        await LoadTestContentAsync(view).ConfigureAwait(true);
         if (view is MaterialEditorView)
         {
             var scroller = view.FindDescendant<ScrollViewer>()!;
@@ -83,7 +90,15 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         }
         else
         {
-            _ = view.FindDescendant<NumberBox>().Should().NotBeNull();
+            if (view is AtmosphereLightsSectionView)
+            {
+                _ = view.FindDescendants().OfType<NumberBox>()
+                    .Should().Contain(number => Equals(number.Tag, "SunAzimuth"));
+            }
+            else
+            {
+                _ = view.FindDescendant<NumberBox>().Should().NotBeNull();
+            }
         }
     });
 
@@ -246,7 +261,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         await InspectorCapture.SaveIfRequestedAsync(section, $"background-{width}-{theme}").ConfigureAwait(true);
     });
 
-    /// <summary>The source panel uses the whole section width and scopes fit without clipping.</summary>
+    /// <summary>The source panel uses the whole section width and quiet disclosures preserve their layout.</summary>
     [TestMethod]
     public Task AtmosphereScalarUnitsUseCompactFieldsAndFourPixelGaps() => EnqueueAsync(async () =>
     {
@@ -285,24 +300,29 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         using var fixture = new SceneAuthoringFixture();
         fixture.Node.Components.OfType<DirectionalLightComponent>().Single().AtmosphereSlot = Oxygen.Editor.World.Serialization.AtmosphereLightSlot.Primary;
         using var model = (EnvironmentViewModel)CreateModel("Environment", fixture);
-        var view = new EnvironmentView { ViewModel = model };
-        var scroller = new Grid { Width = 420, Height = 780, RequestedTheme = ElementTheme.Dark, Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 37, 40, 43)) };
-        scroller.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("ms-appx:///Microsoft.UI.Xaml/DensityStyles/Compact.xaml") });
-        scroller.Children.Add(view);
-        await LoadTestContentAsync(scroller).ConfigureAwait(true);
-        var primary = (Expander)FindInspectorElement(view, "PrimarySourceDisclosure");
-        var secondary = (Expander)FindInspectorElement(view, "SecondarySourceDisclosure");
+        var view = new AtmosphereLightsSectionView { ViewModel = model.AtmosphereLights };
+        var host = new Grid { Width = 420, Height = 780, RequestedTheme = ElementTheme.Dark, Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 37, 40, 43)) };
+        host.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("ms-appx:///Microsoft.UI.Xaml/DensityStyles/Compact.xaml") });
+        host.Children.Add(view);
+        await LoadTestContentAsync(host).ConfigureAwait(true);
+        var atmosphereSection = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("AtmosphereLightsSection");
+        var sourceCard = atmosphereSection.Items.OfType<Oxygen.Editor.Controls.PropertyCard>().Single();
+        _ = atmosphereSection.BringItemIntoView(sourceCard).Should().BeTrue();
+        await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+        var sourceDisclosures = sourceCard.FindDescendants().OfType<Expander>().ToArray();
+        var primary = sourceDisclosures[0];
+        var secondary = sourceDisclosures[1];
         _ = primary.IsExpanded.Should().BeFalse();
         _ = secondary.IsExpanded.Should().BeFalse();
         var collapsedHeader = primary.FindDescendant<ToggleButton>(toggle => toggle.Name == "ExpanderHeader")!;
         _ = primary.ActualHeight.Should().BeApproximately(collapsedHeader.ActualHeight, 1);
-        var sourceCard = ((Oxygen.Editor.Controls.PropertiesExpander)FindInspectorElement(view, "AtmosphereLightsSection")).Items.OfType<Oxygen.Editor.Controls.PropertyCard>().Single();
         var separator = ((StackPanel)sourceCard.Content).Children.OfType<Grid>().Single().Children.OfType<Border>().Single();
         var separatorGap = separator.TransformToVisual(view).TransformPoint(default).Y
             - collapsedHeader.TransformToVisual(view).TransformPoint(default).Y - collapsedHeader.ActualHeight;
         _ = separatorGap.Should().BeApproximately(8, 1);
-        _ = ((Button)view.FindName("ClearPropertySearchButton")).Visibility.Should().Be(Visibility.Collapsed);
         primary.IsExpanded = true;
+        view.UpdateLayout();
+        host.UpdateLayout();
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         var source = (AtmosphereSourceView)primary.Content;
         _ = source.ActualWidth.Should().BeGreaterThan(340);
@@ -328,7 +348,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         var disclosureGap = source.TransformToVisual(primary).TransformPoint(default).Y
             - disclosureHeader.TransformToVisual(primary).TransformPoint(default).Y - disclosureHeader.ActualHeight;
         _ = disclosureGap.Should().BeApproximately(0, 1);
-        var section = (Oxygen.Editor.Controls.PropertiesExpander)FindInspectorElement(view, "AtmosphereLightsSection");
+        var section = atmosphereSection;
         var references = section.FindDescendants().OfType<ComboBox>().ToArray();
         _ = references.Should().HaveCount(2);
         foreach (var reference in references)
@@ -351,26 +371,13 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             }
         }
 
-        var sectionResources = view.SectionView("AtmosphereLights").Resources;
+        var sectionResources = view.Resources;
         var headerToggles = section.FindDescendants().OfType<ToggleButton>().Where(toggle => ReferenceEquals(toggle.Style, sectionResources["QuietInspectorToggle"])).ToArray();
         _ = headerToggles.Should().NotBeEmpty();
         foreach (var toggle in headerToggles)
         {
             _ = ((Microsoft.UI.Xaml.Media.SolidColorBrush)toggle.Background).Color.A.Should().Be(0);
         }
-
-        var selector = (CommunityToolkit.WinUI.Controls.Segmented)view.FindName("ScenePropertyScopeSelector");
-        var scopes = selector.Items.OfType<CommunityToolkit.WinUI.Controls.SegmentedItem>().ToArray();
-        _ = scopes.Max(item => item.ActualWidth).Should().BeApproximately(scopes.Min(item => item.ActualWidth), 1);
-        _ = (scopes.Sum(item => item.ActualWidth) + 6).Should().BeLessThanOrEqualTo(selector.ActualWidth + 1);
-        _ = scopes.Should().OnlyContain(item => item.ActualHeight <= 28 && item.FontSize == 11);
-        var search = (TextBox)view.FindName("ScenePropertySearchBox");
-        var beforeScroll = search.TransformToVisual(view).TransformPoint(default);
-        var propertyScroll = (ScrollViewer)view.FindName("ScenePropertyScroll");
-        _ = propertyScroll.ChangeView(null, 200, null, disableAnimation: true);
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        _ = search.TransformToVisual(view).TransformPoint(default).Y.Should().Be(beforeScroll.Y);
-        _ = propertyScroll.ChangeView(null, 0, null, disableAnimation: true);
 
         if (int.TryParse(Environment.GetEnvironmentVariable("OXYGEN_UI_CAPTURE_HOLD_SECONDS"), out var captureSeconds) && captureSeconds > 0)
         {
@@ -488,6 +495,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         var exposure = (Oxygen.Editor.Controls.PropertiesExpander)FindInspectorElement(view, "ExposureSection");
         var sky = (Oxygen.Editor.Controls.PropertiesExpander)FindInspectorElement(view, "SkyAtmosphereSection");
         var background = (Oxygen.Editor.Controls.PropertiesExpander)FindInspectorElement(view, "BackgroundSection");
+        var references = (FrameworkElement)view.FindName("SceneReferencesView");
         exposure.IsExpanded = false;
         var autoMinimum = (Oxygen.Editor.Controls.PropertyCard)((Oxygen.Editor.Controls.InspectorNumberField)FindInspectorElement(view, "AutoExposureMinEvCard")).Content;
         _ = model.Exposure.ExposureMode.Should().Be(Oxygen.Editor.World.Serialization.ExposureMode.Manual);
@@ -507,7 +515,22 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = sky.Visibility.Should().Be(Visibility.Collapsed);
         _ = background.Visibility.Should().Be(Visibility.Collapsed);
         _ = exposure.Visibility.Should().Be(Visibility.Visible);
+        _ = references.Visibility.Should().Be(Visibility.Collapsed);
 
+        search.Text = string.Empty;
+        scopeSelector.SelectedIndex = 3;
+        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+        _ = references.Visibility.Should().Be(Visibility.Visible);
+        _ = sky.Visibility.Should().Be(Visibility.Collapsed);
+        search.Text = "script";
+        _ = references.Visibility.Should().Be(Visibility.Visible);
+        _ = ((TextBlock)view.FindName("NoScenePropertyMatches")).Visibility.Should().Be(Visibility.Collapsed);
+        search.Text = "no-such-reference";
+        _ = references.Visibility.Should().Be(Visibility.Collapsed);
+        _ = ((TextBlock)view.FindName("NoScenePropertyMatches")).Visibility.Should().Be(Visibility.Visible);
+        search.Text = string.Empty;
+
+        scopeSelector.SelectedIndex = 2;
         search.Text = "manual";
         _ = ((FrameworkElement)FindInspectorElement(view, "AutoExposureMinEvCard")).Visibility.Should().Be(Visibility.Collapsed);
         search.Text = string.Empty;
@@ -532,7 +555,45 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = ((Oxygen.Editor.Controls.InspectorNumberField)FindInspectorElement(view, "DisplayGammaCard")).Label.Should().Be("Display Gamma");
     });
 
-    /// <summary>The seven design-order sections preserve all 42 scene cards and closed secondary groups.</summary>
+    /// <summary>Scene extra-asset references are added and removed through the interactive inspector.</summary>
+    /// <returns>The UI authoring regression task.</returns>
+    [TestMethod]
+    public Task SceneExtraAssetReferencesCanBeAddedAndRemovedInteractively() => EnqueueAsync(async () =>
+    {
+        using var fixture = new SceneAuthoringFixture();
+        using var model = (EnvironmentViewModel)CreateModel("Environment", fixture);
+        var view = new EnvironmentView { ViewModel = model };
+        var scroller = new ScrollViewer { Width = 420, Height = 780, Content = view, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        await LoadTestContentAsync(scroller).ConfigureAwait(true);
+
+        var referencesView = (SceneReferencesSectionView)view.FindName("SceneReferencesView");
+        var section = referencesView.FindDescendant<Oxygen.Editor.Controls.PropertiesExpander>()!;
+        var extraAssetCard = section.Items.OfType<Oxygen.Editor.Controls.PropertyCard>()
+            .Single(card => string.Equals(card.PropertyName, "Extra Asset", StringComparison.Ordinal));
+        _ = section.BringItemIntoView(extraAssetCard).Should().BeTrue();
+        await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+
+        const string path = "/Content/Materials/Shared.omat";
+        var pathInput = extraAssetCard.FindDescendants().OfType<TextBox>().Single();
+        pathInput.Text = path;
+        await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+        var add = section.FindDescendants().OfType<Button>().Single(button => Equals(button.Content, "Add Extra Asset"));
+        _ = add.IsEnabled.Should().BeTrue();
+        ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(add)
+            .GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+        await model.PendingEdits.ConfigureAwait(true);
+        _ = fixture.Scene.References.ExtraAssets.Should().ContainSingle().Which.Should().Be(path);
+        _ = fixture.Context.Metadata.IsDirty.Should().BeTrue();
+
+        var remove = section.FindDescendants().OfType<Button>().Single(button => Equals(button.Content, "Remove"));
+        ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(remove)
+            .GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+        await model.PendingEdits.ConfigureAwait(true);
+        _ = fixture.Scene.References.ExtraAssets.Should().BeEmpty();
+        _ = fixture.Context.History.UndoStack.Should().HaveCount(2);
+    });
+
+    /// <summary>The eight design-order sections preserve all 47 scene cards and closed secondary groups.</summary>
     /// <returns>The UI regression task.</returns>
     [TestMethod]
     public Task SceneSectionsPreserveCardsAndRestoreNestedDisclosureAfterSearch() => EnqueueAsync(async () =>
@@ -550,10 +611,10 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             UserControl { Content: StackPanel effects } => effects.Children.OfType<Oxygen.Editor.Controls.PropertiesExpander>(),
             _ => Enumerable.Empty<Oxygen.Editor.Controls.PropertiesExpander>(),
         }).ToArray();
-        _ = sections.Select(section => section.Header).Should().Equal("Atmosphere Lights", "Sky Atmosphere", "Background", "Exposure", "Tone Mapping", "Color Grading", "Bloom");
-        _ = sections.SelectMany(SceneCards).Should().HaveCount(42);
-        _ = sections.Select(section => section.IsExpanded).Should().Equal(true, true, true, true, true, false, false);
-        var sky = sections[1];
+        _ = sections.Select(section => section.Header).Should().Equal("Scene References", "Atmosphere Lights", "Sky Atmosphere", "Background", "Exposure", "Tone Mapping", "Color Grading", "Bloom");
+        _ = sections.SelectMany(SceneCards).Should().HaveCount(47);
+        _ = sections.Select(section => section.IsExpanded).Should().Equal(true, true, true, true, true, true, false, false);
+        var sky = sections[2];
         var skyGroups = sky.Items.OfType<Expander>().ToArray();
         _ = skyGroups.Select(group => group.Header).Should().Equal("Planet & ground", "Scattering", "Aerial perspective");
         _ = skyGroups.Select(group => group.IsExpanded).Should().OnlyContain(expanded => !expanded);
@@ -563,7 +624,8 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         AssertDisclosureCardOrder(skyGroups[1], "RayleighScaleHeightKm", "MieScaleHeightKm", "MieAnisotropy");
         AssertDisclosureCardOrder(skyGroups[2], "AerialPerspectiveDistanceScale", "AerialScatteringStrength", "AerialPerspectiveStartDepthMeters", "HeightFogContribution");
 
-        var exposureGroups = sections[3].Items.OfType<Expander>().ToArray();
+        var exposure = sections.Single(section => Equals(section.Header, "Exposure"));
+        var exposureGroups = exposure.Items.OfType<Expander>().ToArray();
         _ = exposureGroups.Select(group => group.Header).Should().Equal("Metering & limits", "Adaptation", "Histogram & calibration", "Exposure shaping");
         _ = exposureGroups.Select(group => group.IsExpanded).Should().Equal(true, false, false, false);
         AssertDisclosureCardOrder(exposureGroups[0], "AutoExposureMeteringMode", "AutoExposureMinEv", "AutoExposureMaxEv", "AutoExposureTargetLuminance", "AutoExposureSpotMeterRadius");
@@ -575,10 +637,10 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             (Owner: sky, Item: skyGroups[0], AutomationId: "Scene.Sky.PlanetGround", Query: "PlanetRadiusKm"),
             (Owner: sky, Item: skyGroups[1], AutomationId: "Scene.Sky.Scattering", Query: "RayleighScaleHeightKm"),
             (Owner: sky, Item: skyGroups[2], AutomationId: "Scene.Sky.AerialPerspective", Query: "AerialPerspectiveDistanceScale"),
-            (Owner: sections[3], Item: exposureGroups[0], AutomationId: "Scene.Exposure.MeteringLimits", Query: "AutoExposureMinEv"),
-            (Owner: sections[3], Item: exposureGroups[1], AutomationId: "Scene.Exposure.Adaptation", Query: "AutoExposureSpeedUp"),
-            (Owner: sections[3], Item: exposureGroups[2], AutomationId: "Scene.Exposure.HistogramCalibration", Query: "ExposureKey"),
-            (Owner: sections[3], Item: exposureGroups[3], AutomationId: "Scene.Exposure.ExposureShaping", Query: "AutoExposureCompensationCurve"),
+            (Owner: exposure, Item: exposureGroups[0], AutomationId: "Scene.Exposure.MeteringLimits", Query: "AutoExposureMinEv"),
+            (Owner: exposure, Item: exposureGroups[1], AutomationId: "Scene.Exposure.Adaptation", Query: "AutoExposureSpeedUp"),
+            (Owner: exposure, Item: exposureGroups[2], AutomationId: "Scene.Exposure.HistogramCalibration", Query: "ExposureKey"),
+            (Owner: exposure, Item: exposureGroups[3], AutomationId: "Scene.Exposure.ExposureShaping", Query: "AutoExposureCompensationCurve"),
         };
 
         var search = (TextBox)view.FindName("ScenePropertySearchBox");

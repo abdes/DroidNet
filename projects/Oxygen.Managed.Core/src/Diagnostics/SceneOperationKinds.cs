@@ -92,6 +92,11 @@ public static class SceneOperationKinds
     public const string EditEnvironment = "Scene.Environment.Edit";
 
     /// <summary>
+    /// Scene-level asset reference edit.
+    /// </summary>
+    public const string EditSceneReferences = "Scene.References.Edit";
+
+    /// <summary>
     /// Scene explorer layout folder creation.
     /// </summary>
     public const string ExplorerFolderCreate = "Scene.ExplorerFolder.Create";

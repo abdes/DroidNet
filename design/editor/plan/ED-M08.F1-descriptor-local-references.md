@@ -1,45 +1,66 @@
 # ED-M08.F1 — Descriptor-local reference format
 
-Status: **in progress — F1.1 validated; F1.2/F1.3 and the F1.4 native and managed cutovers implemented and committed; editor scene-reference authoring and F1 qualification open**
+Status: **in progress — F1.1 validated; native and managed format cutovers and editor scene-reference authoring implemented in the worktree; F1 qualification open**
 
 **Summary:** replace descriptor-specific packaging rewrites with native reference
 tables. Follow [scope](#scope), [delivery](#delivery) and [acceptance](#acceptance).
 Execute after [M08.1.9](ED-M08-runtime-parity-and-standalone-validation.md#m081-remaining-increments)
 and before M08.2. Existing M08.2–M08.8 identifiers remain unchanged.
 
-| Outcome                                                                                                                                              | Remaining                                                                                                                                                                           | Evidence                                                                                                                                                                                                                                     |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native reference tables, scene-local scripting, generic packaging, managed loose-index consumers and shared current-version definitions implemented. | The five [remaining work](#remaining-work) items: editor scene-reference authoring, managed validation, load-cost measurement, two layer acceptance cases and the F1 result record. | Release install and 28 native test programs pass; 16 maintained scenes and four retained models recooked; RenderScene retained-library check passes. The managed changes are committed but not yet built, tested or editor-validated for F1. |
+| Outcome                                                                                                                                                                                | Remaining                                                                                                                                                                                                                                | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Native reference tables, scene-local scripting, generic packaging, managed loose-index consumers, shared current-version definitions and editor scene-reference authoring implemented. | Maintained-project cook/package qualification, origin-first lookup/cache-reuse evidence, load-cost measurement and the final F1 result record. Native-pointer UI interaction qualification is blocked by loss of test-window foreground. | Focused verification: ContentPipeline descriptor tests 40/40; typed-reference discovery and typed-reference dependency-closure cook 2/2; material-texture integration tests 2/2; ContentBrowser tests 151/151; WorldEditor Unit tests 405/405; World tests 77/77; extra-asset UI interaction 1/1; InspectorBindingTests 37/37. Seven native-pointer caption rows could not execute because another process took foreground; no maintained-project or load-cost qualification was run. |
 
 ## Remaining work
 
 M08.F1 closes when every item below is done and recorded. Items 1–2 gate the
-editor side of the cutover; items 3–5 close the format plan's own acceptance.
+editor side of the cutover; items 3 and 5 close the format plan's own acceptance.
 
-1. **Editor scene-reference authoring (the editor portion of F1.4).** Native scene
-   descriptor v10 accepts scene-level `scripts`, `input_actions`,
-   `input_mapping_contexts`, `physics_sidecars` and `extra_assets` references; the
-   editor authors none of them. [`SceneData`](../../../projects/Oxygen.Editor.World/src/Serialization/SceneData.cs)
-   has no serialized reference collections and
-   [`SceneDescriptorGenerator`](../../../projects/Oxygen.Editor.ContentPipeline/src/SceneDescriptorGenerator.cs)
-   emits `References(materialRefs, ExtraAssets: null)`. Deliver backward-compatible
-   serialized scene reference data, assignment and validation in the editor,
-   save/reload round-trip, emission of every supported native v10 array,
-   project/library ownership and expected-type resolution, and descriptor,
-   round-trip and cook-closure tests.
-2. **Managed validation of the committed F1 changes.** Build the changed managed
-   projects, run their owning suites, exercise the editor dependency-closure and
-   cook workflow, and clear any diagnostic these changes introduce. No build, test
-   or editor run for them is recorded yet.
-3. **Load cost.** Measure the added reference metadata and load cost against the
-   removed relocation and inspection work, with shader evaluation and rendering
-   hot paths unchanged.
-4. **Two layer acceptance cases have no directly named native test:** flattening an
-   ordered layer set preserves effective content, and reversing conflicting inputs
-   changes the winner. Add the cases or record the equivalent existing evidence.
+1. **Editor scene-reference authoring (the editor portion of F1.4) — implemented
+   and focused-tested.** Scene files now have backward-compatible serialized
+   reference collections, and descriptor generation emits the native v10
+   `materials`, `scripts`, `input_actions`, `input_mapping_contexts`,
+   `physics_sidecars` and `extra_assets` arrays. Typed references are authored as
+   already-cooked project/library outputs; F1 does not infer or schedule source
+   recipes. Physics-scene/sidecar pairing remains native package-planner
+   validation. Focused descriptor, legacy-compatibility, extension-validation,
+   cooked-reference discovery, catalog, serialization, inspector scope/binding,
+   and an editor-to-native cooked-library dependency-closure test pass. The
+   InspectorBindingTests passes 37/37, and the extra-asset add/remove interaction
+   passes 1/1. The native-pointer numeric-caption rows remain unqualified because
+   their test window lost foreground to another process.
+2. **Managed cook/editor qualification.** ContentPipeline Unit and Integration
+   test projects build. Focused descriptor tests pass 40/40; typed-reference
+   discovery and the editor-to-native dependency-closure cook pass 1/1 each;
+   material-texture integration tests pass 2/2; ContentBrowser tests pass 151/151;
+   WorldEditor Unit tests pass 405/405; World tests pass 77/77; and
+   InspectorBindingTests pass 37/37. The extra-asset UI interaction passes 1/1.
+   Seven native-pointer caption rows were blocked because the test window lost
+   foreground to another process; do not treat those as verified interaction
+   results. Native `RejectsInvalidPhysicsScenePairs` and
+   `PatchIncludesBothMembersOfPhysicsScenePair` tests cover pair rejection and
+   patch completeness; `RejectsInvalidAssetReferenceGraphs` covers native
+   missing/type-mismatched asset dependencies. A focused native-backed scene
+   cook now verifies the editor-to-native typed-reference boundary. A broader
+   maintained-project cook/package qualification and recorded origin-first
+   dependency lookup/cache reuse across changed views remain outstanding.
+3. **Load cost — decision/evidence required.** No workload or numeric budget is
+   specified, so do not invent a pass/fail threshold. For the handoff, choose:
+   (a) measure descriptor metadata bytes and scene-load/cook timings on maintained
+   projects and report results without a threshold; (b) set an explicit budget
+   and qualify against it; or (c) defer this gate and keep F1 in progress. Any
+   measurement must compare added metadata/load work with removed relocation and
+   inspection work, with shader evaluation and rendering hot paths unchanged.
+4. **Ordered-layer acceptance evidence — covered by existing native tests.**
+   [`DeterministicPlanningPreservesDeclaredLayerPriority`](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/Test/Pak/PakPlanBuilder_test.cpp)
+   verifies that reversing conflicting inputs changes the winner.
+   [`IncrementalPatchRevertsReplacementAndPreservesDeletion`](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/Test/Pak/PakPlanBuilder_test.cpp)
+   verifies that flattening the ordered layers preserves effective content,
+   including a replacement and deletion.
 5. **Record the M08.F1 result.** Add the `ED-M08.F1` validation row with the exact
    native build/test counts, the recook set, the SDK and Interop state, and the
-   managed suite results.
+   managed suite results. Update it only after the outstanding qualification
+   gates above have evidence; current managed test results are recorded here.
 
 ## Scope
 
@@ -59,34 +80,29 @@ container-global script binding/parameter coordination. Resource aggregation and
 placement remain necessary. No reflection framework, universal graph or general
 content-addressed database is included.
 
-### Editor reference authoring gap
+### Editor reference authoring
 
-Native scene descriptor v10 accepts scene-level `scripts`, `input_actions`,
-`input_mapping_contexts`, `physics_sidecars`, and `extra_assets` references.
-The managed editor currently emits only `materials`; its `SceneData` model has no
-serialized collections or authoring workflow for the other reference kinds.
-`ProjectAssetKeyIndex` now discovers project descriptors for scripts, input
-actions, mapping contexts, and physics scenes, but this does not make them
-authored or emitted by a scene.
-
-Complete this editor portion of F1.4 as [remaining work](#remaining-work) item 1: define backward-compatible
-serialized scene reference data; add assignment, validation, and save/reload
-behavior in the editor; emit all supported native v10 reference arrays; resolve
-project/library ownership and expected asset types; and add descriptor,
-round-trip, and cook-closure coverage. Until then, scene-local scripting and
-these reference kinds are native-format capabilities, not editor capabilities.
+Scene documents now serialize typed script, input-action, input-mapping-context,
+physics-sidecar, and extra-asset references. The inspector exposes typed catalog
+pickers, removal and extra-path controls; edits are undoable and validated before
+the scene is marked dirty. Descriptor generation emits the native v10 reference
+arrays, and cook dependency discovery retains those references as cooked outputs
+rather than source-cook jobs. The remaining editor-side work is qualification:
+focused inspector tests and a native-backed script-reference cook pass; the
+broader inspector suite has two legacy environment-test failures, and interactive
+editor validation remains unperformed.
 
 Wire details belong in the existing Data packing and Cooker PAK designs before
 implementation; do not duplicate their field layouts in this plan.
 
 ## Delivery
 
-| Slice                  | State       | Work                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ---------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| F1.1 Contract          | validated   | Owner contracts cover current asset types, scripts, dependency kinds, absent/fallback/error texture semantics, bounds and versions. Preserve successful model import with diagnostics for missing textures.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| F1.2 Producers/readers | in_progress | Native emitters/readers and Inspector migrated; shared version catalog added. PakGen and its dependencies are removed; external tests use native owning boundaries. Exact reference-inventory checks and per-descriptor publication gates are implemented; frozen physics bindings and shared scene-load scopes are implemented. Binding resolution stays on loading paths. Remaining: record closure evidence for origin-first dependency lookup and cache reuse across changed views, which no current test or record names, and run the pre-commit checks on the changed files.                                                                                                                                                    |
-| F1.3 Packaging         | in_progress | Generic binding relocation implemented; descriptor rewrites and global script tables removed. Ordered composition, embedded catalogs, tombstones, exact adjacent baselines and patch-of-patch input are implemented with native coverage (`PakPlanBuilderTest.DeterministicPlanningPreservesDeclaredLayerPriority`, `PakPlanBuilderTest.IncrementalPatchRevertsReplacementAndPreservesDeletion`, `PatchResolutionPolicyTest.*`). Remaining: the two layer acceptance cases in [remaining work](#remaining-work) item 4 and the pre-commit checks on the changed files.                                                                                                                                                                |
-| F1.4 Cutover           | in_progress | Native SDKs, maintained scenes, shared PAK and four retained model imports refreshed. RenderScene retained-library loading passes. Managed loose-index v3 readers retain reference-block metadata opaquely; editor dependency reports preserve typed native references, validate expected target types, and use the v2 wire/cache contract while only Asset targets enter dependency closure. Project key discovery covers current reference-target descriptor types. Editor scene-level authoring/emission for non-material references remains ([remaining work](#remaining-work) item 1); managed build/test/editor validation of these changes is not recorded; recook and Interop re-validation follow the editor emitter change. |
+| Slice                  | State       | Work                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ---------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F1.1 Contract          | validated   | Owner contracts cover current asset types, scripts, dependency kinds, absent/fallback/error texture semantics, bounds and versions. Preserve successful model import with diagnostics for missing textures.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| F1.2 Producers/readers | in_progress | Native emitters/readers and Inspector migrated; shared version catalog added. PakGen and its dependencies are removed; external tests use native owning boundaries. Exact reference-inventory checks and per-descriptor publication gates are implemented; frozen physics bindings and shared scene-load scopes are implemented. Binding resolution stays on loading paths. Remaining: record closure evidence for origin-first dependency lookup and cache reuse across changed views, which no current test or record names, and run the pre-commit checks on the changed files.                                                                                                                                                                                                |
+| F1.3 Packaging         | in_progress | Generic binding relocation implemented; descriptor rewrites and global script tables removed. Ordered composition, embedded catalogs, tombstones, exact adjacent baselines and patch-of-patch input are implemented with native coverage (`PakPlanBuilderTest.DeterministicPlanningPreservesDeclaredLayerPriority`, `PakPlanBuilderTest.IncrementalPatchRevertsReplacementAndPreservesDeletion`, `PatchResolutionPolicyTest.*`). The ordered-layer acceptance tests cited in [remaining work](#remaining-work) item 4 cover the required cases; final F1 qualification and changed-file checks remain.                                                                                                                                                                            |
+| F1.4 Cutover           | in_progress | Native SDKs, maintained scenes, shared PAK and four retained model imports refreshed. RenderScene retained-library loading passes. Managed loose-index v3 readers retain reference-block metadata opaquely; editor dependency reports preserve typed native references, validate expected target types, and use the v2 wire/cache contract while only Asset targets enter dependency closure. Project key discovery and editor scene-reference authoring/emission now cover the current reference-target descriptor types. Focused managed tests pass as recorded in [remaining work](#remaining-work); UI test compilation, two integration failures, end-to-end cook/editor qualification, interactive validation, load-cost measurement and the final F1 result record remain. |
 
 Implementation boundaries:
 
@@ -120,10 +136,11 @@ owns runtime binding and cache behavior. The
 [Cooker layer contract](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/Docs/Pak/paktool_design.md#ordered-layers-and-patch-baselines)
 owns composition and incremental/cumulative patch baselines.
 
-F1.2 must close origin-first dependency lookup and cache reuse across changed
-views. F1.3 must preserve declared source order, compose base catalogs with
-replacement/deletion semantics and reject incompatible types. These changes are
-in progress; approval is not validation.
+F1.2 still needs recorded evidence for origin-first dependency lookup and cache
+reuse across changed views. F1.3 must preserve declared source order, compose
+base catalogs with replacement/deletion semantics and reject incompatible types;
+the cited native tests cover the ordered-priority, replacement, and deletion
+acceptance cases. These changes remain in progress pending F1 qualification.
 
 ## Acceptance
 

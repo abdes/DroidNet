@@ -25,6 +25,9 @@ public sealed partial class AssetTypeToBrushConverter : IValueConverter
             {
                 AssetKind.Image or AssetKind.Texture => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x3C, 0x9D, 0xD0)),
                 AssetKind.Scene => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xF7, 0xB5, 0x00)),
+                AssetKind.Script => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x8A, 0x6F, 0xD1)),
+                AssetKind.InputAction or AssetKind.InputMappingContext => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x39, 0x8A, 0xA7)),
+                AssetKind.PhysicsScene => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xD1, 0x80, 0x46)),
                 AssetKind.Geometry => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x86, 0xC0, 0x44)),
                 AssetKind.Material => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xB5, 0x77, 0xF2)),
                 AssetKind.Folder => TryGetResourceBrush("FolderAssetBrush") ?? new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xE6, 0xB8, 0x00)),

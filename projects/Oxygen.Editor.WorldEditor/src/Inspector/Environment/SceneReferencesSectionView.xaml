@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.World.Inspector.Environment.SceneReferencesSectionView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Inspector/SceneInspectorStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <editorcontrols:PropertiesExpander
+        HorizontalAlignment="Stretch"
+        HorizontalContentAlignment="Stretch"
+        Description="Typed scene asset references and additional native virtual paths."
+        Header="Scene References"
+        IsExpanded="True"
+        Tag="Scene References;Scripts;Input Actions;Input Mapping Contexts;Physics Sidecars;Extra Assets">
+        <editorcontrols:PropertiesExpander.Items>
+            <TextBlock
+                FontSize="12"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="Only already-cooked assets can be assigned here. Unavailable references are retained until explicitly removed."
+                TextWrapping="Wrap" />
+
+            <TextBlock
+                FontSize="12"
+                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                TextWrapping="Wrap"
+                Visibility="{x:Bind ViewModel.HasError, Converter={StaticResource BoolToVisibilityConverter}, Mode=OneWay}" />
+
+            <StackPanel
+                Orientation="Horizontal"
+                Spacing="6"
+                Visibility="{x:Bind ViewModel.HasCatalogNotice, Converter={StaticResource BoolToVisibilityConverter}, Mode=OneWay}">
+                <TextBlock
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{x:Bind ViewModel.CatalogNotice, Mode=OneWay}"
+                    TextWrapping="Wrap" />
+                <Button
+                    Click="RefreshCatalog_Click"
+                    Content="Retry"
+                    IsEnabled="{x:Bind ViewModel.CanRetryCatalog, Mode=OneWay}" />
+            </StackPanel>
+
+            <editorcontrols:PropertyCard PropertyName="Script">
+                <StackPanel Spacing="5">
+                    <ComboBox
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.Name="Script reference asset"
+                        IsEnabled="{Binding CanEdit}"
+                        ItemsSource="{x:Bind ViewModel.ScriptCandidates, Mode=OneWay}"
+                        SelectedItem="{x:Bind ViewModel.SelectedScript, Mode=TwoWay}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding DisplayName}" />
+                                    <TextBlock
+                                        FontSize="11"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="{Binding DisplayPath}"
+                                        TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button
+                        HorizontalAlignment="Right"
+                        Click="AddScript_Click"
+                        Content="Add Script"
+                        IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" />
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.Scripts, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding DisplayName}" />
+                                        <TextBlock
+                                            FontSize="11"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{Binding StatusText}" />
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="1"
+                                        Click="RemoveReference_Click"
+                                        Content="Remove"
+                                        IsEnabled="{Binding CanEdit}"
+                                        Tag="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </editorcontrols:PropertyCard>
+
+            <editorcontrols:PropertyCard PropertyName="Input Action">
+                <StackPanel Spacing="5">
+                    <ComboBox
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.Name="Input action reference asset"
+                        IsEnabled="{Binding CanEdit}"
+                        ItemsSource="{x:Bind ViewModel.InputActionCandidates, Mode=OneWay}"
+                        SelectedItem="{x:Bind ViewModel.SelectedInputAction, Mode=TwoWay}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding DisplayName}" />
+                                    <TextBlock
+                                        FontSize="11"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="{Binding DisplayPath}"
+                                        TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button
+                        HorizontalAlignment="Right"
+                        Click="AddInputAction_Click"
+                        Content="Add Input Action"
+                        IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" />
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.InputActions, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding DisplayName}" />
+                                        <TextBlock
+                                            FontSize="11"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{Binding StatusText}" />
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="1"
+                                        Click="RemoveReference_Click"
+                                        Content="Remove"
+                                        IsEnabled="{Binding CanEdit}"
+                                        Tag="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </editorcontrols:PropertyCard>
+
+            <editorcontrols:PropertyCard PropertyName="Input Mapping Context">
+                <StackPanel Spacing="5">
+                    <ComboBox
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.Name="Input mapping context reference asset"
+                        IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}"
+                        ItemsSource="{x:Bind ViewModel.InputMappingContextCandidates, Mode=OneWay}"
+                        SelectedItem="{x:Bind ViewModel.SelectedInputMappingContext, Mode=TwoWay}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding DisplayName}" />
+                                    <TextBlock
+                                        FontSize="11"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="{Binding DisplayPath}"
+                                        TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button
+                        HorizontalAlignment="Right"
+                        Click="AddInputMappingContext_Click"
+                        Content="Add Mapping Context"
+                        IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" />
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.InputMappingContexts, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding DisplayName}" />
+                                        <TextBlock
+                                            FontSize="11"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{Binding StatusText}" />
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="1"
+                                        Click="RemoveReference_Click"
+                                        Content="Remove"
+                                        IsEnabled="{Binding CanEdit}"
+                                        Tag="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </editorcontrols:PropertyCard>
+
+            <editorcontrols:PropertyCard PropertyName="Physics Sidecar">
+                <StackPanel Spacing="5">
+                    <ComboBox
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.Name="Physics sidecar reference asset"
+                        IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}"
+                        ItemsSource="{x:Bind ViewModel.PhysicsSidecarCandidates, Mode=OneWay}"
+                        SelectedItem="{x:Bind ViewModel.SelectedPhysicsSidecar, Mode=TwoWay}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding DisplayName}" />
+                                    <TextBlock
+                                        FontSize="11"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="{Binding DisplayPath}"
+                                        TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button
+                        HorizontalAlignment="Right"
+                        Click="AddPhysicsSidecar_Click"
+                        Content="Add Physics Sidecar"
+                        IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" />
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.PhysicsSidecars, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding DisplayName}" />
+                                        <TextBlock
+                                            FontSize="11"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{Binding StatusText}" />
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="1"
+                                        Click="RemoveReference_Click"
+                                        Content="Remove"
+                                        IsEnabled="{Binding CanEdit}"
+                                        Tag="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </editorcontrols:PropertyCard>
+
+            <editorcontrols:PropertyCard PropertyName="Extra Asset">
+                <StackPanel Spacing="5">
+                    <TextBlock
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="Absolute canonical native virtual path, for example /Content/Materials/Shared.omat."
+                        TextWrapping="Wrap" />
+                    <TextBox
+                        AutomationProperties.Name="Extra native virtual asset path"
+                        IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}"
+                        PlaceholderText="/Content/..."
+                        Text="{x:Bind ViewModel.ExtraAssetText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <Button
+                        HorizontalAlignment="Right"
+                        Click="AddExtraAsset_Click"
+                        Content="Add Extra Asset"
+                        IsEnabled="{x:Bind ViewModel.CanAddExtraAsset, Mode=OneWay}" />
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.ExtraAssets, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        Text="{Binding Path}"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <Button
+                                        Grid.Column="1"
+                                        Click="RemoveExtraAsset_Click"
+                                        Content="Remove"
+                                        IsEnabled="{Binding CanEdit}"
+                                        Tag="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </editorcontrols:PropertyCard>
+        </editorcontrols:PropertiesExpander.Items>
+    </editorcontrols:PropertiesExpander>
+</UserControl>

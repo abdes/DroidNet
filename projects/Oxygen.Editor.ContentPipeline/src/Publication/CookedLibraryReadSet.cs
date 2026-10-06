@@ -229,7 +229,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         foreach (var uri in requested)
         {
             var match = this.roots.AsEnumerable().Reverse().Select(root => (root, record: root.Assets.FirstOrDefault(record => record.Uri == uri))).FirstOrDefault(static item => item.record is not null);
-            var owned = HasProjectOwner(graph, uri);
+            var owned = HasProjectOwner(graph, uri) || this.knownProjectOutputs.Contains(uri);
             if (match.record?.Cooked is { } asset)
             {
                 var libraryPriority = priority.Single(item => string.Equals(item.source.Name, match.root.Name, StringComparison.OrdinalIgnoreCase)).index;
@@ -238,7 +238,17 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                     continue;
                 }
 
-                var expected = Path.GetExtension(uri.AbsolutePath).ToUpperInvariant() switch { ".OMAT" => 1, ".OGEO" => 2, ".OSCENE" => 3, _ => 0 };
+                var expected = Path.GetExtension(uri.AbsolutePath).ToUpperInvariant() switch
+                {
+                    ".OMAT" => 1,
+                    ".OGEO" => 2,
+                    ".OSCENE" => 3,
+                    ".OSCRIPT" => 4,
+                    ".OIACT" => 5,
+                    ".OIMAP" => 6,
+                    ".OPSCENE" => 9,
+                    _ => 0,
+                };
                 if (expected != 0 && asset.AssetType != expected)
                 {
                     AddIssue(uri, "asset_cook.library_type_mismatch", "The selected library asset has the wrong type.");

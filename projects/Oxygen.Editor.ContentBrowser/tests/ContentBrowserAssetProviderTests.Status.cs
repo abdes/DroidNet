@@ -68,6 +68,38 @@ public sealed partial class ContentBrowserAssetProviderTests
         _ = material.DerivedState.Should().Be(expected);
     }
 
+    /// <summary>Already-cooked-only reference kinds do not enter the source-cook status reader.</summary>
+    /// <returns>The asynchronous catalog projection regression.</returns>
+    [TestMethod]
+    public async Task TypedReferenceDescriptorsDoNotRequestSourceCookStatus()
+    {
+        using var workspace = new TempWorkspace();
+        const string relativePath = "Content/Scripts/Orbit.oscript.json";
+        var descriptorPath = workspace.SourcePath(relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(descriptorPath)!);
+        File.WriteAllText(descriptorPath, """{"name":"Orbit"}""");
+        var uri = new Uri("asset:///" + relativePath);
+        var catalog = new TestProjectAssetCatalog([new AssetRecord(uri)]);
+        var reader = new DelegateStatusReader((_, _, _) => throw new InvalidOperationException("Typed references are not source-cookable."));
+        var unavailableRuntime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
+        await using var runtimeLifetime = unavailableRuntime.ConfigureAwait(false);
+        using var provider = new ContentBrowserAssetProvider(
+            catalog,
+            CreateProjectContextService(workspace),
+            new TestProjectCookScopeProvider(workspace),
+            new AssetIdentityReducer(),
+            reader,
+            new CookDocumentRegistry(),
+            EmptyCookRuns(),
+            unavailableRuntime);
+        IReadOnlyList<ContentBrowserAssetItem> rows = [];
+        provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value), this.TestContext.CancellationToken);
+
+        await provider.RefreshAsync(AssetBrowserFilter.Default, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = rows.Should().ContainSingle().Which.Kind.Should().Be(AssetKind.Script);
+    }
+
     /// <summary>Concurrent consumers share work; a catalog burst supersedes only the in-flight snapshot.</summary>
     /// <returns>The asynchronous burst and caller-cancellation regression.</returns>
     [TestMethod]

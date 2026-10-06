@@ -15,4 +15,7 @@ public enum InspectorPropertyScope
 
     /// <summary>Exposure, tone mapping, grading and bloom.</summary>
     PostProcessing,
+
+    /// <summary>Typed scene asset references and additional native virtual paths.</summary>
+    SceneReferences,
 }

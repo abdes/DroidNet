@@ -23,15 +23,23 @@ public static class ContentPipelinePaths
         ArgumentNullException.ThrowIfNull(assetUri);
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedExtension);
 
-        if (!string.Equals(assetUri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase))
+        if (!assetUri.IsAbsoluteUri
+            || !string.Equals(assetUri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase)
+            || assetUri.Host.Length != 0
+            || assetUri.UserInfo.Length != 0
+            || assetUri.Port != -1
+            || assetUri.Query.Length != 0
+            || assetUri.Fragment.Length != 0)
         {
-            throw new ArgumentException($"Asset URI must use the '{AssetUris.Scheme}' scheme.", nameof(assetUri));
+            throw new ArgumentException(
+                $"Asset URI must be an absolute path-only '{AssetUris.Scheme}' URI.",
+                nameof(assetUri));
         }
 
         var path = Uri.UnescapeDataString(assetUri.AbsolutePath).Replace('\\', '/');
-        if (!path.StartsWith('/') || path.Contains("//", StringComparison.Ordinal))
+        if (!IsCanonicalVirtualPath(path))
         {
-            throw new ArgumentException("Asset URI path must be an absolute virtual path.", nameof(assetUri));
+            throw new ArgumentException("Asset URI path must be an absolute canonical virtual path.", nameof(assetUri));
         }
 
         var nativePath = path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
@@ -42,12 +50,20 @@ public static class ContentPipelinePaths
             ? throw new ArgumentException(
                 $"Asset URI '{assetUri}' does not normalize to '{expectedExtension}'.",
                 nameof(assetUri))
-            : nativePath.Contains("/../", StringComparison.Ordinal)
-            || nativePath.Contains("/./", StringComparison.Ordinal)
-            || nativePath.EndsWith("/..", StringComparison.Ordinal)
-            || nativePath.EndsWith("/.", StringComparison.Ordinal)
-            ? throw new ArgumentException("Asset URI path must not contain relative path segments.", nameof(assetUri))
             : nativePath;
+    }
+
+    /// <summary>Checks whether a virtual path is absolute and has no relative or empty segments.</summary>
+    /// <param name="path">The native virtual path.</param>
+    /// <returns><see langword="true"/> when the path is canonical.</returns>
+    public static bool IsCanonicalVirtualPath(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        return path.StartsWith('/')
+            && !path.Contains("//", StringComparison.Ordinal)
+            && !path.Contains('\\')
+            && !path.Contains('\0')
+            && !path.Split('/').Skip(1).Any(static segment => segment is "" or "." or "..");
     }
 
     /// <summary>

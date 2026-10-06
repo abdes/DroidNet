@@ -20,7 +20,10 @@ public sealed partial class AssetIdentityReducerTests
     [DataRow((byte)1, AssetKind.Material)]
     [DataRow((byte)2, AssetKind.Geometry)]
     [DataRow((byte)3, AssetKind.Scene)]
-    [DataRow((byte)4, AssetKind.Unknown)]
+    [DataRow((byte)4, AssetKind.Script)]
+    [DataRow((byte)5, AssetKind.InputAction)]
+    [DataRow((byte)6, AssetKind.InputMappingContext)]
+    [DataRow((byte)9, AssetKind.PhysicsScene)]
     [DataRow((byte)255, AssetKind.Unknown)]
     public void CookedRecordsUseIndexedTypeAndPhysicalDescriptor(byte assetType, AssetKind kind)
     {

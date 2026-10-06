@@ -7,9 +7,11 @@ using System.Text.Json.Nodes;
 using System.Text;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -67,6 +69,60 @@ public sealed class SourceDependencyDiscoveryTests
         var materialOnly = await discovery.DiscoverAsync(workspace.ProjectContext, [CookInputResolver.Resolve(workspace.ProjectContext, materialUri, ContentCookInputRole.Primary)], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = materialOnly.Assets.Should().ContainSingle().Which.AssetUri.Should().Be(materialUri);
         _ = materialOnly.Files.Should().NotContain(input => input.RelativePath.EndsWith(".oscene.json", StringComparison.Ordinal));
+    }
+
+    /// <summary>Typed scene references remain cooked identities rather than becoming source jobs.</summary>
+    /// <returns>The asynchronous dependency-discovery operation.</returns>
+    [TestMethod]
+    public async Task DiscoveryTracksTypedSceneReferencesAsCookedOutputs()
+    {
+        using var workspace = new CookWorkspace();
+        var sceneUri = new Uri("asset:///Content/Scenes/Main.oscene.json");
+        var scriptOutputUri = new Uri("asset:///Content/Scripts/Orbit.oscript");
+        var actionOutputUri = new Uri("asset:///Content/Input/Jump.oiact");
+        var mappingOutputUri = new Uri("asset:///Content/Input/Gameplay.oimap");
+        var physicsOutputUri = new Uri("asset:///Content/Physics/Main.opscene");
+        Uri[] typedReferences = [scriptOutputUri, actionOutputUri, mappingOutputUri, physicsOutputUri];
+        workspace.Scene.SetReferences(new SceneReferencesData
+        {
+            Scripts = [scriptOutputUri],
+            InputActions = [actionOutputUri],
+            InputMappingContexts = [mappingOutputUri],
+            PhysicsSidecars = [physicsOutputUri],
+        });
+        await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
+        var discovery = new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents));
+
+        var graph = await discovery.DiscoverAsync(
+            workspace.ProjectContext,
+            [CookInputResolver.Resolve(workspace.ProjectContext, sceneUri, ContentCookInputRole.Primary)],
+            this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = graph.Diagnostics.Should().BeEmpty();
+        _ = graph.Assets.Should().ContainSingle(input => input.AssetUri == sceneUri);
+        _ = graph.Dependencies[sceneUri].Should().BeEquivalentTo(typedReferences);
+        _ = graph.NativeReferences[sceneUri].Should().BeEquivalentTo(typedReferences);
+        _ = graph.PublishedReferences.Should().BeEquivalentTo(typedReferences);
+
+        using var missingOutputs = await CookedLibraryReadSet.AcquireAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var missingDiagnostics = missingOutputs.Apply(graph).Diagnostics
+            .Where(static issue => issue.Code == "asset_cook.library_reference_missing")
+            .ToArray();
+        _ = missingDiagnostics.Should().HaveCount(typedReferences.Length);
+        _ = missingDiagnostics.Should().Contain(issue => issue.Message.Contains(physicsOutputUri.AbsolutePath, StringComparison.Ordinal));
+
+        using var projectOutputs = await CookedLibraryReadSet.AcquireAsync(
+            workspace.ProjectContext,
+            this.TestContext.CancellationToken,
+            knownOutputs: typedReferences).ConfigureAwait(false);
+        _ = projectOutputs.Apply(graph).Diagnostics.Should().BeEmpty();
+
+        using var sourceOnly = await CookedLibraryReadSet.AcquireAsync(
+            workspace.ProjectContext,
+            this.TestContext.CancellationToken,
+            knownOutputs: [new Uri("asset:///Content/Scripts/Orbit.lua")]).ConfigureAwait(false);
+        _ = sourceOnly.Apply(graph).Diagnostics
+            .Should().Contain(issue => issue.Code == "asset_cook.library_reference_missing" && issue.Message.Contains(scriptOutputUri.AbsolutePath, StringComparison.Ordinal));
     }
 
     /// <summary>Settings created after discovery force rediscovery instead of silently disappearing from the input set.</summary>
@@ -284,7 +340,7 @@ public sealed class SourceDependencyDiscoveryTests
         const string source = "Content/Materials/Red.omat.json";
         workspace.WriteMaterial(source, "Red");
         var material = JsonNode.Parse(workspace.ReadText(source))!;
-        material["textures"] = JsonNode.Parse("""{"base_color":{"virtual_path":"/Content/Textures/Red.otex.json"}}""");
+        material["textures"] = JsonNode.Parse("""{"base_color":{"virtual_path":"/Content/Textures/Red.otex"}}""");
         workspace.WriteText(source, material.ToJsonString());
         var api = CreateSuccessfulApi(workspace, NativeSourceFactsFixture.AnalyzeAsync);
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
@@ -292,7 +348,11 @@ public sealed class SourceDependencyDiscoveryTests
         var result = await service.CookAssetAsync(new("asset:///" + source), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Status.Should().Be(OperationStatus.Failed);
-        _ = result.Diagnostics.Should().ContainSingle(diagnostic => diagnostic.AffectedVirtualPath == "/Content/Textures/Red.otex.json");
+        var diagnostic = result.Diagnostics.Should().ContainSingle(diagnostic =>
+            diagnostic.Code == "material.texture_reference_invalid"
+            && diagnostic.AffectedVirtualPath == "/Content/Materials/Red.omat.json"
+            && diagnostic.AffectedPath == Path.Combine(workspace.Root, "Content", "Textures", "Red.otex.json")).Which;
+        _ = diagnostic.Message.Should().Contain("texture channel 'base_color' texture descriptor is missing");
         _ = api.ImportedManifest.Should().BeNull();
         _ = workspace.ReadText(source).Should().Be(material.ToJsonString());
     }

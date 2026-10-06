@@ -75,6 +75,25 @@ public class SceneTests
     }
 
     [TestMethod]
+    public void HydratedSceneReferencesCannotBeMutatedOutsideSceneCommands()
+    {
+        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
+        var script = new Uri("asset:///Content/Scripts/Orbit.oscript");
+        scene.Hydrate(new SceneData
+        {
+            Id = scene.Id,
+            Name = scene.Name,
+            RootNodes = [],
+            References = new SceneReferencesData { Scripts = [script] },
+        });
+
+        var edit = () => scene.References.Scripts.Add(new Uri("asset:///Content/Scripts/Other.oscript"));
+
+        _ = edit.Should().Throw<NotSupportedException>();
+        _ = scene.References.Scripts.Should().ContainSingle().Which.Should().Be(script);
+    }
+
+    [TestMethod]
     public async Task Deserialize_MissingEnvironmentField_LoadsDefaults()
     {
         const string json = """
@@ -91,6 +110,37 @@ public class SceneTests
         var scene = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
 
         _ = scene.Environment.Should().Be(new SceneEnvironmentData());
+    }
+
+    [TestMethod]
+    public async Task SceneReferences_RoundTripAndRemainOmittedWhenEmpty()
+    {
+        var references = new SceneReferencesData
+        {
+            Scripts = [new("asset:///Content/Scripts/Orbit.oscript.json")],
+            InputActions = [new("asset:///Content/Input/Jump.oiact")],
+            InputMappingContexts = [new("asset:///Library/Input/Gameplay.oimap")],
+            PhysicsSidecars = [new("asset:///Content/Physics/Main.opscene")],
+            ExtraAssets = ["/.cooked/Extras/lookup.bin"],
+        };
+        var scene = Scene.CreateAndHydrate(this.ExampleProject, new SceneData
+        {
+            Id = Guid.NewGuid(),
+            Name = "Reference Round Trip",
+            References = references,
+        });
+        var serializer = new SceneSerializer(this.ExampleProject);
+        using var stream = new MemoryStream();
+
+        await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
+        stream.Position = 0;
+        var restored = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
+
+        _ = restored.References.Should().BeEquivalentTo(references);
+        using var emptyStream = new MemoryStream();
+        await serializer.SerializeAsync(emptyStream, new Scene(this.ExampleProject) { Name = "Empty References" }).ConfigureAwait(false);
+        var json = Encoding.UTF8.GetString(emptyStream.ToArray());
+        _ = json.Should().NotContain("\"References\"");
     }
 
     [TestMethod]

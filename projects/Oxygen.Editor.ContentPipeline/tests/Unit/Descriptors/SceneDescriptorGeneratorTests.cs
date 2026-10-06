@@ -649,6 +649,126 @@ public sealed class SceneDescriptorGeneratorTests
         _ = descriptor.RootElement.GetProperty("environment").GetProperty("sky_atmosphere").GetProperty("aerial_perspective_start_depth_m").GetSingle().Should().Be(value);
     }
 
+    [TestMethod]
+    public async Task SceneReferencesRoundTripAndEmitAllNativeCategoriesInCanonicalOrder()
+    {
+        using var workspace = new DescriptorWorkspace();
+        var scope = CreateScope(workspace);
+        var scene = CreateScene(workspace.Project);
+        scene.SetReferences(new SceneReferencesData
+        {
+            Scripts =
+            [
+                new("asset:///Content/Scripts/Z.oscript.json"),
+                new("asset:///Content/Scripts/A.oscript.json"),
+                new("asset:///Content/Scripts/A.oscript.json"),
+            ],
+            InputActions = [new("asset:///Content/Input/Jump.oiact.json")],
+            InputMappingContexts = [new("asset:///Content/Input/Gameplay.oimap.json")],
+            PhysicsSidecars = [new("asset:///Content/Physics/Main.opscene.json")],
+            ExtraAssets = ["/.cooked/Extras/Z.bin", "/.cooked/Extras/A.bin", "/.cooked/Extras/A.bin"],
+        });
+        var node = new Oxygen.Editor.World.SceneNode(scene) { Name = "Authored mesh" };
+        var geometryUri = new Uri("asset:///Content/Geometry/Imported.ogeo.json");
+        var geometry = new Oxygen.Editor.World.GeometryComponent
+        {
+            Name = "Geometry",
+            Geometry = new AssetReference<GeometryAsset>(geometryUri),
+        };
+        geometry.OverrideSlots.Add(new MaterialsSlot
+        {
+            Target = new(geometryUri, Guid.NewGuid(), new string('a', 64)),
+            Material = new AssetReference<MaterialAsset>(new Uri("asset:///Content/Materials/Surface.omat.json")),
+        });
+        _ = node.AddComponent(geometry);
+        scene.RootNodes.Add(node);
+
+        var savedScene = await RoundTripSavedSceneAsync(scene, workspace.Project).ConfigureAwait(false);
+        _ = savedScene.References.Scripts.Should().Equal(scene.References.Scripts);
+        _ = savedScene.References.PhysicsSidecars.Should().Equal(scene.References.PhysicsSidecars);
+        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var result = await generator.GenerateAsync(savedScene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.Diagnostics.Should().BeEmpty();
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
+        var references = document.RootElement.GetProperty("references");
+        _ = references.GetProperty("materials").EnumerateArray().Select(static path => path.GetString())
+            .Should().Equal("/Content/Materials/Surface.omat");
+        _ = references.GetProperty("scripts").EnumerateArray().Select(static path => path.GetString())
+            .Should().Equal("/Content/Scripts/A.oscript", "/Content/Scripts/Z.oscript");
+        _ = references.GetProperty("input_actions").EnumerateArray().Select(static path => path.GetString())
+            .Should().Equal("/Content/Input/Jump.oiact");
+        _ = references.GetProperty("input_mapping_contexts").EnumerateArray().Select(static path => path.GetString())
+            .Should().Equal("/Content/Input/Gameplay.oimap");
+        _ = references.GetProperty("physics_sidecars").EnumerateArray().Select(static path => path.GetString())
+            .Should().Equal("/Content/Physics/Main.opscene");
+        _ = references.GetProperty("extra_assets").EnumerateArray().Select(static path => path.GetString())
+            .Should().Equal("/.cooked/Extras/A.bin", "/.cooked/Extras/Z.bin");
+    }
+
+    [TestMethod]
+    public async Task LegacySceneWithoutReferenceCollectionsLoadsAndRemainsUnchanged()
+    {
+        using var workspace = new DescriptorWorkspace();
+        var scene = CreateScene(workspace.Project);
+
+        var savedScene = await RoundTripSavedSceneAsync(scene, workspace.Project).ConfigureAwait(false);
+
+        _ = savedScene.References.IsEmpty.Should().BeTrue();
+        _ = savedScene.Dehydrate().References.Should().BeNull();
+    }
+
+    [TestMethod]
+    public async Task SceneReferenceWithWrongDescriptorExtensionFailsGeneration()
+    {
+        using var workspace = new DescriptorWorkspace();
+        var scene = CreateScene(workspace.Project);
+        scene.SetReferences(new SceneReferencesData
+        {
+            Scripts = [new("asset:///Content/Scripts/NotAScript.omat.json")],
+        });
+        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+
+        var result = await generator.GenerateAsync(scene, CreateScope(workspace), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.Diagnostics.Should().ContainSingle().Which.Severity.Should().Be(DiagnosticSeverity.Error);
+        _ = File.Exists(result.DescriptorPath).Should().BeFalse();
+    }
+
+    [TestMethod]
+    [DataRow("/Content/../outside.bin")]
+    [DataRow("relative/path.bin")]
+    [DataRow("/Content//duplicate.bin")]
+    public async Task SceneReferenceWithNonCanonicalExtraPathFailsGeneration(string path)
+    {
+        using var workspace = new DescriptorWorkspace();
+        var scene = CreateScene(workspace.Project);
+        scene.SetReferences(new SceneReferencesData { ExtraAssets = [path] });
+        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+
+        var result = await generator.GenerateAsync(scene, CreateScope(workspace), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.Diagnostics.Should().ContainSingle().Which.Severity.Should().Be(DiagnosticSeverity.Error);
+        _ = File.Exists(result.DescriptorPath).Should().BeFalse();
+    }
+
+    [TestMethod]
+    [DataRow("asset://host/Content/Scripts/Orbit.oscript.json")]
+    [DataRow("asset:///Content/Scripts/Orbit.oscript.json?version=1")]
+    [DataRow("relative/Orbit.oscript.json")]
+    public async Task SceneReferenceWithNonCanonicalAssetUriFailsGeneration(string uri)
+    {
+        using var workspace = new DescriptorWorkspace();
+        var scene = CreateScene(workspace.Project);
+        scene.SetReferences(new SceneReferencesData { Scripts = [new Uri(uri, UriKind.RelativeOrAbsolute)] });
+        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+
+        var result = await generator.GenerateAsync(scene, CreateScope(workspace), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.Diagnostics.Should().ContainSingle().Which.Severity.Should().Be(DiagnosticSeverity.Error);
+        _ = File.Exists(result.DescriptorPath).Should().BeFalse();
+    }
+
     private static Scene CreateScene(IProject project)
     {
         var scene = new Scene(project)

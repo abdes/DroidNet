@@ -283,6 +283,12 @@ internal sealed class CookDependencyDiscovery(
                 return nativeUri;
             }
 
+            if (Path.GetExtension(uri.AbsolutePath).ToUpperInvariant() is ".OSCRIPT" or ".OIACT" or ".OIMAP" or ".OPSCENE")
+            {
+                _ = this.published.Add(uri);
+                return uri;
+            }
+
             if (resolveImported?.Invoke(uri) is { } owner)
             {
                 _ = this.importedReferences.Add(uri);

@@ -146,6 +146,7 @@
                 <seg:SegmentedItem Content="All" />
                 <seg:SegmentedItem Content="Environment" />
                 <seg:SegmentedItem Content="Post-processing" />
+                <seg:SegmentedItem Content="References" />
             </seg:Segmented>
         </StackPanel>
         <ScrollViewer
@@ -170,6 +171,7 @@
                     Text="No scene properties match this search."
                     TextWrapping="Wrap"
                     Visibility="Collapsed" />
+                <environment:SceneReferencesSectionView x:Name="SceneReferencesView" ViewModel="{x:Bind ViewModel.SceneReferences, Mode=OneWay}" />
                 <environment:AtmosphereLightsSectionView x:Name="AtmosphereLightsView" ViewModel="{x:Bind ViewModel.AtmosphereLights, Mode=OneWay}" />
                 <environment:SkyAtmosphereSectionView x:Name="SkyAtmosphereView" ViewModel="{x:Bind ViewModel.SkyAtmosphere, Mode=OneWay}" />
                 <environment:BackgroundSectionView x:Name="BackgroundView" ViewModel="{x:Bind ViewModel.Background, Mode=OneWay}" />

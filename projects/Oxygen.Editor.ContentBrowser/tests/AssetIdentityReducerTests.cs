@@ -263,6 +263,21 @@ public sealed partial class AssetIdentityReducerTests
         _ = row.DiagnosticCodes.Should().Contain(AssetIdentityDiagnosticCodes.ResolveMissing);
     }
 
+    /// <summary>Missing native-reference assets retain their expected picker category.</summary>
+    /// <param name="uri">The authored or cooked identity.</param>
+    /// <param name="kind">The expected typed-picker category.</param>
+    [TestMethod]
+    [DataRow("asset:///Content/Scripts/Orbit.oscript.json", AssetKind.Script)]
+    [DataRow("asset:///Content/Input/Jump.oiact", AssetKind.InputAction)]
+    [DataRow("asset:///Content/Input/Gameplay.oimap.json", AssetKind.InputMappingContext)]
+    [DataRow("asset:///Content/Physics/Main.opscene", AssetKind.PhysicsScene)]
+    public void CreateMissing_InfersTypedSceneReferenceKind(string uri, AssetKind kind)
+    {
+        var row = new AssetIdentityReducer().CreateMissing(new Uri(uri));
+
+        _ = row.Kind.Should().Be(kind);
+    }
+
     private static AssetRecord IndexedOutput(Uri uri, string path)
     {
         var descriptor = uri.AbsolutePath["/Content/".Length..];

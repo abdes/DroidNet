@@ -87,6 +87,10 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         1 => AssetKind.Material,
         2 => AssetKind.Geometry,
         3 => AssetKind.Scene,
+        4 => AssetKind.Script,
+        5 => AssetKind.InputAction,
+        6 => AssetKind.InputMappingContext,
+        9 => AssetKind.PhysicsScene,
         _ => AssetKind.Unknown,
     };
 
@@ -97,7 +101,12 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
     {
         var path = AssetUriHelper.GetVirtualPath(uri);
         var name = Path.GetFileName(path);
-        foreach (var suffix in new[] { ".omat.json", ".omat", ".ogeo.json", ".ogeo", ".oscene.json", ".oscene", ".otex.json", ".otex" })
+        foreach (var suffix in new[]
+        {
+            ".omat.json", ".omat", ".ogeo.json", ".ogeo", ".oscene.json", ".oscene",
+            ".oscript.json", ".oscript", ".oiact.json", ".oiact", ".oimap.json", ".oimap",
+            ".opscene.json", ".opscene", ".otex.json", ".otex",
+        })
         {
             if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
             {
@@ -241,6 +250,10 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         return path.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
                || path.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase)
                || path.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase)
+               || path.EndsWith(".oscript.json", StringComparison.OrdinalIgnoreCase)
+               || path.EndsWith(".oiact.json", StringComparison.OrdinalIgnoreCase)
+               || path.EndsWith(".oimap.json", StringComparison.OrdinalIgnoreCase)
+               || path.EndsWith(".opscene.json", StringComparison.OrdinalIgnoreCase)
                || path.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase);
     }
 
@@ -250,6 +263,10 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         return path.EndsWith(".omat", StringComparison.OrdinalIgnoreCase)
                || path.EndsWith(".ogeo", StringComparison.OrdinalIgnoreCase)
                || path.EndsWith(".oscene", StringComparison.OrdinalIgnoreCase)
+               || path.EndsWith(".oscript", StringComparison.OrdinalIgnoreCase)
+               || path.EndsWith(".oiact", StringComparison.OrdinalIgnoreCase)
+               || path.EndsWith(".oimap", StringComparison.OrdinalIgnoreCase)
+               || path.EndsWith(".opscene", StringComparison.OrdinalIgnoreCase)
                || path.EndsWith(".otex", StringComparison.OrdinalIgnoreCase)
                || path.EndsWith(".data", StringComparison.OrdinalIgnoreCase)
                || path.EndsWith(".table", StringComparison.OrdinalIgnoreCase);
@@ -272,6 +289,26 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         if (upper.EndsWith(".OSCENE.JSON", StringComparison.Ordinal) || upper.EndsWith(".OSCENE", StringComparison.Ordinal))
         {
             return AssetKind.Scene;
+        }
+
+        if (upper.EndsWith(".OSCRIPT.JSON", StringComparison.Ordinal) || upper.EndsWith(".OSCRIPT", StringComparison.Ordinal))
+        {
+            return AssetKind.Script;
+        }
+
+        if (upper.EndsWith(".OIACT.JSON", StringComparison.Ordinal) || upper.EndsWith(".OIACT", StringComparison.Ordinal))
+        {
+            return AssetKind.InputAction;
+        }
+
+        if (upper.EndsWith(".OIMAP.JSON", StringComparison.Ordinal) || upper.EndsWith(".OIMAP", StringComparison.Ordinal))
+        {
+            return AssetKind.InputMappingContext;
+        }
+
+        if (upper.EndsWith(".OPSCENE.JSON", StringComparison.Ordinal) || upper.EndsWith(".OPSCENE", StringComparison.Ordinal))
+        {
+            return AssetKind.PhysicsScene;
         }
 
         if (upper.EndsWith(".OTEX.JSON", StringComparison.Ordinal) || upper.EndsWith(".OTEX", StringComparison.Ordinal))

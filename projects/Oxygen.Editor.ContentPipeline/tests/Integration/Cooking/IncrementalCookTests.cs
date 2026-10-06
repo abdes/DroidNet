@@ -2,9 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Buffers.Binary;
 using System.Security.Cryptography;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
@@ -74,6 +76,71 @@ public sealed class IncrementalCookTests
         _ = run.OperationId.Should().Be(savedResult.OperationId);
         _ = run.Request.IsAutomatic.Should().BeFalse();
         _ = run.IsCompleted.Should().BeTrue();
+    }
+
+    /// <summary>A scene cook resolves an authored typed reference against an indexed cooked library.</summary>
+    /// <returns>The asynchronous editor-to-native publication regression.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task SceneCookPublishesTypedReferenceWithCookedLibraryDependency()
+    {
+        using var workspace = new CookWorkspace();
+        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        var libraryRoot = Path.Combine(workspace.Root, "script-library");
+        var scriptPath = Path.Combine(libraryRoot, "Content", "Scripts", "Orbit.oscript");
+        Directory.CreateDirectory(Path.GetDirectoryName(scriptPath)!);
+        // Minimal ScriptAssetDesc with the current header version and no resource bindings.
+        var scriptBytes = new byte[235];
+        scriptBytes[0] = 4;
+        "Orbit"u8.CopyTo(scriptBytes.AsSpan(1, 64));
+        scriptBytes[65] = 2;
+        SHA256.HashData(scriptBytes.AsSpan(0, 67)).CopyTo(scriptBytes, 67);
+        BinaryPrimitives.WriteUInt32LittleEndian(scriptBytes.AsSpan(103, sizeof(uint)), uint.MaxValue);
+        BinaryPrimitives.WriteUInt32LittleEndian(scriptBytes.AsSpan(107, sizeof(uint)), uint.MaxValue);
+        await File.WriteAllBytesAsync(scriptPath, scriptBytes, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using (var indexStream = File.Create(Path.Combine(libraryRoot, "container.index.bin")))
+        {
+            Oxygen.Testing.LooseCookedIndexFixture.Write(indexStream, new Document(
+                ContentVersion: 1,
+                Flags: IndexFeatures.HasVirtualPaths,
+                SourceGuid: Guid.CreateVersion7(),
+                Assets:
+                [
+                    new AssetEntry(
+                        new AssetKey(1, 2),
+                        "Content/Scripts/Orbit.oscript",
+                        "/Content/Scripts/Orbit.oscript",
+                        AssetType: 4,
+                        DescriptorSize: (ulong)scriptBytes.Length,
+                        DescriptorSha256: SHA256.HashData(scriptBytes)),
+                ],
+                Files: []));
+        }
+
+        var context = workspace.ProjectContext with
+        {
+            LocalFolderMounts = [new("Scripts", libraryRoot)],
+            CookedContentOrder = [new(Oxygen.Editor.World.CookedContentSourceKind.ProjectOutput), new(Oxygen.Editor.World.CookedContentSourceKind.LocalFolder, "Scripts")],
+        };
+        workspace.Activate(context);
+        workspace.Scene.SetReferences(new SceneReferencesData
+        {
+            Scripts = [new("asset:///Content/Scripts/Orbit.oscript")],
+        });
+        await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var pipeline = CreateIncrementalService(workspace, CreateRecordingApi(compatibility), compatibility);
+
+        var result = await pipeline.CookCurrentSceneAsync(
+            new Uri("asset:///Content/Scenes/Main.oscene.json"),
+            this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertCookSucceeded(result);
+        _ = result.InputSnapshot!.CookedDependencies.Should().ContainSingle(dependency =>
+            dependency.AssetUri == new Uri("asset:///Content/Scripts/Orbit.oscript")
+            && string.Equals(dependency.SourceName, "Scripts", StringComparison.Ordinal));
+        _ = result.CookedAssets.Should().Contain(asset =>
+            asset.SourceAssetUri == new Uri("asset:///Content/Scenes/Main.oscene.json"));
     }
 
     /// <summary>An unchanged project reuses all products and preserves output bytes and timestamps across service recreation.</summary>

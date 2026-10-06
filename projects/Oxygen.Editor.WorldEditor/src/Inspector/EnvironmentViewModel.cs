@@ -38,6 +38,7 @@ public sealed class EnvironmentViewModel : ComponentPropertyEditor, IDisposable,
         this.Exposure = new(this.EditOwner, assetProvider, observerScheduler ?? ImmediateScheduler.Instance);
         this.PostProcessing = new(this.EditOwner);
         this.AtmosphereLights = new(this.EditOwner, commandService, commandContextProvider, inspectSceneNode);
+        this.SceneReferences = new(commandService, commandContextProvider, assetProvider, observerScheduler ?? ImmediateScheduler.Instance);
     }
 
     /// <summary>Occurs when diagnostic navigation requests realization and focus.</summary>
@@ -61,6 +62,9 @@ public sealed class EnvironmentViewModel : ComponentPropertyEditor, IDisposable,
     /// <summary>Gets the owned source role and observation policy.</summary>
     public AtmosphereLightsSectionViewModel AtmosphereLights { get; }
 
+    /// <summary>Gets the owned typed scene-reference authoring section.</summary>
+    public SceneReferencesSectionViewModel SceneReferences { get; }
+
     /// <summary>Gets the current scene identity.</summary>
     public string SceneName => this.scene?.Name ?? string.Empty;
 
@@ -77,7 +81,7 @@ public sealed class EnvironmentViewModel : ComponentPropertyEditor, IDisposable,
     internal string? PendingFieldFocus { get; private set; }
 
     /// <summary>Gets completion of scene and source-role edits.</summary>
-    internal Task PendingEdits => Task.WhenAll(this.EditOwner.Pending, this.AtmosphereLights.Pending);
+    internal Task PendingEdits => Task.WhenAll(this.EditOwner.Pending, this.AtmosphereLights.Pending, this.SceneReferences.Pending);
 
     /// <inheritdoc />
     internal override InspectorFieldDiagnostics? ValidationFeedback => this.diagnostics;
@@ -99,6 +103,7 @@ public sealed class EnvironmentViewModel : ComponentPropertyEditor, IDisposable,
         this.EditOwner.Bind(value);
         this.scene = value;
         this.AtmosphereLights.Bind(value);
+        this.SceneReferences.Bind(value);
         this.Exposure.StartAssets();
         if (value is { } currentScene)
         {
@@ -146,6 +151,7 @@ public sealed class EnvironmentViewModel : ComponentPropertyEditor, IDisposable,
         }
 
         this.AtmosphereLights.Dispose();
+        this.SceneReferences.Dispose();
         this.Exposure.Dispose();
         this.EditOwner.Dispose();
         this.scene = null;
@@ -167,6 +173,7 @@ public sealed class EnvironmentViewModel : ComponentPropertyEditor, IDisposable,
     {
         this.EditOwner.SetInputEnabled(enabled);
         this.AtmosphereLights.SetInputEnabled(enabled);
+        this.SceneReferences.SetInputEnabled(enabled);
     }
 
     private void RefreshFromScene()

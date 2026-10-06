@@ -20,6 +20,12 @@ public record SceneData : GameObjectData
     public SceneEnvironmentData Environment { get; init; } = new();
 
     /// <summary>
+    /// Gets optional scene-level native asset references.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public SceneReferencesData? References { get; init; }
+
+    /// <summary>
     /// Gets optional editor-only data representing the scene explorer layout (folders and node references).
     /// This field is ignored by runtime code but saved/loaded to preserve editor state.
     /// </summary>

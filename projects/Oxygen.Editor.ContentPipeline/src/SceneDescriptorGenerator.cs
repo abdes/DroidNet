@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -108,6 +109,19 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, Dependencies: [], diagnostics);
         }
 
+        var authoredReferences = CreateNativeReferences(scene.References, out var referenceIssue);
+        if (referenceIssue is not null)
+        {
+            diagnostics.Add(CreateDiagnostic(
+                operationId,
+                DiagnosticSeverity.Error,
+                ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
+                referenceIssue,
+                descriptorPath,
+                descriptorVirtualPath));
+            return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, Dependencies: [], diagnostics);
+        }
+
         var generatedGeometryUris = scene.AllNodes
             .SelectMany(static node => node.Components.OfType<GeometryComponent>())
             .Select(static geometry => geometry.Geometry?.Uri)
@@ -161,6 +175,15 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                 Directional: directionalLights.Count == 0 ? null : directionalLights,
                 Point: pointLights.Count == 0 ? null : pointLights,
                 Spot: spotLights.Count == 0 ? null : spotLights);
+        var references = materialRefs.Count == 0 && authoredReferences is null
+            ? null
+            : new NativeReferences(
+                Materials: materialRefs.Count == 0 ? null : materialRefs.ToArray(),
+                Scripts: authoredReferences?.Scripts,
+                InputActions: authoredReferences?.InputActions,
+                InputMappingContexts: authoredReferences?.InputMappingContexts,
+                PhysicsSidecars: authoredReferences?.PhysicsSidecars,
+                ExtraAssets: authoredReferences?.ExtraAssets);
         var descriptor = new NativeSceneDescriptor(
             Schema: string.Create(CultureInfo.InvariantCulture, $"oxygen.scene-descriptor.v{NativeSceneDescriptorVersion}"),
             Version: NativeSceneDescriptorVersion,
@@ -170,7 +193,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             Cameras: cameras.Count == 0 ? null : new NativeCameras(cameras),
             Lights: lights,
             Environment: CreateEnvironment(scene.Environment),
-            References: materialRefs.Count == 0 ? null : new NativeReferences(materialRefs.ToArray(), ExtraAssets: null));
+            References: references);
 
         JsonNode? descriptorJson;
         try
@@ -427,6 +450,69 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             ? null : IsDefaultMaterial(materialUri)
             ? generatedInputs.FirstOrDefault(static input => IsDefaultMaterial(input.AssetUri))?.OutputVirtualPath
             : ContentPipelinePaths.ToNativeDescriptorPath(materialUri, ".omat");
+
+    private static NativeReferences? CreateNativeReferences(
+        Oxygen.Editor.World.Serialization.SceneReferencesData references,
+        out string? error)
+    {
+        ArgumentNullException.ThrowIfNull(references);
+
+        try
+        {
+            var scripts = ResolveTypedReferences(references.Scripts, ".oscript");
+            var inputActions = ResolveTypedReferences(references.InputActions, ".oiact");
+            var inputMappingContexts = ResolveTypedReferences(references.InputMappingContexts, ".oimap");
+            var physicsSidecars = ResolveTypedReferences(references.PhysicsSidecars, ".opscene");
+            if (references.ExtraAssets.Any(static path => !ContentPipelinePaths.IsCanonicalVirtualPath(path)))
+            {
+                throw new InvalidDataException("Extra scene asset references must be absolute canonical virtual paths.");
+            }
+
+            var extraAssets = new SortedSet<string>(references.ExtraAssets, StringComparer.Ordinal).ToArray();
+            error = null;
+
+            return scripts.Length == 0 && inputActions.Length == 0 && inputMappingContexts.Length == 0
+                && physicsSidecars.Length == 0 && extraAssets.Length == 0
+                ? null
+                : new NativeReferences(
+                    Materials: null,
+                    Scripts: scripts.Length == 0 ? null : scripts,
+                    InputActions: inputActions.Length == 0 ? null : inputActions,
+                    InputMappingContexts: inputMappingContexts.Length == 0 ? null : inputMappingContexts,
+                    PhysicsSidecars: physicsSidecars.Length == 0 ? null : physicsSidecars,
+                    ExtraAssets: extraAssets.Length == 0 ? null : extraAssets);
+        }
+        catch (ArgumentException exception)
+        {
+            error = exception.Message;
+            return null;
+        }
+        catch (InvalidDataException exception)
+        {
+            error = exception.Message;
+            return null;
+        }
+    }
+
+    private static string[] ResolveTypedReferences(
+        IEnumerable<Uri> assetUris,
+        string expectedExtension)
+    {
+        var paths = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var assetUri in assetUris)
+        {
+            if (assetUri is null || !assetUri.IsAbsoluteUri
+                || !string.Equals(assetUri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException($"Scene references must use absolute '{AssetUris.Scheme}' asset URIs.");
+            }
+
+            var nativePath = ContentPipelinePaths.ToNativeDescriptorPath(assetUri, expectedExtension);
+            _ = paths.Add(nativePath);
+        }
+
+        return [.. paths];
+    }
 
     private static bool IsDefaultMaterial(Uri? uri)
         => uri is not null && string.Equals(

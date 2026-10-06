@@ -210,4 +210,8 @@ internal sealed record NativeSkyAtmosphereEnvironment(
 
 internal sealed record NativeReferences(
     [property: JsonPropertyName("materials")] IReadOnlyList<string>? Materials,
+    [property: JsonPropertyName("scripts")] IReadOnlyList<string>? Scripts,
+    [property: JsonPropertyName("input_actions")] IReadOnlyList<string>? InputActions,
+    [property: JsonPropertyName("input_mapping_contexts")] IReadOnlyList<string>? InputMappingContexts,
+    [property: JsonPropertyName("physics_sidecars")] IReadOnlyList<string>? PhysicsSidecars,
     [property: JsonPropertyName("extra_assets")] IReadOnlyList<string>? ExtraAssets);

@@ -63,4 +63,24 @@ public enum AssetKind
     /// Unknown asset kind.
     /// </summary>
     Unknown,
+
+    /// <summary>
+    /// Script descriptor or cooked script.
+    /// </summary>
+    Script,
+
+    /// <summary>
+    /// Input-action descriptor or cooked input action.
+    /// </summary>
+    InputAction,
+
+    /// <summary>
+    /// Input-mapping-context descriptor or cooked mapping context.
+    /// </summary>
+    InputMappingContext,
+
+    /// <summary>
+    /// Physics-scene descriptor or cooked physics scene.
+    /// </summary>
+    PhysicsScene,
 }

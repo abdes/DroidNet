@@ -70,6 +70,7 @@ public sealed partial class EnvironmentView
             model.FieldFocusRequested += this.OnFieldFocusRequested;
             model.Exposure.PropertyChanged += this.OnSectionPropertyChanged;
             model.PostProcessing.PropertyChanged += this.OnSectionPropertyChanged;
+            model.SceneReferences.PropertyChanged += this.OnSectionPropertyChanged;
             this.ApplyScenePropertyFilter();
             this.FocusPendingField();
         }
@@ -82,12 +83,19 @@ public sealed partial class EnvironmentView
             model.FieldFocusRequested -= this.OnFieldFocusRequested;
             model.Exposure.PropertyChanged -= this.OnSectionPropertyChanged;
             model.PostProcessing.PropertyChanged -= this.OnSectionPropertyChanged;
+            model.SceneReferences.PropertyChanged -= this.OnSectionPropertyChanged;
             this.observedModel = null;
         }
     }
 
     private void OnSectionPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (ReferenceEquals(sender, this.observedModel?.SceneReferences))
+        {
+            this.ApplyScenePropertyFilter();
+            return;
+        }
+
         if (args.PropertyName is nameof(ExposureSectionViewModel.ExposureMode)
             or nameof(ExposureSectionViewModel.AutoExposureMeteringMode) or nameof(PostProcessingSectionViewModel.ToneMapping))
         {
@@ -105,6 +113,7 @@ public sealed partial class EnvironmentView
             {
                 1 => InspectorPropertyScope.Environment,
                 2 => InspectorPropertyScope.PostProcessing,
+                3 => InspectorPropertyScope.SceneReferences,
                 _ => InspectorPropertyScope.All,
             };
             this.ApplyScenePropertyFilter();
@@ -121,8 +130,11 @@ public sealed partial class EnvironmentView
         this.registry.Apply(this.ScenePropertySearchBox.Text, this.propertyScope, model.Exposure.ExposureMode, model.Exposure.AutoExposureMeteringMode, model.PostProcessing.ToneMapping);
         this.EnvironmentHeading.Visibility = this.search.IsScopeVisible(InspectorPropertyScope.Environment) ? Visibility.Visible : Visibility.Collapsed;
         this.PostProcessingHeading.Visibility = this.search.IsScopeVisible(InspectorPropertyScope.PostProcessing) ? Visibility.Visible : Visibility.Collapsed;
+        var showReferences = (this.propertyScope is InspectorPropertyScope.All or InspectorPropertyScope.SceneReferences)
+            && model.SceneReferences.MatchesSearch(this.ScenePropertySearchBox.Text);
+        this.SceneReferencesView.Visibility = showReferences ? Visibility.Visible : Visibility.Collapsed;
         this.ClearPropertySearchButton.Visibility = this.search.IsSearching ? Visibility.Visible : Visibility.Collapsed;
-        this.NoScenePropertyMatches.Visibility = this.search.HasNoMatches ? Visibility.Visible : Visibility.Collapsed;
+        this.NoScenePropertyMatches.Visibility = this.search.HasNoMatches && !showReferences ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnFieldFocusRequested(object? sender, EventArgs args) => this.FocusPendingField();

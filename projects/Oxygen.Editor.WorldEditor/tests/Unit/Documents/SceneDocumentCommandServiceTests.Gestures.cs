@@ -61,12 +61,12 @@ public sealed partial class SceneDocumentCommandServiceTests
         var context = CreateContext(scene);
         _ = ConfigureGestureSync(fixture, scene);
         var token = EditSessionToken.Begin([node.Id], "FieldOfView");
-        var edit = PropertyEdit.Single(SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegrees, 90f);
+        var edit = PropertyEdit.SingleEdit(SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegrees, 90f);
         _ = await fixture.Sut.EditPropertiesForTargetsAsync(context, new Dictionary<Guid, PropertyEdit> { [node.Id] = edit }, "Edit Camera", token).ConfigureAwait(false);
         token.Commit();
         _ = await fixture.Sut.EditPropertiesForTargetsAsync(context, new Dictionary<Guid, PropertyEdit> { [node.Id] = PropertyEdit.Empty }, "Edit Camera", token).ConfigureAwait(false);
 
-        var late = PropertyEdit.Single(SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegrees, 100f);
+        var late = PropertyEdit.SingleEdit(SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegrees, 100f);
         _ = await fixture.Sut.EditPropertiesForTargetsAsync(context, new Dictionary<Guid, PropertyEdit> { [node.Id] = late }, "Edit Camera", token).ConfigureAwait(false);
 
         _ = node.Components.OfType<PerspectiveCamera>().Single().FieldOfView.Should().Be(90);
@@ -83,7 +83,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         await interaction.RestoreAsync(ProjectContext.FromProjectInfo(SlotTestProjectInfo), scene.Id).ConfigureAwait(false);
         interaction.SetLocked(node.Id, isLocked: true);
         var fixture = CreateFixture(interaction: interaction);
-        var edit = PropertyEdit.Single(SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegrees, 90f);
+        var edit = PropertyEdit.SingleEdit(SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegrees, 90f);
 
         var emptyResult = await fixture.Sut.EditPropertiesForTargetsAsync(
             context,

@@ -208,6 +208,14 @@ public interface ISceneDocumentCommandService
         SceneEnvironmentEdit edit,
         EditSessionToken session);
 
+    /// <summary>Replaces validated scene-level asset references as one undoable edit.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="references">The complete replacement reference set.</param>
+    /// <returns>The command result.</returns>
+    public Task<SceneCommandResult> EditSceneReferencesAsync(
+        SceneDocumentCommandContext context,
+        SceneReferencesData references);
+
     /// <summary>
     /// Edits descriptor-addressed scene environment properties.
     /// </summary>

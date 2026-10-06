@@ -44,6 +44,11 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     public Serialization.SceneEnvironmentData Environment { get; private set; } = new();
 
     /// <summary>
+    /// Gets the scene-level native asset references with read-only collections.
+    /// </summary>
+    public Serialization.SceneReferencesData References { get; private set; } = new();
+
+    /// <summary>
     ///     Gets all nodes in the scene (flattened).
     /// </summary>
     [JsonIgnore]
@@ -92,6 +97,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
             }
 
             this.Environment = NormalizeEnvironment(data.Environment);
+            this.References = NormalizeReferences(data.References);
         }
     }
 
@@ -112,6 +118,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
             Id = this.Id,
             RootNodes = [.. this.RootNodes.Select(n => n.Dehydrate())],
             Environment = NormalizeEnvironment(this.Environment),
+            References = this.References.IsEmpty ? null : NormalizeReferences(this.References),
             ExplorerLayout = this.ExplorerLayout,
         };
     }
@@ -139,6 +146,22 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
         }
     }
 
+    /// <summary>
+    /// Replaces scene-level asset references.
+    /// </summary>
+    /// <param name="references">The new reference data.</param>
+    internal void SetReferences(Serialization.SceneReferencesData references)
+    {
+        ArgumentNullException.ThrowIfNull(references);
+        var normalized = NormalizeReferences(references);
+        if (!ReferencesEqual(this.References, normalized))
+        {
+            this.OnPropertyChanging(nameof(this.References));
+            this.References = normalized;
+            this.OnPropertyChanged(nameof(this.References));
+        }
+    }
+
     private static Serialization.SceneEnvironmentData NormalizeEnvironment(Serialization.SceneEnvironmentData? environment)
     {
         environment ??= new();
@@ -148,4 +171,34 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
             PostProcess = environment.PostProcess ?? new(),
         };
     }
+
+    private static Serialization.SceneReferencesData NormalizeReferences(Serialization.SceneReferencesData? references)
+    {
+        if (references is null)
+        {
+            return new();
+        }
+
+        ArgumentNullException.ThrowIfNull(references.Scripts);
+        ArgumentNullException.ThrowIfNull(references.InputActions);
+        ArgumentNullException.ThrowIfNull(references.InputMappingContexts);
+        ArgumentNullException.ThrowIfNull(references.PhysicsSidecars);
+        ArgumentNullException.ThrowIfNull(references.ExtraAssets);
+
+        return new()
+        {
+            Scripts = new List<Uri>(references.Scripts).AsReadOnly(),
+            InputActions = new List<Uri>(references.InputActions).AsReadOnly(),
+            InputMappingContexts = new List<Uri>(references.InputMappingContexts).AsReadOnly(),
+            PhysicsSidecars = new List<Uri>(references.PhysicsSidecars).AsReadOnly(),
+            ExtraAssets = new List<string>(references.ExtraAssets).AsReadOnly(),
+        };
+    }
+
+    private static bool ReferencesEqual(Serialization.SceneReferencesData left, Serialization.SceneReferencesData right)
+        => left.Scripts.SequenceEqual(right.Scripts)
+            && left.InputActions.SequenceEqual(right.InputActions)
+            && left.InputMappingContexts.SequenceEqual(right.InputMappingContexts)
+            && left.PhysicsSidecars.SequenceEqual(right.PhysicsSidecars)
+            && left.ExtraAssets.SequenceEqual(right.ExtraAssets, StringComparer.Ordinal);
 }

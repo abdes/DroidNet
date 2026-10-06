@@ -277,6 +277,14 @@ internal sealed partial class CookSourceAnalyzer(
                     continue;
                 }
 
+                var textureUri = new Uri(AssetUris.Scheme + ":///" + string.Join(
+                    '/',
+                    virtualPath.TrimStart('/').Split('/').Select(Uri.EscapeDataString)));
+                if (!CookInputResolver.IsAuthoringUri(operation.Project, textureUri))
+                {
+                    continue;
+                }
+
                 var textureDescriptorPath = this.ResolveTextureDescriptorPath(virtualPath);
                 if (textureDescriptorPath is null || !File.Exists(textureDescriptorPath))
                 {

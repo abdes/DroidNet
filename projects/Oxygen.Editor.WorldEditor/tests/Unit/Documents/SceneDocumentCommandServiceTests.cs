@@ -210,7 +210,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var result = await fixture.Sut.EditPropertiesAsync(
             context,
             [node.Id],
-            PropertyEdit.Single(SceneDocumentCommandService.Geometry.GeometryUri, sphereUri),
+            PropertyEdit.SingleEdit(SceneDocumentCommandService.Geometry.GeometryUri, sphereUri),
             "Edit Geometry",
             EditSessionToken.OneShot).ConfigureAwait(false);
 

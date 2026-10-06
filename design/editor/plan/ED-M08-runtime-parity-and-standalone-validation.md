@@ -469,8 +469,8 @@ rejection. Cook and inspect through native tools, never managed binary decoding.
 
 ### M08.F1 — Descriptor-local reference format
 
-Status: **in progress — implemented except editor scene-reference authoring and
-qualification**. Depends on M08.1.9; prerequisite for M08.2 and subsequent
+Status: **in progress — native/managed cutover and editor scene-reference
+authoring implemented; F1 qualification remains open**. Depends on M08.1.9; prerequisite for M08.2 and subsequent
 qualification. The [format plan](ED-M08.F1-descriptor-local-references.md) owns
 execution, version changes, recooking and its
 [remaining work](ED-M08.F1-descriptor-local-references.md#remaining-work). Data

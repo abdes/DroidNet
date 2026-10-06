@@ -41,7 +41,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var previous = scene.Environment.BackgroundColor;
         var late = await fixture.Sut.EditSceneEnvironmentPropertiesAsync(
             context,
-            PropertyEdit.Single(SceneDocumentCommandService.SceneEnvironment.BackgroundColor, System.Numerics.Vector3.One),
+            PropertyEdit.SingleEdit(SceneDocumentCommandService.SceneEnvironment.BackgroundColor, System.Numerics.Vector3.One),
             "Late background",
             EditSessionToken.OneShot).ConfigureAwait(false);
         _ = late.Succeeded.Should().BeFalse();

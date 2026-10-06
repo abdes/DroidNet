@@ -33,7 +33,7 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         var result = await fixture.Sut.EditSceneEnvironmentPropertiesAsync(
             context,
-            PropertyEdit.Single(SceneDocumentCommandService.SceneEnvironment.BackgroundColor, color),
+            PropertyEdit.SingleEdit(SceneDocumentCommandService.SceneEnvironment.BackgroundColor, color),
             "Edit Background",
             EditSessionToken.OneShot).ConfigureAwait(false);
 

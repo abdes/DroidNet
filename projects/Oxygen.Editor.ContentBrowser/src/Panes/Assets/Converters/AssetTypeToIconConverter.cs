@@ -22,6 +22,10 @@ public partial class AssetTypeToIconConverter : IValueConverter
             {
                 AssetKind.Image => "\uE8B9",
                 AssetKind.Scene => "\uE914",
+                AssetKind.Script => "\uE943",
+                AssetKind.InputAction => "\uE765",
+                AssetKind.InputMappingContext => "\uE721",
+                AssetKind.PhysicsScene => "\uE9D9",
                 AssetKind.Geometry => "\uF158",
                 AssetKind.Material => "\uE790",
                 AssetKind.Texture => "\uE8B9",

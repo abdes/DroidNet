@@ -158,7 +158,7 @@ public sealed class SceneNodeEditorViewModelTests
         sut.SunAzimuth = 45f;
         var edits = await editCompletion.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         var edit = edits.Should().ContainSingle().Which.Value;
-        _ = edit.Ids.Should().OnlyContain(id => id.ComponentKind == SceneDocumentCommandService.TransformKind && id.Pointer.StartsWith("/local_rotation_euler_degrees/", StringComparison.Ordinal));
+        _ = edit.Ids.Should().OnlyContain(id => id.ComponentKind == SceneDocumentCommandService.TransformKind && id.JsonPointer.StartsWith("/local_rotation_euler_degrees/", StringComparison.Ordinal));
         _ = edit.Should().OnlyContain(pair => pair.Value is float && float.IsFinite((float)pair.Value));
     }
 
