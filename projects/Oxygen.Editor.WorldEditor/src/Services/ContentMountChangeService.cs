@@ -53,6 +53,7 @@ public sealed class ContentMountChangeService(IContentCookCoordinator coordinato
         AuthoringMounts = [.. context.AuthoringMounts],
         LocalFolderMounts = [.. context.LocalFolderMounts],
         CookedContentOrder = [.. context.CookedContentOrder],
+        DefaultSceneId = context.DefaultSceneId,
     };
 
     private static void ValidateMountConfiguration(ProjectInfo candidate)

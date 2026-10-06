@@ -186,6 +186,7 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
             AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
             LocalFolderMounts = [new("Library", "D:/Library")],
             Scenes = [],
+            DefaultSceneId = Guid.NewGuid(),
         };
         projects.Activate(project);
         var messenger = new StrongReferenceMessenger();
@@ -210,6 +211,7 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
         await model.PendingMountChange.ConfigureAwait(true);
         _ = saved.Should().NotBeNull();
         _ = saved!.AuthoringMounts.Should().Contain(mount => mount.Name == "Content" && mount.RelativePath == "Content");
+        _ = saved.DefaultSceneId.Should().Be(project.DefaultSceneId);
         _ = saved.AuthoringMounts.Should().Contain(mount => mount.Name == "Cooked" && mount.RelativePath == ".cooked");
         _ = saved.LocalFolderMounts.Should().Contain(mount => mount.Name == "LibraryRenamed" && mount.AbsolutePath == "D:/Library");
         _ = model.HasUnsavedChanges.Should().BeFalse();

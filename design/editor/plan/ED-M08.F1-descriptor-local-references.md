@@ -33,6 +33,10 @@ editor side of the cutover; items 3 and 5 close the format plan's own acceptance
    loaded without a references field, as well as populated references. Regression
    cases for both empty paths were added; they are not executed under the user's
    no-test-rerun instruction. The recorded test counts predate this correction.
+   User mounting qualification exposed dropped default-scene metadata in mount
+   edits. Browser candidates and publication baselines now retain that setting,
+   preserving the full configuration conflict check. Regression coverage was
+   extended; those cases have not been executed under the same instruction.
 2. **Managed cook/editor qualification.** ContentPipeline Unit and Integration
    test projects build. Focused descriptor tests pass 40/40; typed-reference
    discovery and the editor-to-native dependency-closure cook pass 1/1 each;

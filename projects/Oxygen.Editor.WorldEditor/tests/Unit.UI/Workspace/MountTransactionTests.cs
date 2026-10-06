@@ -73,11 +73,14 @@ public sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserInt
     });
 
     /// <summary>Completed publication activates saved configuration and refreshes its matching catalog.</summary>
+    /// <param name="withDefaultScene">Whether the project has a configured default scene to preserve.</param>
     /// <returns>The asynchronous commit regression.</returns>
     [TestMethod]
-    public Task SuccessfulMountChangeCommitsAndResumesInTheNewContext() => EnqueueAsync(async () =>
+    [DataRow(false)]
+    [DataRow(true)]
+    public Task SuccessfulMountChangeCommitsAndResumesInTheNewContext(bool withDefaultScene) => EnqueueAsync(async () =>
     {
-        using var fixture = new MountTransactionFixture();
+        using var fixture = new MountTransactionFixture(withDefaultScene);
         await fixture.InitializeAsync().ConfigureAwait(true);
         var original = fixture.Projects.ActiveProject;
         await fixture.Service.ApplyAsync(original!, fixture.Candidate, next =>
@@ -87,6 +90,8 @@ public sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserInt
             _ = fixture.Paused.Should().BeFalse();
         }, this.TestContext.CancellationToken).ConfigureAwait(true);
         _ = fixture.Projects.ActiveProject!.LocalFolderMounts.Should().ContainSingle();
+        _ = fixture.Projects.ActiveProject.DefaultSceneId.Should().Be(original!.DefaultSceneId);
+        _ = ProjectInfo.FromJson(File.ReadAllText(fixture.ManifestPath)).DefaultSceneId.Should().Be(original.DefaultSceneId);
         _ = fixture.Roots.Should().Equal(fixture.Library, fixture.ProjectOutput);
         _ = fixture.Paused.Should().BeFalse();
     });
@@ -101,7 +106,7 @@ public sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserInt
         private readonly Guid sourceKey = Guid.CreateVersion7();
         private readonly CookPublicationService publication;
         private readonly IDisposable registration;
-        public MountTransactionFixture()
+        public MountTransactionFixture(bool withDefaultScene = false)
         {
             this.ProjectOutput = this.WriteRoot(Path.GetRelativePath(this.directory.FullName, CookPublicationPaths.Generation(this.directory.FullName, this.sourceKey)), this.sourceKey);
             File.WriteAllBytes(Path.Combine(this.ProjectOutput, CookedGeneration.MarkerFileName), []);
@@ -109,7 +114,8 @@ public sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserInt
             _ = Directory.CreateDirectory(Path.Combine(this.directory.FullName, "Content"));
             var info = new ProjectInfo("Transaction", Category.Games, this.directory.FullName)
             {
-                AuthoringMounts = [new("Content", "Content")]
+                AuthoringMounts = [new("Content", "Content")],
+                DefaultSceneId = withDefaultScene ? Guid.NewGuid() : null,
             };
             this.Projects.Activate(ProjectContext.FromProjectInfo(info));
             this.Candidate = new ProjectInfo(info.Id, info.Name, info.Category, info.Location)
@@ -117,6 +123,7 @@ public sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserInt
                 AuthoringMounts = [.. info.AuthoringMounts],
                 LocalFolderMounts = [new("Library", this.Library)],
                 CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "Library"), new(CookedContentSourceKind.ProjectOutput)],
+                DefaultSceneId = info.DefaultSceneId,
             };
             this.coordinator = new(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
             var storage = new NativeStorageProvider(new RealFileSystem());
@@ -150,7 +157,8 @@ public sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserInt
             var context = this.Projects.ActiveProject!;
             var info = new ProjectInfo(context.ProjectId, context.Name, context.Category, context.ProjectRoot)
             {
-                AuthoringMounts = [.. context.AuthoringMounts]
+                AuthoringMounts = [.. context.AuthoringMounts],
+                DefaultSceneId = context.DefaultSceneId,
             };
             _ = (await this.manager.SaveProjectInfoAsync(info).ConfigureAwait(true)).Should().BeTrue();
             var index = await CookedIndexSnapshot.ReadAsync(this.ProjectOutput, CancellationToken.None).ConfigureAwait(true);
