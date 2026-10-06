@@ -13,3 +13,5 @@ using System.Runtime.CompilerServices;
 */
 
 [assembly: InternalsVisibleTo("DroidNet.Controls.InPlaceEdit.UI.Tests")]
+[assembly: InternalsVisibleTo("Oxygen.Editor.WorldEditor.Unit.UI.Tests")]
+[assembly: InternalsVisibleTo("Oxygen.Editor.WorldEditor.Integration.UI.Tests")]

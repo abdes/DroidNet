@@ -24,6 +24,21 @@ public partial class NumberBox
     /// </summary>
     public event EventHandler<ValidationEventArgs<float>>? Validate;
 
+    /// <summary>Internal so UI test hosts can drive edit-session transitions.</summary>
+    /// <param name="interactionKind">The kind of interaction that started the edit session.</param>
+    internal void OnEditSessionStarted(NumberBoxEditInteractionKind interactionKind)
+        => this.EditSessionStarted?.Invoke(this, new NumberBoxEditSessionEventArgs(interactionKind));
+
+    /// <summary>Internal so UI test hosts can drive edit-session transitions.</summary>
+    /// <param name="interactionKind">The kind of interaction that started the edit session.</param>
+    /// <param name="completionKind">Indicates how the edit session completed (committed or cancelled).</param>
+    /// <param name="inputText">Optional input text provided during the edit session, if any.</param>
+    internal void OnEditSessionCompleted(
+        NumberBoxEditInteractionKind interactionKind,
+        NumberBoxEditCompletionKind completionKind,
+        string? inputText = null)
+        => this.EditSessionCompleted?.Invoke(this, new NumberBoxEditSessionEventArgs(interactionKind, completionKind, inputText));
+
     /// <summary>
     ///     Raises the <see cref="Validate" /> event.
     /// </summary>
@@ -33,13 +48,4 @@ public partial class NumberBox
         this.Validate?.Invoke(this, e);
         this.valueIsValid = e.IsValid;
     }
-
-    private void OnEditSessionStarted(NumberBoxEditInteractionKind interactionKind)
-        => this.EditSessionStarted?.Invoke(this, new NumberBoxEditSessionEventArgs(interactionKind));
-
-    private void OnEditSessionCompleted(
-        NumberBoxEditInteractionKind interactionKind,
-        NumberBoxEditCompletionKind completionKind,
-        string? inputText = null)
-        => this.EditSessionCompleted?.Invoke(this, new NumberBoxEditSessionEventArgs(interactionKind, completionKind, inputText));
 }

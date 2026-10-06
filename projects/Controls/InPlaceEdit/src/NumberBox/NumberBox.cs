@@ -180,6 +180,48 @@ public partial class NumberBox : Control
         }
     }
 
+    /// <summary>Internal so UI test hosts can drive edit-session transitions.</summary>
+    internal void StartEdit()
+    {
+        if (this.valueTextBlock is null || this.editTextBox is null)
+        {
+            return;
+        }
+
+        this.LogEditStarted(this.IsIndeterminate);
+
+        // Leaving indeterminate for editing: do not reset NumberValue, only switch presentation
+        this.IsIndeterminate = false;
+
+        this.originalValue = this.NumberValue.ToString(CultureInfo.CurrentCulture);
+        this.isEditing = true;
+        this.OnEditSessionStarted(NumberBoxEditInteractionKind.Text);
+
+        this.UpdateVisualState();
+
+        this.editTextBox.Text = this.originalValue ?? string.Empty;
+        _ = this.editTextBox.Focus(FocusState.Programmatic);
+    }
+
+    /// <summary>Internal so UI test hosts can drive edit-session transitions.</summary>
+    internal void CancelEdit()
+    {
+        var wasIndeterminate = this.IsIndeterminate;
+        if (this.IsIndeterminate)
+        {
+            this.editTextBox!.Text = string.Empty;
+        }
+        else
+        {
+            this.editTextBox!.Text = this.originalValue;
+        }
+
+        this.EndEdit();
+        this.OnEditSessionCompleted(NumberBoxEditInteractionKind.Text, NumberBoxEditCompletionKind.Cancel);
+
+        this.LogEditCanceled(wasIndeterminate);
+    }
+
     /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
@@ -554,28 +596,6 @@ public partial class NumberBox : Control
         this.LogCursorChanged("Default");
     }
 
-    private void StartEdit()
-    {
-        if (this.valueTextBlock is null || this.editTextBox is null)
-        {
-            return;
-        }
-
-        this.LogEditStarted(this.IsIndeterminate);
-
-        // Leaving indeterminate for editing: do not reset NumberValue, only switch presentation
-        this.IsIndeterminate = false;
-
-        this.originalValue = this.NumberValue.ToString(CultureInfo.CurrentCulture);
-        this.isEditing = true;
-        this.OnEditSessionStarted(NumberBoxEditInteractionKind.Text);
-
-        this.UpdateVisualState();
-
-        this.editTextBox.Text = this.originalValue ?? string.Empty;
-        _ = this.editTextBox.Focus(FocusState.Programmatic);
-    }
-
     private void CommitEdit()
     {
         Debug.Assert(this.valueIsValid, "commit only when newValueIsValid is true");
@@ -612,24 +632,6 @@ public partial class NumberBox : Control
 
         this.OnEditSessionCompleted(NumberBoxEditInteractionKind.Text, NumberBoxEditCompletionKind.Commit, text);
         this.EndEdit();
-    }
-
-    private void CancelEdit()
-    {
-        var wasIndeterminate = this.IsIndeterminate;
-        if (this.IsIndeterminate)
-        {
-            this.editTextBox!.Text = string.Empty;
-        }
-        else
-        {
-            this.editTextBox!.Text = this.originalValue;
-        }
-
-        this.EndEdit();
-        this.OnEditSessionCompleted(NumberBoxEditInteractionKind.Text, NumberBoxEditCompletionKind.Cancel);
-
-        this.LogEditCanceled(wasIndeterminate);
     }
 
     private void OnTextChanged(object sender, TextChangedEventArgs textChangedEventArgs)

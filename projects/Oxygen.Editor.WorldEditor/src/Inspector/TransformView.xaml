@@ -180,6 +180,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <TextBlock
+                            x:Name="ScaleXDiagnosticText"
                             Grid.Column="0"
                             AutomationProperties.LiveSetting="Polite"
                             Foreground="{ThemeResource SystemFillColorCriticalBrush}"
