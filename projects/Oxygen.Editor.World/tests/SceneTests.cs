@@ -75,6 +75,38 @@ public class SceneTests
     }
 
     [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void EmptySceneReferences_CreatedOrHydrated_RejectDirectMutation(bool hydrate)
+    {
+        var scene = new Scene(this.ExampleProject) { Name = "Scene" };
+        if (hydrate)
+        {
+            var data = scene.Dehydrate();
+            _ = data.References.Should().BeNull();
+            scene.Hydrate(data);
+        }
+
+        var reference = new Uri("asset:///Content/Scripts/Orbit.oscript");
+        foreach (var collection in new[]
+        {
+            scene.References.Scripts,
+            scene.References.InputActions,
+            scene.References.InputMappingContexts,
+            scene.References.PhysicsSidecars,
+        })
+        {
+            var edit = () => collection.Add(reference);
+            _ = edit.Should().Throw<NotSupportedException>();
+            _ = collection.Should().BeEmpty();
+        }
+
+        var extraEdit = () => scene.References.ExtraAssets.Add("/Content/Extra.otex");
+        _ = extraEdit.Should().Throw<NotSupportedException>();
+        _ = scene.References.ExtraAssets.Should().BeEmpty();
+    }
+
+    [TestMethod]
     public void HydratedSceneReferencesCannotBeMutatedOutsideSceneCommands()
     {
         var scene = new Scene(this.ExampleProject) { Name = "Scene" };

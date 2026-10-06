@@ -46,7 +46,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     /// <summary>
     /// Gets the scene-level native asset references with read-only collections.
     /// </summary>
-    public Serialization.SceneReferencesData References { get; private set; } = new();
+    public Serialization.SceneReferencesData References { get; private set; } = NormalizeReferences(null);
 
     /// <summary>
     ///     Gets all nodes in the scene (flattened).
@@ -174,10 +174,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
 
     private static Serialization.SceneReferencesData NormalizeReferences(Serialization.SceneReferencesData? references)
     {
-        if (references is null)
-        {
-            return new();
-        }
+        references ??= new();
 
         ArgumentNullException.ThrowIfNull(references.Scripts);
         ArgumentNullException.ThrowIfNull(references.InputActions);

@@ -29,6 +29,10 @@ editor side of the cutover; items 3 and 5 close the format plan's own acceptance
    InspectorBindingTests passes 37/37, and the extra-asset add/remove interaction
    passes 1/1. The native-pointer numeric-caption rows remain unqualified because
    their test window lost foreground to another process.
+   Reference snapshots are now read-only for newly created scenes and scenes
+   loaded without a references field, as well as populated references. Regression
+   cases for both empty paths were added; they are not executed under the user's
+   no-test-rerun instruction. The recorded test counts predate this correction.
 2. **Managed cook/editor qualification.** ContentPipeline Unit and Integration
    test projects build. Focused descriptor tests pass 40/40; typed-reference
    discovery and the editor-to-native dependency-closure cook pass 1/1 each;
