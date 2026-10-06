@@ -68,7 +68,7 @@ public sealed partial class CookDocumentRegistry(ILogger<CookDocumentRegistry>? 
                 if (await owner.Acquire(cancellationToken).ConfigureAwait(false) is { } lease)
                 {
                     leases.Add(lease);
-                    if (!string.Equals(lease.State.SourcePath, sourcePath, StringComparison.OrdinalIgnoreCase))
+                    if (!SourcePathsMatch(lease.State.SourcePath, sourcePath))
                     {
                         throw new OperationCanceledException("The document source moved while cook capture was waiting for it.", new CancellationToken(canceled: true));
                     }
@@ -85,6 +85,20 @@ public sealed partial class CookDocumentRegistry(ILogger<CookDocumentRegistry>? 
             }
 
             throw;
+        }
+    }
+
+    // Registrations and owner states are stored canonically, but a lease callback may report the
+    // same source with different separator spelling; only a genuinely different path is a move.
+    private static bool SourcePathsMatch(string stateSourcePath, string sourcePath)
+    {
+        try
+        {
+            return string.Equals(Path.GetFullPath(stateSourcePath), sourcePath, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception invalid) when (invalid is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
         }
     }
 
