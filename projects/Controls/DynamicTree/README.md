@@ -46,6 +46,20 @@ dotnet add package DroidNet.Controls.DynamicTree
 
 ## Basic Usage (WinUI 3)
 
+### Optional XAML performance settings
+
+Call `DynamicTreeXamlSettings.EnableOptimizations()` before `Application.Start`.
+It enables `IconNoGridOptimization`, `OptimizeApplyStyles`, and
+`DeferContextFlyoutInit`. The switches are process-wide, not per-tree, and do not
+opt into `DefaultStyleOptimizations`; existing default templates remain unchanged.
+Late configuration throws rather than silently ignoring the request.
+
+Oxygen and the controls demo enable this profile at startup. Density workload
+tests verify exact row heights, bounded realization, lazy loading and observer
+lifetime across scrolling and reloads.
+
+### Control setup
+
 1. Import the control namespace in your XAML page:
 
    ```xml

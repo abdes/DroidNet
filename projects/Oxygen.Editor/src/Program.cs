@@ -9,6 +9,7 @@ using DroidNet.Aura;
 using DroidNet.Aura.Windowing;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
+using DroidNet.Controls;
 using DroidNet.Coordinates;
 using DroidNet.Docking.Controls;
 using DroidNet.Documents;
@@ -92,6 +93,8 @@ public static partial class Program
         // Ensures that the process can run XAML, and provides a deterministic error if a check
         // fails. Otherwise, it quietly does nothing.
         XamlCheckProcessRequirements();
+        WinRT.ComWrappersSupport.InitializeComWrappers();
+        DynamicTreeXamlSettings.EnableOptimizations();
 
         var bootstrap = new Bootstrapper(args);
         try
@@ -195,7 +198,7 @@ public static partial class Program
         },
     ]);
 
-    private static void InitializeSettings(DryIoc.IContainer container)
+    private static void InitializeSettings(IContainer container)
     {
         // Register Config module
         _ = container.WithConfig();
@@ -276,9 +279,10 @@ public static partial class Program
                 resolver.Resolve<IStatusReducer>(),
                 resolver.Resolve<ILoggerFactory>()),
             Reuse.Singleton);
+
         // Editor hide / lock workspace state: one owner, project-scoped typed settings, serialized writes.
         container.RegisterDelegate(
-            resolver => new Oxygen.Editor.World.Workspace.WorkspaceInteractionService(
+            resolver => new WorkspaceInteractionService(
                 resolver.Resolve<IEditorSettingsManager>(),
                 resolver.Resolve<IOperationResultPublisher>(),
                 resolver.Resolve<IStatusReducer>(),
@@ -312,7 +316,7 @@ public static partial class Program
         // TODO: use keyed registration and parameter name to key mappings
         // https://github.com/dadhi/DryIoc/blob/master/docs/DryIoc.Docs/SpecifyDependencyAndPrimitiveValues.md#complete-example-of-matching-the-parameter-name-to-the-service-key
         container.Register<IStorageProvider, NativeStorageProvider>(Reuse.Singleton);
-        container.RegisterDelegate<IAtomicFileStore>(context => context.Resolve<IStorageProvider>().AtomicFiles, Reuse.Singleton);
+        container.RegisterDelegate(context => context.Resolve<IStorageProvider>().AtomicFiles, Reuse.Singleton);
 
         // Register the universal template source with NO key, so it gets selected when injected an
         // instance of ITemplateSource. Register specific template source implementations KEYED.
@@ -418,32 +422,41 @@ public static partial class Program
         container.Register<IContentPipelineProcessRunner, ContentPipelineProcessRunner>(Reuse.Singleton);
         container.RegisterDelegate<INativeCompatibilityService>(
             _ => EditorNativeCompatibilityService.ForCooking(),
-            Reuse.Singleton, serviceKey: EditorNativeCompatibilityService.CookingServiceKey);
+            Reuse.Singleton,
+            serviceKey: EditorNativeCompatibilityService.CookingServiceKey);
         container.RegisterDelegate<ImportToolContentPipelineApi>(
             resolver => new(
-            resolver.Resolve<IEngineContentPipelineToolLocator>(), resolver.Resolve<IContentPipelineProcessRunner>(),
+            resolver.Resolve<IEngineContentPipelineToolLocator>(),
+            resolver.Resolve<IContentPipelineProcessRunner>(),
             resolver.Resolve<ILogger<ImportToolContentPipelineApi>>(),
-            resolver.Resolve<INativeCompatibilityService>(EditorNativeCompatibilityService.CookingServiceKey)), Reuse.Singleton);
+            resolver.Resolve<INativeCompatibilityService>(EditorNativeCompatibilityService.CookingServiceKey)),
+            Reuse.Singleton);
         container.RegisterMapping<IEngineContentPipelineApi, ImportToolContentPipelineApi>();
         container.RegisterMapping<IBuiltinGeometryCatalogProvider, ImportToolContentPipelineApi>();
         container.Register<ContentCookCoordinator>(Reuse.Singleton);
         container.RegisterMapping<IContentCookCoordinator, ContentCookCoordinator>();
-        container.RegisterMapping<Oxygen.Editor.ContentPipeline.Cooking.ICookRunService, ContentCookCoordinator>();
-        container.Register<Oxygen.Editor.ContentPipeline.Snapshots.ICookDocumentRegistry, Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry>(Reuse.Singleton);
-        container.Register<Oxygen.Editor.World.SceneEditor.SceneCookInputRegistrar>(Reuse.Singleton);
+        container.RegisterMapping<ContentPipeline.Cooking.ICookRunService, ContentCookCoordinator>();
+        container.Register<ContentPipeline.Snapshots.ICookDocumentRegistry, ContentPipeline.Snapshots.CookDocumentRegistry>(Reuse.Singleton);
+        container.Register<World.SceneEditor.SceneCookInputRegistrar>(Reuse.Singleton);
         container.RegisterDelegate<IContentPipelineService>(
             resolver => new ContentPipelineService(
-            resolver.Resolve<IProjectContextService>(), resolver.Resolve<IContentCookCoordinator>(),
-            resolver.Resolve<IProjectCookScopeProvider>(), resolver.Resolve<ISceneDescriptorGenerator>(),
-            resolver.Resolve<IContentImportManifestBuilder>(), resolver.Resolve<IContentImportManifestValidator>(),
-            resolver.Resolve<IEngineContentPipelineApi>(), resolver.Resolve<Oxygen.Editor.ContentPipeline.Snapshots.ICookDocumentRegistry>(),
+            resolver.Resolve<IProjectContextService>(),
+            resolver.Resolve<IContentCookCoordinator>(),
+            resolver.Resolve<IProjectCookScopeProvider>(),
+            resolver.Resolve<ISceneDescriptorGenerator>(),
+            resolver.Resolve<IContentImportManifestBuilder>(),
+            resolver.Resolve<IContentImportManifestValidator>(),
+            resolver.Resolve<IEngineContentPipelineApi>(),
+            resolver.Resolve<ContentPipeline.Snapshots.ICookDocumentRegistry>(),
             resolver.Resolve<INativeCompatibilityService>(EditorNativeCompatibilityService.CookingServiceKey),
-            resolver.Resolve<IAtomicFileStore>(), resolver.Resolve<Oxygen.Editor.ContentPipeline.Publication.CookPublicationService>()), Reuse.Singleton);
-        container.RegisterDelegate<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(
-            resolver => (Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);
-        container.Register<Oxygen.Editor.ContentPipeline.Publication.CookPublicationService>(Reuse.Singleton);
-        container.Register<Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountService>(Reuse.Singleton);
-        container.Register<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService, Oxygen.Editor.ContentPipeline.Cooking.AutomaticCookService>(Reuse.Singleton);
+            resolver.Resolve<IAtomicFileStore>(),
+            resolver.Resolve<ContentPipeline.Publication.CookPublicationService>()),
+            Reuse.Singleton);
+        container.RegisterDelegate(
+            resolver => (ContentPipeline.Inspection.IGeometryMaterialSlotProvider)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);
+        container.Register<ContentPipeline.Publication.CookPublicationService>(Reuse.Singleton);
+        container.Register<ContentPipeline.Mounting.CookedContentMountService>(Reuse.Singleton);
+        container.Register<ContentPipeline.Cooking.IAutomaticCookService, ContentPipeline.Cooking.AutomaticCookService>(Reuse.Singleton);
         container.Register<IMaterialCookService, MaterialCookService>(Reuse.Singleton);
         container.Register<IMaterialSourcePathResolver, ProjectMaterialSourcePathResolver>(Reuse.Singleton);
         container.Register<IMaterialDocumentService, MaterialDocumentService>(Reuse.Singleton);
