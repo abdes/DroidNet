@@ -109,7 +109,7 @@ public sealed partial class InspectorBindingTests
         _ = red.NumberValue.Should().Be(0.25f);
 
         await EnterTextAsync(red, "0.75").ConfigureAwait(true);
-        RaiseNumberEvent(red, "CancelEdit");
+        red.CancelEdit();
         await model.PendingEdits.ConfigureAwait(true);
         _ = Read().X.Should().Be(0.25f);
         _ = fixture.Context.History.UndoStack.Should().ContainSingle();

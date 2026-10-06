@@ -163,7 +163,7 @@ internal static class InspectorControls
     internal static async Task EnterTextAsync(NumberBox number, string value)
     {
         _ = number.ApplyTemplate();
-        RaiseNumberEvent(number, "StartEdit");
+        number.StartEdit();
         var input = number.FindDescendant<TextBox>(element => string.Equals(element.Name, "PartEditBox", StringComparison.Ordinal))!;
         if (string.Equals(input.Text, value, StringComparison.Ordinal))
         {
@@ -210,9 +210,27 @@ internal static class InspectorControls
         throw new InvalidOperationException($"The environment vector '{field}' was not realized while scrolling its inspector.");
     }
 
+    internal static async Task<T> WaitForDescendantAsync<T>(DependencyObject root, Func<T, bool> matches, string description, CancellationToken cancellationToken)
+        where T : FrameworkElement
+    {
+        for (var frame = 0; frame <= 200; frame++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (root.FindDescendant(matches) is { } found)
+            {
+                return found;
+            }
+
+            _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+        }
+
+        throw new InvalidOperationException($"The {description} was not realized in the inspector tree within 200 render passes.");
+    }
+
     internal static void RaiseNumberEvent(NumberBox number, string method, params object[] arguments)
     {
-        var target = typeof(NumberBox).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var target = typeof(NumberBox).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException($"DroidNet.Controls.NumberBox does not declare an instance method '{method}'.");
         var parameters = target.GetParameters();
         var missingParameters = parameters.Skip(arguments.Length).ToArray();
         if (arguments.Length > parameters.Length || missingParameters.Any(static parameter => !parameter.IsOptional))
@@ -278,6 +296,32 @@ internal static class InspectorControls
         }
         finally
         {
+            flyout.Closed -= OnClosed;
+            flyout.Hide();
+        }
+    }
+
+    internal static async Task PickDisplayColorAsync(Button swatch, Windows.UI.Color color)
+    {
+        var flyout = (Flyout)swatch.Flyout;
+        var opened = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnOpened(object? sender, object args) => opened.TrySetResult();
+        void OnClosed(object? sender, object args) => closed.TrySetResult();
+        flyout.Opened += OnOpened;
+        flyout.Closed += OnClosed;
+        try
+        {
+            flyout.ShowAt(swatch);
+            await opened.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
+            ((ColorPicker)flyout.Content).Color = color;
+            flyout.Hide();
+            await closed.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
+            _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+        }
+        finally
+        {
+            flyout.Opened -= OnOpened;
             flyout.Closed -= OnClosed;
             flyout.Hide();
         }

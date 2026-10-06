@@ -29,4 +29,12 @@ internal static class InspectorCapture
             (uint)bitmap.PixelWidth, (uint)bitmap.PixelHeight, 96, 96, pixels.ToArray());
         await encoder.FlushAsync();
     }
+
+    internal static async Task HoldIfRequestedAsync(CancellationToken cancellationToken)
+    {
+        if (int.TryParse(Environment.GetEnvironmentVariable("OXYGEN_UI_CAPTURE_HOLD_SECONDS"), out var holdSeconds) && holdSeconds > 0)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(holdSeconds), cancellationToken);
+        }
+    }
 }
