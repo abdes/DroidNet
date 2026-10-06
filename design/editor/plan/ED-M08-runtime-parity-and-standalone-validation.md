@@ -648,8 +648,9 @@ and requested shadows; None-role fill; capture invalidation; visibility/Hide
 and receiver cases; every primitive/slot/emission case; Auto/Fixed cameras;
 Manual/Auto exposure; every retained tone mapper/grade/background interaction.
 
-Complete M02's one-viewport resize and consolidated discovery evidence under
-[its plan](ED-M02-live-viewport-stabilization.md). Run normal editor and RenderScene
+M02's one-viewport resize and consolidated discovery evidence is recorded under
+[its plan](ED-M02-live-viewport-stabilization.md); the joint M08 review remains.
+Run normal editor and RenderScene
 without development tools installed. Inspect normal Debug/Release references,
 resources, initializers, exports, packages and SDK inventories for zero
 qualification payloads.
@@ -712,5 +713,7 @@ each run. Native example use/content refresh follows the maintained
 - [ ] Cancel/fault/close/restart/resize preserve source, publication and ownership.
 - [ ] Normal Debug/Release build/install/package contain no qualification payloads.
 - [ ] M02 single-viewport evidence and joint M08 review are recorded.
+      The M02 evidence is recorded (ED-M02 is validated); the joint M08 review
+      remains.
 - [ ] Source/API prose and post-V0.1 annotations match implemented contracts.
 - [ ] Affected-code diagnostics are clean and the exact evidence set is recorded.

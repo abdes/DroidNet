@@ -82,11 +82,11 @@ flowchart LR
     M03 --> M04 --> M05 --> M06 --> M06A --> M07 --> M07A --> M07B --> M08 --> M09 --> M10
 ```
 
-`ED-M02` still requires its recorded supported-viewport validation. The current
+`ED-M02` is validated; its supported-viewport evidence is recorded. The current
 execution sequence is ED-M08 -> ED-M09 -> ED-M10. ED-M07A and ED-M07B are validated.
 Earlier milestones retain their delivery records; source-identified omissions
-are assigned to 07A/07B, with no new M04 closure action. Implementation can progress while
-ED-M02's evidence is collected, but M08 cannot close without that evidence.
+are assigned to 07A/07B, with no new M04 closure action. M08 still requires its
+joint review with the recorded ED-M02 evidence.
 
 Within ED-M08, execute M08.1 → [M08.F1 descriptor-local references](plan/ED-M08.F1-descriptor-local-references.md)
 → M08.2–M08.8. The format cutover precedes the remaining rendering and editor
@@ -388,8 +388,9 @@ Purpose: prove exact saved/published project content in embedded and standalone
 runtime using the PRD 100-node/1,000-entry qualification fixture and field suite.
 The one-mesh smoke scene is a development aid, not the complete acceptance gate.
 
-ED-M07A/07B are validated. M08 implementation can proceed; remaining ED-M02
-supported-viewport evidence is required before M08 closure.
+ED-M07A/07B are validated. M08 implementation can proceed. ED-M02 is validated,
+so only the joint M08 review with its recorded evidence remains before M08
+closure.
 ED-M09 tool completion is not a prerequisite. Required LLDs are property-pipeline,
 standalone-runtime-validation, live-engine-sync, runtime-integration,
 content-pipeline and environment-authoring. The

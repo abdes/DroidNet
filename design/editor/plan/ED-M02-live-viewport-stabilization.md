@@ -1,6 +1,10 @@
 # ED-M02 Live Viewport Stabilization
 
-Status: `review`
+Status: `validated`
+
+Validated 2026-10-06. The ED-M02 evidence row is recorded in
+[../IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md); the remaining
+two/three/four-viewport layouts stay deferred per `DB-002`.
 
 ## 1. Purpose
 
