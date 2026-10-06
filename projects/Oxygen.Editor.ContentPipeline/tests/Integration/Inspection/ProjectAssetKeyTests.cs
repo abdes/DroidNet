@@ -55,9 +55,13 @@ public sealed class ProjectAssetKeyTests
         _ = runner.Count.Should().Be(2);
         File.Delete(Path.Combine(workspace.Root, "Content/Materials/Étain.omat.json"));
         index = await ProjectAssetKeyIndex.ReadAsync(workspace.ProjectContext, [], this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = index.IsPending.Should().BeTrue();
+        _ = (await index.EnsureAsync(api, workspace.Root, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
         _ = index.IsPending.Should().BeFalse();
         _ = index.Resolve(key).Should().BeNull();
-        _ = runner.Count.Should().Be(2);
+        _ = index.Resolve(map.PathsByKey.Single(static pair => string.Equals(pair.Value, "/Content/Scripts/Spin.oscript", StringComparison.Ordinal)).Key)
+            .Should().Be(new Uri("asset:///Content/Scripts/Spin.oscript"));
+        _ = runner.Count.Should().Be(3);
         _ = File.Exists(global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationPaths.Head(workspace.Root)).Should().BeFalse();
     }
 
