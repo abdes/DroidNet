@@ -16,7 +16,6 @@ using Oxygen.Editor.ProjectBrowser.Activation;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ProjectBrowser.ViewModels;

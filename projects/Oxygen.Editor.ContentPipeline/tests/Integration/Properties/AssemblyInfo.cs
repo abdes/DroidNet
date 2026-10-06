@@ -3,3 +3,4 @@
 // SPDX-License-Identifier: MIT
 
 [assembly: Parallelize(Workers = 2, Scope = ExecutionScope.ClassLevel)]
+[assembly: DiscoverInternals]

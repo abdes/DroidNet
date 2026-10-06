@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Linq;
 using AwesomeAssertions;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core.Diagnostics;

@@ -125,10 +125,44 @@ public class VisualUserInterfaceTests
     }
 
     /// <summary>
-    /// Enqueue an asynchronous function to be executed on the main thread.
+    /// Waits until the specified visual state is recorded for the given control using the provided
+    /// <see cref="TestVisualStateManager"/>, or throws a <see cref="TimeoutException"/> if the state
+    /// is not reached within the specified timeout.
     /// </summary>
-    /// <typeparam name="T">The type of the result produced by the function.</typeparam>
-    /// <param name="function">The asynchronous function to be executed.</param>
+    /// <param name="vsm">The <see cref="TestVisualStateManager"/> instance to query for current states.</param>
+    /// <param name="control">The <see cref="FrameworkElement"/> control whose state is being monitored.</param>
+    /// <param name="stateName">The name of the visual state to wait for.</param>
+    /// <param name="timeout">The maximum duration to wait for the state to be reached.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="vsm"/> or <paramref name="control"/> is <see langword="null"/>.</exception>
+    /// <exception cref="TimeoutException">Thrown if the specified state is not reached within the timeout period.</exception>
+    internal static async Task WaitForStateAsync(TestVisualStateManager vsm, FrameworkElement control, string stateName, TimeSpan timeout)
+    {
+        ArgumentNullException.ThrowIfNull(vsm);
+        ArgumentNullException.ThrowIfNull(control);
+
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        var sw = Stopwatch.StartNew();
+        while (sw.Elapsed < timeout)
+        {
+            var states = vsm.GetCurrentStates(control);
+            if (states?.Contains(stateName, StringComparer.Ordinal) == true)
+            {
+                return;
+            }
+
+            await WaitForRenderAsync().ConfigureAwait(true);
+        }
+
+        throw new TimeoutException($"State '{stateName}' was not recorded for the control within {timeout}.");
+    }
+
+    /// <summary>
+    /// Enqueue an asynchronous PropertyNames to be executed on the main thread.
+    /// </summary>
+    /// <typeparam name="T">The type of the result produced by the PropertyNames.</typeparam>
+    /// <param name="function">The asynchronous PropertyNames to be executed.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "exceptions propagated out of async block")]
     protected static Task EnqueueAsync<T>(Func<Task<T>> function)
@@ -289,40 +323,6 @@ public class VisualUserInterfaceTests
     /// <returns>A task representing the asynchronous operation.</returns>
     protected static async Task WaitForRenderAsync()
         => _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-
-    /// <summary>
-    /// Waits until the specified visual state is recorded for the given control using the provided
-    /// <see cref="TestVisualStateManager"/>, or throws a <see cref="TimeoutException"/> if the state
-    /// is not reached within the specified timeout.
-    /// </summary>
-    /// <param name="vsm">The <see cref="TestVisualStateManager"/> instance to query for current states.</param>
-    /// <param name="control">The <see cref="FrameworkElement"/> control whose state is being monitored.</param>
-    /// <param name="stateName">The name of the visual state to wait for.</param>
-    /// <param name="timeout">The maximum duration to wait for the state to be reached.</param>
-    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if <paramref name="vsm"/> or <paramref name="control"/> is <see langword="null"/>.</exception>
-    /// <exception cref="TimeoutException">Thrown if the specified state is not reached within the timeout period.</exception>
-    protected static async Task WaitForStateAsync(TestVisualStateManager vsm, FrameworkElement control, string stateName, TimeSpan timeout)
-    {
-        ArgumentNullException.ThrowIfNull(vsm);
-        ArgumentNullException.ThrowIfNull(control);
-
-        await WaitForRenderAsync().ConfigureAwait(true);
-
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < timeout)
-        {
-            var states = vsm.GetCurrentStates(control);
-            if (states?.Contains(stateName, StringComparer.Ordinal) == true)
-            {
-                return;
-            }
-
-            await WaitForRenderAsync().ConfigureAwait(true);
-        }
-
-        throw new TimeoutException($"State '{stateName}' was not recorded for the control within {timeout}.");
-    }
 
     /// <summary>
     /// Performs additional asynchronous setup steps for derived test classes.

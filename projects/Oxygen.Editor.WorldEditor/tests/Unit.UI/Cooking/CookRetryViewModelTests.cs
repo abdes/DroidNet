@@ -3,29 +3,22 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
-using DroidNet.Aura.Dialogs;
 using DroidNet.Hosting.WinUI;
-using DroidNet.Mvvm.Converters;
-using DroidNet.Mvvm;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Importing;
-using Oxygen.Editor.ContentBrowser;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
-using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World.Cooking;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Cooking;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Cooking;
 
 [TestClass]
-public sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     /// <summary>Retry dispatches initial imports and retained sources to their respective shared entry points.</summary>
     /// <param name="retained">Whether the earlier operation already saved its source settings.</param>

@@ -905,7 +905,7 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
             FolderId = entry.FolderId,
             NodeId = entry.NodeId,
             Name = entry.Name,
-            Children = entry.Children is null ? null : entry.Children.Select(CloneEntry).ToList(),
+            Children = entry.Children?.Select(CloneEntry).ToList(),
             IsExpanded = entry.IsExpanded,
         };
     }
@@ -1181,7 +1181,7 @@ public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISc
         // 3. Find the nearest "Node" ancestor in the folder's path
         // Iterate backwards from folder's parent (folder is at Last index)
         Guid? expectedParentId = null;
-        for (int i = folderPath.Count - 2; i >= 0; i--)
+        for (var i = folderPath.Count - 2; i >= 0; i--)
         {
             var entry = folderPath[i];
             if (TypeComparer.Equals(entry.Type, "Node") && entry.NodeId.HasValue)

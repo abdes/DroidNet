@@ -50,19 +50,13 @@ public partial class Anchor : IDisposable
              * root.
              */
 
-            if (this.dockable != null)
-            {
-                // Unsubscribe
-                this.dockable.OnDisposed -= this.OnDockableDisposed;
-            }
+            // Unsubscribe
+            this.dockable?.OnDisposed -= this.OnDockableDisposed;
 
             this.dockable = value;
 
             // Subscribe
-            if (this.dockable != null)
-            {
-                this.dockable.OnDisposed += this.OnDockableDisposed;
-            }
+            this.dockable?.OnDisposed += this.OnDockableDisposed;
         }
     }
 

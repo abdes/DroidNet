@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using DroidNet.Storage;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentPipeline.Snapshots;
@@ -12,7 +11,6 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;

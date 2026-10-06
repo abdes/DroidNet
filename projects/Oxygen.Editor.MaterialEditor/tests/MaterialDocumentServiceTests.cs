@@ -5,7 +5,6 @@
 using System.Buffers.Binary;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
-using DroidNet.Storage;
 using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline;
@@ -400,7 +399,7 @@ public sealed partial class MaterialDocumentServiceTests
             ?? throw new InvalidDataException("The material cook did not publish its Content root.");
         var indexStream = File.OpenRead(Path.Combine(cookedRoot, "container.index.bin"));
         await using var indexLifetime = indexStream.ConfigureAwait(false);
-            var index = Oxygen.Managed.Assets.Persistence.LooseCooked.V3.LooseCookedIndex.Read(indexStream);
+        var index = Oxygen.Managed.Assets.Persistence.LooseCooked.V3.LooseCookedIndex.Read(indexStream);
         var materialEntry = index.Assets.Single(static asset => string.Equals(asset.VirtualPath, "/Content/Materials/RoundTrip.omat", StringComparison.Ordinal));
         var cookedBytes = await File.ReadAllBytesAsync(
             Path.Combine(cookedRoot, materialEntry.DescriptorRelativePath), this.TestContext.CancellationToken).ConfigureAwait(false);

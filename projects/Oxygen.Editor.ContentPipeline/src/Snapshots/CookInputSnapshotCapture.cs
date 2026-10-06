@@ -100,7 +100,10 @@ public sealed partial class CookInputSnapshotCapture(ICookDocumentRegistry docum
             Inputs = inputs.OrderBy(static input => input.RelativePath, StringComparer.Ordinal)
                 .Select(static input => new
                 {
-                    Uri = input.AssetUri?.AbsoluteUri, input.RelativePath, Hash = input.DiscoveryHash, input.Kind,
+                    Uri = input.AssetUri?.AbsoluteUri,
+                    input.RelativePath,
+                    Hash = input.DiscoveryHash,
+                    input.Kind,
                     Metadata = input.ProbeShape,
                 }),
         });

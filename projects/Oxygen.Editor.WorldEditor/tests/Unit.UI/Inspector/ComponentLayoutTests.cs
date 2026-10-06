@@ -8,16 +8,13 @@ using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
 using DroidNet.Tests;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
-using Microsoft.UI.Xaml.Media.Imaging;
-using Microsoft.UI.Xaml;
-using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.TestSupport;
-using Windows.Graphics.Imaging;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
 using NumberBox = DroidNet.Controls.NumberBox;
@@ -25,7 +22,7 @@ using NumberBox = DroidNet.Controls.NumberBox;
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed partial class ComponentLayoutTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class ComponentLayoutTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -59,7 +56,7 @@ public sealed partial class ComponentLayoutTests : DroidNet.Tests.VisualUserInte
         {
             var second = new SceneNode(fixture.Scene)
             {
-                Name = "Second"
+                Name = "Second",
             };
             _ = second.AddComponent(CreateInspectorGeometry());
             fixture.Scene.RootNodes.Add(second);
@@ -71,7 +68,7 @@ public sealed partial class ComponentLayoutTests : DroidNet.Tests.VisualUserInte
             ViewModel = model,
             Width = width,
             Height = height,
-            RequestedTheme = theme
+            RequestedTheme = theme,
         };
         var captureHost = (Border)XamlReader.Load("<Border xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Background='{ThemeResource ApplicationPageBackgroundThemeBrush}' />");
         captureHost.RequestedTheme = theme;
@@ -117,14 +114,14 @@ public sealed partial class ComponentLayoutTests : DroidNet.Tests.VisualUserInte
         {
             var second = new SceneNode(fixture.Scene)
             {
-                Name = "Second"
+                Name = "Second",
             };
             _ = second.AddComponent(CreateInspectorGeometry());
             _ = second.AddComponent(new OrthographicCamera { Name = "Camera" });
             _ = second.AddComponent(new PointLightComponent { Name = "Light" });
             var third = new SceneNode(fixture.Scene)
             {
-                Name = "Third"
+                Name = "Third",
             };
             _ = third.AddComponent(CreateInspectorGeometry());
             _ = third.AddComponent(new PerspectiveCamera { Name = "Camera" });
@@ -138,7 +135,7 @@ public sealed partial class ComponentLayoutTests : DroidNet.Tests.VisualUserInte
         {
             ViewModel = model,
             Width = 360,
-            Height = 500
+            Height = 500,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         _ = model.ComponentFilters.Should().HaveCount(mixedTypes ? 7 : 4);

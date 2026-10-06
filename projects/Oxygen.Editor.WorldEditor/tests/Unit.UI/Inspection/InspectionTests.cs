@@ -9,13 +9,13 @@ using DroidNet.Aura.Windowing;
 using DroidNet.Documents;
 using DroidNet.Mvvm;
 using DryIoc;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml;
 using Microsoft.UI;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Messages;
-using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.MaterialEditor;
@@ -23,15 +23,13 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspection;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspection;
 
 [TestClass]
-public sealed partial class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -57,13 +55,13 @@ public sealed partial class InspectionTests : DroidNet.Tests.VisualUserInterface
         });
         var view = new CookedInspectionView
         {
-            ViewModel = model
+            ViewModel = model,
         };
         var root = new Grid
         {
             Width = width,
             Height = 620,
-            RequestedTheme = light ? ElementTheme.Light : ElementTheme.Dark
+            RequestedTheme = light ? ElementTheme.Light : ElementTheme.Dark,
         };
         root.Children.Add(view);
         await LoadTestContentAsync(root).ConfigureAwait(true);
@@ -184,7 +182,7 @@ public sealed partial class InspectionTests : DroidNet.Tests.VisualUserInterface
         var assets = new[]
         {
             new CookedAssetEntry("/Content/Scenes/Main.oscene", ContentCookAssetKind.Scene),
-            new CookedAssetEntry("/Content/Materials/Red.omat", ContentCookAssetKind.Material)
+            new CookedAssetEntry("/Content/Materials/Red.omat", ContentCookAssetKind.Material),
         };
         CookedFileEntry[] files = [new("container.index.bin", 1024), new("Scenes/Main.oscene", 256), new("Materials/Red.omat", 128)];
         var inspection = new CookInspectionResult(root, Succeeded: true, SourceIdentity: Guid.NewGuid(), assets, files, Diagnostics: []);

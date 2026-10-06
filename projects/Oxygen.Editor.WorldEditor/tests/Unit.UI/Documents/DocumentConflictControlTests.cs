@@ -7,15 +7,14 @@ using CommunityToolkit.WinUI;
 using DroidNet.Aura.Dialogs;
 using DroidNet.Aura.Windowing;
 using DroidNet.Tests;
+using Microsoft.UI;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml;
-using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Documents;
 

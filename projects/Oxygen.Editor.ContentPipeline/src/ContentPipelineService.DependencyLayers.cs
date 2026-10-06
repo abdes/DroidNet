@@ -106,8 +106,13 @@ public sealed partial class ContentPipelineService
                 var inputs = mount.ToArray();
                 var scope = this.CreateScope(operation.Project, inputs, targetKind) with
                 {
-                    Snapshot = snapshot, Artifacts = artifacts, ReusableSources = completed.ToImmutableHashSet(), PreviousProvenance = previous, PreviousInventories = plan.PriorInventories,
-                    NativeJobs = graph.NativeJobs, SceneDescriptors = graph.SceneDescriptors,
+                    Snapshot = snapshot,
+                    Artifacts = artifacts,
+                    ReusableSources = completed.ToImmutableHashSet(),
+                    PreviousProvenance = previous,
+                    PreviousInventories = plan.PriorInventories,
+                    NativeJobs = graph.NativeJobs,
+                    SceneDescriptors = graph.SceneDescriptors,
                     CapturedInputs = new([.. snapshot.CreateNativeInputs().Inputs, .. graph.GeneratedInputs]),
                     Output = staging.Roots.Single(root => string.Equals(root.Mount, mount.Key, StringComparison.OrdinalIgnoreCase)),
                     CookedContextRoots = referenceRoots,

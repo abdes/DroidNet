@@ -5,7 +5,6 @@
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Aura.Dialogs;
 using DroidNet.Controls;
-using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Projects;
@@ -64,7 +63,10 @@ public partial class ProjectLayoutViewModel
 
         var spec = new DialogSpec("Mount Local Folder", view)
         {
-            PrimaryButtonText = "Add", SecondaryButtonText = "Cancel", CloseButtonText = string.Empty, DefaultButton = DialogButton.Primary,
+            PrimaryButtonText = "Add",
+            SecondaryButtonText = "Cancel",
+            CloseButtonText = string.Empty,
+            DefaultButton = DialogButton.Primary,
         };
         return await dialogService.ShowAsync(spec).ConfigureAwait(true) == DialogButton.Primary;
     }

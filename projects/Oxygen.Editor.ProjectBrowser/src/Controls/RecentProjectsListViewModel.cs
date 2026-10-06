@@ -12,7 +12,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.ProjectBrowser.Controls;
 

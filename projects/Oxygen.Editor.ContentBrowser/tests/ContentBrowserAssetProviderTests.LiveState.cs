@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -110,7 +110,10 @@ public sealed partial class ContentBrowserAssetProviderTests
         await provider.RefreshAsync(AssetBrowserFilter.Default, this.TestContext.CancellationToken).ConfigureAwait(false);
         var run = new CookRunSnapshot
         {
-            OperationId = Guid.NewGuid(), ProjectId = context.ActiveProject!.ProjectId, ProjectRoot = workspace.Root, DisplayName = "Cook",
+            OperationId = Guid.NewGuid(),
+            ProjectId = context.ActiveProject!.ProjectId,
+            ProjectRoot = workspace.Root,
+            DisplayName = "Cook",
             Request = new(kind, kind is CookTargetKind.Asset or CookTargetKind.CurrentScene ? red : kind == CookTargetKind.Folder ? new Uri("asset:///Content/Materials") : null),
         };
         runs = [run];
@@ -191,8 +194,12 @@ public sealed partial class ContentBrowserAssetProviderTests
         var context = CreateProjectContextService(workspace);
         var run = new CookRunSnapshot
         {
-            OperationId = Guid.NewGuid(), ProjectId = context.ActiveProject!.ProjectId, ProjectRoot = workspace.Root, DisplayName = "Red",
-            Request = new(CookTargetKind.Asset, uri, IsAutomatic: true), State = CookRunState.Cooking,
+            OperationId = Guid.NewGuid(),
+            ProjectId = context.ActiveProject!.ProjectId,
+            ProjectRoot = workspace.Root,
+            DisplayName = "Red",
+            Request = new(CookTargetKind.Asset, uri, IsAutomatic: true),
+            State = CookRunState.Cooking,
         };
         var cooks = new Mock<ICookRunService>();
         _ = cooks.SetupGet(service => service.Runs).Returns(() => new[] { run });

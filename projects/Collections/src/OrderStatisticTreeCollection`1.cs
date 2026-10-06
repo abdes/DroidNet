@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections;
-using System.Diagnostics;
 
 namespace DroidNet.Collections;
 

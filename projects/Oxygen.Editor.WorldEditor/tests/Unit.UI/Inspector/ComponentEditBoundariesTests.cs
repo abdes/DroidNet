@@ -8,12 +8,11 @@ using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI;
-using Oxygen.Editor.World.Components;
+using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
@@ -22,7 +21,7 @@ using NumberBox = DroidNet.Controls.NumberBox;
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed partial class ComponentEditBoundariesTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class ComponentEditBoundariesTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -48,7 +47,7 @@ public sealed partial class ComponentEditBoundariesTests : DroidNet.Tests.Visual
         {
             ViewModel = host,
             Width = 450,
-            Height = 650
+            Height = 650,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var scroller = (ScrollViewer)view.FindName("PropertyScroll");
@@ -101,7 +100,7 @@ public sealed partial class ComponentEditBoundariesTests : DroidNet.Tests.Visual
         {
             ViewModel = host,
             Width = 450,
-            Height = 650
+            Height = 650,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var scroller = (ScrollViewer)view.FindName("PropertyScroll");

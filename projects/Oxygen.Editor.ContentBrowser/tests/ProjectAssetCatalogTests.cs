@@ -247,7 +247,7 @@ public sealed class ProjectAssetCatalogTests
         fixture.ContentRelease.SetResult();
         await using var catalog = fixture.CreateCatalog();
         var initialization = catalog.InitializeAsync();
-        Task disposal = Task.CompletedTask;
+        var disposal = Task.CompletedTask;
         try
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -284,9 +284,13 @@ public sealed class ProjectAssetCatalogTests
             var content = Path.Combine(root, "Content");
             this.project = new ProjectContext
             {
-                ProjectId = Guid.NewGuid(), Name = "Catalog", Category = Category.Games,
-                ProjectRoot = root, AuthoringMounts = [new("Content", "Content")],
-                LocalFolderMounts = [], Scenes = [],
+                ProjectId = Guid.NewGuid(),
+                Name = "Catalog",
+                Category = Category.Games,
+                ProjectRoot = root,
+                AuthoringMounts = [new("Content", "Content")],
+                LocalFolderMounts = [],
+                Scenes = [],
             };
             var files = new NativeAtomicFileStore(new RealFileSystem());
             var observedFiles = new Mock<IAtomicFileStore>();

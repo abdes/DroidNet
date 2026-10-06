@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
-using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics;
 using System.Text.Json;
 using AwesomeAssertions;

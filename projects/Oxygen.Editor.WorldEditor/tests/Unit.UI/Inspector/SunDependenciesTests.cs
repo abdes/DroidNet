@@ -4,22 +4,20 @@
 
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
-using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed partial class SunDependenciesTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class SunDependenciesTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -37,12 +35,12 @@ public sealed partial class SunDependenciesTests : DroidNet.Tests.VisualUserInte
         var model = host.PropertyEditors.OfType<EnvironmentViewModel>().Single();
         var view = new EnvironmentView
         {
-            ViewModel = model
+            ViewModel = model,
         };
         var scroller = new ScrollViewer
         {
             Content = view,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
         var picker = await FindSunPickerAsync(view, scroller, model).ConfigureAwait(true);
@@ -97,10 +95,10 @@ public sealed partial class SunDependenciesTests : DroidNet.Tests.VisualUserInte
 
         await model.AtmosphereLights.InspectAtmosphereSourceAsync(source).ConfigureAwait(true);
         _ = host.SelectedNode.Should().BeSameAs(fixture.Node);
-        _ = host.SelectedComponentType.Should().Be(typeof(DirectionalLightComponent));
+        _ = host.SelectedComponentType.Should().Be<DirectionalLightComponent>();
         _ = host.PropertyEditors.Should().ContainSingle().Which.Should().BeOfType<DirectionalLightViewModel>();
         await model.AtmosphereLights.InspectAtmosphereSourceAsync(source).ConfigureAwait(true);
-        _ = host.SelectedComponentType.Should().Be(typeof(DirectionalLightComponent));
+        _ = host.SelectedComponentType.Should().Be<DirectionalLightComponent>();
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
         _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
     });
@@ -118,7 +116,7 @@ public sealed partial class SunDependenciesTests : DroidNet.Tests.VisualUserInte
         var model = host.PropertyEditors.OfType<EnvironmentViewModel>().Single();
         model.AtmosphereLights.PrimaryAtmosphereSource.AngularDiameterDegrees = 1;
         await model.AtmosphereLights.PrimaryAtmosphereSource.PendingEdits.ConfigureAwait(true);
-        model.AtmosphereLights.ClearSunCommand.Execute(null);
+        model.AtmosphereLights.ClearSunCommand.Execute(parameter: null);
         await model.PendingEdits.ConfigureAwait(true);
         var editedAngularSize = light.AngularSizeRadians;
         var historyCount = fixture.Context.History.UndoStack.Count;

@@ -1,8 +1,7 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Controls;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
 

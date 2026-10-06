@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -122,7 +122,9 @@ internal static class CookIncrementalPlanner
             Producer = producer,
             Files = files.Select(file => new
             {
-                Path = file.RelativePath, file.DiscoveryHash, file.Kind,
+                Path = file.RelativePath,
+                file.DiscoveryHash,
+                file.Kind,
                 Metadata = file.ProbeShape,
             }),
 

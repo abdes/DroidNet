@@ -7,11 +7,8 @@ using AwesomeAssertions;
 using DroidNet.Storage;
 using Moq;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;

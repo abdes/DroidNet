@@ -6,23 +6,21 @@ using System.Reactive.Subjects;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
-using Microsoft.UI.Xaml;
 using Moq;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.MaterialEditor;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorModels;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed partial class MaterialStatusTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class MaterialStatusTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -45,7 +43,7 @@ public sealed partial class MaterialStatusTests : DroidNet.Tests.VisualUserInter
     {
         var item = CreateStatusAsset(0) with
         {
-            IdentityUri = new("asset:///Content/Materials/UI.omat.json")
+            IdentityUri = new("asset:///Content/Materials/UI.omat.json"),
         };
         using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([item]);
         var provider = new Mock<IContentBrowserAssetProvider>();
@@ -57,7 +55,7 @@ public sealed partial class MaterialStatusTests : DroidNet.Tests.VisualUserInter
             ViewModel = model,
             Width = width,
             Height = 600,
-            RequestedTheme = theme
+            RequestedTheme = theme,
         };
         var host = (Border)XamlReader.Load("<Border xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Background='{ThemeResource ApplicationPageBackgroundThemeBrush}' />");
         host.RequestedTheme = theme;
@@ -80,10 +78,8 @@ public sealed partial class MaterialStatusTests : DroidNet.Tests.VisualUserInter
             (CookRunState.Queued, "Queued"),
             (CookRunState.Cooking, "Cooking"),
             (CookRunState.Failed, "Cook failed"),
-            (CookRunState.Succeeded, "Cooked")
-        }
-
-        )
+            (CookRunState.Succeeded, "Cooked"),
+        })
         {
             await Task.Run(() => updates.OnNext([item with { CookActivity = new(Guid.NewGuid(), state) }]), this.TestContext.CancellationToken).ConfigureAwait(true);
             await WaitForRenderAsync().ConfigureAwait(true);
@@ -97,10 +93,8 @@ public sealed partial class MaterialStatusTests : DroidNet.Tests.VisualUserInter
         {
             (AssetRuntimeAvailability.Mounted, "Ready"),
             (AssetRuntimeAvailability.Failed, "Preview issue"),
-            (AssetRuntimeAvailability.Unavailable, "Cooked")
-        }
-
-        )
+            (AssetRuntimeAvailability.Unavailable, "Cooked"),
+        })
         {
             await Task.Run(() => updates.OnNext([item with { RuntimeAvailability = availability, RuntimeReason = "Native availability detail" }]), this.TestContext.CancellationToken).ConfigureAwait(true);
             await WaitForRenderAsync().ConfigureAwait(true);

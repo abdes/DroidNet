@@ -11,7 +11,7 @@ namespace DroidNet.Tests;
 /// <summary>Exercises window-free dispatch and realized-content reuse in the shared host.</summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
-public sealed class TestHostLifecycleTests : VisualUserInterfaceTests
+internal sealed class TestHostLifecycleTests : VisualUserInterfaceTests
 {
     /// <summary>Fixture setup and cleanup can run without loading content.</summary>
     /// <returns>The dispatched operation.</returns>

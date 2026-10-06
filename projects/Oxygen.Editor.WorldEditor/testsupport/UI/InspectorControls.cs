@@ -5,39 +5,18 @@
 using System.Globalization;
 using System.Reflection;
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
-using DroidNet.Documents;
-using DroidNet.Hosting.WinUI;
-using DroidNet.Mvvm.Converters;
-using DroidNet.Mvvm;
 using DroidNet.Tests;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
-using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml;
-using Microsoft.UI;
-using Moq;
-using Oxygen.Editor.ContentBrowser.Materials;
-using Oxygen.Editor.MaterialEditor;
-using Oxygen.Editor.Projects;
-using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.Schemas;
-using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.Inspector.Geometry;
-using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Editor.WorldEditor.TestSupport;
-using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Model;
-using Oxygen.Managed.Core;
+using Oxygen.Editor.World.Inspector;
+using Oxygen.Editor.World.Inspector.Geometry;
 using Windows.Foundation;
 using NumberBox = DroidNet.Controls.NumberBox;
 
@@ -340,19 +319,19 @@ internal static class InspectorControls
     {
         PerspectiveCameraViewModel camera => new PerspectiveCameraView
         {
-            ViewModel = camera
+            ViewModel = camera,
         },
         DirectionalLightViewModel light => new DirectionalLightView
         {
-            ViewModel = light
+            ViewModel = light,
         },
         EnvironmentViewModel environment => new EnvironmentView
         {
-            ViewModel = environment
+            ViewModel = environment,
         },
         TransformViewModel transform => new TransformView
         {
-            ViewModel = transform
+            ViewModel = transform,
         },
         _ => throw new ArgumentException("Expected a numeric inspector.", nameof(model)),
     };

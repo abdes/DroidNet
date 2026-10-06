@@ -5,7 +5,6 @@
 using AwesomeAssertions;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldCases;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;

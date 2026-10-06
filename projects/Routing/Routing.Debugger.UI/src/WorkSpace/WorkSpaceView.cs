@@ -30,26 +30,14 @@ public partial class WorkSpaceView : UserControl
 
         this.ViewModelChanged += (_, args) =>
         {
-            if (args.OldValue is not null)
-            {
-                args.OldValue.Layout.PropertyChanged -= this.ViewModelPropertyChanged;
-            }
+            args.OldValue?.Layout.PropertyChanged -= this.ViewModelPropertyChanged;
 
             this.UpdateContent();
 
-            if (this.ViewModel is not null)
-            {
-                this.ViewModel.Layout.PropertyChanged += this.ViewModelPropertyChanged;
-            }
+            this.ViewModel?.Layout.PropertyChanged += this.ViewModelPropertyChanged;
         };
 
-        this.Unloaded += (_, _) =>
-        {
-            if (this.ViewModel is not null)
-            {
-                this.ViewModel.Layout.PropertyChanged -= this.ViewModelPropertyChanged;
-            }
-        };
+        this.Unloaded += (_, _) => this.ViewModel?.Layout.PropertyChanged -= this.ViewModelPropertyChanged;
     }
 
     [LoggerMessage(

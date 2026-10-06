@@ -83,7 +83,7 @@ public class CameraComponentTests
     [DataRow(float.PositiveInfinity)]
     public void PhysicalExposure_RejectsInvalidValuesWithoutMutation(float invalid)
     {
-        foreach (CameraComponent camera in new CameraComponent[] { new PerspectiveCamera { Name = "Perspective" }, new OrthographicCamera { Name = "Ortho" } })
+        foreach (var camera in new CameraComponent[] { new PerspectiveCamera { Name = "Perspective" }, new OrthographicCamera { Name = "Ortho" } })
         {
             Action changeAperture = () => camera.ApertureF = invalid;
             Action changeShutter = () => camera.ShutterRate = invalid;

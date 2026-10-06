@@ -4,15 +4,14 @@
 
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
-using DroidNet.Controls.OutputConsole.Model;
 using DroidNet.Controls.OutputConsole;
+using DroidNet.Controls.OutputConsole.Model;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.World.Cooking;
-using Oxygen.Editor.World;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Cooking;

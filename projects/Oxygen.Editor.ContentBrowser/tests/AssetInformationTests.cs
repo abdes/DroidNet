@@ -30,7 +30,9 @@ public sealed class AssetInformationTests
         var output = new Uri("asset:///Content/Materials/Blue.omat");
         var status = asset.CookStatus! with
         {
-            Freshness = AssetCookFreshness.OutOfDate, HasPublishedOutput = true, OutputAvailability = CookedOutputAvailability.Present,
+            Freshness = AssetCookFreshness.OutOfDate,
+            HasPublishedOutput = true,
+            OutputAvailability = CookedOutputAvailability.Present,
             Outputs =
             [
                 new(asset.IdentityUri, output, ContentCookAssetKind.Material, "Content", output.AbsolutePath),
@@ -48,9 +50,13 @@ public sealed class AssetInformationTests
     {
         var builtin = CreateAsset() with
         {
-            IdentityUri = AssetUris.BuildGeneratedUri("Materials/Default"), DisplayName = "Default", PrimaryState = AssetState.Generated,
+            IdentityUri = AssetUris.BuildGeneratedUri("Materials/Default"),
+            DisplayName = "Default",
+            PrimaryState = AssetState.Generated,
             Generated = new("Default", "material", "/Content/Materials/OxygenEditor_Default.omat", GeneratedAssetCategory.Standard),
-            SourcePath = null, DescriptorPath = null, CookStatus = null,
+            SourcePath = null,
+            DescriptorPath = null,
+            CookStatus = null,
         };
         _ = builtin.Information.Facts.Should().ContainSingle().Which.Should().Be(new AssetInformationFact("Origin", "Oxygen built-in"));
         var copy = builtin with { IdentityUri = new("asset:///Content/Materials/OxygenEditor_Default.omat"), CookedUri = new("asset:///Content/Materials/OxygenEditor_Default.omat"), BuiltinOriginUri = builtin.IdentityUri };
@@ -65,8 +71,12 @@ public sealed class AssetInformationTests
     {
         var asset = CreateAsset() with
         {
-            PrimaryState = AssetState.Cooked, SourcePath = null, DescriptorPath = null, CookStatus = null,
-            CookedUri = new("asset:///Library/Blue.omat"), RuntimeAvailability = AssetRuntimeAvailability.Failed,
+            PrimaryState = AssetState.Cooked,
+            SourcePath = null,
+            DescriptorPath = null,
+            CookStatus = null,
+            CookedUri = new("asset:///Library/Blue.omat"),
+            RuntimeAvailability = AssetRuntimeAvailability.Failed,
             RuntimeReason = "The cooked material could not be loaded.",
         };
         _ = asset.Information.Facts.Should().Contain(new AssetInformationFact("Source", "Unavailable · read-only"));

@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.InteropServices;
-using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
@@ -36,25 +36,6 @@ internal sealed partial class NativePointer : IDisposable
         this.position = this.GetTargetPosition();
     }
 
-    private NativePoint GetTargetPosition()
-    {
-        var target = this.target;
-        var center = target.TransformToVisual(target.XamlRoot.Content).TransformPoint(new Point(target.ActualWidth / 2, target.ActualHeight / 2));
-        if (!target.IsLoaded || target.ActualWidth <= 0 || target.ActualHeight <= 0
-            || !VisualTreeHelper.FindElementsInHostCoordinates(center, target.XamlRoot.Content).Contains(target))
-        {
-            throw new InvalidOperationException($"The native input target is not visible and hit-testable: loaded={target.IsLoaded}, size={target.ActualWidth}x{target.ActualHeight}, center={center}, root={target.XamlRoot.Content.RenderSize}.");
-        }
-
-        var point = new NativePoint { X = (int)Math.Round(center.X * this.scale), Y = (int)Math.Round(center.Y * this.scale) };
-        if (!ClientToScreen(this.window, ref point))
-        {
-            throw new Win32Exception(Marshal.GetLastPInvokeError());
-        }
-
-        return point;
-    }
-
     public static async Task<NativePointer> PressAsync(FrameworkElement target, CancellationToken cancellationToken)
     {
         var pointer = new NativePointer(target);
@@ -72,7 +53,7 @@ internal sealed partial class NativePointer : IDisposable
             }
 
             pointer.CheckForeground();
-            pointer.Move(0x0002);
+            pointer.SendMove(0x0002);
             pointer.pressed = true;
             await Task.Delay(80, cancellationToken).ConfigureAwait(true);
             return pointer;
@@ -84,19 +65,19 @@ internal sealed partial class NativePointer : IDisposable
         }
     }
 
+    public static async Task ReleaseAsync(CancellationToken cancellationToken)
+    {
+        await ReleaseAsync(cancellationToken).ConfigureAwait(true);
+        await Task.Delay(80, cancellationToken).ConfigureAwait(true);
+    }
+
     public async Task MoveAsync(double horizontalDips, CancellationToken cancellationToken)
     {
         this.CheckForeground();
-        this.position.X += (int)Math.Round(horizontalDips * this.scale);
-        this.Move();
+        this.position.X += (int)Math.Round(horizontalDips * this.scale, MidpointRounding.ToEven);
+        this.SendMove();
         await Task.Delay(60, cancellationToken).ConfigureAwait(true);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-    }
-
-    public async Task ReleaseAsync(CancellationToken cancellationToken)
-    {
-        this.Release();
-        await Task.Delay(80, cancellationToken).ConfigureAwait(true);
     }
 
     public async Task EscapeAsync(CancellationToken cancellationToken)
@@ -124,12 +105,74 @@ internal sealed partial class NativePointer : IDisposable
         }
     }
 
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial uint SendInput(uint count, in NativeInput input, int size);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool ClientToScreen(nint window, ref NativePoint point);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetCursorPos(out NativePoint point);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetCursorPos(int x, int y);
+
+    [LibraryImport("user32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial uint GetWindowThreadProcessId(nint window, out uint processId);
+
+    [LibraryImport("user32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial nint GetForegroundWindow();
+
+    [LibraryImport("user32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetForegroundWindow(nint window);
+
+    [LibraryImport("user32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial int GetSystemMetrics(int index);
+
+    [LibraryImport("user32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial nint WindowFromPoint(NativePoint point);
+
+    private NativePoint GetTargetPosition()
+    {
+        var center = this.target.TransformToVisual(this.target.XamlRoot.Content).TransformPoint(new Point(this.target.ActualWidth / 2, this.target.ActualHeight / 2));
+        if (!this.target.IsLoaded || this.target.ActualWidth <= 0 || this.target.ActualHeight <= 0
+            || !VisualTreeHelper.FindElementsInHostCoordinates(center, this.target.XamlRoot.Content).Contains(this.target))
+        {
+            throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"The native input target is not visible and hit-testable: loaded={this.target.IsLoaded}, size={this.target.ActualWidth}x{this.target.ActualHeight}, center={center}, root={this.target.XamlRoot.Content.RenderSize}."));
+        }
+
+        var point = new NativePoint
+        {
+            X = (int)Math.Round(center.X * this.scale, MidpointRounding.ToEven),
+            Y = (int)Math.Round(center.Y * this.scale, MidpointRounding.ToEven),
+        };
+        if (!ClientToScreen(this.window, ref point))
+        {
+            throw new Win32Exception(Marshal.GetLastPInvokeError());
+        }
+
+        return point;
+    }
+
     private async Task PositionOverTargetAsync(CancellationToken cancellationToken)
     {
         for (var attempt = 0; attempt < 8; attempt++)
         {
             this.position = this.GetTargetPosition();
-            this.Move();
+            this.SendMove();
             await Task.Delay(60, cancellationToken).ConfigureAwait(true);
             _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
             var current = this.GetTargetPosition();
@@ -151,7 +194,7 @@ internal sealed partial class NativePointer : IDisposable
         }
     }
 
-    private void Move(uint buttonFlags = 0)
+    private void SendMove(uint buttonFlags = 0)
     {
         var left = GetSystemMetrics(76);
         var top = GetSystemMetrics(77);
@@ -173,7 +216,7 @@ internal sealed partial class NativePointer : IDisposable
         if (GetForegroundWindow() != this.window)
         {
             _ = GetWindowThreadProcessId(GetForegroundWindow(), out var foregroundProcess);
-            throw new InvalidOperationException($"Native input stopped because the owned test window is no longer foreground: expected={this.window}, actual={GetForegroundWindow()}, foregroundProcess={foregroundProcess}, testProcess={Environment.ProcessId}.");
+            throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Native input stopped because the owned test window is no longer foreground: expected={this.window}, actual={GetForegroundWindow()}, foregroundProcess={foregroundProcess}, testProcess={Environment.ProcessId}."));
         }
     }
 
@@ -187,9 +230,14 @@ internal sealed partial class NativePointer : IDisposable
     [StructLayout(LayoutKind.Explicit, Size = 40)]
     private struct NativeInput
     {
-        [FieldOffset(0)] public uint Type;
-        [FieldOffset(8)] public MouseInput Mouse;
-        [FieldOffset(8)] public KeyboardInput Keyboard;
+        [FieldOffset(0)]
+        public uint Type;
+
+        [FieldOffset(8)]
+        public MouseInput Mouse;
+
+        [FieldOffset(8)]
+        public KeyboardInput Keyboard;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -212,35 +260,4 @@ internal sealed partial class NativePointer : IDisposable
         public uint Time;
         public nuint ExtraInfo;
     }
-
-    [LibraryImport("user32.dll", SetLastError = true)]
-    private static partial uint SendInput(uint count, in NativeInput input, int size);
-
-    [LibraryImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool ClientToScreen(nint window, ref NativePoint point);
-
-    [LibraryImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool GetCursorPos(out NativePoint point);
-
-    [LibraryImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool SetCursorPos(int x, int y);
-
-    [LibraryImport("user32.dll")]
-    private static partial uint GetWindowThreadProcessId(nint window, out uint processId);
-
-    [LibraryImport("user32.dll")]
-    private static partial nint GetForegroundWindow();
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool SetForegroundWindow(nint window);
-
-    [LibraryImport("user32.dll")]
-    private static partial int GetSystemMetrics(int index);
-
-    [LibraryImport("user32.dll")]
-    private static partial nint WindowFromPoint(NativePoint point);
 }

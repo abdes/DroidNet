@@ -4,8 +4,8 @@
 
 using AwesomeAssertions;
 using DroidNet.Tests;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.World.Inspector;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
@@ -55,7 +55,7 @@ internal sealed class EnvironmentInspectorScenario : IDisposable
         }
 
         var view = new EnvironmentView { ViewModel = model };
-        FrameworkElement content = host switch
+        var content = host switch
         {
             ScenarioHost.Scroll => Sized(new ScrollViewer { Content = view, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }, width, height),
             ScenarioHost.None => Sized(view, width, height),

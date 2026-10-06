@@ -7,22 +7,20 @@ using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml;
 using Moq;
+using Oxygen.Editor.ContentBrowser;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.ContentBrowser.Messages;
-using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
-using Oxygen.Editor.ContentBrowser;
-using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.World.Inspector.Geometry;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core.Diagnostics;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserControls;
@@ -31,7 +29,7 @@ using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed partial class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -54,12 +52,12 @@ public sealed partial class ImportedAssetsTests : DroidNet.Tests.VisualUserInter
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         UserControl view = tiles ? new TilesLayoutView
         {
-            ViewModel = (TilesLayoutViewModel)model
+            ViewModel = (TilesLayoutViewModel)model,
         }
 
         : new ListLayoutView
         {
-            ViewModel = (ListLayoutViewModel)model
+            ViewModel = (ListLayoutViewModel)model,
         };
         view.RequestedTheme = light ? ElementTheme.Light : ElementTheme.Dark;
         await LoadTestContentAsync(view).ConfigureAwait(true);
@@ -100,7 +98,7 @@ public sealed partial class ImportedAssetsTests : DroidNet.Tests.VisualUserInter
         var view = new GeometryView
         {
             ViewModel = geometry,
-            Width = 440
+            Width = 440,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -145,7 +143,7 @@ public sealed partial class ImportedAssetsTests : DroidNet.Tests.VisualUserInter
         using var layout = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
         var layoutView = new TilesLayoutView
         {
-            ViewModel = layout
+            ViewModel = layout,
         };
         await layout.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         using var browser = CreateBuiltinBrowserModel(provider.Object, projects, state, layout, layoutView, messenger, pipeline.Object);
@@ -153,7 +151,7 @@ public sealed partial class ImportedAssetsTests : DroidNet.Tests.VisualUserInter
         browser.LoadContent(layout, "right");
         var view = new AssetsView
         {
-            ViewModel = browser
+            ViewModel = browser,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         layout.SelectedAsset = output;
@@ -188,11 +186,35 @@ public sealed partial class ImportedAssetsTests : DroidNet.Tests.VisualUserInter
         };
     }
 
-    private static ContentBrowserAssetItem[] CreateImportedOutputRows(ContentBrowserAssetItem source) => source.CookStatus!.Outputs.Select(output => new ContentBrowserAssetItem(output.CookedAssetUri, Path.GetFileNameWithoutExtension(output.VirtualPath), output.Kind switch
-    {
-        ContentCookAssetKind.Geometry => AssetKind.Geometry,
-        ContentCookAssetKind.Material => AssetKind.Material,
-        _ => AssetKind.Scene
-    }, AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.NotMounted, output.VirtualPath, SourcePath: null, DescriptorPath: null, output.CookedAssetUri, CookedPath: null, AssetGuid: null, [], IsSelectable: true)
-    { ImportSourceUri = source.IdentityUri, CookStatus = source.CookStatus with { AssetUri = output.CookedAssetUri }, }).ToArray();
+    private static ContentBrowserAssetItem[] CreateImportedOutputRows(ContentBrowserAssetItem source)
+        => [.. source.CookStatus!.Outputs.Select(
+        output =>
+        {
+            var assetKind = output.Kind switch
+            {
+                ContentCookAssetKind.Geometry => AssetKind.Geometry,
+                ContentCookAssetKind.Material => AssetKind.Material,
+                _ => AssetKind.Scene,
+            };
+
+            return new ContentBrowserAssetItem(
+                output.CookedAssetUri,
+                Path.GetFileNameWithoutExtension(output.VirtualPath),
+                assetKind,
+                AssetState.Cooked,
+                DerivedState: null,
+                AssetRuntimeAvailability.NotMounted,
+                output.VirtualPath,
+                SourcePath: null,
+                DescriptorPath: null,
+                output.CookedAssetUri,
+                CookedPath: null,
+                AssetGuid: null,
+                [],
+                IsSelectable: true)
+                {
+                    ImportSourceUri = source.IdentityUri,
+                    CookStatus = source.CookStatus with { AssetUri = output.CookedAssetUri },
+                };
+        })];
 }

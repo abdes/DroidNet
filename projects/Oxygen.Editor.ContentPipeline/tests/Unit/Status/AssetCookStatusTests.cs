@@ -3,11 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
-using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Text.Json.Nodes;
-using System.Text.Json;
 using System.Text;
+using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Moq;
@@ -15,7 +13,6 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
-using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Authoring.Materials;

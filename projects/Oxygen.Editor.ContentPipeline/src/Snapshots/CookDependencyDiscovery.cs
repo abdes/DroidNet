@@ -151,11 +151,16 @@ internal sealed class CookDependencyDiscovery(
                 [.. this.published.OrderBy(static uri => uri.AbsoluteUri, StringComparer.Ordinal)],
                 [.. this.diagnostics])
             {
-                ImportedSources = this.imported.ToImmutableDictionary(), ImportedReferences = [.. this.importedReferences],
-                NativeReferences = this.nativeReferences.ToImmutableDictionary(), CookedDependencies = this.cookedDependencies.ToImmutableDictionary(),
-                SceneDescriptors = this.scenes.ToImmutableDictionary(), NativeJobs = this.jobs.ToImmutableDictionary(),
-                GeneratedSources = [.. this.generatedSources.Values], GeneratedInputs = [.. this.generatedInputs.Values],
-                SourceFacts = this.sourceFacts.ToImmutableDictionary(), SourcesNeedingAnalysis = this.requiresAnalysis.ToImmutableHashSet(),
+                ImportedSources = this.imported.ToImmutableDictionary(),
+                ImportedReferences = [.. this.importedReferences],
+                NativeReferences = this.nativeReferences.ToImmutableDictionary(),
+                CookedDependencies = this.cookedDependencies.ToImmutableDictionary(),
+                SceneDescriptors = this.scenes.ToImmutableDictionary(),
+                NativeJobs = this.jobs.ToImmutableDictionary(),
+                GeneratedSources = [.. this.generatedSources.Values],
+                GeneratedInputs = [.. this.generatedInputs.Values],
+                SourceFacts = this.sourceFacts.ToImmutableDictionary(),
+                SourcesNeedingAnalysis = this.requiresAnalysis.ToImmutableHashSet(),
                 ResourceDependencies = this.resourceDependencies.ToImmutableDictionary(),
             };
         }

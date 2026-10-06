@@ -3,28 +3,17 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
-using System.Security.Cryptography;
 using AwesomeAssertions;
-using DroidNet.Hosting.WinUI;
-using DroidNet.Storage.Native;
-using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentBrowser.Materials;
-using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.ContentPipeline.Mounting;
-using Oxygen.Editor.ContentPipeline.Publication;
-using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.MaterialEditor;
+using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core.Diagnostics;
-using Testably.Abstractions;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
 using static Oxygen.Editor.WorldEditor.TestSupport.PublicationWorkflows;
 

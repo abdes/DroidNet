@@ -2,10 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.ComponentModel;
-using AwesomeAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
 internal sealed class FailingWorkerRunner(Exception exception) : IContentPipelineProcessRunner

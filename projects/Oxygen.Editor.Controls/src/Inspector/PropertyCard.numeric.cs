@@ -31,10 +31,7 @@ public partial class PropertyCard
         this.headerQualifier!.Visibility = Visibility.Collapsed;
         this.prefix!.Visibility = Visibility.Collapsed;
         this.suffix!.Visibility = Visibility.Collapsed;
-        if (this.leading is not null)
-        {
-            this.leading.Visibility = Visibility.Collapsed;
-        }
+        this.leading?.Visibility = Visibility.Collapsed;
 
         if (this.appliedLayout is null)
         {

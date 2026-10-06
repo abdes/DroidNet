@@ -5,8 +5,8 @@
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
 using NumberBox = DroidNet.Controls.NumberBox;
 
@@ -18,17 +18,16 @@ public sealed partial class InspectorBindingTests
     private const float AlbedoGreenLinearPicked = 0.05126946f; // sRGB 64/255
     private const string ChevronExpandedGlyph = "\uE70D"; // Segoe MDL2 chevron pointing down
     private const string ChevronCollapsedGlyph = "\uE76C"; // Segoe MDL2 chevron pointing right
+    private const string AppliesInAutoExposureModeCopy = "applies in Auto exposure mode";
+    private const string AppliesInAutoExposureSpotMeteringCopy = "applies in Auto exposure mode with Spot metering";
+    private const string StoredValueNotePrefixCopy = "Stored value";
 
-    private static readonly (string Part, string Letter, string Label, Windows.UI.Color Color)[] RgbChannels =
+    private static readonly (string part, string letter, string label, Windows.UI.Color color)[] RgbChannels =
     [
         ("PartNumberBoxX", "X", "R", Microsoft.UI.Colors.Red),
         ("PartNumberBoxY", "Y", "G", Microsoft.UI.Colors.Green),
         ("PartNumberBoxZ", "Z", "B", Microsoft.UI.Colors.Blue),
     ];
-
-    private const string AppliesInAutoExposureModeCopy = "applies in Auto exposure mode";
-    private const string AppliesInAutoExposureSpotMeteringCopy = "applies in Auto exposure mode with Spot metering";
-    private const string StoredValueNotePrefixCopy = "Stored value";
 
     private static readonly Dictionary<string, Func<Oxygen.Editor.WorldEditor.TestSupport.EnvironmentInspectorScenario, Task>> VectorFieldPreparations = new(StringComparer.Ordinal)
     {
@@ -48,7 +47,7 @@ public sealed partial class InspectorBindingTests
                 Oxygen.Editor.World.Inspector.Controls.InspectorRgbField { Content: Oxygen.Editor.Controls.PropertyCard card } => [card],
                 _ => Enumerable.Empty<Oxygen.Editor.Controls.PropertyCard>(),
             }),
-            _ => Enumerable.Empty<Oxygen.Editor.Controls.PropertyCard>(),
+            _ => [],
         });
 
     private static IEnumerable<string> SceneFieldLabels(Oxygen.Editor.Controls.PropertiesExpander section)
@@ -94,13 +93,13 @@ public sealed partial class InspectorBindingTests
 
     private static void AssertRgbChannelBasics(NumberBox input, string expectedLabel, Windows.UI.Color expectedColor)
     {
-        var compactLabel = input.FindDescendant<TextBlock>(text => text.Name == "PartCompactLabelTextBlock")!;
+        var compactLabel = input.FindDescendant<TextBlock>(text => string.Equals(text.Name, "PartCompactLabelTextBlock", StringComparison.Ordinal))!;
         _ = compactLabel.Visibility.Should().Be(Visibility.Visible);
         _ = compactLabel.Text.Should().Be(expectedLabel);
         _ = ((Microsoft.UI.Xaml.Media.SolidColorBrush)compactLabel.Foreground).Color.Should().Be(expectedColor);
     }
 
-    private async Task AssertEditSessionPreservesGeometryAsync(NumberBox input, FrameworkElement container, Func<TextBox, Task>? whileEditing = null)
+    private static async Task AssertEditSessionPreservesGeometryAsync(NumberBox input, FrameworkElement container, Func<TextBox, Task>? whileEditing = null)
     {
         var beforeWidth = input.ActualWidth;
         var beforeHeight = input.ActualHeight;
@@ -109,7 +108,7 @@ public sealed partial class InspectorBindingTests
         var beforeContainerHeight = container.ActualHeight;
         input.StartEdit();
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var editor = input.FindDescendant<TextBox>(text => text.Name == "PartEditBox")!;
+        var editor = input.FindDescendant<TextBox>(text => string.Equals(text.Name, "PartEditBox", StringComparison.Ordinal))!;
         _ = editor.Visibility.Should().Be(Visibility.Visible);
         if (whileEditing is { } hook)
         {

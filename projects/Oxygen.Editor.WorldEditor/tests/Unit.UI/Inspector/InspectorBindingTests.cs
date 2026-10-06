@@ -7,24 +7,24 @@ using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
 using DroidNet.Tests;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml;
 using Oxygen.Editor.MaterialEditor;
-using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Inspector.Environment;
-using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorModels;
-using NumberBox = DroidNet.Controls.NumberBox;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
+using NumberBox = DroidNet.Controls.NumberBox;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "partial class with public part")]
 public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
@@ -100,11 +100,11 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, width).ConfigureAwait(true);
         await scenario.SearchAsync("sky_luminance_factor_rgb").ConfigureAwait(true);
         var sky = scenario.Section("SkyAtmosphereSection");
-        var card = SceneCards(sky).Single(property => property.PropertyName == "Sky Luminance");
+        var card = SceneCards(sky).Single(property => string.Equals(property.PropertyName, "Sky Luminance", StringComparison.Ordinal));
         _ = sky.BringItemIntoView(card);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var label = card.FindDescendant<TextBlock>(text => text.Text == card.PropertyName)!;
-        var unit = card.FindDescendant<TextBlock>(text => text.Text == "RGB ×")!;
+        var label = card.FindDescendant<TextBlock>(text => string.Equals(text.Text, card.PropertyName, StringComparison.Ordinal))!;
+        var unit = card.FindDescendant<TextBlock>(text => string.Equals(text.Text, "RGB ×", StringComparison.Ordinal))!;
         var channels = card.FindDescendant<VectorBox>()!;
         _ = label.TextWrapping.Should().Be(TextWrapping.NoWrap);
         _ = label.TextTrimming.Should().Be(TextTrimming.CharacterEllipsis);
@@ -132,17 +132,17 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, width).ConfigureAwait(true);
         await scenario.SearchAsync("sky_luminance_factor_rgb").ConfigureAwait(true);
         var sky = scenario.Section("SkyAtmosphereSection");
-        var card = SceneCards(sky).Single(property => property.PropertyName == "Sky Luminance");
+        var card = SceneCards(sky).Single(property => string.Equals(property.PropertyName, "Sky Luminance", StringComparison.Ordinal));
         _ = sky.BringItemIntoView(card);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         var channels = card.FindDescendant<VectorBox>()!;
         var inputs = channels.FindDescendants().OfType<NumberBox>().ToArray();
-        foreach (var row in RgbChannels)
+        foreach (var (part, letter, label, color) in RgbChannels)
         {
-            var input = inputs.Single(number => number.Name == row.Part);
+            var input = inputs.Single(number => string.Equals(number.Name, part, StringComparison.Ordinal));
             _ = input.IsCompact.Should().BeTrue();
-            AssertRgbChannelBasics(input, row.Label, row.Color);
-            await this.AssertEditSessionPreservesGeometryAsync(
+            AssertRgbChannelBasics(input, label, color);
+            await AssertEditSessionPreservesGeometryAsync(
                 input,
                 channels,
                 whileEditing: async editor =>
@@ -150,7 +150,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
                     _ = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(editor.XamlRoot).Should().BeSameAs(editor);
 
                     // debug capture hold
-                    if (row.Letter == "R")
+                    if (string.Equals(letter, "R", StringComparison.Ordinal))
                     {
                         await InspectorCapture.HoldIfRequestedAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
                     }
@@ -172,11 +172,11 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         var section = scenario.Section("BackgroundSection");
         _ = section.Description.Should().Be("Fallback color when atmosphere rendering is disabled.");
         _ = scenario.Element<Button>("ResetBackgroundButton").IsEnabled.Should().BeTrue();
-        var card = SceneCards(section).Single(property => property.PropertyName == "Color");
+        var card = SceneCards(section).Single(property => string.Equals(property.PropertyName, "Color", StringComparison.Ordinal));
         _ = section.BringItemIntoView(scenario.Named("BackgroundColorCard"));
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var label = card.FindDescendant<TextBlock>(text => text.Text == "Color")!;
-        var unit = card.FindDescendant<TextBlock>(text => text.Text == "Linear RGB")!;
+        var label = card.FindDescendant<TextBlock>(text => string.Equals(text.Text, "Color", StringComparison.Ordinal))!;
+        var unit = card.FindDescendant<TextBlock>(text => string.Equals(text.Text, "Linear RGB", StringComparison.Ordinal))!;
         var swatch = (Button)card.LeadingContent!;
         var channels = card.FindDescendant<VectorBox>()!;
         var channelsPosition = channels.TransformToVisual(card).TransformPoint(default);
@@ -193,11 +193,11 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = inputs.Should().HaveCount(3);
         foreach (var row in RgbChannels)
         {
-            var input = inputs.Single(number => number.Name == row.Part);
-            var value = input.FindDescendant<TextBlock>(text => text.Name == "PartValueTextBlock")!;
+            var input = inputs.Single(number => string.Equals(number.Name, row.part, StringComparison.Ordinal));
+            var value = input.FindDescendant<TextBlock>(text => string.Equals(text.Name, "PartValueTextBlock", StringComparison.Ordinal))!;
             _ = input.ActualWidth.Should().BeGreaterThan(50);
             _ = input.ActualHeight.Should().BeApproximately(32, 1);
-            AssertRgbChannelBasics(input, row.Label, row.Color);
+            AssertRgbChannelBasics(input, row.label, row.color);
             _ = value.Text.Should().Be("0");
             _ = value.Visibility.Should().Be(Visibility.Visible);
             _ = value.Opacity.Should().Be(1);
@@ -221,15 +221,15 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, width, theme: ElementTheme.Dark).ConfigureAwait(true);
         await scenario.SearchAsync("background").ConfigureAwait(true);
         var section = scenario.Section("BackgroundSection");
-        var card = SceneCards(section).Single(property => property.PropertyName == "Color");
+        var card = SceneCards(section).Single(property => string.Equals(property.PropertyName, "Color", StringComparison.Ordinal));
         _ = section.BringItemIntoView(scenario.Named("BackgroundColorCard"));
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         var channels = card.FindDescendant<VectorBox>()!;
         var inputs = channels.FindDescendants().OfType<NumberBox>().ToArray();
-        foreach (var row in RgbChannels)
+        foreach (var (part, letter, label, color) in RgbChannels)
         {
-            var input = inputs.Single(number => number.Name == row.Part);
-            await this.AssertEditSessionPreservesGeometryAsync(
+            var input = inputs.Single(number => string.Equals(number.Name, part, StringComparison.Ordinal));
+            await AssertEditSessionPreservesGeometryAsync(
                 input,
                 channels,
                 whileEditing: editor =>
@@ -251,8 +251,8 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, 350).ConfigureAwait(true);
         await scenario.SearchAsync("planet_radius").ConfigureAwait(true);
         var number = scenario.View.FindDescendant<NumberBox>(input => Equals(input.Tag, "PlanetRadiusKm"))!;
-        var suffix = number.FindDescendant<TextBlock>(text => text.Name == "PartValueQualifier")!;
-        var field = number.FindDescendant<Border>(border => border.Name == "PartBackgroundBorder")!;
+        var suffix = number.FindDescendant<TextBlock>(text => string.Equals(text.Name, "PartValueQualifier", StringComparison.Ordinal))!;
+        var field = number.FindDescendant<Border>(border => string.Equals(border.Name, "PartBackgroundBorder", StringComparison.Ordinal))!;
         _ = number.Label.Should().NotBeNullOrEmpty();
         _ = field.ActualHeight.Should().BeApproximately(30, 1);
         _ = number.ActualWidth.Should().BeGreaterThan(100);
@@ -274,10 +274,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
     [TestMethod]
     public Task AtmosphereSourceDisclosuresStartCollapsedWithHeaderOnlyHeight() => EnqueueAsync(async () =>
     {
-        var staged = await LoadAtmosphereLightsSectionAsync(LoadTestContentAsync).ConfigureAwait(true);
-        using var fixture = staged.Fixture;
-        using var model = staged.Model;
-        var view = staged.View;
+        var (fixture, model, view) = await LoadAtmosphereLightsSectionAsync(LoadTestContentAsync).ConfigureAwait(true);
         var atmosphereSection = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("AtmosphereLightsSection");
         var sourceCard = atmosphereSection.Items.OfType<Oxygen.Editor.Controls.PropertyCard>().Single();
         _ = atmosphereSection.BringItemIntoView(sourceCard).Should().BeTrue();
@@ -288,7 +285,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         var secondary = sourceDisclosures[1];
         _ = primary.IsExpanded.Should().BeFalse();
         _ = secondary.IsExpanded.Should().BeFalse();
-        var collapsedHeader = primary.FindDescendant<ToggleButton>(toggle => toggle.Name == "ExpanderHeader")!;
+        var collapsedHeader = primary.FindDescendant<ToggleButton>(toggle => string.Equals(toggle.Name, "ExpanderHeader", StringComparison.Ordinal))!;
         _ = primary.ActualHeight.Should().BeApproximately(collapsedHeader.ActualHeight, 1);
         var separator = ((StackPanel)sourceCard.Content).Children.OfType<Grid>().Single().Children.OfType<Border>().Single();
         var separatorGap = separator.TransformToVisual(view).TransformPoint(default).Y
@@ -306,10 +303,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         const double LabelColumnRatio = 0.4;
         const double FieldHorizontalPadding = 12;
 
-        var staged = await LoadAtmosphereLightsSectionAsync(LoadTestContentAsync).ConfigureAwait(true);
-        using var fixture = staged.Fixture;
-        using var model = staged.Model;
-        var view = staged.View;
+        var (fixture, model, view) = await LoadAtmosphereLightsSectionAsync(LoadTestContentAsync).ConfigureAwait(true);
         var atmosphereSection = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("AtmosphereLightsSection");
         var sourceCard = atmosphereSection.Items.OfType<Oxygen.Editor.Controls.PropertyCard>().Single();
         _ = atmosphereSection.BringItemIntoView(sourceCard).Should().BeTrue();
@@ -322,10 +316,10 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = source.ActualWidth.Should().BeGreaterThan(340);
         var azimuth = source.FindDescendant<NumberBox>(number => Equals(number.Tag, "SunAzimuth"))!;
         _ = azimuth.ActualWidth.Should().BeGreaterThan(140);
-        _ = source.FindDescendant<TextBlock>(text => text.Text == "Azimuth")!.TextTrimming.Should().Be(TextTrimming.CharacterEllipsis);
+        _ = source.FindDescendant<TextBlock>(text => string.Equals(text.Text, "Azimuth", StringComparison.Ordinal))!.TextTrimming.Should().Be(TextTrimming.CharacterEllipsis);
         _ = azimuth.LabelPosition.Should().Be(LabelPosition.Left);
         _ = azimuth.Label.Should().Be("Azimuth");
-        var valueBorder = azimuth.FindDescendant<Border>(border => border.Name == "PartBackgroundBorder")!;
+        var valueBorder = azimuth.FindDescendant<Border>(border => string.Equals(border.Name, "PartBackgroundBorder", StringComparison.Ordinal))!;
         _ = valueBorder.ActualWidth.Should().BeGreaterThanOrEqualTo(126);
         _ = (valueBorder.TransformToVisual(azimuth).TransformPoint(default).X - valueBorder.Margin.Left)
             .Should().BeApproximately(((azimuth.ActualWidth - FieldHorizontalPadding) * LabelColumnRatio) + FieldHorizontalPadding, 1);
@@ -338,7 +332,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             _ = card.Padding.Should().Be(new Thickness(0));
         }
 
-        var collapsedHeader = primary.FindDescendant<ToggleButton>(toggle => toggle.Name == "ExpanderHeader")!;
+        var collapsedHeader = primary.FindDescendant<ToggleButton>(toggle => string.Equals(toggle.Name, "ExpanderHeader", StringComparison.Ordinal))!;
         var disclosureGap = source.TransformToVisual(primary).TransformPoint(default).Y
             - collapsedHeader.TransformToVisual(primary).TransformPoint(default).Y - collapsedHeader.ActualHeight;
         _ = disclosureGap.Should().BeApproximately(0, 1);
@@ -351,10 +345,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
     [TestMethod]
     public Task AtmosphereReferenceRowsAlignPickerAndActionsOnCenterLine() => EnqueueAsync(async () =>
     {
-        var staged = await LoadAtmosphereLightsSectionAsync(LoadTestContentAsync).ConfigureAwait(true);
-        using var fixture = staged.Fixture;
-        using var model = staged.Model;
-        var view = staged.View;
+        var (fixture, model, view) = await LoadAtmosphereLightsSectionAsync(LoadTestContentAsync).ConfigureAwait(true);
         var atmosphereSection = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("AtmosphereLightsSection");
         var sourceCard = atmosphereSection.Items.OfType<Oxygen.Editor.Controls.PropertyCard>().Single();
         _ = atmosphereSection.BringItemIntoView(sourceCard).Should().BeTrue();
@@ -393,10 +384,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
     [TestMethod]
     public Task QuietInspectorTogglesUseTransparentBackground() => EnqueueAsync(async () =>
     {
-        var staged = await LoadAtmosphereLightsSectionAsync(LoadTestContentAsync).ConfigureAwait(true);
-        using var fixture = staged.Fixture;
-        using var model = staged.Model;
-        var view = staged.View;
+        var (fixture, model, view) = await LoadAtmosphereLightsSectionAsync(LoadTestContentAsync).ConfigureAwait(true);
         var atmosphereSection = (Oxygen.Editor.Controls.PropertiesExpander)view.FindName("AtmosphereLightsSection");
         var sourceCard = atmosphereSection.Items.OfType<Oxygen.Editor.Controls.PropertyCard>().Single();
         _ = atmosphereSection.BringItemIntoView(sourceCard).Should().BeTrue();
@@ -419,10 +407,10 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
     {
         using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync).ConfigureAwait(true);
         var atmosphere = scenario.Section("AtmosphereLightsSection");
-        var header = atmosphere.FindDescendant<ToggleButton>(button => button.Name == "ExpanderHeader")!;
-        var icon = header.FindDescendant<Viewbox>(element => element.Name == "PartHeaderIconPresenterHolder");
+        var header = atmosphere.FindDescendant<ToggleButton>(button => string.Equals(button.Name, "ExpanderHeader", StringComparison.Ordinal))!;
+        var icon = header.FindDescendant<Viewbox>(element => string.Equals(element.Name, "PartHeaderIconPresenterHolder", StringComparison.Ordinal));
         _ = icon.Should().NotBeNull();
-        var chevron = header.FindDescendant<AnimatedIcon>(element => element.Name == "ExpandCollapseChevron")!;
+        var chevron = header.FindDescendant<AnimatedIcon>(element => string.Equals(element.Name, "ExpandCollapseChevron", StringComparison.Ordinal))!;
         _ = Microsoft.UI.Xaml.Automation.AutomationProperties.GetAccessibilityView(chevron).Should().Be(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
         _ = chevron.FindAscendant<ContentControl>()!.IsTabStop.Should().BeFalse();
         _ = header.ActualWidth.Should().BeApproximately(atmosphere.ActualWidth, 1);
@@ -443,7 +431,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
     {
         using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync).ConfigureAwait(true);
         var sky = scenario.Section("SkyAtmosphereSection");
-        var sunDisk = SceneCards(sky).Single(card => card.PropertyName == "Sun Disk");
+        var sunDisk = SceneCards(sky).Single(card => string.Equals(card.PropertyName, "Sun Disk", StringComparison.Ordinal));
         _ = await scenario.BringIntoViewAsync(sky, sunDisk).ConfigureAwait(true);
         _ = sunDisk.FindDescendant<ToggleSwitch>(control => Equals(control.Tag, "SunDiskEnabled")).Should().NotBeNull();
         _ = SceneFieldLabels(sky).Should().Contain(["Distance scale", "Scattering strength", "Start distance", "Height fog contribution"]);
@@ -466,7 +454,8 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             (ScrollViewer)scenario.View.FindName("ScenePropertyScroll"),
             () => scenario.View.FindDescendant<Oxygen.Editor.World.Inspector.Controls.InspectorRgbField>(field =>
                 field.IsLoaded && Equals(field.Tag, "GroundAlbedo") && ((Oxygen.Editor.Controls.PropertyCard)field.Content).LeadingContent is Button),
-            "GroundAlbedo", this.TestContext.CancellationToken).ConfigureAwait(true);
+            "GroundAlbedo",
+            this.TestContext.CancellationToken).ConfigureAwait(true);
         var albedo = (Oxygen.Editor.Controls.PropertyCard)albedoField.Content;
         var swatch = (Button)albedo.LeadingContent!;
         _ = swatch.Flyout.Should().BeOfType<Flyout>();
@@ -497,7 +486,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         var view = new EnvironmentView();
         var number = new NumberBox { Mask = "~.###", NumberValue = value, Style = (Style)view.Resources["SceneNumberBoxStyle"] };
         await LoadTestContentAsync(number).ConfigureAwait(true);
-        _ = number.FindDescendant<TextBlock>(text => text.Name == "PartValueTextBlock")!.Text.Should().Be(expected);
+        _ = number.FindDescendant<TextBlock>(text => string.Equals(text.Name, "PartValueTextBlock", StringComparison.Ordinal))!.Text.Should().Be(expected);
         _ = number.NumberValue.Should().Be(value);
         _ = number.Mask.Should().Be("~.###");
     });
@@ -514,7 +503,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = number.BorderThickness.Should().Be(new Thickness(1));
         number.StartEdit();
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        var editor = number.FindDescendant<TextBox>(text => text.Name == "PartEditBox")!;
+        var editor = number.FindDescendant<TextBox>(text => string.Equals(text.Name, "PartEditBox", StringComparison.Ordinal))!;
         _ = editor.MinHeight.Should().Be(28);
         _ = editor.Padding.Should().Be(new Thickness(6, 4, 6, 4));
         _ = editor.CornerRadius.Should().Be(new CornerRadius(4));
@@ -705,10 +694,12 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         var scroller = (ScrollViewer)scenario.View.FindName("ScenePropertyScroll");
         var group = (Expander)await FindInspectorControlAsync(scroller, () => owner.FindDescendant<Expander>(candidate =>
             candidate.ActualHeight > 0 && string.Equals(AutomationProperties.GetAutomationId(candidate), automationId, StringComparison.Ordinal)),
-            automationId, this.TestContext.CancellationToken).ConfigureAwait(true);
+            automationId,
+            this.TestContext.CancellationToken).ConfigureAwait(true);
         _ = group.ApplyTemplate();
         var header = group.FindDescendant<ToggleButton>(toggle => string.Equals(toggle.Name, "ExpanderHeader", StringComparison.Ordinal))!;
         _ = header.ApplyTemplate();
+
         // the QuietDisclosure template names its header chevron
         var chevron = header.FindDescendant<FontIcon>(icon => string.Equals(icon.Name, "DisclosureChevron", StringComparison.Ordinal))!;
         var content = group.FindDescendant<Border>(border => string.Equals(border.Name, "ExpanderContent", StringComparison.Ordinal))!;
@@ -830,7 +821,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         using var model = (PerspectiveCameraViewModel)CreateModel("Camera", fixture);
         var view = new PerspectiveCameraView
         {
-            ViewModel = model
+            ViewModel = model,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var number = view.FindDescendant<NumberBox>(element => Equals(element.Tag, "NearPlane"))!;
@@ -866,12 +857,12 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         using var model = (TransformViewModel)CreateModel("Transform", fixture);
         var view = new TransformView
         {
-            ViewModel = model
+            ViewModel = model,
         };
         var scroller = new ScrollViewer
         {
             Content = view,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
         var card = view.FindDescendant<Oxygen.Editor.Controls.PropertyCard>(element => string.Equals(element.PropertyName, "Scale", StringComparison.Ordinal))!;
@@ -941,7 +932,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = number.NumberValue.Should().Be(before);
     });
 
-    private static async Task<(SceneAuthoringFixture Fixture, EnvironmentViewModel Model, AtmosphereLightsSectionView View)> LoadAtmosphereLightsSectionAsync(
+    private static async Task<(SceneAuthoringFixture fixture, EnvironmentViewModel model, AtmosphereLightsSectionView view)> LoadAtmosphereLightsSectionAsync(
         Func<FrameworkElement, Task> loadContent,
         double width = 420)
     {

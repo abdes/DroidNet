@@ -2,19 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Numerics;
-using System.Text.Json.Nodes;
-using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml;
-using Moq;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.World.Cooking;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.ModelImportScenario;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;

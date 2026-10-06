@@ -2,16 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Globalization;
-using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
-using DroidNet.Tests;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldCases;
 using NumberBox = DroidNet.Controls.NumberBox;
 

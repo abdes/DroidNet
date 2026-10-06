@@ -1,11 +1,10 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Config;
 using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
-using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline.Discovery;

@@ -105,14 +105,28 @@ public sealed class LightComponentTests
     {
         var source = new DirectionalLightData
         {
-            Name = "Secondary", AtmosphereSlot = AtmosphereLightSlot.Secondary,
-            Color = new(0.4f, 0.7f, 1f), IntensityLux = 2345f, ExposureCompensation = 1.5f,
-            UsePerPixelAtmosphereTransmittance = true, AtmosphereDiskLuminanceScaleRgb = new(2f, 1f, 0.5f),
-            CastsShadows = true, Shadow = new() { Bias = 0.001f, NormalBias = 0.04f,
-                ContactShadows = true, ResolutionHint = ShadowResolutionHint.High },
-            CascadeCount = 3, SplitMode = DirectionalCsmSplitMode.ManualDistances,
-            CascadeDistances = new(5, 15, 40, 90), MaxShadowDistance = 90,
-            DistributionExponent = 2, TransitionFraction = 0.2f, DistanceFadeoutFraction = 0.3f,
+            Name = "Secondary",
+            AtmosphereSlot = AtmosphereLightSlot.Secondary,
+            Color = new(0.4f, 0.7f, 1f),
+            IntensityLux = 2345f,
+            ExposureCompensation = 1.5f,
+            UsePerPixelAtmosphereTransmittance = true,
+            AtmosphereDiskLuminanceScaleRgb = new(2f, 1f, 0.5f),
+            CastsShadows = true,
+            Shadow = new()
+            {
+                Bias = 0.001f,
+                NormalBias = 0.04f,
+                ContactShadows = true,
+                ResolutionHint = ShadowResolutionHint.High
+            },
+            CascadeCount = 3,
+            SplitMode = DirectionalCsmSplitMode.ManualDistances,
+            CascadeDistances = new(5, 15, 40, 90),
+            MaxShadowDistance = 90,
+            DistributionExponent = 2,
+            TransitionFraction = 0.2f,
+            DistanceFadeoutFraction = 0.3f,
         };
         var light = new DirectionalLightComponent { Name = "Accepted" };
         light.Hydrate(source);

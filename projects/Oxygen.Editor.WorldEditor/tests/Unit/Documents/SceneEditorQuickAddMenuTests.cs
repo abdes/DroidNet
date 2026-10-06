@@ -14,9 +14,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneEditor;
-using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Services;
-using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core.Diagnostics;
 

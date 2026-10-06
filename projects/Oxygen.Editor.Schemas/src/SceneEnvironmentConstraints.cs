@@ -2,9 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using System.Globalization;
-using System.IO;
 using System.Text.Json;
 
 namespace Oxygen.Editor.Schemas;

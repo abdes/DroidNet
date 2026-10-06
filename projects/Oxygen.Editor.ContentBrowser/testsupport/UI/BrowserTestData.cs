@@ -3,41 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using System.Reactive.Subjects;
-using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
-using CommunityToolkit.WinUI;
-using DroidNet.Aura.Dialogs;
-using DroidNet.Controls;
-using DroidNet.Hosting.WinUI;
-using DroidNet.Mvvm.Converters;
-using DroidNet.Mvvm;
-using DroidNet.Routing;
 using DroidNet.Storage;
-using DroidNet.Tests;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI.Xaml.Automation.Peers;
-using Microsoft.UI.Xaml.Automation.Provider;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Markup;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml;
 using Moq;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Materials;
-using Oxygen.Editor.ContentBrowser.Messages;
-using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
-using Oxygen.Editor.ContentBrowser.Panes.Assets;
-using Oxygen.Editor.ContentBrowser.ProjectExplorer;
-using Oxygen.Editor.ContentBrowser.Shell;
-using Oxygen.Editor.ContentBrowser.TestSupport;
-using Oxygen.Editor.ContentBrowser;
-using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
-using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.TestSupport;
 
@@ -84,7 +55,7 @@ internal static class BrowserTestData
         return asset with
         {
             DisplayName = name,
-            CookStatus = new(asset.IdentityUri, freshness, HasPublishedOutput: current, OutputAvailability: current ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], [], [])
+            CookStatus = new(asset.IdentityUri, freshness, HasPublishedOutput: current, OutputAvailability: current ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], [], []),
         };
     }
 }

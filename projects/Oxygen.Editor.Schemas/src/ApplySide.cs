@@ -2,10 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-
 namespace Oxygen.Editor.Schemas;
 
 /// <summary>

@@ -25,14 +25,20 @@ internal static class InspectorCapture
         var pixels = await bitmap.GetPixelsAsync();
         await using var stream = File.Create(Path.Combine(directory, $"{name}.png"));
         var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream.AsRandomAccessStream());
-        encoder.SetPixelData(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied,
-            (uint)bitmap.PixelWidth, (uint)bitmap.PixelHeight, 96, 96, pixels.ToArray());
+        encoder.SetPixelData(
+            BitmapPixelFormat.Bgra8,
+            BitmapAlphaMode.Premultiplied,
+            (uint)bitmap.PixelWidth,
+            (uint)bitmap.PixelHeight,
+            96,
+            96,
+            pixels.ToArray());
         await encoder.FlushAsync();
     }
 
     internal static async Task HoldIfRequestedAsync(CancellationToken cancellationToken)
     {
-        if (int.TryParse(Environment.GetEnvironmentVariable("OXYGEN_UI_CAPTURE_HOLD_SECONDS"), out var holdSeconds) && holdSeconds > 0)
+        if (int.TryParse(Environment.GetEnvironmentVariable("OXYGEN_UI_CAPTURE_HOLD_SECONDS"), System.Globalization.CultureInfo.InvariantCulture, out var holdSeconds) && holdSeconds > 0)
         {
             await Task.Delay(TimeSpan.FromSeconds(holdSeconds), cancellationToken);
         }

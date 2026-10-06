@@ -3,21 +3,19 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
-using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
-using System.Text.Json.Nodes;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
-using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
-using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Model;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Descriptors;
 
@@ -569,7 +567,7 @@ public sealed class SceneDescriptorGeneratorTests
                 var result = await generator.GenerateAsync(savedScene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
                 _ = result.Diagnostics.Should().BeEmpty();
                 using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
-                    _ = document.RootElement.GetProperty("version").GetInt32().Should().Be(10);
+                _ = document.RootElement.GetProperty("version").GetInt32().Should().Be(10);
                 var environment = document.RootElement.GetProperty("environment");
                 _ = environment.GetProperty("sky_atmosphere").GetProperty("enabled").GetBoolean().Should().BeFalse();
                 var post = environment.GetProperty("post_process_volume");

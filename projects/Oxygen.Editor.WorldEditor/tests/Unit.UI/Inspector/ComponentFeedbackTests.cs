@@ -6,14 +6,13 @@ using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Schemas;
-using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
@@ -23,7 +22,7 @@ using NumberBox = DroidNet.Controls.NumberBox;
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed partial class ComponentFeedbackTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class ComponentFeedbackTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -47,7 +46,7 @@ public sealed partial class ComponentFeedbackTests : DroidNet.Tests.VisualUserIn
         {
             ViewModel = host,
             Width = 360,
-            Height = 650
+            Height = 650,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         host.SelectComponentFilter(type == typeof(TransformComponent) ? typeof(PerspectiveCamera) : typeof(TransformComponent));
@@ -137,7 +136,7 @@ public sealed partial class ComponentFeedbackTests : DroidNet.Tests.VisualUserIn
         {
             ViewModel = host,
             Width = 360,
-            Height = 650
+            Height = 650,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var oldNumber = view.FindDescendant<NumberBox>(control => Equals(control.Tag, "FieldOfView"))!;

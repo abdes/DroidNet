@@ -7,8 +7,6 @@ using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.World.Inspector.Geometry;
-using Oxygen.Editor.World.Slots;
-using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;

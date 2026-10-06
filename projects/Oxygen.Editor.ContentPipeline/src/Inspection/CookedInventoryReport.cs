@@ -121,7 +121,7 @@ public sealed class CookedInventoryReport
     public CookInspectionResult ToInspection(string root) => new(root, this.IsValid, this.SourceKey,
         this.IsValid ? this.Assets.Select(static asset => new CookedAssetEntry(asset.VirtualPath,
             asset.Type switch { 1 => ContentCookAssetKind.Material, 2 => ContentCookAssetKind.Geometry, 3 => ContentCookAssetKind.Scene, _ => ContentCookAssetKind.Unknown })
-            { DescriptorRelativePath = asset.DescriptorPath, AssetKey = asset.Key.ToString() }).ToArray() : [],
+        { DescriptorRelativePath = asset.DescriptorPath, AssetKey = asset.Key.ToString() }).ToArray() : [],
         this.Files.Select(static file => new CookedFileEntry(file.Key, checked((ulong)file.Value.Size))).ToArray(), this.Diagnostics(root));
 
     /// <summary>Creates the validation view without another native launch or hash pass.</summary>

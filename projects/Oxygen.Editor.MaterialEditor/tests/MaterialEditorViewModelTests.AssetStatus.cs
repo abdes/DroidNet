@@ -9,7 +9,6 @@ using Moq;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Status;
-using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
 

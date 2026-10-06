@@ -186,7 +186,8 @@ public sealed partial class MaterialDocumentService
                 // Undo/redo validates the snapshot before popping history, under this same lock.
                 this.CommitMaterialSource(this.GetDocument(documentId), restore, label);
             }
-        }) { Key = new MaterialHistoryKey(label, restore) });
+        })
+        { Key = new MaterialHistoryKey(label, restore) });
 
     private void FinishMaterialGesture(Guid documentId, bool commit)
     {

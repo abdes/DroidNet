@@ -2,37 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Reflection;
-using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
-using CommunityToolkit.WinUI;
-using DroidNet.Controls;
-using DroidNet.Documents;
-using DroidNet.Tests;
-using DroidNet.TimeMachine;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml;
-using Microsoft.UI;
 using Moq;
-using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.MaterialEditor;
-using Oxygen.Editor.Projects;
-using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Services;
-using Oxygen.Editor.World.Slots;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Editor.WorldEditor.Documents.Selection;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Model;
-using Oxygen.Managed.Core.Diagnostics;
 using static DroidNet.Tests.UiTestHosting;
-using NumberBox = DroidNet.Controls.NumberBox;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 
@@ -45,28 +21,28 @@ internal static class InspectorModels
             case "Transform":
                 var transform = new TransformViewModel(commandService: fixture.Commands, commandContextProvider: () => fixture.Context)
                 {
-                    IsExpanded = true
+                    IsExpanded = true,
                 };
                 transform.UpdateValues([fixture.Node]);
                 return transform;
             case "Camera":
                 var camera = new PerspectiveCameraViewModel(fixture.Commands, () => fixture.Context)
                 {
-                    IsExpanded = true
+                    IsExpanded = true,
                 };
                 camera.UpdateValues([fixture.Node]);
                 return camera;
             case "Light":
                 var light = new DirectionalLightViewModel(fixture.Commands, () => fixture.Context)
                 {
-                    IsExpanded = true
+                    IsExpanded = true,
                 };
                 light.UpdateValues([fixture.Node]);
                 return light;
             case "Environment":
                 var environment = new EnvironmentViewModel(fixture.Commands, () => fixture.Context)
                 {
-                    IsExpanded = true
+                    IsExpanded = true,
                 };
                 environment.SetScene(fixture.Scene);
                 return environment;

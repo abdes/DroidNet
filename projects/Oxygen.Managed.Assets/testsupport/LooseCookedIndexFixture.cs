@@ -19,7 +19,11 @@ internal static class LooseCookedIndexFixture
         uint Add(string? value)
         {
             value ??= string.Empty;
-            if (offsets.TryGetValue(value, out var existing)) { return existing; }
+            if (offsets.TryGetValue(value, out var existing))
+            {
+                return existing;
+            }
+
             var offset = checked((uint)strings.Length);
             strings.Write(Encoding.UTF8.GetBytes(value));
             strings.WriteByte(0);
@@ -27,8 +31,17 @@ internal static class LooseCookedIndexFixture
             return offset;
         }
 
-        foreach (var asset in document.Assets) { _ = Add(asset.DescriptorRelativePath); _ = Add(asset.VirtualPath); }
-        foreach (var file in document.Files) { _ = Add(file.RelativePath); }
+        foreach (var asset in document.Assets)
+        {
+            _ = Add(asset.DescriptorRelativePath);
+            _ = Add(asset.VirtualPath);
+        }
+
+        foreach (var file in document.Files)
+        {
+            _ = Add(file.RelativePath);
+        }
+
         var header = new byte[LooseCookedIndex.HeaderSize];
         "OXLCIDX\0"u8.CopyTo(header);
         BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(8), LooseCookedIndex.Version);

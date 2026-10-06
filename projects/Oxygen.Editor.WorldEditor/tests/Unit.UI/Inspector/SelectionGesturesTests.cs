@@ -8,10 +8,9 @@ using CommunityToolkit.WinUI;
 using DroidNet.Controls;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
@@ -20,7 +19,7 @@ using NumberBox = DroidNet.Controls.NumberBox;
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed partial class SelectionGesturesTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class SelectionGesturesTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -112,6 +111,7 @@ public sealed partial class SelectionGesturesTests : DroidNet.Tests.VisualUserIn
         var view = new TransformView { ViewModel = model };
         var scroller = new ScrollViewer { Content = view };
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
+
         // Text edit sessions are cancelled when their NumberBox unloads; type only after the editor is visible and stably realized.
         var number = (NumberBox)await FindInspectorControlAsync(
             scroller,

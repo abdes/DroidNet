@@ -4,7 +4,6 @@
 
 using System.Numerics;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
 
 namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 

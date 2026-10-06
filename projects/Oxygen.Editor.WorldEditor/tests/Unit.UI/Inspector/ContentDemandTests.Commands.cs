@@ -7,7 +7,6 @@ using CommunityToolkit.Mvvm.Messaging;
 using Moq;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
@@ -21,6 +20,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 /// Each test dirties the document metadata up front so the invalidation under assertion cannot come
 /// from the first-dirty metadata transition, only from the observed collection graph.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "partial class with public part")]
 public sealed partial class ContentDemandTests
 {
     /// <summary>Deleting the referencing node through the document command retires the activation demand.</summary>
@@ -78,7 +78,7 @@ public sealed partial class ContentDemandTests
         _ = (await fixture.Authoring.Commands.EditGeometryAsync(context, [created.Value!.Id], new GeometryEdit(OptionalEditValues.Supplied<Uri?>(fixture.GeometryUri)), EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
 
         var selection = new object();
-        fixture.Authoring.Messenger.Register<SceneNodeSelectionRequestMessage>(selection, (_, message) => message.Reply(new List<SceneNode> { created.Value! }));
+        fixture.Authoring.Messenger.Register<SceneNodeSelectionRequestMessage>(selection, (_, message) => message.Reply([created.Value!]));
         fixture.Service.RequestAssignment(fixture.Authoring.Scene, [created.Value!.Id], fixture.GeometryUri, AssetKind.Geometry);
         _ = fixture.Requests.Should().ContainSingle().Which.uri.Should().Be(fixture.GeometryUri);
 

@@ -3,12 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
-using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.ContentPipeline.TestSupport;
-using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookCoordinatorScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;

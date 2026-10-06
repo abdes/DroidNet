@@ -4,7 +4,6 @@
 
 using System.Numerics;
 using AwesomeAssertions;
-using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;

@@ -12,16 +12,19 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.Controls;
-using InspectorRgbPresentation = Oxygen.Editor.World.Inspector.InspectorRgbPresentation;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
+using InspectorRgbPresentation = Oxygen.Editor.World.Inspector.InspectorRgbPresentation;
 using NumberBox = DroidNet.Controls.NumberBox;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 /// <summary>Exercises the owning property layout policies using real WinUI controls.</summary>
 [TestClass]
-public sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
+internal sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
 {
+    private static readonly string[] PropertyNames = ["Azimuth", "Elevation", "Angular diameter"];
+    private static readonly double[] Widths = [760d, 620d, 900d, 760d];
+
     [TestMethod]
     [DataRow(260d, 1d)]
     [DataRow(340d, 1d)]
@@ -33,7 +36,7 @@ public sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
     public Task ScalarRowsUseSharedColumnsAndKeepUnitsWithValues(double width, double textScale) => EnqueueAsync(async () =>
     {
         var rows = new StackPanel { Spacing = 4 };
-        foreach (var name in new[] { "Azimuth", "Elevation", "Angular diameter" })
+        foreach (var name in PropertyNames)
         {
             rows.Children.Add(new PropertyCard
             {
@@ -51,9 +54,9 @@ public sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
         foreach (var card in rows.Children.OfType<PropertyCard>())
         {
             var number = (NumberBox)card.Content;
-            var label = number.FindDescendant<TextBlock>(text => text.Name == "PartLabelTextBlock")!;
-            var suffix = number.FindDescendant<TextBlock>(text => text.Name == "PartValueQualifier")!;
-            var field = number.FindDescendant<Border>(border => border.Name == "PartBackgroundBorder")!;
+            var label = number.FindDescendant<TextBlock>(text => string.Equals(text.Name, "PartLabelTextBlock", StringComparison.Ordinal))!;
+            var suffix = number.FindDescendant<TextBlock>(text => string.Equals(text.Name, "PartValueQualifier", StringComparison.Ordinal))!;
+            var field = number.FindDescendant<Border>(border => string.Equals(border.Name, "PartBackgroundBorder", StringComparison.Ordinal))!;
             var numberPoint = field.TransformToVisual(card).TransformPoint(default);
             var suffixPoint = suffix.TransformToVisual(card).TransformPoint(default);
             var expected = width >= 12 + Math.Max(124 * textScale / 0.4, ((128 * textScale) + 28) / 0.6)
@@ -63,8 +66,8 @@ public sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
             _ = label.TextTrimming.Should().Be(TextTrimming.CharacterEllipsis);
             _ = label.Text.Should().Be(card.PropertyName);
             _ = label.Visibility.Should().Be(Visibility.Visible);
-            _ = card.FindDescendant<TextBlock>(text => text.Name == "PropertyName")!.ActualWidth.Should().Be(0);
-            _ = (field.ActualWidth + field.Margin.Left + field.Margin.Right).Should().BeGreaterThanOrEqualTo(128 * textScale - 1);
+            _ = card.FindDescendant<TextBlock>(text => string.Equals(text.Name, "PropertyName", StringComparison.Ordinal))!.ActualWidth.Should().Be(0);
+            _ = (field.ActualWidth + field.Margin.Left + field.Margin.Right).Should().BeGreaterThanOrEqualTo((128 * textScale) - 1);
             _ = (suffixPoint.X + suffix.ActualWidth).Should().BeLessThanOrEqualTo(width + 1);
             _ = (suffixPoint.X - numberPoint.X - field.ActualWidth - field.Margin.Right).Should().BeApproximately(4, 1);
             _ = suffixPoint.Y.Should().BeGreaterThanOrEqualTo(numberPoint.Y - 1);
@@ -104,10 +107,10 @@ public sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
         rows.Children.Add(compound);
         var host = CreateHost(760, rows);
         await LoadTestContentAsync(host).ConfigureAwait(true);
-        var scalarLabel = number.FindDescendant<TextBlock>(text => text.Name == "PartLabelTextBlock")!;
-        var scalarValue = number.FindDescendant<Grid>(grid => grid.Name == "PartValueGroup")!;
+        var scalarLabel = number.FindDescendant<TextBlock>(text => string.Equals(text.Name, "PartLabelTextBlock", StringComparison.Ordinal))!;
+        var scalarValue = number.FindDescendant<Grid>(grid => string.Equals(grid.Name, "PartValueGroup", StringComparison.Ordinal))!;
 
-        foreach (var width in new[] { 760d, 620d, 900d, 760d })
+        foreach (var width in Widths)
         {
             host.Width = width;
             host.UpdateLayout();
@@ -125,8 +128,8 @@ public sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
 
             foreach (var card in new[] { toggle, compound })
             {
-                var label = card.FindDescendant<TextBlock>(text => text.Name == "PropertyName")!;
-                var presenter = card.FindDescendant<ContentPresenter>(part => part.Name == "PropertyEditor")!;
+                var label = card.FindDescendant<TextBlock>(text => string.Equals(text.Name, "PropertyName", StringComparison.Ordinal))!;
+                var presenter = card.FindDescendant<ContentPresenter>(part => string.Equals(part.Name, "PropertyEditor", StringComparison.Ordinal))!;
                 var valueGroup = (Grid)presenter.Parent;
                 _ = card.ActualLayout.Should().Be(PropertyLayout.Inline);
                 _ = valueGroup.TransformToVisual(rows).TransformPoint(default).X.Should().BeApproximately(valueStart, 1);
@@ -155,7 +158,7 @@ public sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
         viewport.Children.Add(host);
         using var scaledHost = new ScaledXamlHost();
         await scaledHost.LoadAsync(viewport, 1, CancellationToken.None).ConfigureAwait(true);
-        var label = number.FindDescendant<TextBlock>(part => part.Name == "PartLabelTextBlock")!;
+        var label = number.FindDescendant<TextBlock>(part => string.Equals(part.Name, "PartLabelTextBlock", StringComparison.Ordinal))!;
         var starts = 0;
         var completions = new List<NumberBoxEditCompletionKind?>();
         number.EditSessionStarted += (_, _) => starts++;
@@ -167,10 +170,10 @@ public sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
         host.Width = width == 260 ? 760 : 260;
         host.UpdateLayout();
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        _ = number.FindDescendant<TextBlock>(part => part.Name == "PartLabelTextBlock").Should().BeSameAs(label);
+        _ = number.FindDescendant<TextBlock>(part => string.Equals(part.Name, "PartLabelTextBlock", StringComparison.Ordinal)).Should().BeSameAs(label);
         await pointer.MoveAsync(12, CancellationToken.None).ConfigureAwait(true);
         _ = number.NumberValue.Should().BeGreaterThan(beforeResize);
-        await pointer.ReleaseAsync(CancellationToken.None).ConfigureAwait(true);
+        await NativePointer.ReleaseAsync(CancellationToken.None).ConfigureAwait(true);
         _ = starts.Should().Be(1);
         _ = completions.Should().Equal(NumberBoxEditCompletionKind.Commit);
 
@@ -178,10 +181,10 @@ public sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         host.Children.Add(card);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(host.UpdateLayout).ConfigureAwait(true);
-        var reloadedLabel = number.FindDescendant<TextBlock>(part => part.Name == "PartLabelTextBlock")!;
+        var reloadedLabel = number.FindDescendant<TextBlock>(part => string.Equals(part.Name, "PartLabelTextBlock", StringComparison.Ordinal))!;
         using var reloadedPointer = await NativePointer.PressAsync(reloadedLabel, CancellationToken.None).ConfigureAwait(true);
         await reloadedPointer.MoveAsync(12, CancellationToken.None).ConfigureAwait(true);
-        await reloadedPointer.ReleaseAsync(CancellationToken.None).ConfigureAwait(true);
+        await NativePointer.ReleaseAsync(CancellationToken.None).ConfigureAwait(true);
         _ = starts.Should().Be(2);
         _ = completions.Should().Equal(NumberBoxEditCompletionKind.Commit, NumberBoxEditCompletionKind.Commit);
     });
@@ -199,22 +202,22 @@ public sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
     public Task CompoundEditorsAdaptWithoutLosingQualifiersOrChannelOrder(string kind, double textScale) => EnqueueAsync(async () =>
     {
         var vector = new VectorBox { ComponentLabelPosition = LabelPosition.Left, ComponentMask = "~.###", FontSize = 14 * textScale };
-        if (kind != "position")
+        if (!string.Equals(kind, "position", StringComparison.Ordinal))
         {
             InspectorRgbPresentation.Configure(vector);
         }
 
-        AutomationProperties.SetName(vector, kind == "position" ? "Position, metres" : $"{kind}, RGB");
+        AutomationProperties.SetName(vector, string.Equals(kind, "position", StringComparison.Ordinal) ? "Position, metres" : $"{kind}, RGB");
         var card = new PropertyCard
         {
-            PropertyName = kind == "position" ? "Position" : kind == "color" ? "Color" : "Disk luminance scale",
+            PropertyName = string.Equals(kind, "position", StringComparison.Ordinal) ? "Position" : string.Equals(kind, "color", StringComparison.Ordinal) ? "Color" : "Disk luminance scale",
             IsCompound = true,
-            Qualifier = kind == "position" ? "m" : kind == "color" ? "Linear RGB" : "RGB ×",
+            Qualifier = string.Equals(kind, "position", StringComparison.Ordinal) ? "m" : string.Equals(kind, "color", StringComparison.Ordinal) ? "Linear RGB" : "RGB ×",
             EditorMinimumWidth = 248,
-            Layout = kind == "position" ? PropertyLayout.Auto : PropertyLayout.Stacked,
+            Layout = string.Equals(kind, "position", StringComparison.Ordinal) ? PropertyLayout.Auto : PropertyLayout.Stacked,
             FontSize = 14 * textScale,
             Content = vector,
-            LeadingContent = kind == "color" ? new Button { MinWidth = 28, MinHeight = 32 } : null,
+            LeadingContent = string.Equals(kind, "color", StringComparison.Ordinal) ? new Button { MinWidth = 28, MinHeight = 32 } : null,
         };
         var host = CreateHost(760, card);
         await LoadTestContentAsync(host).ConfigureAwait(true);
@@ -229,17 +232,17 @@ public sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
             host.Width = width;
             host.UpdateLayout();
             _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-            var headerQualifier = card.FindDescendant<TextBlock>(text => text.Name == "HeaderQualifier")!;
-            var valueQualifier = card.FindDescendant<TextBlock>(text => text.Name == "ValueQualifier")!;
+            var headerQualifier = card.FindDescendant<TextBlock>(text => string.Equals(text.Name, "HeaderQualifier", StringComparison.Ordinal))!;
+            var valueQualifier = card.FindDescendant<TextBlock>(text => string.Equals(text.Name, "ValueQualifier", StringComparison.Ordinal))!;
             _ = headerQualifier.Visibility.Should().Be(card.ActualLayout == PropertyLayout.Stacked ? Visibility.Visible : Visibility.Collapsed);
             _ = valueQualifier.Visibility.Should().Be(card.ActualLayout == PropertyLayout.Inline ? Visibility.Visible : Visibility.Collapsed);
             _ = inputs.Should().HaveCount(3);
-            _ = inputs.Select(input => input.Label).Should().Equal(kind == "position" ? ["X", "Y", "Z"] : ["R", "G", "B"]);
+            _ = inputs.Select(input => input.Label).Should().Equal(string.Equals(kind, "position", StringComparison.Ordinal) ? ["X", "Y", "Z"] : ["R", "G", "B"]);
             _ = vector.FindDescendants().OfType<NumberBox>().Should().Equal(inputs);
             var points = inputs.Select(input => input.TransformToVisual(card).TransformPoint(default)).ToArray();
             for (var i = 0; i < inputs.Length; i++)
             {
-                _ = AutomationProperties.GetName(inputs[i]).Should().Contain(kind == "position" ? "metres" : "RGB");
+                _ = AutomationProperties.GetName(inputs[i]).Should().Contain(string.Equals(kind, "position", StringComparison.Ordinal) ? "metres" : "RGB");
                 _ = inputs[i].ActualWidth.Should().BeGreaterThanOrEqualTo(80 * textScale - 1,
                     $"dock width is {width}, vector width is {vector.ActualWidth}, padding is {vector.Padding}, vertical channels are {vector.AreComponentsStacked}");
                 _ = (points[i].X + inputs[i].ActualWidth).Should().BeLessThanOrEqualTo(width + 1);
@@ -264,7 +267,7 @@ public sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
                 _ = vector.AreComponentsStacked.Should().BeTrue();
             }
 
-            if (width == 760 && textScale == 1 && kind == "position")
+            if (width == 760 && textScale == 1 && string.Equals(kind, "position", StringComparison.Ordinal))
             {
                 _ = card.ActualLayout.Should().Be(PropertyLayout.Inline);
             }
@@ -299,7 +302,7 @@ public sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
             host.Width = width;
             host.UpdateLayout();
             _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-            var description = section.FindDescendant<ContentPresenter>(item => item.Name == "PartDescriptionPresenter")!;
+            var description = section.FindDescendant<ContentPresenter>(item => string.Equals(item.Name, "PartDescriptionPresenter", StringComparison.Ordinal))!;
             var descriptionPoint = description.TransformToVisual(section).TransformPoint(default);
             var actionPoint = reset.TransformToVisual(section).TransformPoint(default);
             _ = (descriptionPoint.X + description.ActualWidth).Should().BeLessThanOrEqualTo(actionPoint.X + 1);
@@ -318,9 +321,9 @@ public sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
         host.RequestedTheme = theme;
         expander.Style = (Style)host.Resources["QuietDisclosure"];
         await LoadTestContentAsync(host).ConfigureAwait(true);
-        var header = expander.FindDescendant<ToggleButton>(button => button.Name == "ExpanderHeader")!;
-        var presenter = header.FindDescendant<ContentPresenter>(item => item.Name == "ContentPresenter")!;
-        var chevron = header.FindDescendant<FontIcon>(item => item.Name == "DisclosureChevron")!;
+        var header = expander.FindDescendant<ToggleButton>(button => string.Equals(button.Name, "ExpanderHeader", StringComparison.Ordinal))!;
+        var presenter = header.FindDescendant<ContentPresenter>(item => string.Equals(item.Name, "ContentPresenter", StringComparison.Ordinal))!;
+        var chevron = header.FindDescendant<FontIcon>(item => string.Equals(item.Name, "DisclosureChevron", StringComparison.Ordinal))!;
         _ = header.IsTabStop.Should().BeTrue();
         _ = header.UseSystemFocusVisuals.Should().BeTrue();
         _ = header.Focus(FocusState.Keyboard).Should().BeTrue();

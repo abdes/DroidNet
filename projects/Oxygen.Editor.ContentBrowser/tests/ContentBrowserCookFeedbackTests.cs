@@ -5,7 +5,6 @@
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using Moq;
-using Oxygen.Editor.ContentBrowser;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core.Diagnostics;

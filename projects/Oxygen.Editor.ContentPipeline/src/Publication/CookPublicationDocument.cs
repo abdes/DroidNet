@@ -41,11 +41,11 @@ internal sealed record CookPublicationDocument(
     internal static string ConfigurationIdentity(ProjectContext project)
         => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(
             new
-        {
-            project.AuthoringMounts,
-            project.LocalFolderMounts,
-            Order = CookedContentOrdering.Resolve(project.LocalFolderMounts, project.CookedContentOrder),
-        }, JsonOptions)));
+            {
+                project.AuthoringMounts,
+                project.LocalFolderMounts,
+                Order = CookedContentOrdering.Resolve(project.LocalFolderMounts, project.CookedContentOrder),
+            }, JsonOptions)));
 
     internal void Validate(ProjectContext project)
     {

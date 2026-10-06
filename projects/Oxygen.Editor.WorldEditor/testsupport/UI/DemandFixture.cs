@@ -8,24 +8,17 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
 using DroidNet.Tests;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.Schemas;
-using Oxygen.Editor.World.Inspector.Geometry;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
-using Oxygen.Editor.World.Slots;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Editor.WorldEditor.TestSupport;
-using Oxygen.Managed.Assets.Model;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 
@@ -36,6 +29,7 @@ internal sealed partial class DemandFixture : IDisposable
     private readonly ProjectContextService projects = new();
     private readonly Mock<IContentPipelineService> pipeline = new();
     private Guid activeDocument;
+
     public DemandFixture()
     {
         var info = new ProjectInfo("Demand", Category.Games, "C:/Demand", "preview.png");
@@ -45,7 +39,7 @@ internal sealed partial class DemandFixture : IDisposable
         this.Geometry = new()
         {
             Name = "Geometry",
-            Geometry = new(AssetUris.BuildGeneratedUri("BasicShapes/Cube"))
+            Geometry = new(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
         };
         _ = this.Authoring.Node.AddComponent(this.Geometry);
         this.activeDocument = this.Authoring.Scene.Id;
@@ -66,7 +60,7 @@ internal sealed partial class DemandFixture : IDisposable
         var material = CreateStatusAsset(1) with
         {
             IdentityUri = this.MaterialUri,
-            CookStatus = new(this.MaterialUri, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], [], [])
+            CookStatus = new(this.MaterialUri, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], [], []),
         };
         _ = this.Assets.SetupGet(value => value.Items).Returns(Observable.Return<IReadOnlyList<ContentBrowserAssetItem>>([this.GeometryAsset, material]));
         _ = this.Assets.Setup(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
@@ -79,22 +73,32 @@ internal sealed partial class DemandFixture : IDisposable
             return new TaskCompletionSource<ContentCookResult>(TaskCreationOptions.RunContinuationsAsynchronously).Task.WaitAsync(token);
         });
         this.Service = new(CreateStatusHosting(), this.Assets.Object, this.pipeline.Object, this.projects, this.Authoring.Documents.Object, this.Authoring.Sync.Object, this.Authoring.Messenger, default, NullLogger<SceneContentDemandService>.Instance);
+
         // Demand assertions run without a visual tree; WaitForRenderAsync only completes while a
         // window produces composition frames, so realize the shared test window up front.
         _ = VisualUserInterfaceTestsApp.MainWindow;
     }
 
     public SceneAuthoringFixture Authoring { get; } = new();
+
     public Mock<IContentBrowserAssetProvider> Assets { get; } = new();
+
     public Uri GeometryUri { get; } = new("asset:///Content/Geometry/Custom.ogeo.json");
+
     public Uri MaterialUri { get; } = new("asset:///Content/Materials/Custom.omat.json");
+
     public GeometryComponent Geometry { get; }
+
     public ContentBrowserAssetItem GeometryAsset { get; }
+
     public SceneContentDemandService Service { get; }
+
     public List<(Uri uri, CancellationToken token)> Requests { get; } = [];
 
     public void Activate() => _ = this.Authoring.Messenger.Send(new SceneAuthoringLoadedMessage(this.Authoring.Scene, this.Authoring.Context.Metadata));
+
     public void NotifyEdited() => this.Authoring.Documents.Raise(value => value.DocumentMetadataChanged += null, new DocumentMetadataChangedEventArgs(default, this.Authoring.Context.Metadata));
+
     public void SwitchDocument(Guid documentId)
     {
         this.activeDocument = documentId;

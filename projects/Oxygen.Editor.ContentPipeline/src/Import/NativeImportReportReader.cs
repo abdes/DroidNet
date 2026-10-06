@@ -82,9 +82,11 @@ internal static class NativeImportReportReader
             {
                 diagnostics.Add(new()
                 {
-                    OperationId = execution.OperationId, Domain = FailureDomain.AssetImport,
+                    OperationId = execution.OperationId,
+                    Domain = FailureDomain.AssetImport,
                     Severity = issue.GetProperty("severity").GetString() switch { "info" => DiagnosticSeverity.Info, "warning" => DiagnosticSeverity.Warning, _ => DiagnosticSeverity.Error },
-                    Code = issue.GetProperty("code").GetString()!, Message = issue.GetProperty("message").GetString()!,
+                    Code = issue.GetProperty("code").GetString()!,
+                    Message = issue.GetProperty("message").GetString()!,
                     AffectedPath = Path.GetFullPath(Path.Combine(execution.InputRoot, execution.Manifest.Jobs[index].Source)),
                     TechnicalMessage = issue.TryGetProperty("object_path", out var location) ? location.GetString() : null,
                 });

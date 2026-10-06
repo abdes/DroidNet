@@ -6,24 +6,17 @@ using System.Reactive.Linq;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentPipeline.Status;
-using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Slots;
-using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
-using Oxygen.Managed.Assets.Model;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 
@@ -41,7 +34,7 @@ public sealed partial class ContentDemandTests : DroidNet.Tests.VisualUserInterf
     {
         using var fixture = new DemandFixture();
         fixture.Geometry.Geometry = new(fixture.GeometryUri);
-        fixture.Geometry.OverrideSlots.Add(new MaterialsSlot { Target = fixture.Authoring.TargetFor(fixture.Geometry.Geometry!.Uri), Material = new(fixture.MaterialUri) });
+        fixture.Geometry.OverrideSlots.Add(new MaterialsSlot { Target = SceneAuthoringFixture.TargetFor(fixture.Geometry.Geometry!.Uri), Material = new(fixture.MaterialUri) });
         fixture.Activate();
         _ = fixture.Requests.Select(static request => request.uri).Should().BeEquivalentTo([fixture.GeometryUri, fixture.MaterialUri]);
         fixture.Activate();
@@ -64,7 +57,7 @@ public sealed partial class ContentDemandTests : DroidNet.Tests.VisualUserInterf
         var view = new GeometryView
         {
             ViewModel = model,
-            Width = 440
+            Width = 440,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var choice = model.Groups.Single(group => string.Equals(group.Key, "Content", StringComparison.Ordinal)).Items.Single().Item;
@@ -165,7 +158,7 @@ public sealed partial class ContentDemandTests : DroidNet.Tests.VisualUserInterf
         using var fixture = new DemandFixture();
         fixture.Geometry.Geometry = new(fixture.GeometryUri);
         _ = fixture.Assets.Setup(value => value.ResolveAsync(fixture.GeometryUri, It.IsAny<CancellationToken>())).ReturnsAsync(fixture.GeometryAsset with { CookStatus = fixture.GeometryAsset.CookStatus! with { Freshness = AssetCookFreshness.Current, OutputAvailability = CookedOutputAvailability.Present } });
-        fixture.Geometry.OverrideSlots.Add(new MaterialsSlot { Target = fixture.Authoring.TargetFor(fixture.Geometry.Geometry!.Uri), Material = new(AssetUris.BuildGeneratedUri("Materials/Default")) });
+        fixture.Geometry.OverrideSlots.Add(new MaterialsSlot { Target = SceneAuthoringFixture.TargetFor(fixture.Geometry.Geometry!.Uri), Material = new(AssetUris.BuildGeneratedUri("Materials/Default")) });
         fixture.Activate();
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = fixture.Requests.Should().BeEmpty();
@@ -188,7 +181,7 @@ public sealed partial class ContentDemandTests : DroidNet.Tests.VisualUserInterf
         var edit = model.ApplyAssetAsync(choice);
         var other = new SceneNode(fixture.Authoring.Scene)
         {
-            Name = "Other"
+            Name = "Other",
         };
         _ = other.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = new(AssetUris.BuildGeneratedUri("BasicShapes/Sphere")) });
         fixture.Authoring.Scene.RootNodes.Add(other);

@@ -49,7 +49,7 @@ namespace DroidNet.Tests;
 /// ]]>
 /// </example>
 [SuppressMessage("Usage", "CA1812:Avoid uninstantiated internal classes", Justification = "Used by tests / XAML reflection")]
-public sealed partial class TestVisualStateManager : VisualStateManager
+internal sealed partial class TestVisualStateManager : VisualStateManager
 {
     private readonly Dictionary<FrameworkElement, List<string>> controlStates = [];
 

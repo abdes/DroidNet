@@ -6,7 +6,6 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
-using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Testing;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;

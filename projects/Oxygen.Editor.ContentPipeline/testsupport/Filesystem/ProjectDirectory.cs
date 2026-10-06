@@ -2,10 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
-using AwesomeAssertions;
-using Oxygen.Editor.ContentPipeline.Publication;
-
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
 internal sealed partial class ProjectDirectory : IDisposable

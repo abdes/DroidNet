@@ -352,3 +352,11 @@ dotnet_diagnostic.MA0005.severity = none
 [**/*.Logs.cs]
 # turn off SA1204 (static elements ordering) in these files
 dotnet_diagnostic.SA1204.severity = none
+
+# MSTest instantiates [TestClass] types through reflection, and the assemblies
+# declare [assembly: DiscoverInternals], so internal test classes are the
+# intended shape. CA1812 cannot be satisfied for them (public would re-arm
+# CA1515), so it is silenced for every test folder; app and library sources
+# keep the rule for genuinely dead internal types.
+[**/{test,tests,Tests}/**.cs]
+dotnet_diagnostic.CA1812.severity = none

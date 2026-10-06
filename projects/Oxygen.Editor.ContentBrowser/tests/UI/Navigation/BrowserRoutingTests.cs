@@ -4,22 +4,19 @@
 
 using System.Reactive.Subjects;
 using AwesomeAssertions;
-using DroidNet.Routing.WinUI;
 using DroidNet.Routing;
+using DroidNet.Routing.WinUI;
 using DryIoc;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.Shell;
-using Oxygen.Editor.ContentBrowser.TestSupport;
-using Oxygen.Editor.ContentBrowser;
 using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
-using Oxygen.Editor.World;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 

@@ -20,10 +20,10 @@ using NumberBox = DroidNet.Controls.NumberBox;
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed class ExposureCurveViewTests : VisualUserInterfaceTests
+internal sealed class ExposureCurveViewTests : VisualUserInterfaceTests
 {
     [TestMethod]
-    public Task CurveView_MultipleKeysShareHeadersAndStretchPreviewWithAccessibleFields() => EnqueueAsync(async () =>
+    public Task CurveViewMultipleKeysShareHeadersAndStretchPreviewWithAccessibleFields() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
         using var model = new EnvironmentViewModel(fixture.Commands, () => fixture.Context);
@@ -54,7 +54,7 @@ public sealed class ExposureCurveViewTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task CurveView_KeyTextValidationAndRemoveKeepTheSceneTransactionOwner() => EnqueueAsync(async () =>
+    public Task CurveViewKeyTextValidationAndRemoveKeepTheSceneTransactionOwner() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
         using var model = new EnvironmentViewModel(fixture.Commands, () => fixture.Context);

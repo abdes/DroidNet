@@ -4,7 +4,6 @@
 
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;

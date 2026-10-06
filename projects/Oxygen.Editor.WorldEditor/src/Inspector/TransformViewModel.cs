@@ -5,7 +5,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World.Inspector.Editing;
 using Oxygen.Editor.World.Utils;

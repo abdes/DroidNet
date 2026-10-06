@@ -2,15 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics.CodeAnalysis;
-using AwesomeAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.ContentPipeline.Publication;
-using Oxygen.Editor.Projects;
-using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World;
-using Oxygen.Managed.Core.Diagnostics;
-
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
 internal sealed class CapturingEngineContentPipelineApi(CookValidationResult validation, CookInspectionResult inspection, NativeImportResult? importResult = null) : IEngineContentPipelineApi, IBuiltinGeometryCatalogProvider

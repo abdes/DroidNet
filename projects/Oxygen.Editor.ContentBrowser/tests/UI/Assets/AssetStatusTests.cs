@@ -3,25 +3,17 @@
 // SPDX-License-Identifier: MIT
 
 using System.Reactive.Subjects;
-using AwesomeAssertions;
 using CommunityToolkit.WinUI;
-using DroidNet.Hosting.WinUI;
 using DroidNet.Tests;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Markup;
-using Microsoft.UI.Xaml;
 using Moq;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
-using Oxygen.Editor.ContentBrowser.TestSupport;
-using Oxygen.Editor.ContentBrowser;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
-using Oxygen.Managed.Assets.Catalog;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserControls;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;

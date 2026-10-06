@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -20,29 +20,29 @@ public static class AssetStatusPresentation
         => activity?.State is CookRunState.NeedsSave ? "Needs save"
             : hasUnsavedChanges || status?.HasUnsavedChanges == true ? "Unsaved changes"
             : status is null ? null : activity?.State switch
-        {
-            CookRunState.Queued => "Queued",
-            CookRunState.Preparing or CookRunState.Cooking or CookRunState.Validating => "Cooking",
-            CookRunState.Publishing => "Updating preview",
-            CookRunState.Cancelling => "Cancelling",
-            CookRunState.Failed => "Cook failed",
-            _ => status.Freshness switch
             {
-                AssetCookFreshness.MissingSource => "Source missing",
-                AssetCookFreshness.InvalidSource => "Invalid source",
-                AssetCookFreshness.Unknown when status.Diagnostics.Any(static diagnostic => diagnostic.Severity == Oxygen.Managed.Core.Diagnostics.DiagnosticSeverity.Error) => "Status unavailable",
-                AssetCookFreshness.Unknown => "Status pending",
-                _ when status.HasPublishedOutput && status.OutputAvailability == CookedOutputAvailability.Missing => "Needs cooking",
-                _ when status.HasPublishedOutput && status.OutputAvailability == CookedOutputAvailability.Unknown => "Status pending",
-                AssetCookFreshness.NeedsCooking => "Needs cooking",
-                AssetCookFreshness.OutOfDate => "Out of date",
-                AssetCookFreshness.Current when runtimeAvailability == AssetRuntimeAvailability.Failed => "Preview issue",
-                AssetCookFreshness.Current when runtimeAvailability == AssetRuntimeAvailability.Updating => "Updating preview",
-                AssetCookFreshness.Current when status.HasAvailableOutput && runtimeAvailability == AssetRuntimeAvailability.Mounted => "Ready",
-                AssetCookFreshness.Current => "Cooked",
-                _ => null,
-            },
-        };
+                CookRunState.Queued => "Queued",
+                CookRunState.Preparing or CookRunState.Cooking or CookRunState.Validating => "Cooking",
+                CookRunState.Publishing => "Updating preview",
+                CookRunState.Cancelling => "Cancelling",
+                CookRunState.Failed => "Cook failed",
+                _ => status.Freshness switch
+                {
+                    AssetCookFreshness.MissingSource => "Source missing",
+                    AssetCookFreshness.InvalidSource => "Invalid source",
+                    AssetCookFreshness.Unknown when status.Diagnostics.Any(static diagnostic => diagnostic.Severity == Oxygen.Managed.Core.Diagnostics.DiagnosticSeverity.Error) => "Status unavailable",
+                    AssetCookFreshness.Unknown => "Status pending",
+                    _ when status.HasPublishedOutput && status.OutputAvailability == CookedOutputAvailability.Missing => "Needs cooking",
+                    _ when status.HasPublishedOutput && status.OutputAvailability == CookedOutputAvailability.Unknown => "Status pending",
+                    AssetCookFreshness.NeedsCooking => "Needs cooking",
+                    AssetCookFreshness.OutOfDate => "Out of date",
+                    AssetCookFreshness.Current when runtimeAvailability == AssetRuntimeAvailability.Failed => "Preview issue",
+                    AssetCookFreshness.Current when runtimeAvailability == AssetRuntimeAvailability.Updating => "Updating preview",
+                    AssetCookFreshness.Current when status.HasAvailableOutput && runtimeAvailability == AssetRuntimeAvailability.Mounted => "Ready",
+                    AssetCookFreshness.Current => "Cooked",
+                    _ => null,
+                },
+            };
 
     /// <summary>Gets the semantic WinUI visual state for the same displayed status.</summary>
     /// <param name="status">Saved-source and publication facts.</param>

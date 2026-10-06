@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -57,7 +57,8 @@ public sealed partial class GeometryViewModel
             var category = definition.AuthoringCategory == GeneratedAssetCategory.Advanced ? " · Advanced" : string.Empty;
             var availability = snapshot.IsLastKnown ? " · Preview unavailable" : this.BuiltinAvailability(definition.AssetUri);
             return CreateEngineItem(definition.Name, definition.AssetUri, definition.AssetUri.AbsolutePath)
-                with { DisplayType = "Built-in geometry" + category + availability, };
+                with
+            { DisplayType = "Built-in geometry" + category + availability, };
         }).ToArray() ?? [];
         for (var index = 0; index < geometries.Length; index++)
         {
@@ -87,7 +88,8 @@ public sealed partial class GeometryViewModel
         else
         {
             var material = CreateEngineMaterialItem("Default", AssetUris.BuildGeneratedUri("Materials/Default"), "/Engine/Generated/Materials/Default")
-                with { DisplayType = snapshot.IsLastKnown ? "Built-in material · Preview unavailable" : "Built-in material" + this.BuiltinAvailability(AssetUris.BuildGeneratedUri("Materials/Default")), };
+                with
+            { DisplayType = snapshot.IsLastKnown ? "Built-in material · Preview unavailable" : "Built-in material" + this.BuiltinAvailability(AssetUris.BuildGeneratedUri("Materials/Default")), };
             if (this.engineMaterials.Count == 0)
             {
                 this.engineMaterials.Add(new(material));

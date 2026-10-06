@@ -6,8 +6,6 @@ using System.Numerics;
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
 

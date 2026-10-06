@@ -5,7 +5,6 @@
 using System.Collections.Concurrent;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.ContentPipeline.TestSupport;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookCoordinatorScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;

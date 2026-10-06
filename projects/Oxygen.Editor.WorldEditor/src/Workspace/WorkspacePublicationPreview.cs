@@ -45,7 +45,7 @@ internal sealed class WorkspacePublicationPreview(
     /// <inheritdoc />
     public async Task MountAsync(CookedContentMountSet mounts)
     {
-        CookedContentMountSet? pending = mounts;
+        var pending = mounts;
         try
         {
             if (mounts.Publication.ProjectId != project.ProjectId)

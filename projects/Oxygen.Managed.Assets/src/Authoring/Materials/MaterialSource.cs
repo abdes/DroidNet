@@ -140,7 +140,7 @@ public sealed record MaterialSource
         }
 
         var pbr = this.PbrMetallicRoughness;
-        MaterialTextureRef? baseColor = string.Equals(channel, "base_color"
+        var baseColor = string.Equals(channel, "base_color"
 , StringComparison.Ordinal) ? virtualPath is null ? null : new(virtualPath)
             : pbr.BaseColorTexture;
         return this with

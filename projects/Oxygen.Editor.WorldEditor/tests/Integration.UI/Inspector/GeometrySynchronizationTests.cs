@@ -5,15 +5,9 @@
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
-using Microsoft.UI.Xaml.Automation.Peers;
-using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Inspector.Geometry;
-using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.TestSupport;
-using Oxygen.Managed.Assets.Model;
-using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;

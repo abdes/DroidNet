@@ -5,11 +5,9 @@
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Documents;
+using Oxygen.Editor.World.Services;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Services;
 

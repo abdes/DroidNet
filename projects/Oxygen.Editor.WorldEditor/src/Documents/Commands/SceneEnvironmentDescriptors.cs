@@ -539,7 +539,7 @@ internal sealed class SceneEnvironmentDescriptors
             },
             validator: validator,
             annotation: Annotation(pointer, new EditorAnnotation { Group = "Post-processing", Label = label, Renderer = renderer }),
-            engineCommandKey: $"environment{pointer.Replace('/', '.')}" );
+            engineCommandKey: $"environment{pointer.Replace('/', '.')}");
 
     private static ValidationResult ValidateExposureCompensationCurve(ImmutableArray<ExposureCompensationKeyData> keys)
     {

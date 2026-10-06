@@ -4,20 +4,14 @@
 
 using System.Globalization;
 using System.Numerics;
-using System.Security.Cryptography;
-using System.Text.Json;
 using AwesomeAssertions;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Inspection;
-using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets.Model;
-using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 

@@ -2,24 +2,16 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Globalization;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
-using DryIoc;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
-using Moq;
+using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
+using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.ContentBrowser.TestSupport;
-using Oxygen.Editor.ContentBrowser;
-using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
-using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserControls;
 
 namespace Oxygen.Editor.ContentBrowser.UI.Tests.Navigation;

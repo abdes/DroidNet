@@ -35,7 +35,7 @@ public static class LooseCookedIndex
         ValidateHeader(header, length);
         var stringTable = ReadBlock(stream, header.StringTableOffset, checked((int)header.StringTableSize));
         var assets = ReadAssets(stream, header, stringTable);
-        List<FileRecord> files = header.FileRecordCount == 0 ? [] : ReadFiles(stream, header, stringTable);
+        var files = header.FileRecordCount == 0 ? [] : ReadFiles(stream, header, stringTable);
         var document = new Document(header.ContentVersion, header.Flags, header.SourceGuid, assets, files);
         ValidateDocument(document);
         return document;
@@ -158,7 +158,8 @@ public static class LooseCookedIndex
                     virtualOffset == 0 ? null : ReadString(stringTable, virtualOffset),
                     assetType,
                     descriptorSize,
-                    sha) { References = references });
+                    sha)
+                { References = references });
             }
         }
         finally

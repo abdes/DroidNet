@@ -81,7 +81,10 @@ public partial class ProjectLayoutViewModel
         var model = new ContentPriorityViewModel(expected);
         var spec = new DialogSpec("Content priority", new ContentPriorityView { ViewModel = model })
         {
-            PrimaryButtonText = "Apply", SecondaryButtonText = "Cancel", CloseButtonText = string.Empty, DefaultButton = DialogButton.Primary,
+            PrimaryButtonText = "Apply",
+            SecondaryButtonText = "Cancel",
+            CloseButtonText = string.Empty,
+            DefaultButton = DialogButton.Primary,
         };
         if (await dialogService.ShowAsync(spec).ConfigureAwait(true) == DialogButton.Primary)
         {
@@ -118,7 +121,10 @@ public partial class ProjectLayoutViewModel
             {
                 var spec = new DialogSpec("Content mount update", new TextBlock { Text = exception.Message, TextWrapping = TextWrapping.Wrap, MaxWidth = 520, IsTextSelectionEnabled = true })
                 {
-                    PrimaryButtonText = "Close", SecondaryButtonText = string.Empty, CloseButtonText = string.Empty, DefaultButton = DialogButton.Primary,
+                    PrimaryButtonText = "Close",
+                    SecondaryButtonText = string.Empty,
+                    CloseButtonText = string.Empty,
+                    DefaultButton = DialogButton.Primary,
                 };
                 _ = await dialogService.ShowAsync(spec).ConfigureAwait(true);
             }
@@ -190,10 +196,7 @@ public partial class ProjectLayoutViewModel
                         }
 
                         var previous = this.projectRoot;
-                        if (previous is not null)
-                        {
-                            previous.MountRenamed -= this.OnMountRenamed;
-                        }
+                        previous?.MountRenamed -= this.OnMountRenamed;
 
                         this.projectRoot = candidate;
                         candidate = null;

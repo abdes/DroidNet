@@ -30,7 +30,7 @@ public sealed partial class ContentPipelineService
         });
         var token = cancellation.Token;
         token.ThrowIfCancellationRequested();
-        CookPublicationReadLease? publicationRead = await this.publication.AcquireReadAsync(project, token).ConfigureAwait(false);
+        var publicationRead = await this.publication.AcquireReadAsync(project, token).ConfigureAwait(false);
         try
         {
             var provenance = publicationRead.ProductState;
@@ -198,12 +198,16 @@ public sealed partial class ContentPipelineService
             var origins = GetInspectionProvenance(root, provenance, actual);
             if (validation is not null && known is not null && !known.Matches(actual))
             {
-                validation = validation with { Succeeded = false, Diagnostics = [.. validation.Diagnostics, new DiagnosticRecord
+                validation = validation with
+                {
+                    Succeeded = false,
+                    Diagnostics = [.. validation.Diagnostics, new DiagnosticRecord
                 {
                     OperationId = Guid.NewGuid(), Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error,
                     Code = ContentPipelineDiagnosticCodes.ValidateFailed, Message = "The cooked index no longer matches its publication.",
                     AffectedPath = Path.Combine(root.Path, "container.index.bin"),
-                }] };
+                }]
+                };
             }
 
             var scoped = inspection with
@@ -217,9 +221,14 @@ public sealed partial class ContentPipelineService
         {
             var diagnostic = new DiagnosticRecord
             {
-                OperationId = Guid.NewGuid(), Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error,
-                Code = ContentPipelineDiagnosticCodes.InspectFailed, Message = exception.Message, AffectedPath = root.Path,
-                TechnicalMessage = exception.ToString(), ExceptionType = exception.GetType().FullName,
+                OperationId = Guid.NewGuid(),
+                Domain = FailureDomain.ContentPipeline,
+                Severity = DiagnosticSeverity.Error,
+                Code = ContentPipelineDiagnosticCodes.InspectFailed,
+                Message = exception.Message,
+                AffectedPath = root.Path,
+                TechnicalMessage = exception.ToString(),
+                ExceptionType = exception.GetType().FullName,
             };
             return new(root.Name, IsPresent: true, new(root.Path, Succeeded: false, SourceIdentity: null, [], [], [diagnostic]), Validation: null, []);
         }

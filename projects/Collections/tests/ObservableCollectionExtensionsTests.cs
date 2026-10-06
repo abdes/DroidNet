@@ -12,7 +12,7 @@ namespace DroidNet.Collections.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("ObservableCollection Extensions")]
-public class ObservableCollectionExtensionsTests
+internal sealed class ObservableCollectionExtensionsTests
 {
     [TestMethod]
     public void InsertInPlace_WhenCollectionIsSorted_InsertsItemInCorrectPosition()

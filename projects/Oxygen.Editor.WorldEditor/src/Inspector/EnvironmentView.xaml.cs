@@ -7,7 +7,6 @@ using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
-using Oxygen.Editor.Controls;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Inspector.Environment;
 using Oxygen.Editor.World.Inspector.Presentation;

@@ -43,7 +43,6 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Services;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Workspace;
-using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Managed.Core.Services;

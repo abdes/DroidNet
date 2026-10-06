@@ -5,9 +5,9 @@
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using DroidNet.Controls.Menus;
 using DroidNet.Documents;
 using DroidNet.Routing;
-using DroidNet.Controls.Menus;
 using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.Projects;
@@ -15,8 +15,8 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Documents.Commands;
 using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
 
@@ -24,10 +24,10 @@ namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.SceneExplorer;
 
 /// <summary>Verifies captured context-menu targets without physical input or focus dependencies.</summary>
 [TestClass]
-public sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     [TestMethod]
-    public Task ContextMenu_SelectionChanges_RejectsCapturedDelete() => EnqueueAsync(async () =>
+    public Task ContextMenuSelectionChangesRejectsCapturedDelete() => EnqueueAsync(async () =>
     {
         var harness = new AuthoringHarness(out var scene, out var node);
         var second = new SceneNode(scene) { Name = "Second" };
@@ -42,16 +42,16 @@ public sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserInt
         explorer.ContextMenuInvalidated += (_, _) => dismissed = true;
 
         _ = await explorer.SetSelectedNodes([second.Id]).ConfigureAwait(true);
-        await command.ExecuteAsync(null).ConfigureAwait(true);
+        await command.ExecuteAsync(parameter: null).ConfigureAwait(true);
 
-        _ = command.CanExecute(null).Should().BeFalse();
+        _ = command.CanExecute(parameter: null).Should().BeFalse();
         _ = dismissed.Should().BeTrue();
         harness.Commands.Verify(value => value.DeleteItemsAsync(
             It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<IReadOnlyList<Guid>>()), Times.Never);
     });
 
     [TestMethod]
-    public Task ContextMenu_SelectedAnchor_PreservesBatchAndDeletesAllCapturedNodes() => EnqueueAsync(async () =>
+    public Task ContextMenuSelectedAnchorPreservesBatchAndDeletesAllCapturedNodes() => EnqueueAsync(async () =>
     {
         var harness = new AuthoringHarness(out var scene, out var node);
         var second = new SceneNode(scene) { Name = "Second" };
@@ -66,7 +66,7 @@ public sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserInt
 
         _ = await explorer.PrepareContextMenuAsync(row).ConfigureAwait(true);
         var menu = explorer.BuildContextMenuSource(row!);
-        await GetMenuCommand(menu, "Delete selected items").ExecuteAsync(null).ConfigureAwait(true);
+        await GetMenuCommand(menu, "Delete selected items").ExecuteAsync(parameter: null).ConfigureAwait(true);
 
         harness.Commands.Verify(value => value.DeleteItemsAsync(
             It.IsAny<SceneDocumentCommandContext>(),
@@ -76,15 +76,15 @@ public sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserInt
     });
 
     [TestMethod]
-    public Task ContextMenu_Background_DoesNotInheritSelectionEditsOrClearSelection() => EnqueueAsync(async () =>
+    public Task ContextMenuBackgroundDoesNotInheritSelectionEditsOrClearSelection() => EnqueueAsync(async () =>
     {
         var harness = new AuthoringHarness(out var scene, out var node);
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
         _ = await explorer.SetSelectedNodes([node.Id]).ConfigureAwait(true);
 
-        _ = await explorer.PrepareContextMenuAsync(null).ConfigureAwait(true);
-        var menu = explorer.BuildContextMenuSource(null);
+        _ = await explorer.PrepareContextMenuAsync(anchor: null).ConfigureAwait(true);
+        var menu = explorer.BuildContextMenuSource(anchor: null);
 
         _ = menu.Items.Where(item => !item.IsSeparator).Select(item => item.Text).Should()
             .Equal("New node", "New folder", "Paste at scene root");
@@ -92,12 +92,12 @@ public sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserInt
     });
 
     [TestMethod]
-    public Task ContextMenu_UnselectedAnchor_SettlesInspectorAndSelectsExclusively() => EnqueueAsync(async () =>
+    public Task ContextMenuUnselectedAnchorSettlesInspectorAndSelectsExclusively() => EnqueueAsync(async () =>
     {
         var harness = new AuthoringHarness(out var scene, out var node);
         var second = new SceneNode(scene) { Name = "Second" };
         scene.RootNodes.Add(second);
-        _ = harness.Commands.Setup(value => value.CompleteEditSessionsAsync(It.IsAny<SceneDocumentCommandContext>(), true))
+        _ = harness.Commands.Setup(value => value.CompleteEditSessionsAsync(It.IsAny<SceneDocumentCommandContext>(), commit: true))
             .Returns(Task.CompletedTask);
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
@@ -108,11 +108,11 @@ public sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserInt
 
         _ = explorer.SelectedItemsCount.Should().Be(1);
         _ = explorer.SelectedItem.Should().BeSameAs(row);
-        harness.Commands.Verify(value => value.CompleteEditSessionsAsync(It.IsAny<SceneDocumentCommandContext>(), true), Times.Once);
+        harness.Commands.Verify(value => value.CompleteEditSessionsAsync(It.IsAny<SceneDocumentCommandContext>(), commit: true), Times.Once);
     });
 
     [TestMethod]
-    public Task ContextMenu_NonAnchorLocked_DisablesEntireBatchAndMatchesToolbar() => EnqueueAsync(async () =>
+    public Task ContextMenuNonAnchorLockedDisablesEntireBatchAndMatchesToolbar() => EnqueueAsync(async () =>
     {
         var harness = new AuthoringHarness(out var scene, out var node);
         var second = new SceneNode(scene) { Name = "Locked second" };
@@ -126,20 +126,20 @@ public sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserInt
 
         var menu = explorer.BuildContextMenuSource(anchor!);
 
-        _ = GetMenuCommand(menu, "Delete selected items").CanExecute(null).Should().BeFalse();
-        _ = explorer.DeleteAction.CanExecute(null).Should().BeFalse();
-        _ = GetMenuCommand(menu, "Cut").CanExecute(null).Should().BeFalse();
-        _ = explorer.CutAction.CanExecute(null).Should().BeFalse();
-        _ = GetMenuCommand(menu, "Copy").CanExecute(null).Should().BeTrue();
-        _ = menu.Items.Single(item => item.Text == "Delete selected items").HelpText.Should().Contain("Locked second");
+        _ = GetMenuCommand(menu, "Delete selected items").CanExecute(parameter: null).Should().BeFalse();
+        _ = explorer.DeleteAction.CanExecute(parameter: null).Should().BeFalse();
+        _ = GetMenuCommand(menu, "Cut").CanExecute(parameter: null).Should().BeFalse();
+        _ = explorer.CutAction.CanExecute(parameter: null).Should().BeFalse();
+        _ = GetMenuCommand(menu, "Copy").CanExecute(parameter: null).Should().BeTrue();
+        _ = menu.Items.Single(item => string.Equals(item.Text, "Delete selected items", StringComparison.Ordinal)).HelpText.Should().Contain("Locked second");
     });
 
     [TestMethod]
-    public Task ContextMenu_PasteAsChild_UsesCapturedNodeAndDistinctDestination() => EnqueueAsync(async () =>
+    public Task ContextMenuPasteAsChildUsesCapturedNodeAndDistinctDestination() => EnqueueAsync(async () =>
     {
         var harness = new AuthoringHarness(out var scene, out var node);
         _ = harness.Commands.Setup(value => value.DuplicateNodesFromDataAsync(
-            It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<SceneNodeData>>(), node.Id, null, null))
+            It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<SceneNodeData>>(), node.Id, newParentFolderId: null, insertAfterNodeId: null))
             .ReturnsAsync(SceneCommandResults.Success<IReadOnlyList<SceneNode>>([]));
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
@@ -148,14 +148,14 @@ public sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserInt
         await explorer.CopyItemsAsync([row!]).ConfigureAwait(true);
 
         var menu = explorer.BuildContextMenuSource(row);
-        await GetMenuCommand(menu, "Paste as child (keep world pose)").ExecuteAsync(null).ConfigureAwait(true);
+        await GetMenuCommand(menu, "Paste as child (keep world pose)").ExecuteAsync(parameter: null).ConfigureAwait(true);
 
         harness.Commands.Verify(value => value.DuplicateNodesFromDataAsync(
-            It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<SceneNodeData>>(), node.Id, null, null), Times.Once);
+            It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<SceneNodeData>>(), node.Id, newParentFolderId: null, insertAfterNodeId: null), Times.Once);
     });
 
     [TestMethod]
-    public Task ContextMenu_FolderCopyAndPaste_RoutesWholePayloadThroughAtomicOwner() => EnqueueAsync(async () =>
+    public Task ContextMenuFolderCopyAndPasteRoutesWholePayloadThroughAtomicOwner() => EnqueueAsync(async () =>
     {
         var harness = new AuthoringHarness(out var scene, out var node);
         var folderId = Guid.NewGuid();
@@ -173,43 +173,43 @@ public sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserInt
             It.Is<IReadOnlyList<Guid>>(ids => ids.SequenceEqual(new[] { folderId }))))
             .Returns(SceneCommandResults.Success(payload));
         _ = harness.Commands.Setup(value => value.ValidateExplorerPaste(
-            It.IsAny<SceneDocumentCommandContext>(), payload, false, null, null, false)).Returns((string?)null);
+            It.IsAny<SceneDocumentCommandContext>(), payload, cut: false, parentNodeId: null, parentFolderId: null, preserveWorld: false)).Returns((string?)null);
         _ = harness.Commands.Setup(value => value.PasteExplorerItemsAsync(
-            It.IsAny<SceneDocumentCommandContext>(), payload, false, null, null, false, null))
+            It.IsAny<SceneDocumentCommandContext>(), payload, cut: false, parentNodeId: null, parentFolderId: null, preserveWorld: false, insertAfterNodeId: null))
             .ReturnsAsync(SceneCommandResult.Success);
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
         var folder = explorer.ShownItems.OfType<FolderAdapter>().Single();
         await explorer.CopyItemsAsync([folder]).ConfigureAwait(true);
 
-        var backgroundMenu = explorer.BuildContextMenuSource(null);
-        await GetMenuCommand(backgroundMenu, "Paste at scene root").ExecuteAsync(null).ConfigureAwait(true);
+        var backgroundMenu = explorer.BuildContextMenuSource(anchor: null);
+        await GetMenuCommand(backgroundMenu, "Paste at scene root").ExecuteAsync(parameter: null).ConfigureAwait(true);
 
         harness.Commands.Verify(value => value.PasteExplorerItemsAsync(
-            It.IsAny<SceneDocumentCommandContext>(), payload, false, null, null, false, null), Times.Once);
+            It.IsAny<SceneDocumentCommandContext>(), payload, cut: false, parentNodeId: null, parentFolderId: null, preserveWorld: false, insertAfterNodeId: null), Times.Once);
         _ = explorer.CurrentClipboardState.Should().Be(DroidNet.Controls.ClipboardState.Copied);
     });
 
     [TestMethod]
-    public Task ContextMenu_DefaultCutPaste_UsesPreserveLocalIntent() => EnqueueAsync(async () =>
+    public Task ContextMenuDefaultCutPasteUsesPreserveLocalIntent() => EnqueueAsync(async () =>
     {
         var harness = new AuthoringHarness(out var scene, out var node);
         _ = harness.Commands.Setup(value => value.ReparentNodesAsync(
-            It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), null, false, null))
+            It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), newParentNodeId: null, preserveWorldTransform: false, insertAfterNodeId: null))
             .ReturnsAsync(SceneCommandResult.Success);
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
         var row = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(true);
         await explorer.CutItemsAsync([row!]).ConfigureAwait(true);
 
-        await GetMenuCommand(explorer.BuildContextMenuSource(null), "Paste at scene root").ExecuteAsync(null).ConfigureAwait(true);
+        await GetMenuCommand(explorer.BuildContextMenuSource(anchor: null), "Paste at scene root").ExecuteAsync(parameter: null).ConfigureAwait(true);
 
         harness.Commands.Verify(value => value.ReparentNodesAsync(
-            It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), null, false, null), Times.Once);
+            It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), newParentNodeId: null, preserveWorldTransform: false, insertAfterNodeId: null), Times.Once);
     });
 
     [TestMethod]
-    public Task ContextMenu_CapturedDocumentReplaced_RejectsCommandBeforeAuthoring() => EnqueueAsync(async () =>
+    public Task ContextMenuCapturedDocumentReplacedRejectsCommandBeforeAuthoring() => EnqueueAsync(async () =>
     {
         var harness = new AuthoringHarness(out var scene, out var node);
         var secondScene = harness.AddScene("Replacement");
@@ -220,22 +220,22 @@ public sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserInt
         var command = GetMenuCommand(explorer.BuildContextMenuSource(row), "Delete node");
 
         await explorer.HandleDocumentOpenedAsync(secondScene).ConfigureAwait(true);
-        await command.ExecuteAsync(null).ConfigureAwait(true);
+        await command.ExecuteAsync(parameter: null).ConfigureAwait(true);
 
-        _ = command.CanExecute(null).Should().BeFalse();
+        _ = command.CanExecute(parameter: null).Should().BeFalse();
         harness.Commands.Verify(value => value.DeleteItemsAsync(
             It.IsAny<SceneDocumentCommandContext>(), It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<IReadOnlyList<Guid>>()), Times.Never);
     });
 
     [TestMethod]
-    public Task ContextMenu_NoLoadedDocument_HasNoInertCommands() => EnqueueAsync(() =>
+    public Task ContextMenuNoLoadedDocumentHasNoInertCommands() => EnqueueAsync(() =>
     {
         var harness = new AuthoringHarness(out _, out _);
         using var explorer = harness.Build();
 
-        _ = explorer.BuildContextMenuSource(null).Items.Should().BeEmpty();
-        _ = explorer.NewNodeAction.CanExecute(null).Should().BeFalse();
-        _ = explorer.NewFolderAction.CanExecute(null).Should().BeFalse();
+        _ = explorer.BuildContextMenuSource(anchor: null).Items.Should().BeEmpty();
+        _ = explorer.NewNodeAction.CanExecute(parameter: null).Should().BeFalse();
+        _ = explorer.NewFolderAction.CanExecute(parameter: null).Should().BeFalse();
         return Task.CompletedTask;
     });
 
@@ -264,8 +264,8 @@ public sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserInt
             _ = this.Documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(metadata.DocumentId);
             this.Sync = new Mock<ISceneEngineSync>();
             _ = this.Sync.Setup(value => value.GetDocumentScene(metadata)).Returns(scene);
-            _ = this.Sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata)).Returns(true);
-            _ = this.Sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+            _ = this.Sync.Setup(value => value.RegisterDocument(It.IsAny<Scene>(), metadata)).Returns(value: true);
+            _ = this.Sync.Setup(value => value.SyncSceneWhenReadyAsync(It.IsAny<Scene>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
             this.Commands = new Mock<ISceneDocumentCommandService>(MockBehavior.Strict);
         }
 
@@ -284,7 +284,7 @@ public sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserInt
             var metadata = new SceneDocumentMetadata(added.Id);
             this.openDocuments.Add(metadata);
             _ = this.Sync.Setup(value => value.GetDocumentScene(metadata)).Returns(added);
-            _ = this.Sync.Setup(value => value.RegisterDocument(added, metadata)).Returns(true);
+            _ = this.Sync.Setup(value => value.RegisterDocument(added, metadata)).Returns(value: true);
             return added;
         }
 

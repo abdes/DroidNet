@@ -127,8 +127,10 @@ internal sealed partial class CookPublicationTransaction
         var bytes = JsonSerializer.SerializeToUtf8Bytes(head, JsonOptions);
         this.journal = this.journal with
         {
-            CandidateHead = new([.. bytes], Version(bytes)), SourceReplacement = sourceBundle,
-            SourceFiles = sources.ToImmutable(), ProjectChange = projectChange,
+            CandidateHead = new([.. bytes], Version(bytes)),
+            SourceReplacement = sourceBundle,
+            SourceFiles = sources.ToImmutable(),
+            ProjectChange = projectChange,
         };
         await this.WriteJournalAsync(CookPublicationPhase.Prepared, cancellationToken).ConfigureAwait(false);
     }

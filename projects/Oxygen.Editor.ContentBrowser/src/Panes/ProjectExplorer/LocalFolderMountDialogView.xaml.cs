@@ -36,15 +36,9 @@ public sealed partial class LocalFolderMountDialogView
 
     private void OnViewModelChanged(object? sender, ViewModelChangedEventArgs<LocalFolderMountDialogViewModel> args)
     {
-        if (args.OldValue is not null)
-        {
-            args.OldValue.PropertyChanged -= this.OnViewModelPropertyChanged;
-        }
+        args.OldValue?.PropertyChanged -= this.OnViewModelPropertyChanged;
 
-        if (this.ViewModel is not null)
-        {
-            this.ViewModel.PropertyChanged += this.OnViewModelPropertyChanged;
-        }
+        this.ViewModel?.PropertyChanged += this.OnViewModelPropertyChanged;
 
         this.Bindings.Update();
         this.UpdatePrimaryButtonEnabled();

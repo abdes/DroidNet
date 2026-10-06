@@ -14,14 +14,14 @@ using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed class AcceptedExposurePresentationTests : VisualUserInterfaceTests
+internal sealed class AcceptedExposurePresentationTests : VisualUserInterfaceTests
 {
     [TestMethod]
     [DataRow("AutoExposureMeteringMask", "Metering mask")]
     [DataRow("AutoExposureTransitionDistanceEv", "Adaptation transition distance")]
     [DataRow("AutoExposureBlackInfluence", "Dark-sample influence")]
     [DataRow("AutoExposureCompensationCurve", "Exposure-compensation curve")]
-    public Task AcceptedExposureFields_UseCleanLabels(string key, string label) => EnqueueAsync(async () =>
+    public Task AcceptedExposureFieldsUseCleanLabels(string key, string label) => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
         using var model = new EnvironmentViewModel(fixture.Commands, () => fixture.Context);

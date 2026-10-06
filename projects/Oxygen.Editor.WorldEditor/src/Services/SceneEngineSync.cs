@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
-using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Runtime.Engine;
@@ -792,7 +791,8 @@ public sealed partial class SceneEngineSync(
         return new(mask,
             this.engineService.ContentStatus.Bindings.SingleOrDefault(root => string.Equals(root.ProjectMount, path[1..separator], StringComparison.OrdinalIgnoreCase))?.Path
                 ?? throw new InvalidOperationException("The exposure mask has no accepted cooked generation. Cook its content before previewing it."),
-            path[(separator + 1)..]) { ProjectMount = path[1..separator] };
+            path[(separator + 1)..])
+        { ProjectMount = path[1..separator] };
     }
 
     private async Task<bool> SyncSceneCoreAsync(Scene scene, bool skipIfCurrent, CancellationToken cancellationToken)

@@ -4,10 +4,9 @@
 
 using System.Numerics;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.TestSupport;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 
@@ -39,7 +38,7 @@ internal static class InspectorFieldCases
         if (node.Components.OfType<DirectionalLightComponent>().FirstOrDefault() is { } light)
         {
             Add(3, [light.Color.X, light.Color.Y, light.Color.Z, light.AffectsWorld ? 1f : 0f, 0, light.CastsShadows ? 1f : 0f, light.ShadowBias, light.ShadowNormalBias, light.ContactShadows ? 1f : 0f, (int)light.ShadowResolutionHint, light.ExposureCompensation, light.IntensityLux, light.AngularSizeRadians, 0, 0, light.CascadeCount, (int)light.SplitMode, light.MaxShadowDistance, light.CascadeDistances.X, light.CascadeDistances.Y, light.CascadeDistances.Z, light.CascadeDistances.W, light.DistributionExponent, light.TransitionFraction, light.DistanceFadeoutFraction, (int)light.AtmosphereSlot, light.UsePerPixelAtmosphereTransmittance ? 1f : 0f, light.AtmosphereDiskLuminanceScaleRgb.X, light.AtmosphereDiskLuminanceScaleRgb.Y, light.AtmosphereDiskLuminanceScaleRgb.Z,]);
-            foreach (ushort removed in new ushort[]
+            foreach (var removed in new ushort[]
             {
                 4,
                 13,

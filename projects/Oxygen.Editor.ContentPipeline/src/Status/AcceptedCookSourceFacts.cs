@@ -29,10 +29,13 @@ internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProven
                 {
                     issues.Add(new()
                     {
-                        OperationId = Guid.Empty, Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error,
+                        OperationId = Guid.Empty,
+                        Domain = FailureDomain.ContentPipeline,
+                        Severity = DiagnosticSeverity.Error,
                         Code = AssetImportDiagnosticCodes.SourceMissing,
                         Message = $"The authored source is no longer available: '{input.SourceAbsolutePath}'.",
-                        AffectedPath = input.SourceAbsolutePath, AffectedVirtualPath = input.AssetUri.AbsolutePath,
+                        AffectedPath = input.SourceAbsolutePath,
+                        AffectedVirtualPath = input.AssetUri.AbsolutePath,
                     });
                     continue;
                 }
@@ -43,9 +46,13 @@ internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProven
             {
                 issues.Add(new()
                 {
-                    OperationId = Guid.Empty, Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error,
+                    OperationId = Guid.Empty,
+                    Domain = FailureDomain.ContentPipeline,
+                    Severity = DiagnosticSeverity.Error,
                     Code = error is FileNotFoundException or DirectoryNotFoundException ? AssetImportDiagnosticCodes.SourceMissing : ContentPipelineDiagnosticCodes.ManifestGenerationFailed,
-                    Message = error.Message, AffectedPath = input.SourceAbsolutePath, AffectedVirtualPath = input.AssetUri.AbsolutePath,
+                    Message = error.Message,
+                    AffectedPath = input.SourceAbsolutePath,
+                    AffectedVirtualPath = input.AssetUri.AbsolutePath,
                 });
             }
         }

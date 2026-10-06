@@ -14,7 +14,6 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Catalog.FileSystem;
-using Oxygen.Managed.Assets.Catalog.LooseCooked;
 
 namespace Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 
@@ -351,7 +350,7 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
     private async Task InitializeCoreAsync(ProjectContext project, TaskCompletionSource completion, CookPublicationReadLease? supplied, string? publicationError = null)
     {
         var candidates = new List<Registration>();
-        CookPublicationReadLease? selected = supplied;
+        var selected = supplied;
         try
         {
             this.lifetimeToken.ThrowIfCancellationRequested();

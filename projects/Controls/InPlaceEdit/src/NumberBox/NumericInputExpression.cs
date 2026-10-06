@@ -47,4 +47,4 @@ public readonly record struct NumericInputExpression(NumericInputOperation Opera
             NumericInputOperation.Divide => currentValue / this.Operand,
             _ => throw new InvalidOperationException($"Unsupported numeric input operation: {this.Operation}."),
         };
-    }
+}

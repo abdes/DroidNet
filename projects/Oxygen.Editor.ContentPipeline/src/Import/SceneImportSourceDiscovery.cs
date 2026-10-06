@@ -43,23 +43,28 @@ public sealed class SceneImportSourceDiscovery(ICookDocumentRegistry documents, 
             CookRunContext.Report(new(Message: "Reading source content and dependencies."));
             var report = await native.AnalyzeSourcesAsync(
                 new(operation.OperationId, directory, scratch, [recipe with { Source = primary }])
-            {
-                Artifacts = artifacts,
-            }, cancellationToken).ConfigureAwait(false);
+                {
+                    Artifacts = artifacts,
+                }, cancellationToken).ConfigureAwait(false);
             coordinator.VerifyWriter(operation);
             var facts = report.Jobs.Single();
             if (!report.Complete || !facts.Complete)
             {
                 var issues = facts.Diagnostics.Select(issue => issue with
                 {
-                    OperationId = operation.OperationId, AffectedPath = issue.AffectedPath ?? primary,
+                    OperationId = operation.OperationId,
+                    AffectedPath = issue.AffectedPath ?? primary,
                 }).ToImmutableArray();
                 if (!issues.Any(static issue => issue.Severity >= DiagnosticSeverity.Error))
                 {
                     issues = issues.Add(new()
                     {
-                        OperationId = operation.OperationId, Domain = FailureDomain.AssetImport, Severity = DiagnosticSeverity.Error,
-                        Code = AssetImportDiagnosticCodes.ImportFailed, Message = "Native source analysis did not complete.", AffectedPath = primary,
+                        OperationId = operation.OperationId,
+                        Domain = FailureDomain.AssetImport,
+                        Severity = DiagnosticSeverity.Error,
+                        Code = AssetImportDiagnosticCodes.ImportFailed,
+                        Message = "Native source analysis did not complete.",
+                        AffectedPath = primary,
                     });
                 }
 

@@ -47,7 +47,8 @@ internal sealed partial class CookSourceAnalyzer
 
         var descriptors = prepared.Select(source => this.Rebase(source.Input with
         {
-            SourceAbsolutePath = source.Scene!.DescriptorPath, Role = ContentCookInputRole.GeneratedDescriptor,
+            SourceAbsolutePath = source.Scene!.DescriptorPath,
+            Role = ContentCookInputRole.GeneratedDescriptor,
         }));
         var captured = await CookInputSnapshotCapture.CaptureGeneratedAsync(descriptors.Concat(generated), cancellationToken).ConfigureAwait(false);
         return new(

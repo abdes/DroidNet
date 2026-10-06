@@ -4,7 +4,6 @@
 
 using DroidNet.Docking;
 using DroidNet.Hosting.WinUI;
-using DryIoc;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Publication;

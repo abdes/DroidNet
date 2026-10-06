@@ -2,10 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
-using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Model;
 

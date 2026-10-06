@@ -183,5 +183,6 @@ public sealed partial class ContentBrowserAssetProviderTests
             new(source, new("asset:///Content/Models/Crate/Scenes/Crate.oscene"), ContentCookAssetKind.Scene, "Content", "/Content/Models/Crate/Scenes/Crate.oscene"),
         ],
         [],
-        []) { SourcePaths = [workspace.SourcePath(source.AbsolutePath.TrimStart('/'))] };
+        [])
+    { SourcePaths = [workspace.SourcePath(source.AbsolutePath.TrimStart('/'))] };
 }

@@ -12,7 +12,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Data.Models;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 using Oxygen.Managed.Core.Services;
 
 namespace Oxygen.Editor.ProjectBrowser.Projects;

@@ -184,7 +184,8 @@ public sealed partial class ContentPipelineService
             operation.OperationId,
             operation.Project.ProjectRoot,
             Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")),
-            [job]) { Artifacts = artifacts, CapturedInputs = snapshot.CreateNativeInputs() }, cancellationToken).ConfigureAwait(false);
+            [job])
+            { Artifacts = artifacts, CapturedInputs = snapshot.CreateNativeInputs() }, cancellationToken).ConfigureAwait(false);
         if (!analysis.Complete)
         {
             var issues = analysis.Jobs.SelectMany(static result => result.Diagnostics).ToArray();
@@ -199,7 +200,8 @@ public sealed partial class ContentPipelineService
             SourceFacts = graph.SourceFacts.SetItem(
                 source.AssetUri,
                 new(source, facts.Outputs, facts.References,
-                    [.. inputs.Where(file => graph.FileDependencies[source.AssetUri].Contains(file.RelativePath, StringComparer.Ordinal))]) { Job = job }),
+                    [.. inputs.Where(file => graph.FileDependencies[source.AssetUri].Contains(file.RelativePath, StringComparer.Ordinal))])
+                { Job = job }),
         };
         return (snapshot, graph);
     }

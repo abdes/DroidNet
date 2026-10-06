@@ -152,8 +152,12 @@ public sealed class SceneImportDialogViewModelTests
 
     private static ProjectContext CreateProject() => new()
     {
-        ProjectId = Guid.NewGuid(), Name = "Import", Category = Category.Games,
+        ProjectId = Guid.NewGuid(),
+        Name = "Import",
+        Category = Category.Games,
         ProjectRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
-        AuthoringMounts = [new("Content", "Content")], LocalFolderMounts = [], Scenes = [],
+        AuthoringMounts = [new("Content", "Content")],
+        LocalFolderMounts = [],
+        Scenes = [],
     };
 }

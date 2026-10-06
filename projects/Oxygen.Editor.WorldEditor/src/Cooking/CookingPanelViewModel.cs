@@ -10,7 +10,6 @@ using DroidNet.Hosting.WinUI;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.Projects;
-using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Cooking;
 

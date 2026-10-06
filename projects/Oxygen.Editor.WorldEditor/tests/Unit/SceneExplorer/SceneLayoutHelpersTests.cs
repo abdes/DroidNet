@@ -5,8 +5,6 @@
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.SceneEditor;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;

@@ -5,21 +5,19 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using AwesomeAssertions;
-using DroidNet.Storage.Native;
 using DroidNet.Storage;
+using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
-using Oxygen.Editor.ContentPipeline.Incremental;
-using Oxygen.Editor.ContentPipeline.Mounting;
-using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Incremental;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World.Workspace;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
 using Testably.Abstractions;
 using static DroidNet.Tests.UiTestHosting;
@@ -27,7 +25,7 @@ using static DroidNet.Tests.UiTestHosting;
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Workspace;
 
 [TestClass]
-public sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -106,6 +104,7 @@ public sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserInt
         private readonly Guid sourceKey = Guid.CreateVersion7();
         private readonly CookPublicationService publication;
         private readonly IDisposable registration;
+
         public MountTransactionFixture(bool withDefaultScene = false)
         {
             this.ProjectOutput = this.WriteRoot(Path.GetRelativePath(this.directory.FullName, CookPublicationPaths.Generation(this.directory.FullName, this.sourceKey)), this.sourceKey);
@@ -142,14 +141,23 @@ public sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserInt
         }
 
         public MountAtomicStore Store { get; } = new();
+
         public ProjectContextService Projects { get; } = new();
+
         public ProjectInfo Candidate { get; }
+
         public ContentMountChangeService Service { get; }
+
         public string ProjectOutput { get; }
+
         public string Library { get; }
+
         public string ManifestPath => Path.Combine(this.directory.FullName, Oxygen.Editor.Projects.Constants.ProjectFileName);
+
         public IReadOnlyList<string> Roots { get; private set; }
+
         public bool Paused { get; private set; }
+
         public bool FailNative { get; set; }
 
         public async Task InitializeAsync()
@@ -162,7 +170,7 @@ public sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserInt
             };
             _ = (await this.manager.SaveProjectInfoAsync(info).ConfigureAwait(true)).Should().BeTrue();
             var index = await CookedIndexSnapshot.ReadAsync(this.ProjectOutput, CancellationToken.None).ConfigureAwait(true);
-            var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, context.ProjectId, Guid.NewGuid(), DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(context), [new(CookPublicationRootOwner.Project, "Content", this.sourceKey, index.Fingerprint, null)], [], null);
+            var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, context.ProjectId, Guid.NewGuid(), DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(context), [new(CookPublicationRootOwner.Project, "Content", this.sourceKey, index.Fingerprint, LibraryPath: null)], [], CookInputs: null);
             var path = CookPublicationPaths.Document(context.ProjectRoot, document.OperationId);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var version = await this.Store.WriteAsync(path, JsonSerializer.SerializeToUtf8Bytes(document, CookPublicationDocument.JsonOptions), FileVersion.Missing).ConfigureAwait(true);
@@ -241,10 +249,13 @@ public sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserInt
     private sealed class MountAtomicStore : IAtomicFileStore
     {
         private readonly NativeAtomicFileStore inner = new(new RealFileSystem());
+
         public bool Fail { get; set; }
+
         public Action? AfterCommit { get; set; }
 
         public Task<FileSnapshot> ReadAsync(string path, CancellationToken cancellationToken = default) => this.inner.ReadAsync(path, cancellationToken);
+
         public async Task<FileVersion> WriteAsync(string path, ReadOnlyMemory<byte> content, FileVersion expected, CancellationToken cancellationToken = default)
         {
             var projectSave = string.Equals(Path.GetFileName(path), Oxygen.Editor.Projects.Constants.ProjectFileName, StringComparison.OrdinalIgnoreCase);

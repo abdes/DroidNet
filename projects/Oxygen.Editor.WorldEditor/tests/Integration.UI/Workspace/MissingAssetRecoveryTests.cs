@@ -5,8 +5,8 @@
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core.Diagnostics;

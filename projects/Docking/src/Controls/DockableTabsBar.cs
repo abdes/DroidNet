@@ -113,10 +113,7 @@ public sealed partial class DockableTabsBar : Control
 
     private void SetupItemsRepeaterPart()
     {
-        if (this.itemsRepeater is not null)
-        {
-            this.itemsRepeater.ElementPrepared -= this.OnElementPrepared;
-        }
+        this.itemsRepeater?.ElementPrepared -= this.OnElementPrepared;
 
         this.itemsRepeater = this.GetTemplateChild(PartItemsRepeaterName) as ItemsRepeater
             ?? throw new InvalidOperationException($"{nameof(DockableTabsBar)} control requires an {nameof(ItemsRepeater)} part named `{PartItemsRepeaterName}`");

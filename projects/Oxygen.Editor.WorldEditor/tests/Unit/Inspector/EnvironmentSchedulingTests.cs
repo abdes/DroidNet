@@ -9,7 +9,6 @@ using Moq;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.WorldEditor.TestSupport;
-using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
 

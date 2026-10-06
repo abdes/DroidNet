@@ -11,8 +11,6 @@ using Microsoft.UI.Xaml;
 using Moq;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Managed.Core.Diagnostics;
 

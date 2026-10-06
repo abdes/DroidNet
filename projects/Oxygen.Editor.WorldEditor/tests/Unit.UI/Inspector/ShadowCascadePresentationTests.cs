@@ -12,14 +12,13 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.TestSupport;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorModels;
 using NumberBox = DroidNet.Controls.NumberBox;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
+internal sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
 {
     [TestMethod]
     [DataRow(DirectionalCsmSplitMode.Generated, 1)]
@@ -30,7 +29,7 @@ public sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
     [DataRow(DirectionalCsmSplitMode.ManualDistances, 2)]
     [DataRow(DirectionalCsmSplitMode.ManualDistances, 3)]
     [DataRow(DirectionalCsmSplitMode.ManualDistances, 4)]
-    public Task CascadeFields_OnlyEffectiveSettingsAcceptInput(DirectionalCsmSplitMode mode, int count) => EnqueueAsync(async () =>
+    public Task CascadeFieldsOnlyEffectiveSettingsAcceptInput(DirectionalCsmSplitMode mode, int count) => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
         var light = fixture.Node.Components.OfType<DirectionalLightComponent>().Single();
@@ -49,7 +48,7 @@ public sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task SplitModeChanges_PreserveStoredDistancesAndUpdateAvailabilityThroughUndoRedo() => EnqueueAsync(async () =>
+    public Task SplitModeChangesPreserveStoredDistancesAndUpdateAvailabilityThroughUndoRedo() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
         using var inspector = fixture.CreateInspectorHost("Light");
@@ -92,7 +91,7 @@ public sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task CascadeCountChanges_MoveTheFinalBoundaryWithoutDiscardingStoredValues() => EnqueueAsync(async () =>
+    public Task CascadeCountChangesMoveTheFinalBoundaryWithoutDiscardingStoredValues() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
         var light = fixture.Node.Components.OfType<DirectionalLightComponent>().Single();
@@ -118,7 +117,7 @@ public sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task MixedSelections_EnableOnlySettingsApplicableToEveryLight() => EnqueueAsync(async () =>
+    public Task MixedSelectionsEnableOnlySettingsApplicableToEveryLight() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
         var first = fixture.Node.Components.OfType<DirectionalLightComponent>().Single();
@@ -136,7 +135,7 @@ public sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
         model.UpdateValues([fixture.Node, other]);
         await WaitForRenderAsync().ConfigureAwait(true);
         foreach (var field in view.FindDescendants().OfType<InspectorNumberField>().Where(field => field.Tag is string name
-            && (name.StartsWith("CascadeDistance", StringComparison.Ordinal) || name == "DistributionExponent")))
+            && (name.StartsWith("CascadeDistance", StringComparison.Ordinal) || string.Equals(name, "DistributionExponent", StringComparison.Ordinal))))
         {
             _ = field.IsEnabled.Should().BeFalse();
             _ = field.ApplicabilityText.Should().BeEmpty();

@@ -117,25 +117,25 @@ public sealed partial class SceneDocumentCommandService
             : this.ValidateComponentPropertyEdit(context, edit, kind) is { } validationResult
             ? validationResult
             : kind switch
-        {
-            GeometryKind => await this.EditGeometryPropertiesAsync(context, nodeIds, edit, session).ConfigureAwait(true),
-            PerspectiveCameraKind => await this.EditPerspectiveCameraAsync(
-                context,
-                nodeIds,
-                BuildPerspectiveCameraEditFromPropertyEdit(edit),
-                session).ConfigureAwait(true),
-            DirectionalLightKind => await this.EditDirectionalLightAsync(
-                context,
-                nodeIds,
-                BuildDirectionalLightEditFromPropertyEdit(edit),
-                session).ConfigureAwait(true),
-            _ => this.ValidationFailure(
-                SceneOperationKinds.EditTransform,
-                "PROPERTY_UNKNOWN",
-                "Property edit rejected",
-                $"Unknown component kind: {kind}.",
-                context),
-        };
+            {
+                GeometryKind => await this.EditGeometryPropertiesAsync(context, nodeIds, edit, session).ConfigureAwait(true),
+                PerspectiveCameraKind => await this.EditPerspectiveCameraAsync(
+                    context,
+                    nodeIds,
+                    BuildPerspectiveCameraEditFromPropertyEdit(edit),
+                    session).ConfigureAwait(true),
+                DirectionalLightKind => await this.EditDirectionalLightAsync(
+                    context,
+                    nodeIds,
+                    BuildDirectionalLightEditFromPropertyEdit(edit),
+                    session).ConfigureAwait(true),
+                _ => this.ValidationFailure(
+                    SceneOperationKinds.EditTransform,
+                    "PROPERTY_UNKNOWN",
+                    "Property edit rejected",
+                    $"Unknown component kind: {kind}.",
+                    context),
+            };
 
     private SceneCommandResult? ValidateComponentPropertyEdit(
         SceneDocumentCommandContext context,

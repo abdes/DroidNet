@@ -5,24 +5,17 @@
 using System.Reactive.Linq;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
-using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
-using Oxygen.Editor.ContentBrowser;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Inspector.Geometry;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.TestSupport;
-using Oxygen.Managed.Assets.Catalog;
 using static DroidNet.Tests.UiTestHosting;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed partial class BuiltinCatalogTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class BuiltinCatalogTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -42,12 +35,12 @@ public sealed partial class BuiltinCatalogTests : DroidNet.Tests.VisualUserInter
         _ = materials.Setup(value => value.RefreshAsync(It.IsAny<MaterialPickerFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, materials.Object, discovery, Mock.Of<Oxygen.Editor.World.Services.ISceneContentDemandService>(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
         {
-            IsExpanded = true
+            IsExpanded = true,
         };
         var view = new GeometryView
         {
             ViewModel = model,
-            Width = 440
+            Width = 440,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);

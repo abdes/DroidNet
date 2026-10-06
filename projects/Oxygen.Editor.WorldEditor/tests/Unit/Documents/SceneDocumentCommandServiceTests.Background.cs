@@ -6,10 +6,8 @@ using System.Numerics;
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Schemas;
-using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
-using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Core.Diagnostics;
 

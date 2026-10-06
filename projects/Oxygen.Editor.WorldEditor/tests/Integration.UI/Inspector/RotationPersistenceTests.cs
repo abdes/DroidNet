@@ -4,9 +4,8 @@
 
 using AwesomeAssertions;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml;
-using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldCases;

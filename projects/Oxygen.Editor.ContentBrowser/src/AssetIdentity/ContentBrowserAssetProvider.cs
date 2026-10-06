@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -256,8 +256,11 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
         {
             var diagnostic = new DiagnosticRecord
             {
-                OperationId = Guid.Empty, Domain = FailureDomain.AssetCook, Severity = DiagnosticSeverity.Error,
-                Code = "Cook.PublicationUnavailable", Message = publicationError,
+                OperationId = Guid.Empty,
+                Domain = FailureDomain.AssetCook,
+                Severity = DiagnosticSeverity.Error,
+                Code = "Cook.PublicationUnavailable",
+                Message = publicationError,
             };
             var affected = candidates.Select(static item => item.IdentityUri).ToHashSet();
             return source.Select(item => affected.Contains(item.IdentityUri)

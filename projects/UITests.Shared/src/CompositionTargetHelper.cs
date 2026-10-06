@@ -44,7 +44,7 @@ internal static class CompositionTargetHelper
         }
         catch (Exception ex)
         {
-            taskCompletionSource.SetException(ex); // Note this can just sometimes be a wrong thread exception, see WinUI function notes.
+            taskCompletionSource.SetException(ex); // Note this can just sometimes be a wrong thread exception, see WinUI PropertyNames notes.
         }
 
         return taskCompletionSource.Task;

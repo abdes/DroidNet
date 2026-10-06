@@ -6,22 +6,20 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.World.Inspector.Geometry;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed partial class GeometryStatusTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class GeometryStatusTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -35,7 +33,7 @@ public sealed partial class GeometryStatusTests : DroidNet.Tests.VisualUserInter
             IdentityUri = new("asset:///Content/Geometry/Custom.ogeo.json"),
             DisplayName = "Custom",
             Kind = AssetKind.Geometry,
-            CookedUri = new("asset:///Content/Geometry/Custom.ogeo")
+            CookedUri = new("asset:///Content/Geometry/Custom.ogeo"),
         };
         var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
         var engine = builtins.Snapshot.Catalog!.CreateCatalogRecords()[0];
@@ -44,7 +42,7 @@ public sealed partial class GeometryStatusTests : DroidNet.Tests.VisualUserInter
             IdentityUri = new("asset://" + engine.Generated!.CookedVirtualPath),
             Generated = engine.Generated,
             BuiltinOriginUri = engine.Uri,
-            PrimaryState = AssetState.Generated
+            PrimaryState = AssetState.Generated,
         };
         using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([asset, copy]);
         var provider = new Mock<IContentBrowserAssetProvider>();
@@ -55,12 +53,12 @@ public sealed partial class GeometryStatusTests : DroidNet.Tests.VisualUserInter
         _ = materials.Setup(value => value.RefreshAsync(It.IsAny<MaterialPickerFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         using var model = new GeometryViewModel(CreateStatusHosting(), provider.Object, materials.Object, builtins, Mock.Of<Oxygen.Editor.World.Services.ISceneContentDemandService>(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
         {
-            IsExpanded = true
+            IsExpanded = true,
         };
         var view = new GeometryView
         {
             ViewModel = model,
-            Width = 440
+            Width = 440,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);

@@ -205,10 +205,7 @@ public partial class PropertyCard : ContentControl
             this.suffix.Visibility = !headerAnnotation && !string.IsNullOrEmpty(this.Qualifier) ? Visibility.Visible : Visibility.Collapsed;
             this.suffix.MinWidth = this.IsCompound ? 0 : this.QualifierMinimumWidth;
             this.prefix.Visibility = string.IsNullOrEmpty(this.Prefix) ? Visibility.Collapsed : Visibility.Visible;
-            if (this.leading is not null)
-            {
-                this.leading.Visibility = this.LeadingContent is null ? Visibility.Collapsed : Visibility.Visible;
-            }
+            this.leading?.Visibility = this.LeadingContent is null ? Visibility.Collapsed : Visibility.Visible;
 
             if (layout != this.appliedLayout)
             {

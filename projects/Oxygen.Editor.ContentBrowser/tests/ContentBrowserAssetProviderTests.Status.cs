@@ -259,7 +259,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         await using var runtimeLifetime = runtime.ConfigureAwait(false);
         var provider = new ContentBrowserAssetProvider(new TestProjectAssetCatalog([new(uri)]), CreateProjectContextService(workspace), new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), EmptyCookRuns(), runtime);
         var refresh = provider.RefreshAsync(AssetBrowserFilter.Default, this.TestContext.CancellationToken);
-        Task disposal = Task.CompletedTask;
+        var disposal = Task.CompletedTask;
         try
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);

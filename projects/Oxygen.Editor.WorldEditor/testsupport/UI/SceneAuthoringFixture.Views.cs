@@ -2,30 +2,20 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
-using CommunityToolkit.WinUI;
-using DroidNet.Controls;
-using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
-using DroidNet.Mvvm.Converters;
 using DroidNet.Mvvm;
+using DroidNet.Mvvm.Converters;
 using DroidNet.Tests;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml;
 using Microsoft.UI;
+using Microsoft.UI.Xaml;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Materials;
-using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.TestSupport;
-using Oxygen.Managed.Assets.Catalog;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
-using NumberBox = DroidNet.Controls.NumberBox;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 

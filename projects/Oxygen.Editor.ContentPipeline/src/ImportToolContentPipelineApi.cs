@@ -120,9 +120,13 @@ public sealed partial class ImportToolContentPipelineApi(
     private static DiagnosticRecord InventoryFailure(string root, Exception error, string code) => new()
     {
         OperationId = Guid.NewGuid(),
-        Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error,
-        Code = code, Message = "Cooked inventory verification failed.",
-        TechnicalMessage = error.Message, ExceptionType = error.GetType().FullName, AffectedPath = root,
+        Domain = FailureDomain.ContentPipeline,
+        Severity = DiagnosticSeverity.Error,
+        Code = code,
+        Message = "Cooked inventory verification failed.",
+        TechnicalMessage = error.Message,
+        ExceptionType = error.GetType().FullName,
+        AffectedPath = root,
     };
 
     private static async Task WriteManifestAsync(ContentImportManifest manifest, string path, CancellationToken cancellationToken)

@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Controls;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Generators;
 

@@ -212,8 +212,12 @@ public sealed partial class ContentPipelineService
 
         DiagnosticRecord Collision(string path) => new()
         {
-            OperationId = operationId, Domain = FailureDomain.AssetImport, Severity = DiagnosticSeverity.Error,
-            Code = AssetImportDiagnosticCodes.ImportFailed, AffectedPath = source.SourceAbsolutePath, AffectedVirtualPath = source.AssetUri.AbsolutePath,
+            OperationId = operationId,
+            Domain = FailureDomain.AssetImport,
+            Severity = DiagnosticSeverity.Error,
+            Code = AssetImportDiagnosticCodes.ImportFailed,
+            AffectedPath = source.SourceAbsolutePath,
+            AffectedVirtualPath = source.AssetUri.AbsolutePath,
             Message = $"Import of '{settings.Name}' overlaps '{path}'. Choose a different destination without replacing existing assets.",
         };
     }

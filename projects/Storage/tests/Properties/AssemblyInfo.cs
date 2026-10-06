@@ -3,3 +3,4 @@
 // SPDX-License-Identifier: MIT
 
 [assembly: Parallelize]
+[assembly: DiscoverInternals]

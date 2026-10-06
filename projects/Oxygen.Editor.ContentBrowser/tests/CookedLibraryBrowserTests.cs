@@ -96,8 +96,13 @@ public sealed partial class CookedLibraryBrowserTests
             this.Second = this.WriteRoot("Libraries/Second", 3);
             this.Projects.Activate(new()
             {
-                ProjectId = Guid.NewGuid(), Name = "Libraries", Category = Category.Games, ProjectRoot = this.directory.FullName,
-                AuthoringMounts = [new("Content", "Content")], LocalFolderMounts = [new("First", this.First), new("Second", this.Second)], Scenes = [],
+                ProjectId = Guid.NewGuid(),
+                Name = "Libraries",
+                Category = Category.Games,
+                ProjectRoot = this.directory.FullName,
+                AuthoringMounts = [new("Content", "Content")],
+                LocalFolderMounts = [new("First", this.First), new("Second", this.Second)],
+                Scenes = [],
             });
         }
 

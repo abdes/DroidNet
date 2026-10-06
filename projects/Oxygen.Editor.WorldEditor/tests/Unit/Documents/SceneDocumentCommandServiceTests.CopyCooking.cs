@@ -9,10 +9,8 @@ using DroidNet.Storage;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Services;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 

@@ -475,7 +475,7 @@ public sealed partial class ContentPipelineService(
         CookedInventoryReport inventory;
         try
         {
-            CookOutputReadLease? outputLease = await CookOutputReadLease.AcquireAsync(manifest.Output, cancellationToken).ConfigureAwait(false);
+            var outputLease = await CookOutputReadLease.AcquireAsync(manifest.Output, cancellationToken).ConfigureAwait(false);
             try
             {
                 inventory = await outputLease.ReadInventoryAsync(this.engineContentPipelineApi, cancellationToken, scope.Artifacts).ConfigureAwait(false);
@@ -539,7 +539,8 @@ public sealed partial class ContentPipelineService(
             operationId,
             scope.InputRoot,
             Path.Combine(scope.Project.ProjectRoot, ".build", "cook", operationId.ToString("N")),
-            manifest) { Artifacts = scope.Artifacts, CapturedInputs = scope.CapturedInputs };
+            manifest)
+        { Artifacts = scope.Artifacts, CapturedInputs = scope.CapturedInputs };
         return this.engineContentPipelineApi.ImportAsync(execution, cancellationToken);
     }
 

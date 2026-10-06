@@ -19,7 +19,7 @@ using PropertyCard = Oxygen.Editor.Controls.PropertyCard;
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed class InspectorRgbFieldTests : VisualUserInterfaceTests
+internal sealed class InspectorRgbFieldTests : VisualUserInterfaceTests
 {
     [TestMethod]
     [DataRow(false, 280d, 1d)]
@@ -32,7 +32,7 @@ public sealed class InspectorRgbFieldTests : VisualUserInterfaceTests
     [DataRow(true, 420d, 1.5d)]
     [DataRow(true, 480d, 2d)]
     [DataRow(true, 760d, 2d)]
-    public Task RgbComposition_PreservesDirectCardGeometryAndTypography(bool multiplier, double width, double textScale) => EnqueueAsync(async () =>
+    public Task RgbCompositionPreservesDirectCardGeometryAndTypography(bool multiplier, double width, double textScale) => EnqueueAsync(async () =>
     {
         var host = CreateHost(width);
         var field = new InspectorRgbField
@@ -101,7 +101,7 @@ public sealed class InspectorRgbFieldTests : VisualUserInterfaceTests
         ScaleChannels(vector, textScale);
         await WaitForRenderAsync().ConfigureAwait(true);
         var expected = Measure(reference, vector);
-        _ = actual.Length.Should().Be(expected.Length);
+        _ = actual.Should().HaveCount(expected.Length);
         for (var index = 0; index < expected.Length; index++)
         {
             _ = actual[index].Should().BeApproximately(expected[index], 1);
@@ -109,7 +109,7 @@ public sealed class InspectorRgbFieldTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task RgbComposition_AccessoryMetadataAndMixedChannelsUpdateWithoutReplacingInputs() => EnqueueAsync(async () =>
+    public Task RgbCompositionAccessoryMetadataAndMixedChannelsUpdateWithoutReplacingInputs() => EnqueueAsync(async () =>
     {
         var host = CreateHost(480);
         var field = new InspectorRgbField { Red = 0.25f, Green = 0.5f, Blue = 1, RedIsMixed = true };

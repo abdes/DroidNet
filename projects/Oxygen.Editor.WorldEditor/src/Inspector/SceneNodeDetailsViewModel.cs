@@ -100,16 +100,9 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             var newNodeName = value?.Name;
             this.LogNodeChanged(oldNodeName, newNodeName);
 
-            if (field is not null)
-            {
-                field.PropertyChanged -= OnNodePropertyChanged;
-            }
-
-            if (this.componentCollectionNotifier is not null)
-            {
-                this.componentCollectionNotifier.CollectionChanged -= this.OnNodeComponentsChanged;
-                this.componentCollectionNotifier = null;
-            }
+            field?.PropertyChanged -= OnNodePropertyChanged;
+            this.componentCollectionNotifier?.CollectionChanged -= this.OnNodeComponentsChanged;
+            this.componentCollectionNotifier = null;
 
             field = value;
             this.SelectedComponent = null;

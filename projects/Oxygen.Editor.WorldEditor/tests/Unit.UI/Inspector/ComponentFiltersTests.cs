@@ -6,24 +6,17 @@ using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation.Peers;
-using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
 using Moq;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.TestSupport;
-using Oxygen.Managed.Assets.Model;
-using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
@@ -32,7 +25,7 @@ using NumberBox = DroidNet.Controls.NumberBox;
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed partial class ComponentFiltersTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     /// <summary>Gets or sets the current test context.</summary>
     public TestContext TestContext { get; set; } = null!;
@@ -78,7 +71,7 @@ public sealed partial class ComponentFiltersTests : DroidNet.Tests.VisualUserInt
         {
             ViewModel = model,
             Width = 360,
-            Height = 600
+            Height = 600,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var original = model.PropertyEditors.ToArray();
@@ -121,7 +114,7 @@ public sealed partial class ComponentFiltersTests : DroidNet.Tests.VisualUserInt
         using var model = fixture.CreateInspectorHost("Camera", realizeViews: true);
         var second = new SceneNode(fixture.Scene)
         {
-            Name = "Second"
+            Name = "Second",
         };
         _ = second.AddComponent(new PerspectiveCamera { Name = "Camera", FieldOfView = 80 });
         fixture.Scene.RootNodes.Add(second);
@@ -185,7 +178,7 @@ public sealed partial class ComponentFiltersTests : DroidNet.Tests.VisualUserInt
         {
             ViewModel = model,
             Width = 360,
-            Height = 650
+            Height = 650,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var number = view.FindDescendant<NumberBox>(control => Equals(control.Tag, "FieldOfView"))!;
@@ -210,7 +203,7 @@ public sealed partial class ComponentFiltersTests : DroidNet.Tests.VisualUserInt
         MakeGeometryOnly(fixture);
         var point = new PointLightComponent
         {
-            Name = "Point Light"
+            Name = "Point Light",
         };
         _ = fixture.Node.AddComponent(point);
         using var model = fixture.CreateInspectorHost("Transform", realizeViews: true);
@@ -218,7 +211,7 @@ public sealed partial class ComponentFiltersTests : DroidNet.Tests.VisualUserInt
         {
             ViewModel = model,
             Width = 360,
-            Height = 500
+            Height = 500,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         Toggle(ComponentButton(view, typeof(PointLightComponent)));
@@ -243,11 +236,11 @@ public sealed partial class ComponentFiltersTests : DroidNet.Tests.VisualUserInt
         model.SelectComponentFilter(typeof(PerspectiveCamera));
         var scene = new Scene(Mock.Of<IProject>())
         {
-            Name = "Other scene"
+            Name = "Other scene",
         };
         var node = new SceneNode(scene)
         {
-            Name = "Other node"
+            Name = "Other node",
         };
         _ = node.AddComponent(new GeometryComponent { Name = "Geometry" });
         scene.RootNodes.Add(node);
@@ -277,7 +270,7 @@ public sealed partial class ComponentFiltersTests : DroidNet.Tests.VisualUserInt
         {
             ViewModel = model,
             Width = 360,
-            Height = 350
+            Height = 350,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var scroll = (ScrollViewer)view.FindName("PropertyScroll");
@@ -304,7 +297,7 @@ public sealed partial class ComponentFiltersTests : DroidNet.Tests.VisualUserInt
         var header = new SceneNodeDetailsView
         {
             HistoryRoot = model,
-            IsAllComponentsSelected = false
+            IsAllComponentsSelected = false,
         };
         if (selectedFirst)
         {
@@ -323,7 +316,7 @@ public sealed partial class ComponentFiltersTests : DroidNet.Tests.VisualUserInt
         _ = header.ViewModel!.SelectedComponent.Should().BeSameAs(component);
         var other = new SceneNode(fixture.Scene)
         {
-            Name = "Other node"
+            Name = "Other node",
         };
         fixture.Scene.RootNodes.Add(other);
         header.Node = other;

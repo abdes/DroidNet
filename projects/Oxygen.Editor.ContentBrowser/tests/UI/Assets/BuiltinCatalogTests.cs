@@ -6,16 +6,10 @@ using System.Reactive.Linq;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml;
 using Moq;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
-using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
-using Oxygen.Editor.ContentBrowser.TestSupport;
-using Oxygen.Editor.ContentBrowser;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
-using Oxygen.Managed.Assets.Catalog;
 using static DroidNet.Tests.UiTestHosting;
 
 namespace Oxygen.Editor.ContentBrowser.UI.Tests.Assets;

@@ -16,7 +16,7 @@ internal static class UiTestHosting
         {
             Application = Application.Current,
             Dispatcher = dispatcher,
-            DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher)
+            DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher),
         };
     }
 }

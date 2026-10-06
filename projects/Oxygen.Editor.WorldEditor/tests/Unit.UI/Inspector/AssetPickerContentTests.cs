@@ -14,15 +14,15 @@ using Oxygen.Editor.World.Inspector.Geometry;
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed class AssetPickerContentTests : VisualUserInterfaceTests
+internal sealed class AssetPickerContentTests : VisualUserInterfaceTests
 {
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public Task PickerContent_InvokeReportsTheOriginalTypedRow(bool material) => EnqueueAsync(async () =>
+    public Task PickerContentInvokeReportsTheOriginalTypedRow(bool material) => EnqueueAsync(async () =>
     {
-        var asset = new AssetPickerRow(new("Cube", new("asset:///Engine/Geometry/Cube.ogeo"), "Static Mesh", "/Engine/Geometry/Cube.ogeo", AssetPickerGroup.Engine, true, "\uF158"));
-        var none = new MaterialPickerRow(new("None", null, "No material", "No explicit override", AssetPickerGroup.Engine, true, "\uE790"));
+        var asset = new AssetPickerRow(new("Cube", new("asset:///Engine/Geometry/Cube.ogeo"), "Static Mesh", "/Engine/Geometry/Cube.ogeo", AssetPickerGroup.Engine, IsEnabled: true, "\uF158"));
+        var none = new MaterialPickerRow(new("None", Uri: null, "No material", "No explicit override", AssetPickerGroup.Engine, IsEnabled: true, "\uE790"));
         var view = new AssetPickerContent
         {
             Width = 440,

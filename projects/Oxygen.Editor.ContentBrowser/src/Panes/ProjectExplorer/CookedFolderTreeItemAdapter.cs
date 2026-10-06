@@ -4,7 +4,6 @@
 
 using System.ComponentModel;
 using DroidNet.Controls;
-using Oxygen.Managed.Assets.Filesystem;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 

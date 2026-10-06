@@ -160,7 +160,8 @@ public sealed partial class ContentPipelineService
 
         var scope = this.CreateScope(operation.Project, graph.Assets, targetKind) with
         {
-            Snapshot = snapshot, Artifacts = artifacts,
+            Snapshot = snapshot,
+            Artifacts = artifacts,
             PreparationRoot = Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N"), "builtins"),
         };
         var generated = await new ProceduralGeometryDescriptorService(catalog).EnsureDescriptorsAsync(scope, [.. missing], cancellationToken).ConfigureAwait(false);
@@ -366,7 +367,9 @@ public sealed partial class ContentPipelineService
         var cooked = results.Count == 1 ? results[0] : MergeProjectResults(operation.OperationId, results);
         var result = cooked with
         {
-            TargetKind = targetKind, InputSnapshot = snapshot, ReusedAssets = plan.ReusedAssets,
+            TargetKind = targetKind,
+            InputSnapshot = snapshot,
+            ReusedAssets = plan.ReusedAssets,
             Status = cooked.Status == OperationStatus.Succeeded && !plan.Diagnostics.IsEmpty ? OperationStatus.SucceededWithWarnings : cooked.Status,
             Diagnostics = NormalizeDiagnostics(operation.OperationId, cooked.Diagnostics.Concat(plan.Diagnostics)),
         };

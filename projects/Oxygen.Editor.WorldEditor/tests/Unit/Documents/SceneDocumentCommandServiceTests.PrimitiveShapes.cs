@@ -4,7 +4,6 @@
 
 using AwesomeAssertions;
 using Moq;
-using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core.Diagnostics;
 

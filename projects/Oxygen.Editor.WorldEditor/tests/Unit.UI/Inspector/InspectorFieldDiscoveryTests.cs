@@ -14,7 +14,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 /// <summary>Verifies bounded inspector field discovery during scrolling and layout changes.</summary>
 [TestClass]
-public sealed class InspectorFieldDiscoveryTests : VisualUserInterfaceTests
+internal sealed class InspectorFieldDiscoveryTests : VisualUserInterfaceTests
 {
     /// <summary>Gets or sets the context for the current test execution.</summary>
     public TestContext TestContext { get; set; } = null!;
@@ -51,7 +51,7 @@ public sealed class InspectorFieldDiscoveryTests : VisualUserInterfaceTests
         _ = found.Should().BeSameAs(number);
         var caption = number.FindDescendant<TextBlock>(element => string.Equals(element.Name, part, StringComparison.Ordinal))!;
         var center = caption.TransformToVisual(scroller).TransformPoint(new Point(caption.ActualWidth / 2, caption.ActualHeight / 2));
-        _ = center.Y.Should().BeGreaterThan(0).And.BeLessThan(scroller.ViewportHeight);
+        _ = center.Y.Should().BePositive().And.BeLessThan(scroller.ViewportHeight);
         _ = caption.ActualHeight.Should().BePositive();
     });
 
@@ -63,7 +63,7 @@ public sealed class InspectorFieldDiscoveryTests : VisualUserInterfaceTests
         var scroller = new ScrollViewer { Width = 320, Height = 160, Content = new Border { Height = 1000 } };
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
         using var cancelled = new CancellationTokenSource();
-        cancelled.Cancel();
+        await cancelled.CancelAsync().ConfigureAwait(true);
 
         Func<Task> find = () => InspectorControls.FindInspectorControlAsync(scroller, () => null, "Missing", cancelled.Token);
 

@@ -3,14 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using System.Security.Cryptography;
-using System.Text.Json.Nodes;
-using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Managed.Core.Compatibility;
-using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentPipeline.TestSupport.ImportAdapterScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;

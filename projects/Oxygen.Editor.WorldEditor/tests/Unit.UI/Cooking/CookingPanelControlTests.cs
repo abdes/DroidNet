@@ -2,32 +2,26 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Runtime.InteropServices.WindowsRuntime;
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
+using DroidNet.Docking;
 using DroidNet.Docking.Controls;
 using DroidNet.Docking.Workspace;
-using DroidNet.Docking;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Tests;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
-using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml;
 using Moq;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
-using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World.Cooking;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Cooking;
 using Oxygen.Managed.Core.Diagnostics;
-using Windows.Foundation;
-using Windows.Graphics.Imaging;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Cooking;
 
@@ -564,7 +558,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
             ProjectId = projectId,
             ProjectRoot = Path.GetTempPath(),
             DisplayName = "Vortex",
-            Request = new(CookTargetKind.Project, null),
+            Request = new(CookTargetKind.Project, ScopeUri: null),
             State = CookRunState.Failed,
             CompletedAt = DateTimeOffset.UtcNow,
             Diagnostics = [Issue("Main", "Aerial Start must be 0 m or greater."), Issue("OtherScene", "A referenced geometry could not be loaded.")],

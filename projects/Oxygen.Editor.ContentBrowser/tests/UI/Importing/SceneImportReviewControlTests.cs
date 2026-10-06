@@ -2,21 +2,18 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Runtime.InteropServices.WindowsRuntime;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Aura.Dialogs;
 using DroidNet.Tests;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
-using Microsoft.UI.Xaml.Media.Imaging;
-using Microsoft.UI.Xaml;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Importing;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
-using Windows.Graphics.Imaging;
 
 namespace Oxygen.Editor.ContentBrowser.UI.Tests.Importing;
 

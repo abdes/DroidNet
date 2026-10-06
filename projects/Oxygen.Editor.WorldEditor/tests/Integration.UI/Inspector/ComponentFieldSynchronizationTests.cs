@@ -4,20 +4,18 @@
 
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
-using DroidNet.Controls;
 using DroidNet.Tests;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
-using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector;
+using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldCases;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
-using NumberBox = DroidNet.Controls.NumberBox;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
+using NumberBox = DroidNet.Controls.NumberBox;
 
 namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.Inspector;
 

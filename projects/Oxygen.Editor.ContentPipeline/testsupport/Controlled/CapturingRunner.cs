@@ -2,15 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Buffers.Binary;
-using System.Diagnostics.CodeAnalysis;
-using System.Security.Cryptography;
 using System.Text.Json;
-using System.Text;
-using AwesomeAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
-using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 

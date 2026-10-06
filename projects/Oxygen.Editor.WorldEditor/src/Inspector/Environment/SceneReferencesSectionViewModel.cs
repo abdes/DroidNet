@@ -9,9 +9,9 @@ using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.World.Inspector.Presentation;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Editor.World.Inspector.Presentation;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 

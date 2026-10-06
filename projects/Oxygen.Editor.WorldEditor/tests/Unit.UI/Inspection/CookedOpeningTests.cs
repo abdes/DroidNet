@@ -7,19 +7,17 @@ using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Moq;
+using Oxygen.Editor.ContentBrowser;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Messages;
-using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
-using Oxygen.Editor.ContentBrowser;
-using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.World.Inspection;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using static DroidNet.Tests.UiTestHosting;
@@ -29,7 +27,7 @@ using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspection;
 
 [TestClass]
-public sealed partial class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -46,12 +44,12 @@ public sealed partial class CookedOpeningTests : DroidNet.Tests.VisualUserInterf
             await File.WriteAllBytesAsync(Path.Combine(directory.FullName, "Shared.omat"), [1], this.TestContext.CancellationToken).ConfigureAwait(true);
             var low = new CookedAssetMetadata(directory.FullName, "Shared.omat", Guid.CreateVersion7(), new(1, 2), 1, 1, new string('0', 64))
             {
-                VirtualPath = uri.AbsolutePath
+                VirtualPath = uri.AbsolutePath,
             };
             var high = low with
             {
                 RootFolderPath = Path.Combine(projects.ActiveProject!.ProjectRoot, ".cooked", "Content"),
-                AssetKey = new(3, 4)
+                AssetKey = new(3, 4),
             };
             var effective = new ContentBrowserAssetItem(uri, "Shared", AssetKind.Material, AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.Mounted, uri.AbsolutePath, SourcePath: null, DescriptorPath: null, uri, Path.Combine(high.RootFolderPath, "Shared.omat"), AssetGuid: null, [], IsSelectable: true)
             {
@@ -63,7 +61,7 @@ public sealed partial class CookedOpeningTests : DroidNet.Tests.VisualUserInterf
             var metadata = new CookedInspectionDocumentMetadata(projects.ActiveProject!, new("asset:///Library/Shared.omat"), validate: false)
             {
                 AssetUri = uri,
-                CookedSource = low
+                CookedSource = low,
             };
             var inspection = new CookInspectionResult(directory.FullName, Succeeded: true, low.SourceIdentity, [new(uri.AbsolutePath, ContentCookAssetKind.Material)], [], []);
             var report = new CookedOutputReport(projects.ActiveProject!.ProjectId, metadata.ScopeUri, DateTimeOffset.UtcNow, [new("Library", IsPresent: true, inspection, Validation: null, [])]);
@@ -72,13 +70,13 @@ public sealed partial class CookedOpeningTests : DroidNet.Tests.VisualUserInterf
             using var model = new CookedInspectionViewModel(metadata, pipeline.Object, provider.Object, projects, _ => Task.FromResult(true));
             var view = new CookedInspectionView
             {
-                ViewModel = model
+                ViewModel = model,
             };
             var root = new Grid
             {
                 Width = 700,
                 Height = 480,
-                RequestedTheme = ElementTheme.Dark
+                RequestedTheme = ElementTheme.Dark,
             };
             root.Children.Add(view);
             await LoadTestContentAsync(root).ConfigureAwait(true);
@@ -113,7 +111,7 @@ public sealed partial class CookedOpeningTests : DroidNet.Tests.VisualUserInterf
             AssetKind.Material => "omat",
             AssetKind.Scene => "oscene",
             AssetKind.Geometry => "ogeo",
-            _ => "otex"
+            _ => "otex",
         };
         var uri = builtin ? AssetUris.BuildGeneratedUri(kind == AssetKind.Material ? "Materials/Default" : "BasicShapes/Cube") : new Uri("asset:///Library/Main." + extension);
         var item = new ContentBrowserAssetItem(uri, "Main", kind, builtin ? AssetState.Generated : AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.NotMounted, uri.AbsolutePath, SourcePath: null, DescriptorPath: null, builtin ? null : uri, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
@@ -125,7 +123,7 @@ public sealed partial class CookedOpeningTests : DroidNet.Tests.VisualUserInterf
         await layout.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var layoutView = new ListLayoutView
         {
-            ViewModel = layout
+            ViewModel = layout,
         };
         var messenger = new StrongReferenceMessenger();
         OpenCookedInspectionRequestMessage? requested = null;
@@ -168,18 +166,18 @@ public sealed partial class CookedOpeningTests : DroidNet.Tests.VisualUserInterf
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
         var metadata = new CookedInspectionDocumentMetadata(projects.ActiveProject!, uri, validate: false)
         {
-            AssetUri = uri
+            AssetUri = uri,
         };
         using var model = new CookedInspectionViewModel(metadata, pipeline.Object, provider.Object, projects, _ => Task.FromResult(true));
         var view = new CookedInspectionView
         {
-            ViewModel = model
+            ViewModel = model,
         };
         var root = new Grid
         {
             Width = 640,
             Height = 420,
-            RequestedTheme = ElementTheme.Dark
+            RequestedTheme = ElementTheme.Dark,
         };
         root.Children.Add(view);
         await LoadTestContentAsync(root).ConfigureAwait(true);
@@ -197,7 +195,7 @@ public sealed partial class CookedOpeningTests : DroidNet.Tests.VisualUserInterf
         {
             IdentityUri = copyUri,
             CookedUri = copyUri,
-            BuiltinOriginUri = uri
+            BuiltinOriginUri = uri,
         };
         items.OnNext([item, copy]);
         var cookedKind = geometry ? ContentCookAssetKind.Geometry : ContentCookAssetKind.Material;

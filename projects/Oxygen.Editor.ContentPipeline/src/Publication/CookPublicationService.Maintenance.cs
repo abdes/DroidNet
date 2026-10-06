@@ -97,10 +97,7 @@ public sealed partial class CookPublicationService
             }
 
             // Up-to-date and preflight-only operations may have scratch without a journal.
-            if (owned is not null)
-            {
-                owned.Retry = CookOutputLease.TryAcquireRetryInput(project.ProjectRoot, id);
-            }
+            owned?.Retry = CookOutputLease.TryAcquireRetryInput(project.ProjectRoot, id);
         }
     }
 

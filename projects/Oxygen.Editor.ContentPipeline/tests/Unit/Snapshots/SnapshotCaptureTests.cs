@@ -2,15 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics.CodeAnalysis;
-using System.Security.Cryptography;
-using System.Text;
 using AwesomeAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
-using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
 using static Oxygen.Editor.ContentPipeline.TestSupport.SnapshotScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Snapshots;

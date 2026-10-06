@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Oxygen.Editor.ContentPipeline.TestSupport;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookCoordinatorScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;

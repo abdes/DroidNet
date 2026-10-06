@@ -5,31 +5,20 @@
 using System.Reactive.Subjects;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
-using DroidNet.Hosting.WinUI;
-using DroidNet.Tests;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Markup;
-using Microsoft.UI.Xaml;
 using Moq;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
-using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
-using Oxygen.Editor.ContentBrowser;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.ContentPipeline.Status;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Inspector.Geometry;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.TestSupport;
-using Oxygen.Managed.Assets.Catalog;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed partial class AssetStatusTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class AssetStatusTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -41,7 +30,7 @@ public sealed partial class AssetStatusTests : DroidNet.Tests.VisualUserInterfac
         var asset = CreateStatusAsset(0);
         var material = new MaterialPickerResult(asset.IdentityUri, asset.DisplayName, asset.PrimaryState, asset.DerivedState, asset.RuntimeAvailability, asset.DescriptorPath, asset.CookedPath, BaseColorPreview: null)
         {
-            CookStatus = asset.CookStatus
+            CookStatus = asset.CookStatus,
         };
         using var updates = new BehaviorSubject<IReadOnlyList<MaterialPickerResult>>([material]);
         var picker = new Mock<IMaterialPickerService>();
@@ -52,12 +41,12 @@ public sealed partial class AssetStatusTests : DroidNet.Tests.VisualUserInterfac
         _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<Oxygen.Editor.ContentBrowser.AssetIdentity.AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, picker.Object, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), Mock.Of<Oxygen.Editor.World.Services.ISceneContentDemandService>(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
         {
-            IsExpanded = true
+            IsExpanded = true,
         };
         var view = new GeometryView
         {
             ViewModel = model,
-            Width = 440
+            Width = 440,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);

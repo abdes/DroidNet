@@ -5,17 +5,14 @@
 using System.Numerics;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
-using DroidNet.Tests;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.TestSupport;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorModels;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
-using PropertiesExpander = Oxygen.Editor.Controls.PropertiesExpander;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 

@@ -33,7 +33,8 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             Version: 1,
             Output: output.Path,
             Layout: new ContentImportLayout(ContentPipelinePaths.GetVirtualMountRoot(mountName)),
-            Jobs: jobs) { SourceKey = output.SourceKey };
+            Jobs: jobs)
+        { SourceKey = output.SourceKey };
     }
 
     /// <inheritdoc />
@@ -90,7 +91,8 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             Version: 1,
             Output: output.Path,
             Layout: new ContentImportLayout(ContentPipelinePaths.GetVirtualMountRoot(mountName)),
-            Jobs: jobs) { SourceKey = output.SourceKey };
+            Jobs: jobs)
+        { SourceKey = output.SourceKey };
     }
 
     /// <inheritdoc />

@@ -19,7 +19,7 @@ using NumberBox = DroidNet.Controls.NumberBox;
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed class TransformPresentationTests : VisualUserInterfaceTests
+internal sealed class TransformPresentationTests : VisualUserInterfaceTests
 {
     [TestMethod]
     [DataRow(280d, ElementTheme.Light)]
@@ -46,7 +46,7 @@ public sealed class TransformPresentationTests : VisualUserInterfaceTests
                 _ => throw new InvalidOperationException($"Unexpected Transform field: {card.PropertyName}"),
             };
             _ = card.Qualifier.Should().Be(expectedUnit);
-            var suffix = card.FindDescendant<TextBlock>(text => text.Name == (card.ActualLayout == PropertyLayout.Stacked ? "HeaderQualifier" : "ValueQualifier"))!;
+            var suffix = card.FindDescendant<TextBlock>(text => string.Equals(text.Name, card.ActualLayout == PropertyLayout.Stacked ? "HeaderQualifier" : "ValueQualifier", StringComparison.Ordinal))!;
             _ = suffix.Text.Should().Be(expectedUnit);
             _ = suffix.Visibility.Should().Be(Visibility.Visible);
             _ = suffix.ActualWidth.Should().BePositive();
@@ -54,7 +54,7 @@ public sealed class TransformPresentationTests : VisualUserInterfaceTests
             var vector = card.FindDescendant<VectorBox>()!;
             foreach (var number in vector.FindDescendants().OfType<NumberBox>())
             {
-                var label = number.FindDescendant<TextBlock>(text => text.Name == "PartCompactLabelTextBlock")!;
+                var label = number.FindDescendant<TextBlock>(text => string.Equals(text.Name, "PartCompactLabelTextBlock", StringComparison.Ordinal))!;
                 var expectedColor = label.Text switch
                 {
                     "X" => Colors.Red,
@@ -64,7 +64,7 @@ public sealed class TransformPresentationTests : VisualUserInterfaceTests
                 };
                 _ = label.Visibility.Should().Be(Visibility.Visible);
                 _ = ((SolidColorBrush)label.Foreground).Color.Should().Be(expectedColor);
-                if (card.PropertyName == "Scale")
+                if (string.Equals(card.PropertyName, "Scale", StringComparison.Ordinal))
                 {
                     _ = AutomationProperties.GetName(number).Should().Be($"Scale, multiplier {label.Text}");
                 }

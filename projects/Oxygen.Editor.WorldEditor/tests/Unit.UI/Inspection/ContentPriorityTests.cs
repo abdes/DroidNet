@@ -5,17 +5,16 @@
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentBrowser.ProjectExplorer;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.TestSupport;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspection;
 
 [TestClass]
-public sealed partial class ContentPriorityTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class ContentPriorityTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -47,13 +46,13 @@ public sealed partial class ContentPriorityTests : DroidNet.Tests.VisualUserInte
             var model = new ContentPriorityViewModel(project);
             var view = new ContentPriorityView
             {
-                ViewModel = model
+                ViewModel = model,
             };
             var root = new Grid
             {
                 Width = 440,
                 Height = 280,
-                RequestedTheme = light ? ElementTheme.Light : ElementTheme.Dark
+                RequestedTheme = light ? ElementTheme.Light : ElementTheme.Dark,
             };
             root.Children.Add(view);
             await LoadTestContentAsync(root).ConfigureAwait(true);

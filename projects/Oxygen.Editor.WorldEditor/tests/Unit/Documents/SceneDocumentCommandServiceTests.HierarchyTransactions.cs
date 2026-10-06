@@ -7,8 +7,6 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;

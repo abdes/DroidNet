@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json.Nodes;
-using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;

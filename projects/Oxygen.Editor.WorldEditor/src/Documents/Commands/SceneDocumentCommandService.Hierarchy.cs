@@ -81,7 +81,7 @@ public sealed partial class SceneDocumentCommandService
             folderSceneParentNodeId = nodeId;
         }
 
-        SceneNode? actualParent = parentNode ?? (folderSceneParentNodeId.HasValue ? FindNode(context.Scene, folderSceneParentNodeId.Value) : null);
+        var actualParent = parentNode ?? (folderSceneParentNodeId.HasValue ? FindNode(context.Scene, folderSceneParentNodeId.Value) : null);
         if (actualParent is not null
             && this.RejectLockedTargets(context, SceneOperationKinds.NodeCreate, [actualParent]) is { } parentLockFailure)
         {

@@ -4,10 +4,9 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Schemas;
-using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Inspector;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;

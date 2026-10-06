@@ -6,7 +6,6 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using DroidNet.Hosting.WinUI;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
@@ -19,7 +18,6 @@ using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Geometry;
 

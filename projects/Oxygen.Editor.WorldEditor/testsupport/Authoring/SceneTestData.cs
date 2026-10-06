@@ -4,27 +4,9 @@
 
 using System.Numerics;
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
-using CommunityToolkit.WinUI;
-using DroidNet.Controls;
-using Microsoft.UI.Xaml.Automation.Peers;
-using Microsoft.UI.Xaml.Automation.Provider;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml;
-using Moq;
-using Oxygen.Editor.Projects;
-using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.Inspector.Geometry;
-using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
-using Color = Windows.UI.Color;
-using NumberBox = DroidNet.Controls.NumberBox;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 
@@ -59,7 +41,7 @@ internal static class SceneTestData
     {
         var node = new SceneNode(scene)
         {
-            Name = "Other target"
+            Name = "Other target",
         };
         _ = node.AddComponent(new PerspectiveCamera { Name = "Camera", FieldOfView = value });
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Light", IntensityLux = value });

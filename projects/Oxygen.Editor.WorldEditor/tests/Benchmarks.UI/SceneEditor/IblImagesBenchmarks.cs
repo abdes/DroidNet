@@ -11,7 +11,6 @@ using DroidNet.Tests;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeIblImagesSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;

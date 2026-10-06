@@ -23,7 +23,7 @@ using NumberBox = DroidNet.Controls.NumberBox;
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed class NumericGesturesTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class NumericGesturesTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -65,7 +65,7 @@ public sealed class NumericGesturesTests : DroidNet.Tests.VisualUserInterfaceTes
         {
             _ = starts.Should().Be(1);
             await pointer.MoveAsync(12, this.TestContext.CancellationToken).ConfigureAwait(true);
-            await pointer.ReleaseAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+            await NativePointer.ReleaseAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
         }
 
         await model.PendingEdits.ConfigureAwait(true);
@@ -90,7 +90,7 @@ public sealed class NumericGesturesTests : DroidNet.Tests.VisualUserInterfaceTes
             await pointer.MoveAsync(12, this.TestContext.CancellationToken).ConfigureAwait(true);
             _ = number.NumberValue.Should().BeGreaterThan(authored);
             await pointer.EscapeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-            await pointer.ReleaseAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+            await NativePointer.ReleaseAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
         }
 
         await model.PendingEdits.ConfigureAwait(true);
@@ -158,7 +158,7 @@ public sealed class NumericGesturesTests : DroidNet.Tests.VisualUserInterfaceTes
         {
             _ = starts.Should().Be(1, $"the real {field} caption must start its native edit session");
             await pointer.MoveAsync(12, this.TestContext.CancellationToken).ConfigureAwait(true);
-            await pointer.ReleaseAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+            await NativePointer.ReleaseAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
         }
 
         await PendingNumericEdits(model).ConfigureAwait(true);
@@ -176,7 +176,7 @@ public sealed class NumericGesturesTests : DroidNet.Tests.VisualUserInterfaceTes
             await pointer.MoveAsync(12, this.TestContext.CancellationToken).ConfigureAwait(true);
             _ = number.NumberValue.Should().BeGreaterThan(authored);
             await pointer.EscapeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-            await pointer.ReleaseAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+            await NativePointer.ReleaseAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
         }
 
         await PendingNumericEdits(model).ConfigureAwait(true);

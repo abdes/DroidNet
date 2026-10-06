@@ -75,7 +75,8 @@ internal sealed partial class CookSourceAnalyzer(
             operation.OperationId,
             operation.Project.ProjectRoot,
             this.root,
-            [.. prepared.Select(static source => source.Job), .. generatedJobs]) { Artifacts = artifacts };
+            [.. prepared.Select(static source => source.Job), .. generatedJobs])
+        { Artifacts = artifacts };
         var report = await native.AnalyzeSourcesAsync(execution, cancellationToken).ConfigureAwait(false);
         foreach (var job in report.Jobs)
         {
@@ -88,9 +89,13 @@ internal sealed partial class CookSourceAnalyzer(
                 {
                     diagnostics.Add(new()
                     {
-                        OperationId = operation.OperationId, Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error,
-                        Code = "asset_cook.source_outside_project", Message = $"Cook dependency '{path}' is outside the project. Retain it inside the project before cooking.",
-                        AffectedPath = path, AffectedVirtualPath = owner?.AssetUri.AbsolutePath,
+                        OperationId = operation.OperationId,
+                        Domain = FailureDomain.ContentPipeline,
+                        Severity = DiagnosticSeverity.Error,
+                        Code = "asset_cook.source_outside_project",
+                        Message = $"Cook dependency '{path}' is outside the project. Retain it inside the project before cooking.",
+                        AffectedPath = path,
+                        AffectedVirtualPath = owner?.AssetUri.AbsolutePath,
                     });
                 }
             }
@@ -101,9 +106,13 @@ internal sealed partial class CookSourceAnalyzer(
             var owner = prepared.FirstOrDefault(source => string.Equals(source.Job.Id, job.Id, StringComparison.Ordinal))?.Input;
             diagnostics.Add(new()
             {
-                OperationId = operation.OperationId, Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error,
-                Code = "asset_cook.analysis_incomplete", Message = "Native source analysis did not complete.",
-                AffectedPath = owner?.SourceAbsolutePath ?? job.SourcePath, AffectedVirtualPath = owner?.AssetUri.AbsolutePath,
+                OperationId = operation.OperationId,
+                Domain = FailureDomain.ContentPipeline,
+                Severity = DiagnosticSeverity.Error,
+                Code = "asset_cook.analysis_incomplete",
+                Message = "Native source analysis did not complete.",
+                AffectedPath = owner?.SourceAbsolutePath ?? job.SourcePath,
+                AffectedVirtualPath = owner?.AssetUri.AbsolutePath,
             });
         }
 
@@ -147,7 +156,8 @@ internal sealed partial class CookSourceAnalyzer(
                 facts.Outputs,
                 facts.References,
                 [.. source.ManagedFiles, .. files.Select(file => string.Equals(file.SourcePath, source.Input.SourceAbsolutePath, StringComparison.OrdinalIgnoreCase)
-                    ? file with { AssetUri = source.Input.AssetUri } : file)]) { Job = source.Job, Scene = source.Scene });
+                    ? file with { AssetUri = source.Input.AssetUri } : file)])
+            { Job = source.Job, Scene = source.Scene });
         }
 
         return new(analyzed.ToImmutable(), [.. generated.Values.Select(this.Rebase)], generatedInputs.ToImmutable(), diagnostics.ToImmutable())
@@ -171,8 +181,10 @@ internal sealed partial class CookSourceAnalyzer(
                 operation.Project.ProjectRoot,
                 operation.Project.Thumbnail)
             {
-                AuthoringMounts = [.. operation.Project.AuthoringMounts], LocalFolderMounts = [.. operation.Project.LocalFolderMounts],
-            }) { Name = operation.Project.Name };
+                AuthoringMounts = [.. operation.Project.AuthoringMounts],
+                LocalFolderMounts = [.. operation.Project.LocalFolderMounts],
+            })
+            { Name = operation.Project.Name };
             foreach (var known in operation.Project.Scenes)
             {
                 project.Scenes.Add(new Scene(project) { Id = known.Id, Name = known.Name });
@@ -191,7 +203,10 @@ internal sealed partial class CookSourceAnalyzer(
 
             var scope = new ContentCookScope(operation.Project, scopes.CreateScope(operation.Project), [input], CookTargetKind.Asset)
             {
-                Artifacts = artifacts, PreparationRoot = this.root, BuiltinCatalog = this.catalog, PreparedBuiltins = this.builtins,
+                Artifacts = artifacts,
+                PreparationRoot = this.root,
+                BuiltinCatalog = this.catalog,
+                PreparedBuiltins = this.builtins,
             };
             var projection = await scenes.GenerateAsync(scene, scope, cancellationToken).ConfigureAwait(false);
             projection = projection with { Dependencies = [.. projection.Dependencies.Select(this.Rebase)] };

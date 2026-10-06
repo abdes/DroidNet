@@ -40,7 +40,8 @@ public sealed partial class SceneDocumentCommandService
 
             var original = SceneSaveSnapshot.Capture(context.Scene);
             var data = JsonSerializer.Deserialize(original.Json, SceneJsonContext.Default.SceneData)!
-                with { Id = Guid.NewGuid(), Name = name, };
+                with
+            { Id = Guid.NewGuid(), Name = name, };
             var snapshot = new SceneSaveSnapshot(data.Id, name, original.ProjectLocation, JsonSerializer.Serialize(data, SceneJsonContext.Default.SceneData));
             if (!await this.projectManager.CreateSceneSnapshotAsync(snapshot).ConfigureAwait(true))
             {

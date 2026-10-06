@@ -6,7 +6,6 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
-using DroidNet.Documents;
 using DroidNet.Routing;
 using DroidNet.Tests;
 using Microsoft.UI;
@@ -124,8 +123,8 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         AssertSlot(Button(host.Actions, "EyeButton"), suppressed: false, hovered: false);
         AssertSlot(Button(host.Actions, "LockButton"), suppressed: false, hovered: false);
 
-        host.Interaction.SetHidden(host.Node.Id, true);
-        host.Interaction.SetLocked(host.Node.Id, true);
+        host.Interaction.SetHidden(host.Node.Id, isHidden: true);
+        host.Interaction.SetLocked(host.Node.Id, isLocked: true);
         host.ViewModel.SelectDisplayedItem(host.SecondaryAdapter, host.ViewModel.ShownItems.ToArray(), isControlDown: false, isShiftDown: false);
         await WaitForRenderAsync().ConfigureAwait(true);
         AssertSlot(Button(host.Actions, "EyeButton"), suppressed: true, hovered: false);
@@ -144,7 +143,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         host.Interaction.SetLocked(host.Node.Id, locked);
         host.ViewModel.SelectDisplayedItem(host.SecondaryAdapter, host.ViewModel.ShownItems.ToArray(), isControlDown: false, isShiftDown: false);
         var authoredVisibility = host.Node.IsVisible;
-        host.Actions.SetRowHovered(true);
+        host.Actions.SetRowHovered(hovered: true);
         await InvokeEyeAsync(host).ConfigureAwait(true);
 
         _ = host.Interaction.IsHidden(host.Node.Id).Should().BeTrue();
@@ -168,7 +167,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         await InvokeEyeAsync(host).ConfigureAwait(true);
         _ = host.Adapter.IsHiddenInEditor.Should().BeFalse();
         _ = host.Adapter.IsLocked.Should().Be(locked);
-        host.Actions.SetRowHovered(false);
+        host.Actions.SetRowHovered(hovered: false);
         AssertSlot(Button(host.Actions, "EyeButton"), suppressed: false, hovered: false);
         AssertSlot(Button(host.Actions, "LockButton"), locked, hovered: false);
         host.Fixture.Sync.Verify(value => value.GetDocumentScene(It.IsAny<Oxygen.Editor.World.Documents.SceneDocumentMetadata>()), Times.AtLeastOnce);
@@ -186,7 +185,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         using var host = await CreateRowHostAsync().ConfigureAwait(true);
         host.Interaction.SetHidden(host.Node.Id, hidden);
         host.ViewModel.SelectDisplayedItem(host.SecondaryAdapter, host.ViewModel.ShownItems.ToArray(), isControlDown: false, isShiftDown: false);
-        host.Actions.SetRowHovered(true);
+        host.Actions.SetRowHovered(hovered: true);
         Invoke(Button(host.Actions, "LockButton"));
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = host.Adapter.IsLocked.Should().BeTrue();
@@ -204,7 +203,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         _ = host.Adapter.IsHiddenInEditor.Should().Be(hidden);
         _ = ((SolidColorBrush)Glyph(host.Actions, "LockGlyph").Foreground).Color.Should().Be(
             ((SolidColorBrush)Application.Current.Resources["TextFillColorPrimaryBrush"]).Color);
-        host.Actions.SetRowHovered(false);
+        host.Actions.SetRowHovered(hovered: false);
         AssertSlot(Button(host.Actions, "EyeButton"), hidden, hovered: false);
         AssertSlot(Button(host.Actions, "LockButton"), suppressed: false, hovered: false);
         _ = host.Fixture.Context.History.UndoStack.Should().BeEmpty();
@@ -220,7 +219,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
     public Task Glyphs_RenderNonemptyDistinctImages_InBothStates(bool suppressed) => EnqueueAsync(async () =>
     {
         using var host = await CreateRowHostAsync().ConfigureAwait(true);
-        host.Actions.SetRowHovered(true);
+        host.Actions.SetRowHovered(hovered: true);
         host.Interaction.SetHidden(host.Node.Id, suppressed);
         host.Interaction.SetLocked(host.Node.Id, suppressed);
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -249,8 +248,8 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
     public Task PassiveIndicators_DoNotHitTestAsButtons_ButHoveredActionsDo() => EnqueueAsync(async () =>
     {
         using var host = await CreateRowHostAsync().ConfigureAwait(true);
-        host.Interaction.SetHidden(host.Node.Id, true);
-        host.Interaction.SetLocked(host.Node.Id, true);
+        host.Interaction.SetHidden(host.Node.Id, isHidden: true);
+        host.Interaction.SetLocked(host.Node.Id, isLocked: true);
         await WaitForRenderAsync().ConfigureAwait(true);
         foreach (var hovered in HoverStates)
         {
@@ -272,13 +271,13 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
     public Task InheritedEditorHiding_DoesNotPinTheChildsExplicitEyeSlot() => EnqueueAsync(async () =>
     {
         using var host = await CreateRowHostAsync().ConfigureAwait(true);
-        host.Interaction.SetHidden(host.Node.Id, true);
+        host.Interaction.SetHidden(host.Node.Id, isHidden: true);
         await WaitForRenderAsync().ConfigureAwait(true);
         var childActions = Row(host.Tree, host.ChildAdapter).FindDescendant<SceneRowActions>()!;
         _ = host.ChildAdapter.IsEffectivelyHiddenInEditor.Should().BeTrue();
         _ = host.ChildAdapter.IsHiddenInEditor.Should().BeFalse();
         AssertSlot(Button(childActions, "EyeButton"), suppressed: false, hovered: false);
-        childActions.SetRowHovered(true);
+        childActions.SetRowHovered(hovered: true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = Glyph(childActions, "EyeGlyph").Glyph.Should().Be("\uE890", "the eye reflects only this node's explicit hidden entry");
     });
@@ -289,7 +288,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
     public Task RowActions_PersistAndRestoreWorkspaceState_WithoutDirtyingTheScene() => EnqueueAsync(async () =>
     {
         using var host = await CreateRowHostAsync().ConfigureAwait(true);
-        host.Actions.SetRowHovered(true);
+        host.Actions.SetRowHovered(hovered: true);
         await InvokeEyeAsync(host).ConfigureAwait(true);
         Invoke(Button(host.Actions, "LockButton"));
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -330,8 +329,8 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         _ = host.Actions.ActualWidth.Should().Be(64);
         _ = host.ChildAdapter.Depth.Should().BeGreaterThan(host.Adapter.Depth);
 
-        host.Actions.SetRowHovered(true);
-        childActions.SetRowHovered(true);
+        host.Actions.SetRowHovered(hovered: true);
+        childActions.SetRowHovered(hovered: true);
         await WaitForRenderAsync().ConfigureAwait(true);
         foreach (var name in ButtonNames)
         {
@@ -347,9 +346,9 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
             _ = bounds.Right.Should().BeLessThanOrEqualTo(host.Row.ActualWidth, "the lock must not be clipped by the row");
         }
 
-        host.Interaction.SetHidden(host.Node.Id, true);
-        host.Interaction.SetLocked(host.Node.Id, true);
-        host.Actions.SetRowHovered(false);
+        host.Interaction.SetHidden(host.Node.Id, isHidden: true);
+        host.Interaction.SetLocked(host.Node.Id, isLocked: true);
+        host.Actions.SetRowHovered(hovered: false);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = slots.ActualWidth.Should().Be(64);
         _ = slots.TransformToVisual(host.Tree).TransformPoint(default).X.Should().BeApproximately(initialSlotsX, 0.5);
@@ -365,12 +364,12 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
     {
         using var host = await CreateRowHostAsync().ConfigureAwait(true);
         var rootActions = Row(host.Tree, host.ViewModel.Scene!).FindDescendant<SceneRowActions>()!;
-        rootActions.SetRowHovered(true);
+        rootActions.SetRowHovered(hovered: true);
         _ = Button(rootActions, "EyeButton").Visibility.Should().Be(Visibility.Collapsed);
         _ = Button(rootActions, "LockButton").Visibility.Should().Be(Visibility.Collapsed);
         _ = rootActions.ActualWidth.Should().Be(64);
         host.Actions.DataContext = new FolderAdapter(Guid.NewGuid(), "Folder");
-        host.Actions.SetRowHovered(true);
+        host.Actions.SetRowHovered(hovered: true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = Button(host.Actions, "EyeButton").Visibility.Should().Be(Visibility.Collapsed);
         _ = Button(host.Actions, "LockButton").Visibility.Should().Be(Visibility.Collapsed);
@@ -383,10 +382,10 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
     public Task DataContextReplacement_UpdatesGlyphsAndCommandTargets_AndClearsInvalidContent() => EnqueueAsync(async () =>
     {
         using var host = await CreateRowHostAsync().ConfigureAwait(true);
-        host.Interaction.SetHidden(host.Node.Id, true);
-        host.Interaction.SetLocked(host.Node.Id, true);
+        host.Interaction.SetHidden(host.Node.Id, isHidden: true);
+        host.Interaction.SetLocked(host.Node.Id, isLocked: true);
         host.Actions.DataContext = host.SecondaryAdapter;
-        host.Actions.SetRowHovered(true);
+        host.Actions.SetRowHovered(hovered: true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = Glyph(host.Actions, "EyeGlyph").Glyph.Should().Be("\uE890");
         _ = Glyph(host.Actions, "LockGlyph").Glyph.Should().Be("\uE785");
@@ -395,7 +394,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = host.SecondaryAdapter.IsLocked.Should().BeTrue();
 
-        host.Interaction.SetHidden(host.Node.Id, false);
+        host.Interaction.SetHidden(host.Node.Id, isHidden: false);
         _ = Glyph(host.Actions, "EyeGlyph").Glyph.Should().Be("\uE890");
         host.Actions.DataContext = null;
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -410,14 +409,14 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
     public Task RecycledTreeRow_RebindsActionsToItsReplacementAdapter() => EnqueueAsync(async () =>
     {
         using var host = await CreateRowHostAsync().ConfigureAwait(true);
-        host.Interaction.SetHidden(host.Node.Id, true);
-        host.Interaction.SetLocked(host.Node.Id, true);
+        host.Interaction.SetHidden(host.Node.Id, isHidden: true);
+        host.Interaction.SetLocked(host.Node.Id, isLocked: true);
         host.Row.ItemAdapter = host.SecondaryAdapter;
         host.Tree.UpdateLayout();
         await WaitForRenderAsync().ConfigureAwait(true);
         var actions = host.Row.FindDescendant<SceneRowActions>()!;
         _ = actions.DataContext.Should().BeSameAs(host.SecondaryAdapter);
-        actions.SetRowHovered(true);
+        actions.SetRowHovered(hovered: true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = Glyph(actions, "EyeGlyph").Glyph.Should().Be("\uE890");
         _ = Glyph(actions, "LockGlyph").Glyph.Should().Be("\uE785");
@@ -435,23 +434,23 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         using var host = await CreateRowHostAsync().ConfigureAwait(true);
         for (var cycle = 0; cycle < 2; cycle++)
         {
-            host.Actions.SetRowHovered(true);
+            host.Actions.SetRowHovered(hovered: true);
             await LoadTestContentAsync(new Grid()).ConfigureAwait(true);
             await WaitForRenderAsync().ConfigureAwait(true);
             _ = host.Actions.IsLoaded.Should().BeFalse();
             _ = host.Actions.CommandOwner.Should().BeNull();
-            host.Interaction.SetHidden(host.Node.Id, true);
+            host.Interaction.SetHidden(host.Node.Id, isHidden: true);
             await LoadTestContentAsync(host.View).ConfigureAwait(true);
             await WaitForRenderAsync().ConfigureAwait(true);
             var actions = Row(host.Tree, host.Adapter).FindDescendant<SceneRowActions>()!;
             AssertSlot(Button(actions, "EyeButton"), suppressed: true, hovered: false);
             AssertSlot(Button(actions, "LockButton"), suppressed: false, hovered: false);
             _ = actions.CommandOwner.Should().BeSameAs(host.ViewModel);
-            actions.SetRowHovered(true);
+            actions.SetRowHovered(hovered: true);
             Invoke(Button(actions, "LockButton"));
             await WaitForRenderAsync().ConfigureAwait(true);
             _ = host.Adapter.IsLocked.Should().BeTrue("one click must toggle once even after repeated reloads");
-            host.Interaction.SetLocked(host.Node.Id, false);
+            host.Interaction.SetLocked(host.Node.Id, isLocked: false);
         }
     });
 
@@ -478,8 +477,8 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
             _ = fixture.Documents.Setup(service => service.GetOpenDocuments(It.IsAny<WindowId>())).Returns([metadata]);
             _ = fixture.Documents.Setup(service => service.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(metadata.DocumentId);
             _ = fixture.Sync.Setup(service => service.GetDocumentScene(metadata)).Returns(scene);
-            _ = fixture.Sync.Setup(service => service.RegisterDocument(scene, metadata)).Returns(true);
-            _ = fixture.Sync.Setup(service => service.SyncSceneWhenReadyAsync(scene, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+            _ = fixture.Sync.Setup(service => service.RegisterDocument(scene, metadata)).Returns(value: true);
+            _ = fixture.Sync.Setup(service => service.SyncSceneWhenReadyAsync(scene, It.IsAny<CancellationToken>())).ReturnsAsync(value: false);
             viewModel = new SceneExplorerViewModel(
                 Mock.Of<IProjectManagerService>(),
                 fixture.Messenger,

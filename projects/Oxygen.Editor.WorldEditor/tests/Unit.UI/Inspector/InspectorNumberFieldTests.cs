@@ -15,7 +15,7 @@ using NumberBox = DroidNet.Controls.NumberBox;
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
 [TestClass]
-public sealed class InspectorNumberFieldTests : VisualUserInterfaceTests
+internal sealed class InspectorNumberFieldTests : VisualUserInterfaceTests
 {
     [TestMethod]
     [DataRow(260d, 1d)]
@@ -24,7 +24,7 @@ public sealed class InspectorNumberFieldTests : VisualUserInterfaceTests
     [DataRow(420d, 1.5d)]
     [DataRow(480d, 2d)]
     [DataRow(760d, 2d)]
-    public Task ComposedField_PreservesNativeCaptionTypographyAndUnitAlignment(double width, double textScale) => EnqueueAsync(async () =>
+    public Task ComposedFieldPreservesNativeCaptionTypographyAndUnitAlignment(double width, double textScale) => EnqueueAsync(async () =>
     {
         var host = CreateHost(width);
         var field = CreateField(host);
@@ -33,15 +33,15 @@ public sealed class InspectorNumberFieldTests : VisualUserInterfaceTests
         await LoadTestContentAsync(host).ConfigureAwait(true);
         var number = field.FindDescendant<NumberBox>()!;
         var card = number.FindAscendant<PropertyCard>()!;
-        var label = number.FindDescendant<TextBlock>(part => part.Name == "PartLabelTextBlock")!;
-        var suffix = number.FindDescendant<TextBlock>(part => part.Name == "PartValueQualifier")!;
-        var border = number.FindDescendant<Border>(part => part.Name == "PartBackgroundBorder")!;
+        var label = number.FindDescendant<TextBlock>(part => string.Equals(part.Name, "PartLabelTextBlock", StringComparison.Ordinal))!;
+        var suffix = number.FindDescendant<TextBlock>(part => string.Equals(part.Name, "PartValueQualifier", StringComparison.Ordinal))!;
+        var border = number.FindDescendant<Border>(part => string.Equals(part.Name, "PartBackgroundBorder", StringComparison.Ordinal))!;
         _ = number.Label.Should().Be("Near plane");
         _ = label.Visibility.Should().Be(Visibility.Visible);
         _ = label.FontSize.Should().Be(14 * textScale);
         _ = label.TextWrapping.Should().Be(TextWrapping.NoWrap);
         _ = label.TextTrimming.Should().Be(TextTrimming.CharacterEllipsis);
-        _ = card.FindDescendant<TextBlock>(part => part.Name == "PropertyName")!.ActualWidth.Should().Be(0);
+        _ = card.FindDescendant<TextBlock>(part => string.Equals(part.Name, "PropertyName", StringComparison.Ordinal))!.ActualWidth.Should().Be(0);
         _ = number.Padding.Should().Be(new Thickness(6, 4, 6, 4));
         _ = number.Mask.Should().Be("~.###");
         var inputPoint = border.TransformToVisual(card).TransformPoint(default);
@@ -65,7 +65,7 @@ public sealed class InspectorNumberFieldTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task ComposedField_ForwardsOriginalExpressionValidationAndCompletionArguments() => EnqueueAsync(async () =>
+    public Task ComposedFieldForwardsOriginalExpressionValidationAndCompletionArguments() => EnqueueAsync(async () =>
     {
         var host = CreateHost(480);
         var field = CreateField(host);
@@ -84,7 +84,7 @@ public sealed class InspectorNumberFieldTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task ComposedField_NativeCaptionDragSurvivesReflowAndReload() => EnqueueAsync(async () =>
+    public Task ComposedFieldNativeCaptionDragSurvivesReflowAndReload() => EnqueueAsync(async () =>
     {
         var host = CreateHost(480);
         var field = CreateField(host);
@@ -94,7 +94,7 @@ public sealed class InspectorNumberFieldTests : VisualUserInterfaceTests
         using var scaled = new ScaledXamlHost();
         await scaled.LoadAsync(viewport, 1, CancellationToken.None).ConfigureAwait(true);
         var number = field.FindDescendant<NumberBox>()!;
-        var label = number.FindDescendant<TextBlock>(part => part.Name == "PartLabelTextBlock")!;
+        var label = number.FindDescendant<TextBlock>(part => string.Equals(part.Name, "PartLabelTextBlock", StringComparison.Ordinal))!;
         var starts = 0;
         var completions = 0;
         field.EditSessionStarted += (_, _) => starts++;
@@ -104,9 +104,9 @@ public sealed class InspectorNumberFieldTests : VisualUserInterfaceTests
             await pointer.MoveAsync(12, CancellationToken.None).ConfigureAwait(true);
             host.Width = 260;
             await WaitForRenderAsync().ConfigureAwait(true);
-            _ = number.FindDescendant<TextBlock>(part => part.Name == "PartLabelTextBlock").Should().BeSameAs(label);
+            _ = number.FindDescendant<TextBlock>(part => string.Equals(part.Name, "PartLabelTextBlock", StringComparison.Ordinal)).Should().BeSameAs(label);
             await pointer.MoveAsync(12, CancellationToken.None).ConfigureAwait(true);
-            await pointer.ReleaseAsync(CancellationToken.None).ConfigureAwait(true);
+            await NativePointer.ReleaseAsync(CancellationToken.None).ConfigureAwait(true);
         }
 
         _ = starts.Should().Be(1);
@@ -116,10 +116,10 @@ public sealed class InspectorNumberFieldTests : VisualUserInterfaceTests
         await WaitForRenderAsync().ConfigureAwait(true);
         host.Children.Add(field);
         await WaitForRenderAsync().ConfigureAwait(true);
-        label = number.FindDescendant<TextBlock>(part => part.Name == "PartLabelTextBlock")!;
+        label = number.FindDescendant<TextBlock>(part => string.Equals(part.Name, "PartLabelTextBlock", StringComparison.Ordinal))!;
         using var reloaded = await NativePointer.PressAsync(label, CancellationToken.None).ConfigureAwait(true);
         await reloaded.MoveAsync(12, CancellationToken.None).ConfigureAwait(true);
-        await reloaded.ReleaseAsync(CancellationToken.None).ConfigureAwait(true);
+        await NativePointer.ReleaseAsync(CancellationToken.None).ConfigureAwait(true);
         _ = starts.Should().Be(2);
         _ = completions.Should().Be(2);
     });

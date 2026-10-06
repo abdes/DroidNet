@@ -13,7 +13,6 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
-using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 
