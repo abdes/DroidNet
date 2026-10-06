@@ -1,8 +1,8 @@
 # ED-M08 — Runtime parity and standalone qualification
 
-Status: **in progress — M08.1 validated; M08.F1 format cutover implemented, editor authoring and F1 qualification open**
+Status: **in progress — M08.1 validated; M08.F1 format cutover and editor authoring implemented; F1 qualification open**
 
-Current: **[M08.F1 descriptor-local references](ED-M08.F1-descriptor-local-references.md)**, before M08.2. M08.1's native analysis, editor cutover and maintained-project migration are validated. M08.F1's native and managed format cutovers are implemented and committed; its [remaining work](ED-M08.F1-descriptor-local-references.md#remaining-work) is editor scene-reference authoring, managed validation, load-cost measurement, two layer acceptance cases and the F1 result record.
+Current: **[M08.F1 descriptor-local references](ED-M08.F1-descriptor-local-references.md)**, before M08.2. M08.1's native analysis, editor cutover and maintained-project migration are validated. M08.F1's format cutovers and editor scene-reference authoring are implemented and committed. User reference-authoring checks pass; the live mount-tree correction is user-validated and closed. Its [remaining work](ED-M08.F1-descriptor-local-references.md#remaining-work) is final managed/UI qualification, maintained-project cook/package qualification, origin-first/cache-reuse evidence, load-cost measurement and the F1 result record. Existing native tests cover ordered-layer acceptance.
 See [owners](#2-implementation-document-map), [remaining increments](#m081-remaining-increments)
 and [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);

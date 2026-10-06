@@ -1,15 +1,15 @@
 # ED-M08.F1 — Descriptor-local reference format
 
-Status: **in progress — F1.1 validated; native and managed format cutovers and editor scene-reference authoring implemented in the worktree; F1 qualification open**
+Status: **in progress — F1.1 validated; native and managed format cutovers and editor scene-reference authoring implemented; F1 qualification open**
 
 **Summary:** replace descriptor-specific packaging rewrites with native reference
 tables. Follow [scope](#scope), [delivery](#delivery) and [acceptance](#acceptance).
 Execute after [M08.1.9](ED-M08-runtime-parity-and-standalone-validation.md#m081-remaining-increments)
 and before M08.2. Existing M08.2–M08.8 identifiers remain unchanged.
 
-| Outcome                                                                                                                                                                                | Remaining                                                                                                                                                                                                                                | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native reference tables, scene-local scripting, generic packaging, managed loose-index consumers, shared current-version definitions and editor scene-reference authoring implemented. | Maintained-project cook/package qualification, origin-first lookup/cache-reuse evidence, load-cost measurement and the final F1 result record. Native-pointer UI interaction qualification is blocked by loss of test-window foreground. | Focused verification: ContentPipeline descriptor tests 40/40; typed-reference discovery and typed-reference dependency-closure cook 2/2; material-texture integration tests 2/2; ContentBrowser tests 151/151; WorldEditor Unit tests 405/405; World tests 77/77; extra-asset UI interaction 1/1; InspectorBindingTests 37/37. Seven native-pointer caption rows could not execute because another process took foreground; no maintained-project or load-cost qualification was run. |
+| Outcome                                                                                                                                                                                                             | Remaining                                                                                                                                                         | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Native reference tables, scene-local scripting, generic packaging, managed consumers and scene-reference authoring implemented. User reference-authoring checks pass; live mount-tree refresh validated and closed. | Native-pointer UI qualification, maintained-project cook/package qualification, origin-first/cache-reuse evidence, load-cost measurement and final result record. | Prior focused verification: descriptors 40/40; typed-reference discovery/cook 2/2; texture integration 2/2; ContentBrowser 151/151; WorldEditor Unit 405/405; World 77/77; extra-asset UI 1/1; InspectorBindingTests 37/37. Current mount/router regressions pass 7/7; user confirms the live mount-tree correction on 2026-10-06. Native-pointer qualification has five foreground failures and two Environment caption hit-testing failures. No maintained-project or load-cost qualification was run. |
 
 ## Remaining work
 
@@ -27,8 +27,8 @@ editor side of the cutover; items 3 and 5 close the format plan's own acceptance
    cooked-reference discovery, catalog, serialization, inspector scope/binding,
    and an editor-to-native cooked-library dependency-closure test pass. The
    InspectorBindingTests passes 37/37, and the extra-asset add/remove interaction
-   passes 1/1. The native-pointer numeric-caption rows remain unqualified because
-   their test window lost foreground to another process.
+   passes 1/1. The native-pointer numeric-caption rows remain unqualified: five rows lost
+   test-window foreground and two Environment rows failed caption hit-testing.
    Reference snapshots are now read-only for newly created scenes and scenes
    loaded without a references field, as well as populated references. Regression
    cases for both empty paths were added; they are not executed under the user's
@@ -36,16 +36,28 @@ editor side of the cutover; items 3 and 5 close the format plan's own acceptance
    User mounting qualification exposed dropped default-scene metadata in mount
    edits. Browser candidates and publication baselines now retain that setting,
    preserving the full configuration conflict check. Regression coverage was
-   extended; those cases have not been executed under the same instruction.
+   extended; the browser preservation cases now pass 2/2. The WorldEditor mount
+   transaction cases have not been executed.
+   The user confirms successful mounting, correctly typed reference addition,
+   dirty state, removal, Undo/Redo, Extra Assets, unavailable assets after losing
+   a mount and resolution after remounting. Save/reopen of authored references
+   and full cook/package qualification are not inferred from these checks.
+   Live mount-tree presentation exposed a disposed singleton explorer being
+   reused after outlet replacement. Explorer views and models are now transient
+   and outlet-owned; shell Refresh targets the displayed explorer. Focused browser
+   regressions pass 7/7, including rendered local-folder mounting before/after
+   outlet replacement and refresh discovering a new folder without restart.
+   The user confirmed the correction in the editor on 2026-10-06; the live
+   mount-tree item is validated and closed.
 2. **Managed cook/editor qualification.** ContentPipeline Unit and Integration
    test projects build. Focused descriptor tests pass 40/40; typed-reference
    discovery and the editor-to-native dependency-closure cook pass 1/1 each;
    material-texture integration tests pass 2/2; ContentBrowser tests pass 151/151;
    WorldEditor Unit tests pass 405/405; World tests pass 77/77; and
    InspectorBindingTests pass 37/37. The extra-asset UI interaction passes 1/1.
-   Seven native-pointer caption rows were blocked because the test window lost
-   foreground to another process; do not treat those as verified interaction
-   results. Native `RejectsInvalidPhysicsScenePairs` and
+   Seven native-pointer caption rows remain unqualified: five foreground failures
+   and two Environment caption hit-testing failures; do not treat those as
+   verified interaction results. Native `RejectsInvalidPhysicsScenePairs` and
    `PatchIncludesBothMembersOfPhysicsScenePair` tests cover pair rejection and
    patch completeness; `RejectsInvalidAssetReferenceGraphs` covers native
    missing/type-mismatched asset dependencies. A focused native-backed scene

@@ -116,6 +116,60 @@ public sealed partial class BrowserRevealTests : DroidNet.Tests.VisualUserInterf
         _ = fixture.MountChanges.Should().Be(persisted ? 0 : 1);
     });
 
+    /// <summary>A local folder appears in the routed explorer after mounting and remains visible after refresh.</summary>
+    /// <param name="navigateFirst">Whether to replace the explorer outlet after folder navigation.</param>
+    /// <returns>The asynchronous rendered-browser regression.</returns>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public Task LocalFolderMountImmediatelyUpdatesTheDisplayedExplorer(bool navigateFirst) => EnqueueAsync(async () =>
+    {
+        using var fixture = new BrowserRevealFixture();
+        await fixture.OpenAsync().ConfigureAwait(true);
+        var library = Path.Combine(fixture.Projects.ActiveProject!.ProjectRoot, ".cooked", "main");
+        _ = Directory.CreateDirectory(library);
+        await File.WriteAllBytesAsync(Path.Combine(library, "container.index.bin"), [], this.TestContext.CancellationToken).ConfigureAwait(true);
+        _ = fixture.Dialogs.Setup(value => value.ShowAsync(It.IsAny<DialogSpec>(), It.IsAny<CancellationToken>()))
+            .Returns((DialogSpec spec, CancellationToken _) =>
+            {
+                var dialog = (LocalFolderMountDialogView)spec.Content!;
+                dialog.ViewModel!.MountPointName = "Examples";
+                dialog.ViewModel.SelectedFolderPath = library;
+                return Task.FromResult(DialogButton.Primary);
+            });
+        var browserView = new ContentBrowserView { ViewModel = fixture.Browser, Width = 960, Height = 540 };
+        await LoadTestContentAsync(browserView).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        if (navigateFirst)
+        {
+            var previous = fixture.Explorer;
+            await fixture.NavigateHistoryFolderAsync("Materials", this.TestContext.CancellationToken).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
+            fixture.Browser.LoadContent(null!, "left");
+            await fixture.Browser.NavigateToBreadcrumbAsync(0).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
+            _ = fixture.Explorer.Should().NotBeSameAs(previous);
+        }
+
+        var view = browserView.FindDescendant<ProjectLayoutView>()!;
+        _ = view.Should().NotBeNull("the router must display the project explorer");
+        _ = view.ViewModel.Should().BeSameAs(fixture.Explorer);
+        await fixture.Explorer.MountLocalFolderCommand.ExecuteAsync(null).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = fixture.Projects.ActiveProject!.LocalFolderMounts.Should().ContainSingle(mount => mount.Name == "Examples");
+        _ = fixture.Explorer.ShownItems.Should().Contain(item => item is VirtualFolderMountTreeItemAdapter && item.Label == "Examples", fixture.Diagnostics);
+        var displayed = view.FindDescendant<DynamicTree>()!.DisplayedItems.Should().BeAssignableTo<IEnumerable<ITreeItem>>().Subject;
+        _ = displayed.Should().Contain(item => item.Label == "Examples");
+        _ = view.FindDescendant<TextBlock>(text => text.Text == "Examples").Should().NotBeNull();
+        _ = Directory.CreateDirectory(Path.Combine(fixture.Projects.ActiveProject.ProjectRoot, "Refreshed"));
+        await fixture.Browser.RefreshCommand.ExecuteAsync(null).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = fixture.Explorer.ShownItems.Should().Contain(item => item is VirtualFolderMountTreeItemAdapter && item.Label == "Examples", fixture.Diagnostics);
+        _ = view.FindDescendant<TextBlock>(text => text.Text == "Examples").Should().NotBeNull();
+        _ = fixture.Explorer.ShownItems.Should().Contain(item => item.Label == "Refreshed");
+        _ = view.FindDescendant<TextBlock>(text => text.Text == "Refreshed").Should().NotBeNull();
+    });
+
     /// <summary>Imported output navigation opens the cooked tree and reveals all participating folders without per-row discovery.</summary>
     /// <param name="cookedAlias">An already saved output mount name, or null to create the default mount.</param>
     /// <returns>The asynchronous complete-browser imported-output regression.</returns>

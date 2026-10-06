@@ -158,7 +158,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
         _ = logging.Setup(value => value.CreateLogger(It.IsAny<string>())).Returns(this.logger.Object);
         this.container.RegisterInstance<ILoggerFactory>(logging.Object);
         this.container.RegisterInstance<IBuiltinCatalogDiscovery>(new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
-        this.container.RegisterInstance(Mock.Of<IDialogService>());
+        this.container.RegisterInstance(this.Dialogs.Object);
         this.container.RegisterInstance(Mock.Of<IProjectAssetCatalog>());
         this.container.RegisterInstance(Mock.Of<IAssetCatalog>());
         this.container.RegisterInstance(Mock.Of<ICookRunService>());
@@ -175,6 +175,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
     public ContentBrowserAssetItem Material { get; }
     public ContentBrowserViewModel Browser { get; }
     public Mock<IContentBrowserAssetProvider> Provider { get; }
+    public Mock<IDialogService> Dialogs { get; } = new();
     public string Diagnostics => string.Join(Environment.NewLine, this.logger.Invocations.Where(static call => string.Equals(call.Method.Name, "Log", StringComparison.Ordinal)).Select(static call => call.Arguments[2]?.ToString() + " " + call.Arguments[3]?.ToString()));
     public ProjectLayoutViewModel Explorer => (ProjectLayoutViewModel)this.Browser.LeftPaneViewModel!;
     public AssetsLayoutViewModel Layout => (AssetsLayoutViewModel)((AssetsViewModel)this.Browser.RightPaneViewModel!).LayoutViewModel!;

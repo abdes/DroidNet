@@ -200,8 +200,8 @@ public sealed partial class ContentBrowserViewModel(
             this.childContainer.RegisterDelegate<ContentBrowserState>(
                 _ => new(projectContextService) { Query = this.Query }, Reuse.Singleton);
 
-            this.childContainer.Register<ProjectLayoutViewModel>(Reuse.Singleton);
-            this.childContainer.Register<ProjectLayoutView>(Reuse.Singleton);
+            this.childContainer.Register<ProjectLayoutViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
+            this.childContainer.Register<ProjectLayoutView>(Reuse.Transient);
 
             // Dialog views used via Aura's IDialogService + VmToViewConverter.
             this.childContainer.Register<LocalFolderMountDialogViewModel>(Reuse.Transient);
@@ -858,9 +858,10 @@ public sealed partial class ContentBrowserViewModel(
             this.RefreshCommand.NotifyCanExecuteChanged();
             this.LogRefreshRequested();
 
-            // Refresh the project explorer tree first
-            var projectLayout = this.childContainer.Resolve<ProjectLayoutViewModel>();
-            await projectLayout.RefreshTreeAsync().ConfigureAwait(true);
+            if (this.LeftPaneViewModel is ProjectLayoutViewModel projectLayout)
+            {
+                await projectLayout.RefreshTreeAsync().ConfigureAwait(true);
+            }
 
             await this.childContainer.Resolve<IContentBrowserAssetProvider>().RefreshAsync(AssetBrowserFilter.Default).ConfigureAwait(true);
         }
