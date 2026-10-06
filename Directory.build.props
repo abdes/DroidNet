@@ -19,6 +19,10 @@
 
   <Import Project="Common.props" />
 
+    <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
+        <PreferredToolArchitecture Condition="'$(PreferredToolArchitecture)' == ''">x64</PreferredToolArchitecture>
+    </PropertyGroup>
+
   <PropertyGroup>
         <Authors>Abdessattar Sassi</Authors>
         <Company>DroidNet</Company>

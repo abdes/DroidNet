@@ -429,6 +429,20 @@ function Resolve-OxygenExecutables {
     return [pscustomobject]@{ Selection = $Selection; Targets = $resolved; Paths = $paths }
 }
 
+function Assert-OxygenWindowsBuildTools {
+    param([string] $Compiler)
+    if (-not $IsWindows) { return }
+    if (-not [Environment]::Is64BitProcess) {
+        throw 'Oxygen requires 64-bit build hosts. Use 64-bit PowerShell and x64-hosted MSVC tools.'
+    }
+    if (-not $Compiler) {
+        $Compiler = (Get-Command cl.exe -CommandType Application -ErrorAction Stop).Source
+    }
+    if ($Compiler -notmatch '(?i)[/\\]Hostx64[/\\]x64[/\\]cl\.exe$') {
+        throw "Oxygen requires Hostx64\x64\cl.exe, not '$Compiler'. Initialize vcvars64.bat or -arch=x64 -host_arch=x64. Reconfigure a tree that cached Hostx86 tools; do not reuse it."
+    }
+}
+
 function Invoke-OxygenBuild {
     param([Parameter(Mandatory)][ValidateNotNullOrEmpty()][string[]]$Targets,
         [Parameter(Mandatory)]$Selection, [switch]$DryRun)
@@ -456,6 +470,19 @@ function Invoke-OxygenBuild {
                 $toolchains = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable
                 $cxx = $toolchains['toolchains'] | Where-Object { $_['language'] -eq 'CXX' } | Select-Object -First 1
                 if ($cxx) { $compiler = [string]$cxx['compiler']['path'] }
+            }
+        }
+        if ($IsWindows -and $compiler) { Assert-OxygenWindowsBuildTools -Compiler $compiler }
+        if ($IsWindows -and $cache['CMAKE_C_COMPILER']) {
+            Assert-OxygenWindowsBuildTools -Compiler $cache['CMAKE_C_COMPILER']
+        }
+        if ($IsWindows) {
+            foreach ($hostVariable in @('CMAKE_MAKE_PROGRAM', 'CMAKE_VS_MSBUILD_COMMAND')) {
+                $buildHost = $cache[$hostVariable]
+                if ($buildHost -match '(?i)[/\\]MSBuild\.exe$' -and
+                    $buildHost -notmatch '(?i)[/\\]amd64[/\\]MSBuild\.exe$') {
+                    throw "Oxygen requires 64-bit MSBuild (Bin\amd64\MSBuild.exe), not '$buildHost'. Reconfigure the build tree."
+                }
             }
         }
         if ($IsWindows -and $cache['CMAKE_GENERATOR'] -like 'Ninja*' -and

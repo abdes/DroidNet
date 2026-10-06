@@ -84,6 +84,17 @@ try {
     $null = Get-Command cmake -ErrorAction Stop
 
     function Invoke-TreeConfigure([string]$Preset, [string]$BuildRoot, [string[]]$Definitions = @()) {
+        Assert-OxygenWindowsBuildTools
+        $existingCache = Get-OxygenCacheValues $BuildRoot
+        if ($IsWindows) {
+            foreach ($compilerVariable in @('CMAKE_C_COMPILER', 'CMAKE_CXX_COMPILER')) {
+                $compiler = $existingCache[$compilerVariable]
+                foreach ($definition in $Definitions) {
+                    if ($definition -match "^$compilerVariable(?::[^=]+)?=(.*)$") { $compiler = $Matches[1] }
+                }
+                if ($compiler) { Assert-OxygenWindowsBuildTools -Compiler $compiler }
+            }
+        }
         $python = Get-OxygenPython $engineRoot
         Write-Host "Configuring $Preset..."
         $cmakeArgs = @('--preset', $Preset, "-DPython3_EXECUTABLE=$python") + @($Definitions | ForEach-Object { "-D$_" })
@@ -113,6 +124,7 @@ try {
             if (-not [IO.Path]::IsPathRooted($buildRoot)) { $buildRoot = Join-Path $engineRoot $buildRoot }
             Invoke-TreeConfigure $Selection $buildRoot $Define
         } else {
+            Assert-OxygenWindowsBuildTools
             $null = Get-Command conan -ErrorAction Stop
             $null = Get-Command uv -ErrorAction Stop
             if ($Generator -ne 'VisualStudio') {

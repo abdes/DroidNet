@@ -11,6 +11,10 @@ description: Maintain concise, source-verified DroidNet and Oxygen documentation
 - Read the owning manifests, scripts and representative entrypoints before making
   claims. Current build commands live in `tooling/doc/build.md` and the engine's
   build/preset guides; do not copy stale README examples unchecked.
+- Windows command examples must select 64-bit MSBuild (`Bin\amd64`) and
+  x64-hosted compilers, never 32-bit MSBuild or `Hostx86`. Retain
+  `/p:PreferredToolArchitecture=x64` and the same VS installation; see
+  [Windows tool policy](../../tooling/doc/build.md#windows-tool-policy).
 - Update the requested document in place. Place new documentation beside its
   owning module or under the existing `design/`, `plan/` or `tooling/doc/`
   hierarchy; do not invent a root `docs/` tree or duplicate facts by default.

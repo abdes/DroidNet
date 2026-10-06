@@ -52,6 +52,7 @@ def new_package(project: Path, context: TraversalContext) -> None:
     properties = {
         "Configuration": configuration,
         "Platform": platform,
+        "PreferredToolArchitecture": "x64",
         "UapAppxPackageBuildMode": "SideloadOnly",
         "AppxBundle": "Never",
         "GenerateAppxPackageOnBuild": "true",

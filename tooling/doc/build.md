@@ -9,6 +9,42 @@ their Windows SDK target. Source generators and their compiler-facing attribute
 assemblies retain `netstandard2.0`. Use the SDK selected by `global.json`.
 The editor's EF Core packages and SQLite driver are aligned at 10.0.12.
 
+## Windows tool policy
+
+Windows DroidNet builds use **64-bit build hosts and x64-hosted compiler/linker
+tools only**. Never select 32-bit MSBuild or `Hostx86` tools. The target platform
+(`x64`) is separate from the host architecture.
+
+Initialize an x64 Visual Studio developer shell with `vcvars64.bat` or
+`-arch=x64 -host_arch=x64`. Use the same Visual Studio installation for all
+builders sharing an output configuration; changing installations or compiler
+hosts invalidates C++ incremental tracking. Check command resolution:
+
+```powershell
+Get-Command MSBuild -All | Select-Object CommandType, Source, Definition
+(Get-Command cl.exe -CommandType Application).Source
+$msbuild = Join-Path $env:VSINSTALLDIR 'MSBuild\Current\Bin\amd64\MSBuild.exe'
+& $msbuild -nologo -version
+```
+
+MSBuild must resolve to `MSBuild\Current\Bin\amd64\MSBuild.exe`, and MSVC to
+`VC\Tools\MSVC\<version>\bin\Hostx64\x64\cl.exe`. A bare `MSBuild` command or an
+initialized shell alone does not prove correct resolution. Repository builds
+default `PreferredToolArchitecture=x64` and reject 32-bit hosts/compiler-host
+overrides. SDK-internal utilities are not a reason to select a 32-bit build host;
+their architecture is controlled by the SDK.
+
+The [build wrapper](../Build.ps1), also used by VS Code build tasks, selects only
+64-bit Visual Studio MSBuild, preferring the initialized shell's installation.
+It has no 32-bit fallback. Do not start it while someone else is building the
+same output configuration.
+
+```powershell
+.\tooling\Build.ps1 -Solution projects\Oxygen.Editor\src\Oxygen.Editor.App.csproj -Configuration Debug
+# Inspect tool selection without building or restoring.
+.\tooling\Build.ps1 -Solution projects\Oxygen.Editor\src\Oxygen.Editor.App.csproj -WhatIf
+```
+
 ## Visual Studio
 
 Generate a scoped solution with the project's `open.cmd`, or use
@@ -38,18 +74,18 @@ references, or use bulk code fixes to silence an infrastructure check.
 
 ## Command-line verification
 
-Run from a Visual Studio developer shell, using **MSBuild.exe**, including for
+Run from an x64 Visual Studio developer shell, using **64-bit MSBuild**, including for
 C# entry projects that reference the C++/CLI bridge:
 
 ```powershell
-MSBuild.exe projects/Projects.sln /restore /m /p:Configuration=Debug /p:Platform=x64
-MSBuild.exe projects/Oxygen.Editor/src/Oxygen.Editor.App.csproj /restore /m /p:Configuration=Release
+& $msbuild projects\Projects.sln /restore /m /p:Configuration=Debug /p:Platform=x64 /p:PreferredToolArchitecture=x64
+& $msbuild projects\Oxygen.Editor\src\Oxygen.Editor.App.csproj /restore /m /p:Configuration=Release /p:Platform=x64 /p:PreferredToolArchitecture=x64
 ```
 
 For explicit automated analysis, opt in on a separate invocation:
 
 ```powershell
-MSBuild.exe projects/Oxygen.Editor/src/Oxygen.Editor.App.csproj /m /p:RunAnalyzersDuringBuild=true
+& $msbuild projects\Oxygen.Editor\src\Oxygen.Editor.App.csproj /m /p:RunAnalyzersDuringBuild=true /p:Platform=x64 /p:PreferredToolArchitecture=x64
 ```
 
 This invocation may compile affected C# inputs to run analysis. Visual Studio's
@@ -121,7 +157,7 @@ Only reusable DroidNet libraries opt into NuGet packaging. Both Debug and Releas
 ordinary builds have `GeneratePackageOnBuild=false`. To produce a Release package:
 
 ```powershell
-MSBuild.exe projects/Storage/src/Storage.csproj /restore /m /t:Pack /p:Configuration=Release
+& $msbuild projects\Storage\src\Storage.csproj /restore /m /t:Pack /p:Configuration=Release /p:Platform=x64 /p:PreferredToolArchitecture=x64
 ```
 
 NuGet packages go to `artifacts/package/Release`. Generator packages retain their

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -15,6 +16,84 @@ from tooling.scripts.traversal.task_registry import TaskInvocation, TaskRegistry
 from tooling.scripts.traversal.tasks.invoke_tests import invoke_tests
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+class WindowsBuildTools(unittest.TestCase):
+    def setUp(self):
+        visual_studio_tool.cache_clear()
+        self.addCleanup(visual_studio_tool.cache_clear)
+
+    def test_discovery_selects_only_amd64_msbuild(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "Bin/amd64/MSBuild.exe"
+            executable.parent.mkdir(parents=True)
+            executable.touch()
+            result = subprocess.CompletedProcess([], 0, stdout=str(executable))
+            with patch("tooling.scripts.msbuild.subprocess.run", return_value=result) as run:
+                self.assertEqual(visual_studio_tool("msbuild"), executable)
+            self.assertEqual(run.call_args.args[0][-1], r"MSBuild\**\Bin\amd64\MSBuild.exe")
+
+    def test_discovery_rejects_32bit_result_without_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "Bin/MSBuild.exe"
+            executable.parent.mkdir()
+            executable.touch()
+            result = subprocess.CompletedProcess([], 0, stdout=str(executable))
+            with patch("tooling.scripts.msbuild.subprocess.run", return_value=result) as run:
+                with self.assertRaisesRegex(RuntimeError, "requires 64-bit MSBuild"):
+                    visual_studio_tool("msbuild")
+            self.assertEqual(run.call_count, 1)
+
+    def test_missing_64bit_msbuild_does_not_retry_32bit(self):
+        result = subprocess.CompletedProcess([], 0, stdout="")
+        with patch("tooling.scripts.msbuild.subprocess.run", return_value=result) as run:
+            with self.assertRaisesRegex(RuntimeError, "not installed"):
+                visual_studio_tool("msbuild")
+        self.assertEqual(run.call_count, 1)
+
+    @unittest.skipUnless(os.name == "nt" and shutil.which("pwsh"), "Windows PowerShell 7 required")
+    def test_build_wrapper_has_no_32bit_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            installation = Path(directory)
+            host = installation / "MSBuild/Current/Bin"
+            host.mkdir(parents=True)
+            (host / "MSBuild.exe").touch()
+            environment = {**os.environ, "VSINSTALLDIR": str(installation)}
+            command = ["pwsh", "-NoProfile", "-File", str(ROOT / "tooling/Build.ps1"),
+                       "-Solution", "Probe.csproj", "-WhatIf"]
+            rejected = subprocess.run(command, env=environment, capture_output=True, text=True, check=False)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("64-bit MSBuild was not found", rejected.stdout + rejected.stderr)
+            (host / "amd64").mkdir()
+            executable = host / "amd64/MSBuild.exe"
+            executable.touch()
+            accepted = subprocess.run(command, env=environment, capture_output=True, text=True, check=False)
+            self.assertEqual(accepted.returncode, 0, accepted.stdout + accepted.stderr)
+            self.assertIn(str(executable), accepted.stdout)
+            self.assertIn("PreferredToolArchitecture=x64", accepted.stdout)
+
+    @unittest.skipUnless(os.name == "nt", "Visual Studio MSBuild required")
+    def test_native_default_and_guard_reject_host_overrides_without_building(self):
+        project = ROOT / "projects/Oxygen.Editor.Interop/src/Oxygen.Editor.Interop.vcxproj"
+        values, _ = query_msbuild_properties(project, ["PreferredToolArchitecture", "VCToolArchitecture"])
+        self.assertEqual(values["PreferredToolArchitecture"], "x64")
+        self.assertEqual(values["VCToolArchitecture"], "Native64Bit")
+        for override, code in (
+            (None, None),
+            ("/p:PreferredToolArchitecture=x86", "DNBUILD002"),
+            ("/p:VCToolArchitecture=Native32Bit", "DNBUILD003"),
+        ):
+            with self.subTest(override=override):
+                command = [str(visual_studio_tool("msbuild")), str(project), "/nologo", "/v:quiet",
+                           "/t:ValidateDroidNetWindowsBuildTools", "/p:Platform=x64"]
+                if override:
+                    command.append(override)
+                result = subprocess.run(command, capture_output=True, text=True, check=False)
+                if code:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(code, result.stdout + result.stderr)
+                else:
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 class TestFailurePropagation(unittest.TestCase):

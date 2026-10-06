@@ -97,6 +97,14 @@ hooks. See [pre-commit tooling](../../tooling/doc/pre-commit.md) for their scope
 
 ## Visual Studio
 
+Windows builds must use 64-bit build hosts and x64-hosted MSVC tools only.
+Initialize `vcvars64.bat` or `-arch=x64 -host_arch=x64`, and verify that `cl.exe`
+resolves under `Hostx64\x64`. Never use `Hostx86` or 32-bit MSBuild; MSBuild
+must come from `MSBuild\Current\Bin\amd64`. Keep the same VS installation for
+shared build trees. See the [repository Windows tool policy](../../tooling/doc/build.md#windows-tool-policy).
+The engine wrappers reject cached `Hostx86` compilers instead of silently
+reusing them from an x64 shell.
+
 Make sure the "Desktop development with C++" workload is checked.
 After installation, check for vcvarsall.bat in:
 

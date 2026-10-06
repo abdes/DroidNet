@@ -51,7 +51,9 @@ with a distinct `-SolutionPath`, or let it choose a scope-suffixed filename.
 
 Run `dotnet tool restore` once after cloning or updating the tool manifest.
 `.config/dotnet-tools.json` pins SlnGen. The generator uses that package's .NET
-Framework executable with Visual Studio MSBuild discovered by `vswhere`.
+Framework executable with 64-bit Visual Studio MSBuild discovered by `vswhere`.
+It searches only `Bin\amd64` and supplies `PreferredToolArchitecture=x64`;
+there is no 32-bit fallback. See the [Windows tool policy](build.md#windows-tool-policy).
 This host supports C++/CLI evaluation; the `dotnet slngen` host cannot reliably
 evaluate the native project imports in this solution.
 

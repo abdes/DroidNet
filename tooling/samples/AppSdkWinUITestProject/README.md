@@ -14,10 +14,11 @@ The host is unpackaged both locally and in CI. It needs no MSIX manifest or
 package logos. Keep actual test images and resources, and deploy them explicitly.
 Tests of package identity belong in a deliberately packaged integration host.
 
-From the repository root, after `./init.ps1`:
+From the repository root, after `./init.ps1`, in an x64 VS developer shell.
+Use only [64-bit Windows build tools](../../doc/build.md#windows-tool-policy):
 
 ```powershell
-MSBuild.exe projects/<module>/tests/<module>.UI.Tests.csproj /restore /m /p:Configuration=Debug
+& "$env:VSINSTALLDIR\MSBuild\Current\Bin\amd64\MSBuild.exe" projects\<module>\tests\<module>.UI.Tests.csproj /restore /m /p:Configuration=Debug /p:Platform=x64 /p:PreferredToolArchitecture=x64
 traverse Invoke-Tests --start projects/<module>/tests
 traverse Invoke-Tests --start projects/<module>/tests -- --filter FullyQualifiedName~MyControl
 ```

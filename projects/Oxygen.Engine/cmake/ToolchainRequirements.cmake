@@ -7,6 +7,53 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
   message(FATAL_ERROR "Oxygen's full-engine build requires Windows x64.")
 endif()
 
+foreach(_oxygen_compiler IN ITEMS CMAKE_C_COMPILER CMAKE_CXX_COMPILER)
+  if(
+    DEFINED
+      ${_oxygen_compiler}
+    AND
+      NOT
+        "${${_oxygen_compiler}}"
+          MATCHES
+          "[/\\\\]Hostx64[/\\\\][^/\\\\]+[/\\\\]cl\\.exe$"
+  )
+    message(
+      FATAL_ERROR
+      "Oxygen requires the x64-hosted MSVC compiler (Hostx64/<target>/cl.exe). "
+      "Detected ${${_oxygen_compiler}}. Never use Hostx86 tools."
+    )
+  endif()
+endforeach()
+if(
+  CMAKE_GENERATOR
+    MATCHES
+    "^Visual Studio"
+  AND
+    NOT
+      CMAKE_VS_PLATFORM_TOOLSET_HOST_ARCHITECTURE
+        STREQUAL
+        "x64"
+)
+  message(FATAL_ERROR "Oxygen requires the Visual Studio toolset host=x64.")
+endif()
+foreach(_oxygen_build_host IN ITEMS CMAKE_MAKE_PROGRAM CMAKE_VS_MSBUILD_COMMAND)
+  if(
+    "${${_oxygen_build_host}}"
+      MATCHES
+      "[/\\\\]MSBuild\\.exe$"
+    AND
+      NOT
+        "${${_oxygen_build_host}}"
+          MATCHES
+          "[/\\\\]amd64[/\\\\]MSBuild\\.exe$"
+  )
+    message(
+      FATAL_ERROR
+      "Oxygen requires 64-bit MSBuild (Bin/amd64/MSBuild.exe), not ${${_oxygen_build_host}}."
+    )
+  endif()
+endforeach()
+
 if(
   NOT
     CMAKE_CXX_COMPILER_ID

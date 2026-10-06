@@ -91,7 +91,7 @@ try {
     if (!(Test-Path -LiteralPath $slngen)) { throw 'Run dotnet tool restore before generating solutions.' }
     $arguments = @('--launch', ($Launch.IsPresent -and !$NoLaunch.IsPresent).ToString().ToLowerInvariant(),
         '--solutionfile', $SolutionPath, '--folders', 'false', '--platform', 'x64', '--configuration', 'Debug;Release')
-    $arguments += @('--property', "DroidNetTestScope=$TestScope")
+    $arguments += @('--property', "DroidNetTestScope=$TestScope", '--property', 'PreferredToolArchitecture=x64')
     if ($UseDiagnostics) {
         $logs = Join-Path $repoRoot 'artifacts/build-streamlining'
         [void][IO.Directory]::CreateDirectory($logs)

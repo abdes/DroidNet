@@ -78,6 +78,34 @@ catch { if ($_.Exception.Message -notlike 'No available preset*') { throw } }
 """)
         self.assertEqual(json.loads(output), ["conan-ninja-release", "conan-ninja-debug", "conan-tracy-ninja-release", "conan-vs-debug", "conan-asan-ninja-debug"])
 
+    @unittest.skipUnless(os.name == "nt", "Windows build host policy")
+    def test_windows_compiler_host_policy(self):
+        self.command(r"""
+Assert-OxygenWindowsBuildTools -Compiler 'C:\VS\VC\Tools\MSVC\14.51\bin\Hostx64\x64\cl.exe'
+foreach ($compiler in @(
+    'C:\VS\VC\Tools\MSVC\14.51\bin\Hostx86\x64\cl.exe',
+    'C:\VS\VC\Tools\MSVC\14.51\bin\Hostx64\x86\cl.exe'
+)) {
+    try { Assert-OxygenWindowsBuildTools -Compiler $compiler; throw 'Accepted forbidden compiler' }
+    catch { if ($_.Exception.Message -notlike 'Oxygen requires Hostx64*') { throw } }
+}
+""")
+
+    @unittest.skipUnless(os.name == "nt", "Windows build host policy")
+    def test_cached_hostx86_is_rejected_before_build_invocation(self):
+        build = self.tree("ninja")
+        (build / "CMakeCache.txt").write_text(
+            "CMAKE_GENERATOR:INTERNAL=Ninja Multi-Config\n"
+            "CMAKE_CXX_COMPILER:FILEPATH=C:/VS/VC/Tools/MSVC/14.51/bin/Hostx86/x64/cl.exe\n",
+            encoding="utf-8",
+        )
+        self.command("""
+$selection = Resolve-OxygenBuildSelection
+function global:cmake { throw 'Must reject compiler before building' }
+try { Invoke-OxygenBuild -Targets oxygen-cooker-importtool -Selection $selection; throw 'Accepted forbidden compiler' }
+catch { if ($_.Exception.Message -notlike 'Oxygen requires Hostx64*') { throw } }
+""")
+
     def test_help_needs_no_target_presets_or_cmake(self):
         for name in ("oxybuild.ps1", "oxyrun.ps1"):
             for flag in ("-Help", "-h"):

@@ -1,6 +1,7 @@
 """Exercise CLI mode boundaries without provisioning or compiling the engine."""
 
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -24,6 +25,11 @@ class BuildTreeTests(unittest.TestCase):
             shutil.copyfile(ENGINE / relative, target)
         with (self.root / "tools/cli/BuildSelection.ps1").open("a", encoding="utf-8") as stream:
             stream.write("\nfunction Get-OxygenPython { return 'python' }\n")
+            if os.name == "nt":
+                compiler_folder = self.root / "host/Hostx64/x64"
+                compiler_folder.mkdir(parents=True)
+                (compiler_folder / "cl.exe").touch()
+                stream.write(f"$env:PATH = '{compiler_folder};' + $env:PATH\n")
         self.build = self.root / "out/build-ninja"
         self.build.mkdir(parents=True)
         (self.build / "keep.obj").write_bytes(b"existing compiled object")
@@ -89,6 +95,30 @@ exit $LASTEXITCODE
 exit $LASTEXITCODE
 """, expected=37)
         self.assertEqual([c["tool"] for c in self.calls()], ["cmake"])
+
+    @unittest.skipUnless(os.name == "nt", "Windows build host policy")
+    def test_cached_hostx86_rejected_before_configure(self):
+        (self.build / "CMakeCache.txt").write_text(
+            "CMAKE_CXX_COMPILER:FILEPATH=C:/VS/bin/Hostx86/x64/cl.exe\n", encoding="utf-8",
+        )
+        result = self.run_script(self.mock_tools() + """
+& "$PSScriptRoot/tools/build-tree.ps1" configure oxygen-ninja-default
+exit $LASTEXITCODE
+""", expected=1)
+        self.assertIn("Oxygen requires Hostx64", result.stdout + result.stderr)
+        self.assertEqual(self.calls(), [])
+        self.assertEqual((self.build / "keep.obj").read_bytes(), b"existing compiled object")
+
+    @unittest.skipUnless(os.name == "nt", "Windows build host policy")
+    def test_explicit_x64_compiler_can_repair_hostx86_cache(self):
+        (self.build / "CMakeCache.txt").write_text(
+            "CMAKE_CXX_COMPILER:FILEPATH=C:/VS/bin/Hostx86/x64/cl.exe\n", encoding="utf-8",
+        )
+        self.run_script(self.mock_tools() + """
+& "$PSScriptRoot/tools/build-tree.ps1" configure oxygen-ninja-default -Define 'CMAKE_CXX_COMPILER:FILEPATH=C:/VS/bin/Hostx64/x64/cl.exe'
+exit $LASTEXITCODE
+""")
+        self.assertEqual([c["tool"] for c in self.calls()], ["cmake", "python"])
 
     def test_preparation_failure_propagates(self):
         result = self.run_script(self.mock_tools(fail="python") + """

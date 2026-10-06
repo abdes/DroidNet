@@ -1,4 +1,4 @@
-"""Visual Studio tool discovery and evaluation without building or restoring."""
+"""Discover x64-hosted Visual Studio tools and evaluate without building."""
 from __future__ import annotations
 import json
 import os
@@ -23,6 +23,8 @@ def visual_studio_tool(name: str) -> Path:
     paths = [Path(line.strip()) for line in result.stdout.splitlines() if line.strip()]
     if not paths or not paths[0].is_file():
         raise RuntimeError(f"Visual Studio tool is not installed: {name}")
+    if name == "msbuild" and paths[0].parent.name.lower() != "amd64":
+        raise RuntimeError(f"DroidNet requires 64-bit MSBuild, not {paths[0]}")
     return paths[0]
 
 def query_msbuild_properties(
@@ -32,6 +34,7 @@ def query_msbuild_properties(
     # Two properties ensure MSBuild returns JSON, even for a single query.
     names = list(dict.fromkeys([*properties, "MSBuildProjectFullPath"]))
     args = [str(visual_studio_tool("msbuild")), str(project), "/nologo", "/v:quiet",
+            "/p:PreferredToolArchitecture=x64",
             "/getProperty:" + ",".join(names)]
     for key, value in (("Configuration", configuration), ("TargetFramework", target_framework),
                        ("RuntimeIdentifier", runtime_identifier)):

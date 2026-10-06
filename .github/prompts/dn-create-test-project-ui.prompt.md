@@ -35,10 +35,11 @@ files; they, not a copied packaged-app checklist, are the source of truth:
 
 ## Verify
 
-From the repository root in an initialized VS developer PowerShell:
+From the repository root in an initialized x64 VS developer PowerShell.
+Only 64-bit MSBuild and x64-hosted compilers are allowed:
 
 ```powershell
-MSBuild.exe projects/<module>/tests/<module>.UI.Tests.csproj /restore /m /p:Configuration=Debug
+& "$env:VSINSTALLDIR\MSBuild\Current\Bin\amd64\MSBuild.exe" projects\<module>\tests\<module>.UI.Tests.csproj /restore /m /p:Configuration=Debug /p:Platform=x64 /p:PreferredToolArchitecture=x64
 traverse Invoke-Tests --start projects/<module>/tests --configuration Debug -- --filter FullyQualifiedName~MyControl
 ```
 

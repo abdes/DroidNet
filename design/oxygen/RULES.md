@@ -91,6 +91,10 @@ Read: [ownership](#ownership), [C++](#c), [editor](#editor),
 
 ## Validation and delivery
 
+- Windows builds use only 64-bit build hosts and x64-hosted MSVC tools.
+  Never select 32-bit MSBuild or `Hostx86`; use `Bin\amd64\MSBuild.exe`,
+  `vcvars64.bat` (or `-arch=x64 -host_arch=x64`) and
+  `/p:PreferredToolArchitecture=x64`. Keep the same VS installation.
 - Write clean C++ from the first edit and run `oxyformat` before building.
   Build and test during implementation; reserve `oxytidy` for the pre-commit
   check. Before requesting a commit, clear all warnings in modified C++ files,

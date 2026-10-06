@@ -18,6 +18,13 @@ file). Prompts are task guidance, not authorization for extra work or delegation
 - Unless a module's instructions say otherwise, run commands from the repository
   root in PowerShell. Use the .NET SDK selected
   by `global.json`; individual projects still target different frameworks.
+- Windows builds must use 64-bit build hosts and x64-hosted MSVC tools, never
+  32-bit MSBuild or `Hostx86` compilers/linkers. Use
+  `MSBuild\Current\Bin\amd64\MSBuild.exe`, `vcvars64.bat` (or
+  `-arch=x64 -host_arch=x64`) and `/p:PreferredToolArchitecture=x64`.
+  Keep the same Visual Studio installation across builders. Verify resolved
+  tool paths; a Debug/x64 target does not establish the host architecture.
+  This governs build hosts/compiler selection, not SDK-internal utilities.
 - Provision the shared Python workspace, pinned .NET tools and hooks with
   `./init.ps1 -NoRestore`; add `-DotNetInstall` only when the SDK is missing.
   Use `./init.ps1` in the current shell, not `pwsh ./init.ps1` or `init.cmd`,
@@ -27,9 +34,9 @@ file). Prompts are task guidance, not authorization for extra work or delegation
   create per-tool environments. Change the owning `pyproject.toml`, then run
   `uv lock` and `uv sync --locked` when changing dependencies; see
   [Python tooling](tooling/PYTHON.md).
-- Build scoped managed/interop projects with Visual Studio `MSBuild.exe`, from a VS developer
+- Build scoped managed/interop projects with 64-bit Visual Studio MSBuild, from an x64 VS developer
   shell; `dotnet build` cannot evaluate the editor's C++/CLI references:
-  `MSBuild.exe projects/Storage/tests/Storage.Tests.csproj /restore /m /p:Configuration=Debug /p:Platform=x64`.
+  `& "$env:VSINSTALLDIR\MSBuild\Current\Bin\amd64\MSBuild.exe" projects\Storage\tests\Storage.Tests.csproj /restore /m /p:Configuration=Debug /p:Platform=x64 /p:PreferredToolArchitecture=x64`.
   Avoid concurrent builds sharing the same output configuration.
 - Solutions are generated, not maintained by hand:
   `./tooling/GenerateSolution.ps1 -Scope projects/Storage -TestScope Unit`.

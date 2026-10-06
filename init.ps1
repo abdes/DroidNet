@@ -121,7 +121,7 @@ try {
         $msbuild = @(& $vswhere -latest -prerelease -products '*' -requires Microsoft.Component.MSBuild -find 'MSBuild/**/Bin/amd64/MSBuild.exe') | Select-Object -First 1
         if (!$msbuild) { throw 'Install Visual Studio MSBuild before restoring projects.' }
         foreach ($solution in $restoreSolutions) {
-            $arguments = @($solution.FullName, '/t:Restore', '/m', '/nologo')
+            $arguments = @($solution.FullName, '/t:Restore', '/m', '/nologo', '/p:PreferredToolArchitecture=x64')
             if ($Interactive) { $arguments += '/p:NuGetInteractive=true' }
             & $msbuild @arguments
             if ($LASTEXITCODE -ne 0) { throw "Restore failed: $($solution.FullName)" }

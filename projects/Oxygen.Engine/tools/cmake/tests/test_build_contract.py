@@ -33,6 +33,40 @@ class CommandTests(unittest.TestCase):
 
 
 @unittest.skipUnless(CMAKE, "CMake is required")
+class WindowsToolHostTests(CommandTests):
+    def test_host_policy_without_configuring_or_compiling(self):
+        cases = (
+            ("Hostx64", "x64", "amd64/", None),
+            ("Hostx86", "x64", "amd64/", "x64-hosted MSVC compiler"),
+            ("Hostx64", "x86", "amd64/", "toolset host=x64"),
+            ("Hostx64", "x64", "", "64-bit MSBuild"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = root / "host-policy.cmake"
+            for compiler_host, toolset_host, msbuild_host, error in cases:
+                with self.subTest(compiler_host=compiler_host, toolset_host=toolset_host,
+                                  msbuild_host=msbuild_host):
+                    script.write_text(
+                        'cmake_minimum_required(VERSION 4.2)\n'
+                        'set(CMAKE_SYSTEM_NAME Windows)\n'
+                        'set(CMAKE_CXX_COMPILER_ID MSVC)\n'
+                        'set(CMAKE_CXX_COMPILER_VERSION 19.51)\n'
+                        f'set(CMAKE_CXX_COMPILER "C:/VS/bin/{compiler_host}/x64/cl.exe")\n'
+                        'set(CMAKE_GENERATOR "Visual Studio 18 2026")\n'
+                        f'set(CMAKE_VS_PLATFORM_TOOLSET_HOST_ARCHITECTURE {toolset_host})\n'
+                        f'set(CMAKE_MAKE_PROGRAM "C:/VS/Bin/{msbuild_host}MSBuild.exe")\n'
+                        'set(CMAKE_CXX_COMPILE_FEATURES cxx_std_23)\n'
+                        'set(OXYGEN_COMPILER_TARGETS_X64 TRUE)\n'
+                        f'include("{ENGINE.as_posix()}/cmake/ToolchainRequirements.cmake")\n',
+                        encoding="utf-8",
+                    )
+                    result = self.run_command([CMAKE, "-P", str(script)], root, success=error is None)
+                    if error:
+                        self.assertIn(error, result.stdout + result.stderr)
+
+
+@unittest.skipUnless(CMAKE, "CMake is required")
 class ConfigurationTests(CommandTests):
     def configure(self, root, generator, *arguments):
         return self.run_command(

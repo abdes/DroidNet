@@ -12,7 +12,8 @@
     ],
     "workflow": [
       "In PowerShell, run ./init.ps1 -NoRestore to provision and activate shared Python tooling, restore pinned .NET tools and install hooks; -DotNetInstall is opt-in.",
-      "Use scoped Visual Studio MSBuild.exe /restore /m builds. Generate solutions with tooling/GenerateSolution.ps1 or a project's open.cmd -NoLaunch, not dotnet slngen.",
+      "On Windows, only 64-bit build hosts and x64-hosted MSVC compilers/linkers are permitted. Use MSBuild\\Current\\Bin\\amd64\\MSBuild.exe and vcvars64.bat (or -arch=x64 -host_arch=x64), with /p:PreferredToolArchitecture=x64. Never use 32-bit MSBuild or Hostx86 tools. Verify resolved tool paths and keep the same Visual Studio installation across builders; target x64 alone is insufficient. SDK-internal utilities are not build-host selection.",
+      "Use scoped 64-bit Visual Studio MSBuild /restore /m builds. Generate solutions with tooling/GenerateSolution.ps1 or a project's open.cmd -NoLaunch, not dotnet slngen.",
       "Build tests before traverse Invoke-Tests --start projects/<module>/tests --configuration Debug. Forward single-test selection after --: --filter FullyQualifiedName~MyTest.",
       "Managed tests use MSTest.Sdk/Microsoft.Testing.Platform; native interop tests use VSTest; engine tests use GoogleTest/CTest. Use the shared unpackaged WinUI test host unless package identity is required.",
       "Diagnostic analyzers are opt-in during builds: /p:RunAnalyzersDuringBuild=true. Source generators still run; do not disable them or suppress warnings to bypass validation.",

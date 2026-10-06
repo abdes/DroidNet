@@ -17,6 +17,11 @@ Read only what applies before editing; reuse guidance already read:
   compiler environment initialized. The full engine requires CMake 4.2+, Conan
   2.32+, Windows x64, MSVC 19.50+ (VS 2026) and C++23; reusable modules have a
   separate cross-platform contract in [cmake/README.md](cmake/README.md).
+- On Windows, use only 64-bit build hosts and x64-hosted MSVC tools.
+  Initialize `vcvars64.bat` or a developer shell with
+  `-arch=x64 -host_arch=x64`; use `Bin\amd64\MSBuild.exe` and
+  `/p:PreferredToolArchitecture=x64` for MSBuild. Never use 32-bit MSBuild or
+  `Hostx86` compilers. Keep the same VS installation for shared build trees.
 - Before first provisioning, check the README's [Conan setup](README.md#conan):
   contributor profiles require Oxygen's custom sanitizer settings and recipe fork.
   Conan is installed separately, not inside the shared repository `.venv`.

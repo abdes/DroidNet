@@ -20,7 +20,18 @@
       Remove or Update any item brought in by the import.
 -->
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"
-         TreatAsLocalProperty="MyTopLevelDirectory;MyToolingDirectory">
+         TreatAsLocalProperty="MyTopLevelDirectory;MyToolingDirectory"
+         InitialTargets="ValidateDroidNetWindowsBuildTools">
+
+    <Target Name="ValidateDroidNetWindowsBuildTools" BeforeTargets="PrepareForBuild;Restore"
+            Condition="'$(OS)' == 'Windows_NT' And '$(DesignTimeBuild)' != 'true'">
+        <Error Code="DNBUILD001" Condition="'$([System.Environment]::Is64BitProcess)' != 'True'"
+               Text="DroidNet requires 64-bit MSBuild. Use MSBuild\Current\Bin\amd64\MSBuild.exe from the same Visual Studio installation as your x64 developer shell. 32-bit MSBuild is not permitted." />
+        <Error Code="DNBUILD002" Condition="'$(PreferredToolArchitecture)' != 'x64'"
+               Text="DroidNet requires x64-hosted build tools. Set PreferredToolArchitecture=x64; x86 compiler hosts are not permitted." />
+        <Error Code="DNBUILD003" Condition="'$(MSBuildProjectExtension)' == '.vcxproj' And '$(VCToolArchitecture)' != 'Native64Bit'"
+               Text="DroidNet requires the x64-hosted MSVC toolset. Initialize vcvars64.bat or a VS developer shell with -arch=x64 -host_arch=x64." />
+    </Target>
 
     <!-- Read-only source tree (builds to top-level bin/obj folders) -->
     <PropertyGroup Condition="'$(UseArtifactsOutput)' != 'true'">

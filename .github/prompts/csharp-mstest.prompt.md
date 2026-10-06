@@ -20,7 +20,11 @@ description: "Write focused MSTest tests using DroidNet tooling and fixtures"
   lock tests to an implementation rather than its contract.
 - UI tests use the shared unpackaged host and its dispatcher/content helpers.
   See [UI scaffolding](dn-create-test-project-ui.prompt.md) when creating a host.
-- Build the owning project with Visual Studio `MSBuild.exe /restore /m`, then:
+- Windows builds use only 64-bit MSBuild (`MSBuild\Current\Bin\amd64\MSBuild.exe`)
+  and x64-hosted compilers, from the same VS installation. Never use bare
+  `MSBuild` without checking its resolved path, 32-bit MSBuild, or `Hostx86`.
+- Build the owning project with 64-bit Visual Studio MSBuild
+  `/restore /m /p:Platform=x64 /p:PreferredToolArchitecture=x64`, then:
   `traverse Invoke-Tests --start projects/<module>/tests --configuration Debug -- --filter FullyQualifiedName~MyTest`.
   Substitute the actual module/test name. The runner does not build; report
   failures and unrun checks accurately. See [build workflows](../../tooling/doc/build.md).

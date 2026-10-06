@@ -17,10 +17,11 @@ second runner implementation to copy or maintain.
 The host is unpackaged both locally and in CI. Tests of package identity require
 an explicitly packaged integration host; no MSIX assets are needed here.
 
-From the repository root, after `./init.ps1`:
+From the repository root, after `./init.ps1`, in an x64 VS developer shell.
+Use only [64-bit Windows build tools](../../doc/build.md#windows-tool-policy):
 
 ```powershell
-MSBuild.exe projects/<module>/tests/<module>.UI.Tests.csproj /restore /m /p:Configuration=Debug
+& "$env:VSINSTALLDIR\MSBuild\Current\Bin\amd64\MSBuild.exe" projects\<module>\tests\<module>.UI.Tests.csproj /restore /m /p:Configuration=Debug /p:Platform=x64 /p:PreferredToolArchitecture=x64
 traverse Invoke-Tests --start projects/<module>/tests
 traverse Invoke-Tests --start projects/<module>/tests -- --filter FullyQualifiedName~MyTest
 ```
