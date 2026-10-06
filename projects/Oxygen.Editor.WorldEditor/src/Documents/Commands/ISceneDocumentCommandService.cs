@@ -291,6 +291,12 @@ public interface ISceneDocumentCommandService
         Guid? parentNodeId,
         string name);
 
+    /// <summary>Renames the scene asset through its persistence owner and records reversible document history.</summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="newName">The desired authored name and file stem.</param>
+    /// <returns>The rename result; existing unsaved edits remain unsaved.</returns>
+    public Task<SceneCommandResult> RenameSceneAsync(SceneDocumentCommandContext context, string newName);
+
     /// <summary>Renames a scene node by identity.</summary>
     /// <param name="context">The document command context.</param>
     /// <param name="nodeId">The node to rename.</param>

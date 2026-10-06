@@ -267,16 +267,6 @@ public sealed partial class ContentPipelineService(
         return input.Kind == kind ? input : throw new ArgumentException("The asset kind does not match its source identity.", nameof(assetUri));
     }
 
-    private static string GetExpectedExtension(ContentCookAssetKind kind)
-        => kind switch
-        {
-            ContentCookAssetKind.Texture => ".otex",
-            ContentCookAssetKind.Material => ".omat",
-            ContentCookAssetKind.Geometry => ".ogeo",
-            ContentCookAssetKind.Scene => ".oscene",
-            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported cook input kind."),
-        };
-
     private static bool IsCookableDescriptorFile(string path)
         => path.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
            || path.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase)
@@ -329,19 +319,10 @@ public sealed partial class ContentPipelineService(
         string sourceAbsolutePath,
         ContentCookInputRole role)
     {
-        var projectRelativePath = Path.GetRelativePath(project.ProjectRoot, sourceAbsolutePath).Replace('\\', '/');
         var mountRoot = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath));
         var mountRelativePath = Path.GetRelativePath(mountRoot, sourceAbsolutePath).Replace('\\', '/');
         var assetUri = ToAssetUri(mount.Name, mountRelativePath);
-        var kind = GetAssetKind(assetUri);
-        return kind == ContentCookAssetKind.ForeignSource ? CookInputResolver.Resolve(project, assetUri, role) : new ContentCookInput(
-            assetUri,
-            kind,
-            mount.Name,
-            projectRelativePath,
-            sourceAbsolutePath,
-            ContentPipelinePaths.ToNativeDescriptorPath(assetUri, GetExpectedExtension(kind)),
-            role);
+        return CookInputResolver.Resolve(project, assetUri, role);
     }
 
     private static bool IsDerivedRootMount(ProjectMountPoint mount)

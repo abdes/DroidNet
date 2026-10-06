@@ -18,7 +18,7 @@ public sealed partial class CookDocumentRegistry
                     .Select(static registration => registration.State).OfType<CookDocumentState>(),
             ]);
 
-    private void UpdateState(long id, CookDocumentState state)
+    private void UpdateState(long id, CookDocumentState state, bool relocate = false)
     {
         ArgumentNullException.ThrowIfNull(state);
         state = state with { SourcePath = Path.GetFullPath(state.SourcePath) };
@@ -30,7 +30,7 @@ public sealed partial class CookDocumentRegistry
                 return;
             }
 
-            if (!string.Equals(registration.SourcePath, Path.GetFullPath(state.SourcePath), StringComparison.OrdinalIgnoreCase)
+            if ((!relocate && !string.Equals(registration.SourcePath, state.SourcePath, StringComparison.OrdinalIgnoreCase))
                 || (registration.State is { } owner && owner.DocumentId != state.DocumentId))
             {
                 throw new ArgumentException("Document state must belong to this registered source and document.", nameof(state));
@@ -42,6 +42,7 @@ public sealed partial class CookDocumentRegistry
             }
 
             var before = registration.State;
+            registration.SourcePath = state.SourcePath;
             registration.State = state;
             this.stateVersion++;
             change = new(before, state, this.CaptureState());

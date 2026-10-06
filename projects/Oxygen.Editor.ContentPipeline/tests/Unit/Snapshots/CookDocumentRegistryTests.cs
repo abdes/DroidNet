@@ -154,5 +154,64 @@ public sealed class CookDocumentRegistryTests
         _ = registry.GetState().Documents.Should().BeEmpty();
     }
 
+    /// <summary>Relocation preserves document identity, updates source lookups and rejects a different owner.</summary>
+    /// <returns>The asynchronous registration regression.</returns>
+    [TestMethod]
+    public async Task RelocateSourceChangesLookupAndStateWithoutReplacingDocumentOwner()
+    {
+        var registry = new CookDocumentRegistry();
+        var path = Path.Combine(Path.GetTempPath(), "Main.oscene.json");
+        var renamedPath = Path.Combine(Path.GetTempPath(), "Demo.oscene.json");
+        var state = State(path);
+        using var registration = registry.Register(path, _ => Task.FromResult<CookDocumentReadLease?>(new(state, () => { })));
+        registration.UpdateState(state);
+        var original = registry.GetState();
+        var changes = new List<CookDocumentStateChangedEventArgs>();
+        registry.StateChanged += (_, change) => changes.Add(change);
+
+        state = state with { SourcePath = renamedPath, DisplayName = "Demo" };
+        registration.RelocateSource(state);
+
+        _ = original.Documents.Should().ContainSingle().Which.SourcePath.Should().Be(path);
+        _ = registry.GetState().Documents.Should().ContainSingle().Which.Should().Be(state);
+        _ = changes.Should().ContainSingle().Which.SavedSourceChanged.Should().BeTrue();
+        using var oldReads = await registry.AcquireAsync([path], this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = oldReads.Documents.Should().BeEmpty();
+        using var newReads = await registry.AcquireAsync([renamedPath], this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = newReads.Documents.Should().ContainSingle().Which.Should().Be(state);
+        Action otherOwner = () => registration.RelocateSource(state with { SourcePath = path, DocumentId = Guid.NewGuid() });
+        _ = otherOwner.Should().Throw<ArgumentException>();
+        _ = registry.GetState().Documents.Should().ContainSingle().Which.Should().Be(state);
+    }
+
+    /// <summary>A capture waiting on the old source releases its gate and cancels after a rename.</summary>
+    /// <returns>The asynchronous relocation race regression.</returns>
+    [TestMethod]
+    public async Task RelocateSourceCancelsReadThatWasWaitingForOldPath()
+    {
+        var registry = new CookDocumentRegistry();
+        var path = Path.Combine(Path.GetTempPath(), "Main.oscene.json");
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var state = State(path);
+        var released = false;
+        using var registration = registry.Register(path, async token =>
+        {
+            entered.SetResult();
+            await release.Task.WaitAsync(token).ConfigureAwait(false);
+            return new(state, () => released = true);
+        });
+        registration.UpdateState(state);
+        var read = registry.AcquireAsync([path], this.TestContext.CancellationToken);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+        state = state with { SourcePath = path + ".renamed" };
+        registration.RelocateSource(state);
+        release.SetResult();
+
+        Func<Task> finishRead = async () => { using var reads = await read.ConfigureAwait(false); };
+        _ = await finishRead.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
+        _ = released.Should().BeTrue();
+    }
+
     private static CookDocumentState State(string path) => new(Guid.NewGuid(), path, "Material", 1, 1, IsDirty: false, "saved hash");
 }

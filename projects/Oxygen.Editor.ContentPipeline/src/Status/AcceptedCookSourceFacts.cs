@@ -22,8 +22,21 @@ internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProven
         var issues = ImmutableArray.CreateBuilder<DiagnosticRecord>();
         foreach (var input in inputs)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             try
             {
+                if (!CookSavedSourceReader.Exists(input.SourceAbsolutePath))
+                {
+                    issues.Add(new()
+                    {
+                        OperationId = Guid.Empty, Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error,
+                        Code = AssetImportDiagnosticCodes.SourceMissing,
+                        Message = $"The authored source is no longer available: '{input.SourceAbsolutePath}'.",
+                        AffectedPath = input.SourceAbsolutePath, AffectedVirtualPath = input.AssetUri.AbsolutePath,
+                    });
+                    continue;
+                }
+
                 sources.Add(await this.ReadSourceAsync(input, cancellationToken).ConfigureAwait(false));
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)

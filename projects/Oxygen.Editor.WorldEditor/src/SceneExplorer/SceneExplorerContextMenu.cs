@@ -136,6 +136,11 @@ public static class SceneExplorerContextMenu
 
             case SceneSelectionKind.Scene:
             case SceneSelectionKind.Empty:
+                if (kind == SceneSelectionKind.Scene)
+                {
+                    entries.Add(new(SceneExplorerCommandKind.Rename, "Rename scene", true));
+                }
+
                 entries.Add(new(SceneExplorerCommandKind.NewNode, "New node", true));
                 entries.Add(new(SceneExplorerCommandKind.NewFolder, "New folder", true));
                 entries.Add(new(SceneExplorerCommandKind.Paste, "Paste", true));

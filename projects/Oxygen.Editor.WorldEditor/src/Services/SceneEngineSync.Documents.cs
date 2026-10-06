@@ -221,6 +221,29 @@ public sealed partial class SceneEngineSync
             : Task.FromResult(Publish());
     }
 
+    private Task<bool> PublishExistingSceneReadyAsync(Scene scene)
+    {
+        bool Publish()
+        {
+            lock (this.documentGate)
+            {
+                if (!this.IsSceneProjectionCurrent(scene) || !ReferenceEquals(this.requestedScene, scene)
+                    || !this.TryGetDocument(scene, out var lifetime)
+                    || lifetime.LastSynchronizedTarget is not { } target)
+                {
+                    return false;
+                }
+
+                this.SceneSynchronized?.Invoke(this, new(scene, lifetime.Metadata, target));
+                return true;
+            }
+        }
+
+        return hostingContext?.Dispatcher is { HasThreadAccess: false } dispatcher
+            ? dispatcher.DispatchAsync(Publish)
+            : Task.FromResult(Publish());
+    }
+
     private sealed class DocumentRegistration
     {
         public bool Closed { get; set; }

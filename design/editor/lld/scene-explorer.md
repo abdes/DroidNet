@@ -177,6 +177,7 @@ ED-M03 hierarchy commands:
 | ----------------------------- | -------------------------------------------------------------------------- |
 | Add empty node                | `Scene.Node.Create`                                                        |
 | Rename node                   | `Scene.Node.Rename`                                                        |
+| Rename scene asset            | `Scene.Rename`                                                             |
 | Delete selected node(s)       | `Scene.Node.Delete`                                                        |
 | Drag node to node/root/folder | `Scene.Node.Reparent` plus optional layout update                          |
 | Create folder                 | `Scene.ExplorerFolder.Create`                                              |
@@ -190,6 +191,25 @@ Selection changes go through `ISceneSelectionService`, not the undoable command
 surface. Selection success does not mark dirty, does not enter undo, and does
 not publish an operation result; stale/no-such-node selection requests may
 publish a scoped `SceneAuthoring` diagnostic.
+
+Scene-root inline, toolbar and context-menu rename use
+`ISceneDocumentCommandService.RenameSceneAsync`. The root remains protected from
+cut/delete; that protection does not prohibit its dedicated asset rename.
+`IProjectManagerService.RenameSceneAssetAsync` owns the reusable persistence
+operation, separate from Explorer presentation. It renames the saved
+`Content/Scenes/<name>.oscene.json` file and authored scene name, preserving the
+scene GUID and GUID-based default-scene selection. It repairs matching
+project-local scene `References.ExtraAssets` paths and updates acknowledged
+source versions. Read-only mounted assets and arbitrary string fields are not
+rewritten. Cooked identity is path-derived; a subsequent cook uses the new path.
+
+Rename changes saved data without silently saving unrelated live edits. A clean
+document stays clean, and existing/newer unsaved edits stay dirty. One history
+step reverses the persisted rename and reference repair; Redo reapplies them.
+Invalid names, occupied destinations and external-write conflicts produce
+visible failures without discarding an unapplied Undo/Redo step. If the rename
+commits but editor refresh fails, feedback reports the completed rename with a
+warning rather than claiming it was rejected.
 
 ## 9. UI Surfaces
 
@@ -206,11 +226,18 @@ ED-M03 scene explorer surface includes:
 
 ## 10. Persistence And Round Trip
 
-Scene explorer persists only through the scene document:
+Scene graph and layout edits persist through the scene document:
 
 - scene graph mutations persist through `Scene` serialization.
 - folder/layout mutations persist through `Scene.ExplorerLayout`.
 - selection is not persisted in ED-M03.
+
+The dedicated scene-asset rename persists immediately through its Projects
+owner, not through a save of the live scene graph. Scene writes are serialized
+per project; individual replacements use compare-and-swap baselines. Observed
+write/move failures roll back completed replacements. This is not a multi-file
+crash-atomic transaction. A save snapshot captured before rename is rejected
+rather than recreating the old source file.
 
 Save/reopen must preserve:
 

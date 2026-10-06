@@ -11,4 +11,9 @@ public interface ICookDocumentRegistration : IDisposable
     /// <param name="state">Immutable facts for this registration's document and source.</param>
     /// <remarks>Retired registrations ignore late updates. Updating state never schedules cooking.</remarks>
     public void UpdateState(CookDocumentState state);
+
+    /// <summary>Atomically relocates this document's saved source and publishes its new state.</summary>
+    /// <param name="state">The same document's acknowledged state at its new source path.</param>
+    /// <remarks>Read callbacks remain owned by this registration; captures of the old path are cancelled.</remarks>
+    public void RelocateSource(CookDocumentState state);
 }

@@ -35,6 +35,37 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
 {
     public TestContext TestContext { get; set; } = null!;
 
+    [TestMethod]
+    public Task RenamingPublishedSceneKeepsPreviewAndNextSceneUsable() => EnqueueAsync(() =>
+        CheckWorkspacePublicationAsync(this.TestContext, scope: null, async (scenario, token) =>
+        {
+            var fixture = scenario.SceneAuthoringFixture;
+            _ = (await fixture.Commands.SaveSceneAsync(fixture.Context).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+            var oldName = fixture.Source.Name;
+            var oldUri = new Uri($"asset:///Content/Scenes/{Uri.EscapeDataString(oldName)}.oscene.json");
+            _ = (await scenario.Services.Pipeline.CookCurrentSceneAsync(oldUri, token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
+            _ = (await fixture.Commands.RenameSceneAsync(fixture.Context, "Small Scene").ConfigureAwait(true)).Succeeded.Should().BeTrue();
+            var result = await scenario.Services.Pipeline.CookAssetAsync(new("asset:///Content/Scenes/Small%20Scene.oscene.json"), token).ConfigureAwait(true);
+            _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
+            _ = result.IsMounted.Should().BeTrue();
+            _ = fixture.Runtime.ContentStatus.State.Should().Be(RuntimeContentState.Mounted);
+            using (var publication = await scenario.Services.Publication.AcquireForMountAsync(scenario.Services.Projects.ActiveProject!, token).ConfigureAwait(true))
+            {
+                _ = publication.ProjectOutputPaths.Should().Contain("/Content/Scenes/Small_Scene.oscene")
+                    .And.NotContain($"/Content/Scenes/{ContentPipelinePaths.NormalizeSceneDescriptorName(oldName)}.oscene");
+            }
+
+            foreach (var node in fixture.Source.RootNodes)
+            {
+                _ = await WaitForNodeAsync(fixture, node.Id, value => value.MaterialBaseColors.Length == 1, token).ConfigureAwait(true);
+            }
+
+            await fixture.SaveAndReopenAsync(token).ConfigureAwait(true);
+            await fixture.SwitchToNewSceneAsync(cascades: 2, token).ConfigureAwait(true);
+            await ObserveRenderedFramesAsync(fixture, token).ConfigureAwait(true);
+            _ = fixture.Runtime.State.Should().Be(EngineServiceState.Running);
+        }));
+
     /// <summary>Closing a project cancels its cook, releases native readers and preserves the prior publication for reopening.</summary>
     /// <param name="captured">Whether native output has completed and preview capture is pending.</param>
     /// <returns>The project-lifetime integration check.</returns>

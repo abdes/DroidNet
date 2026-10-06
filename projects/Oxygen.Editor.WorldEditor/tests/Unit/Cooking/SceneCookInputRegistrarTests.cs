@@ -47,6 +47,17 @@ public sealed class SceneCookInputRegistrarTests
         documents.Raise(service => service.DocumentMetadataChanged += null, new DocumentMetadataChangedEventArgs(default, metadata));
         _ = registry.GetState().Documents.Should().ContainSingle().Which.SavedContentHash.Should().Be(new string('B', 64));
         _ = registry.GetState().Documents.Should().ContainSingle().Which.IsDirty.Should().BeFalse();
+        var originalPath = source.SourcePath;
+        foreach (var name in new[] { "Demo", "Main", "Demo" })
+        {
+            source = source with { SourcePath = Path.Combine(Path.GetDirectoryName(originalPath)!, name + ".oscene.json") };
+            scene.Name = name;
+            metadata.Title = name;
+            documents.Raise(service => service.DocumentMetadataChanged += null, new DocumentMetadataChangedEventArgs(default, metadata));
+            _ = registry.GetState().Documents.Should().ContainSingle().Which.SourcePath.Should().Be(source.SourcePath);
+            _ = registry.GetState().Documents.Should().ContainSingle().Which.DocumentId.Should().Be(context.DocumentId);
+        }
+
         registration!.Dispose();
         documents.Raise(service => service.DocumentMetadataChanged += null, new DocumentMetadataChangedEventArgs(default, metadata));
         _ = registry.GetState().Documents.Should().BeEmpty();

@@ -60,6 +60,47 @@ public sealed partial class SceneExplorerAuthoringTests
     }
 
     [TestMethod]
+    public void RenameSceneRoot_AdapterPublishesLabelChangesUntilDetached()
+    {
+        _ = new AuthoringHarness(out var scene, out _);
+        var adapter = new SceneAdapter(scene);
+        var notifications = new List<string?>();
+        adapter.PropertyChanged += (_, args) => notifications.Add(args.PropertyName);
+
+        scene.Name = "Renamed";
+
+        _ = adapter.Label.Should().Be("Renamed");
+        _ = notifications.Should().Equal(nameof(SceneAdapter.Label), nameof(SceneAdapter.DisplayLabel));
+        adapter.Detach();
+        scene.Name = "Detached";
+        _ = notifications.Should().Equal(nameof(SceneAdapter.Label), nameof(SceneAdapter.DisplayLabel));
+    }
+
+    [TestMethod]
+    public async Task RenameSceneRoot_ToolbarAndInlineUseDocumentRenameCommand()
+    {
+        var harness = new AuthoringHarness(out var scene, out _);
+        _ = harness.Commands.Setup(value => value.RenameSceneAsync(It.IsAny<SceneDocumentCommandContext>(), "Lantern Demo"))
+            .Callback<SceneDocumentCommandContext, string>((context, name) => context.Scene.Name = name)
+            .ReturnsAsync(SceneCommandResult.Success);
+        using var explorer = harness.Build();
+        await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
+        var root = explorer.Scene!;
+        explorer.SelectDisplayedItem(root, explorer.ShownItems.ToArray(), isControlDown: false, isShiftDown: false);
+        ITreeItem? requested = null;
+        explorer.RenameRequested += (_, args) => requested = args?.Item;
+
+        _ = explorer.RenameSelectedCommand.CanExecute(null).Should().BeTrue();
+        explorer.RenameSelectedCommand.Execute(null);
+        _ = requested.Should().BeSameAs(root);
+        var renamed = await explorer.CommitRenameAsync(root, "Lantern Demo").ConfigureAwait(false);
+
+        _ = renamed.Succeeded.Should().BeTrue();
+        _ = root.Label.Should().Be("Lantern Demo");
+        harness.Commands.Verify(value => value.RenameSceneAsync(It.IsAny<SceneDocumentCommandContext>(), "Lantern Demo"), Times.Once);
+    }
+
+    [TestMethod]
     public void BuildSelectionContext_ClassifiesRowKindsAndPrimary()
     {
         var project = new Project(new ProjectInfo("Sel", Category.Games, "H:/SelTests", "preview.png")) { Name = "Sel" };

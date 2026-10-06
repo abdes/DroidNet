@@ -11,11 +11,19 @@ namespace Oxygen.Editor.World.SceneExplorer;
 /// <summary>
 ///     A <see cref="DynamicTree" /> item adapter for the <see cref="Scene" /> model class.
 /// </summary>
-/// <param name="scene">The <see cref="SceneNode" /> object to wrap as a <see cref="ITreeItem" />.</param>
-public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scene>
+public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
 {
     // Cache root items to avoid blocking .Result calls on the base Children task
     private readonly List<ITreeItem> rootItemsCache = [];
+
+    /// <summary>Initializes a new instance of the <see cref="SceneAdapter"/> class.</summary>
+    /// <param name="scene">The scene to present.</param>
+    public SceneAdapter(Scene scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        this.AttachedObject = scene;
+        scene.PropertyChanged += this.OnScenePropertyChanged;
+    }
 
     /// <inheritdoc />
     public override string Label
@@ -25,7 +33,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
     }
 
     /// <inheritdoc />
-    public Scene AttachedObject => scene;
+    public Scene AttachedObject { get; }
 
     /// <summary>Gets a value indicating whether the tree uses the authored explorer layout.</summary>
     internal bool UseLayoutAdapters { get; init; }
@@ -35,6 +43,9 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
 
     /// <inheritdoc />
     public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
+
+    /// <summary>Releases the scene-name subscription when the tree is replaced or disposed.</summary>
+    public void Detach() => this.AttachedObject.PropertyChanged -= this.OnScenePropertyChanged;
 
     /// <summary>Rebuilds the tree while restoring the supplied expansion state.</summary>
     /// <param name="expandedFolderIds">The folders to expand after rebuilding.</param>
@@ -98,7 +109,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
     }
 
     /// <inheritdoc />
-    protected override int DoGetChildrenCount() => scene.RootNodes.Count;
+    protected override int DoGetChildrenCount() => this.AttachedObject.RootNodes.Count;
 
     /// <inheritdoc />
     protected override async Task LoadChildren()
@@ -280,5 +291,13 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
     {
         this.AddChildInternal(item);
         this.rootItemsCache.Add(item);
+    }
+
+    private void OnScenePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (string.Equals(args.PropertyName, nameof(Scene.Name), StringComparison.Ordinal))
+        {
+            this.OnPropertyChanged(nameof(this.Label));
+        }
     }
 }

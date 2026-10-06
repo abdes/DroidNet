@@ -22,6 +22,21 @@ public partial class TabStripItemTests : VisualUserInterfaceTests
     public TestContext TestContext { get; set; }
 
     [TestMethod]
+    public Task RenamingLoadedTabUpdatesVisibleTitle_Async() => EnqueueAsync(async () =>
+    {
+        var item = new TabItem { Header = "Main" };
+        var (control, _) = await SetupTabStripItemWithData(item).ConfigureAwait(true);
+        foreach (var title in new[] { "Small Scene", "Main", "Small Scene" })
+        {
+            item.Header = title;
+            await WaitForRenderCompletion().ConfigureAwait(true);
+            var header = control.FindDescendant<TextBlock>(element => string.Equals(element.Name, TabStripItem.HeaderPartName, StringComparison.Ordinal));
+            _ = header.Should().NotBeNull();
+            _ = header!.Text.Should().Be(title);
+        }
+    });
+
+    [TestMethod]
     public Task SetsTemplatePartsCorrectly_Async() => EnqueueAsync(async () =>
     {
         var (tabStripItem, _) = await SetupTabStripItemWithData(new TabItem

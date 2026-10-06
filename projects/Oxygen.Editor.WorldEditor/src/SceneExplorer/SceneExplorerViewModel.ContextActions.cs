@@ -323,6 +323,11 @@ public partial class SceneExplorerViewModel
             yield return (SceneExplorerCommandKind.NewFolder, folder is not null ? "New subfolder" : node is not null ? "New folder beside node" : "New folder", "create");
         }
 
+        if (context.Anchor is SceneAdapter && !context.Background)
+        {
+            yield return (SceneExplorerCommandKind.Rename, "Rename scene", "edit");
+        }
+
         if (!root)
         {
             if (single)
@@ -404,6 +409,11 @@ public partial class SceneExplorerViewModel
         var single = targets.Count == 1;
         var creation = kind is SceneExplorerCommandKind.NewNode or SceneExplorerCommandKind.NewFolder;
         var workspace = kind is SceneExplorerCommandKind.Hide or SceneExplorerCommandKind.Show or SceneExplorerCommandKind.Lock or SceneExplorerCommandKind.Unlock;
+        if (kind == SceneExplorerCommandKind.Rename && context.Anchor is SceneAdapter && !context.Background)
+        {
+            return null;
+        }
+
         if (creation && targets.Count > 1)
         {
             return "Select one creation destination.";
@@ -664,7 +674,7 @@ public partial class SceneExplorerViewModel
                 result = new SceneCommandResult(createdFolder.Succeeded, createdFolder.OperationResultId);
                 break;
             case SceneExplorerCommandKind.Rename:
-                this.RenameRequested?.Invoke(this, new RenameRequestedEventArgs(target!));
+                this.RenameRequested?.Invoke(this, new RenameRequestedEventArgs(target ?? context.Anchor!));
                 return;
             case SceneExplorerCommandKind.Copy:
                 await this.CopyItemsAsync(context.Targets).ConfigureAwait(true);

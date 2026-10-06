@@ -24,6 +24,29 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
             var path = publication.FindProjectRoot(mount);
             var prior = previous.Roots.FirstOrDefault(root => string.Equals(root.Mount, mount, StringComparison.Ordinal));
             var owners = previous.Products.Where(product => product.Outputs.Any(output => string.Equals(output.RootMount, mount, StringComparison.Ordinal))).ToArray();
+            var retiredScenes = owners.Where(product => product.SourceInput is { Kind: ContentCookAssetKind.Scene } source
+                && !CookSavedSourceReader.Exists(Path.Combine(publication.ProjectRoot, source.SourceRelativePath))).ToArray();
+            if (retiredScenes.Length != 0)
+            {
+                // Native indices are append/update inventories. Reconstruct an owned root rather
+                // than deleting descriptors behind an index or inheriting renamed products.
+                empty.Add(mount);
+                sources.UnionWith(owners.Except(retiredScenes).Select(static product => product.SourceUri));
+                if (inventories.TryGetValue(mount, out var selected)
+                    && path is not null)
+                {
+                    if (selected.Assets.Any(asset => !owners.SelectMany(static product => product.Outputs)
+                        .Any(output => string.Equals(output.Asset.VirtualPath, asset.VirtualPath, StringComparison.Ordinal))))
+                    {
+                        diagnostics.Add(Failure(path, "Cannot retire renamed scenes: the root contains assets without source ownership."));
+                    }
+
+                    VerifyRebuildOwnership(path, mount, owners, selected, diagnostics);
+                }
+
+                continue;
+            }
+
             if (!inventories.TryGetValue(mount, out var inventory))
             {
                 if (prior is null && path is not null && Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any())
@@ -65,8 +88,8 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
                 : descriptors.Where(descriptor => inventory.Issues.Any(issue => string.Equals(issue.RelativePath, descriptor, StringComparison.Ordinal)));
             foreach (var descriptor in affected)
             {
-                var owner = owners.Where(product => product.Outputs.Any(output => string.Equals(output.RootMount, mount
-, StringComparison.Ordinal) && string.Equals(output.Asset.DescriptorRelativePath, descriptor, StringComparison.Ordinal))).ToArray();
+                var owner = owners.Where(product => product.Outputs.Any(output => string.Equals(output.RootMount, mount, StringComparison.Ordinal)
+                    && string.Equals(output.Asset.DescriptorRelativePath, descriptor, StringComparison.Ordinal))).ToArray();
                 if (owner.Length != 1)
                 {
                     diagnostics.Add(Failure(Path.Combine(path, descriptor), $"Cannot rebuild '{descriptor}': its source owner is unknown."));
@@ -79,26 +102,12 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
 
             if (sharedDamage)
             {
-                var associatedResources = owners.SelectMany(static product => product.AuxiliaryFiles)
-                    .Concat(owners.SelectMany(static product => product.Outputs)
-                        .Where(output => string.Equals(output.RootMount, mount, StringComparison.Ordinal) && output.Asset.DescriptorRelativePath is not null)
-                        .Select(static output => output.Asset.DescriptorRelativePath!)).ToHashSet(StringComparer.Ordinal);
-                foreach (var file in inventory.Files.Where(file => file.Value.Kind == Oxygen.Managed.Assets.Persistence.LooseCooked.V3.FileKind.Auxiliary
-                    && !associatedResources.Contains(file.Key)))
-                {
-                    diagnostics.Add(Failure(Path.Combine(path, file.Key), "Cannot rebuild this auxiliary file: its source owner is unknown."));
-                }
-
+                VerifyRebuildOwnership(path, mount, owners, inventory, diagnostics);
                 empty.Add(mount);
                 sources.UnionWith(owners.Select(static product => product.SourceUri));
                 if (owners.Length == 0)
                 {
                     diagnostics.Add(Failure(path, "The root has no source ownership record to rebuild from."));
-                }
-
-                foreach (var issue in inventory.Issues.Where(static issue => issue.Reason is "unexpected" or "linked_path" or "not_regular"))
-                {
-                    diagnostics.Add(Failure(Path.Combine(path, issue.RelativePath), "This file has no safe source reconstruction. Resolve it before rebuilding the root."));
                 }
             }
         }
@@ -109,6 +118,24 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
         }
 
         return new(empty.ToImmutable(), sources.ToImmutable());
+    }
+
+    private static void VerifyRebuildOwnership(string path, string mount, IReadOnlyList<CookProvenance.Product> owners, CookedInventoryReport inventory, List<DiagnosticRecord> diagnostics)
+    {
+        var associatedResources = owners.SelectMany(static product => product.AuxiliaryFiles)
+            .Concat(owners.SelectMany(static product => product.Outputs)
+                .Where(output => string.Equals(output.RootMount, mount, StringComparison.Ordinal) && output.Asset.DescriptorRelativePath is not null)
+                .Select(static output => output.Asset.DescriptorRelativePath!)).ToHashSet(StringComparer.Ordinal);
+        foreach (var file in inventory.Files.Where(file => file.Value.Kind == Oxygen.Managed.Assets.Persistence.LooseCooked.V3.FileKind.Auxiliary
+            && !associatedResources.Contains(file.Key)))
+        {
+            diagnostics.Add(Failure(Path.Combine(path, file.Key), "Cannot rebuild this auxiliary file: its source owner is unknown."));
+        }
+
+        foreach (var issue in inventory.Issues.Where(static issue => issue.Reason is "unexpected" or "linked_path" or "not_regular"))
+        {
+            diagnostics.Add(Failure(Path.Combine(path, issue.RelativePath), "This file has no safe source reconstruction. Resolve it before rebuilding the root."));
+        }
     }
 
     private static DiagnosticRecord Failure(string path, string message) => new()

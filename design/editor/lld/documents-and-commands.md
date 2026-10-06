@@ -245,7 +245,7 @@ and the interface's XMLDoc is authoritative for each method's contract:
 | Explorer layout              | `CreateFolderAsync`, `RenameFolderAsync`, `DeleteFolderAsync`, `MoveNodesToFolderAsync`, `RemoveNodesFromFolderAsync`, `MoveFolderToParentAsync`, `ReorderNodesAsync`                                                              | `Scene.ExplorerFolder.Create`, `.Rename`, `.Delete`, `Scene.ExplorerLayout.MoveNode`                                                                                   |
 | Component and property edits | `EditTransformAsync`, `EditGeometryAsync`, `EditMaterialSlotAsync`, `EditPerspectiveCameraAsync`, `EditDirectionalLightAsync`, `AddComponentAsync`, `RemoveComponentAsync`, `EditPropertiesAsync`, `EditPropertiesForTargetsAsync` | `Scene.Component.EditTransform`, `.EditGeometry`, `.EditMaterialSlot`, `.EditCamera`, `.EditLight`, `.Add`, `.Remove`                                                  |
 | Environment                  | `EditSceneEnvironmentAsync`, `EditSceneEnvironmentPropertiesAsync`                                                                                                                                                                 | `Scene.Environment.Edit`                                                                                                                                               |
-| Scene document               | `SaveSceneAsync`, `SaveSceneCopyAsync`, `ReloadSceneAsync`, `CompleteEditSessionsAsync`, `AcquireCookReadAsync`                                                                                                                    | `Scene.Save`, `Scene.Reload`                                                                                                                                           |
+| Scene document               | `SaveSceneAsync`, `SaveSceneCopyAsync`, `RenameSceneAsync`, `ReloadSceneAsync`, `CompleteEditSessionsAsync`, `AcquireCookReadAsync`                                                                                                | `Scene.Save`, `Scene.Rename`, `Scene.Reload`                                                                                                                           |
 | Editor view state            | `SetEditorHiddenAsync`                                                                                                                                                                                                             | `Scene.Node.SetEditorHidden` — recorded here because it is the ratified history-without-dirty exception; the hidden set itself is workspace state, never scene content |
 | Mixed selection              | `DeleteItemsAsync`                                                                                                                                                                                                                 | `Scene.Node.Delete` or `Scene.ExplorerFolder.Delete`, chosen per target row kind                                                                                       |
 
@@ -262,6 +262,36 @@ claimed the one-to-one relation; both are dropped here.
 
 `ISceneSelectionService` is a separate document-scoped service for selection
 state. It is not an undoable command service.
+
+`RenameSceneAsync` coordinates a saved scene-asset rename with the authoring
+lifetime, save gate, document title, source/cook notifications and history. Its
+Projects-owned `RenameSceneAssetAsync` operation is reusable by future asset
+rename consumers; Content Browser rename and Save As are not wired to it yet.
+Rename preserves authored identity and pre-existing/newer dirty edits instead
+of saving the live graph. A clean document remains clean because the rename
+itself is already persisted. Undo/Redo call the same persistence operation and
+repair project-local scene Extra Assets paths in both saved and live state.
+An unapplied replay failure preserves the history step for retry; this does not
+claim rollback of partially applied generic history batches.
+
+Scene rename also relocates the open document's cook registration atomically,
+retaining its document ID and read callback. A read waiting for the old path
+releases its acquired lease and cancels if the owner has moved. Metadata/source
+registration is refreshed before automatic work is queued; automatic requests
+for the previous path are retired and cancelled. Undo/Redo use the same path
+transition, including when a restored source has a previously seen saved hash.
+
+Native scene filenames use the descriptor identifier rules (for example,
+`Small Scene.oscene.json` produces `Small_Scene.oscene`); cook ownership retains
+the authored URI separately from that normalized output. Cooking after a rename
+reconstructs the affected owned root without the missing scene source and preserves
+its other source-owned assets. Unknown assets or auxiliary files block reconstruction
+rather than being silently discarded. Retained publication generations remain under
+lease-safe maintenance; retirement removes the old scene from the selected output.
+
+Document-title changes update the rendered tab header as well as its metadata.
+Reactivating an already-current scene projection republishes readiness without
+rebuilding it, allowing the newly activated editor to recreate its viewport.
 
 Layout and deletion semantics, as ratified by the owner:
 

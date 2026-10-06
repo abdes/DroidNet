@@ -124,6 +124,12 @@ public static class ContentPipelinePaths
         return "/" + mountName.Trim('/');
     }
 
+    internal static string NormalizeSceneOutputPath(string virtualPath)
+    {
+        var separator = virtualPath.LastIndexOf('/');
+        return virtualPath[..(separator + 1)] + NormalizeSceneDescriptorName(virtualPath[(separator + 1)..]) + ".oscene";
+    }
+
     private static bool IsIdentifierStart(char ch)
         => ch is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_';
 

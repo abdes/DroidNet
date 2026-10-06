@@ -76,7 +76,7 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
         try
         {
             _ = await documents.OpenDocumentAsync(window.Id, fixture.Context.Metadata).ConfigureAwait(true);
-            fixture.NotifyTransitionSceneReady();
+            await fixture.NotifyTransitionSceneReadyAsync(timeout.Token).ConfigureAwait(true);
             await WaitForDocumentViewportAsync(host, fixture, timeout.Token).ConfigureAwait(true);
             await fixture.SuspendCookedContentAsync().ConfigureAwait(true);
             await fixture.RefreshCookedRootsAsync().ConfigureAwait(true);
@@ -126,7 +126,7 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
             _ = viewport.AssignedViewId.IsValid.Should().BeFalse();
             _ = documents.GetOpenDocuments(windowId).Should().HaveCount(2);
             _ = (await documents.SelectDocumentAsync(windowId, mainId).ConfigureAwait(true)).Should().BeTrue();
-            fixture.NotifyTransitionSceneReady();
+            await fixture.NotifyTransitionSceneReadyAsync(cancellationToken).ConfigureAwait(true);
             await WaitForDocumentViewportAsync(host, fixture, cancellationToken).ConfigureAwait(true);
             _ = ((SceneEditorViewModel)host.ActiveEditor!).Viewports.Single().AssignedViewId.Should().NotBe(oldView);
             _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();

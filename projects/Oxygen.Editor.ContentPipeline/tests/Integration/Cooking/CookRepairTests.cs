@@ -17,6 +17,43 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Cooking;
 public sealed class CookRepairTests
 {
     public TestContext TestContext { get; set; } = null!;
+
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task RenamingCookedSceneRetiresOldOutputAndPreservesOtherAssets()
+    {
+        using var workspace = new CookWorkspace();
+        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var api = CreateRecordingApi(compatibility);
+        var pipeline = CreateIncrementalService(workspace, api, compatibility);
+        AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
+        var previousName = "Main";
+        foreach (var name in new[] { "Small Scene", "Main", "Small Scene" })
+        {
+            workspace.Scene.Name = name;
+            await workspace.WriteSceneAsync($"Content/Scenes/{name}.oscene.json").ConfigureAwait(false);
+            File.Delete(Path.Combine(workspace.Root, "Content", "Scenes", $"{previousName}.oscene.json"));
+            var result = await pipeline.CookAssetAsync(new($"asset:///Content/Scenes/{Uri.EscapeDataString(name)}.oscene.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+            AssertCookSucceeded(result);
+            _ = result.IsPublished.Should().BeTrue();
+            var root = workspace.CookedRoot("Content");
+            var cookedName = ContentPipelinePaths.NormalizeSceneDescriptorName(name);
+            var previousCookedName = ContentPipelinePaths.NormalizeSceneDescriptorName(previousName);
+            var inventory = await api.ReadInventoryAsync(root, null, this.TestContext.CancellationToken).ConfigureAwait(false);
+            _ = inventory.IsValid.Should().BeTrue();
+            _ = inventory.Assets.Select(static asset => asset.VirtualPath).Should()
+                .Contain($"/Content/Scenes/{cookedName}.oscene")
+                .And.Contain("/Content/Materials/Blue.omat")
+                .And.NotContain($"/Content/Scenes/{previousCookedName}.oscene");
+            _ = Directory.EnumerateFiles(root, $"{previousCookedName}.oscene", SearchOption.AllDirectories).Should().BeEmpty();
+            previousName = name;
+        }
+
+        _ = (await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
+    }
+
     /// <summary>An asset request reconstructs the complete damaged root or preserves the prior publication.</summary>
     /// <param name="failure">A missing source, failed native job, or successful repair.</param>
     /// <returns>The asynchronous native repair regression.</returns>

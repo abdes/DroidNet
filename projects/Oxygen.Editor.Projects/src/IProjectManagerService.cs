@@ -124,6 +124,16 @@ public interface IProjectManagerService
     /// </returns>
     public Task<Scene?> CreateSceneAsync(string sceneName);
 
+    /// <summary>Renames a saved scene asset and repairs project-local scene dependency paths without saving live edits.</summary>
+    /// <param name="scene">The scene still owned by the project.</param>
+    /// <param name="newName">The desired file stem and authored name.</param>
+    /// <param name="cancellationToken">Cancels planning/writing; rollback and the final move are not cancelled.</param>
+    /// <returns>The committed name/path and changed source baselines; the document owner applies the path mapping to live references.</returns>
+    /// <exception cref="ArgumentException">The name is invalid or duplicates another scene.</exception>
+    /// <exception cref="InvalidOperationException">The scene is stale, unsaved or outside authoring mounts.</exception>
+    /// <exception cref="StorageException">Storage failed, a destination exists, or a saved baseline changed.</exception>
+    public Task<SceneAssetRenameResult> RenameSceneAssetAsync(Scene scene, string newName, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Saves a scene to storage asynchronously.
     /// </summary>

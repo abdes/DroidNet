@@ -180,8 +180,29 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         return new(documents, views.Object, this.engine, publisher.Object, new OperationStatusReducer(), container, new DocumentCloseCoordinator(Mock.Of<IDocumentClosePrompt>(), publisher.Object), Mock.Of<IWindowManagerService>(), windowId);
     }
 
-    public DocumentManager CreateTransitionDocumentManager(EditorDocumentService documents, IProjectContextService projects, WindowId windowId) => new(documents, this.messenger, projects, Mock.Of<Oxygen.Editor.Data.Services.IProjectUsageService>(), Mock.Of<IMaterialDocumentService>(), windowId);
-    public void NotifyTransitionSceneReady() => this.messenger.Send(new SceneLoadedMessage(this.Source));
+    public DocumentManager CreateTransitionDocumentManager(EditorDocumentService documents, IProjectContextService projects, WindowId windowId) => new(documents, this.messenger, projects, Mock.Of<Oxygen.Editor.Data.Services.IProjectUsageService>(), Mock.Of<IMaterialDocumentService>(), windowId, this.manager, this.sync);
+
+    public async Task NotifyTransitionSceneReadyAsync(CancellationToken cancellationToken)
+    {
+        void Publish(object? sender, SceneSynchronizationCompletedEventArgs args)
+        {
+            if (ReferenceEquals(args.Metadata, this.Context.Metadata))
+            {
+                _ = this.messenger.Send(new SceneLoadedMessage(args.Scene));
+            }
+        }
+
+        this.sync.SceneSynchronized += Publish;
+        try
+        {
+            _ = (await this.sync.SyncSceneWhenReadyAsync(this.Source, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
+        }
+        finally
+        {
+            this.sync.SceneSynchronized -= Publish;
+        }
+    }
+
     public Task<bool> OpenTransitionInspectionAsync(ProjectContext project) => this.messenger.Send(new OpenCookedInspectionRequestMessage(project, new Uri("asset:///Content/Geometry"), validate: false)).Response;
     public SceneContentDemandService CreateImportedAssetDemand(CatalogWorkloadServices services, ContentBrowserAssetProvider provider)
     {
@@ -322,7 +343,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     {
         this.activeMaterialSlotProvider = materialSlots ?? this.materialPipeline.Pipeline;
         this.messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
-        return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.Commands, this.documents.Object, default, assets ?? this.AssetCatalog.Object, materials ?? this.MaterialPicker.Object, this.sync, builtins ?? new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>(), this.materialSlotProvider.Object, this.projectContexts);
+        return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.Commands, this.documents.Object, default, assets ?? this.AssetCatalog.Object, materials ?? this.MaterialPicker.Object, this.sync, new SceneSelectionService(), builtins ?? new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>(), this.materialSlotProvider.Object, this.projectContexts);
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken, bool mountPublished = false)

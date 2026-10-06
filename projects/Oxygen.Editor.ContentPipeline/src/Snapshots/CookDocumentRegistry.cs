@@ -48,25 +48,30 @@ public sealed partial class CookDocumentRegistry(ILogger<CookDocumentRegistry>? 
         ArgumentNullException.ThrowIfNull(sourcePaths);
         cancellationToken.ThrowIfCancellationRequested();
         var paths = sourcePaths.Select(Path.GetFullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        Registration[] selected;
+        (Registration owner, string sourcePath)[] selected;
         lock (this.sync)
         {
             selected = this.registrations.Values
                 .Where(entry => paths.Contains(entry.SourcePath))
                 .OrderBy(static entry => entry.SourcePath, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static entry => entry.Id)
+                .Select(static entry => (entry, entry.SourcePath))
                 .ToArray();
         }
 
         var leases = new List<CookDocumentReadLease>();
         try
         {
-            foreach (var entry in selected)
+            foreach (var (owner, sourcePath) in selected)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (await entry.Acquire(cancellationToken).ConfigureAwait(false) is { } lease)
+                if (await owner.Acquire(cancellationToken).ConfigureAwait(false) is { } lease)
                 {
                     leases.Add(lease);
+                    if (!string.Equals(lease.State.SourcePath, sourcePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new OperationCanceledException("The document source moved while cook capture was waiting for it.", new CancellationToken(canceled: true));
+                    }
                 }
             }
 
@@ -112,13 +117,15 @@ public sealed partial class CookDocumentRegistry(ILogger<CookDocumentRegistry>? 
 
         public long Id { get; } = id;
 
-        public string SourcePath { get; } = sourcePath;
+        public string SourcePath { get; set; } = sourcePath;
 
         public Func<CancellationToken, Task<CookDocumentReadLease?>> Acquire { get; } = acquire;
 
         public CookDocumentState? State { get; set; }
 
         public void UpdateState(CookDocumentState state) => Volatile.Read(ref this.owner)?.UpdateState(this.Id, state);
+
+        public void RelocateSource(CookDocumentState state) => Volatile.Read(ref this.owner)?.UpdateState(this.Id, state, relocate: true);
 
         public void Dispose() => Interlocked.Exchange(ref this.owner, value: null)?.Remove(this.Id);
     }

@@ -16,7 +16,7 @@ namespace DroidNet.TimeMachine.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("HistoryKeeper.Async")]
-public class HistoryKeeperAsyncTests
+public partial class HistoryKeeperAsyncTests
 {
     public TestContext TestContext { get; set; }
 

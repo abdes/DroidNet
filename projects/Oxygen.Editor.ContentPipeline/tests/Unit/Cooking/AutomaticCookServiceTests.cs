@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Threading.Channels;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -94,6 +95,44 @@ public sealed class AutomaticCookServiceTests
         service.NotifySaved(Path.Combine(projects.ActiveProject!.ProjectRoot, "Content", "Main.oscene.json"), "unchanged", contentChanged: false);
         service.NotifySaved(Path.Combine(Path.GetTempPath(), "Foreign", "Content", "Main.oscene.json"), "foreign");
         pipeline.VerifyNoOtherCalls();
+    }
+
+    /// <summary>Rapid rename, Undo and Redo cancel obsolete work and recook paths even with previously seen hashes.</summary>
+    /// <returns>The asynchronous source identity regression.</returns>
+    [TestMethod]
+    public async Task RenameUndoRedoRetiresOldRequestsAndQueuesEachCurrentSource()
+    {
+        var projects = CreateProjects();
+        var project = projects.ActiveProject!;
+        var pipeline = new Mock<IContentPipelineService>();
+        var calls = Channel.CreateUnbounded<(Uri assetUri, CancellationToken token)>();
+        _ = pipeline.Setup(value => value.CookSavedAssetAsync(It.IsAny<Uri>(), project, It.IsAny<CancellationToken>()))
+            .Returns<Uri, ProjectContext, CancellationToken>(async (uri, projectContext, token) =>
+            {
+                _ = calls.Writer.TryWrite((uri, token));
+                await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false);
+                return Succeeded();
+            });
+        using var service = new AutomaticCookService(projects, pipeline.Object, Mock.Of<ICookRunService>(value => value.Runs == Array.Empty<CookRunSnapshot>()), NullLogger<AutomaticCookService>.Instance);
+        var previousPath = Path.Combine(project.ProjectRoot, "Content", "Scenes", "Main.oscene.json");
+        service.NotifySaved(previousPath, "Main hash");
+        var previousCall = await calls.Reader.ReadAsync(this.TestContext.CancellationToken).AsTask()
+            .WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        foreach (var name in new[] { "Demo", "Main", "Demo" })
+        {
+            var path = Path.Combine(Path.GetDirectoryName(previousPath)!, name + ".oscene.json");
+            service.NotifyRenamed(previousPath, path, name + " hash");
+            var currentCall = await calls.Reader.ReadAsync(this.TestContext.CancellationToken).AsTask()
+                .WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
+            _ = previousCall.token.IsCancellationRequested.Should().BeTrue();
+            _ = currentCall.assetUri.Should().Be(new Uri("asset:///Content/Scenes/" + name + ".oscene.json"));
+            _ = currentCall.token.IsCancellationRequested.Should().BeFalse();
+            previousCall = currentCall;
+            previousPath = path;
+        }
+
+        pipeline.Verify(value => value.CookSavedAssetAsync(It.IsAny<Uri>(), project, It.IsAny<CancellationToken>()), Times.Exactly(4));
     }
 
     private static ContentCookResult Succeeded() => new(Guid.NewGuid(), CookTargetKind.Asset, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null);

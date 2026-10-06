@@ -821,7 +821,7 @@ public sealed partial class SceneEngineSync(
 
             if (skipIfCurrent && this.IsSceneProjectionCurrent(scene))
             {
-                return true;
+                return await this.PublishExistingSceneReadyAsync(scene).ConfigureAwait(false);
             }
 
             var world = this.TryGetWorld();

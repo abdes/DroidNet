@@ -69,7 +69,7 @@ public sealed class SceneExplorerContextMenuTests
     }
 
     [TestMethod]
-    public void Build_ForSceneRoot_ContainsCreationAndPasteOnly()
+    public void Build_ForSceneRoot_ContainsRenameCreationAndPasteButNotDelete()
     {
         var menu = SceneExplorerContextMenu.Build(SceneSelectionKind.Scene, primaryIsInFolder: false, primaryHasChildren: false, primaryIsUnlocked: true);
 
@@ -78,10 +78,10 @@ public sealed class SceneExplorerContextMenuTests
             {
                 SceneExplorerCommandKind.NewNode,
                 SceneExplorerCommandKind.NewFolder,
+                SceneExplorerCommandKind.Rename,
                 SceneExplorerCommandKind.Paste,
             });
         _ = menu.Select(entry => entry.Kind).Should().NotContain(SceneExplorerCommandKind.Delete);
-        _ = menu.Select(entry => entry.Kind).Should().NotContain(SceneExplorerCommandKind.Rename);
     }
 
     [TestMethod]

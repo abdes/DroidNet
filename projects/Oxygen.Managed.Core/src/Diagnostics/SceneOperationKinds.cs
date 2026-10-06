@@ -10,6 +10,11 @@ namespace Oxygen.Managed.Core.Diagnostics;
 public static class SceneOperationKinds
 {
     /// <summary>
+    /// Scene asset rename, including its saved source path.
+    /// </summary>
+    public const string Rename = "Scene.Rename";
+
+    /// <summary>
     /// Scene node creation.
     /// </summary>
     public const string NodeCreate = "Scene.Node.Create";

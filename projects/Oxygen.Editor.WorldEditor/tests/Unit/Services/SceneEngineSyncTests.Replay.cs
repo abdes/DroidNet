@@ -19,6 +19,23 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Services;
 public sealed partial class SceneEngineSyncTests
 {
     [TestMethod]
+    public async Task ReactivatingCurrentScene_PublishesReadinessWithoutRebuildingProjection()
+    {
+        using var fixture = new ReplayFixture();
+        var (scene, _, metadata) = fixture.RegisterScene(1);
+        _ = (await fixture.Sync.SyncSceneWhenReadyAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
+        var requests = fixture.Requests.ToArray();
+        var ready = new List<SceneSynchronizationCompletedEventArgs>();
+        fixture.Sync.SceneSynchronized += (_, args) => ready.Add(args);
+
+        _ = (await fixture.Sync.SyncSceneWhenReadyAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
+
+        _ = ready.Should().ContainSingle().Which.Scene.Should().BeSameAs(scene);
+        _ = ready[0].Metadata.Should().BeSameAs(metadata);
+        _ = fixture.Requests.Should().Equal(requests);
+    }
+
+    [TestMethod]
     public async Task DeleteDuringFullProjection_RemovesTheFrozenNodeBeforeReadiness()
     {
         using var fixture = new ReplayFixture();

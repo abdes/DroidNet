@@ -114,6 +114,7 @@ internal static partial class CookSavedSourceReader
         bool allowUnsavedDocuments = false)
     {
         using var reads = await documents.AcquireAsync([sourcePath], cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         var dirty = reads.Documents.Where(static document => document.IsDirty).ToArray();
         if (!allowUnsavedDocuments && dirty.Length != 0)
         {

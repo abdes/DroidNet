@@ -27,7 +27,7 @@ public sealed partial class SceneCookInputRegistrar(
     /// <returns>A registration to dispose, or null until the scene has a saved source.</returns>
     public IDisposable? Register(SceneDocumentCommandContext context, ISceneDocumentCommandService commands)
         => projectManager.GetSceneSourceVersion(context.Scene) is { } source
-            ? new Registration(context, projectManager, documentService, documents.Register(source.SourcePath, token => hostingContext.Dispatcher.DispatchAsync(() => commands.AcquireCookReadAsync(context, token))))
+            ? new Registration(context, projectManager, documentService, source.SourcePath, documents.Register(source.SourcePath, token => hostingContext.Dispatcher.DispatchAsync(() => commands.AcquireCookReadAsync(context, token))))
             : null;
 
     private sealed partial class Registration : IDisposable
@@ -36,13 +36,15 @@ public sealed partial class SceneCookInputRegistrar(
         private readonly IProjectManagerService projectManager;
         private readonly ICookDocumentRegistration document;
         private readonly IDocumentService documentService;
+        private string sourcePath;
 
-        public Registration(SceneDocumentCommandContext context, IProjectManagerService projectManager, IDocumentService documentService, ICookDocumentRegistration document)
+        public Registration(SceneDocumentCommandContext context, IProjectManagerService projectManager, IDocumentService documentService, string sourcePath, ICookDocumentRegistration document)
         {
             this.context = context;
             this.projectManager = projectManager;
             this.document = document;
             this.documentService = documentService;
+            this.sourcePath = Path.GetFullPath(sourcePath);
             this.documentService.DocumentMetadataChanged += this.OnMetadataChanged;
             this.PublishState();
         }
@@ -65,14 +67,23 @@ public sealed partial class SceneCookInputRegistrar(
         {
             if (this.projectManager.GetSceneSourceVersion(this.context.Scene) is { } source)
             {
-                this.document.UpdateState(new(
+                var state = new CookDocumentState(
                     this.context.DocumentId,
                     Path.GetFullPath(source.SourcePath),
                     this.context.Metadata.Title,
                     this.context.Metadata.ChangeVersion,
                     this.context.Metadata.SavedVersion,
                     this.context.Metadata.IsDirty,
-                    source.Version.Sha256));
+                    source.Version.Sha256);
+                if (!string.Equals(this.sourcePath, state.SourcePath, StringComparison.Ordinal))
+                {
+                    this.document.RelocateSource(state);
+                    this.sourcePath = state.SourcePath;
+                }
+                else
+                {
+                    this.document.UpdateState(state);
+                }
             }
         }
     }

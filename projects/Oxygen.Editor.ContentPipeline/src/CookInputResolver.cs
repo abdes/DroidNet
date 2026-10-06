@@ -66,9 +66,10 @@ internal static class CookInputResolver
         var relative = Path.Combine(mount.RelativePath, nativePath[(slash + 1)..] + (kind == ContentCookAssetKind.ForeignSource ? string.Empty : ".json")).Replace('\\', '/');
         var absolute = Path.GetFullPath(Path.Combine(project.ProjectRoot, relative));
         relative = Path.GetRelativePath(project.ProjectRoot, absolute).Replace('\\', '/');
+        var outputPath = kind == ContentCookAssetKind.Scene ? ContentPipelinePaths.NormalizeSceneOutputPath(nativePath) : nativePath;
         return Path.IsPathRooted(relative) || relative.StartsWith("../", StringComparison.Ordinal)
             || relative.Split('/')[0].ToUpperInvariant() is ".COOKED" or ".BUILD" or ".PIPELINE" or ".IMPORTED"
             ? throw new InvalidDataException($"Cook dependency '{uri}' does not resolve to a retained authoring file in this project.")
-            : new(kind == ContentCookAssetKind.ForeignSource ? uri : new Uri($"{AssetUris.Scheme}://{nativePath}.json"), kind, mount.Name, relative, absolute, kind == ContentCookAssetKind.ForeignSource ? null : nativePath, role);
+            : new(kind == ContentCookAssetKind.ForeignSource ? uri : new Uri($"{AssetUris.Scheme}://{nativePath}.json"), kind, mount.Name, relative, absolute, kind == ContentCookAssetKind.ForeignSource ? null : outputPath, role);
     }
 }

@@ -398,6 +398,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         var result = item switch
         {
+            SceneAdapter => await this.commandService.RenameSceneAsync(context, trimmed).ConfigureAwait(true),
             SceneNodeAdapter node => await this.commandService.RenameNodeAsync(context, node.AttachedObject.Id, trimmed).ConfigureAwait(true),
             FolderAdapter folder => await this.RenameFolderAsync(context, folder, trimmed).ConfigureAwait(true),
             _ => new SceneCommandResult(Succeeded: false),
@@ -534,6 +535,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             this.loadSceneCts?.Dispose();
 
             this.loadSceneCts = null;
+            this.Scene?.Detach();
             this.projection.Clear();
         }
 
@@ -588,8 +590,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     [RelayCommand(CanExecute = nameof(CanRenameSelected))]
     private void RenameSelected()
     {
-        var item = this.SelectionModel?.SelectedItem;
-        if (item?.IsLocked == false)
+        var item = this.SelectionModel?.SelectedItem ?? this.Scene;
+        if (item is SceneAdapter || item?.IsLocked == false)
         {
             this.RenameRequested?.Invoke(this, new RenameRequestedEventArgs(item));
         }
@@ -1052,6 +1054,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.searchExpandedNodeIds.Clear();
 
         // Build the scene layout from the loaded scene
+        this.Scene?.Detach();
         this.Scene = new SceneAdapter(loadedScene)
         {
             IsExpanded = true,

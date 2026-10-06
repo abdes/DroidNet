@@ -259,8 +259,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         ArgumentNullException.ThrowIfNull(scene);
         try
         {
-            var path = Path.Combine(scene.Project.ProjectInfo.Location ?? string.Empty, scene.Name + Constants.SceneFileExtension);
-            return await this.sceneWrites.RunAsync(path, () => this.WriteSceneSnapshotAsync(SceneSaveSnapshot.Capture(scene))).ConfigureAwait(true);
+            return await this.sceneWrites.RunAsync(scene.Project.ProjectInfo.Location ?? string.Empty, () => this.WriteSceneSnapshotAsync(SceneSaveSnapshot.Capture(scene))).ConfigureAwait(true);
         }
         catch (Exception exception)
         {
@@ -273,16 +272,14 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
     public Task<bool> SaveSceneSnapshotAsync(SceneSaveSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        var path = Path.Combine(snapshot.ProjectLocation, snapshot.SceneName + Constants.SceneFileExtension);
-        return this.sceneWrites.RunAsync(path, () => this.WriteSceneSnapshotAsync(snapshot));
+        return this.sceneWrites.RunAsync(snapshot.ProjectLocation, () => this.WriteSceneSnapshotAsync(snapshot));
     }
 
     /// <inheritdoc/>
     public Task<bool> CreateSceneSnapshotAsync(SceneSaveSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        var path = Path.Combine(snapshot.ProjectLocation, snapshot.SceneName + Constants.SceneFileExtension);
-        return this.sceneWrites.RunAsync(path, () => this.WriteSceneSnapshotAsync(snapshot, createNew: true));
+        return this.sceneWrites.RunAsync(snapshot.ProjectLocation, () => this.WriteSceneSnapshotAsync(snapshot, createNew: true));
     }
 
     private static string SceneSourceKey(string projectRoot, Guid sceneId)
@@ -336,6 +333,12 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             var projectFolder = await storage.GetFolderFromPathAsync(snapshot.ProjectLocation).ConfigureAwait(true);
             var scenesFolder = await GetScenesFolderAsync(projectFolder).ConfigureAwait(true);
             var sceneFile = await scenesFolder.GetDocumentAsync(snapshot.SceneName + Constants.SceneFileExtension).ConfigureAwait(true);
+            if (!createNew && this.sceneSources.TryGetValue(SceneSourceKey(snapshot.ProjectLocation, snapshot.SceneId), out var source)
+                && !string.Equals(source.SourcePath, sceneFile.Location, StringComparison.Ordinal))
+            {
+                throw new StorageWriteConflictException("The scene source path changed. Rename through the scene-asset operation or capture a new save snapshot.");
+            }
+
             var version = createNew ? FileVersion.Missing : this.sceneVersions.GetValueOrDefault(sceneFile.Location, FileVersion.Missing);
             var written = await this.AtomicFiles.WriteAsync(sceneFile.Location, System.Text.Encoding.UTF8.GetBytes(snapshot.Json), version).ConfigureAwait(true);
             this.sceneVersions[sceneFile.Location] = written;

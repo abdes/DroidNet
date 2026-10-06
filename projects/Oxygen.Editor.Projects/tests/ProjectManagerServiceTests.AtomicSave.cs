@@ -76,11 +76,30 @@ public partial class ProjectManagerServiceTests
 
         public bool Fail { get; set; }
 
+        public string? FailOncePath { get; set; }
+
+        public Action<string>? AfterWrite { get; set; }
+
         public Task<FileSnapshot> ReadAsync(string path, CancellationToken cancellationToken = default)
             => this.inner.ReadAsync(path, cancellationToken);
 
-        public Task<FileVersion> WriteAsync(string path, ReadOnlyMemory<byte> content, FileVersion expected, CancellationToken cancellationToken = default)
-            => this.Fail ? throw new IOException("Controlled atomic write failure") : this.inner.WriteAsync(path, content, expected, cancellationToken);
+        public async Task<FileVersion> WriteAsync(string path, ReadOnlyMemory<byte> content, FileVersion expected, CancellationToken cancellationToken = default)
+        {
+            if (string.Equals(path, this.FailOncePath, StringComparison.OrdinalIgnoreCase))
+            {
+                this.FailOncePath = null;
+                throw new IOException("Controlled one-shot atomic write failure");
+            }
+
+            if (this.Fail)
+            {
+                throw new IOException("Controlled atomic write failure");
+            }
+
+            var written = await this.inner.WriteAsync(path, content, expected, cancellationToken).ConfigureAwait(false);
+            this.AfterWrite?.Invoke(path);
+            return written;
+        }
     }
 
     private sealed partial class AtomicWorkspace : IDisposable

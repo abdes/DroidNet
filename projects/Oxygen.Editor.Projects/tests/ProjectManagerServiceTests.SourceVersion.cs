@@ -22,19 +22,21 @@ public partial class ProjectManagerServiceTests
         var store = new ControlledAtomicStore();
         var service = new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()), atomicFiles: store);
         var scene = CreateAtomicScene(workspace.Root);
+        scene.Project.ProjectInfo.AuthoringMounts.Add(new("Content", "Content"));
+        scene.Project.Scenes.Add(scene);
         _ = service.GetSceneSourceVersion(scene).Should().BeNull();
         _ = await service.SaveSceneSnapshotAsync(SceneSaveSnapshot.Capture(scene)).ConfigureAwait(false);
         var saved = service.GetSceneSourceVersion(scene);
         _ = saved.Should().NotBeNull();
 
-        scene.Name = "Renamed";
-        _ = service.GetSceneSourceVersion(scene).Should().Be(saved);
         store.Fail = true;
-        _ = (await service.SaveSceneSnapshotAsync(SceneSaveSnapshot.Capture(scene)).ConfigureAwait(false)).Should().BeFalse();
+        var failedRename = () => service.RenameSceneAssetAsync(scene, "Renamed", this.CancellationToken);
+        _ = await failedRename.Should().ThrowAsync<IOException>().ConfigureAwait(false);
+        _ = scene.Name.Should().Be("Atomic");
         _ = service.GetSceneSourceVersion(scene).Should().Be(saved);
 
         store.Fail = false;
-        _ = (await service.SaveSceneSnapshotAsync(SceneSaveSnapshot.Capture(scene)).ConfigureAwait(false)).Should().BeTrue();
+        _ = await service.RenameSceneAssetAsync(scene, "Renamed", this.CancellationToken).ConfigureAwait(false);
         var renamed = service.GetSceneSourceVersion(scene)!;
         _ = renamed.SourcePath.Should().Be(Path.Combine(workspace.Root, "Content", "Scenes", "Renamed.oscene.json"));
         _ = renamed.Version.Should().NotBe(saved!.Version);

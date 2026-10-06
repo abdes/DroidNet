@@ -273,10 +273,23 @@ public class HistoryKeeper : ITransactionManager
             return;
         }
 
-        using (new StateTransition<States>(this, States.Undoing))
-        using (new ChangeSetUndoRedo(this, lastChange))
+        var inverseCount = this.redoStack.Count;
+        try
         {
-            await lastChange.ApplyAsync(cancellationToken).ConfigureAwait(false);
+            using (new StateTransition<States>(this, States.Undoing))
+            using (new ChangeSetUndoRedo(this, lastChange))
+            {
+                await lastChange.ApplyAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            if (RemoveEmptyReplay(this.redoStack, inverseCount, this.redoStack.FirstOrDefault()))
+            {
+                this.PushToUndoStack(lastChange);
+            }
+
+            throw;
         }
     }
 
@@ -319,10 +332,23 @@ public class HistoryKeeper : ITransactionManager
             return;
         }
 
-        using (new StateTransition<States>(this, States.Redoing))
-        using (new ChangeSetUndoRedo(this, lastChange))
+        var inverseCount = this.undoStack.Count;
+        try
         {
-            await lastChange.ApplyAsync(cancellationToken).ConfigureAwait(false);
+            using (new StateTransition<States>(this, States.Redoing))
+            using (new ChangeSetUndoRedo(this, lastChange))
+            {
+                await lastChange.ApplyAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            if (RemoveEmptyReplay(this.undoStack, inverseCount, this.undoStack.LastOrDefault()))
+            {
+                this.PushToRedoStack(lastChange);
+            }
+
+            throw;
         }
     }
 
@@ -396,6 +422,16 @@ public class HistoryKeeper : ITransactionManager
         {
             this.currentChangeSet = null;
         }
+    }
+
+    private static bool RemoveEmptyReplay(ObservableCollection<IChange> inverse, int previousCount, IChange? added)
+    {
+        if (inverse.Count == previousCount + 1 && added is ChangeSet set && !set.Changes.Any())
+        {
+            _ = inverse.Remove(set);
+        }
+
+        return inverse.Count == previousCount;
     }
 
     private void ClearUndoStack() => this.undoStack.Clear();

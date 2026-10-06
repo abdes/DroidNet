@@ -50,11 +50,39 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IObser
     }
 
     /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Scheduling derived work reports failures without rejecting an acknowledged rename.")]
+    public void NotifyRenamed(string previousPath, string sourcePath, string contentHash)
+    {
+        try
+        {
+            lock (this.sync)
+            {
+                if (this.project is { } current && ResolveSource(current, previousPath) is { } previous
+                    && this.requests.Remove(previous, out var retired))
+                {
+                    CancelRequest(retired);
+                }
+            }
+
+            this.QueueSaved(sourcePath, contentHash, contentChanged: true);
+        }
+        catch (Exception exception)
+        {
+            this.LogSchedulingFailure(exception, sourcePath);
+        }
+    }
+
+    /// <inheritdoc />
     public void Dispose()
     {
         lock (this.sync)
         {
             this.disposed = true;
+            foreach (var request in this.requests.Values)
+            {
+                CancelRequest(request);
+            }
+
             this.requests.Clear();
         }
 
@@ -68,6 +96,11 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IObser
         lock (this.sync)
         {
             this.project = value;
+            foreach (var request in this.requests.Values)
+            {
+                CancelRequest(request);
+            }
+
             this.requests.Clear();
         }
     }
@@ -77,6 +110,14 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IObser
 
     /// <inheritdoc />
     void IObserver<ProjectContext?>.OnError(Exception error) => ((IObserver<ProjectContext?>)this).OnNext(value: null);
+
+    private static void CancelRequest(SavedRequest request)
+    {
+        if (request.Running)
+        {
+            request.CancellationCompletion ??= request.Cancellation.CancelAsync();
+        }
+    }
 
     private static Uri? ResolveSource(ProjectContext project, string sourcePath)
     {
@@ -135,6 +176,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IObser
             this.requests[uri] = request;
             if (resumed)
             {
+                request.Cancellation.Dispose();
                 return;
             }
         }
@@ -146,12 +188,46 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IObser
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The shared coordinator records background failures in Cooking; they must not escape onto the document's Save caller.")]
     private async Task CookSavedAsync(SavedRequest request)
     {
+        try
+        {
+            await this.CookSavedCoreAsync(request).ConfigureAwait(false);
+        }
+        finally
+        {
+            Task? cancellation;
+            lock (this.sync)
+            {
+                request.Running = false;
+                cancellation = request.CancellationCompletion;
+            }
+
+            try
+            {
+                if (cancellation is not null)
+                {
+                    await cancellation.ConfigureAwait(false);
+                }
+            }
+            catch (Exception exception)
+            {
+                this.LogSchedulingFailure(exception, request.AssetUri.AbsoluteUri);
+            }
+            finally
+            {
+                request.Cancellation.Dispose();
+            }
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Background cook failures are reported and must not escape to source authoring.")]
+    private async Task CookSavedCoreAsync(SavedRequest request)
+    {
         while (true)
         {
             string capturedHash;
             lock (this.sync)
             {
-                if (this.disposed || !ReferenceEquals(request.Project, this.project))
+                if (!this.IsCurrent(request))
                 {
                     return;
                 }
@@ -161,7 +237,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IObser
 
             try
             {
-                var result = await this.pipeline.CookSavedAssetAsync(request.AssetUri, request.Project, CancellationToken.None).ConfigureAwait(false);
+                var result = await this.pipeline.CookSavedAssetAsync(request.AssetUri, request.Project, request.Cancellation.Token).ConfigureAwait(false);
                 capturedHash = result.InputSnapshot?.Inputs.FirstOrDefault(input => input.AssetUri == request.AssetUri)?.DiscoveryHash ?? capturedHash;
             }
             catch (OperationCanceledException)
@@ -175,7 +251,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IObser
 
             lock (this.sync)
             {
-                if (this.disposed || !ReferenceEquals(request.Project, this.project))
+                if (!this.IsCurrent(request))
                 {
                     return;
                 }
@@ -189,6 +265,11 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IObser
         }
     }
 
+    private bool IsCurrent(SavedRequest request)
+        => !this.disposed && ReferenceEquals(request.Project, this.project)
+            && this.requests.TryGetValue(request.AssetUri, out var current) && ReferenceEquals(current, request)
+            && !request.Cancellation.IsCancellationRequested;
+
     [LoggerMessage(Level = LogLevel.Error, Message = "Automatic cooking failed for saved source {Source}.")]
     private partial void LogSchedulingFailure(Exception exception, string source);
 
@@ -201,5 +282,9 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IObser
         public string ContentHash { get; set; } = contentHash;
 
         public bool Running { get; set; }
+
+        public CancellationTokenSource Cancellation { get; } = new();
+
+        public Task? CancellationCompletion { get; set; }
     }
 }
