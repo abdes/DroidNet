@@ -20,9 +20,7 @@
     </ItemGroup>
 
     <Target Name="CopyAtomicWriteProbe" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
-        <MSBuild Projects="..\testhost\Storage.AtomicWriteProbe.csproj" Targets="GetTargetPath"
-                 Properties="Configuration=$(Configuration);Platform=$(Platform);TargetFramework=$(TargetFramework)"
-                 RemoveProperties="BuildingInsideVisualStudio;BuildingSolutionFile;CurrentSolutionConfigurationContents">
+        <MSBuild Projects="..\testhost\Storage.AtomicWriteProbe.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);Platform=$(Platform);TargetFramework=$(TargetFramework)" RemoveProperties="BuildingInsideVisualStudio;BuildingSolutionFile;CurrentSolutionConfigurationContents">
             <Output TaskParameter="TargetOutputs" ItemName="_AtomicWriteProbeAssembly" />
         </MSBuild>
         <PropertyGroup>
