@@ -38,7 +38,7 @@ public sealed partial class BuiltinCatalogTests : DroidNet.Tests.VisualUserInter
         {
             ViewModel = model,
             Width = 500,
-            Height = 300
+            Height = 300,
         };
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         await LoadTestContentAsync(view).ConfigureAwait(true);

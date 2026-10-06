@@ -14,6 +14,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Snapshots;
 public sealed class SnapshotCaptureTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Names dirty participating documents and releases their save gates without capturing bytes.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]

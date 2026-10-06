@@ -156,6 +156,7 @@ public sealed class CookPublicationReadLease : IDisposable
         try
         {
             var path = CookPublicationPaths.Document(project.ProjectRoot, head.PublicationId);
+
             // The immutable document cannot be replaced while its contents are
             // read or a consumer still retains this selection.
             handles.Add(new(path, FileMode.Open, FileAccess.Read, FileShare.Read));

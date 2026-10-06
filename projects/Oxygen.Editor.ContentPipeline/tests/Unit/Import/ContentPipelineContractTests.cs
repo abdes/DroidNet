@@ -12,6 +12,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 public sealed class ContentPipelineContractTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     [TestMethod]
     public void ContentPipelineOperationKinds_ShouldMatchAcceptedVocabulary()
     {

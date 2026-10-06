@@ -12,6 +12,7 @@ internal sealed class CapturingEngineContentPipelineApi(CookValidationResult val
     };
 
     public Func<ContentImportExecution, CancellationToken, Task>? BeforeImport { get; init; }
+
     public required Func<ContentSourceAnalysisExecution, CancellationToken, Task<global::Oxygen.Editor.ContentPipeline.Import.NativeSourceAnalysisReport>> SourceAnalysis { get; init; }
 
     public List<ContentImportExecution> Executions { get; } = [];

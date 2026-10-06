@@ -36,17 +36,17 @@ public sealed partial class CapturedSkyTests : DroidNet.Tests.VisualUserInterfac
     {
         var inspector = new EnvironmentView
         {
-            ViewModel = model
+            ViewModel = model,
         };
         var scroller = new ScrollViewer
         {
             Content = inspector,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
         var panel = new SwapChainPanel
         {
             Width = 320,
-            Height = 240
+            Height = 240,
         };
         var host = new Grid();
         host.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });

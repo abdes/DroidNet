@@ -236,6 +236,8 @@ public static class LightValidation
     }
 
     private static bool Nonnegative(float value) => float.IsFinite(value) && value >= 0;
+
     private static bool Nonnegative(Vector3 value) => Nonnegative(value.X) && Nonnegative(value.Y) && Nonnegative(value.Z);
+
     private static bool Fraction(float value) => Nonnegative(value) && value <= 1;
 }

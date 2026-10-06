@@ -14,6 +14,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;
 public sealed class NativeCompatibilityTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>The deployed editor schema names and installed cooker pass the real preflight.</summary>
     /// <returns>The asynchronous installed-input check.</returns>
     [TestMethod]

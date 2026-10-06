@@ -449,5 +449,4 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         // Single log statement with all relevant info
         this.LogSecondaryCommandsInfo(newVisibility, currentlyVisible, windowWidth, requiredWidthToShowSecondary);
     }
-
 }

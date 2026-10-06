@@ -20,6 +20,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 public sealed class ProducedSourceMetadataTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Later authored settings changes do not corrupt immutable publication metadata.</summary>
     /// <returns>The asynchronous publication regression.</returns>
     [TestMethod]
@@ -193,7 +194,7 @@ public sealed class ProducedSourceMetadataTests
                     geometry_asset_key = "10000000-0000-0000-0000-000000000001", source_geometry_anchor = "mesh0",
                     source_layout_witness = new string('a', 64), layout_revision = new string('b', 64),
                     slots = new[] { new { slot_id = "20000000-0000-0000-0000-000000000001", display_name = "Surface",
-                        bindings = new[] { new { lod_index = 0, submesh_index = 0, default_material_key = "30000000-0000-0000-0000-000000000001" } } } },
+                        bindings = new[] { new { lod_index = 0, submesh_index = 0, default_material_key = "30000000-0000-0000-0000-000000000001" } } }, },
                     allocations = new[] { new { declaration_key = 0, slot_id = "20000000-0000-0000-0000-000000000001" } },
                 },
             },

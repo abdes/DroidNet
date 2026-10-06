@@ -17,6 +17,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Inspection;
 public sealed class ImportedSourceInspectionTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Source and source-folder inspection find the actual output mount and named native assets.</summary>
     /// <returns>The asynchronous source inspection regression.</returns>
     [TestMethod]

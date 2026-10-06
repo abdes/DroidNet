@@ -98,6 +98,7 @@ public sealed class CookedContentMountTests
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-CookedMounts-");
         private readonly Guid sourceKey = Guid.CreateVersion7();
         private readonly NativeAtomicFileStore files = new(new RealFileSystem());
+
         public MountFixture()
         {
             this.ProjectOutput = this.WriteRoot(Path.GetRelativePath(this.directory.FullName, CookPublicationPaths.Generation(this.directory.FullName, this.sourceKey)), 1, this.sourceKey);

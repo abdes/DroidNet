@@ -44,17 +44,17 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         model.RevealSelection();
         UserControl view = tiles ? new TilesLayoutView
         {
-            ViewModel = (TilesLayoutViewModel)model
+            ViewModel = (TilesLayoutViewModel)model,
         }
 
         : new ListLayoutView
         {
-            ViewModel = (ListLayoutViewModel)model
+            ViewModel = (ListLayoutViewModel)model,
         };
         var root = new Grid
         {
             Width = 440,
-            Height = 380
+            Height = 380,
         };
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition());
@@ -94,7 +94,7 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         await list.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var listView = new ListLayoutView
         {
-            ViewModel = list
+            ViewModel = list,
         };
         await LoadTestContentAsync(listView).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -104,7 +104,7 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         await tiles.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var tileView = new TilesLayoutView
         {
-            ViewModel = tiles
+            ViewModel = tiles,
         };
         await LoadTestContentAsync(tileView).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -124,7 +124,7 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         var published = red with
         {
             RuntimeAvailability = AssetRuntimeAvailability.Mounted,
-            CookedUri = new("asset:///Content/Materials/Red.omat")
+            CookedUri = new("asset:///Content/Materials/Red.omat"),
         };
         updates.OnNext([published, blue]);
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -151,7 +151,7 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         await list.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var listView = new ListLayoutView
         {
-            ViewModel = list
+            ViewModel = list,
         };
         await LoadTestContentAsync(listView).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -159,7 +159,7 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         await tiles.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var tileView = new TilesLayoutView
         {
-            ViewModel = tiles
+            ViewModel = tiles,
         };
         await LoadTestContentAsync(tileView).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);

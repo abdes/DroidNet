@@ -1013,6 +1013,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     private async Task HideChildrenAsync(ITreeItem itemAdapter)
     {
         this.LogHideChildrenStarted(itemAdapter);
+
         // IndexOf returns -1 when the item is not shown, which makes the derived index 0. The old
         // guard tested the index against -1, so it could never fire and the real case was silent.
         var removeIndex = this.shownItems.IndexOf(itemAdapter) + 1;

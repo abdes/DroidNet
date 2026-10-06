@@ -24,6 +24,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Descriptors;
 public sealed class SceneDescriptorGeneratorTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>An explicit builtin material uses its native identity even without builtin geometry.</summary>
     /// <param name="materialName">The case variant of the authored builtin reference.</param>
     /// <returns>The test task.</returns>

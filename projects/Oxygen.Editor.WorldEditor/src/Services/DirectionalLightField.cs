@@ -78,12 +78,16 @@ public enum DirectionalLightField
 
     /// <summary>Explicit None/Primary/Secondary atmosphere assignment.</summary>
     AtmosphereLightSlot = 25,
+
     /// <summary>Per-pixel atmosphere transmittance.</summary>
     UsePerPixelAtmosphereTransmittance = 26,
+
     /// <summary>Red disk luminance multiplier.</summary>
     DiskScaleR = 27,
+
     /// <summary>Green disk luminance multiplier.</summary>
     DiskScaleG = 28,
+
     /// <summary>Blue disk luminance multiplier.</summary>
     DiskScaleB = 29,
 }

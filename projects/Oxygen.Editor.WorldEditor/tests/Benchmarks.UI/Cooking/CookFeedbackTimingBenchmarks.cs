@@ -42,7 +42,7 @@ public sealed partial class CookFeedbackTimingBenchmarks : DroidNet.Tests.Visual
         {
             ViewModel = model,
             Width = 960,
-            Height = 420
+            Height = 420,
         };
         var window = VisualUserInterfaceTestsApp.MainWindow.AppWindow;
         var originalSize = window.Size;

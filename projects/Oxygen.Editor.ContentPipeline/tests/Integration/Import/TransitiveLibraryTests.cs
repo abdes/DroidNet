@@ -19,6 +19,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;
 public sealed class TransitiveLibraryTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>A library geometry's material resolves through the project's saved source priority.</summary>
     /// <param name="projectWins">Whether project output has higher priority than the material library.</param>
     /// <param name="materialLibraryMounted">Whether a library index can name the dependent material.</param>

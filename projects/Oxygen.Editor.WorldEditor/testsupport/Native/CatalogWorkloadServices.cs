@@ -19,6 +19,7 @@ namespace Oxygen.Editor.WorldEditor.TestSupport;
 internal sealed partial class CatalogWorkloadServices : IDisposable
 {
     private readonly Oxygen.Testing.TemporaryNativeArtifacts compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+
     public CatalogWorkloadServices(NativeSceneFixture fixture, IContentPipelineProcessRunner? processRunner = null)
     {
         this.Projects = fixture.Projects;
@@ -37,13 +38,21 @@ internal sealed partial class CatalogWorkloadServices : IDisposable
     }
 
     public ProjectContextService Projects { get; }
+
     public NativeStorageProvider Storage { get; } = new(new RealFileSystem());
+
     public CookDocumentRegistry Documents { get; } = new();
+
     public ContentCookCoordinator Runs { get; }
+
     public ProjectCookScopeProvider Scopes { get; }
+
     public ContentPipelineService Pipeline { get; }
+
     public CookPublicationService Publication { get; }
+
     public CookedContentMountService Mounts { get; }
+
     public BuiltinCatalogDiscovery Builtins { get; }
 
     public void Dispose()

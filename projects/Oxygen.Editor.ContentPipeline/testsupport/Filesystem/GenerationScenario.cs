@@ -35,6 +35,7 @@ internal static class GenerationScenario
         LocalFolderMounts = [],
         Scenes = [],
     };
+
     internal static async Task<string> WritePublicationFixtureAsync(ProjectContext project, IAtomicFileStore files, FileVersion expectedHead, CancellationToken token)
     {
         var sourceKey = Guid.CreateVersion7();

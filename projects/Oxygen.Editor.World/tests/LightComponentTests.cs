@@ -118,7 +118,7 @@ public sealed class LightComponentTests
                 Bias = 0.001f,
                 NormalBias = 0.04f,
                 ContactShadows = true,
-                ResolutionHint = ShadowResolutionHint.High
+                ResolutionHint = ShadowResolutionHint.High,
             },
             CascadeCount = 3,
             SplitMode = DirectionalCsmSplitMode.ManualDistances,

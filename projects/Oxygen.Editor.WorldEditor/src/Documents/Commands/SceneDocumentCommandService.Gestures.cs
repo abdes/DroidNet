@@ -357,6 +357,7 @@ public sealed partial class SceneDocumentCommandService
         SceneEnvironmentData environment)
     {
         Guid? firstResult = null;
+
         // A role transfer's inverse must release the current native occupant before
         // restoring its previous owner. Snapshot dictionary order is not semantic.
         var ordered = snapshot.PerNode.OrderBy(pair => pair.Value.TryGetRaw(DirectionalLight.AtmosphereSlot.Id, out var role)

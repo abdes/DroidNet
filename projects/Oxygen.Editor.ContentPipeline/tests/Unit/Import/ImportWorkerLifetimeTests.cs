@@ -16,6 +16,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 public sealed class ImportWorkerLifetimeTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Retains input until the failed-to-terminate worker actually drains.</summary>
     /// <param name="readerFailed">Whether a reader faults after termination fails.</param>
     /// <returns>The asynchronous test operation.</returns>

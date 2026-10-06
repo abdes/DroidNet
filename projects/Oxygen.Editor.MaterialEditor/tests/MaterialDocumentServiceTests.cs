@@ -410,6 +410,7 @@ public sealed partial class MaterialDocumentServiceTests
         _ = ReadSingle(cookedBytes, 0x7C).Should().BeApproximately(1.0f, 0.0001f);
         _ = ReadUnorm16(cookedBytes, 0x84).Should().BeApproximately(0.8f, 0.0001f);
         _ = ReadUnorm16(cookedBytes, 0x86).Should().BeApproximately(0.2f, 0.0001f);
+
         // Material v3 stores three float32 emission channels before alpha cutoff.
         _ = ReadUnorm16(cookedBytes, 0xC6).Should().BeApproximately(0.4f, 0.0001f);
         _ = cookedBytes[0x67].Should().Be(3);

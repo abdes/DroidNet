@@ -40,7 +40,7 @@ public sealed partial class EnvironmentDefaultsTests : DroidNet.Tests.VisualUser
         var model = host.PropertyEditors.Should().ContainSingle().Which.Should().BeOfType<EnvironmentViewModel>().Subject;
         var view = new EnvironmentView
         {
-            ViewModel = model
+            ViewModel = model,
         };
         await LoadTestContentAsync(new ScrollViewer { Content = view }).ConfigureAwait(true);
         _ = model.SkyAtmosphere.AtmosphereEnabled.Should().BeTrue();

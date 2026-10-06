@@ -80,6 +80,7 @@ public sealed partial class BrowserRoutingTests : DroidNet.Tests.VisualUserInter
     private sealed partial class BrowserLayoutOutlet : AbstractOutletContainer
     {
         public BrowserLayoutOutlet() => this.Outlets.Add("right", (nameof(this.Layout), null));
+
         public AssetsLayoutViewModel? Layout => this.Outlets["right"].viewModel as AssetsLayoutViewModel;
     }
 }

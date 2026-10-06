@@ -69,12 +69,12 @@ public sealed partial class GeometrySynchronizationTests : DroidNet.Tests.Visual
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
         var view = new GeometryView
         {
-            ViewModel = model
+            ViewModel = model,
         };
         var scroller = new ScrollViewer
         {
             Content = view,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
         var button = (SplitButton)await FindInspectorControlAsync(scroller, () => view.FindDescendant<SplitButton>(value => string.Equals(value.Name, "AssetSplitButton", StringComparison.Ordinal)), "Geometry", timeout.Token).ConfigureAwait(true);

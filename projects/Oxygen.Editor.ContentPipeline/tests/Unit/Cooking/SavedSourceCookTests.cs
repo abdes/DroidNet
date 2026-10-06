@@ -37,7 +37,7 @@ public sealed class SavedSourceCookTests
                 entered.SetResult();
                 return release.Task.WaitAsync(token);
             },
-            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync
+            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
         var service = CreateService(workspace, generator, api);
         var cook = service.CookCurrentSceneAsync(new("asset:///Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken);

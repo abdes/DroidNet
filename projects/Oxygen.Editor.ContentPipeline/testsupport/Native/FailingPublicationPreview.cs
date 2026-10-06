@@ -14,6 +14,7 @@ internal sealed partial class FailingPublicationPreview : ICookPublicationPrevie
     public int Mounts { get; private set; }
 
     public Task PrepareReplacementAsync() => Task.CompletedTask;
+
     public Task MountAsync(global::Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountSet mounts)
     {
         mounts.Dispose();

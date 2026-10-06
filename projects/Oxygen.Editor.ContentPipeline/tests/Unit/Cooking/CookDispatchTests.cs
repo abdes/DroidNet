@@ -12,6 +12,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
 public sealed class CookDispatchTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Submission returns while an admitted cook is still performing synchronous work.</summary>
     /// <param name="coalesced">Whether the request uses shared pending ownership.</param>
     /// <returns>The asynchronous dispatch regression.</returns>

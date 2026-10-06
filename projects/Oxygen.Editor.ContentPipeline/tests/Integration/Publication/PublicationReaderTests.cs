@@ -13,6 +13,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 public sealed class PublicationReaderTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Publication can finish while an earlier inspection keeps its exact generation alive.</summary>
     /// <returns>The nested-reader deadlock regression.</returns>
     [TestMethod]

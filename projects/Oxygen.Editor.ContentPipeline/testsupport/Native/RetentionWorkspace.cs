@@ -16,6 +16,7 @@ namespace Oxygen.Editor.ContentPipeline.TestSupport;
 internal sealed partial class RetentionWorkspace : IDisposable
 {
     private readonly string root = Directory.CreateTempSubdirectory("OxygenSourceRetention-").FullName;
+
     public RetentionWorkspace()
     {
         Directory.CreateDirectory(this.ProjectRoot);

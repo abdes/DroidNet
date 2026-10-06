@@ -55,7 +55,7 @@ public sealed partial class BrowserHistoryJourneyTests : DroidNet.Tests.VisualUs
             ViewModel = fixture.Browser,
             Width = 1100,
             Height = 600,
-            RequestedTheme = light ? ElementTheme.Light : ElementTheme.Dark
+            RequestedTheme = light ? ElementTheme.Light : ElementTheme.Dark,
         };
         var root = new Grid
         {
@@ -83,7 +83,7 @@ public sealed partial class BrowserHistoryJourneyTests : DroidNet.Tests.VisualUs
             ("Scenes", false),
             ("Geometry", false),
             ("Materials", false),
-            ("Materials", true)
+            ("Materials", true),
         }
 
         )
@@ -98,7 +98,7 @@ public sealed partial class BrowserHistoryJourneyTests : DroidNet.Tests.VisualUs
             ("Materials", false),
             ("Geometry", false),
             ("Scenes", false),
-            ("Scenes", true)
+            ("Scenes", true),
         }
 
         )

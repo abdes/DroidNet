@@ -19,6 +19,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;
 public sealed class TexturedModelImportTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>External images remain portable after the original files disappear and the retained model is edited.</summary>
     /// <param name="extension">The native model format.</param>
     /// <returns>The import/reimport verification.</returns>

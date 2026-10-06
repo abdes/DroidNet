@@ -75,6 +75,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         var hidden = Guid.NewGuid();
 
         var settings = new Mock<IEditorSettingsManager>(MockBehavior.Loose);
+
         // Same path-scope but a different ProjectId: the settings scope is reused by path, so a
         // copied project must not inherit a stranger's hidden set.
         var stored = new WorkspaceInteractionService.ProjectInteraction(

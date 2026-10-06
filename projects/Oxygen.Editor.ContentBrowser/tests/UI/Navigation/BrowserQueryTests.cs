@@ -63,16 +63,16 @@ public sealed partial class BrowserQueryTests : DroidNet.Tests.VisualUserInterfa
         await tile.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var queryView = new AssetQueryView
         {
-            ViewModel = state.Query
+            ViewModel = state.Query,
         };
         UserControl assetsView = tiles ? new TilesLayoutView
         {
-            ViewModel = tile
+            ViewModel = tile,
         }
 
         : new ListLayoutView
         {
-            ViewModel = list
+            ViewModel = list,
         };
         var root = CreateQueryTestRoot(queryView, assetsView, light);
         root.Width = light ? 360 : 620;
@@ -114,7 +114,7 @@ public sealed partial class BrowserQueryTests : DroidNet.Tests.VisualUserInterfa
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var view = new ListLayoutView
         {
-            ViewModel = model
+            ViewModel = model,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -156,7 +156,7 @@ public sealed partial class BrowserQueryTests : DroidNet.Tests.VisualUserInterfa
         var scenes = new[]
         {
             CreateQueryAsset("Main", AssetKind.Scene, AssetCookFreshness.Current),
-            CreateQueryAsset("Second", AssetKind.Scene, AssetCookFreshness.Current)
+            CreateQueryAsset("Second", AssetKind.Scene, AssetCookFreshness.Current),
         };
         using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([origin, copy, .. scenes]);
         var provider = CreateQueryProvider(updates);
@@ -169,12 +169,12 @@ public sealed partial class BrowserQueryTests : DroidNet.Tests.VisualUserInterfa
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         UserControl view = tiles ? new TilesLayoutView
         {
-            ViewModel = (TilesLayoutViewModel)model
+            ViewModel = (TilesLayoutViewModel)model,
         }
 
         : new ListLayoutView
         {
-            ViewModel = (ListLayoutViewModel)model
+            ViewModel = (ListLayoutViewModel)model,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);

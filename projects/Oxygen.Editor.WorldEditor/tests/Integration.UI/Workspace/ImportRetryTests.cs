@@ -46,7 +46,7 @@ public sealed partial class ImportRetryTests : DroidNet.Tests.VisualUserInterfac
         using var panel = new CookingPanelViewModel(services.Runs, services.Pipeline, services.Projects, Mock.Of<ICookingWorkspaceActions>(), CreateStatusHosting());
         var view = new CookingPanelView
         {
-            ViewModel = panel
+            ViewModel = panel,
         };
         var root = new Grid
         {
@@ -57,7 +57,7 @@ public sealed partial class ImportRetryTests : DroidNet.Tests.VisualUserInterfac
             Children =
             {
                 view
-            }
+            },
         };
         await LoadTestContentAsync(root).ConfigureAwait(true);
         var window = DroidNet.Tests.VisualUserInterfaceTestsApp.MainWindow.AppWindow;
@@ -103,6 +103,7 @@ public sealed partial class ImportRetryTests : DroidNet.Tests.VisualUserInterfac
         public const string Failure = "Injected importer failure after source retention.";
         private readonly ContentPipelineProcessRunner inner = new();
         private bool failed;
+
         public Task<ContentPipelineProcessResult> RunAsync(ContentPipelineProcessRequest request, CancellationToken cancellationToken)
         {
             if (!this.failed && request.Arguments.Contains("batch", StringComparer.Ordinal))

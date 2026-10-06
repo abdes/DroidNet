@@ -9,8 +9,10 @@ public enum AtmosphereLightSlot
 {
     /// <summary>Direct lighting only.</summary>
     None = 0,
+
     /// <summary>First atmosphere contributor.</summary>
     Primary = 1,
+
     /// <summary>Second atmosphere contributor.</summary>
     Secondary = 2,
 }

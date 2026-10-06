@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -11,6 +11,7 @@ namespace Oxygen.Editor.ContentPipeline;
 public sealed partial class ContentPipelineService
 {
     private readonly AssetCookStatusReader statusReader = new(cookDocuments, publication, nativeCompatibility);
+
     /// <inheritdoc />
     public event EventHandler? Changed
     {

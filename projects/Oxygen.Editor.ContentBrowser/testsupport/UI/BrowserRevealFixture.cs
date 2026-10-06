@@ -47,7 +47,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
         {
             "Materials",
             "Geometry",
-            "Scenes"
+            "Scenes",
         }
 
         )
@@ -74,6 +74,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
     }
 
     public void PublishHistoryRows(IReadOnlyList<ContentBrowserAssetItem> rows) => this.items.OnNext(rows);
+
     public async Task<(string physical, string expected)> ConfigurePhysicalNavigationAsync(string mount, CancellationToken token)
     {
         if (string.Equals(mount, "Library", StringComparison.Ordinal))
@@ -110,6 +111,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
     private readonly Container container = new();
     private readonly BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>> items;
     private readonly Mock<ILogger> logger = new();
+
     public BrowserRevealFixture(bool persisted = false, string cookedAlias = "Cooked")
     {
         _ = Directory.CreateDirectory(Path.Combine(this.directory.FullName, "Content", "Materials"));
@@ -121,7 +123,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
         _ = provider.Setup(value => value.ResolveAsync(this.Material.IdentityUri, It.IsAny<CancellationToken>())).ReturnsAsync(this.Material);
         var info = new ProjectInfo("Browser", Category.Games, this.directory.FullName)
         {
-            AuthoringMounts = [new("Content", "Content")]
+            AuthoringMounts = [new("Content", "Content")],
         };
         if (persisted)
         {
@@ -162,16 +164,25 @@ internal sealed partial class BrowserRevealFixture : IDisposable
     }
 
     public ProjectContextService Projects { get; } = new();
+
     public ContentBrowserAssetItem Material { get; }
+
     public ContentBrowserViewModel Browser { get; }
+
     public Mock<IContentBrowserAssetProvider> Provider { get; }
+
     public Mock<IDialogService> Dialogs { get; } = new();
+
     public string Diagnostics => string.Join(Environment.NewLine, this.logger.Invocations.Where(static call => string.Equals(call.Method.Name, "Log", StringComparison.Ordinal)).Select(static call => call.Arguments[2]?.ToString() + " " + call.Arguments[3]?.ToString()));
+
     public ProjectLayoutViewModel Explorer => (ProjectLayoutViewModel)this.Browser.LeftPaneViewModel!;
+
     public AssetsLayoutViewModel Layout => (AssetsLayoutViewModel)((AssetsViewModel)this.Browser.RightPaneViewModel!).LayoutViewModel!;
+
     public int MountChanges { get; private set; }
 
     private string? publishedOutputRoot;
+
     public async Task SetCookedOutputsAsync(IReadOnlyList<ContentBrowserAssetItem> outputs, CancellationToken token)
     {
         var project = this.Projects.ActiveProject!;
@@ -226,7 +237,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
             CookedUri = new("asset:///Art/Shared.omat"),
             CookedMetadata = new(root, "Materials/Shared.omat", Guid.NewGuid(), new(1, 2), 1, 1, new string('0', 64))
             {
-                VirtualPath = "/Art/Shared.omat"
+                VirtualPath = "/Art/Shared.omat",
             },
         };
         this.Projects.Activate(this.Projects.ActiveProject! with { LocalFolderMounts = [new("Library", root)] });

@@ -97,6 +97,7 @@ public sealed record MaterialSource
     /// Gets a value indicating whether the material should be treated as double-sided.
     /// </summary>
     public bool DoubleSided { get; init; }
+
     /// <summary>Gets the linear emission colour, retained at zero intensity.</summary>
     public Vector3 EmissiveColor { get; init; }
 

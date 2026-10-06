@@ -42,19 +42,19 @@ public sealed partial class RotationPersistenceTests : DroidNet.Tests.VisualUser
         var model = host.PropertyEditors.OfType<TransformViewModel>().Single();
         var view = new TransformView
         {
-            ViewModel = model
+            ViewModel = model,
         };
         var scroller = new ScrollViewer
         {
             Content = view,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
         var values = new[]
         {
             pitch,
             yaw,
-            roll
+            roll,
         };
         for (var axis = 0; axis < RotationFields.Length; axis++)
         {

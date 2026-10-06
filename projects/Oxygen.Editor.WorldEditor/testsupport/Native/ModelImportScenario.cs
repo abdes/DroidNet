@@ -177,7 +177,7 @@ internal sealed class ModelImportScenario : DroidNet.Tests.VisualUserInterfaceTe
 
         var next = services.Projects.ActiveProject! with
         {
-            LocalFolderMounts = [new("Library", library)]
+            LocalFolderMounts = [new("Library", library)],
         };
         var manager = new Oxygen.Editor.Projects.ProjectManagerService(services.Storage);
         var saved = await manager.LoadProjectInfoAsync(consumer.ProjectRoot).ConfigureAwait(true) ?? throw new InvalidDataException("The consumer project must be saved.");

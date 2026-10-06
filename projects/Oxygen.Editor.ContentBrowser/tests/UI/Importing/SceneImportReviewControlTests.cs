@@ -118,7 +118,6 @@ public sealed class SceneImportReviewControlTests : VisualUserInterfaceTests
             _ = warning.Message.Should().Contain("/Content/SourceMedia/DCC/Crate/model.gltf");
             _ = warning.Message.Should().Contain("/Content/Materials/Models/Crate");
         }
-
     }
 
     private async Task CreateRetainedSourceAsync(ProjectContext project)
@@ -135,5 +134,4 @@ public sealed class SceneImportReviewControlTests : VisualUserInterfaceTests
             "Models/Crate");
         await File.WriteAllBytesAsync(Path.Combine(root, "model.gltf.import.json"), settings.ToBytes(), this.TestContext.CancellationToken).ConfigureAwait(false);
     }
-
 }

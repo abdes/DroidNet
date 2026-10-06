@@ -22,7 +22,9 @@ internal static class CookScenario
     }
 
     internal static ContentPipelineService CreateService(CookWorkspace workspace, ISceneDescriptorGenerator generator, IEngineContentPipelineApi api, Oxygen.Managed.Core.Compatibility.INativeCompatibilityService? compatibility = null, CookPublicationService? publication = null) => new(workspace.ContextService, workspace.CookCoordinator, new FixedCookScopeProvider(workspace.Root), generator, new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, workspace.Documents, compatibility ?? workspace.Compatibility, workspace.Files, publication ?? workspace.Publication);
+
     internal static CookInspectionResult SucceededInspection(CookWorkspace workspace) => new(workspace.Root, Succeeded: true, SourceIdentity: null, Assets: [], Files: [], Diagnostics: []);
+
     internal async static Task AssertReaderRetainedUntilDrainAsync(TestContext testContext, Task work, CookWorkspace consumer, Action openForWrite, TaskCompletionSource drain)
     {
         Func<Task> observe = () => work.WaitAsync(TimeSpan.FromSeconds(5), testContext.CancellationToken);

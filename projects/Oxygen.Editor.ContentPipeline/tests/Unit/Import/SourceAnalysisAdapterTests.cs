@@ -18,6 +18,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 public sealed class SourceAnalysisAdapterTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>A changed native artifact rejects analysis before its worker is started.</summary>
     /// <returns>The compatibility-boundary verification.</returns>
     [TestMethod]
@@ -207,6 +208,7 @@ public sealed class SourceAnalysisAdapterTests
         new(NativeArtifactInventory.SourceAnalysisSchemaId, schemaPath),
         new(NativeArtifactInventory.CapturedInputsSchemaId, Path.Combine(AppContext.BaseDirectory, "Schemas", "oxygen.captured-inputs.schema.json")),
     ]);
+
     private sealed class SourceAnalysisRunner : IContentPipelineProcessRunner
     {
         public int Calls { get; private set; }
@@ -218,6 +220,7 @@ public sealed class SourceAnalysisAdapterTests
         public Exception? Failure { get; init; }
 
         public Action<JsonObject>? RewriteReport { get; init; }
+
         public ContentPipelineProcessRequest? Request { get; private set; }
 
         public string? ManifestPath { get; private set; }

@@ -74,6 +74,7 @@ public sealed partial class ColorHistoryTests
     }
 
     private static Task PendingColorEdits(IDisposable model) => model is EnvironmentViewModel environment ? environment.PendingEdits : ((DirectionalLightViewModel)model).PendingEdits;
+
     private static IDisposable CreateColorModel(string kind, SceneAuthoringFixture fixture)
     {
         if (string.Equals(kind, "Environment", StringComparison.Ordinal))

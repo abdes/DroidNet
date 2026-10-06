@@ -19,6 +19,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Cooking;
 public sealed class SourceAnalysisReuseTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>A newly changed scene and a cached scene repair share one generated builtin source.</summary>
     /// <returns>The mixed-frontier native verification.</returns>
     [TestMethod]

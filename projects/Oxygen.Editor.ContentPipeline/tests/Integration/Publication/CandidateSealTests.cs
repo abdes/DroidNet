@@ -15,6 +15,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 public sealed class CandidateSealTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>A new write explicitly retires the preceding proof, and sealing permanently ends writes.</summary>
     /// <returns>The asynchronous staged-output ownership regression.</returns>
     [TestMethod]

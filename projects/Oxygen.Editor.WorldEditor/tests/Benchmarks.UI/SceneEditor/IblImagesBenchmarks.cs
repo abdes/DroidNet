@@ -79,12 +79,12 @@ public sealed partial class IblImagesBenchmarks : DroidNet.Tests.VisualUserInter
         var first = new SwapChainPanel
         {
             Width = 320,
-            Height = 240
+            Height = 240,
         };
         var second = new SwapChainPanel
         {
             Width = 320,
-            Height = 240
+            Height = 240,
         };
         var host = new StackPanel
         {
@@ -93,7 +93,7 @@ public sealed partial class IblImagesBenchmarks : DroidNet.Tests.VisualUserInter
             {
                 first,
                 second
-            }
+            },
         };
         var window = VisualUserInterfaceTestsApp.MainWindow;
         var previousSize = window.AppWindow.Size;
@@ -109,13 +109,13 @@ public sealed partial class IblImagesBenchmarks : DroidNet.Tests.VisualUserInter
             DocumentId = fixture.Context.DocumentId,
             ViewportId = Guid.NewGuid(),
             ViewportIndex = 0,
-            IsPrimary = true
+            IsPrimary = true,
         };
         var secondRequest = firstRequest with
         {
             ViewportId = Guid.NewGuid(),
             ViewportIndex = 1,
-            IsPrimary = false
+            IsPrimary = false,
         };
         var firstSurface = await fixture.Runtime.AttachViewportAsync(firstRequest, first, timeout.Token).ConfigureAwait(true);
         await using var firstLifetime = firstSurface.ConfigureAwait(true);
@@ -129,7 +129,7 @@ public sealed partial class IblImagesBenchmarks : DroidNet.Tests.VisualUserInter
             foreach (var request in new[]
             {
                 firstRequest,
-                secondRequest
+                secondRequest,
             }
 
             )
@@ -187,13 +187,13 @@ public sealed partial class IblImagesBenchmarks : DroidNet.Tests.VisualUserInter
             Captured = captureRequested,
             Environment = fixture.Source.Environment,
             Geometry = geometry,
-            Ready = ready
+            Ready = ready,
         };
         await File.WriteAllTextAsync(Path.Combine(output, "inputs.json"), JsonSerializer.Serialize(record, IblImageJsonOptions), cancellationToken).ConfigureAwait(true);
         foreach (var (root, name) in new[]
         {
             (Path.Combine(fixture.ProjectRoot, "Content"), "source"),
-            (Path.GetDirectoryName(cooked)!, "cooked")
+            (Path.GetDirectoryName(cooked)!, "cooked"),
         }
 
         )
@@ -218,6 +218,7 @@ public sealed partial class IblImagesBenchmarks : DroidNet.Tests.VisualUserInter
         private readonly StartCapture start;
         private readonly CountCaptures isCapturing;
         private readonly EndCapture end;
+
         public IblRenderDocCapture()
         {
             this.module = NativeLibrary.Load("renderdoc.dll");
@@ -225,6 +226,7 @@ public sealed partial class IblImagesBenchmarks : DroidNet.Tests.VisualUserInter
             {
                 var getApi = Marshal.GetDelegateForFunctionPointer<GetApi>(NativeLibrary.GetExport(this.module, "RENDERDOC_GetAPI"));
                 _ = getApi(10000, out var api).Should().Be(1);
+
                 // Stable RENDERDOC_API_1_0_0 slots from renderdoc_app.h.
                 this.count = Marshal.GetDelegateForFunctionPointer<CountCaptures>(Marshal.ReadIntPtr(api, 13 * nint.Size));
                 this.start = Marshal.GetDelegateForFunctionPointer<StartCapture>(Marshal.ReadIntPtr(api, 19 * nint.Size));
@@ -240,12 +242,16 @@ public sealed partial class IblImagesBenchmarks : DroidNet.Tests.VisualUserInter
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate int GetApi(int version, out nint api);
+
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate uint CountCaptures();
+
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate void StartCapture(nint device, nint window);
+
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate uint EndCapture(nint device, nint window);
+
         public uint Count => this.count();
 
         public void Begin()
@@ -256,6 +262,7 @@ public sealed partial class IblImagesBenchmarks : DroidNet.Tests.VisualUserInter
         }
 
         public void End() => this.end(0, 0).Should().Be(1);
+
         public void Dispose() => NativeLibrary.Free(this.module);
     }
 }

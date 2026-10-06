@@ -14,6 +14,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 public sealed class GenerationReclamationTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Both sharing protocols used by managed and native readers exclude reclamation.</summary>
     [TestMethod]
     public void GenerationReadersExcludeReclamationUntilAllClose()
@@ -22,6 +23,7 @@ public sealed class GenerationReclamationTests
         var marker = Path.Combine(project.Root, ".generation.lock");
         File.WriteAllBytes(marker, []);
         using var managed = WindowsCookFile.OpenGenerationReader(marker);
+
         // Serio's shared reader uses Read access with Read/Write/Delete sharing.
         using var native = new FileStream(marker, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         _ = WindowsCookFile.TryClaimGeneration(marker).Should().BeNull();

@@ -20,6 +20,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Cooking;
 public sealed class IncrementalCookTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>A saved scene produces a quiet automatic run, its assets, and reusable native output.</summary>
     /// <returns>The asynchronous native background-cook regression.</returns>
     [TestMethod]
@@ -83,6 +84,7 @@ public sealed class IncrementalCookTests
         var libraryRoot = Path.Combine(workspace.Root, "script-library");
         var scriptPath = Path.Combine(libraryRoot, "Content", "Scripts", "Orbit.oscript");
         Directory.CreateDirectory(Path.GetDirectoryName(scriptPath)!);
+
         // Minimal ScriptAssetDesc with the current header version and no resource bindings.
         var scriptBytes = new byte[235];
         scriptBytes[0] = 4;

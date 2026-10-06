@@ -29,18 +29,25 @@ public sealed class CookedInventoryReport
 
     /// <summary>Gets the native source identity.</summary>
     public Guid SourceKey { get; }
+
     /// <summary>Gets the protected index length.</summary>
     public long IndexSize { get; }
+
     /// <summary>Gets the digest that selects this exact inventory.</summary>
     public string IndexSha256 { get; }
+
     /// <summary>Gets all expected content members, excluding the index and generation lock.</summary>
     public ImmutableDictionary<string, Member> Files { get; }
+
     /// <summary>Gets the index's asset identities and descriptor locations.</summary>
     public ImmutableArray<Asset> Assets { get; }
+
     /// <summary>Gets native resource descriptors, distinct from keyed runtime assets.</summary>
     public ImmutableArray<Resource> Resources { get; }
+
     /// <summary>Gets observed file failures; process success alone does not establish integrity.</summary>
     public ImmutableArray<Issue> Issues { get; }
+
     /// <summary>Gets whether every indexed member and the complete membership matched.</summary>
     public bool IsValid => this.Issues.IsEmpty;
 

@@ -233,6 +233,7 @@ public partial class SceneExplorerViewModel
 
         var selection = this.selectionService.GetContext(document.DocumentId);
         var selected = this.GetSelectedItems().ToArray();
+
         // Authoritative identities can include collapsed/unrealized rows. Never silently shrink that batch.
         foreach (var id in selection.SelectedNodeIds)
         {

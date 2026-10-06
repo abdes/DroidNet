@@ -76,7 +76,7 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
             var panel = new SwapChainPanel
             {
                 Width = 1920 / scale,
-                Height = 1080 / scale
+                Height = 1080 / scale,
             };
             var state = new ContentBrowserState(services.Projects);
             state.SetSelectedFolders(["/Content"]);
@@ -85,16 +85,16 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
             using AssetsLayoutViewModel layout = tiles ? new TilesLayoutViewModel(provider, services.Projects, state, CreateStatusHosting(), services.Builtins) : new ListLayoutViewModel(provider, services.Projects, state, CreateStatusHosting(), services.Builtins);
             var query = new AssetQueryView
             {
-                ViewModel = state.Query
+                ViewModel = state.Query,
             };
             UserControl view = tiles ? new TilesLayoutView
             {
-                ViewModel = (TilesLayoutViewModel)layout
+                ViewModel = (TilesLayoutViewModel)layout,
             }
 
             : new ListLayoutView
             {
-                ViewModel = (ListLayoutViewModel)layout
+                ViewModel = (ListLayoutViewModel)layout,
             };
             var browser = CreateQueryTestRoot(query, view, light: false);
             browser.Width = 1920 / scale;
@@ -108,7 +108,7 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
                 DocumentId = fixture.Source.Id,
                 ViewportId = Guid.NewGuid(),
                 ViewportIndex = 0,
-                IsPrimary = true
+                IsPrimary = true,
             };
             var surface = await fixture.Runtime.AttachViewportAsync(request, panel, cancellationToken).ConfigureAwait(true);
             await using var surfaceLifetime = surface.ConfigureAwait(true);

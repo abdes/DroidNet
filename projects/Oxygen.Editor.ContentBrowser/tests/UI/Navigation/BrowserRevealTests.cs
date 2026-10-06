@@ -57,14 +57,14 @@ public sealed partial class BrowserRevealTests : DroidNet.Tests.VisualUserInterf
         _ = fixture.Browser.LeftPaneViewModel.Should().BeOfType<ProjectLayoutViewModel>();
         var view = new ProjectLayoutView
         {
-            ViewModel = fixture.Explorer
+            ViewModel = fixture.Explorer,
         };
         var root = new Grid
         {
             Width = 420,
             Height = 540,
             RequestedTheme = ElementTheme.Dark,
-            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 32, 32, 32))
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 32, 32, 32)),
         };
         root.Children.Add(view);
         await LoadTestContentAsync(root).ConfigureAwait(true);

@@ -40,7 +40,7 @@ public sealed partial class RuntimeSettingsTests : DroidNet.Tests.VisualUserInte
         using var model = await fixture.CreateSceneEditorAsync(container).ConfigureAwait(true);
         var view = new SceneEditorView
         {
-            ViewModel = model
+            ViewModel = model,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var settings = (ToolBarButton)view.FindName("SettingsButton");

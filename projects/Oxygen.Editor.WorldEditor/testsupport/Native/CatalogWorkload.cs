@@ -69,13 +69,13 @@ internal static class CatalogWorkload
                 Name = "Geometry " + index.ToString(CultureInfo.InvariantCulture),
                 IsActive = true,
                 CastsShadows = true,
-                ReceivesShadows = true
+                ReceivesShadows = true,
             };
             var geometryUri = index >= 90 ? mesh : authoringGeometries[index % authoringGeometries.Length].AssetUri;
             var geometry = new GeometryComponent
             {
                 Name = "Geometry",
-                Geometry = new AssetReference<GeometryAsset>(geometryUri)
+                Geometry = new AssetReference<GeometryAsset>(geometryUri),
             };
             var inventory = inventories[geometryUri];
             var target = new MaterialSlotTarget(geometryUri, inventory.Slots.Should().ContainSingle().Which.SlotId, inventory.LayoutRevision);
@@ -98,7 +98,7 @@ internal static class CatalogWorkload
         var camera = new SceneNode(scene)
         {
             Name = "Camera",
-            IsActive = true
+            IsActive = true,
         };
         _ = camera.AddComponent(new PerspectiveCamera { Name = "Camera" });
         camera.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(0, -25, 15);
@@ -106,7 +106,7 @@ internal static class CatalogWorkload
         var sun = new SceneNode(scene)
         {
             Name = "Sun",
-            IsActive = true
+            IsActive = true,
         };
         _ = sun.AddComponent(new DirectionalLightComponent { Name = "Sun", CastsShadows = true, CascadeCount = 4 });
         sun.Components.OfType<TransformComponent>().Single().LocalRotation = DirectionalLightComponent.DefaultLocalRotation;

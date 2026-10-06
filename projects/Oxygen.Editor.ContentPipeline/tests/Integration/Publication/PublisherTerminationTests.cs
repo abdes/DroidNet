@@ -14,6 +14,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 public sealed class PublisherTerminationTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>A terminated publisher leaves recoverable old output, or a verifiable committed generation.</summary>
     /// <param name="hadPrevious">Whether the project already had published roots.</param>
     /// <param name="boundary">The point where the owned publisher is terminated.</param>
@@ -67,7 +68,6 @@ public sealed class PublisherTerminationTests
                 await recovered.RecoverAsync(writer).ConfigureAwait(false);
                 project.AssertOld();
             }
-
         }
         finally
         {

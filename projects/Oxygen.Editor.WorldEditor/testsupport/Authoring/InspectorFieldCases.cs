@@ -42,7 +42,7 @@ internal static class InspectorFieldCases
             {
                 4,
                 13,
-                14
+                14,
             }
 
             )

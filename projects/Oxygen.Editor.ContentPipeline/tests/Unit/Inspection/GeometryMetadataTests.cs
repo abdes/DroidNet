@@ -18,6 +18,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Inspection;
 public sealed class GeometryMetadataTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Opaque UUID text and omitted defaults survive the managed projection unchanged.</summary>
     [TestMethod]
     public void GeometryMetadataPreservesOpaqueSlotsAndNilDefaults()

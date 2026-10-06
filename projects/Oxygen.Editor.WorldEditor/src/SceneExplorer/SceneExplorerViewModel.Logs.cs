@@ -318,6 +318,7 @@ public partial class SceneExplorerViewModel
 
     private void LogSceneLoadedMessageSent(System.Guid sceneId, System.DateTime utcNow)
         => LogSceneLoadedMessageSent(this.logger, sceneId, utcNow);
+
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,

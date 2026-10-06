@@ -206,7 +206,7 @@ public sealed partial class ContentPipelineService
                     OperationId = Guid.NewGuid(), Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error,
                     Code = ContentPipelineDiagnosticCodes.ValidateFailed, Message = "The cooked index no longer matches its publication.",
                     AffectedPath = Path.Combine(root.Path, "container.index.bin"),
-                }]
+                }],
                 };
             }
 

@@ -53,6 +53,7 @@ internal sealed partial class CookWorkspace : IDisposable
     public Scene Scene { get; }
 
     public Oxygen.Testing.TemporaryNativeArtifacts Compatibility { get; }
+
     public global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry Documents { get; } = new();
 
     public async Task SeedEmptyPublicationAsync(string mount, CancellationToken token)

@@ -37,7 +37,7 @@ public sealed partial class AssetInformationTests : DroidNet.Tests.VisualUserInt
         asset = asset with
         {
             SourcePath = "C:/Projects/Example/Content/Materials/BlueMetal.omat.json",
-            DisplayPath = Uri.UnescapeDataString(asset.DisplayPath)
+            DisplayPath = Uri.UnescapeDataString(asset.DisplayPath),
         };
         using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([asset]);
         var provider = CreateQueryProvider(updates);
@@ -48,12 +48,12 @@ public sealed partial class AssetInformationTests : DroidNet.Tests.VisualUserInt
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         UserControl view = tiles ? new TilesLayoutView
         {
-            ViewModel = (TilesLayoutViewModel)model
+            ViewModel = (TilesLayoutViewModel)model,
         }
 
         : new ListLayoutView
         {
-            ViewModel = (ListLayoutViewModel)model
+            ViewModel = (ListLayoutViewModel)model,
         };
         view.RequestedTheme = light ? ElementTheme.Light : ElementTheme.Dark;
         await LoadTestContentAsync(view).ConfigureAwait(true);
@@ -79,7 +79,7 @@ public sealed partial class AssetInformationTests : DroidNet.Tests.VisualUserInt
                 {
                     Freshness = AssetCookFreshness.Current,
                     HasPublishedOutput = true,
-                    OutputAvailability = CookedOutputAvailability.Present
+                    OutputAvailability = CookedOutputAvailability.Present,
                 },
             };
             updates.OnNext([cooked]);

@@ -13,6 +13,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
 public sealed class SharedCookTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Two pending callers get one run; cancelling one leaves the other caller's work intact.</summary>
     /// <returns>The asynchronous shared ownership regression.</returns>
     [TestMethod]

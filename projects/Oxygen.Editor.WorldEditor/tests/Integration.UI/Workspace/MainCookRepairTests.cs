@@ -62,11 +62,11 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         using var panel = new CookingPanelViewModel(services.Runs, services.Pipeline, services.Projects, actions.Object, CreateStatusHosting());
         var environment = new EnvironmentView
         {
-            ViewModel = fixture.Model
+            ViewModel = fixture.Model,
         };
         var cooking = new CookingPanelView
         {
-            ViewModel = panel
+            ViewModel = panel,
         };
         var root = CreateMainRepairSurface(environment, cooking);
         using var host = new ScaledXamlHost();
@@ -91,7 +91,7 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
             Width = 1200,
             Height = 650,
             RequestedTheme = ElementTheme.Dark,
-            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Black)
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Black),
         };
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(380) });
         root.ColumnDefinitions.Add(new ColumnDefinition());

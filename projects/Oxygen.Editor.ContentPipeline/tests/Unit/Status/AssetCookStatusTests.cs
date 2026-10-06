@@ -230,6 +230,7 @@ public sealed class AssetCookStatusTests
         private readonly Mock<IEngineContentPipelineApi> api = new();
         private readonly ProjectManagerService manager = new(new NativeStorageProvider(new Testably.Abstractions.RealFileSystem()));
         private string? selectedRoot;
+
         public StatusProject()
         {
             this.Project = new ProjectContext
@@ -288,6 +289,7 @@ public sealed class AssetCookStatusTests
 
         public async Task<AssetCookStatus> ReadAsync(CancellationToken cancellationToken)
             => (await this.CreateReader().ReadAsync(this.Project, [SourceUri], cancellationToken).ConfigureAwait(false)).Single();
+
         public async Task PublishAsync(CancellationToken cancellationToken, Uri? primary = null, IReadOnlyList<Uri>? dependencies = null)
         {
             var operation = new ContentCookOperation(Guid.NewGuid(), this.Project, 1);

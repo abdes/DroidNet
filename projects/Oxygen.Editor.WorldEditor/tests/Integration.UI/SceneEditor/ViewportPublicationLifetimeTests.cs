@@ -29,7 +29,7 @@ public sealed partial class ViewportPublicationLifetimeTests : DroidNet.Tests.Vi
         var panel = new SwapChainPanel
         {
             Width = 320,
-            Height = 200
+            Height = 200,
         };
         await LoadTestContentAsync(panel).ConfigureAwait(true);
         var request = new ViewportSurfaceRequest
@@ -79,12 +79,12 @@ public sealed partial class ViewportPublicationLifetimeTests : DroidNet.Tests.Vi
         var first = new SwapChainPanel
         {
             Width = 320,
-            Height = 200
+            Height = 200,
         };
         var second = new SwapChainPanel
         {
             Width = 320,
-            Height = 200
+            Height = 200,
         };
         var host = new StackPanel();
         host.Children.Add(first);

@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using DroidNet.Docking.Detail;
 using DroidNet.Docking.Workspace;
+
 namespace DroidNet.Docking.Tests;
 
 /// <summary>Module level initialization code for the test frameworks.</summary>

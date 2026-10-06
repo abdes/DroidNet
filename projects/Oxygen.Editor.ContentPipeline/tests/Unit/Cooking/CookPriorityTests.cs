@@ -13,6 +13,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
 public sealed class CookPriorityTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Explicit and demanded work passes queued saves, preserving order within each priority.</summary>
     /// <returns>The asynchronous queue-order regression.</returns>
     [TestMethod]

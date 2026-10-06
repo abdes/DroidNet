@@ -190,10 +190,12 @@ public sealed class BuiltinCatalogDiscoveryTests
 
     private static async Task<BuiltinGeometryCatalog> ReadCatalogAsync(CancellationToken cancellationToken)
         => BuiltinGeometryCatalog.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "BuiltinGeometryCatalog.json"), cancellationToken).ConfigureAwait(false));
+
     private sealed partial class CatalogDiscoveryFixture : IDisposable
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("oxygen-builtin-discovery-");
         private readonly Oxygen.Testing.TemporaryNativeArtifacts native;
+
         public CatalogDiscoveryFixture()
         {
             File.WriteAllText(this.ProducerPath, "producer");

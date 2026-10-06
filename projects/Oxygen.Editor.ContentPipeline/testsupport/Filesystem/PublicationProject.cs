@@ -24,6 +24,7 @@ internal sealed partial class PublicationProject : IDisposable
     private FileStream? ownership;
     private CookPublicationReadLease? baseline;
     private Func<string, Task> checkpoint = static _ => Task.CompletedTask;
+
     public PublicationProject(bool hadPrevious)
     {
         this.hadPrevious = hadPrevious;
@@ -64,11 +65,15 @@ internal sealed partial class PublicationProject : IDisposable
     }
 
     public string Root => this.directory.FullName;
+
     public ProjectContext Context { get; }
 
     public ContentCookOperation Operation { get; }
+
     public NativeAtomicFileStore Files { get; } = new(new RealFileSystem());
+
     public ProjectManagerService Manager { get; } = new(new NativeStorageProvider(new RealFileSystem()));
+
     public CookPublicationReadLease Baseline => this.baseline ?? throw new InvalidOperationException("Prepare staging first.");
 
     public async Task<CookStagingArea> StageAsync(CancellationToken cancellationToken)

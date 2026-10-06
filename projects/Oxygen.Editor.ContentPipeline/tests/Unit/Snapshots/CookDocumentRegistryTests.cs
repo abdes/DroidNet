@@ -12,6 +12,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Snapshots;
 public sealed class CookDocumentRegistryTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Acquires all owners in stable order and releases each exactly once in reverse order.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]

@@ -258,12 +258,19 @@ public sealed partial class CookPublicationService
     private sealed class MaintenanceBatch : IDisposable
     {
         internal FileStream? Maintenance { get; set; }
+
         internal List<OperationClaim> Operations { get; } = [];
+
         internal List<DocumentClaim> Documents { get; } = [];
+
         internal List<CookedGeneration> Generations { get; } = [];
+
         internal HashSet<Guid> RetainedDocuments { get; } = [];
+
         internal HashSet<Guid> RetainedGenerations { get; } = [];
+
         internal HashSet<Guid> UnpreparedGenerations { get; } = [];
+
         internal List<string> Failures { get; } = [];
 
         internal void Attempt(Action deletion)
@@ -295,8 +302,11 @@ public sealed partial class CookPublicationService
     private sealed class OperationClaim(string directory, FileStream ownership) : IDisposable
     {
         internal string Directory { get; } = directory;
+
         internal CookPublicationTransaction? Transaction { get; set; }
+
         internal FileStream? Retry { get; set; }
+
         public void Dispose()
         {
             this.Retry?.Dispose();

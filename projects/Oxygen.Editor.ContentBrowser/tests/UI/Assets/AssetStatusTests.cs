@@ -44,12 +44,12 @@ public sealed partial class AssetStatusTests : DroidNet.Tests.VisualUserInterfac
         using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, hosting, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture()) : new ListLayoutViewModel(provider.Object, projects, state, hosting, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
         FrameworkElement view = tiles ? new TilesLayoutView
         {
-            ViewModel = (TilesLayoutViewModel)model
+            ViewModel = (TilesLayoutViewModel)model,
         }
 
         : new ListLayoutView
         {
-            ViewModel = (ListLayoutViewModel)model
+            ViewModel = (ListLayoutViewModel)model,
         };
         var host = (Border)XamlReader.Load("<Border xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Background='{ThemeResource ApplicationPageBackgroundThemeBrush}' />");
         host.Width = 460;
@@ -77,7 +77,7 @@ public sealed partial class AssetStatusTests : DroidNet.Tests.VisualUserInterfac
             var offset = scroll.VerticalOffset;
             items[10] = items[10] with
             {
-                CookActivity = new(Guid.NewGuid(), CookRunState.Queued)
+                CookActivity = new(Guid.NewGuid(), CookRunState.Queued),
             };
             updates.OnNext(items.ToArray());
             await WaitForRenderAsync().ConfigureAwait(true);

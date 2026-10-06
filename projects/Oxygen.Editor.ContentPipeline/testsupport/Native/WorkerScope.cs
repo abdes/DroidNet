@@ -9,6 +9,7 @@ namespace Oxygen.Editor.ContentPipeline.TestSupport;
 internal sealed class WorkerScope : IAsyncDisposable
 {
     private Task<ContentPipelineProcessResult>? operation;
+
     internal WorkerScope()
     {
         this.Root = Path.Combine(Path.GetTempPath(), "oxygen content worker tests", Guid.NewGuid().ToString("N"));

@@ -54,7 +54,7 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
             Application = Application.Current,
             Dispatcher = dispatcher,
             DispatcherScheduler = new DispatcherQueueScheduler(dispatcher),
-            IsRunning = true
+            IsRunning = true,
         };
         var results = Mock.Of<IOperationResultPublisher>();
         using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
@@ -82,7 +82,7 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
         var manager = new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()));
         var project = new Project(new ProjectInfo("Native UI", Category.Games, directory, "preview.png"))
         {
-            Name = "Native UI"
+            Name = "Native UI",
         };
         var scene = Scene.CreateAndHydrate(project, new SceneData { Id = Guid.NewGuid(), Name = "Background", Environment = new SceneEnvironmentData { AtmosphereEnabled = true } });
         project.Scenes.Add(scene);
@@ -127,12 +127,12 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
             model.SetScene(scene);
             var view = new EnvironmentView
             {
-                ViewModel = model
+                ViewModel = model,
             };
             var scroller = new ScrollViewer
             {
                 Content = view,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             };
             await LoadTestContentAsync(scroller).ConfigureAwait(true);
             var atmosphereCase = NativeEnvironmentFields.Single(static value => string.Equals(value.Field, "AtmosphereEnabled", StringComparison.Ordinal));
@@ -160,6 +160,7 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
     private static async Task EditBackgroundPickerAsync(EnvironmentView view, ScrollViewer scroller, CancellationToken cancellationToken)
     {
         _ = await FindVisibleVectorAsync(view, scroller, "BackgroundColor").ConfigureAwait(true);
+
         // The restructured inspector hosts the swatch as PropertyCard leading content, so the picker button is an
         // owned accessory of the background field rather than a sibling of the vector box.
         var button = view.FindDescendant<Button>(element => string.Equals(AutomationProperties.GetName(element), "Pick background color", StringComparison.Ordinal));

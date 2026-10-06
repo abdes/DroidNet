@@ -330,6 +330,7 @@ public sealed class SourceBundleDiscoveryTests
         }
 
         public Task<NativeImportResult> ImportAsync(ContentImportExecution execution, CancellationToken cancellationToken) => throw new NotSupportedException();
+
         public Task<global::Oxygen.Editor.ContentPipeline.Inspection.CookedInventoryReport> ReadInventoryAsync(string cookedRoot, NativeArtifactLease? artifacts, CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task<CookInspectionResult> InspectLooseCookedRootAsync(string cookedRoot, CancellationToken cancellationToken) => throw new NotSupportedException();

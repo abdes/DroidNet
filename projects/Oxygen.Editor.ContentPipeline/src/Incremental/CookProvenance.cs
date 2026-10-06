@@ -83,6 +83,7 @@ internal sealed partial record CookProvenance(Guid ProjectId, ImmutableArray<Coo
 
         /// <summary>Gets the source state accepted for reuse after producer-owned source metadata is committed.</summary>
         public required string ReuseFingerprint { get; init; }
+
         /// <summary>Gets the external native identities used when the source was cooked.</summary>
         public ImmutableArray<Snapshots.CookedDependencySnapshot> CookedDependencies { get; init; } = [];
 

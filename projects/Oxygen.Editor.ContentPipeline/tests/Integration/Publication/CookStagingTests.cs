@@ -158,6 +158,7 @@ public sealed class CookStagingTests
         private readonly ProjectManagerService manager = new(new NativeStorageProvider(new RealFileSystem()));
         private CookPublicationReadLease? baseline;
         private FileStream? ownership;
+
         public StagingProject()
         {
             this.Operation = new(

@@ -12,6 +12,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
 public sealed class CookProjectChangeTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Context replacement does not cancel the committed change or allow a competing cook to enter early.</summary>
     /// <returns>The asynchronous project-change ownership regression.</returns>
     [TestMethod]

@@ -14,6 +14,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Processes;
 public sealed class WorkerOwnershipTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Keeps ownership until both readers finish after termination.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
@@ -103,6 +104,7 @@ public sealed class WorkerOwnershipTests
 
     private static ContentPipelineProcessRequest CreateControlledRequest()
         => new("controlled-worker.exe", [], Path.GetTempPath());
+
     private sealed partial class ControlledWorker : IContentPipelineWorker
     {
         public Task<int> Exit => this.ExitSource.Task;

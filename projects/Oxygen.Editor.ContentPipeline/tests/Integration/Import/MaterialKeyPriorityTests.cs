@@ -24,6 +24,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;
 public sealed class MaterialKeyPriorityTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Project priority resolves the same native material key for library and project geometry.</summary>
     /// <returns>The asynchronous native identity regression.</returns>
     [TestMethod]

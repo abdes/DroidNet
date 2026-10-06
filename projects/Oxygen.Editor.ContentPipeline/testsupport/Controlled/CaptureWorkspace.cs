@@ -13,6 +13,7 @@ namespace Oxygen.Editor.ContentPipeline.TestSupport;
 internal sealed partial class CaptureWorkspace : IDisposable
 {
     private readonly ProjectContextService context = new();
+
     public CaptureWorkspace()
     {
         Directory.CreateDirectory(this.Root);

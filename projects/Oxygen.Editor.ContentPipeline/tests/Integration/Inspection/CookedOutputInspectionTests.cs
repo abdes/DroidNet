@@ -15,6 +15,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Inspection;
 public sealed class CookedOutputInspectionTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Native scene inspection exposes its verified source/dependencies while source edits remain independent of output integrity.</summary>
     /// <returns>The asynchronous native report regression.</returns>
     [TestMethod]

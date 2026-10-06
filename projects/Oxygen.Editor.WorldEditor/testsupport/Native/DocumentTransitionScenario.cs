@@ -51,7 +51,7 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
         {
             ViewModel = host,
             Width = 960,
-            Height = 600
+            Height = 600,
         };
         await LoadTestContentAsync(root).ConfigureAwait(true);
         window.Resize(new((int)(root.Width * root.XamlRoot.RasterizationScale) + 60, (int)(root.Height * root.XamlRoot.RasterizationScale) + 100));

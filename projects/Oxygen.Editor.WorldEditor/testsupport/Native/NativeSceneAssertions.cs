@@ -95,6 +95,7 @@ internal static class NativeSceneAssertions
     internal static async Task ObserveRenderedFramesAsync(NativeSceneFixture fixture, CancellationToken cancellationToken)
     {
         var nodeId = fixture.Source.RootNodes[0].Id;
+
         // Each observation crosses SceneMutation on a later native frame. Continue
         // beyond GPU deferred-release latency after a viewport is destroyed.
         for (var frame = 0; frame < 8; ++frame)

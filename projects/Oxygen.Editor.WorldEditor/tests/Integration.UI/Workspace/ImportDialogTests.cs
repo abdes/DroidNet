@@ -54,7 +54,7 @@ public sealed partial class ImportDialogTests : DroidNet.Tests.VisualUserInterfa
             Width = 900,
             Height = 650,
             RequestedTheme = ElementTheme.Dark,
-            Background = new SolidColorBrush(Microsoft.UI.Colors.Black)
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Black),
         };
         root.Children.Add(new CookingPanelView { ViewModel = panel });
         await LoadTestContentAsync(root).ConfigureAwait(true);

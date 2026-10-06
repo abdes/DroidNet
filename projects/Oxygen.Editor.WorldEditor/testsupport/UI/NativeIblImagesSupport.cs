@@ -11,6 +11,6 @@ internal static class NativeIblImagesSupport
     internal static readonly JsonSerializerOptions IblImageJsonOptions = new()
     {
         WriteIndented = true,
-        IncludeFields = true
+        IncludeFields = true,
     };
 }

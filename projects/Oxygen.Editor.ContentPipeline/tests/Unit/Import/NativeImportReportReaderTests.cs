@@ -14,6 +14,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 public sealed class NativeImportReportReaderTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Native output files and source diagnostics remain correlated to their owning operation.</summary>
     [TestMethod]
     public void ReadsExactOutputsAndSourceDiagnostics()

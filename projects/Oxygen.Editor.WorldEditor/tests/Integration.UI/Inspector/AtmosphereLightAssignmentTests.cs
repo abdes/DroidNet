@@ -37,17 +37,17 @@ public sealed partial class AtmosphereLightAssignmentTests : DroidNet.Tests.Visu
         var model = host.PropertyEditors.Single(editor => scenePicker ? editor is EnvironmentViewModel : editor is DirectionalLightViewModel);
         UserControl view = model is EnvironmentViewModel environment ? new EnvironmentView
         {
-            ViewModel = environment
+            ViewModel = environment,
         }
 
         : new DirectionalLightView
         {
-            ViewModel = (DirectionalLightViewModel)model
+            ViewModel = (DirectionalLightViewModel)model,
         };
         var scroller = new ScrollViewer
         {
             Content = view,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
         if (model is EnvironmentViewModel sceneModel)
@@ -102,12 +102,12 @@ public sealed partial class AtmosphereLightAssignmentTests : DroidNet.Tests.Visu
     {
         var owner = new SceneNode(scene)
         {
-            Name = "Primary owner"
+            Name = "Primary owner",
         };
         _ = owner.AddComponent(new DirectionalLightComponent { Name = "Light", AtmosphereSlot = AtmosphereLightSlot.Primary });
         var candidate = new SceneNode(scene)
         {
-            Name = "Unassigned light"
+            Name = "Unassigned light",
         };
         _ = candidate.AddComponent(new DirectionalLightComponent { Name = "Light" });
         scene.RootNodes.Add(owner);

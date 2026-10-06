@@ -34,7 +34,7 @@ public sealed partial class SceneReplacementTests : DroidNet.Tests.VisualUserInt
         var panel = new SwapChainPanel
         {
             Width = 640,
-            Height = 360
+            Height = 360,
         };
         await LoadTestContentAsync(panel).ConfigureAwait(true);
         for (var cycle = 0; cycle < 30; ++cycle)

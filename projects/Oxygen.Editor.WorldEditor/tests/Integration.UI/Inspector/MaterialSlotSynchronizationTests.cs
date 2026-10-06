@@ -52,12 +52,12 @@ public sealed partial class MaterialSlotSynchronizationTests : DroidNet.Tests.Vi
         await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);
         var view = new GeometryView
         {
-            ViewModel = model
+            ViewModel = model,
         };
         var scroller = new ScrollViewer
         {
             Content = view,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
         var button = (SplitButton)await FindInspectorControlAsync(scroller, () => view.FindDescendant<SplitButton>(value => string.Equals(value.Name, "MaterialSplitButton", StringComparison.Ordinal)), "Material", timeout.Token).ConfigureAwait(true);

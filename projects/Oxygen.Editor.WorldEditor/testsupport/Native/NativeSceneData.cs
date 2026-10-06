@@ -14,7 +14,7 @@ internal static class NativeSceneData
     {
         var node = new SceneNode(scene)
         {
-            Name = shape
+            Name = shape,
         };
         _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri($"BasicShapes/{shape}")) });
         scene.RootNodes.Add(node);
@@ -24,7 +24,7 @@ internal static class NativeSceneData
     {
         var node = new SceneNode(scene)
         {
-            Name = kind
+            Name = kind,
         };
         if (string.Equals(kind, "Camera", StringComparison.Ordinal))
         {
@@ -49,7 +49,7 @@ internal static class NativeSceneData
         var sun = new SceneNode(scene)
         {
             Name = "Sun",
-            IsActive = true
+            IsActive = true,
         };
         _ = sun.AddComponent(new DirectionalLightComponent { Name = "Sun", CastsShadows = true, CascadeCount = cascades });
         scene.RootNodes.Add(sun);

@@ -20,6 +20,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;
 public sealed class RetainedSourceCookTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>A retained native source publishes all outputs once and reuses them after a service restart.</summary>
     /// <param name="extension">The retained model format.</param>
     /// <returns>The asynchronous native import/cook regression.</returns>

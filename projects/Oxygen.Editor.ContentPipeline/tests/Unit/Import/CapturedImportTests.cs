@@ -16,6 +16,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 public sealed class CapturedImportTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Private bytes travel in a capture map without replacing manifest source coordinates.</summary>
     /// <returns>The asynchronous transport test.</returns>
     [TestMethod]
@@ -77,6 +78,7 @@ public sealed class CapturedImportTests
     private sealed class CaptureContractRunner(Exception? failure = null) : IContentPipelineProcessRunner
     {
         private readonly CapturingRunner importer = new(new(0, string.Empty, string.Empty));
+
         public ContentPipelineProcessRequest? Request { get; private set; }
 
         public string? CapturePath { get; private set; }

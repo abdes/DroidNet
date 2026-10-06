@@ -74,12 +74,12 @@ public sealed partial class EnvironmentSynchronizationTests : DroidNet.Tests.Vis
         VisualUserInterfaceTestsApp.MainWindow.Activate();
         var view = new EnvironmentView
         {
-            ViewModel = fixture.Model
+            ViewModel = fixture.Model,
         };
         var scroller = new ScrollViewer
         {
             Content = view,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
         var control = await FindEnvironmentFieldControlAsync(view, scroller, fixture.Model, field, timeout.Token).ConfigureAwait(true);
@@ -92,7 +92,7 @@ public sealed partial class EnvironmentSynchronizationTests : DroidNet.Tests.Vis
         _ = fixture.Context.History.UndoStack.Should().ContainSingle();
         var expected = new Dictionary<string, object>(before, StringComparer.Ordinal)
         {
-            [field.Field] = field.ExpectedValue
+            [field.Field] = field.ExpectedValue,
         };
         await AssertEnvironmentFieldValuesAsync(fixture, expected, timeout.Token).ConfigureAwait(true);
         await fixture.Context.History.UndoAsync(timeout.Token).ConfigureAwait(true);

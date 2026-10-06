@@ -20,6 +20,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 public sealed class ImportAdapterTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Verifies the workflow can invoke Import Tool With Temporary Manifest Under Operation Directory.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]

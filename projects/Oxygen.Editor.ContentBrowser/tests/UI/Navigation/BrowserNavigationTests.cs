@@ -56,12 +56,12 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
         await layout.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         UserControl view = tiles ? new TilesLayoutView
         {
-            ViewModel = (TilesLayoutViewModel)layout
+            ViewModel = (TilesLayoutViewModel)layout,
         }
 
         : new ListLayoutView
         {
-            ViewModel = (ListLayoutViewModel)layout
+            ViewModel = (ListLayoutViewModel)layout,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -166,7 +166,7 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
             root,
             content,
             cooked,
-            library
+            library,
         }
 
         )
@@ -299,6 +299,7 @@ public sealed partial class BrowserNavigationTests : DroidNet.Tests.VisualUserIn
     private sealed class NavigationDirectory : IDisposable
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-Navigation-");
+
         public string Path => this.directory.FullName.Replace('\\', '/');
 
         public void Dispose() => this.directory.Delete(recursive: true);

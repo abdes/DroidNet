@@ -102,6 +102,7 @@ public partial class PropertyCard : ContentControl
             card.appliedLayout = null;
             card.InvalidateMeasure();
         }));
+
     /// <summary>The name of the visual state group for common states.</summary>
     public const string CommonStates = "CommonStates";
 

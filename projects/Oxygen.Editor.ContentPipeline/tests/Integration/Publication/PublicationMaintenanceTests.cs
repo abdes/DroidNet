@@ -18,6 +18,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 public sealed class PublicationMaintenanceTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     [TestMethod]
     public async Task MaintenanceReclaimsOldPublicationOnlyAfterItsLastReaderCloses()
     {

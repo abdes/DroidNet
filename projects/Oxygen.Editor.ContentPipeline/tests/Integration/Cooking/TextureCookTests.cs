@@ -17,6 +17,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Cooking;
 public sealed class TextureCookTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Named textures remain source-associated and resolve from native material and scene imports.</summary>
     /// <returns>The asynchronous native workflow regression.</returns>
     [TestMethod]

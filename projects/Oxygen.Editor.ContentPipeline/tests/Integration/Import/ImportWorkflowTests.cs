@@ -127,7 +127,7 @@ public sealed class ImportWorkflowTests
         workspace.Activate(workspace.ProjectContext with { Name = "Changed" });
         var api = new CapturingEngineContentPipelineApi(new(workspace.Root, Succeeded: true, []), SucceededInspection(workspace))
         {
-            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync
+            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync,
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
         var result = await service.ImportSourceAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -227,6 +227,7 @@ public sealed class ImportWorkflowTests
 
     private static readonly string[] TypedImportOutputPaths =
         ["/Content/Materials/Model/Scalar.omat", "/Content/Geometry/Model/Triangle.ogeo", "/Content/Scenes/Model/Model.oscene"];
+
     private sealed class FailSettingsStore : IAtomicFileStore
     {
         private readonly NativeAtomicFileStore inner = new(new RealFileSystem());

@@ -81,14 +81,14 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         _ = model.CanEditMaterialSlot.Should().BeTrue("the current native slot must be editable: " + model.MaterialSlotNotice);
         var view = new GeometryView
         {
-            ViewModel = model
+            ViewModel = model,
         };
         var scroller = new ScrollViewer
         {
             Content = view,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Width = 480,
-            Height = 560
+            Height = 560,
         };
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
         try

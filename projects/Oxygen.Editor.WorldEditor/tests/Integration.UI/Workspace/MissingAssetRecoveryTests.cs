@@ -35,7 +35,7 @@ public sealed partial class MissingAssetRecoveryTests : DroidNet.Tests.VisualUse
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
         var view = new GeometryView
         {
-            ViewModel = model
+            ViewModel = model,
         };
         await LoadTestContentAsync(new ScrollViewer { Content = view }).ConfigureAwait(true);
         var missing = new Uri("asset:///Content/Geometry/DoesNotExist.ogeo");

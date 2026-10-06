@@ -18,6 +18,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 public sealed class PublicationReadTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Old readers retain the exact prior roots without excluding a new publication.</summary>
     /// <returns>The asynchronous head and lifetime regression.</returns>
     [TestMethod]

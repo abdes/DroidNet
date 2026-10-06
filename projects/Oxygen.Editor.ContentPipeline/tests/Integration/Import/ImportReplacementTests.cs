@@ -23,6 +23,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;
 public sealed class ImportReplacementTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>A replacement preserves source/output identities and becomes current only after publication.</summary>
     /// <param name="failure">The initial replacement failure, or success.</param>
     /// <returns>The asynchronous replacement and retained-candidate regression.</returns>

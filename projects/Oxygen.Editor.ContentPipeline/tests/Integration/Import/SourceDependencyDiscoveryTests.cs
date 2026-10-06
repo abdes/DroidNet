@@ -25,6 +25,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;
 public sealed class SourceDependencyDiscoveryTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Discovers shared scene dependencies, geometry buffers and settings without unrelated consuming scenes.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]

@@ -18,6 +18,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;
 public sealed class CrossMountImportTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>A scalar material in another mount is cooked before its authored geometry and scene consumers.</summary>
     /// <param name="interleaved">Whether the material and scene share a mount separated by the geometry's mount.</param>
     /// <returns>The asynchronous transitive cross-mount regression.</returns>

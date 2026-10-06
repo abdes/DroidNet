@@ -23,6 +23,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;
 public sealed class ImportedOutputOwnershipTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>An authored descriptor cannot silently take over an import-owned native identity.</summary>
     /// <param name="authoredRequest">Whether the request selects the descriptor instead of the cooked identity.</param>
     /// <returns>The asynchronous namespace-conflict regression.</returns>

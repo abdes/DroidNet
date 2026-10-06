@@ -19,6 +19,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;
 public sealed class CookedLibraryResolutionTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>A scene resolves and reuses a native geometry supplied only by a declared library.</summary>
     /// <returns>The asynchronous cooked-library regression.</returns>
     [TestMethod]

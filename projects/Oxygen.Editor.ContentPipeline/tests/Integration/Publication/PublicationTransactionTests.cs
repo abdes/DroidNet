@@ -149,10 +149,15 @@ public sealed class PublicationTransactionTests
         private global::Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountSet? reader;
 
         public bool IsRuntimeAvailable => true;
+
         public bool FailFirstMount { get; init; }
+
         public bool FailAllMounts { get; init; }
+
         public bool Resumed { get; private set; } = true;
+
         public int MountCount { get; private set; }
+
         public IReadOnlyList<string> MountedRoots { get; private set; } = [];
 
         public Task PrepareReplacementAsync()

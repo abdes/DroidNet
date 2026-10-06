@@ -83,7 +83,7 @@ public sealed partial class ComponentFieldSynchronizationTests : DroidNet.Tests.
         var scroller = new ScrollViewer
         {
             Content = view,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
         var control = await FindNodeFieldControlAsync(view, scroller, model, field, timeout.Token).ConfigureAwait(true);
@@ -94,7 +94,7 @@ public sealed partial class ComponentFieldSynchronizationTests : DroidNet.Tests.
         await WaitForNodeControlCommitAsync(fixture, model, timeout.Token).ConfigureAwait(true);
         var expected = new Dictionary<(ushort component, ushort field), float>(before)
         {
-            [(field.Component, field.NativeField)] = field.ExpectedValue
+            [(field.Component, field.NativeField)] = field.ExpectedValue,
         };
         await AssertNodeValuesAsync(fixture, node.Id, expected, model, timeout.Token).ConfigureAwait(true);
         await fixture.Context.History.UndoAsync(timeout.Token).ConfigureAwait(true);
@@ -127,7 +127,7 @@ public sealed partial class ComponentFieldSynchronizationTests : DroidNet.Tests.
         var scroller = new ScrollViewer
         {
             Content = view,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
         var control = await FindRealizedNodeFieldControlAsync(view, model, field, timeout.Token).ConfigureAwait(true);

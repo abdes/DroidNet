@@ -19,8 +19,11 @@ namespace Oxygen.Editor.ContentPipeline.TestSupport;
 internal static class IncrementalCookScenario
 {
     internal static RecordingNativeApi CreateRecordingApi(INativeCompatibilityService compatibility) => new(new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility));
+
     internal static ContentPipelineService CreateIncrementalService(CookWorkspace workspace, RecordingNativeApi api, INativeCompatibilityService compatibility) => CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+
     internal static void AssertCookSucceeded(ContentCookResult result) => _ = result.Status.Should().BeOneOf([OperationStatus.Succeeded, OperationStatus.SucceededWithWarnings], string.Join(Environment.NewLine, result.Diagnostics.Select(static diagnostic => diagnostic.TechnicalMessage ?? diagnostic.Message)));
+
     internal static Dictionary<string, (string hash, DateTime write)> ReadOutputIdentities(string projectRoot)
     {
         var headPath = global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationPaths.Head(projectRoot);

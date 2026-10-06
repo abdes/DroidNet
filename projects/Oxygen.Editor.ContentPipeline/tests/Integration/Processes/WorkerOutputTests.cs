@@ -15,6 +15,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Processes;
 public sealed class WorkerOutputTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Delivers both native streams while the worker is still running and stops only after drain.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]

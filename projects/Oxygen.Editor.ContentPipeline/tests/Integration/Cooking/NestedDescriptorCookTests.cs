@@ -22,6 +22,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Cooking;
 public sealed class NestedDescriptorCookTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Same-named materials in different folders remain distinct and resolve through nested geometry and scene paths.</summary>
     /// <returns>The asynchronous nested-namespace regression.</returns>
     [TestMethod]

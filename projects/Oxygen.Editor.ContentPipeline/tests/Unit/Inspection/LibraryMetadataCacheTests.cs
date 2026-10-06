@@ -15,6 +15,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Inspection;
 public sealed class LibraryMetadataCacheTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>A partially written or manually damaged cache must not break asset-status reads.</summary>
     /// <param name="missingReport">Whether the cached report is missing instead of malformed JSON.</param>
     /// <returns>The asynchronous cache-corruption check.</returns>

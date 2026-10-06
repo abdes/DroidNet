@@ -13,6 +13,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 public sealed class ContentImportManifestBuilderTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Distinct punctuation and Unicode paths remain distinct within a frontier.</summary>
     [TestMethod]
     public void BuildJobIdsDoNotCollapseSourcePaths()
@@ -258,6 +259,7 @@ public sealed class ContentImportManifestBuilderTests
         public string Root { get; }
 
         public Project Project { get; }
+
         public global::Oxygen.Editor.ContentPipeline.Publication.CookStagingRoot Output { get; }
 
         public void Dispose()

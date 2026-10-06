@@ -65,12 +65,12 @@ public sealed partial class BuiltinOriginsTests : DroidNet.Tests.VisualUserInter
         using AssetsLayoutViewModel layout = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins) : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
         FrameworkElement layoutView = tiles ? new TilesLayoutView
         {
-            ViewModel = (TilesLayoutViewModel)layout
+            ViewModel = (TilesLayoutViewModel)layout,
         }
 
         : new ListLayoutView
         {
-            ViewModel = (ListLayoutViewModel)layout
+            ViewModel = (ListLayoutViewModel)layout,
         };
         await layout.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         using var browser = CreateBuiltinBrowserModel(provider.Object, projects, state, layout, layoutView);
@@ -81,7 +81,7 @@ public sealed partial class BuiltinOriginsTests : DroidNet.Tests.VisualUserInter
             ViewModel = browser,
             Width = 800,
             Height = 360,
-            RequestedTheme = ElementTheme.Dark
+            RequestedTheme = ElementTheme.Dark,
         };
         var originalSize = VisualUserInterfaceTestsApp.MainWindow.AppWindow.Size;
         try
@@ -103,7 +103,7 @@ public sealed partial class BuiltinOriginsTests : DroidNet.Tests.VisualUserInter
             var authored = CreateStatusAsset(0) with
             {
                 IdentityUri = authoredUri,
-                DisplayPath = authoredUri.AbsolutePath
+                DisplayPath = authoredUri.AbsolutePath,
             };
             updates.OnNext([item, authored]);
             await WaitForRenderAsync().ConfigureAwait(true);

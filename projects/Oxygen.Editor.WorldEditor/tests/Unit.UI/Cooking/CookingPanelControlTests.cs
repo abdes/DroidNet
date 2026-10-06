@@ -122,7 +122,6 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
 
         AssertResponsiveLayout(view, toolbar, issue, scroller, width);
         await ScaledXamlHost.ScrollToEndAsync(scroller, this.TestContext.CancellationToken).ConfigureAwait(true);
-
     });
 
     /// <summary>Inspection is inline with the selected run's recovery actions and does not submit another cook.</summary>
@@ -258,7 +257,6 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)new Microsoft.UI.Xaml.Automation.Peers.HyperlinkButtonAutomationPeer(link).GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
         await WaitForRenderAsync().ConfigureAwait(true);
         actions.Verify(value => value.OpenDocumentAsync(document.DocumentId), Times.Once);
-
     });
 
     /// <summary>Recovery activation waits for the initiating menu event to return and selects the requested run.</summary>
@@ -353,7 +351,6 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
             _ = panel.FindDescendants().Should().Contain(browserView);
 
             await VerifyDockAttentionAsync(runs, model, dock, browser, cooking, browserView, cookingView, panel, tabs).ConfigureAwait(true);
-
         }
         finally
         {
@@ -582,5 +579,4 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         var hosting = new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) };
         return new(runs.Object, Mock.Of<IContentPipelineService>(), projects, actions ?? Mock.Of<ICookingWorkspaceActions>(), hosting);
     }
-
 }

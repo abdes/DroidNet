@@ -47,7 +47,7 @@ public sealed class CapturedInputCookTests
                     names.Add(document.RootElement.GetProperty("name").GetString()!);
                 }
             },
-            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync
+            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync,
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
         var result = await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -98,7 +98,7 @@ public sealed class CapturedInputCookTests
                 _ = capturedBuffer.Should().NotBe(Path.Combine(execution.InputRoot, "Content", "Geometry", "mesh.bin"));
                 _ = (await File.ReadAllTextAsync(capturedBuffer, token).ConfigureAwait(false)).Should().Be("saved buffer bytes");
             },
-            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync
+            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync,
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
 
@@ -142,7 +142,7 @@ public sealed class CapturedInputCookTests
                 _ = capturedImage.Should().NotBe(Path.Combine(execution.InputRoot, image));
                 _ = (await File.ReadAllTextAsync(capturedImage, token).ConfigureAwait(false)).Should().Be("saved mask image bytes");
             },
-            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync
+            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync,
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
 
@@ -169,7 +169,7 @@ public sealed class CapturedInputCookTests
                 state = state with { Revision = 2, IsDirty = true };
                 return Task.CompletedTask;
             },
-            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync
+            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync,
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
 
@@ -200,7 +200,7 @@ public sealed class CapturedInputCookTests
                 state = state with { Revision = 2, IsDirty = true };
                 return Task.CompletedTask;
             },
-            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync
+            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync,
         };
         var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
         var service = new MaterialCookService(pipeline, workspace.ContextService, NullLogger<MaterialCookService>.Instance);
@@ -243,7 +243,7 @@ public sealed class CapturedInputCookTests
         var api = new CapturingEngineContentPipelineApi(new(workspace.Root, Succeeded: true, []), SucceededInspection(workspace))
         {
             BeforeImport = (_, _) => Task.FromException(new System.ComponentModel.Win32Exception(2)),
-            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync
+            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync,
         };
         var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
         var service = new MaterialCookService(pipeline, workspace.ContextService, NullLogger<MaterialCookService>.Instance);
@@ -270,7 +270,7 @@ public sealed class CapturedInputCookTests
                 workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
                 return Task.CompletedTask;
             },
-            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync
+            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync,
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
 
@@ -290,7 +290,7 @@ public sealed class CapturedInputCookTests
         var api = new CapturingEngineContentPipelineApi(new(workspace.Root, Succeeded: true, []), SucceededInspection(workspace))
         {
             BeforeImport = (_, _) => Task.FromException(new ContentPipelineTerminationException(new IOException("Termination failed"), drain.Task)),
-            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync
+            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync,
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
         Func<Task> cook = () => service.CookAssetAsync(new("asset:///Content/Materials/Red.omat.json"), this.TestContext.CancellationToken);

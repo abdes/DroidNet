@@ -43,7 +43,7 @@ public sealed partial class CookingSaveConflictTests : DroidNet.Tests.VisualUser
         using var panel = new CookingPanelViewModel(services.Runs, services.Pipeline, services.Projects, actions.Object, CreateStatusHosting());
         var view = new CookingPanelView
         {
-            ViewModel = panel
+            ViewModel = panel,
         };
         var root = new Grid
         {
@@ -54,7 +54,7 @@ public sealed partial class CookingSaveConflictTests : DroidNet.Tests.VisualUser
             Children =
             {
                 view
-            }
+            },
         };
         await LoadTestContentAsync(root).ConfigureAwait(true);
         var cook = services.Pipeline.CookAssetAsync(scenario.Material.MaterialUri, cancellationToken);

@@ -14,6 +14,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 public sealed class PublicationGateTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     [TestMethod]
     [DoNotParallelize]
     public async Task SelectionGateContentionDoesNotRaiseFirstChanceExceptions()

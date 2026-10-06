@@ -11,6 +11,7 @@ namespace Oxygen.Editor.ContentPipeline.TestSupport;
 internal static class CookCoordinatorScenario
 {
     internal static ContentCookCoordinator CreateCoordinator(ProjectContextService context) => new(context, NullLogger<ContentCookCoordinator>.Instance);
+
     internal static ProjectContextService CreateContextService()
     {
         var service = new ProjectContextService();

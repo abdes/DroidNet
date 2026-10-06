@@ -61,6 +61,7 @@ namespace Oxygen.Editor.WorldEditor.TestSupport;
 internal sealed partial class NativeSceneFixture : IAsyncDisposable
 {
     public CookingPanelViewModel CreateTimingCookingPanel(CatalogWorkloadServices services) => new(services.Runs, services.Pipeline, services.Projects, Mock.Of<ICookingWorkspaceActions>(), this.hosting);
+
     public ICookDocumentRegistration RegisterMainCookDocument(CatalogWorkloadServices services)
     {
         var source = this.manager.GetSceneSourceVersion(this.Source)!;
@@ -185,6 +186,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     }
 
     public Task<bool> OpenTransitionInspectionAsync(ProjectContext project) => this.messenger.Send(new OpenCookedInspectionRequestMessage(project, new Uri("asset:///Content/Geometry"), validate: false)).Response;
+
     public SceneContentDemandService CreateImportedAssetDemand(CatalogWorkloadServices services, ContentBrowserAssetProvider provider)
     {
         var demand = new SceneContentDemandService(this.hosting, provider, services.Pipeline, services.Projects, this.documents.Object, this.sync, this.messenger, default, NullLogger<SceneContentDemandService>.Instance);
@@ -208,6 +210,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     private readonly BehaviorSubject<IReadOnlyList<MaterialPickerResult>> materialChoices = new([]);
     private RuntimeSceneTarget? target;
     private IGeometryMaterialSlotProvider activeMaterialSlotProvider;
+
     public NativeSceneFixture(bool automatic, Action<Scene>? seed = null, EngineSettings? engineSettings = null, ILoggerFactory? loggerFactory = null, bool hierarchyAuthoring = false)
     {
         var dispatcher = VisualUserInterfaceTestsApp.DispatcherQueue;
@@ -216,7 +219,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
             Application = Application.Current,
             Dispatcher = dispatcher,
             DispatcherScheduler = new DispatcherQueueScheduler(dispatcher),
-            IsRunning = true
+            IsRunning = true,
         };
         var publisher = new Mock<IOperationResultPublisher>();
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
@@ -227,7 +230,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         this.sync = new SceneEngineSync(this.engine, operationResults: results, hostingContext: this.hosting);
         var project = new Project(new ProjectInfo("Environment fields", Category.Games, this.directory.FullName, "preview.png") { AuthoringMounts = [new("Content", "Content")], })
         {
-            Name = "Environment fields"
+            Name = "Environment fields",
         };
         File.WriteAllText(Path.Combine(this.directory.FullName, "Project.oxy"), ProjectInfo.ToJson(project.ProjectInfo));
         this.projectContexts.Activate(ProjectContext.FromProjectInfo(project.ProjectInfo));
@@ -261,13 +264,21 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     }
 
     public Scene Source { get; private set; }
+
     public SceneDocumentCommandContext Context { get; private set; }
+
     public EnvironmentViewModel Model { get; }
+
     public SceneDocumentCommandService Commands { get; }
+
     public Mock<Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider> AssetCatalog { get; } = new();
+
     public Mock<IMaterialPickerService> MaterialPicker { get; } = new();
+
     public ConcurrentQueue<OperationResult> Results { get; } = new();
+
     public string ProjectRoot => this.directory.FullName;
+
     public ProjectContextService Projects => this.projectContexts;
 
     public async Task<MaterialSlotTarget> ReadSingleMaterialSlotAsync(Guid nodeId, CancellationToken cancellationToken)
@@ -305,6 +316,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     }
 
     public void SetMaterialChoices(IReadOnlyList<MaterialPickerResult> choices) => this.materialChoices.OnNext(choices);
+
     public async Task<string> GetCookedRootAsync(string projectRoot, CancellationToken token)
     {
         var info = await this.manager.LoadProjectInfoAsync(projectRoot).ConfigureAwait(true) ?? throw new InvalidOperationException("The native fixture project has not been saved.");
@@ -320,6 +332,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     }
 
     public Task SuspendCookedContentAsync() => this.engine.SuspendCookedContentAsync();
+
     public SceneNodeEditorViewModel CreateInspectorHost(IList<SceneNode> selection, Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider? assets = null, IMaterialPickerService? materials = null, Oxygen.Editor.ContentPipeline.Discovery.IBuiltinCatalogDiscovery? builtins = null, ISceneContentDemandService? contentDemand = null, IGeometryMaterialSlotProvider? materialSlots = null)
     {
         this.activeMaterialSlotProvider = materialSlots ?? this.materialPipeline.Pipeline;

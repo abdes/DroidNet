@@ -12,6 +12,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 public sealed class SelectionLeaseTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     [TestMethod]
     public async Task CancellingSelectionWaitDoesNotReleaseAnotherPublisher()
     {

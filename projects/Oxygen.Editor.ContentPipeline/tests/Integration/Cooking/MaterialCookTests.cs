@@ -17,6 +17,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Cooking;
 public sealed class MaterialCookTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Verifies the workflow can import Build And Verify Loose Cooked Output.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
@@ -245,9 +246,11 @@ public sealed class MaterialCookTests
             alphaMode: MaterialAlphaMode.Opaque,
             alphaCutoff: 0.5f,
             doubleSided: false);
+
     private sealed partial class MaterialWorkspace : IDisposable
     {
         private Oxygen.Testing.NativeContentPipelineFixture? nativePipeline;
+
         public MaterialWorkspace(string authoringFolder = "Content")
         {
             this.Root = Path.Combine(Path.GetTempPath(), "oxygen-content-pipeline-tests", Guid.NewGuid().ToString("N"));
@@ -276,6 +279,7 @@ public sealed class MaterialCookTests
         public ProjectContextService ContextService { get; } = new();
 
         public ContentCookCoordinator CookCoordinator { get; }
+
         public global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry Documents { get; } = new();
 
         public Oxygen.Testing.NativeContentPipelineFixture NativePipeline => this.nativePipeline ??= new(this.ContextService, this.CookCoordinator, this.Documents);

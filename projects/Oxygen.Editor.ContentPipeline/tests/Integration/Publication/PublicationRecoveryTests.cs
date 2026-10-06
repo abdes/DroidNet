@@ -15,6 +15,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 public sealed class PublicationRecoveryTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Recovery restores prior roots even when a rename completed before the next journal update.</summary>
     /// <param name="hadPrevious">Whether prior output existed.</param>
     /// <param name="boundary">The interrupted durable boundary.</param>
@@ -55,7 +56,6 @@ public sealed class PublicationRecoveryTests
             _ = recovery.Phase.Should().Be(CookPublicationPhase.RolledBack);
             AssertRecoveredRoot(replica.FullName, "Content", hadPrevious);
             AssertRecoveredRoot(replica.FullName, "Second", hadPrevious);
-
         }
         finally
         {

@@ -18,6 +18,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 public sealed class CookPublicationWorkflowTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>A native recook followed by mount failure restores every published byte and its selected head and products.</summary>
     /// <returns>The asynchronous native publication regression.</returns>
     [TestMethod]

@@ -14,6 +14,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
 public sealed class CookRunHistoryTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Queued writers and cancellation wait until the current consumer refresh settles.</summary>
     /// <returns>The asynchronous publication ordering regression.</returns>
     [TestMethod]

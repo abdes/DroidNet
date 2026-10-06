@@ -607,6 +607,7 @@ public sealed partial class SceneDocumentCommandService
         }
 
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
+
         // Publish the compensated local TRS before reparenting native with preserve-world
         // disabled, so the native side applies the new local TRS instead of a stale one.
         Guid? firstOperationResultId = null;
@@ -1052,6 +1053,7 @@ public sealed partial class SceneDocumentCommandService
             $"Move {move.Node.Name}",
             async () => await this.RedoReparentAsync(context, move).ConfigureAwait(true));
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
+
         // Surface a native rejection from inside the history delegate: operation results reach the
         // user through the operations channel regardless of who initiated the reparent.
         var outcome = await this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, move.Node).ConfigureAwait(true);
@@ -1072,6 +1074,7 @@ public sealed partial class SceneDocumentCommandService
             $"Move {move.Node.Name}",
             async () => await this.UndoReparentAsync(context, move).ConfigureAwait(true));
         await this.MarkDirtyAsync(context).ConfigureAwait(true);
+
         // Surface a native rejection from inside the history delegate, as in UndoReparentAsync.
         var outcome = await this.sceneEngineSync.UpdateNodeTransformAsync(context.Scene, move.Node).ConfigureAwait(true);
         _ = await this.PublishSyncOutcomeAsync(context, SceneOperationKinds.NodeReparent, outcome).ConfigureAwait(true);

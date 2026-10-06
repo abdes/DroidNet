@@ -17,6 +17,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Processes;
 public sealed class WorkerLaunchTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Preserves empty, quoted, Unicode, and shell-looking arguments as literal tokens.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]

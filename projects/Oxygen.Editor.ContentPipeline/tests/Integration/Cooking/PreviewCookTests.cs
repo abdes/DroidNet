@@ -18,6 +18,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Cooking;
 public sealed class PreviewCookTests
 {
     public TestContext TestContext { get; set; } = null!;
+
     /// <summary>A material demand joins its paused Save without saving or cooking its dirty consuming scene.</summary>
     /// <returns>The asynchronous native preview-demand regression.</returns>
     [TestMethod]

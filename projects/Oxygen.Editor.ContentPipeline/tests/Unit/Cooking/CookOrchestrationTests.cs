@@ -28,7 +28,7 @@ public sealed class CookOrchestrationTests
         var generator = new CapturingSceneDescriptorGenerator(diagnostics: []);
         var api = new CapturingEngineContentPipelineApi(validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []), inspection: new CookInspectionResult(workspace.Root, Succeeded: true, SourceIdentity: Guid.NewGuid(), Assets: [new CookedAssetEntry("/Content/Scenes/Main.oscene", ContentCookAssetKind.Scene)], Files: [], Diagnostics: []))
         {
-            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync
+            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
         var service = CreateService(workspace, generator, api);
 
@@ -72,7 +72,7 @@ public sealed class CookOrchestrationTests
             ]);
         var api = new CapturingEngineContentPipelineApi(validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []), inspection: SucceededInspection(workspace))
         {
-            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync
+            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
         var service = CreateService(workspace, generator, api);
 
@@ -97,7 +97,7 @@ public sealed class CookOrchestrationTests
         var materialUri = new Uri("asset:///Content/Materials/Red.omat.json");
         var api = new CapturingEngineContentPipelineApi(validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []), inspection: new CookInspectionResult(workspace.Root, Succeeded: true, SourceIdentity: Guid.NewGuid(), Assets: [new CookedAssetEntry("/Content/Materials/Red.omat", ContentCookAssetKind.Material)], Files: [], Diagnostics: []))
         {
-            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync
+            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
@@ -127,7 +127,7 @@ public sealed class CookOrchestrationTests
         using var workspace = new CookWorkspace();
         var api = new CapturingEngineContentPipelineApi(validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []), inspection: SucceededInspection(workspace))
         {
-            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync
+            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
@@ -150,7 +150,7 @@ public sealed class CookOrchestrationTests
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         var api = new CapturingEngineContentPipelineApi(validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []), inspection: SucceededInspection(workspace), importResult: new NativeImportResult(Succeeded: false, Diagnostics: [new DiagnosticRecord { OperationId = Guid.NewGuid(), Domain = FailureDomain.AssetImport, Severity = DiagnosticSeverity.Error, Code = AssetImportDiagnosticCodes.ImportFailed, Message = "Native import failed.", },]))
         {
-            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync
+            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
@@ -172,7 +172,7 @@ public sealed class CookOrchestrationTests
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         var api = new CapturingEngineContentPipelineApi(validation: new CookValidationResult(workspace.Root, Succeeded: false, Diagnostics: [new DiagnosticRecord { OperationId = Guid.NewGuid(), Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error, Code = ContentPipelineDiagnosticCodes.ValidateFailed, Message = "Index is invalid.", },]), inspection: SucceededInspection(workspace))
         {
-            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync
+            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
@@ -196,7 +196,7 @@ public sealed class CookOrchestrationTests
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         var api = new CapturingEngineContentPipelineApi(validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []), inspection: new CookInspectionResult(workspace.Root, Succeeded: false, SourceIdentity: null, Assets: [], Files: [], Diagnostics: [new DiagnosticRecord { OperationId = Guid.NewGuid(), Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error, Code = ContentPipelineDiagnosticCodes.InspectFailed, Message = "Inspection failed.", },]))
         {
-            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync
+            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
@@ -220,7 +220,7 @@ public sealed class CookOrchestrationTests
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         var api = new CapturingEngineContentPipelineApi(validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []), inspection: SucceededInspection(workspace))
         {
-            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync
+            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
         var service = new ContentPipelineService(
             workspace.ContextService,
@@ -263,7 +263,7 @@ public sealed class CookOrchestrationTests
             ]);
         var api = new CapturingEngineContentPipelineApi(validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []), inspection: SucceededInspection(workspace))
         {
-            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync
+            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
         var service = CreateService(workspace, generator, api);
 
@@ -288,7 +288,7 @@ public sealed class CookOrchestrationTests
         workspace.WriteMaterial("Content/Materials/Nested/Blue.omat.json", "Blue");
         var api = new CapturingEngineContentPipelineApi(validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []), inspection: SucceededInspection(workspace))
         {
-            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync
+            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
@@ -310,7 +310,7 @@ public sealed class CookOrchestrationTests
         var generator = new CapturingSceneDescriptorGenerator(diagnostics: []);
         var api = new CapturingEngineContentPipelineApi(validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []), inspection: SucceededInspection(workspace))
         {
-            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync
+            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
         var service = CreateService(workspace, generator, api);
 
@@ -332,7 +332,7 @@ public sealed class CookOrchestrationTests
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         var api = new CapturingEngineContentPipelineApi(validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []), inspection: SucceededInspection(workspace))
         {
-            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync
+            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
@@ -354,7 +354,7 @@ public sealed class CookOrchestrationTests
         await workspace.SeedEmptyPublicationAsync("Content", CancellationToken.None).ConfigureAwait(false);
         var api = new CapturingEngineContentPipelineApi(validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []), inspection: SucceededInspection(workspace))
         {
-            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync
+            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
@@ -377,7 +377,7 @@ public sealed class CookOrchestrationTests
         await workspace.SeedEmptyPublicationAsync("Content", CancellationToken.None).ConfigureAwait(false);
         var api = new CapturingEngineContentPipelineApi(validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []), inspection: SucceededInspection(workspace))
         {
-            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync
+            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
@@ -390,6 +390,7 @@ public sealed class CookOrchestrationTests
     private sealed class InvalidManifestBuilder : IContentImportManifestBuilder
     {
         public ContentImportJob BuildModelJob(ContentCookInput input, IReadOnlyList<string> dependsOn, string name, ContentImportLayout layout, global::Oxygen.Editor.ContentPipeline.Import.NativeMaterialSlotProvenance provenance) => new ContentImportManifestBuilder().BuildModelJob(input, dependsOn, name, layout, provenance);
+
         public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn, global::Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings? modelSettings = null) => new ContentImportManifestBuilder().BuildJob(input, dependsOn, modelSettings);
 
         public ContentImportManifest BuildManifest(ContentCookScope scope)

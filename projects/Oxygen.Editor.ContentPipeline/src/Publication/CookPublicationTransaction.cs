@@ -157,6 +157,7 @@ internal sealed partial class CookPublicationTransaction
         try
         {
             candidate.RequireAvailableGenerations();
+
             // Keep metadata admission and member opens outside the selection gate.
             // These readers also protect mutable external libraries through commit.
             admission = await new CookedContentMountService().PrepareAsync(this.project, candidate, cancellationToken).ConfigureAwait(false);

@@ -48,7 +48,7 @@ public sealed partial class ContentPriorityTests : DroidNet.Tests.VisualUserInte
         var source = fixture.Source;
         var overriding = project with
         {
-            CookedContentOrder = [new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.LocalFolder, "Library")]
+            CookedContentOrder = [new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.LocalFolder, "Library")],
         };
         await fixture.ApplyContentPriorityAsync(overriding, timeout.Token).ConfigureAwait(true);
         var overridden = await WaitForNodeAsync(fixture, nodeId, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], blue) < 0.001f, timeout.Token).ConfigureAwait(true);
