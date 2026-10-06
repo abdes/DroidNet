@@ -5,18 +5,18 @@
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Dialogs;
-using DroidNet.Hosting.WinUI;
-using DroidNet.Mvvm.Converters;
+using DroidNet.Aura.Windowing;
 using DroidNet.Mvvm;
-using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml;
+using DroidNet.Mvvm.Converters;
+using Microsoft.UI;
+using Microsoft.UI.Xaml.Controls;
 using Moq;
+using Oxygen.Editor.ContentBrowser;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Importing;
-using Oxygen.Editor.ContentBrowser;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
-using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core.Diagnostics;
@@ -27,12 +27,14 @@ namespace Oxygen.Editor.ContentBrowser.UI.Tests.Importing;
 public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     /// <summary>Accepting the review submits its values once; cancelling starts no native operation.</summary>
+    /// <param name="selectSource">Whether the source picker returns a file or is cancelled.</param>
     /// <param name="accept">Whether the user confirms the review.</param>
     /// <returns>The asynchronous command handoff test.</returns>
     [TestMethod]
-    [DataRow(true)]
-    [DataRow(false)]
-    public Task ImportReviewUsesSharedCookingAndHonorsCancel(bool accept) => EnqueueAsync(async () =>
+    [DataRow(true, true)]
+    [DataRow(true, false)]
+    [DataRow(false, false)]
+    public Task ImportReviewUsesSharedCookingAndHonorsCancel(bool selectSource, bool accept) => EnqueueAsync(async () =>
     {
         var projects = new ProjectContextService();
         var project = new ProjectContext
@@ -53,18 +55,14 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
             .ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.Asset, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null));
         var locator = new Mock<IViewLocator>();
         _ = locator.Setup(value => value.ResolveView(It.IsAny<object>())).Returns(() => new SceneImportDialogView());
-        var dialogs = new Mock<IDialogService>();
-        _ = dialogs.Setup(value => value.ShowAsync(It.IsAny<DialogSpec>(), It.IsAny<CancellationToken>()))
-            .Returns<DialogSpec, CancellationToken>(async (spec, cancellationToken) =>
-            {
-                _ = spec.PrimaryButtonText.Should().Be("Import");
-                var view = (SceneImportDialogView)spec.Content!;
-                AssertImportPlacement(view.ViewModel!);
-                view.ViewModel!.Name = "ReviewedCrate";
-                view.ViewModel.DestinationFolder = "/Content/Props";
-                _ = (await spec.PrimaryAction!().ConfigureAwait(true)).Should().BeTrue();
-                return accept ? DialogButton.Primary : DialogButton.Close;
-            });
+        var source = @"D:\External Sources\Crate.gltf";
+        await LoadTestContentAsync(new Grid()).ConfigureAwait(true);
+        var owner = DroidNet.Tests.VisualUserInterfaceTestsApp.MainWindow;
+        var managed = new Mock<IManagedWindow>();
+        _ = managed.SetupGet(value => value.Window).Returns(owner);
+        var windows = new Mock<IWindowManagerService>();
+        _ = windows.SetupGet(value => value.ActiveWindow).Returns(managed.Object);
+        var dialogs = CreateDialogs(project, source, selectSource, accept);
         var provider = new Mock<IContentBrowserAssetProvider>();
         using var browser = new AssetsViewModel(
             Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.ICookRunService>(),
@@ -80,12 +78,12 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
             Mock.Of<DroidNet.Storage.IStorageProvider>(),
             new StrongReferenceMessenger(),
             dialogs.Object,
-            Mock.Of<DroidNet.Aura.Windowing.IWindowManagerService>())
+            windows.Object)
         {
             IsOperationResultVisible = true,
         };
-        var source = Path.Combine(Path.GetTempPath(), "Crate.gltf");
-        await browser.ImportSourceFileAsync(project, source).ConfigureAwait(true);
+        await browser.ImportCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
+        dialogs.Verify(value => value.ShowAsync(It.IsAny<DialogSpec>(), It.IsAny<CancellationToken>()), selectSource ? Times.Once() : Times.Never());
         pipeline.Verify(value => value.ImportSourceAsync(It.IsAny<SceneImportRequest>(), It.IsAny<CancellationToken>()), accept ? Times.Once() : Times.Never());
         provider.Verify(value => value.RefreshAsync(AssetBrowserFilter.Default, It.IsAny<CancellationToken>()), accept ? Times.Once() : Times.Never());
         if (accept)
@@ -97,6 +95,34 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
             _ = browser.IsOperationResultVisible.Should().BeFalse();
         }
     });
+
+    private static Mock<IDialogService> CreateDialogs(ProjectContext project, string source, bool selectSource, bool accept)
+    {
+        var dialogs = new Mock<IDialogService>();
+        var ownerId = DroidNet.Tests.VisualUserInterfaceTestsApp.MainWindow.AppWindow.Id;
+        _ = dialogs.Setup(value => value.PickFileAsync(It.IsAny<FilePickerSpec>(), ownerId, It.IsAny<CancellationToken>()))
+            .Callback<FilePickerSpec, WindowId, CancellationToken>((spec, _, _) =>
+            {
+                _ = spec.SettingsIdentifier.Should().Be("Oxygen.ImportAsset");
+                _ = spec.SuggestedStartFolder.Should().Be(project.ProjectRoot);
+                _ = spec.FileTypeChoices.Keys.Should().Equal("Supported assets", "3D models", "Textures");
+                _ = spec.FileTypeChoices["3D models"].Should().Equal(".gltf", ".glb", ".fbx");
+                _ = spec.FileTypeChoices["Textures"].Should().NotBeEmpty();
+            })
+            .ReturnsAsync(selectSource ? source : null);
+        _ = dialogs.Setup(value => value.ShowAsync(It.IsAny<DialogSpec>(), It.IsAny<CancellationToken>()))
+            .Returns<DialogSpec, CancellationToken>(async (spec, cancellationToken) =>
+            {
+                _ = spec.PrimaryButtonText.Should().Be("Import");
+                var view = (SceneImportDialogView)spec.Content!;
+                AssertImportPlacement(view.ViewModel!);
+                view.ViewModel!.Name = "ReviewedCrate";
+                view.ViewModel.DestinationFolder = "/Content/Props";
+                _ = (await spec.PrimaryAction!().ConfigureAwait(true)).Should().BeTrue();
+                return accept ? DialogButton.Primary : DialogButton.Close;
+            });
+        return dialogs;
+    }
 
     private static ContentBrowserState CreateSceneFolderImportState(IProjectContextService projects)
     {

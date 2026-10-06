@@ -66,17 +66,24 @@ public interface IDialogService
     public Task<bool> ConfirmAsync(string title, string message, CancellationToken cancellationToken = default);
 
     /// <summary>
-    ///     Shows a folder picker owned by the currently active Aura window.
+    ///     Shows a configured folder picker owned by the currently active Aura window.
     /// </summary>
-    /// <param name="cancellationToken">A token that cancels the picker operation.</param>
-    /// <returns>The selected folder path, or <see langword="null"/> when cancelled or unavailable.</returns>
-    public Task<string?> PickFolderAsync(CancellationToken cancellationToken = default);
+    /// <param name="picker">The title and location preferences; these do not restrict folder selection.</param>
+    /// <param name="cancellationToken">A token checked before and after the native picker operation.</param>
+    /// <returns>The selected folder path, or <see langword="null"/> when the user cancels.</returns>
+    public Task<string?> PickFolderAsync(FolderPickerSpec picker, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    ///     Shows a folder picker owned by a specific Aura window.
-    /// </summary>
+    /// <summary>Shows a configured folder picker owned by a specific Aura window.</summary>
+    /// <param name="picker">The title and location preferences; these do not restrict folder selection.</param>
     /// <param name="ownerWindowId">The owner window id.</param>
-    /// <param name="cancellationToken">A token that cancels the picker operation.</param>
-    /// <returns>The selected folder path, or <see langword="null"/> when cancelled or unavailable.</returns>
-    public Task<string?> PickFolderAsync(WindowId ownerWindowId, CancellationToken cancellationToken = default);
+    /// <param name="cancellationToken">A token checked before and after the native picker operation.</param>
+    /// <returns>The selected folder path, or <see langword="null"/> when the user cancels.</returns>
+    public Task<string?> PickFolderAsync(FolderPickerSpec picker, WindowId ownerWindowId, CancellationToken cancellationToken = default);
+
+    /// <summary>Shows a configured file-open picker owned by a specific Aura window.</summary>
+    /// <param name="picker">The title, location preferences and labeled file types.</param>
+    /// <param name="ownerWindowId">The owner window id.</param>
+    /// <param name="cancellationToken">A token checked before and after the native picker operation.</param>
+    /// <returns>The selected file path, or <see langword="null"/> when the user cancels.</returns>
+    public Task<string?> PickFileAsync(FilePickerSpec picker, WindowId ownerWindowId, CancellationToken cancellationToken = default);
 }

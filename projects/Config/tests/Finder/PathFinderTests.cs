@@ -191,7 +191,9 @@ public class PathFinderTests
         var pathFinder = new PathFinder(this.mockFileSystem.Object, config);
 
         string expectedPath;
-        var localAppDataSpecialFolder = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var localAppDataSpecialFolder = KnownFolders.GetKnownFolderPath(
+            new Guid("F1B32785-6FBA-4FCF-9D55-7B8E7F157091"),
+            KnownFolders.NoPackageRedirection);
         expectedPath = Path.Combine(localAppDataSpecialFolder, config.CompanyName, config.ApplicationName);
 
         // Act

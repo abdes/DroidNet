@@ -16,21 +16,6 @@ public sealed partial class LocalFolderMountDialogViewModel : ObservableObject
     private readonly IDialogService dialogService;
     private readonly HashSet<string> existingMountPointNames;
 
-    [ObservableProperty]
-    private string mountPointName = string.Empty;
-
-    [ObservableProperty]
-    private string selectedFolderPath = string.Empty;
-
-    [ObservableProperty]
-    private string errorMessage = string.Empty;
-
-    [ObservableProperty]
-    private bool canAccept;
-
-    /// <summary>
-    ///     Initializes a new instance of the <see cref="LocalFolderMountDialogViewModel"/> class.
-    /// </summary>
     public LocalFolderMountDialogViewModel(
         IDialogService dialogService,
         IReadOnlyCollection<string> existingMountPointNames)
@@ -39,6 +24,18 @@ public sealed partial class LocalFolderMountDialogViewModel : ObservableObject
         this.existingMountPointNames = new HashSet<string>(existingMountPointNames, StringComparer.Ordinal);
         this.Revalidate();
     }
+
+    [ObservableProperty]
+    public partial string MountPointName { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string SelectedFolderPath { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string ErrorMessage { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial bool CanAccept { get; set; }
 
     /// <summary>
     ///     Gets the resulting mount definition when the dialog is accepted.
@@ -53,13 +50,21 @@ public sealed partial class LocalFolderMountDialogViewModel : ObservableObject
     {
         try
         {
-            var folder = await this.dialogService.PickFolderAsync(cancellationToken);
+            var picker = new FolderPickerSpec("Choose local folder mount", "Oxygen.LocalFolderMount")
+            {
+                SuggestedStartFolder = this.SelectedFolderPath,
+            };
+            var folder = await this.dialogService.PickFolderAsync(picker, cancellationToken).ConfigureAwait(true);
             if (!string.IsNullOrEmpty(folder))
             {
                 this.SelectedFolderPath = folder;
             }
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+            or InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
             this.ErrorMessage = $"Could not pick folder: {ex.Message}";
         }

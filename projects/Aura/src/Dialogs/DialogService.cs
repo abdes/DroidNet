@@ -9,8 +9,7 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
-using Windows.Storage.Pickers;
-using WinRT.Interop;
+using Microsoft.Windows.Storage.Pickers;
 
 namespace DroidNet.Aura.Dialogs;
 
@@ -83,12 +82,76 @@ public sealed class DialogService : IDialogService
     }
 
     /// <inheritdoc/>
-    public Task<string?> PickFolderAsync(CancellationToken cancellationToken = default)
-        => this.PickFolderAsync(ownerWindowId: null, cancellationToken);
+    public Task<string?> PickFolderAsync(FolderPickerSpec picker, CancellationToken cancellationToken = default)
+        => this.PickFolderAsync(picker, ownerWindowId: null, cancellationToken);
 
     /// <inheritdoc/>
-    public Task<string?> PickFolderAsync(WindowId ownerWindowId, CancellationToken cancellationToken = default)
-        => this.PickFolderAsync((WindowId?)ownerWindowId, cancellationToken);
+    public Task<string?> PickFolderAsync(FolderPickerSpec picker, WindowId ownerWindowId, CancellationToken cancellationToken = default)
+        => this.PickFolderAsync(picker, (WindowId?)ownerWindowId, cancellationToken);
+
+    /// <inheritdoc/>
+    public async Task<string?> PickFileAsync(FilePickerSpec picker, WindowId ownerWindowId, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(picker);
+        cancellationToken.ThrowIfCancellationRequested();
+        var owner = this.ResolveOwnerWindow(ownerWindowId);
+        return await owner.DispatcherQueue.EnqueueAsync(async () =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var nativePicker = CreateFilePicker(picker, owner.Id);
+            var file = await nativePicker.PickSingleFileAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+            return file?.Path;
+        }).ConfigureAwait(false);
+    }
+
+    internal static FolderPicker CreateFolderPicker(FolderPickerSpec spec, WindowId ownerWindowId)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        ArgumentException.ThrowIfNullOrWhiteSpace(spec.Title, nameof(spec));
+        ArgumentException.ThrowIfNullOrWhiteSpace(spec.SettingsIdentifier, nameof(spec));
+        return new FolderPicker(ownerWindowId)
+        {
+            Title = spec.Title,
+            SettingsIdentifier = spec.SettingsIdentifier,
+            SuggestedStartFolder = spec.SuggestedStartFolder,
+            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+        };
+    }
+
+    internal static FileOpenPicker CreateFilePicker(FilePickerSpec spec, WindowId ownerWindowId)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        ArgumentException.ThrowIfNullOrWhiteSpace(spec.Title, nameof(spec));
+        ArgumentException.ThrowIfNullOrWhiteSpace(spec.SettingsIdentifier, nameof(spec));
+        ArgumentNullException.ThrowIfNull(spec.FileTypeChoices, nameof(spec));
+        if (spec.FileTypeChoices.Count == 0)
+        {
+            throw new ArgumentException("At least one file type choice is required.", nameof(spec));
+        }
+
+        var picker = new FileOpenPicker(ownerWindowId)
+        {
+            Title = spec.Title,
+            SettingsIdentifier = spec.SettingsIdentifier,
+            SuggestedStartFolder = spec.SuggestedStartFolder,
+            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+            ViewMode = PickerViewMode.List,
+        };
+        foreach (var (label, extensions) in spec.FileTypeChoices)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(label, nameof(spec));
+            ArgumentNullException.ThrowIfNull(extensions, nameof(spec));
+            if (extensions.Count == 0)
+            {
+                throw new ArgumentException("Each file type choice must contain an extension.", nameof(spec));
+            }
+
+            picker.FileTypeChoices.Add(label, [.. extensions]);
+        }
+
+        return picker;
+    }
 
     private static DialogButton MapResult(ContentDialogResult result)
         => result switch
@@ -297,32 +360,24 @@ public sealed class DialogService : IDialogService
         }
     }
 
-    private async Task<string?> PickFolderAsync(WindowId? ownerWindowId, CancellationToken cancellationToken)
+    private async Task<string?> PickFolderAsync(FolderPickerSpec spec, WindowId? ownerWindowId, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(spec);
+        cancellationToken.ThrowIfCancellationRequested();
         var owner = this.ResolveOwnerWindow(ownerWindowId);
 
         return await owner.DispatcherQueue.EnqueueAsync(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var picker = new FolderPicker();
-            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(owner.Window));
-            picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
-            picker.FileTypeFilter.Add("*");
+            var picker = CreateFolderPicker(spec, owner.Id);
 
             // FolderPicker does not accept CancellationToken; honor cancellation before/after.
             cancellationToken.ThrowIfCancellationRequested();
             var folder = await picker.PickSingleFolderAsync();
             cancellationToken.ThrowIfCancellationRequested();
 
-            var path = folder?.Path;
-            System.Diagnostics.Debug.WriteLine($"[DialogService] PickFolderAsync returned path: {path}");
-            if (string.IsNullOrEmpty(path))
-            {
-                System.Diagnostics.Debug.WriteLine("[DialogService] Picker returned null/empty path");
-            }
-
-            return path;
+            return folder?.Path;
         }).ConfigureAwait(false);
     }
 

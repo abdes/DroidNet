@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Aura.Dialogs;
 using DroidNet.Mvvm.Generators;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ProjectBrowser.Projects;
@@ -17,17 +19,23 @@ namespace Oxygen.Editor.ProjectBrowser.Views;
 public sealed partial class NewProjectView
 {
     private readonly IProjectBrowserService projectBrowser;
+    private readonly IDialogService dialogService;
+    private readonly ILoggerFactory? loggerFactory;
     private Control? templatesGridControl;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="NewProjectView"/> class.
     /// </summary>
     /// <param name="projectBrowser">The project browser service.</param>
-    public NewProjectView(IProjectBrowserService projectBrowser)
+    /// <param name="dialogService">The owner-aware picker service.</param>
+    /// <param name="loggerFactory">The logger factory.</param>
+    public NewProjectView(IProjectBrowserService projectBrowser, IDialogService dialogService, ILoggerFactory? loggerFactory = null)
     {
         this.InitializeComponent();
 
         this.projectBrowser = projectBrowser;
+        this.dialogService = dialogService;
+        this.loggerFactory = loggerFactory;
         this.Loaded += this.OnNewProjectViewLoaded;
     }
 
@@ -76,7 +84,7 @@ public sealed partial class NewProjectView
         _ = args;
 
         var template = this.ViewModel!.SelectedItem!;
-        var dialog = new NewProjectDialog(this.projectBrowser, template) { XamlRoot = this.XamlRoot };
+        var dialog = new NewProjectDialog(this.projectBrowser, template, this.dialogService, this.loggerFactory) { XamlRoot = this.XamlRoot };
 
         var result = await dialog.ShowAsync();
 

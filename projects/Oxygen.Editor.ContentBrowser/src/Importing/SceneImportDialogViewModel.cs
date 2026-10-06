@@ -179,7 +179,11 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
     {
         try
         {
-            var selected = await this.dialogs.PickFolderAsync(cancellationToken).ConfigureAwait(true);
+            var picker = new FolderPickerSpec("Choose model destination", "Oxygen.ModelDestination")
+            {
+                SuggestedStartFolder = this.project.ProjectRoot,
+            };
+            var selected = await this.dialogs.PickFolderAsync(picker, cancellationToken).ConfigureAwait(true);
             if (selected is null)
             {
                 return;

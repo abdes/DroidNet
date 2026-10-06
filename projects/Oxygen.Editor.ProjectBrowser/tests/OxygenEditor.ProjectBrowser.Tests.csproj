@@ -13,6 +13,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <PackageReference Include="Moq" />
         <PackageReference Include="DryIoc.dll" />
         <PackageReference Include="DryIoc.Microsoft.DependencyInjection" />
         <PackageReference Include="Microsoft.Extensions.Hosting" />

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using DroidNet.Aura.Dialogs;
 using DroidNet.Mvvm.Generators;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -24,21 +25,26 @@ public sealed partial class HomeView
 {
     private readonly ILogger logger;
     private readonly IProjectBrowserService projectBrowser;
+    private readonly IDialogService dialogService;
+    private readonly ILoggerFactory? loggerFactory;
     private readonly RecentProjectsListViewModel? recentProjectsListViewModel;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="HomeView"/> class.
     /// </summary>
     /// <param name="projectBrowser">The project browser service.</param>
+    /// <param name="dialogService">The owner-aware picker service.</param>
     /// <param name="loggerFactory">
     ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
     ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
     /// </param>
-    public HomeView(IProjectBrowserService projectBrowser, ILoggerFactory? loggerFactory = null)
+    public HomeView(IProjectBrowserService projectBrowser, IDialogService dialogService, ILoggerFactory? loggerFactory = null)
     {
         this.logger = loggerFactory?.CreateLogger<HomeView>() ?? NullLoggerFactory.Instance.CreateLogger<HomeView>();
 
         this.projectBrowser = projectBrowser;
+        this.dialogService = dialogService;
+        this.loggerFactory = loggerFactory;
         this.InitializeComponent();
 
         // Setup the RecentProjectsList control with its ViewModel
@@ -96,7 +102,7 @@ public sealed partial class HomeView
             return;
         }
 
-        var dialog = new NewProjectDialog(this.projectBrowser, templateInfo) { XamlRoot = this.XamlRoot };
+        var dialog = new NewProjectDialog(this.projectBrowser, templateInfo, this.dialogService, this.loggerFactory) { XamlRoot = this.XamlRoot };
         var result = await dialog.ShowAsync();
         if (result == ContentDialogResult.Primary)
         {

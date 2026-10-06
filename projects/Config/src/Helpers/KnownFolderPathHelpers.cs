@@ -11,6 +11,9 @@ namespace DroidNet.Config.Helpers;
 /// </summary>
 internal static partial class KnownFolders
 {
+    /// <summary>Prevents package identity from redirecting a user's known folder.</summary>
+    internal const uint NoPackageRedirection = 0x00010000;
+
     /// <summary>
     ///     Retrieves the full path of a known folder identified by the folder's GUID.
     /// </summary>

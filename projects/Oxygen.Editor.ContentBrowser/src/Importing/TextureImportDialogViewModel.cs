@@ -23,7 +23,7 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
     private string error = string.Empty;
     private bool canAccept;
 
-    /// <summary>Initializes a reviewed image import.</summary>
+    /// <summary>Initializes a new instance of the <see cref="TextureImportDialogViewModel"/> class for a reviewed image import.</summary>
     /// <param name="project">The active project.</param>
     /// <param name="sourcePath">The selected image.</param>
     /// <param name="destinationFolder">The initial authoring destination.</param>
@@ -115,14 +115,14 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
         }
     }
 
-    /// <summary>Gets or sets the inline validation failure.</summary>
+    /// <summary>Gets the inline validation failure.</summary>
     public string Error
     {
         get => this.error;
         private set => this.SetProperty(ref this.error, value);
     }
 
-    /// <summary>Gets or sets whether the reviewed import is valid and collision-free.</summary>
+    /// <summary>Gets a value indicating whether the reviewed import is valid and collision-free.</summary>
     public bool CanAccept
     {
         get => this.canAccept;
@@ -156,12 +156,19 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
         return this.CanAccept;
     }
 
+    private static Uri ToUri(string folder)
+        => new("asset:///" + string.Join('/', folder.Trim().Trim('/').Split('/').Select(Uri.EscapeDataString)));
+
     [RelayCommand]
     private async Task BrowseDestinationAsync(CancellationToken cancellationToken)
     {
         try
         {
-            var selected = await this.dialogs.PickFolderAsync(cancellationToken).ConfigureAwait(true);
+            var picker = new FolderPickerSpec("Choose texture destination", "Oxygen.TextureDestination")
+            {
+                SuggestedStartFolder = this.project.ProjectRoot,
+            };
+            var selected = await this.dialogs.PickFolderAsync(picker, cancellationToken).ConfigureAwait(true);
             if (selected is null)
             {
                 return;
@@ -186,18 +193,15 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
         {
             // Cancelling the picker keeps the review open.
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or System.Runtime.InteropServices.COMException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or System.Runtime.InteropServices.COMException)
         {
-            this.Error = "Could not select the destination folder. " + error.Message;
+            this.Error = "Could not select the destination folder. " + ex.Message;
             this.CanAccept = false;
         }
     }
 
     private TextureSourceImportRequest CreateRequest()
         => new(this.project, this.SourcePath, ToUri(this.DestinationFolder), this.Name.Trim(), this.Intent, this.ColorSpace, this.Format);
-
-    private static Uri ToUri(string folder)
-        => new("asset:///" + string.Join('/', folder.Trim().Trim('/').Split('/').Select(Uri.EscapeDataString)));
 
     private void Revalidate()
     {
@@ -215,9 +219,9 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
             this.Error = string.Empty;
             this.CanAccept = true;
         }
-        catch (Exception error) when (error is ArgumentException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
         {
-            this.Error = error.Message;
+            this.Error = ex.Message;
         }
 
         this.OnPropertyChanged(nameof(this.OutputVirtualPath));

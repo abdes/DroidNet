@@ -234,6 +234,23 @@ Key public interfaces and types include:
 
 These public types create a focused boundary: the Controls module owns the visual and template aspects of tabbed documents, while the Drag/Tab System module coordinates cross-window behaviors through stable contracts (`ITabStrip`/`IDragPayload` defined in the Drag module, implemented by `TabStrip` and `TabItem` in this module). Applications build on these building blocks to implement document lifecycle, window tear-out, and document-based actions while keeping application logic separate from the UI control implementations.
 
+### Dialogs
+
+`IDialogService` owns XAML dialogs and desktop storage pickers. Its picker
+specifications carry titles, stable settings identifiers and suggested starting
+folders; `FilePickerSpec` additionally groups file extensions under labels.
+`DialogService` uses `Microsoft.Windows.Storage.Pickers` with the resolved Aura
+window's id and marshals picker creation and display to its dispatcher. Explicit
+owner ids never fall back to whichever window happens to be active.
+
+The active-window folder overload also requires a specification; no legacy
+no-options or HWND-initialized picker path is retained. Suggested folders do not
+constrain selection. User cancellation returns null, whereas missing ownership
+and native failures propagate to the caller's UI error handling. Cancellation
+tokens are checked before and after the native dialog; they do not forcibly
+dismiss it. Remembered picker folders use the platform's settings identifiers,
+not application-data paths or project-root restrictions.
+
 ### Composition
 
 The Composition module provides the integration layer between Aura's window management

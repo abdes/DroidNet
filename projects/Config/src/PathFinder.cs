@@ -67,7 +67,10 @@ public class PathFinder : IPathFinder
 
         this.ProgramData = AppContext.BaseDirectory;
 
-        var localAppDataSpecialFolder = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        // Keep durable data at the same user-visible path with or without MSIX identity.
+        var localAppDataSpecialFolder = KnownFolders.GetKnownFolderPath(
+            new Guid("F1B32785-6FBA-4FCF-9D55-7B8E7F157091"),
+            KnownFolders.NoPackageRedirection);
         this.LocalAppData = fs.Path.GetFullPath(
             Path.Combine(localAppDataSpecialFolder, pathFinderConfig.CompanyName, pathFinderConfig.ApplicationName));
 

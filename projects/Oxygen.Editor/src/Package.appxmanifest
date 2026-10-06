@@ -8,7 +8,8 @@
   xmlns:genTemplate="http://schemas.microsoft.com/appx/developer/templatestudio"
   xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
   xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
-  IgnorableNamespaces="uap rescap genTemplate">
+  xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
+  IgnorableNamespaces="uap rescap genTemplate desktop6">
 
     <Identity
       Name="6ae02a4d-9755-4636-99da-6dd37fd677cb"
@@ -21,6 +22,7 @@
         <DisplayName>OxygenEditor</DisplayName>
         <PublisherDisplayName>abdes</PublisherDisplayName>
         <Logo>Assets\StoreLogo.png</Logo>
+        <desktop6:FileSystemWriteVirtualization>disabled</desktop6:FileSystemWriteVirtualization>
     </Properties>
 
     <Dependencies>
@@ -64,6 +66,7 @@
     <Capabilities>
         <rescap:Capability Name="runFullTrust" />
         <rescap:Capability Name="broadFileSystemAccess" />
+        <rescap:Capability Name="unvirtualizedResources" />
     </Capabilities>
 
     <genTemplate:Metadata>

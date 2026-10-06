@@ -35,6 +35,12 @@ model class is `ProjectTemplateSettings`.
 
 ## Services
 
+Project-location browsing uses Aura's owner-aware desktop picker service. It
+passes the dialog's `XamlRoot` window id, the selected location as a starting
+suggestion, and the stable `Oxygen.ProjectLocation` settings identifier. Selection
+is unrestricted: the user can choose any accessible drive, folder or network
+share. A cancelled picker leaves the selected location unchanged.
+
 The project browser exposes the following services:
 
 - `ProjectTemplatesService` via the `IProjectTemplatesService` interface.

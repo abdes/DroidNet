@@ -63,10 +63,16 @@ directories consistently across development and production environments.
 
 ### Modes
 
-| Mode | Purpose | LocalAppData | ProgramData |
-|------|---------|--------------|-------------|
-| **Development** (`dev`) | Build/debug environment | `{LocalAppData}\{Company}\{App}\Development` | `AppContext.BaseDirectory` |
-| **Real** (`real`) | Production deployment | `{LocalAppData}\{Company}\{App}` | `AppContext.BaseDirectory` |
+| Mode                    | Purpose                 | LocalAppData                     | ProgramData                |
+| ----------------------- | ----------------------- | -------------------------------- | -------------------------- |
+| **Development** (`dev`) | Build/debug environment | `{LocalAppData}\{Company}\{App}` | `AppContext.BaseDirectory` |
+| **Real** (`real`)       | Production deployment   | `{LocalAppData}\{Company}\{App}` | `AppContext.BaseDirectory` |
+
+`LocalAppData` uses the user's known folder with package redirection disabled.
+Package identity does not change the company/application suffix or `.state`
+directory. MSIX hosts that share durable files with unpackaged builds must also
+disable file-write virtualization in their package manifest; resolving the path
+alone does not disable that virtualization.
 
 ### Available Paths
 
@@ -310,7 +316,7 @@ auto-save facility for convenience. Key behaviors:
 
 - `SaveAsync(CancellationToken)` validates the current snapshot and delegates to `SettingsManager` to persist data.
 - `ValidateAsync(CancellationToken)` runs DataAnnotations validation against the POCO snapshot and returns
-    `SettingsValidationError` entries when validation fails.
+  `SettingsValidationError` entries when validation fails.
 - `SaveAsync` compares the saved snapshot with the in-memory snapshot and only clears `IsDirty` when they match.
 
 AutoSave (via `SettingsManager.AutoSave`) is optional and debounced. The manager's default `AutoSaveDelay` is
@@ -382,11 +388,9 @@ file `settings.user.json` may contain personal overrides.
 ### Important wiring notes (from Program.cs)
 
 - The sample registers the real filesystem:
-
   - `container.RegisterInstance<System.IO.Abstractions.IFileSystem>(new RealFileSystem());`
 
 - Config sources are added with file paths relative to the provided samples folder. The sample adds sources like:
-
   - `WithJsonConfigSource("base", Path.Combine(samplesPath, "settings.json"), watch: true)`
   - `WithJsonConfigSource("dev", Path.Combine(samplesPath, $"settings.{pathFinder.Mode}.json"), watch: true)`
   - `WithJsonConfigSource("user", Path.Combine(samplesPath, "settings.user.json"), watch: true)`
@@ -473,10 +477,10 @@ The README above shows the typical coverage XML location produced by the tests (
 
 - GOAL-004: Implement secure storage for sensitive configuration data using encryption
 
-| Completed | Task | Description |
-|------|-------------|-----------|
-|✅| TASK-021 | Create `EncryptedJsonSettingsSource` class in `src/Sources/EncryptedJsonSettingsSource.cs` extending JsonSettingsSource |
-|✅| TASK-022 | Implement Secret&lt;T&gt; encryption/decryption using platform-appropriate APIs (DPAPI on Windows) |
-| | TASK-023 | Add key management and rotation capabilities to EncryptedJsonSettingsSource |
-| | TASK-024 | Implement secure memory handling to prevent secret leakage in logs or exceptions |
-| | TASK-025 | Add validation to prevent Secret&lt;T&gt; properties from being saved to non-encrypted sources |
+| Completed | Task     | Description                                                                                                             |
+| --------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
+| ✅        | TASK-021 | Create `EncryptedJsonSettingsSource` class in `src/Sources/EncryptedJsonSettingsSource.cs` extending JsonSettingsSource |
+| ✅        | TASK-022 | Implement Secret&lt;T&gt; encryption/decryption using platform-appropriate APIs (DPAPI on Windows)                      |
+|           | TASK-023 | Add key management and rotation capabilities to EncryptedJsonSettingsSource                                             |
+|           | TASK-024 | Implement secure memory handling to prevent secret leakage in logs or exceptions                                        |
+|           | TASK-025 | Add validation to prevent Secret&lt;T&gt; properties from being saved to non-encrypted sources                          |

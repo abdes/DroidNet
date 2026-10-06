@@ -111,6 +111,34 @@ Oxygen.Editor/
 
 ## Key Features
 
+### Storage and deployment
+
+Packaged and unpackaged builds use the same durable storage policy:
+
+- Settings remain under `%LOCALAPPDATA%\DroidNet\Oxygen Editor`.
+- The state database remains at `.state\state.db` under that directory.
+- New profiles default to `Oxygen Projects` under that directory. The last-used
+  project location takes precedence; Documents remains a quick-save alternative.
+- Projects can be stored on any accessible drive or folder. Defaults and picker
+  starting locations are suggestions, not restrictions.
+
+The MSIX manifest disables file-write virtualization, including for user-selected
+project locations inside AppData. These files remain visible to unpackaged builds,
+external tools and native engine services, and persist after uninstall. Registry
+virtualization is not changed. This opt-out requires Windows 10 version 1903 or
+later; older MSIX environments do not provide the same file-write guarantee.
+No existing projects, settings or databases are moved or overwritten.
+
+Project and import browsing use Aura's shared `Microsoft.Windows.Storage.Pickers`
+service. Dialog ownership comes from the actual window id rather than the
+foreground HWND. Project-location, asset-source, model-destination,
+texture-destination and local-mount pickers have distinct remembered locations.
+Asset-source browsing groups supported types into all supported assets, 3D models
+and textures.
+
+- [Picker ownership and specifications](../Aura/docs/design.md#dialogs)
+- [DynamicTree startup optimizations](../Controls/DynamicTree/README.md#optional-xaml-performance-settings)
+
 - **Integrated Project Management** - Create, open, and manage game projects with templates
 - **World Editor** - Visual world editing with hierarchical scene management (via DynamicTree)
 - **Data Persistence** - SQLite-backed data storage with Entity Framework Core

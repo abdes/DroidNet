@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -24,11 +24,8 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
-using Windows.Storage.Pickers;
-using WinRT.Interop;
 
 namespace Oxygen.Editor.ContentBrowser;
 
@@ -204,68 +201,7 @@ public partial class AssetsViewModel(
             }
         }
 
-        return string.Create(CultureInfo.InvariantCulture, $"NewMaterial{Guid.NewGuid():N}");
-    }
-
-    private async Task ImportImageSourceAsync(ProjectContext project, string sourcePath)
-    {
-        if (!ReferenceEquals(projectContextService.ActiveProject, project))
-        {
-            await dialogService.ShowMessageAsync("Import texture", "The project changed. Select the image again in the current project.").ConfigureAwait(true);
-            return;
-        }
-
-        var destination = this.GetSelectedTextureFolder(project);
-        var model = new TextureImportDialogViewModel(project, sourcePath, destination, dialogService);
-        var view = new TextureImportDialogView(model);
-        var button = await dialogService.ShowAsync(new DialogSpec("Import texture", view)
-        {
-            PrimaryButtonText = "Import",
-            CloseButtonText = "Cancel",
-            DefaultButton = DialogButton.Primary,
-            PrimaryAction = () => Task.FromResult(model.Validate()),
-        }).ConfigureAwait(true);
-        if (button != DialogButton.Primary || model.Request is not { } request)
-        {
-            return;
-        }
-
-        this.IsOperationResultVisible = false;
-        try
-        {
-            var textureUri = await TextureSourceAssetImporter.CreateAsync(request).ConfigureAwait(true);
-            await this.RunSourceImportAsync(
-                project,
-                () => contentPipelineService.CookAssetAsync(textureUri, CancellationToken.None, project),
-                "Import texture",
-                textureUri).ConfigureAwait(true);
-        }
-        catch (OperationCanceledException)
-        {
-            // The active texture import is cancelled before publication.
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
-        {
-            this.PublishFailure(ContentPipelineOperationKinds.Import, "Import texture", error.Message, AssetImportDiagnosticCodes.ImportFailed, request.DestinationFolder, error, showInBrowser: false);
-        }
-    }
-
-    private string GetSelectedTextureFolder(ProjectContext project)
-    {
-        var selected = this.GetSelectedFolderUri();
-        var parts = Uri.UnescapeDataString(selected.AbsolutePath).Trim('/').Split('/');
-        var mountName = parts.Length > 0
-            ? project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.OrdinalIgnoreCase))?.Name
-            : null;
-        mountName ??= project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.OrdinalIgnoreCase))?.Name
-            ?? project.AuthoringMounts.FirstOrDefault()?.Name
-            ?? throw new InvalidOperationException("The project has no authoring mount for texture assets.");
-        if (parts.Skip(1).Any(static part => string.Equals(part, "Textures", StringComparison.OrdinalIgnoreCase)))
-        {
-            return "/" + string.Join('/', parts);
-        }
-
-        return "/" + mountName + "/Textures";
+        return $"NewMaterial{Guid.NewGuid():N}";
     }
 
     /// <summary>Gets the authoring destination for a new material.</summary>
@@ -348,7 +284,9 @@ public partial class AssetsViewModel(
                 ?? throw new InvalidOperationException("The import review view is unavailable.");
             var button = await dialogService.ShowAsync(new DialogSpec("Import model", view)
             {
-                PrimaryButtonText = "Import", CloseButtonText = "Cancel", DefaultButton = DialogButton.Primary,
+                PrimaryButtonText = "Import",
+                CloseButtonText = "Cancel",
+                DefaultButton = DialogButton.Primary,
                 PrimaryAction = () => Task.FromResult(model.Validate()),
             }).ConfigureAwait(true);
             if (button == DialogButton.Primary && model.Request is { } request)
@@ -462,14 +400,75 @@ public partial class AssetsViewModel(
     private static List<DiagnosticRecord> NormalizeDiagnostics(
         Guid operationId,
         IEnumerable<DiagnosticRecord> diagnostics)
-        => diagnostics
+        => [.. diagnostics
             .Select(diagnostic => diagnostic.OperationId == operationId
                 ? diagnostic
-                : diagnostic with { OperationId = operationId })
-            .ToList();
+                : diagnostic with { OperationId = operationId })];
 
     private static string DescribeScope(Uri? scopeUri)
         => scopeUri?.ToString() ?? "the active project";
+
+    private async Task ImportImageSourceAsync(ProjectContext project, string sourcePath)
+    {
+        if (!ReferenceEquals(projectContextService.ActiveProject, project))
+        {
+            await dialogService.ShowMessageAsync("Import texture", "The project changed. Select the image again in the current project.").ConfigureAwait(true);
+            return;
+        }
+
+        var destination = this.GetSelectedTextureFolder(project);
+        var model = new TextureImportDialogViewModel(project, sourcePath, destination, dialogService);
+        var view = new TextureImportDialogView(model);
+        var button = await dialogService.ShowAsync(new DialogSpec("Import texture", view)
+        {
+            PrimaryButtonText = "Import",
+            CloseButtonText = "Cancel",
+            DefaultButton = DialogButton.Primary,
+            PrimaryAction = () => Task.FromResult(model.Validate()),
+        }).ConfigureAwait(true);
+        if (button != DialogButton.Primary || model.Request is not { } request)
+        {
+            return;
+        }
+
+        this.IsOperationResultVisible = false;
+        try
+        {
+            var textureUri = await TextureSourceAssetImporter.CreateAsync(request).ConfigureAwait(true);
+            await this.RunSourceImportAsync(
+                project,
+                () => contentPipelineService.CookAssetAsync(textureUri, CancellationToken.None, project),
+                "Import texture",
+                textureUri).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // The active texture import is cancelled before publication.
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            this.PublishFailure(ContentPipelineOperationKinds.Import, "Import texture", error.Message, AssetImportDiagnosticCodes.ImportFailed, request.DestinationFolder, error, showInBrowser: false);
+        }
+    }
+
+    private string GetSelectedTextureFolder(ProjectContext project)
+    {
+        var selected = this.GetSelectedFolderUri();
+        var parts = Uri.UnescapeDataString(selected.AbsolutePath).Trim('/').Split('/');
+        var mountName = parts.Length > 0
+            ? project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.OrdinalIgnoreCase))?.Name
+            : null;
+        mountName ??= project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.OrdinalIgnoreCase))?.Name
+            ?? (project.AuthoringMounts.Count > 0
+                ? project.AuthoringMounts[0].Name
+                : throw new InvalidOperationException("The project has no authoring mount for texture assets."));
+        if (parts.Skip(1).Any(static part => string.Equals(part, "Textures", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "/" + string.Join('/', parts);
+        }
+
+        return "/" + mountName + "/Textures";
+    }
 
     private void OnAssetsChanged()
     {
@@ -782,7 +781,9 @@ public partial class AssetsViewModel(
 
             var request = messenger.Send(new OpenCookedInspectionRequestMessage(project, scopeUri, validate)
             {
-                AssetUri = assetUri, CookedSource = asset?.CookedMetadata, DisplayName = asset?.DisplayName,
+                AssetUri = assetUri,
+                CookedSource = asset?.CookedMetadata,
+                DisplayName = asset?.DisplayName,
             });
             if (!request.HasReceivedResponse || !await request.Response.ConfigureAwait(true))
             {
@@ -960,29 +961,30 @@ public partial class AssetsViewModel(
                 return;
             }
 
-            var picker = new FileOpenPicker();
-            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(window));
-            picker.ViewMode = PickerViewMode.List;
-            picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
-            foreach (var extension in new[] { ".gltf", ".glb", ".fbx" })
-            {
-                picker.FileTypeFilter.Add(extension);
-            }
-
-            foreach (var extension in TextureSourceAssetImporter.SupportedExtensions)
-            {
-                picker.FileTypeFilter.Add(extension);
-            }
-
-            if (await picker.PickSingleFileAsync() is { } file)
-            {
-                if (TextureSourceAssetImporter.IsSupportedImage(file.Path))
+            var models = new List<string> { ".gltf", ".glb", ".fbx" };
+            var textures = TextureSourceAssetImporter.SupportedExtensions.ToList();
+            var picker = new FilePickerSpec(
+                "Import asset",
+                "Oxygen.ImportAsset",
+                new Dictionary<string, IList<string>>(StringComparer.Ordinal)
                 {
-                    await this.ImportImageSourceAsync(project, file.Path).ConfigureAwait(true);
+                    ["Supported assets"] = [.. models.Concat(textures).Distinct(StringComparer.OrdinalIgnoreCase)],
+                    ["3D models"] = models,
+                    ["Textures"] = textures,
+                })
+            {
+                SuggestedStartFolder = project.ProjectRoot,
+            };
+
+            if (await dialogService.PickFileAsync(picker, window.AppWindow.Id).ConfigureAwait(true) is { } path)
+            {
+                if (TextureSourceAssetImporter.IsSupportedImage(path))
+                {
+                    await this.ImportImageSourceAsync(project, path).ConfigureAwait(true);
                 }
                 else
                 {
-                    await this.ImportSourceFileAsync(project, file.Path).ConfigureAwait(true);
+                    await this.ImportSourceFileAsync(project, path).ConfigureAwait(true);
                 }
             }
         }

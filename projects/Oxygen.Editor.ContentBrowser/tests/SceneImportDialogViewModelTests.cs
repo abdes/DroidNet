@@ -88,7 +88,7 @@ public sealed class SceneImportDialogViewModelTests
     {
         var project = CreateProject();
         var dialogs = new Mock<IDialogService>();
-        _ = dialogs.Setup(value => value.PickFolderAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Path.GetTempPath());
+        _ = dialogs.Setup(value => value.PickFolderAsync(It.IsAny<FolderPickerSpec>(), It.IsAny<CancellationToken>())).ReturnsAsync(Path.GetTempPath());
         var model = new SceneImportDialogViewModel(project, Path.Combine(Path.GetTempPath(), "Crate.gltf"), "/Content/Models", dialogs.Object);
         await model.BrowseDestinationCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
         _ = model.CanAccept.Should().BeFalse();
@@ -104,7 +104,7 @@ public sealed class SceneImportDialogViewModelTests
     public async Task PickerFailureIsReportedInline()
     {
         var dialogs = new Mock<IDialogService>();
-        _ = dialogs.Setup(value => value.PickFolderAsync(It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("Unavailable"));
+        _ = dialogs.Setup(value => value.PickFolderAsync(It.IsAny<FolderPickerSpec>(), It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("Unavailable"));
         var model = new SceneImportDialogViewModel(CreateProject(), Path.Combine(Path.GetTempPath(), "Crate.gltf"), "/Content/Models", dialogs.Object);
         await model.BrowseDestinationCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
         _ = model.Error.Should().Contain("Unavailable");

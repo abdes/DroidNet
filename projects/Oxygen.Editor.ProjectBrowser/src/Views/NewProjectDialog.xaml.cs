@@ -2,15 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
-using System.Runtime.InteropServices;
+using DroidNet.Aura.Dialogs;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
-using Windows.Storage.Pickers;
-using WinRT.Interop;
 
 namespace Oxygen.Editor.ProjectBrowser.Views;
 
@@ -19,6 +18,8 @@ namespace Oxygen.Editor.ProjectBrowser.Views;
 /// </summary>
 public sealed partial class NewProjectDialog
 {
+    private readonly IDialogService dialogService;
+    private readonly ILogger logger;
     private Grid? contentGrid;
 
     /// <summary>
@@ -26,8 +27,17 @@ public sealed partial class NewProjectDialog
     /// </summary>
     /// <param name="projectBrowser">The project browser service.</param>
     /// <param name="template">The template information for the new project.</param>
-    public NewProjectDialog(IProjectBrowserService projectBrowser, ITemplateInfo template)
+    /// <param name="dialogService">The owner-aware picker service.</param>
+    /// <param name="loggerFactory">The logger factory.</param>
+    public NewProjectDialog(
+        IProjectBrowserService projectBrowser,
+        ITemplateInfo template,
+        IDialogService dialogService,
+        ILoggerFactory? loggerFactory = null)
     {
+        ArgumentNullException.ThrowIfNull(dialogService);
+        this.dialogService = dialogService;
+        this.logger = loggerFactory?.CreateLogger<NewProjectDialog>() ?? NullLogger<NewProjectDialog>.Instance;
         this.InitializeComponent();
 
         this.ViewModel = new NewProjectDialogViewModel(projectBrowser, template);
@@ -45,6 +55,22 @@ public sealed partial class NewProjectDialog
     ///     Gets or sets the view model for the dialog.
     /// </summary>
     public NewProjectDialogViewModel ViewModel { get; set; }
+
+    internal async Task BrowseLocationAsync()
+    {
+        var ownerWindowId = this.XamlRoot?.ContentIslandEnvironment.AppWindowId
+            ?? throw new InvalidOperationException("The project dialog must be attached to an owner window.");
+        var picker = new FolderPickerSpec("Choose project location", "Oxygen.ProjectLocation")
+        {
+            SuggestedStartFolder = this.ViewModel.SelectedLocation.Path,
+        };
+        var path = await this.dialogService.PickFolderAsync(picker, ownerWindowId).ConfigureAwait(true);
+        if (path is not null)
+        {
+            this.ViewModel.SetLocationCommand.Execute(new QuickSaveLocation("Custom", path));
+            this.LocationExpander.IsExpanded = false;
+        }
+    }
 
     private void OnDialogLoaded(object sender, RoutedEventArgs e)
     {
@@ -85,46 +111,14 @@ public sealed partial class NewProjectDialog
         try
         {
             _ = sender;
-
-            var picker = new FolderPicker();
-
-            // Prefer App window handle if available via WindowNative. Fallback to GetForegroundWindow/GetActiveWindow.
-            var hwnd = GetForegroundWindow() is var h && h != IntPtr.Zero ? h : GetActiveWindow();
-            InitializeWithWindow.Initialize(picker, hwnd);
-
-            // Optionally set suggested start location and file type filter
-            picker.SuggestedStartLocation = PickerLocationId.Desktop;
-            picker.FileTypeFilter.Add("*");
-
-            var folder = await picker.PickSingleFolderAsync();
-            if (folder is null)
-            {
-                return;
-            }
-
-            var location = new QuickSaveLocation("Custom", folder.Path);
-            this.ViewModel.SetLocationCommand.Execute(location);
-            this.LocationExpander.IsExpanded = false;
+            _ = e;
+            await this.BrowseLocationAsync().ConfigureAwait(true);
         }
-#pragma warning disable CA1031 // Do not catch general exception types
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+            or InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
-            // show the error message in the ViewModel-bound InfoBar and log
-            _ = this.ViewModel.ShowFeedbackMessageAsync("Could not open folder picker. Please try again.");
-
-            // Ideally also log the exception to application telemetry
-            Debug.WriteLine(ex);
+            LogFailedToOpenPicker(this.logger, ex);
+            await this.ViewModel.ShowFeedbackMessageAsync("Could not open folder picker. Please try again.").ConfigureAwait(true);
         }
-#pragma warning restore CA1031 // Do not catch general exception types
     }
-
-#pragma warning disable SA1204 // Static elements should appear before instance elements
-    [LibraryImport("user32.dll")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial IntPtr GetForegroundWindow();
-
-    [LibraryImport("user32.dll")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial IntPtr GetActiveWindow();
-#pragma warning restore SA1204 // Static elements should appear before instance elements
 }

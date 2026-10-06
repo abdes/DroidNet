@@ -117,8 +117,8 @@ public partial class ProjectBrowserService : IProjectBrowserService
             locations.Add(new QuickSaveLocation("Recently Used", lastSaveLocation));
         }
 
-        locations.Add(new QuickSaveLocation("Personal Projects", this.finder.PersonalProjects));
         locations.Add(new QuickSaveLocation("Local Projects", this.finder.LocalProjects));
+        locations.Add(new QuickSaveLocation("Personal Projects", this.finder.PersonalProjects));
 
         return locations;
     }
