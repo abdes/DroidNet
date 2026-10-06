@@ -89,8 +89,10 @@ are assigned to 07A/07B, with no new M04 closure action. M08 still requires its
 joint review with the recorded ED-M02 evidence.
 
 Within ED-M08, execute M08.1 → [M08.F1 descriptor-local references](plan/ED-M08.F1-descriptor-local-references.md)
-→ M08.2–M08.8. The format cutover precedes the remaining rendering and editor
-parity work.
+→ M08.2–M08.8. The format cutover is implemented; its
+[remaining work](plan/ED-M08.F1-descriptor-local-references.md#remaining-work) is
+editor scene-reference authoring and F1 qualification, before the remaining
+rendering and editor parity work.
 
 ## 4. Milestone Roadmap
 

@@ -1,7 +1,7 @@
 # Binary Packing Discipline for PakFormat Structures
 
-Read [current rules](#mandatory-rules) and the separately planned
-[M08.F1 reference format](#descriptor-local-references-m08f1).
+Read [current rules](#mandatory-rules) and the implemented
+[descriptor-local reference format](#descriptor-local-references-m08f1).
 
 ## Mandatory Rules
 
@@ -121,7 +121,7 @@ When adding/modifying PakFormat structures:
 
 Native producers, readers and packaging implement this layout. The
 [format milestone](../../../../../../design/editor/plan/ED-M08.F1-descriptor-local-references.md)
-owns remaining rollout and qualification.
+owns the remaining editor authoring and qualification.
 
 [PakFormatVersions.inc](../PakFormatVersions.inc) defines the current container,
 index and asset versions. Native format declarations, producers and inspection

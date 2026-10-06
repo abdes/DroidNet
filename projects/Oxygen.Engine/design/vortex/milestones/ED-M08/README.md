@@ -2,11 +2,11 @@
 
 Status: `in_progress`
 
-| Field     | Summary                                                                                                                       |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Outcome   | M08.1 canonical data and content pipeline are validated; rendered/editor parity gates remain.                                 |
-| Remaining | Open: [VX-ED-01](../../OPEN_ITEMS.md#p1--current-delivery).                                                                   |
-| Evidence  | [Editor progress](../../../../../../design/editor/IMPLEMENTATION_STATUS.md#ed-m08---runtime-parity-and-standalone-validation) |
+| Field     | Summary                                                                                                                                                                                                                  |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Outcome   | M08.1 canonical data and content pipeline are validated; M08.F1's descriptor-local format cutover is implemented, with editor scene-reference authoring and its qualification open; rendered/editor parity gates remain. |
+| Remaining | Open: [VX-ED-01](../../OPEN_ITEMS.md#p1--current-delivery).                                                                                                                                                              |
+| Evidence  | [Editor progress](../../../../../../design/editor/IMPLEMENTATION_STATUS.md#ed-m08---runtime-parity-and-standalone-validation)                                                                                            |
 
 Captured-sky/specular IBL is delivered by VX-IBL-01. ED-M08 retains the
 remaining native/editor field integration and its broader rendered qualification. The [editor execution plan](../../../../../../design/editor/plan/ED-M08-runtime-parity-and-standalone-validation.md)

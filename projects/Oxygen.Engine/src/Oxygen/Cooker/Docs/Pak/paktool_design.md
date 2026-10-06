@@ -1,7 +1,7 @@
 # PakTool Technical Design
 
-Start with [purpose](#1-purpose); the approved future format work is in
-[M08.F1 reference-table packaging](#planned-reference-table-packaging-m08f1).
+Start with [purpose](#1-purpose); the implemented reference-table packaging is in
+[M08.F1 reference-table packaging](#reference-table-packaging-m08f1).
 
 This document defines the release-target design for
 `src/Oxygen/Cooker/Tools/PakTool`, the native Oxygen CLI for building
@@ -726,7 +726,7 @@ separately approved:
 Native packaging uses descriptor-local bindings. Data owns the
 [descriptor-local reference contract](../../../Data/Docs/binary_packing_discipline.md#descriptor-local-references-m08f1).
 The [format milestone](../../../../../../../design/editor/plan/ED-M08.F1-descriptor-local-references.md)
-owns migration and qualification.
+owns the remaining editor scene-reference authoring and qualification.
 
 ### Producer and packaging boundary
 

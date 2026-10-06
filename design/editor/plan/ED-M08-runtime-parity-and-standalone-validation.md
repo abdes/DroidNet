@@ -1,8 +1,8 @@
 # ED-M08 — Runtime parity and standalone qualification
 
-Status: **in progress — M08.1 validated**
+Status: **in progress — M08.1 validated; M08.F1 format cutover implemented, editor authoring and F1 qualification open**
 
-Current: **[M08.F1 descriptor-local references](ED-M08.F1-descriptor-local-references.md)**, before M08.2. M08.1's native analysis, editor cutover and maintained-project migration are validated.
+Current: **[M08.F1 descriptor-local references](ED-M08.F1-descriptor-local-references.md)**, before M08.2. M08.1's native analysis, editor cutover and maintained-project migration are validated. M08.F1's native and managed format cutovers are implemented and committed; its [remaining work](ED-M08.F1-descriptor-local-references.md#remaining-work) is editor scene-reference authoring, managed validation, load-cost measurement, two layer acceptance cases and the F1 result record.
 See [owners](#2-implementation-document-map), [remaining increments](#m081-remaining-increments)
 and [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
@@ -469,10 +469,13 @@ rejection. Cook and inspect through native tools, never managed binary decoding.
 
 ### M08.F1 — Descriptor-local reference format
 
-Status: **planned**. Depends on M08.1.9; prerequisite for M08.2 and subsequent
-qualification. The [permanent format plan](ED-M08.F1-descriptor-local-references.md)
-owns execution, version changes and recooking. Data and Cooker own the wire
-contract and packaging behavior; this milestone introduces no compatibility reader.
+Status: **in progress — implemented except editor scene-reference authoring and
+qualification**. Depends on M08.1.9; prerequisite for M08.2 and subsequent
+qualification. The [format plan](ED-M08.F1-descriptor-local-references.md) owns
+execution, version changes, recooking and its
+[remaining work](ED-M08.F1-descriptor-local-references.md#remaining-work). Data
+and Cooker own the wire contract and packaging behavior; this milestone
+introduces no compatibility reader.
 
 ### M08.2 — Native rendering and view behavior
 
@@ -704,6 +707,8 @@ each run. Native example use/content refresh follows the maintained
 ## 7. Exit checklist
 
 - [ ] Canonical formats/migration and every required producer/loader mapping pass.
+      M08.1 is validated and M08.F1 implements the native and managed format
+      cutovers; its editor scene-reference authoring and qualification are open.
 - [ ] Engine fixes have native tests and rendered evidence outside the editor.
 - [ ] Editor authoring/history/Save/cook/live delivery and workspace Hide pass.
 - [ ] M08.4 inspector field coverage and usability audit pass, with user walkthrough acceptance.
