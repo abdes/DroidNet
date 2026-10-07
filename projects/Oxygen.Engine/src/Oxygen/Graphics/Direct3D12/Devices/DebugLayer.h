@@ -24,7 +24,8 @@ class DebugLayer final : public Component {
   OXYGEN_COMPONENT(DebugLayer)
 
 public:
-  DebugLayer(bool enable_debug_layer, bool enable_validation) noexcept;
+  DebugLayer(
+    bool enable_debug_layer, bool enable_validation, bool enable_dred) noexcept;
   ~DebugLayer() noexcept override;
 
   OXYGEN_MAKE_NON_COPYABLE(DebugLayer);

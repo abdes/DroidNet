@@ -169,10 +169,29 @@ auto ExposureGpuTest::CreateBackend(const SerializedBackendConfig& config,
 
 auto ExposureGpuTest::BackendConfigJson() const -> std::string
 {
-  if (!CapturePath().empty()) {
-    return R"({"enable_debug_layer":true,"frame_capture":{"provider":"renderdoc","init_mode":"search"}})";
+  const auto environment_flag = [](const char* name) -> bool {
+    char* value = nullptr;
+    std::size_t size = 0U;
+    if (_dupenv_s(&value, &size, name) != 0 || value == nullptr) {
+      return false;
+    }
+    std::free(value);
+    return true;
+  };
+  // External GPU crash analysis (e.g. Radeon GPU Detective) needs the device
+  // without the debug layer and DRED, which otherwise intercept removal.
+  if (environment_flag("OXYGEN_GPU_CRASH_ANALYSIS")) {
+    return R"({"enable_debug_layer":false})";
   }
-  return R"({"enable_debug_layer":true})";
+  // DRED instruments every command list; enable it only to diagnose a
+  // device removal (OXYGEN_GPU_DRED). The debug layer itself stays on.
+  auto json = std::string { R"({"enable_debug_layer":true,"enable_dred":)" };
+  json += environment_flag("OXYGEN_GPU_DRED") ? "true" : "false";
+  if (!CapturePath().empty()) {
+    json += R"(,"frame_capture":{"provider":"renderdoc","init_mode":"search"})";
+  }
+  json += "}";
+  return json;
 }
 
 auto ExposureGpuTest::CapturePath() -> std::string

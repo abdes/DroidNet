@@ -577,6 +577,9 @@ Graphics::Graphics(const SerializedBackendConfig& config,
   if (jsonConfig.contains("enable_aftermath")) {
     desc.enable_aftermath = jsonConfig.at("enable_aftermath").get<bool>();
   }
+  if (jsonConfig.contains("enable_dred")) {
+    desc.enable_dred = jsonConfig.at("enable_dred").get<bool>();
+  }
   if (!oxygen::AreGraphicsToolingOptionsMutuallyExclusive(
         desc.enable_debug_layer, desc.enable_aftermath)) {
     LOG_F(ERROR,

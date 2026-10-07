@@ -4,25 +4,36 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <array>
+#include <cstdint>
 #include <cwctype>
 #include <exception>
 #include <filesystem>
 #include <span>
 #include <string>
+#include <string_view>
+#include <system_error>
 
 #include <combaseapi.h>
 #include <d3d12.h>
+#include <d3d12sdklayers.h>
 #include <debugapi.h>
 #include <dxgi1_3.h>
 #include <dxgidebug.h>
+#include <errhandlingapi.h>
 #include <fmt/format.h>
 #include <libloaderapi.h>
+#include <minwindef.h>
+#include <strsafe.h>
+#include <winnt.h>
 #include <wrl/client.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Base/Windows/ComError.h>
+#include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/AftermathTracker.h>
@@ -41,9 +52,10 @@ using oxygen::windows::ThrowOnFailed;
 
 namespace {
 
-constexpr wchar_t kRenderDocModuleName[] = L"renderdoc.dll";
-constexpr wchar_t kPixGpuCapturerModuleName[] = L"WinPixGpuCapturer.dll";
-constexpr wchar_t kPixTimingCapturerModuleName[] = L"WinPixTimingCapturer.dll";
+constexpr const wchar_t* kRenderDocModuleName = L"renderdoc.dll";
+constexpr const wchar_t* kPixGpuCapturerModuleName = L"WinPixGpuCapturer.dll";
+constexpr const wchar_t* kPixTimingCapturerModuleName
+  = L"WinPixTimingCapturer.dll";
 
 struct ToolingPolicy {
   bool requested_aftermath { true };
@@ -58,7 +70,12 @@ struct ToolingPolicy {
   bool aftermath_enabled { false };
 };
 
-ToolingPolicy g_tooling_policy;
+//! Process-wide tooling state, shared by every DebugLayer.
+auto ToolingPolicyState() noexcept -> ToolingPolicy&
+{
+  static ToolingPolicy policy;
+  return policy;
+}
 
 auto IsModuleLoaded(const wchar_t* module_name) noexcept -> bool
 {
@@ -111,7 +128,7 @@ constexpr auto IsPixBuildAvailable() noexcept -> bool
 
 constexpr auto IsPixGpuCaptureBuildAvailable() noexcept -> bool
 {
-#if defined(OXYGEN_PIX_GPU_CAPTURE_AVAILABLE)
+#ifdef OXYGEN_PIX_GPU_CAPTURE_AVAILABLE
   return true;
 #else
   return false;
@@ -120,7 +137,7 @@ constexpr auto IsPixGpuCaptureBuildAvailable() noexcept -> bool
 
 constexpr auto IsPixTimingCaptureBuildAvailable() noexcept -> bool
 {
-#if defined(OXYGEN_PIX_TIMING_CAPTURE_AVAILABLE)
+#ifdef OXYGEN_PIX_TIMING_CAPTURE_AVAILABLE
   return true;
 #else
   return false;
@@ -129,7 +146,7 @@ constexpr auto IsPixTimingCaptureBuildAvailable() noexcept -> bool
 
 constexpr auto IsPixUiBuildAvailable() noexcept -> bool
 {
-#if defined(OXYGEN_PIX_UI_AVAILABLE)
+#ifdef OXYGEN_PIX_UI_AVAILABLE
   return true;
 #else
   return false;
@@ -143,15 +160,17 @@ auto IsAftermathBuildAvailable() noexcept -> bool
 
 auto RefreshToolingPolicy() noexcept -> void
 {
-  g_tooling_policy.renderdoc_enabled = g_tooling_policy.requested_renderdoc
-    && g_tooling_policy.renderdoc_api_initialized;
-  g_tooling_policy.pix_enabled
-    = g_tooling_policy.requested_pix && IsPixBuildAvailable();
+  ToolingPolicyState().renderdoc_enabled
+    = ToolingPolicyState().requested_renderdoc
+    && ToolingPolicyState().renderdoc_api_initialized;
+  ToolingPolicyState().pix_enabled
+    = ToolingPolicyState().requested_pix && IsPixBuildAvailable();
   const auto capture_hooks_active = IsModuleLoaded(kRenderDocModuleName)
     || IsModuleLoaded(kPixGpuCapturerModuleName)
     || IsModuleLoaded(kPixTimingCapturerModuleName);
-  g_tooling_policy.aftermath_enabled = g_tooling_policy.requested_aftermath
-    && IsAftermathBuildAvailable() && !capture_hooks_active;
+  ToolingPolicyState().aftermath_enabled
+    = ToolingPolicyState().requested_aftermath && IsAftermathBuildAvailable()
+    && !capture_hooks_active;
 }
 
 auto IsRenderDocActive() noexcept -> bool
@@ -178,10 +197,10 @@ auto ActiveCaptureToolName() noexcept -> const char*
 
 auto RequestedCaptureToolName() noexcept -> const char*
 {
-  if (g_tooling_policy.requested_renderdoc) {
+  if (ToolingPolicyState().requested_renderdoc) {
     return "RenderDoc";
   }
-  if (g_tooling_policy.requested_pix) {
+  if (ToolingPolicyState().requested_pix) {
     return "PIX";
   }
   return nullptr;
@@ -201,19 +220,22 @@ auto NormalizePathForComparison(std::filesystem::path path) -> std::wstring
   }
   path = path.lexically_normal();
   auto normalized = path.native();
-  std::ranges::transform(normalized, normalized.begin(),
-    [](const wchar_t ch) { return static_cast<wchar_t>(std::towlower(ch)); });
+  std::ranges::transform(
+    normalized, normalized.begin(), [](const wchar_t ch) -> wchar_t {
+      return static_cast<wchar_t>(std::towlower(ch));
+    });
   return normalized;
 }
 
 auto ResolveModulePath(HMODULE module) -> std::filesystem::path
 {
-  wchar_t buffer[MAX_PATH] {};
-  const auto length = ::GetModuleFileNameW(module, buffer, MAX_PATH);
+  std::array<wchar_t, MAX_PATH> buffer {};
+  const auto length = ::GetModuleFileNameW(
+    module, buffer.data(), static_cast<DWORD>(buffer.size()));
   if (length == 0U) {
     return {};
   }
-  return std::filesystem::path(buffer);
+  return { std::wstring_view(buffer.data(), length) };
 }
 
 auto PathsEquivalent(
@@ -225,15 +247,35 @@ auto PathsEquivalent(
   return NormalizePathForComparison(lhs) == NormalizePathForComparison(rhs);
 }
 
+// Debug-layer messages reach only OutputDebugString unless routed; logging
+// them makes an invalid call visible in an ordinary run, before any removal.
+void CALLBACK LogD3D12Message(D3D12_MESSAGE_CATEGORY /*category*/,
+  const D3D12_MESSAGE_SEVERITY severity, const D3D12_MESSAGE_ID id,
+  const LPCSTR description, void* /*context*/) noexcept
+{
+  const auto* text = description != nullptr ? description : "";
+  switch (severity) {
+  case D3D12_MESSAGE_SEVERITY_CORRUPTION:
+  case D3D12_MESSAGE_SEVERITY_ERROR:
+    LOG_F(ERROR, "D3D12 debug layer [{}]: {}", static_cast<int>(id), text);
+    break;
+  case D3D12_MESSAGE_SEVERITY_WARNING:
+    LOG_F(WARNING, "D3D12 debug layer [{}]: {}", static_cast<int>(id), text);
+    break;
+  default:
+    break;
+  }
+}
+
 } // namespace
 
-DebugLayer::DebugLayer(
-  const bool enable_debug_layer, const bool enable_validation) noexcept
+DebugLayer::DebugLayer(const bool enable_debug_layer,
+  const bool enable_validation, const bool enable_dred) noexcept
 {
   BootstrapRenderDoc();
   BootstrapPix();
   InitializeDebugLayer(enable_debug_layer, enable_validation);
-  if (enable_debug_layer) {
+  if (enable_debug_layer && enable_dred) {
     InitializeDred();
   }
   InitializeAftermath();
@@ -257,14 +299,19 @@ DebugLayer::~DebugLayer() noexcept
   AftermathTracker::Instance().DisableCrashDumps();
 }
 
+// Diagnostics only: logging is the sole throwing operation, and a failed log
+// while configuring tools or reporting a removal cannot be recovered here.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 void DebugLayer::ConfigureTooling(const bool enable_debug_layer,
   const bool enable_aftermath,
   const oxygen::FrameCaptureConfig& frame_capture_config) noexcept
 {
-  g_tooling_policy = ToolingPolicy { .requested_aftermath = enable_aftermath,
+  ToolingPolicyState() = ToolingPolicy {
+    .requested_aftermath = enable_aftermath,
     .requested_renderdoc = IsRenderDocRequested(frame_capture_config.provider),
     .requested_pix = IsPixRequested(frame_capture_config.provider),
-    .frame_capture = frame_capture_config };
+    .frame_capture = frame_capture_config,
+  };
   RefreshToolingPolicy();
 
   LOG_F(INFO,
@@ -292,16 +339,17 @@ void DebugLayer::ConfigureTooling(const bool enable_debug_layer,
       "Aftermath requested by GraphicsConfig, but the backend was built "
       "without Nsight Aftermath support");
   }
-  if (g_tooling_policy.requested_renderdoc && !IsRenderDocBuildAvailable()) {
+  if (ToolingPolicyState().requested_renderdoc
+    && !IsRenderDocBuildAvailable()) {
     LOG_F(INFO,
       "RenderDoc frame capture requested by GraphicsConfig, but the backend "
       "was built without RenderDoc support");
   }
-  if (g_tooling_policy.requested_pix && !IsPixBuildAvailable()) {
+  if (ToolingPolicyState().requested_pix && !IsPixBuildAvailable()) {
     LOG_F(INFO,
       "PIX frame capture requested by GraphicsConfig, but the backend was "
       "built without PIX support");
-  } else if (g_tooling_policy.requested_pix) {
+  } else if (ToolingPolicyState().requested_pix) {
     LOG_F(INFO,
       "PIX tooling support compiled in: markers={} gpu_capture={} "
       "timing_capture={} ui={}",
@@ -312,13 +360,13 @@ void DebugLayer::ConfigureTooling(const bool enable_debug_layer,
   LOG_F(INFO,
     "D3D12 tooling policy resolved: debug_layer={} aftermath={} renderdoc={} "
     "pix={}",
-    enable_debug_layer, g_tooling_policy.aftermath_enabled,
-    g_tooling_policy.renderdoc_enabled, g_tooling_policy.pix_enabled);
+    enable_debug_layer, ToolingPolicyState().aftermath_enabled,
+    ToolingPolicyState().renderdoc_enabled, ToolingPolicyState().pix_enabled);
 }
 
 auto DebugLayer::IsPixEnabled() noexcept -> bool
 {
-  return g_tooling_policy.pix_enabled;
+  return ToolingPolicyState().pix_enabled;
 }
 
 void DebugLayer::InitializeDebugLayer(
@@ -384,13 +432,20 @@ void DebugLayer::InitializeDred() noexcept
   dred_settings_->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
   dred_settings_->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
   dred_settings_->SetWatsonDumpEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
-  LOG_F(
-    INFO, "Forced DRED enabled (auto-breadcrumbs, page faults, Watson dumps)");
+  // Breadcrumb contexts carry the event and marker names, so a removal report
+  // names the pass that stalled instead of only its operation index.
+  Microsoft::WRL::ComPtr<ID3D12DeviceRemovedExtendedDataSettings1> settings1;
+  if (SUCCEEDED(dred_settings_->QueryInterface(IID_PPV_ARGS(&settings1)))) {
+    settings1->SetBreadcrumbContextEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+  }
+  LOG_F(INFO,
+    "Forced DRED enabled (auto-breadcrumbs, contexts, page faults, Watson "
+    "dumps)");
 }
 
 void DebugLayer::InitializeAftermath() noexcept
 {
-  if (!g_tooling_policy.requested_aftermath) {
+  if (!ToolingPolicyState().requested_aftermath) {
     LOG_F(INFO, "Aftermath integration disabled by GraphicsConfig");
     return;
   }
@@ -404,7 +459,7 @@ void DebugLayer::InitializeAftermath() noexcept
     return;
   }
 
-  if (!g_tooling_policy.aftermath_enabled) {
+  if (!ToolingPolicyState().aftermath_enabled) {
     return;
   }
 
@@ -412,22 +467,25 @@ void DebugLayer::InitializeAftermath() noexcept
   AftermathTracker::Instance().EnableCrashDumps();
 }
 
+// Diagnostics only: logging is the sole throwing operation, and a failed log
+// while configuring tools or reporting a removal cannot be recovered here.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 void DebugLayer::BootstrapRenderDoc() noexcept
 {
-  if (!g_tooling_policy.requested_renderdoc) {
+  if (!ToolingPolicyState().requested_renderdoc) {
     return;
   }
 
 #if defined(USE_RENDERDOC) && __has_include(<renderdoc_app.h>)
-  if (g_tooling_policy.renderdoc_bootstrap_attempted) {
+  if (ToolingPolicyState().renderdoc_bootstrap_attempted) {
     return;
   }
-  g_tooling_policy.renderdoc_bootstrap_attempted = true;
+  ToolingPolicyState().renderdoc_bootstrap_attempted = true;
 
   auto* renderdoc_module = ::GetModuleHandleW(kRenderDocModuleName);
   auto loaded_by_bootstrap = false;
   if (renderdoc_module == nullptr) {
-    switch (g_tooling_policy.frame_capture.init_mode) {
+    switch (ToolingPolicyState().frame_capture.init_mode) {
     case oxygen::FrameCaptureInitMode::kDisabled:
       LOG_F(INFO,
         "RenderDoc frame capture initialization is disabled; continuing "
@@ -452,41 +510,43 @@ void DebugLayer::BootstrapRenderDoc() noexcept
       loaded_by_bootstrap = true;
       break;
     case oxygen::FrameCaptureInitMode::kExplicitPath:
-      if (g_tooling_policy.frame_capture.module_path.empty()) {
+      if (ToolingPolicyState().frame_capture.module_path.empty()) {
         LOG_F(WARNING,
           "RenderDoc frame capture requested explicit-path bootstrap before "
           "D3D12 startup, but no module path was configured");
         return;
       }
       renderdoc_module = ::LoadLibraryW(
-        ToWidePath(g_tooling_policy.frame_capture.module_path).c_str());
+        ToWidePath(ToolingPolicyState().frame_capture.module_path).c_str());
       if (renderdoc_module == nullptr) {
         LOG_F(WARNING,
           "RenderDoc frame capture requested explicit-path bootstrap before "
           "D3D12 startup, but LoadLibraryW({}) failed with Win32 error {}",
-          g_tooling_policy.frame_capture.module_path, ::GetLastError());
+          ToolingPolicyState().frame_capture.module_path, ::GetLastError());
         return;
       }
       loaded_by_bootstrap = true;
       break;
     }
-  } else if (g_tooling_policy.frame_capture.init_mode
+  } else if (ToolingPolicyState().frame_capture.init_mode
     == oxygen::FrameCaptureInitMode::kExplicitPath) {
     const auto loaded_module_path = ResolveModulePath(renderdoc_module);
     const auto configured_module_path
-      = std::filesystem::path(g_tooling_policy.frame_capture.module_path);
+      = std::filesystem::path(ToolingPolicyState().frame_capture.module_path);
     if (!PathsEquivalent(loaded_module_path, configured_module_path)) {
       LOG_F(WARNING,
         "RenderDoc explicit-path bootstrap requested '{}', but "
         "renderdoc.dll was already loaded from '{}'; refusing to mix "
         "different RenderDoc modules",
-        g_tooling_policy.frame_capture.module_path,
+        ToolingPolicyState().frame_capture.module_path,
         loaded_module_path.empty() ? "<unknown>"
                                    : loaded_module_path.generic_string());
       return;
     }
   }
 
+  // GetProcAddress returns an untyped entry point by contract.
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
   const auto get_api = reinterpret_cast<pRENDERDOC_GetAPI>(
     ::GetProcAddress(renderdoc_module, "RENDERDOC_GetAPI"));
   if (get_api == nullptr) {
@@ -499,6 +559,8 @@ void DebugLayer::BootstrapRenderDoc() noexcept
   }
 
   RENDERDOC_API_1_6_0* api = nullptr;
+  // RENDERDOC_GetAPI returns the versioned table through a void** by contract.
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
   if (get_api(eRENDERDOC_API_Version_1_6_0, reinterpret_cast<void**>(&api)) != 1
     || api == nullptr) {
     LOG_F(WARNING,
@@ -510,7 +572,7 @@ void DebugLayer::BootstrapRenderDoc() noexcept
     return;
   }
 
-  g_tooling_policy.renderdoc_api_initialized = true;
+  ToolingPolicyState().renderdoc_api_initialized = true;
   RefreshToolingPolicy();
 
   LOG_F(
@@ -518,21 +580,24 @@ void DebugLayer::BootstrapRenderDoc() noexcept
 #endif
 }
 
+// Diagnostics only: logging is the sole throwing operation, and a failed log
+// while configuring tools or reporting a removal cannot be recovered here.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 void DebugLayer::BootstrapPix() noexcept
 {
-  if (!g_tooling_policy.requested_pix) {
+  if (!ToolingPolicyState().requested_pix) {
     return;
   }
 
 #if defined(USE_PIX) && __has_include(<pix3.h>)
-  if (g_tooling_policy.pix_bootstrap_attempted) {
+  if (ToolingPolicyState().pix_bootstrap_attempted) {
     return;
   }
-  g_tooling_policy.pix_bootstrap_attempted = true;
+  ToolingPolicyState().pix_bootstrap_attempted = true;
 
   auto* pix_module = ::GetModuleHandleW(kPixGpuCapturerModuleName);
   if (pix_module == nullptr) {
-    switch (g_tooling_policy.frame_capture.init_mode) {
+    switch (ToolingPolicyState().frame_capture.init_mode) {
     case oxygen::FrameCaptureInitMode::kDisabled:
       LOG_F(INFO,
         "PIX GPU capture initialization is disabled; continuing without "
@@ -556,34 +621,34 @@ void DebugLayer::BootstrapPix() noexcept
       }
       break;
     case oxygen::FrameCaptureInitMode::kExplicitPath:
-      if (g_tooling_policy.frame_capture.module_path.empty()) {
+      if (ToolingPolicyState().frame_capture.module_path.empty()) {
         LOG_F(WARNING,
           "PIX GPU capture requested explicit-path bootstrap before D3D12 "
           "startup, but no module path was configured");
         return;
       }
       pix_module = ::LoadLibraryW(
-        ToWidePath(g_tooling_policy.frame_capture.module_path).c_str());
+        ToWidePath(ToolingPolicyState().frame_capture.module_path).c_str());
       if (pix_module == nullptr) {
         LOG_F(WARNING,
           "PIX GPU capture requested explicit-path bootstrap before D3D12 "
           "startup, but LoadLibraryW({}) failed with Win32 error {}",
-          g_tooling_policy.frame_capture.module_path, ::GetLastError());
+          ToolingPolicyState().frame_capture.module_path, ::GetLastError());
         return;
       }
       break;
     }
-  } else if (g_tooling_policy.frame_capture.init_mode
+  } else if (ToolingPolicyState().frame_capture.init_mode
     == oxygen::FrameCaptureInitMode::kExplicitPath) {
     const auto loaded_module_path = ResolveModulePath(pix_module);
     const auto configured_module_path
-      = std::filesystem::path(g_tooling_policy.frame_capture.module_path);
+      = std::filesystem::path(ToolingPolicyState().frame_capture.module_path);
     if (!PathsEquivalent(loaded_module_path, configured_module_path)) {
       LOG_F(WARNING,
         "PIX explicit-path bootstrap requested '{}', but "
         "WinPixGpuCapturer.dll was already loaded from '{}'; refusing to mix "
         "different PIX GPU capturer modules",
-        g_tooling_policy.frame_capture.module_path,
+        ToolingPolicyState().frame_capture.module_path,
         loaded_module_path.empty() ? "<unknown>"
                                    : loaded_module_path.generic_string());
       return;
@@ -610,6 +675,15 @@ void DebugLayer::ConfigureDeviceInfoQueue(dx::IDevice* device) noexcept
     return;
   }
 
+  Microsoft::WRL::ComPtr<ID3D12InfoQueue1> message_queue;
+  if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&message_queue)))) {
+    DWORD cookie = 0;
+    if (FAILED(message_queue->RegisterMessageCallback(&LogD3D12Message,
+          D3D12_MESSAGE_CALLBACK_FLAG_NONE, nullptr, &cookie))) {
+      LOG_F(WARNING, "Failed to route D3D12 debug-layer messages to the log");
+    }
+  }
+
   if (::IsDebuggerPresent() == 0) {
     return;
   }
@@ -629,12 +703,12 @@ void DebugLayer::ConfigureDeviceInfoQueue(dx::IDevice* device) noexcept
     LOG_F(WARNING, "Failed to set D3D12 break-on-error severity");
   }
 
-  D3D12_MESSAGE_SEVERITY deny_severity[] = {
+  std::array deny_severity {
     D3D12_MESSAGE_SEVERITY_INFO,
   };
   D3D12_INFO_QUEUE_FILTER filter = {};
-  filter.DenyList.NumSeverities = std::size(deny_severity);
-  filter.DenyList.pSeverityList = deny_severity;
+  filter.DenyList.NumSeverities = static_cast<UINT>(deny_severity.size());
+  filter.DenyList.pSeverityList = deny_severity.data();
   if (FAILED(info_queue->PushStorageFilter(&filter))) {
     LOG_F(WARNING, "Failed to apply D3D12 info queue storage filter");
   }
@@ -643,7 +717,7 @@ void DebugLayer::ConfigureDeviceInfoQueue(dx::IDevice* device) noexcept
 void DebugLayer::ConfigureAftermathForDevice(
   dx::IDevice* device, const uint32_t vendor_id) noexcept
 {
-  if (!g_tooling_policy.aftermath_enabled) {
+  if (!ToolingPolicyState().aftermath_enabled) {
     return;
   }
 
@@ -699,8 +773,10 @@ void DebugLayer::PrintLiveObjectsReport() noexcept
                     "-----------------------------------------------===\n");
   try {
     ThrowOnFailed(dxgi_debug_->ReportLiveObjects(DXGI_DEBUG_ALL,
-      static_cast<DXGI_DEBUG_RLO_FLAGS>(DXGI_DEBUG_RLO_SUMMARY
-        | DXGI_DEBUG_RLO_DETAIL | DXGI_DEBUG_RLO_IGNORE_INTERNAL)));
+      static_cast<DXGI_DEBUG_RLO_FLAGS>(
+        static_cast<unsigned>(DXGI_DEBUG_RLO_SUMMARY)
+        | static_cast<unsigned>(DXGI_DEBUG_RLO_DETAIL)
+        | static_cast<unsigned>(DXGI_DEBUG_RLO_IGNORE_INTERNAL))));
     OutputDebugString("===-----------------------------------------------------"
                       "-----------------===\n");
   } catch (const windows::ComError& e) {
@@ -710,128 +786,6 @@ void DebugLayer::PrintLiveObjectsReport() noexcept
       "------------------------------------------------------------===\n");
   }
 }
-
-namespace nostd::adl_helper {
-
-// Add before the existing as_string template
-inline static auto as_string(D3D12_DRED_ALLOCATION_TYPE type) -> std::string
-{
-  switch (type) {
-  case D3D12_DRED_ALLOCATION_TYPE_COMMAND_QUEUE:
-    return "COMMAND_QUEUE";
-  case D3D12_DRED_ALLOCATION_TYPE_COMMAND_ALLOCATOR:
-    return "COMMAND_ALLOCATOR";
-  case D3D12_DRED_ALLOCATION_TYPE_PIPELINE_STATE:
-    return "PIPELINE_STATE";
-  case D3D12_DRED_ALLOCATION_TYPE_COMMAND_LIST:
-    return "COMMAND_LIST";
-  case D3D12_DRED_ALLOCATION_TYPE_FENCE:
-    return "FENCE";
-  case D3D12_DRED_ALLOCATION_TYPE_DESCRIPTOR_HEAP:
-    return "DESCRIPTOR_HEAP";
-  case D3D12_DRED_ALLOCATION_TYPE_HEAP:
-    return "HEAP";
-  case D3D12_DRED_ALLOCATION_TYPE_QUERY_HEAP:
-    return "QUERY_HEAP";
-  case D3D12_DRED_ALLOCATION_TYPE_COMMAND_SIGNATURE:
-    return "COMMAND_SIGNATURE";
-  case D3D12_DRED_ALLOCATION_TYPE_PIPELINE_LIBRARY:
-    return "PIPELINE_LIBRARY";
-  case D3D12_DRED_ALLOCATION_TYPE_VIDEO_DECODER:
-    return "VIDEO_DECODER";
-  case D3D12_DRED_ALLOCATION_TYPE_VIDEO_PROCESSOR:
-    return "VIDEO_PROCESSOR";
-  case D3D12_DRED_ALLOCATION_TYPE_RESOURCE:
-    return "RESOURCE";
-  case D3D12_DRED_ALLOCATION_TYPE_PASS:
-    return "PASS";
-  case D3D12_DRED_ALLOCATION_TYPE_CRYPTOSESSION:
-    return "CRYPTOSESSION";
-  case D3D12_DRED_ALLOCATION_TYPE_CRYPTOSESSIONPOLICY:
-    return "CRYPTOSESSIONPOLICY";
-  case D3D12_DRED_ALLOCATION_TYPE_PROTECTEDRESOURCESESSION:
-    return "PROTECTEDRESOURCESESSION";
-  case D3D12_DRED_ALLOCATION_TYPE_VIDEO_DECODER_HEAP:
-    return "VIDEO_DECODER_HEAP";
-  case D3D12_DRED_ALLOCATION_TYPE_COMMAND_POOL:
-    return "COMMAND_POOL";
-  case D3D12_DRED_ALLOCATION_TYPE_COMMAND_RECORDER:
-    return "COMMAND_RECORDER";
-  case D3D12_DRED_ALLOCATION_TYPE_STATE_OBJECT:
-    return "STATE_OBJECT";
-  case D3D12_DRED_ALLOCATION_TYPE_METACOMMAND:
-    return "METACOMMAND";
-  case D3D12_DRED_ALLOCATION_TYPE_SCHEDULINGGROUP:
-    return "SCHEDULINGGROUP";
-  case D3D12_DRED_ALLOCATION_TYPE_VIDEO_MOTION_ESTIMATOR:
-    return "VIDEO_MOTION_ESTIMATOR";
-  case D3D12_DRED_ALLOCATION_TYPE_VIDEO_MOTION_VECTOR_HEAP:
-    return "VIDEO_MOTION_VECTOR_HEAP";
-  case D3D12_DRED_ALLOCATION_TYPE_VIDEO_EXTENSION_COMMAND:
-    return "VIDEO_EXTENSION_COMMAND";
-  case D3D12_DRED_ALLOCATION_TYPE_VIDEO_ENCODER:
-    return "VIDEO_ENCODER";
-  case D3D12_DRED_ALLOCATION_TYPE_VIDEO_ENCODER_HEAP:
-    return "VIDEO_ENCODER_HEAP";
-  case D3D12_DRED_ALLOCATION_TYPE_INVALID:
-    return "INVALID";
-  default:
-    return "UNKNOWN";
-  }
-}
-
-inline static auto as_string(D3D12_AUTO_BREADCRUMB_OP op) -> std::string
-{
-  switch (op) {
-  case D3D12_AUTO_BREADCRUMB_OP_SETMARKER:
-    return "SetMarker";
-  case D3D12_AUTO_BREADCRUMB_OP_BEGINEVENT:
-    return "BeginEvent";
-  case D3D12_AUTO_BREADCRUMB_OP_ENDEVENT:
-    return "EndEvent";
-  case D3D12_AUTO_BREADCRUMB_OP_DRAWINSTANCED:
-    return "DrawInstanced";
-  case D3D12_AUTO_BREADCRUMB_OP_DRAWINDEXEDINSTANCED:
-    return "DrawIndexedInstanced";
-  case D3D12_AUTO_BREADCRUMB_OP_EXECUTEINDIRECT:
-    return "ExecuteIndirect";
-  case D3D12_AUTO_BREADCRUMB_OP_DISPATCH:
-    return "Dispatch";
-  case D3D12_AUTO_BREADCRUMB_OP_COPYBUFFERREGION:
-    return "CopyBufferRegion";
-  case D3D12_AUTO_BREADCRUMB_OP_COPYTEXTUREREGION:
-    return "CopyTextureRegion";
-  case D3D12_AUTO_BREADCRUMB_OP_COPYRESOURCE:
-    return "CopyResource";
-  case D3D12_AUTO_BREADCRUMB_OP_COPYTILES:
-    return "CopyTiles";
-  case D3D12_AUTO_BREADCRUMB_OP_RESOLVESUBRESOURCE:
-    return "ResolveSubresource";
-  case D3D12_AUTO_BREADCRUMB_OP_CLEARRENDERTARGETVIEW:
-    return "ClearRenderTargetView";
-  case D3D12_AUTO_BREADCRUMB_OP_CLEARUNORDEREDACCESSVIEW:
-    return "ClearUnorderedAccessView";
-  case D3D12_AUTO_BREADCRUMB_OP_CLEARDEPTHSTENCILVIEW:
-    return "ClearDepthStencilView";
-  case D3D12_AUTO_BREADCRUMB_OP_RESOURCEBARRIER:
-    return "ResourceBarrier";
-  case D3D12_AUTO_BREADCRUMB_OP_EXECUTEBUNDLE:
-    return "ExecuteBundle";
-  case D3D12_AUTO_BREADCRUMB_OP_PRESENT:
-    return "Present";
-  case D3D12_AUTO_BREADCRUMB_OP_RESOLVEQUERYDATA:
-    return "ResolveQueryData";
-  case D3D12_AUTO_BREADCRUMB_OP_BEGINSUBMISSION:
-    return "BeginSubmission";
-  case D3D12_AUTO_BREADCRUMB_OP_ENDSUBMISSION:
-    return "EndSubmission";
-  // ... add other cases as needed
-  default:
-    return fmt::format("Unknown({})", static_cast<int>(op));
-  }
-}
-
-} // namespace nostd::adl_helper
 
 namespace {
 void PrintCommandListInfo(const D3D12_AUTO_BREADCRUMB_NODE1* node) noexcept
@@ -846,6 +800,9 @@ void PrintCommandListInfo(const D3D12_AUTO_BREADCRUMB_NODE1* node) noexcept
   }
 }
 
+// Diagnostics only: logging is the sole throwing operation, and a failed log
+// while configuring tools or reporting a removal cannot be recovered here.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 void PrintBreadcrumbHistory(const D3D12_AUTO_BREADCRUMB_NODE1* node) noexcept
 {
   if (node->pCommandHistory == nullptr || node->BreadcrumbCount == 0) {
@@ -884,6 +841,9 @@ void PrintBreadcrumbContexts(const D3D12_AUTO_BREADCRUMB_NODE1* node) noexcept
   }
 }
 
+// Diagnostics only: logging is the sole throwing operation, and a failed log
+// while configuring tools or reporting a removal cannot be recovered here.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 void PrintAllocationNode(
   const D3D12_DRED_ALLOCATION_NODE* node, const char* prefix) noexcept
 {

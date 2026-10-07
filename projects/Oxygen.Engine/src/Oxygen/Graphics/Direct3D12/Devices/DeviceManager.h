@@ -108,6 +108,9 @@ concept DeviceRemovalHandler
 struct DeviceManagerDesc {
   bool enable_debug_layer { DefaultGraphicsDebugLayerEnabled() };
   bool enable_validation { false };
+  //! Device Removed Extended Data with the debug layer: breadcrumbs, contexts
+  //! and page faults for removal reports, at a cost on every command list.
+  bool enable_dred { true };
   bool enable_aftermath { DefaultGraphicsAftermathEnabled() };
   FrameCaptureConfig frame_capture {};
   bool require_display { true };

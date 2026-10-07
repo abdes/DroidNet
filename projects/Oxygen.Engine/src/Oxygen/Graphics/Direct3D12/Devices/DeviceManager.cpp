@@ -410,7 +410,7 @@ DeviceManager::DeviceManager(DeviceManagerDesc desc)
     || props_.frame_capture.provider != oxygen::FrameCaptureProvider::kNone) {
     // The DebugLayer object also owns runtime debug-tool integration state.
     debug_layer_ = std::make_shared<DebugLayer>(
-      props_.enable_debug_layer, props_.enable_validation);
+      props_.enable_debug_layer, props_.enable_validation, props_.enable_dred);
   }
 
   DiscoverAdapters();
