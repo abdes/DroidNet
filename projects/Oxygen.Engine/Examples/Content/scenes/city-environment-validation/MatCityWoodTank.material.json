@@ -1,9 +1,9 @@
 {
-  "name": "MatCityBrickRed",
+  "name": "MatCityWoodTank",
   "domain": "opaque",
   "alpha_mode": "opaque",
   "parameters": {
-    "base_color": [0.33, 0.15, 0.1, 1.0],
+    "base_color": [0.25, 0.18, 0.12, 1.0],
     "metalness": 0.0,
     "roughness": 0.85,
     "ambient_occlusion": 1.0

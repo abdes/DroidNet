@@ -1,16 +1,38 @@
 # City Environment Validation Scene
 
-`CityEnvironmentValidation.scene.json` is a meter-authored city-scale scene for validating Oxygen environment rendering. The default unit is meters: the ground slab is 7000 m x 4200 m, the far skyline extends beyond 3 km from the default camera, 309 building cubes use footprints of tens of meters, and landmark towers reach 210 m, 260 m, and 320 m.
+`CityEnvironmentValidation.scene.json` is a foggy-morning city in metres
+(X east, Y north, Z up) for validating Oxygen environment rendering at city
+scale: atmosphere, height fog, sky light and directional shadows over a dense,
+readable urban layout.
 
-Scene-authored environment coverage:
+- A river with quays and two bridges runs along the south; the default camera
+  stands on the south-bank promenade looking north at the skyline.
+- North of the river, 150 m x 110 m kerbed blocks sit on a grid of 30 m avenues
+  and 20 m streets. Districts follow distance from downtown: podium towers with
+  setbacks and three landmarks (spire, round and plain, 210-300 m), midtown
+  offices with rooftop plant, and residential perimeter blocks around planted
+  courtyards with occasional rooftop water tanks.
+- A central park with a pond, a plaza, a tree-lined boulevard and riverside
+  trees provide open space.
+- Materials use muted, physically plausible albedos.
+- The environment is a low north-east sun through ground fog with about 1.2 km
+  street-level visibility over a thin haze layer, plus a local mist volume
+  over the river. The fog is analytic height fog; volumetric fog is disabled
+  until it is stable without temporal anti-aliasing.
 
-- `environment.sky_atmosphere` enables Earth-scale sky, sun disk, aerial perspective, and height-fog contribution.
-- `environment.fog` enables height fog plus volumetric fog parameters with kilometer-scale start/end distances.
-- `environment.sky_light` enables captured-scene sky lighting with diffuse/specular and volumetric-scattering controls.
-- `local_fog_volumes` adds three authored local fog volumes at near, mid, and far city distances.
-- The directional sun is a scene light explicitly assigned to the Primary atmosphere slot, with four meter-scale shadow cascades.
+The scene uses unit procedural geometries (cube, cylinder, cone and
+icosphere) that share one material-slot layout, so every renderable selects
+its material through a scene override.
 
-The city uses one procedural cube geometry with scene-authored `renderables[].material_ref` overrides, so material variety validates the runtime scene material-override path directly.
+## Regenerate
+
+`generate_city.py` produces the scene descriptor, the geometry and material
+descriptors and the import manifest deterministically. Edit it, never the
+generated JSON, then run from this directory:
+
+```powershell
+python generate_city.py
+```
 
 ## Run and inspect
 
@@ -21,7 +43,6 @@ From the Content directory, cook the scene using the [content workflow](../../RE
 ```
 
 Select `CityEnvironmentValidation` in RenderScene Library and choose **Use Scene**
-to restore its authored environment. Compare near buildings with the distant
-skyline when checking aerial perspective and fog. Use the authored camera for
-repeatable comparisons; see the [RenderScene guide](../../../RenderScene/README.md)
-for camera reset, exposure and verification controls.
+to restore its authored environment. Use the authored camera for repeatable
+comparisons; see the [RenderScene guide](../../../RenderScene/README.md) for
+camera reset, exposure and verification controls.

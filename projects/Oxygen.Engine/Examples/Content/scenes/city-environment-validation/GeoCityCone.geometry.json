@@ -1,0 +1,38 @@
+{
+  "name": "GeoCityCone",
+  "bounds": {
+    "min": [-0.5, -0.5, -0.5],
+    "max": [0.5, 0.5, 0.5]
+  },
+  "lods": [
+    {
+      "name": "GeoCityCone_lod0",
+      "mesh_type": "procedural",
+      "bounds": {
+        "min": [-0.5, -0.5, -0.5],
+        "max": [0.5, 0.5, 0.5]
+      },
+      "procedural": {
+        "generator": "Cone",
+        "mesh_name": "GeoCityCone",
+        "params": {
+          "segments": 24,
+          "height": 1.0,
+          "radius": 0.5
+        }
+      },
+      "submeshes": [
+        {
+          "name": "GeoCityCone_surface",
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "views": [
+            {
+              "view_ref": "__all__"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

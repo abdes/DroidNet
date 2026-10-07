@@ -1,11 +1,11 @@
 {
-  "name": "MatCityGlassBlue",
+  "name": "MatCityGlassBronze",
   "domain": "opaque",
   "alpha_mode": "opaque",
   "parameters": {
-    "base_color": [0.1, 0.13, 0.17, 1.0],
+    "base_color": [0.14, 0.11, 0.08, 1.0],
     "metalness": 0.5,
-    "roughness": 0.12,
+    "roughness": 0.14,
     "ambient_occlusion": 1.0
   }
 }

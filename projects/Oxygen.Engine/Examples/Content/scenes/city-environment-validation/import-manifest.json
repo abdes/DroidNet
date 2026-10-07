@@ -4,17 +4,17 @@
   "output": "../../.cooked/main",
   "jobs": [
     {
-      "id": "material.MatCityGlassBlue",
+      "id": "material.MatCityAsphalt",
       "type": "material-descriptor",
-      "source": "./MatCityGlassBlue.material.json",
-      "name": "MatCityGlassBlue",
+      "source": "./MatCityAsphalt.material.json",
+      "name": "MatCityAsphalt",
       "content_hashing": true
     },
     {
-      "id": "material.MatCityGlassTeal",
+      "id": "material.MatCityPavement",
       "type": "material-descriptor",
-      "source": "./MatCityGlassTeal.material.json",
-      "name": "MatCityGlassTeal",
+      "source": "./MatCityPavement.material.json",
+      "name": "MatCityPavement",
       "content_hashing": true
     },
     {
@@ -32,6 +32,13 @@
       "content_hashing": true
     },
     {
+      "id": "material.MatCityLimestone",
+      "type": "material-descriptor",
+      "source": "./MatCityLimestone.material.json",
+      "name": "MatCityLimestone",
+      "content_hashing": true
+    },
+    {
       "id": "material.MatCityBrickRed",
       "type": "material-descriptor",
       "source": "./MatCityBrickRed.material.json",
@@ -39,10 +46,38 @@
       "content_hashing": true
     },
     {
-      "id": "material.MatCityCopperGreen",
+      "id": "material.MatCityBrickBuff",
       "type": "material-descriptor",
-      "source": "./MatCityCopperGreen.material.json",
-      "name": "MatCityCopperGreen",
+      "source": "./MatCityBrickBuff.material.json",
+      "name": "MatCityBrickBuff",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCityGlassBlue",
+      "type": "material-descriptor",
+      "source": "./MatCityGlassBlue.material.json",
+      "name": "MatCityGlassBlue",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCityGlassTeal",
+      "type": "material-descriptor",
+      "source": "./MatCityGlassTeal.material.json",
+      "name": "MatCityGlassTeal",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCityGlassBronze",
+      "type": "material-descriptor",
+      "source": "./MatCityGlassBronze.material.json",
+      "name": "MatCityGlassBronze",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCityMetalPanel",
+      "type": "material-descriptor",
+      "source": "./MatCityMetalPanel.material.json",
+      "name": "MatCityMetalPanel",
       "content_hashing": true
     },
     {
@@ -53,31 +88,45 @@
       "content_hashing": true
     },
     {
-      "id": "material.MatCitySafetyYellow",
+      "id": "material.MatCityRoofGravel",
       "type": "material-descriptor",
-      "source": "./MatCitySafetyYellow.material.json",
-      "name": "MatCitySafetyYellow",
+      "source": "./MatCityRoofGravel.material.json",
+      "name": "MatCityRoofGravel",
       "content_hashing": true
     },
     {
-      "id": "material.MatCityCeramicWhite",
+      "id": "material.MatCityGrass",
       "type": "material-descriptor",
-      "source": "./MatCityCeramicWhite.material.json",
-      "name": "MatCityCeramicWhite",
+      "source": "./MatCityGrass.material.json",
+      "name": "MatCityGrass",
       "content_hashing": true
     },
     {
-      "id": "material.MatCityNightWindows",
+      "id": "material.MatCityTreeCanopy",
       "type": "material-descriptor",
-      "source": "./MatCityNightWindows.material.json",
-      "name": "MatCityNightWindows",
+      "source": "./MatCityTreeCanopy.material.json",
+      "name": "MatCityTreeCanopy",
       "content_hashing": true
     },
     {
-      "id": "material.MatCityAsphalt",
+      "id": "material.MatCityBark",
       "type": "material-descriptor",
-      "source": "./MatCityAsphalt.material.json",
-      "name": "MatCityAsphalt",
+      "source": "./MatCityBark.material.json",
+      "name": "MatCityBark",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCityWater",
+      "type": "material-descriptor",
+      "source": "./MatCityWater.material.json",
+      "name": "MatCityWater",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCityWoodTank",
+      "type": "material-descriptor",
+      "source": "./MatCityWoodTank.material.json",
+      "name": "MatCityWoodTank",
       "content_hashing": true
     },
     {
@@ -89,6 +138,30 @@
       "depends_on": ["material.MatCityConcreteWarm"]
     },
     {
+      "id": "geometry.GeoCityCylinder",
+      "type": "geometry-descriptor",
+      "source": "./GeoCityCylinder.geometry.json",
+      "name": "GeoCityCylinder",
+      "content_hashing": true,
+      "depends_on": ["material.MatCityConcreteWarm"]
+    },
+    {
+      "id": "geometry.GeoCityCone",
+      "type": "geometry-descriptor",
+      "source": "./GeoCityCone.geometry.json",
+      "name": "GeoCityCone",
+      "content_hashing": true,
+      "depends_on": ["material.MatCityConcreteWarm"]
+    },
+    {
+      "id": "geometry.GeoCitySphere",
+      "type": "geometry-descriptor",
+      "source": "./GeoCitySphere.geometry.json",
+      "name": "GeoCitySphere",
+      "content_hashing": true,
+      "depends_on": ["material.MatCityConcreteWarm"]
+    },
+    {
       "id": "scene.CityEnvironmentValidation",
       "type": "scene-descriptor",
       "source": "./CityEnvironmentValidation.scene.json",
@@ -96,17 +169,27 @@
       "content_hashing": true,
       "depends_on": [
         "geometry.GeoCityCube",
-        "material.MatCityGlassBlue",
-        "material.MatCityGlassTeal",
+        "geometry.GeoCityCylinder",
+        "geometry.GeoCityCone",
+        "geometry.GeoCitySphere",
+        "material.MatCityAsphalt",
+        "material.MatCityPavement",
         "material.MatCityConcreteWarm",
         "material.MatCityConcreteCool",
+        "material.MatCityLimestone",
         "material.MatCityBrickRed",
-        "material.MatCityCopperGreen",
+        "material.MatCityBrickBuff",
+        "material.MatCityGlassBlue",
+        "material.MatCityGlassTeal",
+        "material.MatCityGlassBronze",
+        "material.MatCityMetalPanel",
         "material.MatCitySlateDark",
-        "material.MatCitySafetyYellow",
-        "material.MatCityCeramicWhite",
-        "material.MatCityNightWindows",
-        "material.MatCityAsphalt"
+        "material.MatCityRoofGravel",
+        "material.MatCityGrass",
+        "material.MatCityTreeCanopy",
+        "material.MatCityBark",
+        "material.MatCityWater",
+        "material.MatCityWoodTank"
       ]
     }
   ]

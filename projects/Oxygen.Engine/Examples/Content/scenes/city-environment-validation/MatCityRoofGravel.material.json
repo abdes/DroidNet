@@ -1,11 +1,11 @@
 {
-  "name": "MatCityBrickRed",
+  "name": "MatCityRoofGravel",
   "domain": "opaque",
   "alpha_mode": "opaque",
   "parameters": {
-    "base_color": [0.33, 0.15, 0.1, 1.0],
+    "base_color": [0.2, 0.2, 0.19, 1.0],
     "metalness": 0.0,
-    "roughness": 0.85,
+    "roughness": 0.95,
     "ambient_occlusion": 1.0
   }
 }
