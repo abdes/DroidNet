@@ -5,9 +5,10 @@ Status: `review`
 ## 1. Purpose
 
 Define the ED-M02 viewport design: live embedded viewport presentation for the
-supported single viewport, editor camera defaults/framing, runtime settings
-surface, and the boundary between current stabilization work and later authoring
-tools. Multi-viewport layout stability is deferred to later engine/editor work.
+scene layouts, editor camera defaults/framing, runtime settings surface, and the
+boundary between current stabilization work and later authoring tools.
+ED-M08.V1 owns multi-viewport layouts and the camera preview inset; ED-M08.V2
+owns viewport state persistence.
 
 Selection highlights, transform gizmos, node icons, picking, and advanced
 overlays are planned for ED-M09. They are intentionally not ED-M02 blockers.
@@ -17,8 +18,8 @@ overlays are planned for ED-M09. They are intentionally not ED-M02 blockers.
 | ID            | Coverage                                                                                                                    |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `REQ-025`     | A live embedded viewport renders the active scene.                                                                          |
-| `REQ-027`     | The supported single live viewport layout is stable; multi-viewport layouts are deferred.                                   |
-| `REQ-028`     | The supported live viewport presents to the correct editor surface; multi-viewport surface routing is deferred.             |
+| `REQ-027`     | Every scene layout and the camera preview inset are stable (ED-M08.V1).                                                     |
+| `REQ-028`     | Each viewport presents to its surface (ED-M08.V1); layout and camera state survive reopening (ED-M08.V2).                   |
 | `REQ-030`     | Partial: ED-M02 verifies the active scene is visibly rendered in the embedded viewport; full preview parity remains ED-M08. |
 | `SUCCESS-003` | Users can see the scene in the editor viewport.                                                                             |
 | `SUCCESS-005` | Live viewport is stable enough for later authoring work.                                                                    |
@@ -94,8 +95,7 @@ Target invariants:
 3. Hidden/removed viewports release their engine view and surface lease.
 4. Layout changes update viewport metadata before surface/view requests rely on
    index/primary flags.
-5. The supported single viewport layout must route to the correct surface;
-   multi-viewport routing is deferred.
+5. Every layout routes each pane to its own surface.
 6. The editor camera is owned by the runtime/editor view, not by scene camera
    authoring data.
 7. ED-M02 framing means the default camera observes authored content after
@@ -121,13 +121,26 @@ Target invariants:
 
 ### Viewport Layout
 
-`SceneViewLayout` describes the requested pane arrangement. ED-M02 validates:
+`SceneViewLayout` describes the requested pane arrangement, from one to four
+panes. ED-M02 validated one pane; ED-M08.V1 qualifies every variant.
 
-- one pane.
-- multi-viewport layouts are deferred.
+### Multi-Viewport Layouts
 
-Other layout variants may exist but do not expand the ED-M02 validation matrix
-unless they are touched by the implementation.
+- Each pane holds one surface lease and one engine view. A layout change
+  creates and releases only the panes that change and keeps the surviving
+  panes' state.
+- Panes are independent: editor camera, view preset, orthographic size,
+  camera control mode and viewed scene camera are per pane. A camera piloted
+  in one pane moves live wherever it is shown; one pane at a time pilots a
+  given camera.
+- Each document has one focused pane. Keyboard shortcuts, frame commands,
+  Scene Explorer camera commands and Align to View act on it. Pointer input
+  goes to the pane under the pointer and focuses it.
+- Selecting a camera node shows a camera preview inset in the focused pane,
+  rendered through that camera with its framing. It is composed through the
+  engine's destination viewport and z-order, is excluded from the host view's
+  metering, and hides when the camera is deselected or already viewed by
+  the pane.
 
 ### Viewport Identity
 
@@ -229,7 +242,11 @@ Failure presentation:
 
 Persisted:
 
-- scene document layout metadata.
+- per scene, as user-local workspace state (ED-M08.V2, settings architecture
+  §5.2): the layout, the focused pane, and each pane's editor camera pose and
+  orbit focus, view preset, orthographic size, camera control mode and viewed
+  scene camera. Pilot is not restored: the pane reopens looking through the
+  camera. A missing camera falls back to the editor camera.
 - workspace layout.
 - runtime/editor settings through their settings service.
 
@@ -339,9 +356,8 @@ where practical.
 
 ED-M02 remains the recorded presentation/lifecycle baseline. ED-M09 implements
 the interaction contract below and consumes ED-M07A's command/session/diagnostic
-mechanism. Multi-viewport stability remains excluded. Existing unqualified
-multi-pane controls must be disabled with a clear explanation in the V0.1 build;
-visible but crash-prone modes do not qualify as an acceptable deferred feature.
+mechanism. ED-M08.V1 qualifies every multi-pane layout; until it does, a
+crash-prone mode does not qualify as supported.
 
 ## 16. V0.1 Viewport Interaction Contract
 

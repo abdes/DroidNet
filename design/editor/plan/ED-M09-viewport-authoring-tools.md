@@ -27,9 +27,9 @@ node pivot, fixed snap increments, camera/light icons and bounded overlays.
 
 ## 5. Non-Scope
 
-Multi-viewport stability, alternate validation models, asset editing from gizmos,
-advanced manipulators, and navigation that changes authored camera state.
-Existing unqualified multi-pane controls are disabled with a reason.
+Alternate validation models, asset editing from gizmos, advanced manipulators,
+and navigation that changes authored camera state outside pilot mode.
+Multi-viewport layouts belong to ED-M08.V1.
 
 ## 6. Implementation Sequence
 

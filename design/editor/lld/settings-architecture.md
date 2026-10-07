@@ -55,6 +55,7 @@ storing a setting outside its row.
 | Native log verbosity                                          | User/project                    | `PreviewSettingsService` → `IEngineService`       | project-scoped SQLite setting                    | preview preference                       | no               | yes (immediate)                                                  |
 | `IEngineSettings` (startup)                                   | Editor preference               | `ISettingsService<IEngineSettings>`               | DroidNet user-local settings                     | `ISettingsService.Save`                  | no               | only on next engine init                                         |
 | Workspace docking, recent docs                                | Workspace                       | existing editor data services                     | user-local                                       | workspace services                       | no               | n/a                                                              |
+| Viewport layout and per-pane camera state                     | Workspace per project and scene | WorldEditor viewport-state service                | `IEditorSettingsManager`, project-scoped setting | viewport UI, not authoring command       | no               | restored when the scene's panes are created                      |
 | Editor Hide / Show All                                        | Workspace per project and scene | WorldEditor workspace-visibility service          | `IEditorSettingsManager`, project-scoped setting | workspace command, not authoring command | no               | all editing viewports of the active scene; drops draw and shadow |
 | Project content roots, cook scope                             | Project                         | `Oxygen.Editor.Projects`                          | project metadata                                 | project/content commands                 | no scene changes | ordered mount/publication workflow                               |
 
@@ -102,6 +103,23 @@ Controlled qualification views omit workspace masks and restore the current
 valid editing mask on return. Their opt-in adapters do not save a temporary
 profile, camera ratio or Hide state. Qualification EvidenceRoot is an explicit
 development-run option, not a persistent editor/project preference.
+
+### 5.2 Viewport state storage and lifetime
+
+WorldEditor owns the typed `WorldEditor/SceneViewports` setting through a
+viewport-state service and the existing `IEditorSettingsManager`, with
+`SettingContext.Project` on the canonical project root, as in §5.1. The
+versioned payload contains the project ID and a map of scene IDs to the
+layout, the focused pane index, and per pane (by layout index) the editor
+camera position, rotation and orbit focus point, view preset, orthographic
+size, camera control mode and viewed scene camera node ID. Identity is the
+stable authored node ID.
+
+One coordinated service serializes writes and suppresses stale restoration.
+It writes shortly after navigation stops, on layout, preset, mode or camera
+assignment changes, and on document close. An unreadable or unsupported
+payload is discarded with a warning. Nothing is written to scene documents,
+history, authoring mounts, cooked output or validation requests.
 
 ## 6. Mutation Path Rules
 
@@ -199,6 +217,7 @@ V0.1 does not introduce a generic Settings panel.
 | Diagnostic override                   | no         | command-line / env var                           |
 | Workspace layout                      | yes        | by existing editor data services                 |
 | Workspace Hide                        | yes        | through the project-scoped typed setting in §5.1 |
+| Viewport layout and camera state      | yes        | through the project-scoped typed setting in §5.2 |
 
 Scene round trips preserve typed values, identities and source modes through
 `SceneJsonContext`. Text formatting need not match input bytes. The property

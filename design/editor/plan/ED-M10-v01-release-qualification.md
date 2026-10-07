@@ -28,7 +28,7 @@ failure safety, native mismatch handling, performance and lifecycle measurements
 ## 5. Non-Scope
 
 No larger-project guarantee, autosave/unsaved crash recovery, unsupported imports,
-new settings/preset panel, deferred multi-viewport support, or relaxed parity
+new settings/preset panel, or relaxed parity
 thresholds. No old milestone is retrospectively marked fully proven by new prose.
 
 ## 6. Implementation And Qualification Sequence

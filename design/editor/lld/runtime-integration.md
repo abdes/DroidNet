@@ -16,16 +16,15 @@ protocol, runner and acceptance metrics; sections 17-20 here define its integrat
 boundary and the ordinary runtime behavior it exercises.
 
 ED-M07 consumes this LLD only for validated cooked-root mount refresh after
-content pipeline cook. Multi-viewport remains deferred and is not reopened by
-ED-M07.
+content pipeline cook. ED-M08.V1 owns multi-viewport layouts.
 
 ## 2. PRD Traceability
 
 | ID            | Coverage                                                                                                                                        |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `REQ-025`     | Embedded viewport renders the active scene through the live engine.                                                                             |
-| `REQ-027`     | Runtime surface/view lifecycle supports the V0.1 single live viewport; multi-viewport is deferred.                                              |
-| `REQ-028`     | Runtime presentation is routed to the correct editor surface for the supported live viewport.                                                   |
+| `REQ-027`     | Runtime surface/view lifecycle supports every V0.1 scene layout and the camera preview inset (ED-M08.V1).                                       |
+| `REQ-028`     | Runtime presentation is routed to the correct editor surface for every live viewport.                                                           |
 | `REQ-030`     | Partial: runtime presentation provides the embedded preview path used later for parity validation; full authored-content parity remains ED-M08. |
 | `SUCCESS-003` | Live editor viewport presents correctly.                                                                                                        |
 | `SUCCESS-005` | Runtime presentation is stable enough for later authoring validation.                                                                           |

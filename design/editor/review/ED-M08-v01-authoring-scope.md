@@ -117,8 +117,8 @@ legacy runtime readers, alias resolution or duplicate behavior paths.
 V0.1 excludes generic node activation, authored hidden-shadow/Shadows Only modes,
 blended-material shadow casting, more than two atmospheric sources, sky-only
 authoring, lunar surface/phase/orbit features, physical-camera editor authoring,
-texture/material-graph authoring, topology/slot creation, physics/script authoring
-and stable multi-viewport UX.
+texture/material-graph authoring, topology/slot creation and physics/script
+authoring. Multi-viewport layouts are in scope under ED-M08.V1.
 
 The [engine deferred-capability record](../../../projects/Oxygen.Engine/design/vortex/milestones/ED-M08/deferred-capabilities.md)
 owns source-local TODO IDs and distinguishes existing native functionality from

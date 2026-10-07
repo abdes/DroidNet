@@ -51,8 +51,9 @@ Planning rules:
    work.
 6. PRD section 8 owns the V0.1 capability boundary; the linked LLD field and
    interaction contracts define its details. Required gates execute under their
-   current owning milestones. Multi-viewport stability is the explicit deferral;
-   listed non-goals are exclusions, not permission to omit required fields.
+   current owning milestones. Multi-viewport layouts are in scope under
+   ED-M08.V1; listed non-goals are exclusions, not permission to omit
+   required fields.
 7. Previously recorded milestone status/evidence is retained. Identified missing
    implementation or additional guarantees execute in named gap-closing
    milestones; do not create a retrospective closure sweep.
@@ -94,8 +95,9 @@ the user's Main/Lantern scene packaged and rendered from its PAK alone, and
 focused native origin/binding/cache evidence pass. Its
 [closure record](plan/ED-M08.F1-descriptor-local-references.md#closure-verification)
 retains the user's non-blocking managed/UI and load-cost decisions.
-M08.2 rendering and view behavior is validated and closed on 2026-10-08; the
-M08.3 harness and subsequent editor parity work are next.
+M08.2 rendering and view behavior is validated and closed on 2026-10-08.
+M08.V1 multi-viewport layouts and M08.V2 viewport state persistence are
+next, before the M08.3 harness.
 
 ## 4. Milestone Roadmap
 

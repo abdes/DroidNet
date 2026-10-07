@@ -1,8 +1,9 @@
 # ED-M08 — Runtime parity and standalone qualification
 
-Status: **in progress — M08.1, M08.F1 and M08.2 validated; M08.3 is next**
+Status: **in progress — M08.1, M08.F1 and M08.2 validated; M08.V1 is next**
 
-Current: **M08.3 development harness and native visual gate.** M08.1,
+Current: **M08.V1 multi-viewport layouts**, then M08.V2 viewport state
+persistence, before M08.3. M08.1,
 [M08.F1 descriptor-local references](ED-M08.F1-descriptor-local-references.md)
 and M08.2 are validated. [Closure evidence and approved scope](ED-M08.F1-descriptor-local-references.md#closure-verification)
 for F1 retain failing/unrun checks without claiming passes; final managed/UI
@@ -12,7 +13,8 @@ node "Rendering" section, colour grading, camera framing with orthographic
 cameras and editor viewing through authored cameras, and point/spot light
 editors. The editor representation mask is deferred to M08.4, which is
 re-scoped to the remaining authoring surface: the representation mask and
-polish. M08.3 and M08.5–M08.8 remain unchanged.
+polish. Multi-viewport layouts return to scope as M08.V1, followed by
+M08.V2 viewport state persistence. M08.3 and M08.5–M08.8 remain unchanged.
 See [owners](#2-implementation-document-map), [remaining increments](#m081-remaining-increments)
 and [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
@@ -22,7 +24,9 @@ its rendering, precision and publication contracts remain unchanged.
 
 The editor and native engine implement one canonical V0.1 authoring contract.
 Saved and cooked scenes reproduce geometry, material slots, visibility, cameras,
-lighting and environment in native and embedded rendering. An opt-in development
+lighting and environment in native and embedded rendering. Every scene layout
+presents stable, independent viewports whose state survives reopening. An
+opt-in development
 harness proves semantic and image parity for the complete workload and field suite.
 
 Production behavior ships in its owning modules. Qualification protocols,
@@ -30,7 +34,7 @@ fixtures, comparisons, instrumentation and runners belong exclusively to
 development targets. Normal Debug and Release applications and SDK packages
 contain no qualification workflow.
 
-Trace: REQ-018/019/022-026/030/037/039-042; SUCCESS-001/003/004/006.
+Trace: REQ-018/019/022-030/037/039-042; SUCCESS-001/003-006.
 
 ## 2. Implementation document map
 
@@ -133,7 +137,8 @@ from missing editor exposure. Current M08 obligations are not future TODOs.
 Each slice ends with focused checks and a buildable code/test/doc commit. Native
 contracts and rendered behavior pass before editor implementation relies on them.
 M02's remaining supported-viewport evidence is a closeout gate; M09 tools are not
-an entry dependency.
+an entry dependency. Order: M08.1 → M08.F1 → M08.2 → M08.V1 → M08.V2 →
+M08.3–M08.8.
 
 ### M08.1 — Native canonical data, producers and primitives
 
@@ -580,6 +585,82 @@ workflow checks above.
 | 4 Framing            | Orthographic and perspective Auto/Fixed framing per target, Fixed bars composed after post-processing (outside metering and grading), cooked `aspect_mode`, scene version 11. Editor camera inspectors and live attach. Viewports look through, pilot (with undoable pose commits) and align authored cameras from the viewport menu, Scene Explorer and Ctrl+Shift+F. Orthographic ground grid. |
 | 5 Point/spot editors | Descriptors, Interop `LocalLightPropertyApplier`, inspectors (cones in degrees), history/save/cook/live.                                                                                                                                                                                                                                                                                         |
 
+### M08.V1 — Multi-viewport layouts
+
+Multi-viewport support returns to scope (decision `DB-006` supersedes `DB-002`).
+The native engine already composes several views per frame, each presenting to
+its own surface or to a destination rectangle with a z-order
+(picture-in-picture), and the editor already offers one- to four-pane
+`SceneViewLayout` arrangements that mostly work. M08.V1 qualifies them and
+closes the gaps; the contract is the
+[viewport LLD](../lld/viewport-and-tools.md#multi-viewport-layouts).
+
+1. **Every layout is supported.** Each pane of every `SceneViewLayout` holds
+   one surface lease and one engine view. A layout change creates and releases
+   only the panes that change, keeps the surviving panes' camera state, and
+   leaks no view or lease. Presentation follows each pane through splits,
+   resizes, dock moves, document switches and close/reopen.
+2. **Panes are independent.** Each pane has its own editor camera, view
+   preset, orthographic size, camera control mode and viewed scene camera. A
+   camera piloted in one pane moves live in every other pane that shows it or
+   looks through it; one pane at a time pilots a given camera.
+3. **Focus and routing.** Each document has one focused pane. It receives
+   keyboard shortcuts, frame commands, Scene Explorer camera commands and Align
+   to View. Pointer input (navigation, picking, gizmos) goes to the pane under
+   the pointer and focuses it. Selection feedback, gizmos, icons and workspace
+   Hide apply in every editing pane.
+4. **Camera preview inset.** Selecting a camera node shows a
+   picture-in-picture inset in the focused pane, rendered through that camera
+   with its framing and bars. The inset hides when the camera is deselected or
+   when the pane already looks through it. It is editor-only presentation,
+   composed through the engine's destination viewport and z-order, and is
+   excluded from the host view's metering.
+5. **Cost.** Measure frame time and GPU memory in Release with four panes plus
+   the inset. Any throttling of unfocused panes is decided from that
+   measurement, not assumed.
+
+Owners: WorldEditor `SceneEditorViewModel`, `ViewportViewModel` and the
+`Viewport` control; Runtime surface leases and view lifetimes; Interop
+`EditorModule` views and `EditorCompositor`; Vortex `CompositionView`.
+
+Checks: open, switch and close every layout, returning the native view and
+lease counts to their baseline with no debug-layer or resource-state errors;
+resize and dock moves present to the correct surfaces; per-pane camera
+independence; a piloted camera observed from a second pane; shortcuts and
+Scene Explorer commands reach the focused pane; inset show/hide rules; the
+four-pane Release measurement.
+
+### M08.V2 — Viewport state persistence
+
+Depends on M08.V1. A scene reopens with its layout, focused pane and every
+pane's camera as the user left them. Viewport state is user-local workspace
+state, never authoring data: it does not dirty the scene, enter history or
+reach cooked output. The storage contract is
+[settings architecture §5.2](../lld/settings-architecture.md#52-viewport-state-storage-and-lifetime).
+
+1. **What is kept.** Per scene: the layout and focused pane. Per pane, by
+   layout index: editor camera position, rotation and orbit focus point, view
+   preset, orthographic size, camera control mode, and the viewed scene
+   camera's node ID.
+2. **Restore.** State applies when the scene's panes are created, before their
+   first presented frame. A pane that was piloting reopens looking through its
+   camera, not piloting. A viewed camera that no longer exists falls back to
+   the editor camera with an informational log entry. Panes with no stored
+   state use the defaults; stored panes beyond the layout are ignored.
+3. **Write.** Shortly after navigation stops, on any layout, preset, mode or
+   camera-assignment change, and when the document closes. Writes are
+   serialized per project, and a stale restore never overwrites newer state.
+4. **Native.** A view command sets the editor camera pose (position, rotation,
+   focus point and orthographic size); the existing view camera pose query
+   reports it back.
+
+Owners: WorldEditor viewport-state service with `IEditorSettingsManager`;
+`ViewportViewModel`; Runtime and Interop view camera commands.
+
+Checks: reopen restores each layout and pane; no scene dirty state or history
+entry from navigation or restore; deleted-camera fallback; project and scene
+isolation; an unreadable or unsupported payload is discarded with a warning.
+
 ### M08.3 — Development harness and native visual gate
 
 Implement the named opt-in targets and standalone LLD's version-1 protocol.
@@ -787,6 +868,8 @@ each run. Native example use/content refresh follows the maintained
       M08.1 and M08.F1 are validated; remaining M08 producer/loader mappings
       retain their later slice owners.
 - [ ] Engine fixes have native tests and rendered evidence outside the editor.
+- [ ] Every scene layout and the camera preview inset pass M08.V1, and
+      viewport state survives reopening per M08.V2.
 - [ ] Editor authoring/history/Save/cook/live delivery and workspace Hide pass.
 - [ ] M08.4 inspector field coverage and usability audit pass, with user walkthrough acceptance.
 - [ ] Saved-input proof/ownership survive partial/no-op publication and contention.

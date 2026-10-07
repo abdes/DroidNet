@@ -469,7 +469,6 @@ material slots, project manifests, or recent documents.
   `AssetMount`, restores prior output, and never reports the new output current.
 - Embedded runtime refreshes mounted cooked roots only through validated publication.
 - Opt-in development tools own standalone parity and visual-equivalence evidence.
-- Stable multi-viewport operation remains outside this release scope.
 
 ## 12. Operation Results And Diagnostics
 
@@ -529,7 +528,6 @@ Forbidden:
 - ContentPipeline must not persist cooked paths into authoring files.
 - Project services must not execute cook/import.
 - Runtime services must not generate descriptors or decide cook scope.
-- Stable multi-viewport behavior is outside this production scope.
 
 ## 14. Validation Gates
 
