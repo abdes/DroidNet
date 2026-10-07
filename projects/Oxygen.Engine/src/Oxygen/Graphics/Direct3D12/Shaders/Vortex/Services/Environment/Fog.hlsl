@@ -43,17 +43,22 @@ static inline bool VolumetricFogFlagEnabled(uint flags, uint bit)
 // lookup must use the receiver's view depth, not its radial distance: off-axis
 // the radial distance lands behind the surface, in cells that can be opaque
 // (exponential height fog grows without bound below its height offset).
+static bool IsIntegratedVolumetricFogUsable(GpuVolumetricFogParams volumetric_fog)
+{
+    return VolumetricFogFlagEnabled(volumetric_fog.flags, GPU_VOLUMETRIC_FOG_FLAG_ENABLED)
+        && VolumetricFogFlagEnabled(
+            volumetric_fog.flags,
+            GPU_VOLUMETRIC_FOG_FLAG_INTEGRATED_SCATTERING_VALID)
+        && volumetric_fog.integrated_light_scattering_srv != K_INVALID_BINDLESS_INDEX
+        && BX_IN_TEXTURES(volumetric_fog.integrated_light_scattering_srv);
+}
+
 static float4 SampleIntegratedVolumetricFog(
     GpuVolumetricFogParams volumetric_fog,
     float2 uv,
     float view_depth_m)
 {
-    if (!VolumetricFogFlagEnabled(volumetric_fog.flags, GPU_VOLUMETRIC_FOG_FLAG_ENABLED)
-        || !VolumetricFogFlagEnabled(
-            volumetric_fog.flags,
-            GPU_VOLUMETRIC_FOG_FLAG_INTEGRATED_SCATTERING_VALID)
-        || volumetric_fog.integrated_light_scattering_srv == K_INVALID_BINDLESS_INDEX
-        || !BX_IN_TEXTURES(volumetric_fog.integrated_light_scattering_srv)) {
+    if (!IsIntegratedVolumetricFogUsable(volumetric_fog)) {
         return float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
 
@@ -131,20 +136,32 @@ float4 VortexFogPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
         input.uv,
         raw_depth,
         inverse_view_projection_matrix);
+    const float3 camera_to_receiver = world_position - camera_position;
+    const float view_depth_m =
+        max(-mul(view_matrix, float4(world_position, 1.0f)).z, 0.0f);
+    const bool volumetric_usable =
+        IsIntegratedVolumetricFogUsable(env_data.volumetric_fog);
+    // Volumetric fog covers view depths up to its distance; exclude analytic
+    // height fog from that range along this ray, as UE does, so the two media
+    // are not counted twice.
+    GpuFogParams height_fog_params = fog;
+    if (volumetric_usable && view_depth_m > 0.0f) {
+        const float ray_per_view_depth = length(camera_to_receiver) / view_depth_m;
+        height_fog_params.start_distance_m = max(fog.start_distance_m,
+            env_data.volumetric_fog.distance_m * ray_per_view_depth);
+    }
     float4 height_fog = float4(0.0f, 0.0f, 0.0f, 1.0f);
     if (FogFlagEnabled(fog.flags, GPU_FOG_FLAG_HEIGHT_FOG_ENABLED)
         && (fog.primary_density > 0.0f || fog.secondary_density > 0.0f)) {
         height_fog = EvaluateHeightFogSegment(
-            fog,
+            height_fog_params,
             env_data,
             environment_view,
             camera_position,
-            world_position - camera_position);
+            camera_to_receiver);
     }
     RecordHdrConsumerInput(height_fog.rgb, HDR_INPUT_HEIGHT_FOG);
     height_fog.rgb *= GetPreExposure();
-    const float view_depth_m =
-        max(-mul(view_matrix, float4(world_position, 1.0f)).z, 0.0f);
     const float4 volumetric_fog = SampleIntegratedVolumetricFog(
         env_data.volumetric_fog,
         input.uv,

@@ -594,6 +594,13 @@ Authoring file:
 
 - [Fog.h](/F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Scene/Environment/Fog.h)
 
+Both systems describe one medium. Volumetric fog covers view depths up to its
+distance; the composite excludes analytic height fog from that range along each
+ray (distance divided by the ray's view-depth ratio, as UE's exclude distance)
+and samples the integrated volume by the receiver's view depth, the axis the
+froxel grid is built on. Neither medium is counted twice, and receivers never
+sample cells behind their own surface.
+
 #### 4.2.3 `scene::environment::SkyLight`
 
 `SkyLight` provides environment-family coupling for atmosphere, fog, local

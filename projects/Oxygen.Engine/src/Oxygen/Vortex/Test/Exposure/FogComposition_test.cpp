@@ -510,101 +510,118 @@ NOLINT_TEST_F(ExposureGpuTest, FogCompositionClampsViewportAndDepthEdges)
          Format::kRGBA16Float,
        }) {
     const auto volume = MakeSignal(2, 2, pixels, 2, format, true);
-    auto environment_static = EnvironmentStaticData {};
-    environment_static.fog.flags
-      = kGpuFogFlagEnabled | kGpuFogFlagRenderInMainPass;
-    environment_static.volumetric_fog.flags = kGpuVolumetricFogFlagEnabled
-      | kGpuVolumetricFogFlagIntegratedScatteringValid;
-    environment_static.volumetric_fog.integrated_light_scattering_srv
-      = volume.srv.get();
-    environment_static.volumetric_fog.distance_m = 1.0F;
-    environment_static.volumetric_fog.grid_depth = 2U;
-    auto environment_bindings = EnvironmentFrameBindings {};
-    environment_bindings.environment_static_slot
-      = PublishFixtureData(environment_static);
-    environment_bindings.environment_view_slot = environment_view_slot;
-    auto view_bindings = ViewFrameBindings {};
-    view_bindings.environment_frame_slot
-      = PublishFixtureData(environment_bindings);
-    view_bindings.scene_texture_frame_slot = scene_slot;
-    const auto view_slot = PublishFixtureData(view_bindings);
-    // Off-axis receivers (lateral offset) lie farther than their view depth;
-    // the volume is sliced by view depth, so the lookup must ignore the offset.
-    for (const auto [distance, lateral] : {
-           std::pair { 0.0F, 0.0F },
-           std::pair { .25F, 0.0F },
-           std::pair { .25F, .6F },
-           std::pair { 1.0F, 0.0F },
-           std::pair { 4.0F, 0.0F },
-           std::pair { .0625F, .5F },
-         }) {
-      SCOPED_TRACE(distance);
-      SCOPED_TRACE(lateral);
-      auto view = ViewConstants::GpuData {};
-      view.view_frame_bindings_bslot = BindlessViewFrameBindingsSlot {
-        view_slot,
-      };
-      view.reverse_z = 0U;
-      view.inverse_view_projection_matrix = glm::mat4 {
-        0.0F,
-      };
-      view.inverse_view_projection_matrix
-        = glm::column(view.inverse_view_projection_matrix, 3,
-          glm::vec4 {
-            lateral,
-            0,
-            -distance,
-            1,
-          });
-      auto constants = CreateUploadBuffer(
-        SizeBytes {
-          256U,
-        },
-        BufferUsage::kConstant);
-      constants->Update(&view, sizeof(view), 0U);
-      ctx_.view_constants = constants;
-      {
-        auto recorder = AcquireRecorder("Fog edge initialization");
-        for (const auto& texture : {
-               textures.GetSceneColorResource(),
-               textures.GetSceneDepthResource(),
-             }) {
-          if (!recorder->AdoptKnownResourceState(*texture)) {
-            recorder->BeginTrackingResourceState(
-              *texture, texture->GetDescriptor().initial_state);
-          }
-        }
-        recorder->RequireResourceState(
-          textures.GetSceneColor(), ResourceStates::kRenderTarget);
-        recorder->RequireResourceState(
-          textures.GetSceneDepth(), ResourceStates::kDepthWrite);
-        recorder->FlushBarriers();
-        recorder->ClearFramebuffer(*framebuffer,
-          std::vector<std::optional<Color>> {
-            Color {},
-          },
-          0.0F);
+    // Analytic height fog is excluded where the volume covers the ray, so
+    // enabling it must not change receivers inside the volumetric range.
+    for (const bool height_fog : { false, true }) {
+      SCOPED_TRACE(height_fog);
+      auto environment_static = EnvironmentStaticData {};
+      environment_static.fog.flags
+        = kGpuFogFlagEnabled | kGpuFogFlagRenderInMainPass;
+      environment_static.volumetric_fog.flags = kGpuVolumetricFogFlagEnabled
+        | kGpuVolumetricFogFlagIntegratedScatteringValid;
+      environment_static.volumetric_fog.integrated_light_scattering_srv
+        = volume.srv.get();
+      environment_static.volumetric_fog.distance_m = 1.0F;
+      environment_static.volumetric_fog.grid_depth = 2U;
+      if (height_fog) {
+        environment_static.fog.flags |= kGpuFogFlagHeightFogEnabled;
+        environment_static.fog.primary_density = 2.0F;
+        environment_static.fog.max_opacity = 1.0F;
+        environment_static.fog.fog_inscattering_luminance_rgb
+          = { 1.0F, 1.0F, 1.0F };
       }
-      ASSERT_TRUE(SubmitCommands("Vortex test",
-        [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
-          return compose.Record(ctx_, recorder, textures);
-        }).executed);
-      const auto result = ReadFloatTexture(textures.GetSceneColor());
-      const double z = std::clamp(
-        (2 * std::sqrt(std::clamp(static_cast<double>(distance), 0.0, 1.0)))
-          - .5,
-        0.0, 1.0);
-      for (unsigned y = 0; y < 8; ++y) {
-        for (unsigned x = 0; x < 8; ++x) {
-          const auto& pixel = result.at((y * 8) + x);
-          EXPECT_NEAR(pixel.at(0),
-            std::clamp(((static_cast<double>(x) + .5) / 4) - .5, 0.0, 1.0),
-            3e-7);
-          EXPECT_NEAR(pixel.at(1),
-            std::clamp(((static_cast<double>(y) + .5) / 4) - .5, 0.0, 1.0),
-            3e-7);
-          EXPECT_NEAR(pixel.at(2), z, 3e-7);
-          EXPECT_NEAR(pixel.at(3), z, 3e-7);
+      auto environment_bindings = EnvironmentFrameBindings {};
+      environment_bindings.environment_static_slot
+        = PublishFixtureData(environment_static);
+      environment_bindings.environment_view_slot = environment_view_slot;
+      auto view_bindings = ViewFrameBindings {};
+      view_bindings.environment_frame_slot
+        = PublishFixtureData(environment_bindings);
+      view_bindings.scene_texture_frame_slot = scene_slot;
+      const auto view_slot = PublishFixtureData(view_bindings);
+      // Off-axis receivers (lateral offset) lie farther than their view depth;
+      // the volume is sliced by view depth, so the lookup must ignore the
+      // offset.
+      for (const auto [distance, lateral] : {
+             std::pair { 0.0F, 0.0F },
+             std::pair { .25F, 0.0F },
+             std::pair { .25F, .6F },
+             std::pair { 1.0F, 0.0F },
+             std::pair { 4.0F, 0.0F },
+             std::pair { .0625F, .5F },
+           }) {
+        SCOPED_TRACE(distance);
+        SCOPED_TRACE(lateral);
+        if (height_fog
+          && distance > environment_static.volumetric_fog.distance_m) {
+          continue;
+        }
+        auto view = ViewConstants::GpuData {};
+        view.view_frame_bindings_bslot = BindlessViewFrameBindingsSlot {
+          view_slot,
+        };
+        view.reverse_z = 0U;
+        view.inverse_view_projection_matrix = glm::mat4 {
+          0.0F,
+        };
+        view.inverse_view_projection_matrix
+          = glm::column(view.inverse_view_projection_matrix, 3,
+            glm::vec4 {
+              lateral,
+              0,
+              -distance,
+              1,
+            });
+        auto constants = CreateUploadBuffer(
+          SizeBytes {
+            256U,
+          },
+          BufferUsage::kConstant);
+        constants->Update(&view, sizeof(view), 0U);
+        ctx_.view_constants = constants;
+        {
+          auto recorder = AcquireRecorder("Fog edge initialization");
+          for (const auto& texture : {
+                 textures.GetSceneColorResource(),
+                 textures.GetSceneDepthResource(),
+               }) {
+            if (!recorder->AdoptKnownResourceState(*texture)) {
+              recorder->BeginTrackingResourceState(
+                *texture, texture->GetDescriptor().initial_state);
+            }
+          }
+          recorder->RequireResourceState(
+            textures.GetSceneColor(), ResourceStates::kRenderTarget);
+          recorder->RequireResourceState(
+            textures.GetSceneDepth(), ResourceStates::kDepthWrite);
+          recorder->FlushBarriers();
+          recorder->ClearFramebuffer(*framebuffer,
+            std::vector<std::optional<Color>> {
+              Color {},
+            },
+            0.0F);
+        }
+        ASSERT_TRUE(SubmitCommands("Vortex test",
+          [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+            return compose.Record(ctx_, recorder, textures);
+          }).executed);
+        const auto result = ReadFloatTexture(textures.GetSceneColor());
+        const double z = std::clamp(
+          (2 * std::sqrt(std::clamp(static_cast<double>(distance), 0.0, 1.0)))
+            - .5,
+          0.0, 1.0);
+        for (unsigned y = 0; y < 8; ++y) {
+          for (unsigned x = 0; x < 8; ++x) {
+            const auto& pixel = result.at((y * 8) + x);
+            EXPECT_NEAR(pixel.at(0),
+              std::clamp(((static_cast<double>(x) + .5) / 4) - .5, 0.0, 1.0),
+              3e-7);
+            EXPECT_NEAR(pixel.at(1),
+              std::clamp(((static_cast<double>(y) + .5) / 4) - .5, 0.0, 1.0),
+              3e-7);
+            EXPECT_NEAR(pixel.at(2), z, 3e-7);
+            EXPECT_NEAR(pixel.at(3), z, 3e-7);
+          }
         }
       }
     }
