@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -37,6 +38,7 @@
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
@@ -72,6 +74,13 @@ namespace {
   constexpr float kUeFroxelNearOffsetMeters = 9.5F;
   constexpr float kUeVolumetricFogHistoryWeight = 0.9F;
   constexpr std::uint32_t kUeVolumetricFogMaxHistoryMissSamples = 16U;
+  constexpr std::uint32_t kHaltonBaseX = 2U;
+  constexpr std::uint32_t kHaltonBaseY = 3U;
+  constexpr std::uint32_t kHaltonBaseZ = 5U;
+  constexpr float kMinLightDirectionLengthSq = 1.0e-6F;
+  constexpr float kGridParamTolerance = 1.0e-4F;
+  // Henyey-Greenstein g stays inside (-1, 1).
+  constexpr float kMaxScatteringDistribution = 0.99F;
 
   auto Halton(std::uint32_t index, const std::uint32_t base) noexcept -> float
   {
@@ -93,8 +102,9 @@ namespace {
     }
 
     const auto halton_index = frame_number & 1023U;
-    return { Halton(halton_index, 2U), Halton(halton_index, 3U),
-      Halton(halton_index, 5U), 0.0F };
+    return { Halton(halton_index, kHaltonBaseX),
+      Halton(halton_index, kHaltonBaseY), Halton(halton_index, kHaltonBaseZ),
+      0.0F };
   }
 
   auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
@@ -134,9 +144,9 @@ namespace {
           table.view_type = RangeTypeToViewType(
             static_cast<bindless_d3d12::RangeType>(range.range_type));
           table.base_index = range.base_register;
-          table.count = range.num_descriptors
-              == (std::numeric_limits<std::uint32_t>::max)()
-            ? (std::numeric_limits<std::uint32_t>::max)()
+          table.count
+            = range.num_descriptors == std::numeric_limits<std::uint32_t>::max()
+            ? std::numeric_limits<std::uint32_t>::max()
             : range.num_descriptors;
         }
         binding.data = table;
@@ -201,23 +211,21 @@ namespace {
     recorder.BeginTrackingResourceState(texture, initial, true);
   }
 
-  auto SetVec4(float (&target)[4], const glm::vec3 value, const float w = 0.0F)
-    -> void
+  auto SetVec4(std::array<float, 4>& target, const glm::vec3 value,
+    const float w = 0.0F) -> void
   {
-    target[0] = value.x;
-    target[1] = value.y;
-    target[2] = value.z;
-    target[3] = w;
+    target = { value.x, value.y, value.z, w };
   }
 
-  auto PopulateLight(float (&direction_enabled)[4], float (&illuminance_rgb)[4],
-    const AtmosphereLightModel& light) -> void
+  auto PopulateLight(std::array<float, 4>& direction_enabled,
+    std::array<float, 4>& illuminance_rgb, const AtmosphereLightModel& light)
+    -> void
   {
     auto direction = glm::vec3 { 0.0F, 0.0F, 1.0F };
     if (light.enabled) {
       const auto length_sq
         = glm::dot(light.direction_to_light_ws, light.direction_to_light_ws);
-      if (length_sq > 1.0e-6F) {
+      if (length_sq > kMinLightDirectionLengthSq) {
         direction = glm::normalize(light.direction_to_light_ws);
       }
     }
@@ -245,6 +253,7 @@ namespace {
   }
 
   auto CalculateUeGridZParams(const float start_distance_m,
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) - UE's order
     const float near_plane_m, const float far_plane_m,
     const std::uint32_t grid_size_z) -> glm::vec3
   {
@@ -260,7 +269,7 @@ namespace {
     const auto far_minus_near = std::max(far_plane - near_with_offset, 1.0e-6);
     const auto depth_exp = std::exp2(slice_count / depth_distribution);
     const auto offset
-      = (far_plane - near_with_offset * depth_exp) / far_minus_near;
+      = (far_plane - (near_with_offset * depth_exp)) / far_minus_near;
     const auto scale = (1.0 - offset) / near_with_offset;
 
     return glm::vec3 { static_cast<float>(scale), static_cast<float>(offset),
@@ -269,7 +278,7 @@ namespace {
 
   auto NearlyEqual(const float left, const float right) -> bool
   {
-    return std::abs(left - right) <= 1.0e-4F;
+    return std::abs(left - right) <= kGridParamTolerance;
   }
 
 } // namespace
@@ -319,7 +328,7 @@ auto VolumetricFogPass::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
   if (exposure_frame_ != sequence) {
-    exposure_readers_[slot.get()].clear();
+    exposure_readers_.at(slot.get()).clear();
     exposure_frame_ = sequence;
   }
   live_textures_.clear();
@@ -342,11 +351,10 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   -> RecordState
 {
   const auto& volumetric = stable_state.view_products.volumetric_fog;
-  auto state = RecordState {
-    .requested = ctx.current_view.view_id != kInvalidViewId
-      && ctx.current_view.with_height_fog && volumetric.enabled
-      && ctx.current_view.resolved_view != nullptr,
-  };
+  auto state = RecordState {};
+  state.requested = ctx.current_view.view_id != kInvalidViewId
+    && ctx.current_view.with_height_fog && volumetric.enabled
+    && ctx.current_view.resolved_view != nullptr;
   if (!state.requested
     || !renderer_.HasCapability(
       RendererCapabilityFamily::kEnvironmentLighting)) {
@@ -458,9 +466,12 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   const auto sky_light_injection_ready
     = sky_light_injection_requested && distant_sky_light_lut_srv.IsValid();
 
+  // Byte offsets mirror the HLSL VolumetricFogPassConstants layout.
+  // NOLINTBEGIN(*-magic-numbers)
   static_assert(offsetof(PassConstants, exposure_status_uav) == 532U);
   static_assert(offsetof(PassConstants, exposure_fp16_store) == 536U);
   static_assert(offsetof(PassConstants, previous_error_bounds_srv) == 540U);
+  // NOLINTEND(*-magic-numbers)
   auto constants = PassConstants {};
   constants.exposure_status_uav = ctx.current_view.frame_exposure
     ? ctx.current_view.frame_exposure->current_state->status_uav_index.get()
@@ -495,14 +506,8 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
       : 0U;
     const auto jitter
       = VolumetricFogTemporalRandom(sample_frame, temporal_jitter_enabled);
-    constants.temporal_history1.frame_jitter_offsets[sample_index][0]
-      = jitter.x;
-    constants.temporal_history1.frame_jitter_offsets[sample_index][1]
-      = jitter.y;
-    constants.temporal_history1.frame_jitter_offsets[sample_index][2]
-      = jitter.z;
-    constants.temporal_history1.frame_jitter_offsets[sample_index][3]
-      = jitter.w;
+    constants.temporal_history1.frame_jitter_offsets.at(sample_index)
+      = { jitter.x, jitter.y, jitter.z, jitter.w };
   }
   HistoryEntry transient_history;
   if (!temporal_reprojection_enabled) {
@@ -531,8 +536,8 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
         = history_entry.frame_exposure->srv_index.get();
       constants.previous_error_bounds_srv
         = history_entry.frame_exposure->current_state->status_srv_index.get();
-      exposure_readers_[ctx.frame_slot.get()].push_back(
-        history_entry.frame_exposure);
+      exposure_readers_.at(ctx.frame_slot.get())
+        .push_back(history_entry.frame_exposure);
     }
     constants.temporal_history0.previous_integrated_light_scattering_srv
       = history_entry.srv.get();
@@ -553,7 +558,8 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   constants.media0.albedo_rgb[1] = volumetric.albedo.y;
   constants.media0.albedo_rgb[2] = volumetric.albedo.z;
   constants.media0.scattering_distribution
-    = std::clamp(volumetric.scattering_distribution, -0.99F, 0.99F);
+    = std::clamp(volumetric.scattering_distribution,
+      -kMaxScatteringDistribution, kMaxScatteringDistribution);
   constants.media1.emissive_rgb[0] = volumetric.emissive.x;
   constants.media1.emissive_rgb[1] = volumetric.emissive.y;
   constants.media1.emissive_rgb[2] = volumetric.emissive.z;
@@ -618,10 +624,10 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   }
   PopulateLight(constants.light0_direction_enabled,
     constants.light0_illuminance_rgb,
-    stable_state.view_products.atmosphere_lights[0]);
+    stable_state.view_products.atmosphere_lights.at(0));
   PopulateLight(constants.light1_direction_enabled,
     constants.light1_illuminance_rgb,
-    stable_state.view_products.atmosphere_lights[1]);
+    stable_state.view_products.atmosphere_lights.at(1));
 
   auto constants_alloc = pass_constants_buffer_.Allocate(1U);
   if (!constants_alloc.has_value()
@@ -757,8 +763,8 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   }
   texture_committed = true;
   if (ctx.current_view.frame_exposure) {
-    exposure_readers_[ctx.frame_slot.get()].push_back(
-      ctx.current_view.frame_exposure);
+    exposure_readers_.at(ctx.frame_slot.get())
+      .push_back(ctx.current_view.frame_exposure);
   }
   return state;
 }

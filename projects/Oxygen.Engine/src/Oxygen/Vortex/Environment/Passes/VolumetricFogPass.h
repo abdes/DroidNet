@@ -198,7 +198,7 @@ namespace environment {
     };
 
     struct alignas(16) TemporalHistoryControl1 {
-      float frame_jitter_offsets[16][4] {};
+      std::array<std::array<float, 4>, 16> frame_jitter_offsets {};
     };
 
     struct alignas(16) PassConstants {
@@ -216,10 +216,10 @@ namespace environment {
       LocalFogControl0 local_fog0 {};
       LocalFogControl1 local_fog1 {};
       LocalFogControl2 local_fog2 {};
-      float light0_direction_enabled[4] { 0.0F, 0.0F, 1.0F, 0.0F };
-      float light0_illuminance_rgb[4] { 0.0F, 0.0F, 0.0F, 0.0F };
-      float light1_direction_enabled[4] { 0.0F, 0.0F, 1.0F, 0.0F };
-      float light1_illuminance_rgb[4] { 0.0F, 0.0F, 0.0F, 0.0F };
+      std::array<float, 4> light0_direction_enabled { 0.0F, 0.0F, 1.0F, 0.0F };
+      std::array<float, 4> light0_illuminance_rgb { 0.0F, 0.0F, 0.0F, 0.0F };
+      std::array<float, 4> light1_direction_enabled { 0.0F, 0.0F, 1.0F, 0.0F };
+      std::array<float, 4> light1_illuminance_rgb { 0.0F, 0.0F, 0.0F, 0.0F };
       std::uint32_t previous_frame_exposure_srv {
         kInvalidShaderVisibleIndex.get(),
       };
