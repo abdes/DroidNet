@@ -44,7 +44,10 @@ public sealed class DocumentConflictControlTests : VisualUserInterfaceTests
         var first = prompt.ShowAsync(windowId, metadata, participant);
         var second = prompt.ShowAsync(windowId, metadata, participant);
         _ = second.Should().BeSameAs(first);
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+
+        // The prompt opens its dialog from a normal-priority dispatcher item; a low-priority item runs after it
+        // without depending on the window rendering a frame.
+        await VisualUserInterfaceTestsApp.DispatcherQueue.EnqueueAsync(static () => { }, Microsoft.UI.Dispatching.DispatcherQueuePriority.Low).ConfigureAwait(true);
         dialogs.Verify(value => value.ShowAsync(It.IsAny<DialogSpec>(), windowId, It.IsAny<CancellationToken>()), Times.Once);
         closed.SetResult(DialogButton.Close);
         await first.ConfigureAwait(true);

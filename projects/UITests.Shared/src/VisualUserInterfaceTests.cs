@@ -93,6 +93,9 @@ public class VisualUserInterfaceTests
     [TestInitialize]
     public async Task NonOverridableTestSetup()
     {
+        // Unhandled UI exceptions are attributed to the test that raises them.
+        await EnqueueAsync(UnhandledUiExceptions.Reset).ConfigureAwait(true);
+
         // Make sure every test starts with a clean slate, even if it doesn't use LoadTestContentAsync.
         await EnqueueAsync(ClearTestContent).ConfigureAwait(true);
 
@@ -113,15 +116,23 @@ public class VisualUserInterfaceTests
     [TestCleanup]
     public async Task NonOverridableTestCleanup()
     {
-        // Make sure every test ends with a clean slate, even if it doesn't use LoadTestContentAsync.
-        await EnqueueAsync(ClearTestContent).ConfigureAwait(true);
+        try
+        {
+            // Make sure every test ends with a clean slate, even if it doesn't use LoadTestContentAsync.
+            await EnqueueAsync(ClearTestContent).ConfigureAwait(true);
 
-        // Give a chance to derived test classes to run their own cleanup code.
-        await EnqueueAsync(this.TestCleanup).ConfigureAwait(true);
-        await EnqueueAsync(this.TestCleanupAsync).ConfigureAwait(true);
+            // Give a chance to derived test classes to run their own cleanup code.
+            await EnqueueAsync(this.TestCleanup).ConfigureAwait(true);
+            await EnqueueAsync(this.TestCleanupAsync).ConfigureAwait(true);
 
-        // Ensure the LoggerFactory created for this test is disposed to free resources
-        this.LoggerFactory.Dispose();
+            // Fail the test that let an exception escape into WinUI, including one raised during cleanup.
+            await EnqueueAsync(UnhandledUiExceptions.ThrowIfAny).ConfigureAwait(true);
+        }
+        finally
+        {
+            // Ensure the LoggerFactory created for this test is disposed to free resources
+            this.LoggerFactory.Dispose();
+        }
     }
 
     /// <summary>
@@ -174,8 +185,9 @@ public class VisualUserInterfaceTests
                 {
                     try
                     {
-                        var result = await function().ConfigureAwait(true);
-                        taskCompletionSource.SetResult(result);
+                        var work = function();
+                        await AwaitOrUnhandledUiExceptionAsync(work).ConfigureAwait(true);
+                        taskCompletionSource.SetResult(await work.ConfigureAwait(true));
                     }
                     catch (Exception ex)
                     {
@@ -200,7 +212,9 @@ public class VisualUserInterfaceTests
             {
                 try
                 {
-                    await function().ConfigureAwait(true);
+                    var work = function();
+                    await AwaitOrUnhandledUiExceptionAsync(work).ConfigureAwait(true);
+                    await work.ConfigureAwait(true);
                     taskCompletionSource.SetResult();
                 }
                 catch (Exception ex)
@@ -348,6 +362,21 @@ public class VisualUserInterfaceTests
     /// </summary>
     protected virtual void TestCleanup()
     {
+    }
+
+    /// <summary>
+    /// Waits for <paramref name="work"/> unless an exception escapes into WinUI first, in which case that
+    /// exception fails the caller instead of leaving it waiting for work that may never complete.
+    /// </summary>
+    /// <param name="work">The test work being awaited.</param>
+    /// <returns>A task that completes with the work or faults with the unhandled UI exception.</returns>
+    private static async Task AwaitOrUnhandledUiExceptionAsync(Task work)
+    {
+        var signal = UnhandledUiExceptions.Current;
+        if (await Task.WhenAny(work, signal).ConfigureAwait(true) == signal && !work.IsCompleted)
+        {
+            await signal.ConfigureAwait(true);
+        }
     }
 
     /// <summary>

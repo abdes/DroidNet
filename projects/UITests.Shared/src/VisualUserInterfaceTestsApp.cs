@@ -62,6 +62,13 @@ public abstract class VisualUserInterfaceTestsApp : Application
             ?? throw new InvalidOperationException("The UI test application requires a dispatcher queue.");
         UITestMethodAttribute.DispatcherQueue = this.dispatcherQueue;
 
+        // An exception escaping into WinUI fails the running test instead of fail-fasting the host.
+        this.UnhandledException += static (_, e) =>
+        {
+            e.Handled = true;
+            UnhandledUiExceptions.Record(e.Message, e.Exception);
+        };
+
         Environment.ExitCode = 1;
         try
         {

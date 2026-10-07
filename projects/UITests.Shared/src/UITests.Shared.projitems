@@ -25,6 +25,7 @@
       <DependentUpon>MainWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="$(MSBuildThisFileDirectory)TestVisualStateManager.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)UnhandledUiExceptions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)VisualUserInterfaceTests.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)VisualUserInterfaceTestsApp.cs" />
   </ItemGroup>
