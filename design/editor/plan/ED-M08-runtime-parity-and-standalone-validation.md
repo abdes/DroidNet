@@ -1,8 +1,8 @@
 # ED-M08 — Runtime parity and standalone qualification
 
-Status: **in progress — M08.1 and M08.F1 validated; M08.2 native rendering is next**
+Status: **in progress — M08.1 and M08.F1 validated; M08.2 native rendered behavior is next**
 
-Current: **M08.2 native rendering and view behavior.** M08.1 and [M08.F1 descriptor-local references](ED-M08.F1-descriptor-local-references.md) are validated. F1 closes on 2026-10-06 with user reference-authoring/live mount-tree checks, the user's Main/Lantern scene packaged and rendered from its PAK alone, and five existing focused native origin/binding/cache cases passing. [Closure evidence and approved scope](ED-M08.F1-descriptor-local-references.md#closure-verification) retain failing/unrun checks without claiming passes; final managed/UI qualification and load-cost measurement are non-blocking by user decision. M08.2–M08.8 remain unchanged.
+Current: **M08.2 native rendering and view behavior.** M08.1 and [M08.F1 descriptor-local references](ED-M08.F1-descriptor-local-references.md) are validated. F1 closes on 2026-10-06 with user reference-authoring/live mount-tree checks, the user's Main/Lantern scene packaged and rendered from its PAK alone, and five existing focused native origin/binding/cache cases passing. [Closure evidence and approved scope](ED-M08.F1-descriptor-local-references.md#closure-verification) retain failing/unrun checks without claiming passes; final managed/UI qualification and load-cost measurement are non-blocking by user decision. M08.2's native data foundation (Local/Inherit flags, cast/receive extraction, receiver and contact-shadow GPU paths, the independent directional array with Primary/Secondary slots and per-light CSM shadows, and captured-sky IBL) is already landed; M08.2 now finishes the remaining authoring gaps — live invalidation on flag/role edits, the node "Rendering" section (Scene Visibility / Cast / Receive Shadows), color-grading shader consumers, camera framing bars with orthographic camera editor UI and sync command, and point/spot light editors — while the editor representation mask is deferred to M08.4. M08.4 is re-scoped to the remaining authoring surface: the representation mask and polish. M08.3 and M08.5–M08.8 remain unchanged.
 See [owners](#2-implementation-document-map), [remaining increments](#m081-remaining-increments)
 and [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
@@ -478,41 +478,84 @@ introduces no compatibility reader.
 
 ### M08.2 — Native rendering and view behavior
 
-Implement effective visibility for geometry/light eligibility and invalidation
-on effective flag/hierarchy changes. Keep editing-main-view hiding separate.
-Preserve independent geometry casting, light shadowing and receiver opt-out;
-carry receiving into both GPU surface paths and implement retained contact-shadow
-controls with their defined field semantics.
+M08.2 finishes the authoring surface the editor already shows and completes the
+light-editing stack. The content author can already place and transform objects,
+assign materials, add directional/point/spot lights and orthographic cameras, and
+set environment/exposure/tone mapping. Five gaps remain: one missing control,
+three controls shown but inert, and one complete light-type UI suite. Each item
+below is a content-author need, not an internal engine seam.
 
-Replace single-directional surface/shadow selection with independent participating
-sources. Primary and Secondary both illuminate and cast requested shadows;
-None remains an ordinary directional source.
+1. **Every edit takes effect immediately.** When the author sets a light node's
+   `Visible` flag to Hidden, changes its role (None/Primary/Secondary), or flips a
+   Cast/Receive Shadows flag, the view must relight on that edit alone. Today the
+   cached light list and captured-sky lighting are not recomputed on a flag-only
+   change, so the edit looks like it did nothing until an unrelated edit refreshes
+   the cache. Deliver: emit a mutation on flag/role changes and invalidate the
+   directional-light resolver, the per-frame light selection, and the captured-sky
+   products in the same operation that applied the change.
 
-[VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md)
-already delivers captured diffuse/specular sky lighting, readiness/invalidation,
-Stage 13 evaluation, height-fog capture, both update schedules and DemoShell UI;
-the Stage 12 ambient bridge is removed. M08.2 preserves and qualifies that
-implementation against the canonical light/view behavior. Keep its scene-global
-capture anchor and shared filtering rules: camera navigation does not change
-authored sky lighting.
+2. **Node "Rendering" section.** The author cannot yet choose which objects render
+   or cast/receive shadows. Add a "Rendering" property section to the node
+   Inspector — Scene Visibility, Geometry Cast Shadows, Geometry Receive Shadows —
+   placed after the component inspectors. These are node flags the engine already
+   stores and consumes; the section wires them through command/history/Undo/Save/
+   cook and live projection.
 
-Resolve the exact camera and parented pose. Auto derives target aspect with
-unchanged vertical FOV; Fixed preserves ratio/composition with a centred content
-rectangle. Bars are outside metering and added after scene post-processing.
-Implement retained grading/vignette and effective settings with defined ordering,
-including clear-background display colour and foreground transparency.
+3. **Color grading takes effect.** The author already sees Saturation, Contrast and
+   Vignette in the environment inspector; editing them does nothing today. Add the
+   shader consumers in the fixed order — exposure once → Rec.709 saturation →
+   linear-light contrast about 0.18 → tone curve → content-ellipse vignette →
+   display gamma → background/coverage composition — so the sliders grade the
+   frame, including the clear-background colour and foreground transparency.
 
-Owners: `Scene/SceneFlags`, `Scene/Light/DirectionalLightResolver`,
-`Vortex/ScenePrep`, `Vortex/Resources/DrawMetadataEmitter`, `Vortex/Lighting`,
-`Vortex/Shadows`, `Vortex/Environment`, `Vortex/IndirectLighting`,
-`Vortex/SceneCameraViewResolver`,
-`Vortex/SceneRenderer`, and their D3D12 shaders.
+4. **Camera framing and orthographic editor.** The author can set Aspect Mode = Fixed on a
+   camera; today the image stretches instead of showing letterbox/pillarbox bars.
+   Auto fills the target with the unchanged vertical FOV (perspective) or
+   OrthographicSize (orthographic); Fixed fits the authored ratio in a centred
+   content rectangle with bars composed after post-processing and excluded from
+   metering and grading. One framing contract serves both projection types. Add the
+   orthographic camera sync command (`RuntimeAttachOrthographicCamera`) to enable
+   rendering of authored orthographic cameras in the editor view, and add the editor
+   property section (OrthographicSize, AspectMode/AspectRatio, near/far) following
+   the perspective camera pattern. Physical exposure stays deferred.
 
-Checks: independent light/caster/receiver controls; inherited Hidden/local Shown;
-visibility cache invalidation; off-screen versus authored-hidden casters; opaque/
-masked/Blend behavior; two shadowed directionals and Secondary alone; fill-only;
-IBL readiness; grading/contact effects; Auto/Fixed projection. Preserve existing
-material-sidedness and mirrored-winding correctness.
+5. **Point and Spot light editors.** The author can already create point and spot
+   lights and the native rendering exists, but the Inspector has no controls for
+   them. Add editor property sections reusing directional-light patterns and common
+   inspector controls. Point lights expose lumens, range and source radius; spot
+   lights additionally expose inner and outer cone angles. Wire both through
+   command/history/Undo/Save/cook and live projection. Both lights support the
+   same shared fields as directional (colour, Affects Scene, Cast Shadows, contact
+   shadows, shadow bias/normal-bias/resolution, exposure compensation).
+
+Pushed to M08.4: the editor representation mask — the native per-view delivery
+that keeps workspace-Hide geometry casting and lighting. The eye toggle already
+hides geometry in the editing view; preserving caster/light eligibility for hidden
+geometry is a refinement of that shipped feature. This work defers to M08.4 as
+it becomes essential only for large scenes, which is not the case for current
+content validation.
+
+Owners: `Scene/Scene.*` mutation dispatch and `Scene/SceneTraversal.h`;
+`Scene/Light/DirectionalLightResolver.*`; `SceneRenderer::BuildFrameLightSelection`;
+`Scene/Camera/Perspective`, `Scene/Camera/Orthographic`, `Vortex/SceneCameraViewResolver`,
+`Core/Types/ResolvedView`, InitViews/SceneTextures and composition;
+`Vortex/PostProcess/*` and `Tonemap.hlsl`/`Exposure.hlsl`. Light and camera editors:
+WorldEditor inspector/commands, `World` light component types, camera property sections
+and property slots, and the Interop light/camera-command transport. The node "Rendering"
+section: `World` node-flag slots (`RenderingSlot` / `LightingSlot`) and flag-command
+transport.
+
+Checks (focused native tests and rendered evidence precede M08.3): flag/role edits
+invalidate the light list and captured sky after cache population; the three node
+"Rendering" flags round-trip edit/Undo/Save/reopen with live effect, including a
+locally Shown child under a Hidden parent; the Saturation/Contrast/Vignette golden,
+neutral, None, background and transparent-coverage cases; Auto resize without
+authored mutation and the Fixed 4:3/16:9 bar fits. Point/spot light edits
+(range, lumens, cone angles) with live effect and history/Undo/Save/reopen;
+orthographic camera edits (OrthographicSize, AspectMode/AspectRatio, near/far)
+with live effect and history/Undo/Save/reopen; orthographic framing with Auto resize
+and Fixed fit; orthographic sync command attaches authored cameras to editor views.
+Preserve existing material-sidedness and mirrored-winding correctness.
 
 ### M08.3 — Development harness and native visual gate
 
@@ -530,8 +573,9 @@ RenderDoc/PIX dependency. Supply reusable documented build/run scripts.
 
 **Native visual gate:** render every changed engine capability outside the
 editor: all primitives and material slots; scalar emission/transparency;
-visibility/caster/receiver controls; both atmospheric sources and fill lights;
-captured diffuse/specular sky; camera framing; exposure/grading/background.
+visibility/caster/receiver controls; both atmospheric sources, ordinary fill and
+point/spot lights; captured diffuse/specular sky; perspective/orthographic camera
+framing; exposure/grading/background.
 Retain images, observations, actual profile/build identities and readiness facts.
 Resolve these failures before the editor-integration slice.
 
@@ -541,21 +585,31 @@ Maintained RenderScene examples provide ordinary-loading regression coverage.
 
 ### M08.4 — Editor canonical authoring and live delivery
 
-Implement the owning LLD field tables through existing document/property services:
-all slots and repair affordances, emission, flags, atmospheric roles, cameras,
-realtime light/shadow controls, captured sky light, exposure/grading and primitives.
+The transform, geometry/slot, directional/point/spot-light, camera and environment
+field tables are now complete by M08.2; M08.4 audits the remaining surface and
+adds refinements end-to-end:
+
+- **Workspace Hide representation mask** (pushed from M08.2 for large-scene
+  optimization): the native per-view delivery so hidden geometry keeps casting
+  and lighting without authored changes. Apply the workspace-Hide mask to the
+  editing-main-view depth/colour submissions while retaining caster/light
+  eligibility. Workspace owns persistence and Show All semantics; no authored
+  dirty/history/cook mutation is introduced.
+- **Remaining polish:** copy/duplicate, mixed selection, sessions, diagnostics and
+  current-scene convergence across every retained field. Inspector completeness
+  and usability audit: verify actual packaged controls, field coverage, label/unit
+  clarity and keyboard/focus behavior.
 
 WorldEditor/MaterialEditor own UI/commands; World/Managed.Assets own source data;
 ContentPipeline owns native production; Runtime/Interop adapt engine operations.
-Complete copy/duplicate, mixed selection, sessions, Undo/Redo, Save/reopen,
-diagnostics and current-scene convergence. Workspace Hide follows the settings
-contract and adds no authored state or cooking demand. Product UI contains no
-qualification entry.
+Product UI contains no qualification entry.
 
 Checks: actual packaged controls/commands, nonzero slot assignment/clearing and
-repair, published material changes, role conflicts, flag defaults/overrides,
-Auto resize without dirtying, workspace Hide restoration/lifetime/accessibility.
-Verify engine fixes again through normal editor workflows.
+repair, published material changes, role conflicts, flag defaults/overrides.
+Re-verify M08.2 deliverables through normal editor workflows: point/spot light edits
+(range, lumens, cone angles) and orthographic camera edits (size, near/far) with
+live effect, Auto resize without dirtying, workspace Hide restoration/lifetime/accessibility
+and hidden-caster retention, and all node Rendering flags with history/Undo/Save/reopen.
 
 **Inspector completeness and usability gate:** audit the real scene/environment
 and node/component property editors before implementation, then repeat the review
@@ -646,9 +700,10 @@ real editor authoring/Save/Cook/migration/recovery. Qualify matched Release imag
 on the same adapter/driver; Debug covers protocol and ownership faults.
 
 Include Primary-only, Secondary-only and both with distinct directions/colours
-and requested shadows; None-role fill; capture invalidation; visibility/Hide
-and receiver cases; every primitive/slot/emission case; Auto/Fixed cameras;
-Manual/Auto exposure; every retained tone mapper/grade/background interaction.
+and requested shadows; None-role fill; point/spot lights; capture invalidation;
+visibility/Hide and receiver cases; every primitive/slot/emission case; Auto/Fixed
+perspective and orthographic cameras; Manual/Auto exposure; every retained tone
+mapper/grade/background interaction.
 
 M02's one-viewport resize and consolidated discovery evidence is recorded under
 [its plan](ED-M02-live-viewport-stabilization.md); the joint M08 review remains.

@@ -166,13 +166,12 @@ Existing shadow scope: [conventional shadow parity](../VTX-M05D/README.md).
 
 ## Other authoring exclusions: do not mislabel existing engine capabilities
 
-Orthographic camera authoring, texture parameter/material-graph authoring, mesh
-topology/material-slot creation and general physics/script authoring are outside
-the V0.1 editor scope. Their corresponding native capabilities are not
-all absent. When touching a related engine boundary, track an actual remaining
-native/persistence requirement if one exists and link the owning editor LLD.
-Do not create generic engine TODOs to implement already working orthographic
-cameras, textures, parameterized geometry or scripting.
+Texture parameter/material-graph authoring, mesh topology/material-slot creation
+and general physics/script authoring are outside the V0.1 editor scope. Their
+corresponding native capabilities are not all absent. When touching a related
+engine boundary, track an actual remaining native/persistence requirement if one
+exists and link the owning editor LLD. Do not create generic engine TODOs to
+implement already working textures, parameterized geometry or scripting.
 
 The final inspector and environment field tables define retained advanced
 controls. Their required producer and renderer consumers belong to ED-M08;
@@ -180,9 +179,11 @@ they are not implicitly deferred by this record.
 
 ## Must remain V0.1 work
 
-Do **not** defer either atmosphere slot's real direct lighting/shadowing, ordinary
-directional fill lighting, captured-sky diffuse/specular lighting, functional
-Receive Shadows, correct visibility invalidation, all material slots, scalar
-emission, Capsule and canonical primitive defaults, finite input validation, or
-Auto/Fixed camera framing. These are current obligations. A post-V0.1 TODO cannot
-replace an implementation or validation gate for a retained V0.1 control.
+Do **not** defer point and spot light authoring and rendering, either atmosphere
+slot's real direct lighting/shadowing, ordinary directional fill lighting,
+captured-sky diffuse/specular lighting, functional Receive Shadows, correct
+visibility invalidation, all material slots, scalar emission, Capsule and
+canonical primitive defaults, finite input validation, Auto/Fixed camera framing,
+or orthographic camera sync command. These are current obligations. A post-V0.1
+TODO cannot replace an implementation or validation gate for a retained V0.1
+control.

@@ -19,8 +19,7 @@ state, [environment authoring](environment-authoring.md) owns scene settings,
 
 This covers REQ-005 through REQ-009, REQ-022/024/026/037 and SUCCESS-002/003.
 Import UI, topology editing, general simulation activation, physical-camera
-controls, orthographic authoring and transform gizmos are outside this inspector
-slice. Native capabilities outside this surface remain with their engine owners.
+controls and transform gizmos are outside this inspector slice. Native capabilities outside this surface remain with their engine owners.
 
 ## 2. Ownership and mutation flow
 
@@ -172,7 +171,9 @@ or position. The engine owns continuity/provenance, and the
 [content pipeline](content-pipeline.md) owns publication and repair. Use the
 [material contract](material-editor.md) for assignment/precision behavior.
 
-## 7. Basic perspective camera
+## 7. Basic perspective and orthographic cameras
+
+### Perspective camera
 
 | Field              | Source/unit/default                  | Bounds                | UI/effect                                               |
 | ------------------ | ------------------------------------ | --------------------- | ------------------------------------------------------- |
@@ -190,8 +191,21 @@ content rectangle separately. The fixed qualification target is not the editor
 navigation camera. Select the exact authored camera, including second/parented
 cameras; no synthetic fallback. A hidden camera node remains usable.
 
-Physical aperture/shutter/ISO, sensor/lens/DOF and ManualCamera authoring are
-excluded; existing native physical exposure is not removed or renamed.
+### Orthographic camera
+
+| Field              | Source/unit/default        | Bounds         | UI/effect                                                   |
+| ------------------ | -------------------------- | -------------- | ----------------------------------------------------------- |
+| Orthographic Size  | float32 metres, 10         | Finite >0      | Half-height of the view; controls the vertical world extent |
+| Near Plane         | float32 metres, 0.1        | >0 and <Far    | Reject invalid cross-field edit                             |
+| Far Plane          | float32 metres, 1000       | >Near          | Reject invalid cross-field edit                             |
+| Aspect Mode        | Auto / Fixed, Auto         | Defined values | Auto derives aspect per target, retaining OrthographicSize  |
+| Fixed Aspect Ratio | float32 width/height, 16/9 | Finite >0      | Shown in Fixed mode; retain ratio when toggling modes       |
+
+Orthographic uses the same Auto/Fixed framing and bar composition as perspective,
+with OrthographicSize in place of vertical FOV; horizontal extent is
+OrthographicSize × aspect. Physical aperture/shutter/ISO, sensor/lens/DOF and
+ManualCamera authoring are excluded; existing native physical exposure is not
+removed or renamed.
 
 ## 8. Directional light
 
@@ -323,7 +337,75 @@ both light and receiver toggles, editor Hide, and native/editor parity. Independ
 golden tests cover depths/bias/thresholds and fade endpoints; a stored bool or
 code-presence assertion cannot establish the effect.
 
-## 9. Scene settings and conditional UI
+## 9. Point light
+
+All numeric rows are float32 unless stated otherwise. Light colour is linear RGB;
+colour-picker display conversion occurs at the UI boundary only.
+
+| Field                          | Default/unit                  | Bounds                      | Disclosure/active effect                                                      |
+| ------------------------------ | ----------------------------- | --------------------------- | ----------------------------------------------------------------------------- |
+| Affects Scene (`AffectsWorld`) | On; bool                      | Boolean                     | Primary; controls all contribution, gated by effective node visibility        |
+| Color                          | (1,1,1); linear RGB           | Clamp each channel [0,1]    | Primary; illumination colour                                                  |
+| Intensity (Lumens)             | 1600; float32                 | Finite >0                   | Primary; total luminous intensity                                             |
+| Range                          | 20 m                          | Finite >0                   | Primary; distance at which light intensity reaches zero                       |
+| Source Radius                  | 0 m                           | Finite >=0                  | Advanced; analytic sphere size for specular softening (V0.1 visual)           |
+| Cast Shadows                   | On; bool                      | Boolean                     | Primary; shadowing from this light, independent of geometry flags             |
+| Shadow.Bias                    | 0; dimensionless user bias    | Clamp [0,10]                | Advanced, Cast Shadows On; depth-bias effect                                  |
+| Shadow.NormalBias              | 0.02 m receiver normal offset | Clamp >=0                   | Advanced, Cast Shadows On; normal offset effect                               |
+| Shadow.ContactShadows          | Off; bool                     | Boolean                     | Advanced, Cast Shadows On; real contact-shadow contribution required          |
+| Shadow.ResolutionHint          | Medium                        | Low / Medium / High / Ultra | Advanced, Cast Shadows On; resolution request bounded by renderer             |
+| ExposureCompensation           | 0 EV                          | Clamp [-10,10]              | Advanced; effective light intensity multiplier 2^EV, without rewriting lumens |
+
+Light Cast Shadows On is an explicit creation default. The writer emits it;
+the low-level native CommonLightProperties constructor currently defaults Off.
+Realtime is the canonical authored mobility. Remove Mixed/Baked choices and the
+redundant authored mobility field; do not advertise a nonexistent bake workflow.
+Existing shadow/compensation fields require complete cooker, runtime and rendered
+effects. A current no-op is an implementation defect, not permission to silently
+defer the field.
+
+Source Radius remains visual only in V0.1: specular softening follows the radius
+without area-light sampling or penumbra widening. PCSS/finite-source GGX is outside
+this contract.
+
+## 10. Spot light
+
+All numeric rows are float32 unless stated otherwise. Light colour is linear RGB;
+colour-picker display conversion occurs at the UI boundary only.
+
+| Field                          | Default/unit                  | Bounds                      | Disclosure/active effect                                                      |
+| ------------------------------ | ----------------------------- | --------------------------- | ----------------------------------------------------------------------------- |
+| Affects Scene (`AffectsWorld`) | On; bool                      | Boolean                     | Primary; controls all contribution, gated by effective node visibility        |
+| Color                          | (1,1,1); linear RGB           | Clamp each channel [0,1]    | Primary; illumination colour                                                  |
+| Intensity (Lumens)             | 1600; float32                 | Finite >0                   | Primary; total luminous intensity                                             |
+| Range                          | 20 m                          | Finite >0                   | Primary; distance at which light intensity reaches zero                       |
+| Inner Cone Angle               | 22.5 degrees                  | Finite [0, Outer Angle]     | Primary; angle of full-brightness cone                                        |
+| Outer Cone Angle               | 45 degrees                    | Finite [Inner Angle, 90]    | Primary; angle at which intensity falls to zero                               |
+| Source Radius                  | 0 m                           | Finite >=0                  | Advanced; analytic sphere size for specular softening (V0.1 visual)           |
+| Cast Shadows                   | On; bool                      | Boolean                     | Primary; shadowing from this light, independent of geometry flags             |
+| Shadow.Bias                    | 0; dimensionless user bias    | Clamp [0,10]                | Advanced, Cast Shadows On; depth-bias effect                                  |
+| Shadow.NormalBias              | 0.02 m receiver normal offset | Clamp >=0                   | Advanced, Cast Shadows On; normal offset effect                               |
+| Shadow.ContactShadows          | Off; bool                     | Boolean                     | Advanced, Cast Shadows On; real contact-shadow contribution required          |
+| Shadow.ResolutionHint          | Medium                        | Low / Medium / High / Ultra | Advanced, Cast Shadows On; resolution request bounded by renderer             |
+| ExposureCompensation           | 0 EV                          | Clamp [-10,10]              | Advanced; effective light intensity multiplier 2^EV, without rewriting lumens |
+
+Light Cast Shadows On is an explicit creation default. The writer emits it;
+the low-level native CommonLightProperties constructor currently defaults Off.
+Realtime is the canonical authored mobility. Remove Mixed/Baked choices and the
+redundant authored mobility field; do not advertise a nonexistent bake workflow.
+Existing shadow/compensation fields require complete cooker, runtime and rendered
+effects. A current no-op is an implementation defect, not permission to silently
+defer the field.
+
+Cone angles clamp inner to outer and both to valid ranges. Cross-field validation
+rejects inner > outer in a single edit. Source Radius remains visual only in V0.1:
+specular softening follows the radius without area-light sampling or penumbra
+widening. PCSS/finite-source GGX is outside this contract.
+
+Spotlight falloff uses the standard cosine model: at the inner cone, intensity is
+full; at the outer cone, intensity is zero; between them, intensity is cos-weighted.
+
+## 11. Scene settings and conditional UI
 
 The scene/empty selection shows atmosphere, captured SkyLight, exposure,
 tone-mapping/grading, bloom and background sections from
@@ -335,7 +417,7 @@ Use compact shared property sections, NumberBox/VectorBox/colour controls and
 catalog pickers. Keep side-by-side labels/values, inline diagnostics and tooltips
 for clipped content; no bespoke numeric controls or blanket Raw-field view.
 
-<a id="91-ed-m07b-compact-layout-and-component-filtering"></a>
+<a id="111-ed-m07b-compact-layout-and-component-filtering"></a>
 
 ### Component layout and filtering
 
@@ -352,7 +434,7 @@ valid pending text before changing sections; cancel unfinished drags. Late colou
 picker completion cannot affect a new edit lifetime. Validate constrained docks
 and 100%/150%/200% scale with real controls.
 
-## 10. Commands, history and results
+## 12. Commands, history and results
 
 Use existing typed property/document command entry points. Extend their payloads
 for node source modes, stable MaterialSlotId and per-light AtmosphereLightSlot;
@@ -373,7 +455,7 @@ while Save remains valid. Missing/rejected required behavior is a field-scoped
 implementation/qualification failure; no invisible default fallback can pass.
 Unresolved asset identity is preserved with actionable loading/repair feedback.
 
-## 11. Persistence, migration and dependencies
+## 13. Persistence, migration and dependencies
 
 Canonical DTOs preserve node source modes, local transforms, geometry/all-slot
 assignments, camera Auto/Fixed state, per-light assignment/settings and scene
@@ -386,7 +468,7 @@ Inspector depends on document commands, World, shared controls/schemas and asset
 identity interfaces. Commands own sync. Geometry does not embed scalar material
 editing; Runtime/Interop remain behind their owning boundary.
 
-## 12. Qualification and rationale
+## 14. Qualification and rationale
 
 Every field has a meaningful non-default source case, native observation and
 rendered effect where applicable. Test complete Undo/Redo/Save/cook/reopen,

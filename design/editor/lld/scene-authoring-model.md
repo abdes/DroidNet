@@ -49,9 +49,9 @@ preserve-world operation remains distinct.
 
 Commands, deserialization and migration enforce component cardinality. Malformed
 source does not gain silent duplicate-component selection or synthetic cameras/
-lights. V0.1 authored editors cover Transform, Geometry, basic PerspectiveCamera
-and DirectionalLight. Existing other component data does not imply a new editor
-or release capability.
+lights. V0.1 authored editors cover Transform, Geometry, basic PerspectiveCamera,
+OrthographicCamera, DirectionalLight, PointLight and SpotLight. Existing other
+component data does not imply a new editor or release capability.
 
 ## 4. Transform and camera state
 
@@ -67,8 +67,11 @@ is derived, not saved. Fixed fits its full image without stretching or cropping.
 The mode and retained ratio survive save/load and runtime synchronization together.
 The one-time project upgrade marks existing explicit ratios Fixed; newly created
 cameras use Auto. Resizing never overwrites the retained ratio.
-Select cameras by authored ID; hidden camera nodes remain usable. Physical-camera
-authoring is outside V0.1; existing native physical exposure remains engine-owned.
+OrthographicCamera stores OrthographicSize (half-height in metres) with the same
+Auto/Fixed aspect policy and retained ratio; horizontal extent is
+OrthographicSize × aspect. Select cameras by authored ID; hidden camera nodes
+remain usable. Physical-camera authoring is outside V0.1; existing native
+physical exposure remains engine-owned.
 
 ### ED-M08 visibility and shadow source state
 
@@ -125,7 +128,7 @@ metric defaults/orientation are in [primitive recipes](property-inspector.md#pri
 All pivots are centred in Z-up space. No managed generator/default list or
 editor-only corrective rotation/scale exists.
 
-## 6. Directional lights and atmosphere
+## 6. Light components
 
 A directional light owns colour, lux, source angle, Affects Scene, shadow
 settings and `AtmosphereLightSlot`: None, Primary or Secondary. Preserve existing
@@ -146,9 +149,16 @@ so the author reassigns the moved light explicitly.
 Both sources support direct illumination, requested surface/fog shadows,
 atmosphere and captured-sky diffuse/specular lighting. A Moon use case is
 moonlight plus an analytic disk; lunar textures/phases/orbits and sky-only
-creation remain outside V0.1. Detailed fields/defaults are owned by the inspector
-and environment LLDs. Authored lights are Realtime-only; no Mixed/Baked authoring
+creation remain outside V0.1.
+
+Point and spot lights own colour, lumens, range, Affects Scene and shadow
+settings. Point lights additionally own source radius (visual only in V0.1).
+Spot lights additionally own inner and outer cone angles. All light types
+support contact shadows, shadow bias/normal-bias/resolution, and exposure
+compensation. Authored lights are Realtime-only; no Mixed/Baked authoring
 field advertises an absent baking workflow.
+
+Detailed fields/defaults are owned by the inspector and environment LLDs.
 
 ## 7. Editor state and runtime presence
 

@@ -193,28 +193,33 @@ FOV/near/far/source aspect policy; invalid authored values fail instead of being
 abs-normalized, reordered, or replaced with a synthetic camera. A demo navigation
 camera is application-owned view intent, not an authored-camera fallback.
 
-Auto is the new authoring default: preserve vertical FOV and derive effective
-aspect independently for each target. Fixed preserves its stored positive ratio
-and fits its complete frame in a centred content rectangle. Use one native
-projection/fit helper for ordinary engine, editor and development views; do not
-mutate the camera object or saved data to render multiple targets. Pixel rounding
-and content/scissor mapping are deterministic and shared by both capture paths.
-Fixed 4:3 into 1920x1080 yields 1440x1080 content at x=240, with side bars.
+Auto is the new authoring default: preserve the vertical extent (perspective
+vertical FOV, orthographic size) and derive effective aspect independently for
+each target. Fixed preserves its stored positive ratio and fits its complete
+frame in a centred content rectangle. Use one native projection/fit helper for
+ordinary engine, editor and development views; do not mutate the camera object or
+saved data to render multiple targets. Pixel rounding and content/scissor mapping
+are deterministic and shared by both capture paths. Fixed 4:3 into 1920x1080
+yields 1440x1080 content at x=240, with side bars.
 
-`PerspectiveCamera` owns the authored mode and retained Fixed ratio. Its per-target
-projection calculation consumes a viewport without changing authored state.
-M08.1 delivers this data-preserving seam; M08.2 owns fitted content rectangles,
-bar composition and their rendering qualification. This follows UE5.7.4
-`CameraComponent.h` (`AspectRatio`, `bConstrainAspectRatio`) and
+Both camera types own the authored mode and retained Fixed ratio:
+`PerspectiveCamera` uses vertical FOV and `OrthographicCamera` uses orthographic
+size as the vertical extent. Their per-target projection calculation consumes a
+viewport without changing authored state. M08.1 delivers this data-preserving
+seam; M08.2 owns fitted content rectangles, bar composition and their rendering
+qualification. This follows UE5.7.4 `CameraComponent.h` (`AspectRatio`,
+`bConstrainAspectRatio`) and
 `CameraStackTypes.cpp::CalculateProjectionMatrixGivenViewRectangle`; Oxygen
 retains its existing vertical-FOV convention without adding UE's axis policy.
 
 Bars are composed after post-processing and remain outside metering/foreground
-grading. Preserve camera identity, local/world pose, vertical FOV and clipping;
-`kVisible` does not disable camera function. Existing native physical exposure
-remains; basic editor camera/Manual-Auto exposure does not add physical controls.
+grading. Preserve camera identity, local/world pose, vertical FOV or orthographic
+size, and clipping; `kVisible` does not disable camera function. Existing native
+physical exposure remains; basic editor camera/Manual-Auto exposure does not add
+physical controls.
 
-Targets: `Scene/Camera/Perspective`, source schemas/packed camera records,
+Targets: `Scene/Camera/Perspective`, `Scene/Camera/Orthographic`, source
+schemas/packed camera records,
 DemoShell `SceneLoaderService::SelectActiveCamera/EnsureCameraAndViewport`,
 `Vortex/SceneCameraViewResolver`, `Core/Types/ResolvedView`, InitViews/SceneTextures,
 composition and Interop EditorView projection.
