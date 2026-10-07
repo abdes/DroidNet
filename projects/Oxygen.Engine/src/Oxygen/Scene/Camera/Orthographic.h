@@ -13,6 +13,7 @@
 
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/Camera/CameraExposure.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
@@ -96,6 +97,72 @@ public:
     return { left_, right_, bottom_, top_, near_, far_ };
   }
 
+  //! Sets the orthographic size (height in world units).
+  /*!
+   @param size The height of the orthographic view.
+  */
+  auto SetOrthographicSize(float size) noexcept -> void
+  {
+    orthographic_size_ = size;
+  }
+
+  //! Gets the orthographic size.
+  /*!
+   @return The height of the orthographic view.
+  */
+  OXGN_SCN_NDAPI auto GetOrthographicSize() const noexcept -> float
+  {
+    return orthographic_size_;
+  }
+
+  //! Sets the aspect ratio for fixed aspect mode.
+  /*!
+   @param aspect_ratio The desired aspect ratio (width / height).
+  */
+  auto SetAspectRatio(float aspect_ratio) noexcept -> void
+  {
+    aspect_ratio_ = aspect_ratio;
+  }
+
+  //! Gets the aspect ratio.
+  /*!
+   @return The aspect ratio (width / height).
+  */
+  OXGN_SCN_NDAPI auto GetAspectRatio() const noexcept -> float
+  {
+    return aspect_ratio_;
+  }
+
+  //! Sets the aspect mode (Auto or Fixed).
+  /*!
+   @param mode The aspect mode to apply.
+  */
+  auto SetAspectMode(CameraAspectMode mode) noexcept -> void
+  {
+    aspect_mode_ = mode;
+  }
+
+  //! Gets the aspect mode.
+  /*!
+   @return The aspect mode.
+  */
+  OXGN_SCN_NDAPI auto GetAspectMode() const noexcept -> CameraAspectMode
+  {
+    return aspect_mode_;
+  }
+
+  //! Sets the near plane distance.
+  /*!
+   @param near_plane The near plane distance.
+  */
+  auto SetNearPlane(float near_plane) noexcept -> void { near_ = near_plane; }
+
+  //! Sets the far plane distance.
+  /*!
+   @param far_plane The far plane distance.
+  */
+  auto SetFarPlane(float far_plane) noexcept -> void { far_ = far_plane; }
+
   //! Sets the camera exposure parameters.
   /*!
    @param exposure Exposure settings to apply.
@@ -170,6 +237,9 @@ private:
   float top_ = 1.0F;
   float near_ = kDefaultNearPlane;
   float far_ = kDefaultFarPlane;
+  float orthographic_size_ = 10.0F;
+  float aspect_ratio_ = 16.0F / 9.0F;
+  CameraAspectMode aspect_mode_ = CameraAspectMode::kAuto;
   CameraExposure exposure_ {};
   std::optional<ViewPort> viewport_;
   detail::TransformComponent* transform_ { nullptr };

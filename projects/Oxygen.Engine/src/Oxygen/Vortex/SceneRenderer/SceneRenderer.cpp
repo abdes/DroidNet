@@ -2055,6 +2055,7 @@ auto SceneRenderer::RenderCurrentView(
     if (auto* scene_mutable = ctx.GetSceneMutable().get();
       scene_mutable != nullptr) {
       scene_mutable->Update(false);
+      scene_mutable->SyncObservers();
       auto& resolver = scene_mutable->GetDirectionalLightResolver();
       resolver.Validate();
       BuildFrameLightSelection(*scene_mutable, resolver,

@@ -25,6 +25,9 @@ struct PostProcessConfig {
   float gamma { 2.2F };
   float bloom_intensity { 0.5F };
   float bloom_threshold { 1.0F };
+  float saturation { 1.0F };
+  float contrast { 1.0F };
+  float vignette_intensity { 0.0F };
 
   auto operator==(const PostProcessConfig&) const -> bool = default;
 };

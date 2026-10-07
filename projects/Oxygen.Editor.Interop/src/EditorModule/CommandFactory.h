@@ -37,11 +37,14 @@ class SetMaterialOverrideCommand;
 struct MaterialSlotTarget;
 enum class MaterialSlotAssignmentIntent : std::uint8_t;
 class SetVisibilityCommand;
+class SetCastShadowsCommand;
+class SetReceiveShadowsCommand;
 class ReparentSceneNodeCommand;
 class ReparentSceneNodesCommand;
 class UpdateTransformsForNodesCommand;
 class RemoveSceneNodesCommand;
 class AttachPerspectiveCameraCommand;
+class AttachOrthographicCameraCommand;
 class DetachCameraCommand;
 } // namespace oxygen::interop::module
 
@@ -97,11 +100,22 @@ namespace Oxygen::Interop::World {
         float fieldOfViewYRadians, float aspectRatio, float nearPlane,
         float farPlane, oxygen::CameraAspectMode aspectMode);
 
+    virtual oxygen::interop::module::AttachOrthographicCameraCommand*
+      CreateAttachOrthographicCamera(oxygen::scene::NodeHandle handle,
+        float orthographicSize, float aspectRatio, float nearPlane,
+        float farPlane, oxygen::CameraAspectMode aspectMode);
+
     virtual oxygen::interop::module::DetachCameraCommand*
       CreateDetachCamera(oxygen::scene::NodeHandle handle);
 
     virtual oxygen::interop::module::SetVisibilityCommand*
       CreateSetVisibility(oxygen::scene::NodeHandle handle, bool visible);
+
+    virtual oxygen::interop::module::SetCastShadowsCommand*
+      CreateSetCastShadows(oxygen::scene::NodeHandle handle, bool castsShadows);
+
+    virtual oxygen::interop::module::SetReceiveShadowsCommand*
+      CreateSetReceiveShadows(oxygen::scene::NodeHandle handle, bool receivesShadows);
 
     virtual oxygen::interop::module::ReparentSceneNodeCommand*
       CreateReparentSceneNode(oxygen::scene::NodeHandle child,

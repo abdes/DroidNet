@@ -149,11 +149,20 @@ internal sealed partial class NativeRuntimeCommandTransport(EngineContext contex
             case RuntimeAttachPerspectiveCamera value:
                 this.world.AttachPerspectiveCamera(value.NodeId, value.FieldOfViewYRadians, value.AspectRatio, value.NearPlane, value.FarPlane, (byte)value.AspectMode);
                 break;
+            case RuntimeAttachOrthographicCamera value:
+                this.world.AttachOrthographicCamera(value.NodeId, value.OrthographicSize, value.AspectRatio, value.NearPlane, value.FarPlane, (byte)value.AspectMode);
+                break;
             case RuntimeDetachCamera value:
                 this.world.DetachCamera(value.NodeId);
                 break;
             case RuntimeSetVisibility value:
                 this.world.SetVisibility(value.NodeId, value.Visible);
+                break;
+            case RuntimeSetCastShadows value:
+                this.world.SetCastShadows(value.NodeId, value.CastsShadows);
+                break;
+            case RuntimeSetReceiveShadows value:
+                this.world.SetReceiveShadows(value.NodeId, value.ReceivesShadows);
                 break;
             case RuntimeAttachDirectionalLight value:
                 this.world.AttachDirectionalLight(value.NodeId, value.IntensityLux, value.AngularSizeRadians, value.Color, value.AffectsWorld, value.Mobility, value.CastsShadows, value.ShadowBias, value.ShadowNormalBias, value.ContactShadows, value.ShadowResolutionHint, value.ExposureCompensation, value.AtmosphereLightSlot, value.UsePerPixelAtmosphereTransmittance, value.AtmosphereDiskLuminanceScaleRgb, value.CascadeCount, value.SplitMode, value.MaxShadowDistance, value.CascadeDistances, value.DistributionExponent, value.TransitionFraction, value.DistanceFadeoutFraction);
