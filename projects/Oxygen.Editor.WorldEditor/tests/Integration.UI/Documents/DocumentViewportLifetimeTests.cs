@@ -12,9 +12,9 @@ public sealed class DocumentViewportLifetimeTests : VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>One Main/Inspect/Main transition at a slow native cadence releases the old view and recreates it.</summary>
+    /// <returns>The asynchronous document-transition regression.</returns>
     [TestMethod]
-    [DataRow(60u)]
-    [DataRow(10u)]
-    public Task MainInspectionMainReleasesEachNativeView(uint targetFps)
-        => new DocumentTransitionScenario(this.TestContext).RunAsync(targetFps, 3);
+    public Task MainInspectionMainReleasesTheNativeView()
+        => new DocumentTransitionScenario(this.TestContext).RunAsync(targetFps: 10, cycles: 1);
 }

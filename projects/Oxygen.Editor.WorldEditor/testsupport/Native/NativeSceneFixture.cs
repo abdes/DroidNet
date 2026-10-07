@@ -197,7 +197,9 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("OxygenEnvironmentField-");
     private readonly ProjectManagerService manager = new(new NativeStorageProvider(new RealFileSystem()));
     private readonly EngineService engine;
-    private readonly Oxygen.Testing.TemporaryNativeArtifacts compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+    private readonly bool ownsEngine;
+    private readonly Oxygen.Testing.TemporaryNativeArtifacts? compatibility;
+    private readonly IDisposable? sharedResults;
     private readonly SceneEngineSync sync;
     private readonly ProjectContextService projectContexts = new();
     private readonly ContentCookCoordinator materialCookCoordinator;
@@ -211,6 +213,15 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     private RuntimeSceneTarget? target;
     private IGeometryMaterialSlotProvider activeMaterialSlotProvider;
 
+    /// <summary>Initializes a new instance of the <see cref="NativeSceneFixture"/> class.</summary>
+    /// <param name="automatic">Whether the scene uses automatic exposure.</param>
+    /// <param name="seed">Authors the initial scene.</param>
+    /// <param name="engineSettings">
+    ///     Startup settings that differ from the shared engine's. Supplying them, or a logger factory,
+    ///     gives the fixture its own engine and stops the shared one for the duration of the test.
+    /// </param>
+    /// <param name="loggerFactory">Receives native engine logs; implies a fixture-owned engine.</param>
+    /// <param name="hierarchyAuthoring">Whether hierarchy commands use the real mutator and organizer.</param>
     public NativeSceneFixture(bool automatic, Action<Scene>? seed = null, EngineSettings? engineSettings = null, ILoggerFactory? loggerFactory = null, bool hierarchyAuthoring = false)
     {
         var dispatcher = VisualUserInterfaceTestsApp.DispatcherQueue;
@@ -224,9 +235,20 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         var publisher = new Mock<IOperationResultPublisher>();
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
         var results = publisher.Object;
-        var settings = new Mock<DroidNet.Config.ISettingsService<IEngineSettings>>();
-        _ = settings.SetupGet(value => value.Settings).Returns(engineSettings ?? new EngineSettings());
-        this.engine = new EngineService(this.hosting, results, loggerFactory, engineSettings: settings.Object, nativeCompatibility: this.compatibility);
+        this.ownsEngine = engineSettings is not null || loggerFactory is not null;
+        if (this.ownsEngine)
+        {
+            var settings = new Mock<DroidNet.Config.ISettingsService<IEngineSettings>>();
+            _ = settings.SetupGet(value => value.Settings).Returns(engineSettings ?? new EngineSettings());
+            this.compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+            this.engine = new EngineService(this.hosting, results, loggerFactory, engineSettings: settings.Object, nativeCompatibility: this.compatibility);
+        }
+        else
+        {
+            this.engine = SharedNativeEngine.Engine;
+            this.sharedResults = SharedNativeEngine.RouteResults(this.Results);
+        }
+
         this.sync = new SceneEngineSync(this.engine, operationResults: results, hostingContext: this.hosting);
         var project = new Project(new ProjectInfo("Environment fields", Category.Games, this.directory.FullName, "preview.png") { AuthoringMounts = [new("Content", "Content")], })
         {
@@ -340,11 +362,24 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.Commands, this.documents.Object, default, assets ?? this.AssetCatalog.Object, materials ?? this.MaterialPicker.Object, this.sync, new SceneSelectionService(), builtins ?? new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>(), this.materialSlotProvider.Object, this.projectContexts);
     }
 
+    /// <summary>Opens the fixture's scene on a running engine, starting the shared engine only if it is not running.</summary>
+    /// <param name="cancellationToken">Cancels startup and synchronization.</param>
+    /// <param name="mountPublished">Whether the project's published content is mounted before synchronization.</param>
+    /// <returns>The initialization task.</returns>
     public async Task InitializeAsync(CancellationToken cancellationToken, bool mountPublished = false)
     {
-        _ = (await this.engine.InitializeAsync(cancellationToken).ConfigureAwait(true)).Should().BeTrue();
-        this.engine.TargetFps = 60;
-        await this.engine.StartAsync().ConfigureAwait(true);
+        if (this.ownsEngine)
+        {
+            await SharedNativeEngine.StandDownAsync().ConfigureAwait(true);
+            _ = (await this.engine.InitializeAsync(cancellationToken).ConfigureAwait(true)).Should().BeTrue();
+            this.engine.TargetFps = 60;
+            await this.engine.StartAsync().ConfigureAwait(true);
+        }
+        else
+        {
+            _ = (await SharedNativeEngine.EnsureRunningAsync(cancellationToken).ConfigureAwait(true)).Should().BeTrue();
+        }
+
         if (mountPublished)
         {
             await this.RefreshCookedRootsAsync().ConfigureAwait(true);
@@ -401,7 +436,15 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
         this.materialChoices.Dispose();
         try
         {
-            await this.engine.DisposeAsync().ConfigureAwait(true);
+            if (this.ownsEngine)
+            {
+                await this.engine.DisposeAsync().ConfigureAwait(true);
+            }
+            else
+            {
+                this.sharedResults!.Dispose();
+                await SharedNativeEngine.ResetAsync().ConfigureAwait(true);
+            }
         }
         finally
         {
@@ -413,7 +456,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
                 foreign.Coordinator.Dispose();
             }
 
-            this.compatibility.Dispose();
+            this.compatibility?.Dispose();
             this.directory.Delete(recursive: true);
         }
     }

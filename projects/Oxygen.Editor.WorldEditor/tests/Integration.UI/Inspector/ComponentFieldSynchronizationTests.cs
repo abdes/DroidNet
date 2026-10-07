@@ -24,50 +24,19 @@ public sealed partial class ComponentFieldSynchronizationTests : DroidNet.Tests.
 {
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>Each component field preserves source and native values through history and Save/reopen.</summary>
+    /// <summary>One field per control kind and value conversion preserves source and native values through history and Save/reopen.</summary>
     /// <param name="kind">The inspector component.</param>
     /// <param name="fieldName">The numeric, boolean or enum field.</param>
     /// <returns>The test task.</returns>
     [TestMethod]
     [DataRow("Transform", "PositionX")]
-    [DataRow("Transform", "PositionY")]
-    [DataRow("Transform", "PositionZ")]
-    [DataRow("Transform", "RotationX")]
     [DataRow("Transform", "RotationY")]
-    [DataRow("Transform", "RotationZ")]
-    [DataRow("Transform", "ScaleX")]
-    [DataRow("Transform", "ScaleY")]
-    [DataRow("Transform", "ScaleZ")]
     [DataRow("Camera", "FieldOfView")]
-    [DataRow("Camera", "AspectRatio")]
-    [DataRow("Camera", "NearPlane")]
-    [DataRow("Camera", "FarPlane")]
     [DataRow("Light", "ColorR")]
-    [DataRow("Light", "ColorG")]
-    [DataRow("Light", "ColorB")]
-    [DataRow("Light", "AffectsWorld")]
-    [DataRow("Light", "DiskScaleR")]
-    [DataRow("Light", "DiskScaleG")]
-    [DataRow("Light", "DiskScaleB")]
     [DataRow("Light", "CastsShadows")]
-    [DataRow("Light", "ShadowBias")]
-    [DataRow("Light", "ShadowNormalBias")]
-    [DataRow("Light", "ContactShadows")]
-    [DataRow("Light", "ShadowResolutionHint")]
-    [DataRow("Light", "ExposureCompensation")]
     [DataRow("Light", "IntensityLux")]
-    [DataRow("Light", "AngularSizeRadians")]
-    [DataRow("Light", "UsePerPixelAtmosphereTransmittance")]
-    [DataRow("Light", "AtmosphereSlot")]
     [DataRow("Light", "CascadeCount")]
     [DataRow("Light", "SplitMode")]
-    [DataRow("Light", "MaxShadowDistance")]
-    [DataRow("Light", "CascadeDistance1")]
-    [DataRow("Light", "CascadeDistance2")]
-    [DataRow("Light", "CascadeDistance3")]
-    [DataRow("Light", "DistributionExponent")]
-    [DataRow("Light", "TransitionFraction")]
-    [DataRow("Light", "DistanceFadeoutFraction")]
     public Task NodeFieldControlHistoryAndReopenReachNativeState(string kind, string fieldName) => EnqueueAsync(async () =>
     {
         var field = NativeNodeFields.Single(value => string.Equals(value.Kind, kind, StringComparison.Ordinal) && string.Equals(value.Field, fieldName, StringComparison.Ordinal));

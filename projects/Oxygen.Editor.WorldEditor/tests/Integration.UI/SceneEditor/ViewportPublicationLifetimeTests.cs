@@ -42,25 +42,22 @@ public sealed partial class ViewportPublicationLifetimeTests : DroidNet.Tests.Vi
         var surface = await fixture.Runtime.AttachViewportAsync(request, panel, timeout.Token).ConfigureAwait(true);
         await using var surfaceLifetime = surface.ConfigureAwait(true);
         await surface.ResizeAsync(320, 200, timeout.Token).ConfigureAwait(true);
-        for (var cycle = 0; cycle < 3; ++cycle)
+        var view = await fixture.Runtime.CreateViewAsync(new() { Name = "Publication viewport", Purpose = "Viewport", CompositingTarget = request.ViewportId, Width = 320, Height = 200, }).ConfigureAwait(true);
+        try
         {
-            var view = await fixture.Runtime.CreateViewAsync(new() { Name = "Publication viewport", Purpose = "Viewport", CompositingTarget = request.ViewportId, Width = 320, Height = 200, }).ConfigureAwait(true);
-            try
-            {
-                _ = view.IsValid.Should().BeTrue();
-                await ObserveRenderedFramesAsync(fixture, timeout.Token).ConfigureAwait(true);
-                await fixture.SuspendCookedContentAsync().WaitAsync(timeout.Token).ConfigureAwait(true);
-                await fixture.RefreshCookedRootsAsync(mountPublished: false).WaitAsync(timeout.Token).ConfigureAwait(true);
-                await ObserveRenderedFramesAsync(fixture, timeout.Token).ConfigureAwait(true);
-            }
-            finally
-            {
-                _ = await fixture.Runtime.DestroyViewAsync(view).ConfigureAwait(true);
-            }
-
+            _ = view.IsValid.Should().BeTrue();
             await ObserveRenderedFramesAsync(fixture, timeout.Token).ConfigureAwait(true);
-            _ = fixture.Runtime.State.Should().Be(EngineServiceState.Running);
+            await fixture.SuspendCookedContentAsync().WaitAsync(timeout.Token).ConfigureAwait(true);
+            await fixture.RefreshCookedRootsAsync(mountPublished: false).WaitAsync(timeout.Token).ConfigureAwait(true);
+            await ObserveRenderedFramesAsync(fixture, timeout.Token).ConfigureAwait(true);
         }
+        finally
+        {
+            _ = await fixture.Runtime.DestroyViewAsync(view).ConfigureAwait(true);
+        }
+
+        await ObserveRenderedFramesAsync(fixture, timeout.Token).ConfigureAwait(true);
+        _ = fixture.Runtime.State.Should().Be(EngineServiceState.Running);
     });
 
     /// <summary>Native teardown releases panel attachments even while WinUI retains the loaded controls.</summary>

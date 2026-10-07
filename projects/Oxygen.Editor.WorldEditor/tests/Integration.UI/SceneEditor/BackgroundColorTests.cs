@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Concurrent;
 using System.Numerics;
 using System.Reactive.Concurrency;
 using AwesomeAssertions;
@@ -27,6 +28,7 @@ using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
+using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
@@ -57,22 +59,19 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
             IsRunning = true,
         };
         var results = Mock.Of<IOperationResultPublisher>();
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
-        var engine = new EngineService(hosting, results, nativeCompatibility: compatibility);
-        await using var engineLifetime = engine.ConfigureAwait(true);
-        _ = (await engine.InitializeAsync(timeout.Token).ConfigureAwait(true)).Should().BeTrue();
-        engine.TargetFps = 60;
-        await engine.StartAsync().ConfigureAwait(true);
-        using var sync = new SceneEngineSync(engine, operationResults: results, hostingContext: hosting);
+        var engine = SharedNativeEngine.Engine;
+        var engineResults = SharedNativeEngine.RouteResults(new ConcurrentQueue<OperationResult>());
         var directory = Directory.CreateTempSubdirectory("OxygenNativeBackground-");
         try
         {
+            _ = (await SharedNativeEngine.EnsureRunningAsync(timeout.Token).ConfigureAwait(true)).Should().BeTrue();
+            using var sync = new SceneEngineSync(engine, operationResults: results, hostingContext: hosting);
             await CheckNativeBackgroundWorkflowAsync(engine, sync, results, directory.FullName, timeout.Token).ConfigureAwait(true);
         }
         finally
         {
-            sync.Dispose();
-            await engine.ShutdownAsync().ConfigureAwait(true);
+            engineResults.Dispose();
+            await SharedNativeEngine.ResetAsync().ConfigureAwait(true);
             directory.Delete(recursive: true);
         }
     });
