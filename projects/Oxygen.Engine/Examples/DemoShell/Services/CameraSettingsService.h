@@ -20,6 +20,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Types/Geometry.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/SceneNode.h>
 
@@ -207,6 +208,8 @@ private:
       float fov { 1.0F };
       float near_plane { 0.1F };
       float far_plane { 1000.0F };
+      CameraAspectMode aspect_mode { CameraAspectMode::kAuto };
+      float aspect_ratio { kDefaultCameraAspectRatio };
 
       [[nodiscard]] auto IsDirty(const PerspectiveState& other) const -> bool;
       void Persist(SettingsService& settings, const std::string& prefix) const;
@@ -222,6 +225,7 @@ private:
         0.1F,
         1000.0F,
       };
+      CameraAspectMode aspect_mode { CameraAspectMode::kAuto };
 
       [[nodiscard]] auto IsDirty(const OrthoState& other) const -> bool;
       void Persist(SettingsService& settings, const std::string& prefix) const;

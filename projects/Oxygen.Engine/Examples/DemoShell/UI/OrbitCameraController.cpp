@@ -6,22 +6,41 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <numbers>
 #include <optional>
 
+#include <glm/common.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/quaternion_geometric.hpp>
+#include <glm/ext/quaternion_trigonometric.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/geometric.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/matrix.hpp>
+
+#include <Oxygen/Core/Time/Types.h>
+#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/Flags.h>
+
 #define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtc/matrix_transform.hpp>
+#include "DemoShell/UI/OrbitCameraController.h"
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Transforms/Decompose.h>
+#include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 
-#include "DemoShell/UI/OrbitCameraController.h"
-
 namespace oxygen::examples::ui {
+
 namespace {
+  // Near and far planes in OrthographicCamera::GetExtents().
+  constexpr std::size_t kOrthoNearIndex = 4U;
+  constexpr std::size_t kOrthoFarIndex = 5U;
   constexpr float kPanSensitivityScale = 0.001F;
   constexpr float kTurntablePitchLimitEpsilon = 0.01F;
 
@@ -116,7 +135,24 @@ void OrbitCameraController::Update(
     return;
   }
   if (std::abs(zoom_delta_) > math::Epsilon) {
-    ApplyZoom(zoom_delta_);
+    // Moving an orthographic camera does not change its image; zoom its size.
+    if (auto ortho = node.GetCameraAs<scene::OrthographicCamera>(); ortho) {
+      constexpr float kOrthoZoomStep = 0.1F;
+      constexpr float kMinScale = 0.5F;
+      constexpr float kMaxScale = 2.0F;
+      const float scale = std::clamp(
+        1.0F - (zoom_delta_ * kOrthoZoomStep), kMinScale, kMaxScale);
+      auto ext = ortho->get().GetExtents();
+      const float centre_x = 0.5F * (ext.at(0) + ext.at(1));
+      const float centre_y = 0.5F * (ext.at(2) + ext.at(3));
+      ortho->get().SetExtents(centre_x + ((ext.at(0) - centre_x) * scale),
+        centre_x + ((ext.at(1) - centre_x) * scale),
+        centre_y + ((ext.at(2) - centre_y) * scale),
+        centre_y + ((ext.at(3) - centre_y) * scale), ext.at(kOrthoNearIndex),
+        ext.at(kOrthoFarIndex));
+    } else {
+      ApplyZoom(zoom_delta_);
+    }
     zoom_delta_ = 0.0F;
   }
 
@@ -158,10 +194,9 @@ void OrbitCameraController::Update(
     }
     const glm::vec3 up_ws = glm::cross(right_ws, forward_ws_norm);
 
-    glm::mat4 view_basis(1.0F);
-    view_basis[0] = glm::vec4(right_ws, 0.0F);
-    view_basis[1] = glm::vec4(up_ws, 0.0F);
-    view_basis[2] = glm::vec4(-forward_ws_norm, 0.0F);
+    const glm::mat4 view_basis(glm::vec4(right_ws, 0.0F),
+      glm::vec4(up_ws, 0.0F), glm::vec4(-forward_ws_norm, 0.0F),
+      glm::vec4(0.0F, 0.0F, 0.0F, 1.0F));
     orbit_rot_ = glm::normalize(glm::quat_cast(view_basis));
   }
 

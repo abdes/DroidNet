@@ -5,22 +5,35 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
+#include <memory>
+#include <string>
 #include <string_view>
-
-#include <glm/geometric.hpp>
-#include <glm/glm.hpp>
-#include <imgui.h>
-
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Constants.h>
-#include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
-#include <Oxygen/Input/Action.h>
 
 #include "DemoShell/UI/CameraControlPanel.h"
 #include "DemoShell/UI/CameraVm.h"
+#include "DemoShell/UI/OrbitCameraController.h"
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/vector_float2.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/geometric.hpp>
+#include <imgui.h>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Types/Geometry.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
+#include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
+#include <Oxygen/Input/Action.h>
+#include <Oxygen/Input/ActionValue.h>
 
 namespace oxygen::examples::ui {
+
+// ImGui takes printf-style text and literal layout metrics.
+// NOLINTBEGIN(cppcoreguidelines-pro-type-vararg, *-magic-numbers)
 
 CameraControlPanel::CameraControlPanel(observer_ptr<CameraVm> vm)
   : vm_(vm)
@@ -197,7 +210,7 @@ void CameraControlPanel::DrawCameraModeTab()
     ImGui::SeparatorText("Fly Settings");
 
     float speed = vm_->GetFlyMoveSpeed();
-    if (ImGui::SliderFloat("Move Speed", &speed, 0.1F, 100.0F, "%.2F",
+    if (ImGui::SliderFloat("Move Speed", &speed, 0.1F, 1000.0F, "%.2F",
           ImGuiSliderFlags_Logarithmic)) {
       vm_->SetFlyMoveSpeed(speed);
     }
@@ -215,57 +228,10 @@ void CameraControlPanel::DrawCameraModeTab()
   ImGui::SeparatorText("Projection");
   if (!vm_->HasActiveCamera()) {
     ImGui::TextDisabled("No active camera");
-  } else if (vm_->HasPerspectiveCamera()) {
-    ImGui::TextUnformatted("Perspective");
-    ImGui::Indent();
-    ImGui::PushID("PerspectiveProjection");
-
-    float fov_deg = vm_->GetPerspectiveFovDegrees();
-    if (ImGui::SliderFloat("FOV", &fov_deg, 10.0F, 160.0F, "%.1F deg")) {
-      vm_->SetPerspectiveFovDegrees(fov_deg);
-    }
-
-    float near_plane = vm_->GetPerspectiveNearPlane();
-    if (ImGui::InputFloat("Near", &near_plane, 0.01F, 0.1F, "%.4F")) {
-      vm_->SetPerspectiveNearPlane(near_plane);
-    }
-
-    float far_plane = vm_->GetPerspectiveFarPlane();
-    if (ImGui::InputFloat("Far", &far_plane, 1.0F, 10.0F, "%.2F")) {
-      vm_->SetPerspectiveFarPlane(far_plane);
-    }
-
-    ImGui::PopID();
-    ImGui::Unindent();
-  } else if (vm_->HasOrthographicCamera()) {
-    ImGui::TextUnformatted("Orthographic");
-    ImGui::Indent();
-    ImGui::PushID("OrthoProjection");
-
-    float width = vm_->GetOrthoWidth();
-    if (ImGui::InputFloat("Width", &width, 0.1F, 1.0F, "%.3F")) {
-      vm_->SetOrthoWidth(width);
-    }
-
-    float height = vm_->GetOrthoHeight();
-    if (ImGui::InputFloat("Height", &height, 0.1F, 1.0F, "%.3F")) {
-      vm_->SetOrthoHeight(height);
-    }
-
-    float near_plane = vm_->GetOrthoNearPlane();
-    if (ImGui::InputFloat("Near", &near_plane, 0.01F, 0.1F, "%.4F")) {
-      vm_->SetOrthoNearPlane(near_plane);
-    }
-
-    float far_plane = vm_->GetOrthoFarPlane();
-    if (ImGui::InputFloat("Far", &far_plane, 1.0F, 10.0F, "%.2F")) {
-      vm_->SetOrthoFarPlane(far_plane);
-    }
-
-    ImGui::PopID();
-    ImGui::Unindent();
-  } else {
+  } else if (!vm_->HasPerspectiveCamera() && !vm_->HasOrthographicCamera()) {
     ImGui::TextDisabled("Active camera has no projection component");
+  } else {
+    DrawProjectionSettings();
   }
 
   ImGui::SeparatorText("Actions");
@@ -277,6 +243,97 @@ void CameraControlPanel::DrawCameraModeTab()
   if (ImGui::IsItemHovered()) {
     ImGui::SetTooltip("Reset camera to initial position and rotation");
   }
+}
+
+void CameraControlPanel::DrawProjectionSettings()
+{
+  struct RatioPreset {
+    const char* label;
+    float ratio;
+  };
+  constexpr std::array kRatioPresets {
+    RatioPreset { .label = "16:9", .ratio = 16.0F / 9.0F },
+    RatioPreset { .label = "4:3", .ratio = 4.0F / 3.0F },
+    RatioPreset { .label = "21:9", .ratio = 21.0F / 9.0F },
+    RatioPreset { .label = "1:1", .ratio = 1.0F },
+    RatioPreset { .label = "9:16", .ratio = 9.0F / 16.0F },
+  };
+  constexpr std::array kProjectionItems { "Perspective", "Orthographic" };
+  constexpr std::array kAspectItems { "Auto", "Fixed" };
+
+  ImGui::PushID("Projection");
+  ImGui::Indent();
+
+  int projection = vm_->HasOrthographicCamera() ? 1 : 0;
+  if (ImGui::Combo("Type", &projection, kProjectionItems.data(),
+        static_cast<int>(kProjectionItems.size()))) {
+    vm_->SetOrthographic(projection == 1);
+  }
+
+  if (vm_->HasPerspectiveCamera()) {
+    float fov_deg = vm_->GetPerspectiveFovDegrees();
+    if (ImGui::SliderFloat("FOV", &fov_deg, 10.0F, 160.0F, "%.1F deg")) {
+      vm_->SetPerspectiveFovDegrees(fov_deg);
+    }
+  } else {
+    float height = vm_->GetOrthoHeight();
+    if (ImGui::InputFloat("Size", &height, 0.1F, 1.0F, "%.3F")) {
+      vm_->SetOrthoHeight(height);
+    }
+    ImGui::SetItemTooltip("Visible height in world units");
+  }
+
+  // Auto fills the view; Fixed keeps the ratio and adds bars as needed.
+  const auto mode = vm_->GetAspectMode();
+  int mode_index = mode == CameraAspectMode::kFixed ? 1 : 0;
+  if (ImGui::Combo("Aspect", &mode_index, kAspectItems.data(),
+        static_cast<int>(kAspectItems.size()))) {
+    vm_->SetAspectMode(
+      mode_index == 1 ? CameraAspectMode::kFixed : CameraAspectMode::kAuto);
+  }
+  if (mode == CameraAspectMode::kFixed) {
+    float ratio = vm_->GetAspectRatio();
+    const auto* current = "Custom";
+    for (const auto& preset : kRatioPresets) {
+      if (std::abs(preset.ratio - ratio) < 1.0e-3F) {
+        current = preset.label;
+      }
+    }
+    if (ImGui::BeginCombo("Ratio", current)) {
+      for (const auto& preset : kRatioPresets) {
+        if (ImGui::Selectable(preset.label, current == preset.label)) {
+          vm_->SetAspectRatio(preset.ratio);
+        }
+      }
+      ImGui::EndCombo();
+    }
+    if (ImGui::InputFloat("Width / Height", &ratio, 0.01F, 0.1F, "%.4F")) {
+      vm_->SetAspectRatio(ratio);
+    }
+  }
+
+  float near_plane = vm_->HasPerspectiveCamera()
+    ? vm_->GetPerspectiveNearPlane()
+    : vm_->GetOrthoNearPlane();
+  if (ImGui::InputFloat("Near", &near_plane, 0.01F, 0.1F, "%.4F")) {
+    if (vm_->HasPerspectiveCamera()) {
+      vm_->SetPerspectiveNearPlane(near_plane);
+    } else {
+      vm_->SetOrthoNearPlane(near_plane);
+    }
+  }
+  float far_plane = vm_->HasPerspectiveCamera() ? vm_->GetPerspectiveFarPlane()
+                                                : vm_->GetOrthoFarPlane();
+  if (ImGui::InputFloat("Far", &far_plane, 1.0F, 10.0F, "%.2F")) {
+    if (vm_->HasPerspectiveCamera()) {
+      vm_->SetPerspectiveFarPlane(far_plane);
+    } else {
+      vm_->SetOrthoFarPlane(far_plane);
+    }
+  }
+
+  ImGui::Unindent();
+  ImGui::PopID();
 }
 
 void CameraControlPanel::DrawDebugTab()
@@ -332,43 +389,43 @@ void CameraControlPanel::DrawCameraPoseInfo()
     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
     constexpr float kValueFieldWidth = 240.0F;
-    const auto right_align = [] {
+    const auto right_align = [] -> void {
       const float start = ImGui::GetCursorPosX();
       const float col_width = ImGui::GetColumnWidth();
       const float offset = std::max(0.0F, col_width - kValueFieldWidth);
       ImGui::SetCursorPosX(start + offset);
     };
 
-    auto row_vec3 = [right_align](const char* label, const glm::vec3& value) {
+    auto row_vec3
+      = [right_align](const char* label, const glm::vec3& value) -> void {
       ImGui::TableNextRow();
       ImGui::TableNextColumn();
       ImGui::TextUnformatted(label);
       ImGui::TableNextColumn();
-      float data[3] = { value.x, value.y, value.z };
+      std::array data { value.x, value.y, value.z };
       ImGui::BeginDisabled();
       const std::string id = std::string("##") + label;
       right_align();
       ImGui::SetNextItemWidth(kValueFieldWidth);
       ImGui::InputFloat3(
-        id.c_str(), data, "%.3F", ImGuiInputTextFlags_ReadOnly);
+        id.c_str(), data.data(), "%.3F", ImGuiInputTextFlags_ReadOnly);
       ImGui::EndDisabled();
     };
 
-    auto row_float
-      = [kValueFieldWidth, right_align](const char* label, float value) {
-          ImGui::TableNextRow();
-          ImGui::TableNextColumn();
-          ImGui::TextUnformatted(label);
-          ImGui::TableNextColumn();
-          float data = value;
-          ImGui::BeginDisabled();
-          const std::string id = std::string("##") + label;
-          right_align();
-          ImGui::SetNextItemWidth(kValueFieldWidth);
-          ImGui::InputFloat(id.c_str(), &data, 0.0F, 0.0F, "%.3F",
-            ImGuiInputTextFlags_ReadOnly);
-          ImGui::EndDisabled();
-        };
+    auto row_float = [right_align](const char* label, float value) -> void {
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn();
+      ImGui::TextUnformatted(label);
+      ImGui::TableNextColumn();
+      float data = value;
+      ImGui::BeginDisabled();
+      const std::string id = std::string("##") + label;
+      right_align();
+      ImGui::SetNextItemWidth(kValueFieldWidth);
+      ImGui::InputFloat(
+        id.c_str(), &data, 0.0F, 0.0F, "%.3F", ImGuiInputTextFlags_ReadOnly);
+      ImGui::EndDisabled();
+    };
 
     row_vec3("Position", position);
     row_vec3("Forward", forward);
@@ -397,14 +454,14 @@ void CameraControlPanel::DrawInputDebugInfo()
     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
     auto row_bool
-      = [kActiveColor, kInactiveColor](const char* label, bool value) {
-          ImGui::TableNextRow();
-          ImGui::TableNextColumn();
-          ImGui::TextUnformatted(label);
-          ImGui::TableNextColumn();
-          const ImVec4 color = value ? kActiveColor : kInactiveColor;
-          ImGui::TextColored(color, "%s", value ? "Active" : "Inactive");
-        };
+      = [kActiveColor, kInactiveColor](const char* label, bool value) -> void {
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn();
+      ImGui::TextUnformatted(label);
+      ImGui::TableNextColumn();
+      const ImVec4 color = value ? kActiveColor : kInactiveColor;
+      ImGui::TextColored(color, "%s", value ? "Active" : "Inactive");
+    };
 
     row_bool("ImGui WantCaptureKeyboard", io.WantCaptureKeyboard);
     row_bool("ImGui WantCaptureMouse", io.WantCaptureMouse);
@@ -422,8 +479,9 @@ void CameraControlPanel::DrawInputDebugInfo()
     ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, 120.0F);
     ImGui::TableSetupColumn("Flags", ImGuiTableColumnFlags_WidthStretch);
 
-    const auto show_action = [this](const char* label,
-                               const std::shared_ptr<input::Action>& action) {
+    const auto show_action
+      = [this](const char* label,
+          const std::shared_ptr<input::Action>& action) -> void {
       const char* state = vm_->GetActionStateString(action);
       const bool ongoing = action && action->IsOngoing();
       const bool triggered = action && action->WasTriggeredThisFrame();
@@ -476,11 +534,11 @@ void CameraControlPanel::DrawInputDebugInfo()
       ImGui::TableNextColumn();
       ImGui::TextUnformatted("Mouse Delta");
       ImGui::TableNextColumn();
-      float delta[2] = { mouse_delta.x, mouse_delta.y };
+      std::array delta { mouse_delta.x, mouse_delta.y };
       ImGui::BeginDisabled();
       ImGui::SetNextItemWidth(220.0F);
       ImGui::InputFloat2(
-        "##MouseDelta", delta, "%.2F", ImGuiInputTextFlags_ReadOnly);
+        "##MouseDelta", delta.data(), "%.2F", ImGuiInputTextFlags_ReadOnly);
       ImGui::EndDisabled();
       ImGui::EndTable();
     }
@@ -510,14 +568,14 @@ void CameraControlPanel::DrawDroneMinimap()
   const float minimap_width = std::max(avail.x, 1.0F);
   const ImVec2 size(minimap_width, kMinimapHeight);
 
-  ImGui::BeginChild("DroneMinimap", size, true, ImGuiWindowFlags_NoScrollbar);
+  ImGui::BeginChild("DroneMinimap", size, 1, ImGuiWindowFlags_NoScrollbar);
   const ImVec2 origin = ImGui::GetCursorScreenPos();
   auto* draw_list = ImGui::GetWindowDrawList();
 
-  float min_x = points[0].x;
-  float max_x = points[0].x;
-  float min_y = points[0].y;
-  float max_y = points[0].y;
+  float min_x = points.front().x;
+  float max_x = points.front().x;
+  float min_y = points.front().y;
+  float max_y = points.front().y;
   for (const auto& p : points) {
     min_x = std::min(min_x, p.x);
     max_x = std::max(max_x, p.x);
@@ -529,41 +587,46 @@ void CameraControlPanel::DrawDroneMinimap()
   const float height = std::max(max_y - min_y, 0.001F);
 
   constexpr float kPadding = 22.0F;
-  const float scale_x = (size.x - 2.0F * kPadding) / path_width;
-  const float scale_y = (size.y - 2.0F * kPadding) / height;
+  const float scale_x = (size.x - (2.0F * kPadding)) / path_width;
+  const float scale_y = (size.y - (2.0F * kPadding)) / height;
   const float scale = std::min(scale_x, scale_y);
 
   const float offset_x = origin.x + kPadding
-    + 0.5F * (size.x - 2.0F * kPadding - path_width * scale);
-  const float offset_y
-    = origin.y + kPadding + 0.5F * (size.y - 2.0F * kPadding - height * scale);
+    + (0.5F * (size.x - (2.0F * kPadding) - (path_width * scale)));
+  const float offset_y = origin.y + kPadding
+    + (0.5F * (size.y - (2.0F * kPadding) - (height * scale)));
 
   const auto to_minimap = [&](const glm::vec3& p) -> ImVec2 {
-    const float x = offset_x + (p.x - min_x) * scale;
-    const float y = offset_y + (p.y - min_y) * scale;
-    return ImVec2(x, y);
+    const float x = offset_x + ((p.x - min_x) * scale);
+    const float y = offset_y + ((p.y - min_y) * scale);
+    return { x, y };
   };
 
   constexpr ImU32 line_color = IM_COL32(0, 255, 255, 255);
   constexpr float kThickness = 1.5F;
-  for (size_t i = 0; i < points.size(); ++i) {
-    const size_t j = (i + 1) % points.size();
+  // Closed loop: the last point joins the first.
+  auto previous = points.back();
+  for (const auto& point : points) {
     draw_list->AddLine(
-      to_minimap(points[i]), to_minimap(points[j]), line_color, kThickness);
+      to_minimap(previous), to_minimap(point), line_color, kThickness);
+    previous = point;
   }
 
   const double progress = vm_->GetDroneProgress();
   if (!points.empty()) {
     const double wrapped = std::fmod(progress, 1.0);
     const double safe = wrapped < 0.0 ? wrapped + 1.0 : wrapped;
-    const size_t idx
-      = static_cast<size_t>(safe * points.size()) % points.size();
+    const auto idx
+      = static_cast<std::size_t>(safe * static_cast<double>(points.size()))
+      % points.size();
     constexpr float kDotRadius = 6.0F;
-    draw_list->AddCircleFilled(
-      to_minimap(points[idx]), kDotRadius, IM_COL32(255, 255, 0, 255));
+    draw_list->AddCircleFilled(to_minimap(points.subspan(idx, 1).front()),
+      kDotRadius, IM_COL32(255, 255, 0, 255));
   }
 
   ImGui::EndChild();
 }
+
+// NOLINTEND(cppcoreguidelines-pro-type-vararg, *-magic-numbers)
 
 } // namespace oxygen::examples::ui

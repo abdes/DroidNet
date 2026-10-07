@@ -4,18 +4,37 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <cstddef>
+
+#include <glm/common.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/quaternion_geometric.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/geometric.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/trigonometric.hpp>
+
+#include <Oxygen/Core/Time/Types.h>
 
 #define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtc/matrix_transform.hpp>
+#include "DemoShell/UI/FlyCameraController.h"
 #include <glm/gtx/quaternion.hpp>
 
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/SceneNode.h>
 
-#include "DemoShell/UI/FlyCameraController.h"
-
 namespace oxygen::examples::ui {
+
+namespace {
+  // Near and far planes in OrthographicCamera::GetExtents().
+  constexpr std::size_t kOrthoNearIndex = 4U;
+  constexpr std::size_t kOrthoFarIndex = 5U;
+} // namespace
 
 void FlyCameraController::Update(
   scene::SceneNode& node, time::CanonicalDuration delta_time)
@@ -44,7 +63,8 @@ void FlyCameraController::Update(
 
   glm::vec3 right_ws = glm::cross(forward_ws, world_up);
   const float right_len2 = glm::dot(right_ws, right_ws);
-  if (right_len2 <= 1e-8f) {
+  constexpr float kColinearEpsilon = 1e-8F;
+  if (right_len2 <= kColinearEpsilon) {
     // Forward is nearly colinear with world up: pick an arbitrary right.
     right_ws = space::move::Right;
   } else {
@@ -52,10 +72,9 @@ void FlyCameraController::Update(
   }
   const glm::vec3 up_ws = glm::normalize(glm::cross(right_ws, forward_ws));
 
-  glm::mat4 view_basis(1.0F);
-  view_basis[0] = glm::vec4(right_ws, 0.0F);
-  view_basis[1] = glm::vec4(up_ws, 0.0F);
-  view_basis[2] = glm::vec4(-glm::normalize(forward_ws), 0.0F);
+  const glm::mat4 view_basis(glm::vec4(right_ws, 0.0F), glm::vec4(up_ws, 0.0F),
+    glm::vec4(-glm::normalize(forward_ws), 0.0F),
+    glm::vec4(0.0F, 0.0F, 0.0F, 1.0F));
   const glm::quat orientation = glm::normalize(glm::quat_cast(view_basis));
 
   // 2. Handle Movement
@@ -63,10 +82,35 @@ void FlyCameraController::Update(
   glm::vec3 pos = tf.GetLocalPosition().value_or(glm::vec3(0.0F));
 
   if (glm::length(move_input_) > 0.0F) {
-    const glm::vec3 move_dir = glm::normalize(move_input_);
+    glm::vec3 move_dir = glm::normalize(move_input_);
 
-    const float speed
-      = move_speed_ * (boost_active_ ? boost_multiplier_ : 1.0F);
+    float speed = move_speed_ * (boost_active_ ? boost_multiplier_ : 1.0F);
+
+    // An orthographic image does not change with distance: forward/back
+    // zooms its size, and panning scales with that size so it covers the same
+    // share of the view as a perspective camera ten units away.
+    if (auto ortho = node.GetCameraAs<scene::OrthographicCamera>(); ortho) {
+      constexpr float kReferenceHeight = 10.0F;
+      constexpr float kZoomRatePerSecond = 1.0F;
+      constexpr float kMinHeight = 0.01F;
+      auto ext = ortho->get().GetExtents();
+      const float height = ext.at(3) - ext.at(2);
+      if (std::abs(move_dir.z) > 0.0F) {
+        const float boost = boost_active_ ? boost_multiplier_ : 1.0F;
+        const float scale
+          = std::max(std::exp(-move_dir.z * kZoomRatePerSecond * boost * dt),
+            kMinHeight / height);
+        const float centre_x = 0.5F * (ext.at(0) + ext.at(1));
+        const float centre_y = 0.5F * (ext.at(2) + ext.at(3));
+        ortho->get().SetExtents(centre_x + ((ext.at(0) - centre_x) * scale),
+          centre_x + ((ext.at(1) - centre_x) * scale),
+          centre_y + ((ext.at(2) - centre_y) * scale),
+          centre_y + ((ext.at(3) - centre_y) * scale), ext.at(kOrthoNearIndex),
+          ext.at(kOrthoFarIndex));
+        move_dir.z = 0.0F;
+      }
+      speed *= height / kReferenceHeight;
+    }
 
     if (plane_lock_active_) {
       // Horizontal movement (no vertical gain): forward is -Y at yaw=0.

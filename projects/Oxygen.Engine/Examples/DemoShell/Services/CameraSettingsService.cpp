@@ -34,6 +34,7 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Time/Types.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
@@ -815,7 +816,9 @@ auto CameraSettingsService::PersistedCameraState::PerspectiveState::IsDirty(
     || (enabled
       && (!NearlyEqual(fov, other.fov)
         || !NearlyEqual(near_plane, other.near_plane)
-        || !NearlyEqual(far_plane, other.far_plane)));
+        || !NearlyEqual(far_plane, other.far_plane)
+        || aspect_mode != other.aspect_mode
+        || !NearlyEqual(aspect_ratio, other.aspect_ratio)));
 }
 
 void CameraSettingsService::PersistedCameraState::PerspectiveState::Persist(
@@ -829,6 +832,9 @@ void CameraSettingsService::PersistedCameraState::PerspectiveState::Persist(
   settings.SetFloat(prefix + ".camera.perspective.fov", fov);
   settings.SetFloat(prefix + ".camera.perspective.near", near_plane);
   settings.SetFloat(prefix + ".camera.perspective.far", far_plane);
+  settings.SetBool(prefix + ".camera.perspective.aspect_fixed",
+    aspect_mode == CameraAspectMode::kFixed);
+  settings.SetFloat(prefix + ".camera.perspective.aspect_ratio", aspect_ratio);
 }
 
 auto CameraSettingsService::PersistedCameraState::OrthoState::IsDirty(
@@ -836,10 +842,11 @@ auto CameraSettingsService::PersistedCameraState::OrthoState::IsDirty(
 {
   return enabled != other.enabled
     || (enabled
-      && !std::equal(extents.begin(), extents.end(), other.extents.begin(),
-        [](const float lhs, const float rhs) -> bool {
-          return NearlyEqual(lhs, rhs);
-        }));
+      && (aspect_mode != other.aspect_mode
+        || !std::equal(extents.begin(), extents.end(), other.extents.begin(),
+          [](const float lhs, const float rhs) -> bool {
+            return NearlyEqual(lhs, rhs);
+          })));
 }
 
 void CameraSettingsService::PersistedCameraState::OrthoState::Persist(
@@ -857,6 +864,8 @@ void CameraSettingsService::PersistedCameraState::OrthoState::Persist(
   settings.SetFloat(prefix + ".camera.ortho.near", extents.at(4));
   // NOLINTNEXTLINE(*-magic-numbers)
   settings.SetFloat(prefix + ".camera.ortho.far", extents.at(5));
+  settings.SetBool(prefix + ".camera.ortho.aspect_fixed",
+    aspect_mode == CameraAspectMode::kFixed);
 }
 
 auto CameraSettingsService::PersistedCameraState::ExposureState::IsDirty(
@@ -1084,6 +1093,15 @@ auto CameraSettingsService::RestoreActiveCameraSettings() -> bool
         = settings->GetFloat(prefix + ".camera.perspective.far")) {
         cam.SetFarPlane(*far_plane);
       }
+      if (const auto fixed
+        = settings->GetBool(prefix + ".camera.perspective.aspect_fixed")) {
+        cam.SetAspectMode(
+          *fixed ? CameraAspectMode::kFixed : CameraAspectMode::kAuto);
+      }
+      if (const auto ratio
+        = settings->GetFloat(prefix + ".camera.perspective.aspect_ratio")) {
+        cam.SetAspectRatio(*ratio);
+      }
 
       auto& exposure = cam.Exposure();
       if (const auto enabled
@@ -1120,6 +1138,11 @@ auto CameraSettingsService::RestoreActiveCameraSettings() -> bool
       const auto far_plane = settings->GetFloat(prefix + ".camera.ortho.far");
       if (left && right && bottom && top && near_plane && far_plane) {
         cam.SetExtents(*left, *right, *bottom, *top, *near_plane, *far_plane);
+      }
+      if (const auto fixed
+        = settings->GetBool(prefix + ".camera.ortho.aspect_fixed")) {
+        cam.SetAspectMode(
+          *fixed ? CameraAspectMode::kFixed : CameraAspectMode::kAuto);
       }
 
       auto& exposure = cam.Exposure();
@@ -1220,6 +1243,8 @@ auto CameraSettingsService::CaptureActiveCameraState() -> PersistedCameraState
     current.perspective.fov = cam.GetFieldOfView();
     current.perspective.near_plane = cam.GetNearPlane();
     current.perspective.far_plane = cam.GetFarPlane();
+    current.perspective.aspect_mode = cam.GetAspectMode();
+    current.perspective.aspect_ratio = cam.GetAspectRatio();
 
     const auto& exposure = cam.Exposure();
     current.exposure.enabled = true;
@@ -1233,6 +1258,7 @@ auto CameraSettingsService::CaptureActiveCameraState() -> PersistedCameraState
     const auto& cam = cam_ref->get();
     current.ortho.enabled = true;
     current.ortho.extents = cam.GetExtents();
+    current.ortho.aspect_mode = cam.GetAspectMode();
 
     const auto& exposure = cam.Exposure();
     current.exposure.enabled = true;

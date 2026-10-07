@@ -8,9 +8,9 @@
 
 #include <string_view>
 
-#include <Oxygen/Base/ObserverPtr.h>
-
 #include "DemoShell/UI/DemoPanel.h"
+
+#include <Oxygen/Base/ObserverPtr.h>
 
 namespace oxygen::examples::ui {
 
@@ -52,6 +52,7 @@ private:
   void DrawCameraModeTab();
   void DrawDebugTab();
   void DrawCameraPoseInfo();
+  void DrawProjectionSettings();
   void DrawInputDebugInfo();
   void DrawDroneMinimap();
 

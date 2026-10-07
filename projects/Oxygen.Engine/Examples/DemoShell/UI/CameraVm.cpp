@@ -5,12 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <memory>
+#include <mutex>
+#include <span>
+#include <tuple>
+#include <utility>
 #include <vector>
-
-#include <Oxygen/Input/Action.h>
-#include <Oxygen/Scene/Camera/Orthographic.h>
-#include <Oxygen/Scene/Camera/Perspective.h>
-#include <Oxygen/Scene/SceneNode.h>
 
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/UI/CameraRigController.h"
@@ -18,8 +20,25 @@
 #include "DemoShell/UI/DroneCameraController.h"
 #include "DemoShell/UI/FlyCameraController.h"
 #include "DemoShell/UI/OrbitCameraController.h"
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/vector_float2.hpp>
+#include <glm/trigonometric.hpp>
+
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
+#include <Oxygen/Input/Action.h>
+#include <Oxygen/Scene/Camera/Orthographic.h>
+#include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen::examples::ui {
+
+namespace {
+  // Near and far planes in OrthographicCamera::GetExtents().
+  constexpr std::size_t kOrthoNearIndex = 4U;
+  constexpr std::size_t kOrthoFarIndex = 5U;
+} // namespace
 
 CameraVm::CameraVm(observer_ptr<CameraSettingsService> service,
   observer_ptr<CameraRigController> camera_rig)
@@ -31,7 +50,7 @@ CameraVm::CameraVm(observer_ptr<CameraSettingsService> service,
 
 auto CameraVm::GetControlMode() -> CameraControlMode
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -40,7 +59,7 @@ auto CameraVm::GetControlMode() -> CameraControlMode
 
 auto CameraVm::SetControlMode(CameraControlMode mode) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (control_mode_ == mode) {
     return;
   }
@@ -56,7 +75,7 @@ auto CameraVm::SetControlMode(CameraControlMode mode) -> void
 
 auto CameraVm::GetOrbitMode() -> OrbitMode
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -65,7 +84,7 @@ auto CameraVm::GetOrbitMode() -> OrbitMode
 
 auto CameraVm::SetOrbitMode(OrbitMode mode) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (orbit_mode_ == mode) {
     return;
   }
@@ -81,7 +100,7 @@ auto CameraVm::SetOrbitMode(OrbitMode mode) -> void
 
 auto CameraVm::GetFlyMoveSpeed() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -90,7 +109,7 @@ auto CameraVm::GetFlyMoveSpeed() -> float
 
 auto CameraVm::SetFlyMoveSpeed(float speed) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (fly_move_speed_ == speed) {
     return;
   }
@@ -119,7 +138,7 @@ auto CameraVm::GetDroneProgress() const -> double
 
 auto CameraVm::GetDroneSpeed() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -128,7 +147,7 @@ auto CameraVm::GetDroneSpeed() -> float
 
 auto CameraVm::SetDroneSpeed(float speed) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   service_->SetDroneSpeed(speed);
   epoch_ = service_->GetEpoch();
   if (camera_rig_ && camera_rig_->GetDroneController()) {
@@ -138,7 +157,7 @@ auto CameraVm::SetDroneSpeed(float speed) -> void
 
 auto CameraVm::GetDroneDamping() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -147,7 +166,7 @@ auto CameraVm::GetDroneDamping() -> float
 
 auto CameraVm::SetDroneDamping(float damping) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   service_->SetDroneDamping(damping);
   epoch_ = service_->GetEpoch();
   if (camera_rig_ && camera_rig_->GetDroneController()) {
@@ -157,7 +176,7 @@ auto CameraVm::SetDroneDamping(float damping) -> void
 
 auto CameraVm::GetDroneFocusHeight() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -166,7 +185,7 @@ auto CameraVm::GetDroneFocusHeight() -> float
 
 auto CameraVm::SetDroneFocusHeight(float height) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   service_->SetDroneFocusHeight(height);
   epoch_ = service_->GetEpoch();
   if (camera_rig_ && camera_rig_->GetDroneController()) {
@@ -176,7 +195,7 @@ auto CameraVm::SetDroneFocusHeight(float height) -> void
 
 auto CameraVm::GetDroneFocusOffset() -> glm::vec2
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -185,7 +204,7 @@ auto CameraVm::GetDroneFocusOffset() -> glm::vec2
 
 auto CameraVm::SetDroneFocusOffset(glm::vec2 offset) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   service_->SetDroneFocusOffsetX(offset.x);
   service_->SetDroneFocusOffsetY(offset.y);
   epoch_ = service_->GetEpoch();
@@ -201,7 +220,7 @@ auto CameraVm::SetDroneFocusOffset(glm::vec2 offset) -> void
 
 auto CameraVm::GetDroneRunning() -> bool
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -210,7 +229,7 @@ auto CameraVm::GetDroneRunning() -> bool
 
 auto CameraVm::SetDroneRunning(bool running) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   service_->SetDroneRunning(running);
   epoch_ = service_->GetEpoch();
   if (camera_rig_ && camera_rig_->GetDroneController()) {
@@ -224,7 +243,7 @@ auto CameraVm::SetDroneRunning(bool running) -> void
 
 auto CameraVm::GetDroneBobAmplitude() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -233,7 +252,7 @@ auto CameraVm::GetDroneBobAmplitude() -> float
 
 auto CameraVm::SetDroneBobAmplitude(float amp) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   service_->SetDroneBobAmplitude(amp);
   epoch_ = service_->GetEpoch();
   if (camera_rig_ && camera_rig_->GetDroneController()) {
@@ -243,7 +262,7 @@ auto CameraVm::SetDroneBobAmplitude(float amp) -> void
 
 auto CameraVm::GetDroneBobFrequency() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -252,7 +271,7 @@ auto CameraVm::GetDroneBobFrequency() -> float
 
 auto CameraVm::SetDroneBobFrequency(float hz) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   service_->SetDroneBobFrequency(hz);
   epoch_ = service_->GetEpoch();
   if (camera_rig_ && camera_rig_->GetDroneController()) {
@@ -262,7 +281,7 @@ auto CameraVm::SetDroneBobFrequency(float hz) -> void
 
 auto CameraVm::GetDroneNoiseAmplitude() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -271,7 +290,7 @@ auto CameraVm::GetDroneNoiseAmplitude() -> float
 
 auto CameraVm::SetDroneNoiseAmplitude(float amp) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   service_->SetDroneNoiseAmplitude(amp);
   epoch_ = service_->GetEpoch();
   if (camera_rig_ && camera_rig_->GetDroneController()) {
@@ -281,7 +300,7 @@ auto CameraVm::SetDroneNoiseAmplitude(float amp) -> void
 
 auto CameraVm::GetDroneBankFactor() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -290,7 +309,7 @@ auto CameraVm::GetDroneBankFactor() -> float
 
 auto CameraVm::SetDroneBankFactor(float factor) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   service_->SetDroneBankFactor(factor);
   epoch_ = service_->GetEpoch();
   if (camera_rig_ && camera_rig_->GetDroneController()) {
@@ -300,7 +319,7 @@ auto CameraVm::SetDroneBankFactor(float factor) -> void
 
 auto CameraVm::GetDronePOISlowdownRadius() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -309,7 +328,7 @@ auto CameraVm::GetDronePOISlowdownRadius() -> float
 
 auto CameraVm::SetDronePOISlowdownRadius(float radius) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   service_->SetDronePOISlowdownRadius(radius);
   epoch_ = service_->GetEpoch();
   if (camera_rig_ && camera_rig_->GetDroneController()) {
@@ -319,7 +338,7 @@ auto CameraVm::SetDronePOISlowdownRadius(float radius) -> void
 
 auto CameraVm::GetDronePOIMinSpeed() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -328,7 +347,7 @@ auto CameraVm::GetDronePOIMinSpeed() -> float
 
 auto CameraVm::SetDronePOIMinSpeed(float factor) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   service_->SetDronePOIMinSpeed(factor);
   epoch_ = service_->GetEpoch();
   if (camera_rig_ && camera_rig_->GetDroneController()) {
@@ -338,7 +357,7 @@ auto CameraVm::SetDronePOIMinSpeed(float factor) -> void
 
 auto CameraVm::GetDroneShowPath() -> bool
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -347,7 +366,7 @@ auto CameraVm::GetDroneShowPath() -> bool
 
 auto CameraVm::SetDroneShowPath(bool show) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   service_->SetDroneShowPath(show);
   epoch_ = service_->GetEpoch();
   if (camera_rig_ && camera_rig_->GetDroneController()) {
@@ -375,13 +394,13 @@ auto CameraVm::GetCameraPosition() -> glm::vec3
 auto CameraVm::GetCameraRotation() -> glm::quat
 {
   if (!HasActiveCamera()) {
-    return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
+    return { 1.0F, 0.0F, 0.0F, 0.0F };
   }
   auto transform = service_->GetActiveCamera().GetTransform();
   if (auto rot = transform.GetLocalRotation()) {
     return *rot;
   }
-  return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
+  return { 1.0F, 0.0F, 0.0F, 0.0F };
 }
 
 auto CameraVm::HasPerspectiveCamera() const -> bool
@@ -521,7 +540,7 @@ auto CameraVm::GetOrthoWidth() const -> float
   }
   if (auto cam_ref = camera.GetCameraAs<scene::OrthographicCamera>(); cam_ref) {
     const auto extents = cam_ref->get().GetExtents();
-    return extents[1] - extents[0];
+    return extents.at(1) - extents.at(0);
   }
   return 0.0F;
 }
@@ -537,7 +556,7 @@ auto CameraVm::GetOrthoHeight() const -> float
   }
   if (auto cam_ref = camera.GetCameraAs<scene::OrthographicCamera>(); cam_ref) {
     const auto extents = cam_ref->get().GetExtents();
-    return extents[3] - extents[2];
+    return extents.at(3) - extents.at(2);
   }
   return 0.0F;
 }
@@ -552,7 +571,7 @@ auto CameraVm::GetOrthoNearPlane() const -> float
     return 0.0F;
   }
   if (auto cam_ref = camera.GetCameraAs<scene::OrthographicCamera>(); cam_ref) {
-    return cam_ref->get().GetExtents()[4];
+    return cam_ref->get().GetExtents().at(kOrthoNearIndex);
   }
   return 0.0F;
 }
@@ -567,7 +586,7 @@ auto CameraVm::GetOrthoFarPlane() const -> float
     return 0.0F;
   }
   if (auto cam_ref = camera.GetCameraAs<scene::OrthographicCamera>(); cam_ref) {
-    return cam_ref->get().GetExtents()[5];
+    return cam_ref->get().GetExtents().at(kOrthoFarIndex);
   }
   return 0.0F;
 }
@@ -585,11 +604,11 @@ auto CameraVm::SetOrthoWidth(float width) -> void
     constexpr float kMinSize = 0.001F;
     auto extents = cam_ref->get().GetExtents();
     const float clamped = std::max(width, kMinSize);
-    const float center = 0.5F * (extents[0] + extents[1]);
-    extents[0] = center - 0.5F * clamped;
-    extents[1] = center + 0.5F * clamped;
-    cam_ref->get().SetExtents(
-      extents[0], extents[1], extents[2], extents[3], extents[4], extents[5]);
+    const float center = 0.5F * (extents.at(0) + extents.at(1));
+    extents.at(0) = center - (0.5F * clamped);
+    extents.at(1) = center + (0.5F * clamped);
+    cam_ref->get().SetExtents(extents.at(0), extents.at(1), extents.at(2),
+      extents.at(3), extents.at(kOrthoNearIndex), extents.at(kOrthoFarIndex));
     service_->PersistActiveCameraSettings();
   }
 }
@@ -606,12 +625,18 @@ auto CameraVm::SetOrthoHeight(float height) -> void
   if (auto cam_ref = camera.GetCameraAs<scene::OrthographicCamera>(); cam_ref) {
     constexpr float kMinSize = 0.001F;
     auto extents = cam_ref->get().GetExtents();
-    const float clamped = std::max(height, kMinSize);
-    const float center = 0.5F * (extents[2] + extents[3]);
-    extents[2] = center - 0.5F * clamped;
-    extents[3] = center + 0.5F * clamped;
-    cam_ref->get().SetExtents(
-      extents[0], extents[1], extents[2], extents[3], extents[4], extents[5]);
+    const float clamped = std::max(kMinSize, height);
+    // Resizing keeps the framing ratio, as an authored OrthographicSize does.
+    const float ratio
+      = (extents.at(1) - extents.at(0)) / (extents.at(3) - extents.at(2));
+    const float center = 0.5F * (extents.at(2) + extents.at(3));
+    extents.at(2) = center - (0.5F * clamped);
+    extents.at(3) = center + (0.5F * clamped);
+    const float center_x = 0.5F * (extents.at(0) + extents.at(1));
+    extents.at(0) = center_x - (0.5F * clamped * ratio);
+    extents.at(1) = center_x + (0.5F * clamped * ratio);
+    cam_ref->get().SetExtents(extents.at(0), extents.at(1), extents.at(2),
+      extents.at(3), extents.at(kOrthoNearIndex), extents.at(kOrthoFarIndex));
     service_->PersistActiveCameraSettings();
   }
 }
@@ -630,11 +655,12 @@ auto CameraVm::SetOrthoNearPlane(float near_plane) -> void
     constexpr float kMinRange = 0.001F;
     auto extents = cam_ref->get().GetExtents();
     const float clamped_near = std::max(near_plane, kMinNear);
-    const float far_plane = std::max(extents[5], clamped_near + kMinRange);
-    extents[4] = clamped_near;
-    extents[5] = far_plane;
-    cam_ref->get().SetExtents(
-      extents[0], extents[1], extents[2], extents[3], extents[4], extents[5]);
+    const float far_plane
+      = std::max(extents.at(kOrthoFarIndex), clamped_near + kMinRange);
+    extents.at(kOrthoNearIndex) = clamped_near;
+    extents.at(kOrthoFarIndex) = far_plane;
+    cam_ref->get().SetExtents(extents.at(0), extents.at(1), extents.at(2),
+      extents.at(3), extents.at(kOrthoNearIndex), extents.at(kOrthoFarIndex));
     service_->PersistActiveCameraSettings();
   }
 }
@@ -651,22 +677,179 @@ auto CameraVm::SetOrthoFarPlane(float far_plane) -> void
   if (auto cam_ref = camera.GetCameraAs<scene::OrthographicCamera>(); cam_ref) {
     constexpr float kMinRange = 0.001F;
     auto extents = cam_ref->get().GetExtents();
-    extents[5] = std::max(far_plane, extents[4] + kMinRange);
-    cam_ref->get().SetExtents(
-      extents[0], extents[1], extents[2], extents[3], extents[4], extents[5]);
+    extents.at(kOrthoFarIndex)
+      = std::max(far_plane, extents.at(kOrthoNearIndex) + kMinRange);
+    cam_ref->get().SetExtents(extents.at(0), extents.at(1), extents.at(2),
+      extents.at(3), extents.at(kOrthoNearIndex), extents.at(kOrthoFarIndex));
     service_->PersistActiveCameraSettings();
   }
+}
+
+auto CameraVm::SetOrthographic(const bool orthographic) -> void
+{
+  if (!service_) {
+    return;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive() || HasOrthographicCamera() == orthographic) {
+    return;
+  }
+
+  // Match the visible height at the orbit target (or a nominal distance).
+  constexpr float kNominalDistance = 10.0F;
+  constexpr float kMinFovY = glm::radians(1.0F);
+  constexpr float kMaxFovY = glm::radians(179.0F);
+  auto distance = kNominalDistance;
+  if (camera_rig_) {
+    if (const auto orbit = camera_rig_->GetOrbitController(); orbit) {
+      constexpr float kMinDistance = 0.01F;
+      distance = std::max(orbit->GetDistance(), kMinDistance);
+    }
+  }
+
+  if (orthographic) {
+    auto cam_ref = camera.GetCameraAs<scene::PerspectiveCamera>();
+    if (!cam_ref) {
+      return;
+    }
+    const auto& source = cam_ref->get();
+    const float height
+      = 2.0F * distance * std::tan(0.5F * source.GetFieldOfView());
+    const float half_w = 0.5F * height * source.GetAspectRatio();
+    auto replacement = std::make_unique<scene::OrthographicCamera>();
+    replacement->SetExtents(-half_w, half_w, -0.5F * height, 0.5F * height,
+      source.GetNearPlane(), source.GetFarPlane());
+    replacement->SetAspectMode(source.GetAspectMode());
+    replacement->SetExposure(source.Exposure());
+    const float far_plane = source.GetFarPlane();
+    std::ignore = camera.ReplaceCamera(std::move(replacement));
+
+    // The parallel image does not depend on distance, but the near plane
+    // does: back away so the scene around the camera is not clipped.
+    auto transform = camera.GetTransform();
+    const auto rotation = transform.GetLocalRotation().value_or(
+      glm::quat(1.0F, 0.0F, 0.0F, 0.0F));
+    const auto position
+      = transform.GetLocalPosition().value_or(glm::vec3(0.0F));
+    std::ignore = transform.SetLocalPosition(
+      position - (rotation * space::look::Forward) * (0.5F * far_plane));
+    if (camera_rig_) {
+      camera_rig_->SyncFromActiveCamera();
+    }
+  } else {
+    auto cam_ref = camera.GetCameraAs<scene::OrthographicCamera>();
+    if (!cam_ref) {
+      return;
+    }
+    const auto& source = cam_ref->get();
+    const auto ext = source.GetExtents();
+    const float height = ext.at(3) - ext.at(2);
+    auto replacement = std::make_unique<scene::PerspectiveCamera>();
+    replacement->SetFieldOfView(std::clamp(
+      2.0F * std::atan(0.5F * height / distance), kMinFovY, kMaxFovY));
+    replacement->SetAspectRatio((ext.at(1) - ext.at(0)) / height);
+    replacement->SetAspectMode(source.GetAspectMode());
+    replacement->SetNearPlane(ext.at(kOrthoNearIndex));
+    replacement->SetFarPlane(ext.at(kOrthoFarIndex));
+    replacement->SetExposure(source.Exposure());
+    std::ignore = camera.ReplaceCamera(std::move(replacement));
+  }
+  service_->PersistActiveCameraSettings();
+}
+
+auto CameraVm::GetAspectMode() const -> CameraAspectMode
+{
+  if (!service_) {
+    return CameraAspectMode::kAuto;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return CameraAspectMode::kAuto;
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::PerspectiveCamera>(); cam_ref) {
+    return cam_ref->get().GetAspectMode();
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::OrthographicCamera>(); cam_ref) {
+    return cam_ref->get().GetAspectMode();
+  }
+  return CameraAspectMode::kAuto;
+}
+
+auto CameraVm::SetAspectMode(const CameraAspectMode mode) -> void
+{
+  if (!service_) {
+    return;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return;
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::PerspectiveCamera>(); cam_ref) {
+    cam_ref->get().SetAspectMode(mode);
+  } else if (auto ortho = camera.GetCameraAs<scene::OrthographicCamera>();
+    ortho) {
+    ortho->get().SetAspectMode(mode);
+  } else {
+    return;
+  }
+  service_->PersistActiveCameraSettings();
+}
+
+auto CameraVm::GetAspectRatio() const -> float
+{
+  if (!service_) {
+    return kDefaultCameraAspectRatio;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return kDefaultCameraAspectRatio;
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::PerspectiveCamera>(); cam_ref) {
+    return cam_ref->get().GetAspectRatio();
+  }
+  if (auto cam_ref = camera.GetCameraAs<scene::OrthographicCamera>(); cam_ref) {
+    const auto ext = cam_ref->get().GetExtents();
+    return (ext.at(1) - ext.at(0)) / (ext.at(3) - ext.at(2));
+  }
+  return kDefaultCameraAspectRatio;
+}
+
+auto CameraVm::SetAspectRatio(const float ratio) -> void
+{
+  if (!service_ || !std::isfinite(ratio)) {
+    return;
+  }
+  auto& camera = service_->GetActiveCamera();
+  if (!camera.IsAlive()) {
+    return;
+  }
+  constexpr float kMinRatio = 0.1F;
+  constexpr float kMaxRatio = 10.0F;
+  const float clamped = std::clamp(ratio, kMinRatio, kMaxRatio);
+  if (auto cam_ref = camera.GetCameraAs<scene::PerspectiveCamera>(); cam_ref) {
+    cam_ref->get().SetAspectRatio(clamped);
+  } else if (auto ortho = camera.GetCameraAs<scene::OrthographicCamera>();
+    ortho) {
+    auto ext = ortho->get().GetExtents();
+    const float center_x = 0.5F * (ext.at(0) + ext.at(1));
+    const float half_w = 0.5F * (ext.at(3) - ext.at(2)) * clamped;
+    ortho->get().SetExtents(center_x - half_w, center_x + half_w, ext.at(2),
+      ext.at(3), ext.at(kOrthoNearIndex), ext.at(kOrthoFarIndex));
+  } else {
+    return;
+  }
+  service_->PersistActiveCameraSettings();
 }
 
 auto CameraVm::GetDronePathPoints() const -> std::span<const glm::vec3>
 {
   if (camera_rig_) {
     if (const auto drone = camera_rig_->GetDroneController()) {
-      return std::span(drone->GetPathPoints());
+      return { drone->GetPathPoints() };
     }
   }
   static const std::vector<glm::vec3> empty;
-  return std::span(empty);
+  return { empty };
 }
 
 auto CameraVm::GetActionStateString(

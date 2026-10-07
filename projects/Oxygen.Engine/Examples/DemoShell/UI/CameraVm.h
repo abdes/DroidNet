@@ -12,12 +12,12 @@
 #include <optional>
 #include <span>
 
+#include "DemoShell/UI/CameraControlPanel.h"
+#include "DemoShell/UI/OrbitCameraController.h"
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
-
-#include "DemoShell/UI/CameraControlPanel.h"
-#include "DemoShell/UI/OrbitCameraController.h"
+#include <Oxygen/Core/Types/CameraAspectMode.h>
 
 namespace oxygen::input {
 class Action;
@@ -138,6 +138,17 @@ public:
   auto SetOrthoHeight(float height) -> void;
   auto SetOrthoNearPlane(float near_plane) -> void;
   auto SetOrthoFarPlane(float far_plane) -> void;
+
+  //! Replaces the active camera's projection, keeping its pose, clip planes,
+  //! exposure and framing policy, and matching the visible height at the
+  //! orbit target.
+  auto SetOrthographic(bool orthographic) -> void;
+
+  [[nodiscard]] auto GetAspectMode() const -> CameraAspectMode;
+  auto SetAspectMode(CameraAspectMode mode) -> void;
+  //! Width over height kept by a Fixed camera.
+  [[nodiscard]] auto GetAspectRatio() const -> float;
+  auto SetAspectRatio(float ratio) -> void;
 
   // --- Drone Path ---
 
