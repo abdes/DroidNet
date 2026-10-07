@@ -387,8 +387,9 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
         result.AddRange(filteredEditors.Values);
 
-        // Node rendering flags follow every component section, in the unfiltered view only.
-        if (this.selectedComponentType is null)
+        // Node rendering flags follow every component section, in the unfiltered view only, and
+        // only for nodes the flags affect.
+        if (this.selectedComponentType is null && NodeRenderingViewModel.AppliesTo(this.items))
         {
             result.Add(this.renderingEditor);
         }

@@ -98,16 +98,30 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             return Task.CompletedTask;
         });
 
-    /// <summary>The node Rendering section realizes its three authored flag toggles.</summary>
+    /// <summary>For geometry, the node Rendering section realizes all three authored flag toggles.</summary>
     /// <returns>The XAML realization task.</returns>
     [TestMethod]
     public Task NodeRenderingXamlRealizesItsFlagToggles() => AssertInspectorRealizesAsync(
         static fixture => CreateModel("Rendering", fixture),
         static model => new NodeRenderingView { ViewModel = (NodeRenderingViewModel)model },
-        prepareFixture: null,
+        prepareFixture: static fixture => fixture.Node.Components.Add(new GeometryComponent { Name = "Geometry" }),
         assertRealizedAsync: static view =>
         {
             _ = view.FindDescendants().OfType<ToggleSwitch>().Should().HaveCount(3);
+            return Task.CompletedTask;
+        });
+
+    /// <summary>For a light without geometry, the Rendering section realizes only Scene Visibility.</summary>
+    /// <returns>The XAML realization task.</returns>
+    [TestMethod]
+    public Task NodeRenderingXamlHidesShadowFlagsWithoutGeometry() => AssertInspectorRealizesAsync(
+        static fixture => CreateModel("Rendering", fixture),
+        static model => new NodeRenderingView { ViewModel = (NodeRenderingViewModel)model },
+        prepareFixture: null,
+        assertRealizedAsync: static view =>
+        {
+            _ = view.FindDescendants().OfType<ToggleSwitch>().Should().ContainSingle()
+                .Which.GetValue(AutomationProperties.NameProperty).Should().Be("Scene visibility");
             return Task.CompletedTask;
         });
 

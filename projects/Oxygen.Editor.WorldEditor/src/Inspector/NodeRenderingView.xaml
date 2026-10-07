@@ -23,10 +23,10 @@
             <editorcontrols:PropertyCard PropertyName="Scene visibility">
                 <ToggleSwitch AutomationProperties.Name="Scene visibility" IsOn="{x:Bind ViewModel.IsVisible, Mode=TwoWay}" />
             </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard PropertyName="Cast shadows">
+            <editorcontrols:PropertyCard PropertyName="Cast shadows" Visibility="{x:Bind ViewModel.ShowsShadowFlags, Mode=OneWay}">
                 <ToggleSwitch AutomationProperties.Name="Cast shadows" IsOn="{x:Bind ViewModel.CastsShadows, Mode=TwoWay}" />
             </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard PropertyName="Receive shadows">
+            <editorcontrols:PropertyCard PropertyName="Receive shadows" Visibility="{x:Bind ViewModel.ShowsShadowFlags, Mode=OneWay}">
                 <ToggleSwitch AutomationProperties.Name="Receive shadows" IsOn="{x:Bind ViewModel.ReceivesShadows, Mode=TwoWay}" />
             </editorcontrols:PropertyCard>
         </editorcontrols:PropertiesExpander.Items>

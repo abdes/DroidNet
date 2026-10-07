@@ -12,6 +12,12 @@ namespace Oxygen.Editor.World.Inspector;
 /// Node "Rendering" section: authored Scene Visibility and geometry Cast/Receive Shadows, edited as
 /// explicit local values on every selected node.
 /// </summary>
+/// <remarks>
+/// Every authored node carries its own values, so the flags only matter where the node itself is
+/// rendered: Scene Visibility for geometry and lights, the shadow flags for geometry. The section
+/// applies only when every selected node has geometry or a light, and shows the shadow flags only
+/// when every selected node has geometry.
+/// </remarks>
 public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, IDisposable
 {
     private readonly InspectorEditSessionCoordinator? edits;
@@ -60,6 +66,9 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
         set => InspectorBindingRequests.Request(this.receivesShadowsBinding, value);
     }
 
+    /// <summary>Gets a value indicating whether every selected node has geometry, so the shadow flags apply.</summary>
+    public bool ShowsShadowFlags { get; private set; }
+
     /// <inheritdoc />
     public override string Header => "Rendering";
 
@@ -96,14 +105,31 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
         var nodes = targets.Keys.ToArray();
         this.edits?.Bind(nodes);
         this.selectedItems = items;
+        var showsShadowFlags = items.Count > 0 && items.All(HasGeometry);
+        if (showsShadowFlags != this.ShowsShadowFlags)
+        {
+            this.ShowsShadowFlags = showsShadowFlags;
+            this.OnPropertyChanged(nameof(this.ShowsShadowFlags));
+        }
+
         foreach (var registration in this.registrations)
         {
             registration.Refresh(nodes, id => targets.GetValueOrDefault(id));
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the section applies to a selection: every node has geometry or a light.
+    /// </summary>
+    /// <param name="items">The selected nodes.</param>
+    /// <returns><see langword="true"/> when the rendering flags affect every selected node.</returns>
+    internal static bool AppliesTo(ICollection<SceneNode> items)
+        => items.Count > 0 && items.All(static node => HasGeometry(node) || node.Components.OfType<LightComponent>().Any());
+
     /// <inheritdoc />
     protected override void OnInputEnabledChanged(bool enabled) => this.edits?.SetInputEnabled(enabled);
+
+    private static bool HasGeometry(SceneNode node) => node.Components.OfType<GeometryComponent>().Any();
 
     private void Register<T>(PropertyBinding<T> binding, string property)
         => this.registrations.Add(new InspectorBindingRegistration<T>(
