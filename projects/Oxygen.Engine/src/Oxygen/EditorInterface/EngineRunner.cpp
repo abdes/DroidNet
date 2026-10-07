@@ -262,8 +262,10 @@ auto RunEngine(
     LOG_F(ERROR, "Unhandled exception of unknown type during shutdown");
   }
   LOG_F(INFO, "engine exit code: {}", rc);
+  // The host configured logging (ConfigureLogging) and owns its lifetime,
+  // including callbacks it registered; an engine run ending must not tear it
+  // down, since the host may start another run in the same process.
   loguru::flush();
-  loguru::shutdown();
 }
 
 auto StopEngine(std::shared_ptr<EngineContext> ctx) -> void

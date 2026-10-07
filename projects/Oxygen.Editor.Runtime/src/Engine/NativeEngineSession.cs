@@ -41,17 +41,18 @@ internal sealed partial class NativeEngineSession(HostingContext hostingContext,
         var runtimeLibrary = artifacts.GetPath(NativeArtifactInventory.RuntimeId(EditorNativeCompatibilityService.CurrentConfiguration));
         var config = CreateConfig(settings, editorCVarsArchivePath, runtimeLibrary);
         this.runner = new EngineRunner();
-        if (logger is not null)
+
+        // Always apply the default threshold so hosts without a managed logger (tests, tools)
+        // do not inherit the native backend's verbose default.
+        var logging = new LoggingConfig
         {
-            _ = this.runner.ConfigureLogging(
-                new LoggingConfig
-                {
-                    Verbosity = EngineConstants.DefaultLoggingVerbosity,
-                    IsColored = false,
-                    ModuleOverrides = string.Empty,
-                },
-                logger);
-        }
+            Verbosity = EngineConstants.DefaultLoggingVerbosity,
+            IsColored = false,
+            ModuleOverrides = string.Empty,
+        };
+        _ = logger is not null
+            ? this.runner.ConfigureLogging(logging, logger)
+            : this.runner.ConfigureLogging(logging);
 
         this.context = this.runner.CreateEngine(config);
         if (this.context?.IsValid != true)
