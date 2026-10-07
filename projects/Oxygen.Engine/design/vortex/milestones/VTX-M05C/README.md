@@ -235,21 +235,6 @@ Oxygen.Vortex.SceneRendererDeferredCore --parallel 4` passed;
   `ctest --preset test-debug -R
 "Oxygen\.Vortex\.SceneRendererDeferredCore" --output-on-failure` passed
   40/40 tests; `git diff --check` passed.
-- Runtime proof: final artifacts under
-  `out/build-ninja/analysis/vortex/translucency/m05c-final/` record CDB/D3D12
-  `overall_verdict=pass`, `runtime_exit_code=0`, zero D3D12/DXGI errors,
-  Stage 18 scope count 1, Stage 18 draw count 2, Stage 9 draw count 2,
-  Stage 20 ground grid count 0, cyan pixels 2161, magenta pixels 225, and
-  Stage 18 RGB delta 2682.43359.
-- Fresh post-remediation runtime proof: artifacts under
-  `out/build-ninja/analysis/vortex/translucency/m05c-review-remediation/`
-  record CDB/D3D12 `overall_verdict=pass`, `runtime_exit_code=0`, no debugger
-  break, zero D3D12/DXGI errors, zero blocking warnings, a runtime log with
-  `Parsed with-translucency option = true` and repeated `Writing 4 draw
-metadata` entries, and a RenderDoc translucency report with Stage 18 scope
-  count 1, Stage 18 draw count 2, Stage 9 draw count 2, ground grid count 0,
-  Stage 18 after post-opaque and before resolve, cyan pixels 2130, magenta
-  pixels 225, `stage18_scene_color_changed=true`, and Stage 18 max RGB delta 2684.
 - Manual visual confirmation: accepted after the final VortexBasic scene used
   the foreground cyan sphere and magenta cylinder, raised sphere, reduced
   alpha, and authored manual exposure.

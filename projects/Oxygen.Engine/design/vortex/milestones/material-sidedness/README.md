@@ -75,10 +75,7 @@ general glTF compliance or complete those workflows.
   ShadowService 10, DrawMetadataEmitter 14, ScenePrep 40 (120 total).
   The first shadow run exposed a missing fake texture registration; the fixture
   was corrected to match the production allocator and the suite passed.
-- Native VortexBasic D3D12 captures, outside the editor:
-  `artifacts/sidedness-native-deferred.png`, `sidedness-native-forward.png`,
-  `sidedness-native-deferred-normal.png`, `sidedness-native-forward-normal.png`.
-  All are under the repository root's artifacts directory.
+- All are under the repository root's artifacts directory.
 - In all four lit runs, columns 2/6 are absent across opaque, masked, and
   translucent rows. Single/double-sided fronts, double-sided backs, mirrored
   fronts/backs, inherited mirror and two-reflection cancellation render as
@@ -89,16 +86,14 @@ general glTF compliance or complete those workflows.
   shadows (existing forward-lighting limitation).
 - Launch: `Oxygen.Examples.VortexBasic.exe --validation-scene sidedness
 --shading-path deferred|forward --fps 30 -v=-1`, optionally
-  `--validation-normal-map true`. Captures were made through native CUA and saved
-  without editing. Pixel samples are in `artifacts/sidedness-native-pixel-evidence.json`.
+  `--validation-normal-map true`. Captures were made through native CUA and
+  saved without editing.
 - The first lit chart was black because the fixture used an ordinary directional
-  light, while current frame-light publication only selects the primary atmosphere
-  light slot. The fixture now declares the primary sun, as the default demo does;
-  no renderer lighting workaround was introduced. Base-color diagnostic had
-  independently confirmed geometry coverage before this fixture correction.
-- A bounded native run with `--validation-motion true --debug-layer true
---frames 120` completed with exit 0; log:
-  `artifacts/sidedness-native-debug-layer.log`.
+  light, while current frame-light publication only selects the primary
+  atmosphere light slot. The fixture now declares the primary sun, as the
+  default demo does; no renderer lighting workaround was introduced. Base-color
+  diagnostic had independently confirmed geometry coverage before this fixture
+  correction.
 - Depth/base/velocity and shadow state transitions are validated at actual Draw
   calls in the fake graphics recorder. Native screenshots establish final rendered
   coverage and shading, not pixel-by-pixel velocity-buffer values.
@@ -109,13 +104,13 @@ general glTF compliance or complete those workflows.
   (1.428 s), including all 7 new bake tests. These exercise cooked identities,
   geometry bytes, signed transforms, shared/material variants, parent/child
   reflections, retained attachment/animation/morph semantics, and existing full
-  scene/light imports. Evidence: `artifacts/sidedness-import-regression-*` logs/XML.
+  scene/light imports.
 - Editor recovery is implemented and validated: 33 native request tests passed,
   the real editor recovered red material overrides after missing geometry was
   reimported in the same scene session, sidedness/mirror editing and Undo/Redo
   passed, and Save/reopen retained rendering. Detailed evidence is in
-  `design/editor/validation/material-sidedness-and-recovery.md` at repository root.
-- Prior diagnosis: `artifacts/imported-triangle-rendering-findings.md`.
+  `design/editor/validation/material-sidedness-and-recovery.md` at repository
+  root.
 
 ### Separate existing limitations observed during validation
 

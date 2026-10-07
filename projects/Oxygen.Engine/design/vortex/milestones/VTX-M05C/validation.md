@@ -7,7 +7,25 @@ The milestone README owns the final outcome and remaining work.
 
 **Qualification:** `validated`
 
-Stage 18 `TranslucencyModule`/`TranslucencyMeshProcessor`, SceneRenderer wiring, forward unlit-material exposure contract fix, VortexBasic cyan sphere + magenta cylinder proof scene, and RenderDoc/CDB proof tooling are present. Senior-review remediation on 2026-04-26 fixed sparse-bounds sort fallback, invalid draw rejection, projection-kind detection, diagnostics skip reasons/logging, and Stage 18 PSO/root-binding descriptor caching; broader UE-class gaps for per-material sided culling, instanced draw merging, lightweight translucent shading, and material fog/AP controls are documented as deferred scope. UE5.7 re-check covered standard straight-alpha blending and read-only depth state. Validation: focused ShaderBake/catalog tests passed previously; remediation validation passed `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.SceneRendererDeferredCore --parallel 4`, `ctest --preset test-debug -R "Oxygen\.Vortex\.SceneRendererDeferredCore" --output-on-failure` with 40/40 tests, and `git diff --check`. Fresh VortexBasic translucency proof after remediation passed `cmake --build out\build-ninja --config Debug --target oxygen-vortex oxygen-graphics-direct3d12 oxygen-examples-vortexbasic --parallel 4`, a CDB/debug-layer audit, runtime log inspection, RenderDoc capture, and `Verify-VortexTranslucencyProof.ps1`. Fresh CDB report `out/build-ninja/analysis/vortex/translucency/m05c-review-remediation/vortexbasic-translucency-review-remediation.debug-layer.report.txt` passed with runtime exit 0, no debugger break, 0 D3D12/DXGI errors, and 0 blocking warnings. Fresh RenderDoc report `out/build-ninja/analysis/vortex/translucency/m05c-review-remediation/vortexbasic-translucency-review-remediation_capture.rdc_vortex_translucency_report.txt` proves Stage 18 scope count 1, Stage 18 draw count 2, Stage 9 draw count 2, ground grid absent, Stage 18 after post-opaque and before resolve, cyan pixels 2130, magenta pixels 225, max RGB delta 2684, `stage18_scene_color_changed=true`, `runtime_log_translucency_enabled=true`, and `runtime_log_draw_metadata_count=4`. Manual visual confirmation approved the final scene.
+Stage 18 `TranslucencyModule`/`TranslucencyMeshProcessor`, SceneRenderer wiring,
+forward unlit-material exposure contract fix, VortexBasic cyan sphere + magenta
+cylinder proof scene, and RenderDoc/CDB proof tooling are present. Senior-review
+remediation on 2026-04-26 fixed sparse-bounds sort fallback, invalid draw
+rejection, projection-kind detection, diagnostics skip reasons/logging, and
+Stage 18 PSO/root-binding descriptor caching; broader UE-class gaps for
+per-material sided culling, instanced draw merging, lightweight translucent
+shading, and material fog/AP controls are documented as deferred scope. UE5.7
+re-check covered standard straight-alpha blending and read-only depth state.
+Validation: focused ShaderBake/catalog tests passed previously; remediation
+validation passed `cmake --build out\build-ninja --config Debug --target
+Oxygen.Vortex.SceneRendererDeferredCore --parallel 4`, `ctest --preset
+test-debug -R "Oxygen\.Vortex\.SceneRendererDeferredCore" --output-on-failure`
+with 40/40 tests, and `git diff --check`. Fresh VortexBasic translucency proof
+after remediation passed `cmake --build out\build-ninja --config Debug --target
+oxygen-vortex oxygen-graphics-direct3d12 oxygen-examples-vortexbasic --parallel
+4`, a CDB/debug-layer audit, runtime log inspection, RenderDoc capture, and
+`Verify-VortexTranslucencyProof.ps1`. Manual visual confirmation approved the
+final scene.
 
 **Remaining work:** No open M05C closure gap.
 
@@ -36,21 +54,6 @@ If shader catalog or shader request metadata changes:
 ```powershell
 cmake --build out\build-ninja --config Debug --target Oxygen.Graphics.Direct3D12.ShaderBake Oxygen.Graphics.Direct3D12.ShaderBakeCatalog.Tests --parallel 4
 ctest --preset test-debug -R "Oxygen\.Graphics\.Direct3D12\.ShaderBakeCatalog" --output-on-failure
-```
-
-Runtime proof artifacts live under:
-
-```text
-out/build-ninja/analysis/vortex/translucency/m05c-final/
-  vortexbasic-translucency-m05c-final.debug-layer.report.txt
-  vortexbasic-translucency-m05c-final_capture.rdc
-  vortexbasic-translucency-m05c-final_capture.rdc_vortex_translucency_report.txt
-
-out/build-ninja/analysis/vortex/translucency/m05c-review-remediation/
-  vortexbasic-translucency-review-remediation.debug-layer.report.txt
-  vortexbasic-translucency-review-remediation.stderr.log
-  vortexbasic-translucency-review-remediation_capture.rdc
-  vortexbasic-translucency-review-remediation_capture.rdc_vortex_translucency_report.txt
 ```
 
 ## Slice A - Architecture And Plan Authority — checks

@@ -75,7 +75,6 @@ in the PostProcessService LLD, and one calibration-demo specification for LightB
   scenarios, per-view comparisons and reproducible interaction sequences.
 - Repository-root editor authoring/API documents: new authored fields and
   versioned round-trip behavior; no general UI redesign.
-- Reports/captures: `out/build-ninja/analysis/vortex/exposure-lightbench/`.
 
 UE5.7 source reference root: `F:/Epic Games/UE_5.7/Engine`.
 

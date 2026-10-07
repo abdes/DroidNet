@@ -34,9 +34,7 @@ optimization and final integration belong to D–F.
 | Final coherent closure record                                       | This audit, owning status/LLDs, complete final-code results and catalog checks                                                                                                       | Passed. The source audit checks every declared member of all 15 wire records, all 32 inventory IDs and retired interfaces; four catalog tests pass in each configuration. Current evidence and later-stage obligations are reconciled below. |
 
 The current 24-case native test executable contains 22 D3D12 decode/lookup
-cases, one D3D12 allocation query and one CPU index-contract case. Current
-reproducible results are under
-`out/build-ninja/analysis/vortex/exposure-lightbench/ex07a`:
+cases, one D3D12 allocation query and one CPU index-contract case.
 
 - `grid-depth-LightingGpuAbi-{debug,release}.json`: all 24 cases per configuration.
 - `closure-catalog-{debug,release}.json`: four catalog checks per configuration.
@@ -59,9 +57,8 @@ not substituted for a current reproducible rendering gate.
 
 A's frozen contracts, canonical record/interface migration, native ABI evidence,
 applicable captures and user checkpoints pass their scoped exit gate. The
-`grid-depth-checkpoint.json` records the last production-source repair and its
-276 Debug/Release test executions. The subsequent catalog tests add eight
-executions; source/document reconciliation changes no production behavior.
+subsequent catalog tests add eight executions; source/document reconciliation
+changes no production behavior.
 
 At A closure, the handoff to B required independently qualified physical/BRDF/finite-source references,
 known-input GPU probes, deterministic image/reference fixtures and bounded
@@ -83,9 +80,7 @@ LightBench leaked 2,700 blocks (43,200 bytes) in 300 frames.
 ## Reproduction and fix
 
 MSVC 19.51.36257 x64, toolset directory `14.51.36231`, reproduces the defect
-without the engine using `/std:c++latest /EHsc /Od /MDd /Z7`. The standalone
-[reproducer](../../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/conditional-vector-repro.cpp)
-measures CRT heap differences across three iterations of each construction:
+without the engine using `/std:c++latest /EHsc /Od /MDd /Z7`.
 
 ```text
 mode=0 normal_blocks=3 normal_bytes=48
@@ -126,13 +121,6 @@ The 300-frame runs used CDB with the normal D3D12 backend and debug layer:
   --frames 300 --fps 60 --vsync=false --debug-layer=true --aftermath=false
 ```
 
-Evidence under `out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/`:
-`leaked-allocation-stacks.txt`, `vortexbasic-3-before.cdb.log`,
-`lightbench-cdb-shutdown.log`, `vortexbasic-3-after.cdb.log`,
-`vortexbasic-300-after.cdb.log`, `lightbench-300-after.cdb.log`, corresponding
-stdout logs with runtime exit code zero, `heap-scenerenderer-debug.json`,
-`heap-ledger-debug.json`, and `tidy-heap/`.
-
 This closes the observed frame-scaled CPU leak. It does not close the remaining
 EX07A lighting ABI migration or establish GPU resource lifetime correctness.
 
@@ -166,8 +154,7 @@ its six remaining findings concern unchanged code. No suppression was added.
 The user reviewed the Ninja Release application with the exact reproduction
 options and confirmed: **both lower views are stable**. This live check matters
 because capture instrumentation can change the timing of premature descriptor
-reuse. Logs and test JSON are under
-`out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/repeated-frame-*`.
+reuse.
 
 This closes the reported flicker and same-frame descriptor-reset defect. It is
 not a blanket qualification of all upload, deferred-CBV or shadow-resource
@@ -280,25 +267,25 @@ and cannot be metered or reported as a valid timing sample.
 
 ## Verification obligations and current evidence
 
-Implementation checkpoint: `ClusterLightRange`, `LightGridMetadata`, `LightGridBuildStatus`,
-`LightGridPassConstants`, `LightShadowReference` and `DirectionalShadowRecord`
-now have canonical CPU/HLSL definitions and layout assertions. Array indices use
-distinct Oxygen `NamedType` wrappers and symbolic sentinels. The new
-`Oxygen.Vortex.LightingGpuAbi.Tests` target passes **8 Debug / 8 Release** tests
-using Graphics-owned upload, compute and readback, including nonzero element
-indices, adjacent records, high-bit words and a deliberately changed upload lane.
-Debug results (historical `vortex.lightinggpuabi-debug.json`; original artifact unavailable)
-and Release results (historical `vortex.lightinggpuabi-release.json`; original artifact unavailable)
-are partial ABI evidence. Evaluation records, full bindings, projection records,
-matrix probes, catalog/capture analysis and complete producer/consumer migration
-remain open. The spatial culler has not been connected to these records.
-The grid-metadata producer test also required repairing Core `ResolvedView`
-validation: finite signed orthographic near planes are accepted; perspective
-near remains positive and every far plane remains finite and above near. Core
-view and LightingService suites each pass 5 tests in both configurations.
-Checkpoint manifest (historical `abi-foundation-checkpoint.json`; original artifact unavailable)
-records source identities, commands and remaining validation. This dependency
-repair does not qualify downstream orthographic shading/culling/shadows.
+Implementation checkpoint: `ClusterLightRange`, `LightGridMetadata`,
+`LightGridBuildStatus`, `LightGridPassConstants`, `LightShadowReference` and
+`DirectionalShadowRecord` now have canonical CPU/HLSL definitions and layout
+assertions. Array indices use distinct Oxygen `NamedType` wrappers and symbolic
+sentinels. The new `Oxygen.Vortex.LightingGpuAbi.Tests` target passes **8 Debug
+/ 8 Release** tests using Graphics-owned upload, compute and readback, including
+nonzero element indices, adjacent records, high-bit words and a deliberately
+changed upload lane. Debug results (historical
+`vortex.lightinggpuabi-debug.json`; original artifact unavailable) and Release
+results (historical `vortex.lightinggpuabi-release.json`; original artifact
+unavailable) are partial ABI evidence. Evaluation records, full bindings,
+projection records, matrix probes, catalog/capture analysis and complete
+producer/consumer migration remain open. The spatial culler has not been
+connected to these records. The grid-metadata producer test also required
+repairing Core `ResolvedView` validation: finite signed orthographic near planes
+are accepted; perspective near remains positive and every far plane remains
+finite and above near. Core view and LightingService suites each pass 5 tests in
+both configurations. This dependency repair does not qualify downstream
+orthographic shading/culling/shadows.
 
 The subsequent consumer checkpoint closes the two reviewed lookup gaps:
 
@@ -320,11 +307,10 @@ The subsequent consumer checkpoint closes the two reviewed lookup gaps:
   forward-light RenderDoc analyzer understands complete ranges; no new capture
   is claimed by this checkpoint.
 
-Consumer checkpoint evidence (historical `lookup-consumer-checkpoint.json`; original artifact unavailable)
-records source hashes and results. This is still a complete-list baseline, not
-spatial culling. Culler/lookup cell equivalence, full binding/evaluation/shadow
-record migration, same-submission failure presentation, physical BRDF parity and
-full orthographic rendering remain open.
+This is still a complete-list baseline, not spatial culling. Culler/lookup cell
+equivalence, full binding/evaluation/shadow record migration, same-submission
+failure presentation, physical BRDF parity and full orthographic rendering
+remain open.
 
 The next evaluation-record prerequisite adds
 `Core/Lighting/LightPhotometry.{h,cpp}`: checked per-component tint/EV
@@ -369,14 +355,12 @@ plus Debug SceneRendererDeferredCore 64, ShadowService 11 and SceneAsyncTraversa
 
 1. The deferred-matrix probe uses actual 256-byte-aligned CBVs. Four fresh
    RenderDoc forward captures (both, point, spot and neither local light) decode
-   the 80-byte records and 96-byte header, check integer identities/reserved zeros
-   and matching build status, and verify the expected lighting presence/absence.
-   Evidence is under the existing `ex07a` directory: `final-Oxygen.*.json`,
-   `records-hdr-{debug,release}.json`, `scene-async-debug.json`,
-   `deferred-cbv-debug.json` and `forward-records-*-report.txt`/`*_capture.rdc`.
-   The HDR oracle now accounts for lumen-to-candela conversion and finite-range
-   attenuation. Invalid negative flux rejects the view while retaining the prior
-   exposure history; this does not qualify all GPU failure/history paths.
+   the 80-byte records and 96-byte header, check integer identities/reserved
+   zeros and matching build status, and verify the expected lighting
+   presence/absence. The HDR oracle now accounts for lumen-to-candela conversion
+   and finite-range attenuation. Invalid negative flux rejects the view while
+   retaining the prior exposure history; this does not qualify all GPU
+   failure/history paths.
 
 The default MultiView visual check exposed light-volume far clipping: camera
 far depth 100 m versus point/spot support of 300/250 m. Both draws initially
@@ -418,13 +402,12 @@ also rebuilds successfully.
 
 The `consumer-visual` MultiView RenderDoc capture checks eight cascade records
 across two directional-light draws, including matching descriptors actually read
-by the pixel shader. Reports are `cascade-{abi,service}-{debug,release}.json` and
-`cascade-record-report.txt` beside `cascade-record_capture.rdc` under `ex07a`.
-The capture validates record publication and consumption; it does not certify
-coverage policy, multiview resource lifetime or physical BRDF correctness.
-Oxytidy ran on all six changed C++ sources/headers with tests included and no
-failed contexts or coverage gaps. Edited-line findings were fixed without new
-suppressions; existing whole-file findings remain in the reports.
+by the pixel shader. The capture validates record publication and consumption;
+it does not certify coverage policy, multiview resource lifetime or physical
+BRDF correctness. Oxytidy ran on all six changed C++ sources/headers with tests
+included and no failed contexts or coverage gaps. Edited-line findings were
+fixed without new suppressions; existing whole-file findings remain in the
+reports.
 
 The enclosing shadow header still contains inline arrays and is temporarily
 3,392 bytes because its cascade elements are now 128 bytes. The required
@@ -461,8 +444,7 @@ whole-file diagnostics are recorded without adding suppressions.
 surface/layer/selection identity against the corresponding canonical light and
 the pixel shader's actual descriptor reads. `local-shadow-coverage-report.txt`
 records 1,540 positive point-light samples and 933 spot-light samples, matching
-the earlier default-scene contribution check. The capture is
-`local-shadow-record_capture.rdc`, all under the existing `ex07a` directory.
+the earlier default-scene contribution check.
 
 The 112-byte shadow header and separate array publication remain unimplemented.
 Existing local range/near-plane floors, cone clamping, fixed capacities and
@@ -498,13 +480,11 @@ changed code were repaired; whole-file warning reports remain available without
 new suppressions.
 
 `shadow-header-{LightingGpuAbi,ShadowService,LightingService,SceneRendererDeferredCore}-{debug,release}.json`
-records the suites. `shadow-header_capture.rdc` and `shadow-header-report.txt`
-verify the 112-byte header, exact array strides/counts, source identity, shared
-validity dependency and distinct view generations at six production draws
-across two views. The checked-in analyzer is
-`tools/vortex/AnalyzeRenderDocShadowRecords.py`; use the existing RenderDoc runner
-with the MultiView `consumer-visual` recipe. This proves publication/consumption,
-not all coverage, lifetime or physical-response obligations.
+records the suites. The checked-in analyzer is
+`tools/vortex/AnalyzeRenderDocShadowRecords.py`; use the existing RenderDoc
+runner with the MultiView `consumer-visual` recipe. This proves
+publication/consumption, not all coverage, lifetime or physical-response
+obligations.
 
 All canonical record layouts have now migrated. Multi-directional CPU selection,
 BRDF moment publication, complete local support/routing, capacity rejection,
@@ -598,11 +578,8 @@ binding metadata rather than requiring a dedicated backing-buffer name.
 Oxytidy covered all 12 changed C++ files; the new publisher is checked separately
 after fixes. Existing whole-file findings remain recorded without suppressions.
 
-Evidence under `ex07a`: `deferred-cbv-before.log`,
-`deferred-cbv-{SceneRendererDeferredCore,RingBufferStaging,LightingGpuAbi}-{debug,release}.json`,
-`deferred-cbv-release-warning-check.log`, `deferred-cbv_capture.rdc` and
-`deferred-cbv-report.txt`. This qualifies the repaired constant lifetime and
-failure path, not every EX07 capacity/submission/resource-lifetime scenario.
+This qualifies the repaired constant lifetime and failure path, not every EX07
+capacity/submission/resource-lifetime scenario.
 
 ### Fractional content-rectangle lookup checkpoint
 
@@ -616,9 +593,8 @@ Lookup now clamps to the full floating-point extent, then bounds the integer
 cluster coordinates by the published grid dimensions. This preserves fractional
 edge tiles and retains safe behavior at and beyond the upper boundary. The
 complete native suite passes **21 Debug / 21 Release** cases; the changed test
-is oxytidy-clean. Evidence: `fractional-tile-before.log` and
-`fractional-tile-{debug,release}.json` under `ex07a`. This is coordinate
-qualification, not proof of a spatial culler or a rendered-performance gain.
+is oxytidy-clean. This is coordinate qualification, not proof of a spatial
+culler or a rendered-performance gain.
 
 ### Atmosphere-source fog shadow checkpoint
 
@@ -644,12 +620,10 @@ the requested structure-layout magic-number guard.
 The `consumer-visual --visual-fog volume --directional-array-proof true` capture
 passes `AnalyzeRenderDocFogDirectionalShadows.py`: both views' fog dispatches
 access Secondary selection 0 (three cascades, 1024 resolution) and Primary
-selection 2 (two cascades, 2048 resolution), using matching publication identities
-and distinct surfaces. Native tests prove numerical visibility; the capture
-proves live producer/consumer wiring. No performance or full visual-parity claim.
-Evidence under `ex07a`: `fog-shadow-{environment,regressions}-{debug,release}.json`,
-`fog-shadow-negative.log`, `fog-directional-report.txt`,
-`fog-shadow-tidy-verified/` and `fog-shadow-checkpoint.json`.
+selection 2 (two cascades, 2048 resolution), using matching publication
+identities and distinct surfaces. Native tests prove numerical visibility; the
+capture proves live producer/consumer wiring. No performance or full
+visual-parity claim.
 
 Ordinary role-None fog scattering, unified physical atmosphere resolution and
 broader fog qualification remain separate open repairs. This checkpoint removes
@@ -682,12 +656,8 @@ zero, and has no warnings/errors. No renewed visual confirmation was needed for
 this ownership change; the captured runtime wiring and existing manually verified
 stable view layout are distinct evidence.
 
-Evidence under `ex07a`: `shadow-owner-*-{debug,release}.json`,
-`shadow-owner-{deferred,forward,fog,local}-report.txt`,
-`shadow-owner-release-180.log`, `shadow-owner-tidy-final/`,
-`shadow-owner-publisher-tidy/` and `shadow-owner-checkpoint.json`. This closes
-independent map-index prediction, not wide-spot support, resource-budget growth,
-full submission/failure recovery, or EX07A as a whole.
+This closes independent map-index prediction, not wide-spot support,
+resource-budget growth, full submission/failure recovery, or EX07A as a whole.
 
 ### Source identity and aerial-perspective interface checkpoint
 
@@ -705,19 +675,16 @@ volume LUT already owns both atmosphere-source contributions; no second light
 authority replaces these fields. Direct DXC compiles pass; optimized output is
 not byte-identical, so equivalence is not inferred from binary hashes.
 
-Debug and Release each pass **21 native ABI/lookup, 26 lighting, 17 shadow,
-68 SceneRenderer and one native AP matrix test** (266 test executions).
-The native AP fixture and RenderDoc analyzer pass 72 composition draws / 1,152
-pixels across FP16/FP32 inputs, with maximum absolute error 5.96e-8 against the
+Debug and Release each pass **21 native ABI/lookup, 26 lighting, 17 shadow, 68
+SceneRenderer and one native AP matrix test** (266 test executions). The native
+AP fixture and RenderDoc analyzer pass 72 composition draws / 1,152 pixels
+across FP16/FP32 inputs, with maximum absolute error 5.96e-8 against the
 independent transfer equation. Both 233-module shader archives rebuild, and the
 180-frame Release native offscreen proof exits zero without warnings/errors.
-Oxytidy covers all three changed C++ files with no changed-line findings; existing
-whole-file diagnostics remain. Evidence under `ex07a`:
-`source-identity-*-{debug,release}.json`, `ap-interface-{debug,release}.json`,
-`ap-interface-report.txt`, `source-identity-tidy/`,
-`source-identity-release-180.log` and `source-identity-checkpoint.json`.
-This checkpoint does not qualify full source-mutation/round-trip behavior or a
-separate forward raster image oracle. EX07A remains in progress.
+Oxytidy covers all three changed C++ files with no changed-line findings;
+existing whole-file diagnostics remain. This checkpoint does not qualify full
+source-mutation/round-trip behavior or a separate forward raster image oracle.
+EX07A remains in progress.
 
 ### Transient-upload compatibility removal checkpoint
 
@@ -732,9 +699,7 @@ Debug/Release each pass all **13 transient-buffer and 68 SceneRenderer tests**
 start descriptor retention. The 180-frame Release offscreen directional proof
 exits zero with no warnings/errors. Oxytidy covers both changed files: only the
 existing pointer-arithmetic and missing-nodiscard diagnostics remain; no warning
-was suppressed. Evidence under `ex07a`: `transient-cleanup-*-{debug,release}.json`,
-`transient-cleanup-release-180.log`, `transient-cleanup-tidy-final/` and
-`transient-cleanup-checkpoint.json`.
+was suppressed.
 
 The closure audit still needs to retire/migrate stale diagnostic decoders and
 refresh missing native allocation-query evidence. This cleanup does not qualify
@@ -764,9 +729,7 @@ contains the reproducible command and explicitly distinguishes the missing
 historical GPU format probe from this fresh allocation evidence.
 
 Debug and Release each pass all **22 native cases** (44 executions), and their
-allocation matrices match exactly. The new C++ query is oxytidy-clean. Evidence under `ex07a`: `allocation-refresh-*.json`,
-`allocation-requirements-current.json`, `readability-canonical-*-report.json`,
-`readability-canonical-verdict.json` and `environment-header-migration.txt`.
+allocation matrices match exactly. The new C++ query is oxytidy-clean.
 
 ### Identity-admission checkpoint and completion audit
 
@@ -781,11 +744,8 @@ fresh view generations.
 
 Both new tests fail under the previous implementation and pass after the repair.
 Debug/Release each pass **28 lighting and 68 SceneRenderer tests** (192
-executions); the 180-frame Release offscreen proof exits zero without warnings or
-errors. Both changed C++ files are oxytidy-clean. Evidence under `ex07a`:
-`identity-admission-negative.log`, `identity-admission-*-{debug,release}.json`,
-`identity-admission-release-180.log`, `identity-admission-tidy-final/` and
-`identity-admission-checkpoint.json`.
+executions); the 180-frame Release offscreen proof exits zero without warnings
+or errors. Both changed C++ files are oxytidy-clean.
 
 The audit keeps EX07A open for actual producer-derived perspective-depth
 qualification, the identified unused CPU selection fields and final coherent
@@ -813,13 +773,10 @@ Debug/Release each pass **24 native, 29 lighting, 17 shadow and 68 SceneRenderer
 cases** (276 executions). All six changed C++ files were processed by oxytidy,
 with no changed-line findings or added suppressions; existing whole-file
 warnings remain. Both shader archives build. The forward RenderDoc proof checks
-the live view's 0.05–160 m metadata, endpoint slices 0/31 and the canonical light/
-shadow references. The 180-frame Release offscreen proof exits zero without
-warnings/errors. This does not claim a spatial-culling or performance gain.
-Evidence under `ex07a`: `grid-depth-negative.log`,
-`grid-depth-*-{debug,release}.json`, `grid-depth-forward-report.txt`,
-`grid-depth-tidy-final/`, `grid-depth-release-180.log` and
-`grid-depth-checkpoint.json`.
+the live view's 0.05–160 m metadata, endpoint slices 0/31 and the canonical
+light/ shadow references. The 180-frame Release offscreen proof exits zero
+without warnings/errors. This does not claim a spatial-culling or performance
+gain.
 
 The two concrete follow-ups from the completion audit are repaired. Final A
 contract/catalog/document reconciliation remains; the active goal now covers
@@ -847,18 +804,19 @@ statement for the new ABI target only. A
 standalone C++20 /W4 /WX allocation-query program and CPU mathematical checks
 were run as described below.
 
-The additional CPU mathematical check (historical `mathematical-checks.json`; original artifact unavailable)
-passed 1,440 reciprocal-pair cases (maximum absolute difference 2.78e-17),
-the alpha=1 analytic unit-reflectance furnace check (9.63e-13), reflected-energy
-bounds over the sampled domain and spot solid-angle integration (1.12e-15
-relative), analytic finite-source irradiance (1.90e-14 relative) and projected
-directional-disk illuminance (1.68e-12 relative). The importance-sampled alpha=1 directional-moment check differs from
+The additional CPU mathematical check (historical `mathematical-checks.json`;
+original artifact unavailable) passed 1,440 reciprocal-pair cases (maximum
+absolute difference 2.78e-17), the alpha=1 analytic unit-reflectance furnace
+check (9.63e-13), reflected-energy bounds over the sampled domain and spot
+solid-angle integration (1.12e-15 relative), analytic finite-source irradiance
+(1.90e-14 relative) and projected directional-disk illuminance (1.68e-12
+relative). The importance-sampled alpha=1 directional-moment check differs from
 its analytic value by at most 1.11e-4. This is a draft-model consistency check,
 **not** the <=1e-5 production-reference uncertainty certificate required by B.
-The [allocation query](../../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/allocation-requirements-current.json)
-measures resource requirements on the reference adapter without allocating maps.
 Neither artifact qualifies rendered images, GPU ABI, live resource lifetimes or
-performance. The allocation-query source is now versioned in the native test target. The older model-check source/results are historical and unavailable; B must supply a new reproducible qualified reference.
+performance. The allocation-query source is now versioned in the native test
+target. The older model-check source/results are historical and unavailable; B
+must supply a new reproducible qualified reference.
 
 Local UE5.7 source inspected as implementation reference, not an Oxygen oracle:
 `F:/Epic Games/UE_5.7/Engine/Source/Runtime/Renderer/Private/LightGridInjection.cpp`

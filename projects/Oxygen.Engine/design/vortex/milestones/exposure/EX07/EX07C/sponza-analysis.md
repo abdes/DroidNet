@@ -23,7 +23,6 @@ Its earlier results do not establish application regression clearance.
 | Missing local shadows          | Source and cooked lights cast shadows. Receiver bias incorrectly used the shadow texel footprint at the far plane for nearby receivers. | Candidate scales the footprint to the actual receiver depth for point and spot lights. The failing long-range image test now passes in both rendering families.                                            |
 | Approximately 15 FPS           | Reproduced without Tracy. GPU local-light evaluation and translucency dominate; static local shadow caching still works.                | Performance is unchanged by this correction. Preserve current source semantics and investigate the measured GPU costs.                                                                                     |
 
-Evidence directory: [ex07-regressions-20260924](../../../../../../out/analysis/ex07-regressions-20260924).
 The original crash dump is retained by Windows at
 `C:/Users/abdes/AppData/Local/CrashDumps/Oxygen.Examples.RenderScene.exe.47520.dmp`.
 Its extracted D3D12 error and stack are in `shutdown-before/debug-message.txt`

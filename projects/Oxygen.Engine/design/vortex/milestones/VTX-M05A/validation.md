@@ -282,18 +282,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Assert-VortexBa
   with `ShaderDebugModeRegistry` 9/9, `DiagnosticsPanel` 1/1, and
   `RenderingSettingsService` 3/3. ShaderBake repacked `shaders.bin` and removed
   the eight stale UV0/Opacity debug artifacts.
-- Debug-mode/render-mode correction validation passed:
-  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.ShaderDebugModeRegistry.Tests Oxygen.Examples.DemoShell.RenderingSettingsService.Tests Oxygen.Examples.DemoShell.DiagnosticsPanel.Tests --parallel 4`;
-  `ctest --test-dir out\build-ninja -C Debug -R "(Oxygen\.Vortex\.ShaderDebugModeRegistry|Oxygen\.Examples\.DemoShell\.(RenderingSettingsService|DiagnosticsPanel))" --output-on-failure`
-  with `ShaderDebugModeRegistry` 9/9, `RenderingSettingsService` 4/4 in the
-  focused executable, and `DiagnosticsPanel` 1/1; `cmake --build out\build-ninja
---config Debug --target oxygen-examples-renderscene --parallel 4` passed and
-  ShaderBake repacked `shaders.bin` with 185 shader modules.
-- Runtime DemoShell registration smoke passed:
-  `cmake --build out\build-ninja --config Debug --target oxygen-examples-texturedcube --parallel 4`;
-  `Oxygen.Examples.TexturedCube.exe --frames 4 --fps 30 --vsync false --capture-provider off`
-  exited 0 and `texturedcube-diagnostics-panel.stderr.log` contains
-  `Registered Diagnostics panel for the Vortex runtime`.
+- Debug-mode/render-mode correction validation passed: `cmake --build
+out\build-ninja --config Debug --target
+Oxygen.Vortex.ShaderDebugModeRegistry.Tests
+Oxygen.Examples.DemoShell.RenderingSettingsService.Tests
+Oxygen.Examples.DemoShell.DiagnosticsPanel.Tests --parallel 4`; `ctest
+--test-dir out\build-ninja -C Debug -R
+"(Oxygen\.Vortex\.ShaderDebugModeRegistry|Oxygen\.Examples\.DemoShell\.(RenderingSettingsService|DiagnosticsPanel))"
+--output-on-failure` with `ShaderDebugModeRegistry` 9/9,
+  `RenderingSettingsService` 4/4 in the focused executable, and
+  `DiagnosticsPanel` 1/1; `cmake --build out\build-ninja --config Debug --target
+oxygen-examples-renderscene --parallel 4` passed and ShaderBake repacked
+  `shaders.bin` with 185 shader modules.
 
 ## Slice H - External Tool Handshake And Automation Hardening — checks
 

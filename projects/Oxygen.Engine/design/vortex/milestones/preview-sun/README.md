@@ -114,19 +114,15 @@ preview decision. Explicit UI changes after CLI startup are ordinary saved edits
 6. Use Sponza only for final integration proof after the small fixture passes.
    Do not compensate for unrelated renderer or exposure defects with a skybox or
    renderer changes. Keep those visual gates open with their own evidence.
-7. Update the operating guide and evidence record with the precise verified
+7. Update the operating guide with the precise verified
    scope; distinguish unit, runtime, UI, and visual outcomes.
 
 ## Current qualification evidence
 
-The [closeout record](../../../../../../artifacts/ed-m08/preview-profiles/closeout.json)
-identifies logs, captures, settings protection, manual acceptance and open defects.
-Native artifacts are under engine `out/build-ninja/ed-m08/preview-profiles/`.
-
 | Check                       | Result and boundary                                                                                                                                                                                                                                                         |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native builds               | Debug succeeds in `build-debug-9.log`; Release is current in `build-release-final.log`. No renderer or exposure-arithmetic change is included.                                                                                                                              |
-| Focused tests               | **97/97** across six suites: DefaultSceneLighting 10, PreviewSunController 18, EnvironmentSceneSnapshot 8, SkyboxService 6, EnvironmentSettingsService 46, EnvironmentVm 9. See `tests-debug-9.log` and XML.                                                                |
+| Native builds               | No renderer or exposure-arithmetic change is included.                                                                                                                                                                                                                      |
+| Focused tests               | **97/97** across six suites: DefaultSceneLighting 10, PreviewSunController 18, EnvironmentSceneSnapshot 8, SkyboxService 6, EnvironmentSettingsService 46, EnvironmentVm 9.                                                                                                 |
 | Dedicated fixture           | **13/13** native cooking jobs and Inspector validation pass. Five small scenes cover absent, untagged, authored, hidden/off, and isolated sun-only lighting. Camera framing includes the sky; axes and identities are checked in `fixture/camera-sun-only-validation.json`. |
 | Native scenarios            | **18/18** runs in `matrix-20260916-085555` exit zero and pass final preview-state, scene-publication and persistence checks. Coverage includes preview off/on, all five premades, Custom, and saved-Custom relaunch. Native embedded capture images are retained.           |
 | CLI rejection               | Unknown profile and conflicting Scene/skybox options exit nonzero without changing settings; see `cli-rejection-results.json`.                                                                                                                                              |
@@ -172,10 +168,6 @@ directional existed, before independent opt-in preview and profile restoration.
 It does not validate the current candidate-reuse or ImGui contract. The capture
 tooling results remain evidence for those tools, not new preview behavior.
 
-Workspace evidence: `artifacts/renderscene-preview-sun/evidence.json`, with
-commands, logs, settings, executable/model/capture/image hashes, and test XML.
-
-- Debug native RenderScene build passed (`final-build.log`, no compiler warnings).
 - DefaultSceneLighting: 9/9 tests passed. EnvironmentSettingsService: 36/36
   passed, including forced-custom policy preservation and disabled parented sun
   selection/re-enable across scene changes.
@@ -219,13 +211,11 @@ before loading completed. This latency is a separate serial dependency-loading
 issue, not part of the sun correction.
 
 The corrected full original-source generation was subsequently published through
-the script: four scenes, 3,537 assets, 239 imported textures, BC7 with full mips.
-All 8,131 publication-file hashes, four original source hashes, and 73 external
-dependency hashes passed an independent audit (`own-final-audit.json` under
-`artifacts/native-examples-refresh`). Town now has 1,249 indexed and physical
-materials, with all material values, image mappings, and mesh bindings checked.
-Nine case-only pairs retain distinct identities; four have different rendered
-values and five resolve equivalently, matching the source.
+the script: four scenes, 3,537 assets, 239 imported textures, BC7 with full
+mips. Town now has 1,249 indexed and physical materials, with all material
+values, image mappings, and mesh bindings checked. Nine case-only pairs retain
+distinct identities; four have different rendered values and five resolve
+equivalently, matching the source.
 
 Native run `final-library-mount` mounted that generation with hash verification:
 all 3,537 descriptor hashes checked, none missing/skipped, then CubeScene loaded

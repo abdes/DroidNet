@@ -56,12 +56,7 @@ All builds use `out/build-ninja`.
 | `Oxygen.Vortex.LightingInstrumentation.Tests` | 17/17, 0.047 s | 17/17, 0.029 s |
 | `Oxygen.Vortex.MaterialBinder.Tests`          | 34/34, 0.075 s | 34/34, 0.018 s |
 
-Raw evidence is under `out/build-ninja/analysis/vortex/exposure-lightbench/ex07b`:
-`closeout-images-{debug,release}.json`, `closeout-cpu-{debug,release}.json`,
-`material-identity-{debug,release}.json` and their build/run logs. New workload
-and material-test code is oxytidy-clean. `closeout-tidy-final/` records 70 findings
-on unchanged MaterialBinder code; the added identity fields have no findings and
-no suppression was added.
+New workload and material-test code is oxytidy-clean.
 
 Stable implementation checkpoints: `91fe62b0e` (material identity and sampling)
 and `2cdc585cb` (workload generator, manifest and native preview).

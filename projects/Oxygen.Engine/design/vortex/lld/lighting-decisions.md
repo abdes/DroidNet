@@ -1,6 +1,6 @@
 # Lighting model and capacity decisions
 
-### D1 — admission capacities
+## D1 — admission capacities
 
 **Approved 2026-09-22: A — budgeted dynamic capacity. Conventional allocation
 and compact-list implementation complete; broader workload qualification continues.**
@@ -42,7 +42,7 @@ numbers. EX07A must finish backend allocation accounting and freeze numeric
 admission profiles before consumer cutover. EX07D separately freezes measured
 CPU/GPU/memory performance budgets; it does not postpone the A capacity decision.
 
-#### Capacity arithmetic and correction
+### Capacity arithmetic and correction
 
 At the target 80-byte local/64-byte directional strides, 65,536 local records
 would occupy 5 MiB and 64 directionals 4 KiB. These remain illustrative arithmetic,
@@ -72,7 +72,7 @@ retired allocation. Shared or correctly ordered reused resources are counted onc
 additional outstanding allocations are counted until their fences retire.
 Do not assume either free frame reuse or a fixed frames-in-flight multiplier.
 
-### D2 — physical lighting and artistic attenuation scope
+## D2 — physical lighting and artistic attenuation scope
 
 **Approved 2026-09-22: A — physical model only. Implementation pending.**
 Point/spot punctual lighting uses the specified inverse-square propagation,
@@ -101,7 +101,7 @@ Required strict cutover in EX07-C:
   point/spot round-trip/rendered results. No artistic-mode tests or GPU fields
   remain in the target contract.
 
-### D3 — local source radius
+## D3 — local source radius
 
 Source radius controls the analytic finite-source diffuse horizon and specular
 highlight in [production model 2](../../renderer-core/physically-based-rendering.md#production-local-lighting-and-brdf-model-2).
@@ -121,7 +121,7 @@ Zero separation returns zero; the punctual 1 mm guard remains separate from
 source size. The existing source-center PCF/contact visibility remains unchanged:
 source radius does not introduce radius-dependent shadow penumbrae.
 
-### D4 — common BRDF quality target
+## D4 — common BRDF quality target
 
 Forward, deferred and existing indirect consumers share correlated Smith GGX,
 Schlick Fresnel, metallic-roughness/specular inputs and perceptual roughness floor
@@ -143,7 +143,7 @@ with model revision 2 and no shipping compatibility evaluator. See the
 [PBR tradeoffs](../../renderer-core/physically-based-rendering.md#design-tradeoffs-and-rejected-alternatives)
 for the alternatives and measured errors.
 
-### D5 — hemispherical spot support
+## D5 — hemispherical spot support
 
 Accept `0 <= inner < outer <= pi/2`, including the 90-degree soft endpoint
 supported by glTF. Equal-angle hard cones remain supported below 90 degrees.
@@ -158,13 +158,13 @@ positive representable cosine width. CPU photometric normalization uses both
 authored angles in double precision; GPU angular shading uses the FP32 squared
 center-cone ramp. This replaces compensated per-pixel cone arithmetic.
 
-### D6 — default resource envelope
+## D6 — default resource envelope
 
-**Approved 2026-09-22: A — 4 GiB total / 128 MiB compact indices.** A standalone D3D12 query on the reference
-RTX 3080 (10 GiB, driver 610.62) now confirms allocation requirements for the
-current typeless D32S8 resource descriptions. No shadow resources were allocated
-and no rendering/performance claim follows from this probe. See
-[allocation requirements](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/allocation-requirements-current.json).
+**Approved 2026-09-22: A — 4 GiB total / 128 MiB compact indices.** A standalone
+D3D12 query on the reference RTX 3080 (10 GiB, driver 610.62) now confirms
+allocation requirements for the current typeless D32S8 resource descriptions. No
+shadow resources were allocated and no rendering/performance claim follows from
+this probe.
 
 The queried medium narrow-spot set is 512 MiB; using six-face maps for all eight
 spots makes it 832 MiB. Corresponding maximum-resolution sets are 2,048 and

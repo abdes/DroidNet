@@ -75,12 +75,11 @@ Before any migration completion claim:
 
 ### 2.2 Evidence Artifacts
 
-| Artifact                 | Format            | Purpose                                                      |
-| ------------------------ | ----------------- | ------------------------------------------------------------ |
-| `baseline_frame10.png`   | screenshot        | parity evidence image                                        |
-| `baseline_depth.png`     | screenshot        | depth parity evidence                                        |
-| `baseline_renderdoc.rdc` | RenderDoc capture | pass / resource inspection against the owning UE5.7 contract |
-| `baseline_behaviors.md`  | notes             | observable workflow checklist for the parity gate            |
+| Artifact                | Format     | Purpose                                           |
+| ----------------------- | ---------- | ------------------------------------------------- |
+| `baseline_frame10.png`  | screenshot | parity evidence image                             |
+| `baseline_depth.png`    | screenshot | depth parity evidence                             |
+| `baseline_behaviors.md` | notes      | observable workflow checklist for the parity gate |
 
 ### 2.3 Truthful Phase 4 Feature Baseline
 

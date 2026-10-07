@@ -181,29 +181,17 @@ Validated evidence from 2026-04-26:
   `cmake --build --preset windows-debug --target oxygen-graphics-direct3d12 --parallel 4`;
   `ShaderBake rebuild ... --mode dev` wrote `184` modules to
   `bin/Oxygen/Debug/dev/shaders.bin`; shader catalog tests passed `4/4`.
-- VortexBasic enabled proof passed:
-  `Verify-VortexAerialPerspectiveProof.ps1` against
-  `out/build-ninja/analysis/vortex/m04d6-aerial-proof/vortexbasic_aerial_enabled_depthfix_frame5_capture.rdc`.
-  Validation records `overall_verdict=pass`, `runtime_cli_observed=1`,
+- Validation records `overall_verdict=pass`, `runtime_cli_observed=1`,
   `camera_aerial_volume_dims=64x64x32`,
-  `camera_aerial_probe_rgb_sum=410703.604`,
-  `aerial_scattering_strength=1`,
+  `camera_aerial_probe_rgb_sum=410703.604`, `aerial_scattering_strength=1`,
   `aerial_perspective_start_depth_km=0`, and
   `stage15_atmosphere_scene_color_delta_max=10`.
-- VortexBasic disabled proof passed:
-  the same wrapper with `-ExpectDisabled` against
-  `vortexbasic_aerial_disabled_depthfix_frame5_capture.rdc`.
-  Validation records `overall_verdict=pass`, `runtime_cli_observed=0`,
+- Validation records `overall_verdict=pass`, `runtime_cli_observed=0`,
   `aerial_scattering_strength=0`, and
   `stage15_atmosphere_scene_color_delta_max=0`.
-- City-scale RenderScene proof passed:
-  `Verify-VortexAerialPerspectiveProof.ps1` against
-  `out/build-ninja/analysis/vortex/m04d6-aerial-proof/renderscene_city_aerial_tuned_frame90_capture.rdc`.
-  Validation records `overall_verdict=pass`,
-  `camera_aerial_volume_dims=64x64x32`,
-  `camera_aerial_probe_rgb_sum=12.785145`,
-  `aerial_perspective_distance_scale=1`,
-  `aerial_scattering_strength=1`,
+- Validation records `overall_verdict=pass`,
+  `camera_aerial_volume_dims=64x64x32`, `camera_aerial_probe_rgb_sum=12.785145`,
+  `aerial_perspective_distance_scale=1`, `aerial_scattering_strength=1`,
   `aerial_perspective_start_depth_km=0.0400000028`,
   `camera_aerial_consumed_by_atmosphere=true`,
   `static_atmosphere_camera_volume_srv_valid=true`, and

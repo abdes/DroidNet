@@ -37,12 +37,11 @@ tests of the compiled shader on the target device.
 ## Numerical audit
 
 `tools/vortex/audit_exposure_contract.py` uses independent Python arithmetic and
-IEEE binary storage conversion. Ten checks pass: EV14/15/16, the physical
-camera example, histogram uint32 headroom, FP32 storage boundaries, analytical
-FP16 endpoint incompatibility, sampled P loss, FP32 endpoint preservation and
-Earth-reference solar-disk headroom.
-The report is `out/build-ninja/analysis/vortex/exposure-lightbench/contract-audit/arithmetic-audit.json`.
-It includes checkout/source hashes and explicitly records `renderer_validation=false`.
+IEEE binary storage conversion. Ten checks pass: EV14/15/16, the physical camera
+example, histogram uint32 headroom, FP32 storage boundaries, analytical FP16
+endpoint incompatibility, sampled P loss, FP32 endpoint preservation and
+Earth-reference solar-disk headroom. It includes checkout/source hashes and
+explicitly records `renderer_validation=false`.
 
 Binary16 has less than 40 stops from its minimum positive subnormal to maximum
 finite value, and less than 30 stops using only normals. The specified

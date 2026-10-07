@@ -398,8 +398,6 @@ seed/Preserve precedence, retries, invalid initial metering and both camera
 projections. Physical camera inputs and authored modes are checked against the
 rendered pixel as well as GPU state. Rejection is visible in the event-frame GPU
 record; public CPU status changes only after its normal completed-status poll.
-The [EX05-22 evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/scene-lifecycle-manifest.json)
-records the independent histogram, hybrid-response and final-pixel oracles.
 
 A new view, camera cut, replaced world or device recovery remeters by default.
 Preserve and Seed are explicit alternatives. Walking, streaming, light changes,
@@ -719,10 +717,7 @@ The existing Release workload selector accepts `fp32-only` in the same binary.
 `OXYGEN_EXPOSURE_BASELINE_FRAMES=warmup` writes an untimed warmup manifest for
 paired frame-count selection; numeric values retain the sampled-run behavior.
 All recipes now record final output/gain/P/rejection checkpoints outside their
-sample window, including controlled cases. The
-[04 checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/fp32-only/checkpoint-manifest.json)
-records 109 passing Debug checks (latest unique outcomes), 13 passing Release
-checks and both 234-module shader builds. The five new native cases exercise
+sample window, including controlled cases. The five new native cases exercise
 mode/gain/event preservation, fixed/zero-target operation, both existing shared
 lifecycle paths, and actual temporal rendering with mode reset and range
 failure/recovery. Existing FP32-reference and fog-edge controls also pass. The
@@ -797,12 +792,11 @@ an older completed packet before it can acknowledge a seed; a fresh packet
 acknowledges the same solved seed without reapplying it. Qualification-attempt
 failures still preserve valid authored-solve acknowledgements. The existing
 delayed-status, shared/layout, failed-solve and queued-consumer cases pass with
-explicit diagnostic selection and unchanged test identities. The
-[checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/production-policy/checkpoint-manifest.json)
-records commands and frozen hashes. The 0.683 ms I02 FP32-only measurement was
-an intermediate checkpoint. Subsequent CPU corrections and final qualification
-are recorded in [EX05.1](../milestones/exposure/EX05.1/README.md); the remaining
-active-CPU budget work is VX-CPU-01.
+explicit diagnostic selection and unchanged test identities. The 0.683 ms I02
+FP32-only measurement was an intermediate checkpoint. Subsequent CPU corrections
+and final qualification are recorded in
+[EX05.1](../milestones/exposure/EX05.1/README.md); the remaining active-CPU
+budget work is VX-CPU-01.
 
 The reviewed and approved ownership API is one move-only `CommandRecording`
 returned by `Graphics::AcquireCommandRecorder`. `SubmissionPolicy::kOnScopeExit`

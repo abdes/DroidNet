@@ -161,12 +161,12 @@ the same slice that introduces the replacement.
   and
   `ctest --preset test-debug -R "Oxygen\.Vortex\.SceneRendererDeferredCore" --output-on-failure`
   with 46/46 tests passing, including `BasePassSolidForwardWritesSceneColor`.
-- CDB/debug-layer smoke passed for the solid-forward offscreen layout:
-  `cdb -G -g -o -c "g;q" out\build-ninja\bin\Debug\Oxygen.Examples.MultiView.exe --frames 5 --fps 30 --offscreen-proof-layout true --capture-provider off --debug-layer true`
-  with exit code 0, no `CHECK FAILED`, no D3D12/DXGI errors, no access
-  violation, 5 deferred preview renders, and 5 forward capture renders. The log
-  is recorded at
-  `out\build-ninja\analysis\vortex\m06b-offscreen\cdb-solid-forward-smoke.log`.
+- CDB/debug-layer smoke passed for the solid-forward offscreen layout: `cdb -G
+-g -o -c "g;q" out\build-ninja\bin\Debug\Oxygen.Examples.MultiView.exe
+--frames 5 --fps 30 --offscreen-proof-layout true --capture-provider off
+--debug-layer true` with exit code 0, no `CHECK FAILED`, no D3D12/DXGI errors,
+  no access violation, 5 deferred preview renders, and 5 forward capture
+  renders.
 - Runtime closure tooling landed in the current proof-tooling slice:
   `tools\vortex\Run-VortexOffscreenValidation.ps1`,
   `tools\vortex\AnalyzeRenderDocVortexOffscreen.py`, and

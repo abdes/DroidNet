@@ -25,7 +25,6 @@ independent expectations; 8K output cannot overflow histogram accumulation.
 
 ## Recorded qualification
 
-| Slice | Status | Boundary | Evidence |
-| ----- | ------ | -------- | -------- |
-
-| 3 — Metering and adaptation | validated | Controlled-input histogram, curve, masks and hybrid adaptation; scene acceptance remains slice 5. | [Metering](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/metering/evidence-manifest.json) |
+| Slice                       | Status    | Boundary                                                                                          |
+| --------------------------- | --------- | ------------------------------------------------------------------------------------------------- |
+| 3 — Metering and adaptation | validated | Controlled-input histogram, curve, masks and hybrid adaptation; scene acceptance remains slice 5. |

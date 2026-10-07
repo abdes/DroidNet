@@ -72,11 +72,9 @@ That version used descriptor conversion and `GetResourceAllocationInfo` without
 creating shadow textures. It supplied the historical comparison below; it did not
 validate production allocator output.
 
-The [historical query](../../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/allocation-requirements-current.json)
-contains 18 observations: eight large descriptors and a small alignment control
-for each format. All eight large D32 arrays require half the D32S8 allocation.
-Both six-slice 32x32 controls require 64 KiB, so format savings must use backend
-sizes rather than assuming every texture is exactly halved.
+All eight large D32 arrays require half the D32S8 allocation. Both six-slice
+32x32 controls require 64 KiB, so format savings must use backend sizes rather
+than assuming every texture is exactly halved.
 
 | Queried set              |     D32S8 |       D32 |
 | ------------------------ | --------: | --------: |

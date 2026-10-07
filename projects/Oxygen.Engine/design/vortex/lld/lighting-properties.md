@@ -237,14 +237,9 @@ performance comparison.
 The source-to-cooked check on Sponza's `HDRI_SKY` confirms a source point light
 at 200 cd with no range or shadow override. The cooked node remains a point at
 2513.27417 lm (200 cd), with the expected axis conversion; shadowing follows the
-importer's explicit default. The original 10 m cutoff came from the range defect; the corrected v7 content
-uses the approved 4,096 m fallback. There
-is no basis for converting this named node into an environment light. The bounded
-check, source declarations and file hashes are in
-[`hdri-sky-source-cooked-check.json`](../../../out/build-tracy-ninja/analysis/vortex/exposure-lightbench/ex07c/hdri-sky-source-cooked-check.json).
-
-The corrected-content field/identity check is in
-[`sponza-v7-content-check.json`](../../../out/analysis/ex07c-completion/sponza-v7-content-check.json).
+importer's explicit default. The original 10 m cutoff came from the range
+defect; the corrected v7 content uses the approved 4,096 m fallback. There is no
+basis for converting this named node into an environment light.
 
 ### Suite ownership
 

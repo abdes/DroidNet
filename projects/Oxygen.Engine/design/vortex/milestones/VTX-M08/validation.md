@@ -112,11 +112,14 @@ Validation evidence:
 - `cmake --build out\build-ninja --config Debug --target oxygen-examples-renderscene oxygen-examples-demoshell oxygen-examples-texturedcube oxygen-graphics-direct3d12_shaders Oxygen.Vortex.EnvironmentLightingService.Tests Oxygen.Graphics.Direct3D12.ShaderBakeCatalog.Tests --parallel 4` passed after adding the RenderScene startup-skybox proof route, texture-domain SkySphere descriptor sampling, and EV-authored skybox radiance-scale UI.
 - `ctest --preset test-debug -R "Oxygen\.Vortex\.EnvironmentLightingService|Oxygen\.Graphics\.Direct3D12\.ShaderBakeCatalog|Oxygen\.Content\.Loaders|Oxygen\.Content\.AssetLoader" --output-on-failure` passed 6/6 matched test executables.
 - `python -m py_compile tools\vortex\AnalyzeRenderDocVortexSkybox.py` passed.
-- CDB/debug-layer runtime audit passed for `Oxygen.Examples.RenderScene.exe -v=-1 --frames 40 --fps 0 --capture-provider off`; log `out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-intensity.cdb.log` records exit code 0, no D3D12/DXGI errors after excluding the known non-blocking live `IDXGIFactory` shutdown warning, no device removal/hang, and no access violation.
-- RenderDoc capture passed for `RenderScene -v=-1 --frames 100 --fps 0 --capture-provider renderdoc --capture-load search --capture-output out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-intensity.rdc --capture-from-frame 75 --capture-frame-count 1`; capture `out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-intensity_capture.rdc` was produced.
-- `powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Verify-VortexSkyboxProof.ps1 -CapturePath out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-intensity_capture.rdc -CaptureReportPath out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-intensity.vortex-skybox.txt -AnalysisTimeoutSeconds 240` passed. The report proves one `Vortex.Stage15.Sky` scope, one sky draw, zero `Vortex.Stage15.Atmosphere` scopes, `atmosphere_enabled=0`, cubemap `SkySphere` source/enabled/texture-domain descriptor state, authored `sky_sphere_intensity=1000`, one `SceneColor` output, non-black Stage-15 sky samples, and 25/25 non-black Stage-22 tonemap sky samples.
-- `RenderScene --frames 65 --fps 0 --capture-provider off` passed with startup SkySphere cubemap enabled from local demo settings; runtime log `out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-allocation.verbose.stderr.log` records the startup skybox route and 65 `Vortex.SceneTextureLeasePool.Churn` telemetry records.
-- `powershell -NoProfile -ExecutionPolicy Bypass -File tools\vortex\Assert-VortexSkyboxAllocationChurn.ps1 -RuntimeLogPath out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-allocation.verbose.stderr.log -RunFrames 65 -WarmupFrames 5 -ReportPath out\build-ninja\analysis\vortex\m08-skybox\renderscene-skybox-allocation.allocation-churn.txt` passed. The report proves `telemetry_frame_count=65`, `steady_state_frame_count=60`, `steady_state_allocations_after_warmup=0`, `steady_state_allocations_zero=true`, and `overall_verdict=pass`.
+- The report proves one `Vortex.Stage15.Sky` scope, one sky draw, zero
+  `Vortex.Stage15.Atmosphere` scopes, `atmosphere_enabled=0`, cubemap
+  `SkySphere` source/enabled/texture-domain descriptor state, authored
+  `sky_sphere_intensity=1000`, one `SceneColor` output, non-black Stage-15 sky
+  samples, and 25/25 non-black Stage-22 tonemap sky samples.
+- The report proves `telemetry_frame_count=65`, `steady_state_frame_count=60`,
+  `steady_state_allocations_after_warmup=0`,
+  `steady_state_allocations_zero=true`, and `overall_verdict=pass`.
 - Manual visual confirmation accepted the corrected RenderScene skybox settings
   after the black-window configuration issue was fixed and before the final
   short 10 fps capture proof.
@@ -154,9 +157,14 @@ Validation evidence:
 - `cmake --build out\build-ninja --config Debug --target oxygen-examples-renderscene Oxygen.Vortex.EnvironmentLightingService.Tests Oxygen.Vortex.SceneRendererDeferredCore.Tests Oxygen.Vortex.ShaderDebugModeRegistry.Tests --parallel 4` passed and rebaked the changed deferred-light shader variants.
 - `ctest --preset test-debug -R "Oxygen\.Vortex\.(EnvironmentLightingService|SceneRendererDeferredCore|ShaderDebugModeRegistry)|Oxygen\.Graphics\.Direct3D12\.ShaderBakeCatalog" --output-on-failure` passed 4/4 matched test executables.
 - Runtime cache proof `RenderScene --frames 80 --fps 10 --capture-provider off` recorded steady `sky_light_ibl_status=valid-current-key`, `sky_light_ibl_valid=true`, and `sky_light_ibl_unavailable_reason=none` after product generation.
-- CDB/debug-layer audit `cdb -logo out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-prod-iblonly-10fps.cdb.log -c "g;q" out\build-ninja\bin\Debug\Oxygen.Examples.RenderScene.exe --frames 60 --fps 10 --capture-provider off` exited 0 and the D3D12/DXGI/device-removal scan found 0 blocking hits; the known live `IDXGIFactory` shutdown warning remains non-blocking for this gate.
-- RenderDoc capture `out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-prod-iblonly-10fps_capture.rdc` was produced with `RenderScene --frames 60 --fps 10 --capture-provider renderdoc --capture-load search --capture-output out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-prod-iblonly-10fps --capture-from-frame 45 --capture-frame-count 1`.
-- `tools\vortex\Verify-VortexStaticSkyLightProof.ps1 -CapturePath out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-prod-iblonly-10fps_capture.rdc -AnalysisTimeoutSeconds 240` passed. The report proves one `Vortex.Stage12.StaticSkyLight` draw, zero directional/point/spot/Stage15 sky scopes in IBL-only mode, enabled specified-cubemap SkyLight state, texture-domain processed cubemap slot `35818`, valid diffuse SH slot `49`, invalid prefilter slot, positive radiance/diffuse intensity, `scene_color_max_luminance=0.128336914`, 31 non-black scanned pixels after the static SkyLight draw, 16/16 sampled pixel histories passing through the static SkyLight draw, and `static_skylight_pixel_history_verdict=true`.
+- The report proves one `Vortex.Stage12.StaticSkyLight` draw, zero
+  directional/point/spot/Stage15 sky scopes in IBL-only mode, enabled
+  specified-cubemap SkyLight state, texture-domain processed cubemap slot
+  `35818`, valid diffuse SH slot `49`, invalid prefilter slot, positive
+  radiance/diffuse intensity, `scene_color_max_luminance=0.128336914`, 31
+  non-black scanned pixels after the static SkyLight draw, 16/16 sampled pixel
+  histories passing through the static SkyLight draw, and
+  `static_skylight_pixel_history_verdict=true`.
 
 ## Slice E: Interaction And Lifecycle Proof — recorded evidence
 
@@ -178,14 +186,17 @@ Implementation evidence:
 
 Validation evidence:
 
-- Direct-plus-IBL RenderDoc capture
-  `out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-direct-plus-ibl-10fps_capture.rdc`
-  was produced with `RenderScene --frames 60 --fps 10 --capture-provider renderdoc --capture-load search --capture-output out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-direct-plus-ibl-10fps --capture-from-frame 45 --capture-frame-count 1`.
-- `tools\vortex\Verify-VortexStaticSkyLightProof.ps1 -CapturePath out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-direct-plus-ibl-10fps_capture.rdc -ProofMode direct-plus-ibl -AnalysisTimeoutSeconds 240` passed. The report proves one static SkyLight draw, one directional draw, zero point/spot/Stage15 sky scopes, valid processed cubemap and diffuse SH bindings, invalid prefilter slot, `scene_color_max_luminance=6292.476`, 31 non-black scanned pixels, 16/16 static SkyLight histories passed, 16/16 directional histories passed, `direct_plus_ibl_both_history_count=16`, and `static_skylight_pixel_history_verdict=true`.
+- The report proves one static SkyLight draw, one directional draw, zero
+  point/spot/Stage15 sky scopes, valid processed cubemap and diffuse SH
+  bindings, invalid prefilter slot, `scene_color_max_luminance=6292.476`, 31
+  non-black scanned pixels, 16/16 static SkyLight histories passed, 16/16
+  directional histories passed, `direct_plus_ibl_both_history_count=16`, and
+  `static_skylight_pixel_history_verdict=true`.
 - Lifecycle runtime proof `RenderScene --frames 115 --fps 10 --capture-provider off` passed with local proof settings toggling SkyLight off at frame 30 and back on at frame 45.
-- `tools\vortex\Assert-VortexStaticSkyLightLifecycle.ps1 -RuntimeLogPath out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-lifecycle-10fps.log -ToggleOffFrame 30 -ToggleOnFrame 45 -WarmupFramesAfterOn 10 -MinimumStableFrames 60 -ReportPath out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-lifecycle-10fps.lifecycle.txt` passed. The report proves `disabled_status_after_off_count=15`, `regenerating_after_on_count=1`, `valid_current_key_after_on_count=70`, `unexpected_unavailable_reason_after_on_count=0`, `stable_churn_frame_count=61`, and `stable_churn_nonzero_delta_count=0`.
-- CDB/debug-layer audit of the lifecycle path
-  `cdb -logo out\build-ninja\analysis\vortex\m08-skylight\renderscene-static-skylight-lifecycle-10fps.cdb.log -c "g;q" out\build-ninja\bin\Debug\Oxygen.Examples.RenderScene.exe --frames 115 --fps 10 --capture-provider off` exited 0 and the D3D12/DXGI/device-removal scan found 0 blocking hits; the known live `IDXGIFactory` shutdown warning remains non-blocking for this gate.
+- The report proves `disabled_status_after_off_count=15`,
+  `regenerating_after_on_count=1`, `valid_current_key_after_on_count=70`,
+  `unexpected_unavailable_reason_after_on_count=0`,
+  `stable_churn_frame_count=61`, and `stable_churn_nonzero_delta_count=0`.
 
 ## Validation and remaining work
 

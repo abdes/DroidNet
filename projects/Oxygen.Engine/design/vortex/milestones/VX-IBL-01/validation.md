@@ -739,8 +739,7 @@ Town replay records one Stage 13 draw and
 no Stage 12 sky-light draw. In that same frame, IBL illuminates **577,727**
 previously black geometry pixels and leaves **210,159** sky pixels unchanged,
 with coverage preserved. This isolates the contribution at identical camera and
-exposure. The run record retains the local capture path/hash; the screenshot is
-the native output. RenderDoc timings are not performance acceptance.
+exposure. The screenshot is the native output. RenderDoc timings are not performance acceptance.
 
 S2 atmosphere source: 22 sky/fog tests,
 30 IBL/fog tests and 64 environment tests pass. The native capture check verifies
@@ -909,8 +908,7 @@ For the atmosphere source, run Exposure test filter `*CapturedAtmosphereUses*`
 with `OXYGEN_EXPOSURE_CAPTURE` set. Replay with
 `tools/vortex/AnalyzeRenderDocCapturedSky.py`, pass name `CapturedSky`.
 
-The run record identifies the source hashes,
-build outputs and standalone-header command. The [milestone plan](README.md)
+The [milestone plan](README.md)
 owns slice state and the complete acceptance list.
 
 To capture and replay the constant-cube producer test:

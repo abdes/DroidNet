@@ -251,15 +251,7 @@ off`, exited `0`, and logged `d3d12_errors=0`, `dxgi_errors=0`, and
   sun/environment defaults; generated solid-color demo materials are marked
   non-texture-sampling; the Physics floor uses correct Oxygen +Z-up placement
   and a non-zero above-atmosphere visual/collision plane.
-- Physics direct-light proof passed with RenderDoc analysis:
-  `tools/vortex/ProbeRenderDocPhysicsDirectLighting.py
-out\build-ninja\analysis\physics\physics-after-scene-cleanup_capture.rdc`
-  wrote
-  `out\build-ninja\analysis\physics\physics-after-scene-cleanup-direct-lighting-probe.txt`
-  with `analysis_result=success`, `floor_candidate_count=4`,
-  `nonzero_direct_floor_count=3`, lit floor `NoL=0.690735274`, and direct
-  output values around `8680..9160`. The one zero-direct floor sample was
-  shadowed, not missing lighting.
+- The one zero-direct floor sample was shadowed, not missing lighting.
 
 | Example target                          | Scope                                         | M07 proof status                                                                                                     |
 | --------------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |

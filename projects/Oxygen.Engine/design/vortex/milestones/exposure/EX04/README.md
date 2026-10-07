@@ -37,7 +37,6 @@ views and recovery.
 
 ## Recorded qualification
 
-| Slice | Status | Boundary | Evidence |
-| ----- | ------ | -------- | -------- |
-
-| 4 — GPU lifecycle and sharing | validated | Controlled-input/public-event gate, including offscreen routing. Real-scene resource lifetime is tracked in slice 5. | [Lifecycle](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/discontinuity-manifest.json), [offscreen sharing](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/offscreen-sharing-manifest.json) |
+| Slice                         | Status    | Boundary                                                                                                             |
+| ----------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------- |
+| 4 — GPU lifecycle and sharing | validated | Controlled-input/public-event gate, including offscreen routing. Real-scene resource lifetime is tracked in slice 5. |

@@ -12,15 +12,13 @@ Status: `validated`
 
 ## Delivery scope
 
-**Closed 2026-09-21.** Source/cook/package/load/script/editor integration, strict
-current-format cutover, C++20 editor boundary and rendered DemoShell acceptance
-are qualified. The [item tracker](#tasks-and-outcome)
-and [local evidence](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/slice6-progress.json)
-record validation. The TexturedCube assignment/panel-refresh regression is
-unit-tested and confirmed fixed by the user's rebuilt-app test. Its deferred console
-work subsequently closed in [EX08.1](../EX08.1/validation.md). ImGui Test Engine
-integration also closed in [EX08.2](../EX08.2/validation.md); its earlier deferral
-is superseded.
+**Closed 2026-09-21.** Source/cook/package/load/script/editor integration,
+strict current-format cutover, C++20 editor boundary and rendered DemoShell
+acceptance are qualified. The TexturedCube assignment/panel-refresh regression
+is unit-tested and confirmed fixed by the user's rebuilt-app test. Its deferred
+console work subsequently closed in [EX08.1](../EX08.1/validation.md). ImGui
+Test Engine integration also closed in [EX08.2](../EX08.2/validation.md); its
+earlier deferral is superseded.
 
 - Include native aperture/shutter/ISO source/cook/load persistence, as
   approved on 2026-09-16. Scene-v6 perspective/orthographic records are 32/40
@@ -161,10 +159,9 @@ personal settings.
 
 ## Recorded qualification
 
-| Slice | Status | Boundary | Evidence |
-| ----- | ------ | -------- | -------- |
-
-| 6 — Authoring and persistence | validated | Strict source/cook/load/script/editor migration, C++20 editor boundary, PAK repacking, rendered UI acceptance and configuration isolation closed. | [Detailed items](#tasks-and-outcome), [acceptance evidence](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/slice6-progress.json) |
+| Slice                         | Status    | Boundary                                                                                                                                          | Details                              |
+| ----------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| 6 — Authoring and persistence | validated | Strict source/cook/load/script/editor migration, C++20 editor boundary, PAK repacking, rendered UI acceptance and configuration isolation closed. | [Detailed items](#tasks-and-outcome) |
 
 ## Tasks and outcome
 
@@ -183,10 +180,6 @@ personal settings.
 | EX06-09   | LightBench experiment ownership and personal-settings isolation                   | validated |
 | EX06-GATE | Authoring, persistence, migration and isolation acceptance                        | validated |
 
-**Evidence:** [slice acceptance](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/slice6-progress.json),
-[native validation index](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/slice6-validation-index.json),
-[TexturedCube regression and user confirmation](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/texturedcube-regression.json).
-The [plan](#delivery-scope)
-retains the wire/API contracts and
-[UX requirements](#demoshell-user-scenarios-and-implementation-quality).
-No EX06 delivery item remains open.
+The [plan](#delivery-scope) retains the wire/API contracts and [UX
+requirements](#demoshell-user-scenarios-and-implementation-quality). No EX06
+delivery item remains open.

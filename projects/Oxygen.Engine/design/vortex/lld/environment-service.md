@@ -1474,8 +1474,6 @@ The recorded runtime, shader and publication checks belong to
 [local fog](../milestones/VTX-M04D.3/validation.md),
 [volumetric fog](../milestones/VTX-M04D.4/validation.md) and
 [aerial perspective](../milestones/VTX-M04D.6/validation.md).
-The linear-clamp correction is recorded in the
-[filter-gradient manifest](../../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/filter-gradients-manifest.json).
 
 Remaining work is tracked in [OPEN_ITEMS.md](../OPEN_ITEMS.md): height-fog
 cubemap sampling (VX-FOG-01), reflection-view AP resources (VX-AP-01), clouds

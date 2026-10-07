@@ -101,11 +101,6 @@ uv run --no-project --with python-flint==0.9.0 python tools/vortex/GenerateGgxMo
 uv run --no-project --with python-flint==0.9.0 python -m unittest discover -s tools/vortex -p TestGgxMomentCertificates.py -v
 ```
 
-Evidence under `out/build-ninja/analysis/vortex/exposure-lightbench/ex07b`:
-`moment-certificate-{debug,release}.json`, `moment-certificate-generator-tests.log`,
-`moment-certificate-format-check.log`, `moment-certificate-tidy-verified/` and
-`moment-certificate-checkpoint.json`.
-
 ## Remaining qualification
 
 These are pointwise certificates. An arbitrary C++ quadrature result is still
@@ -286,8 +281,3 @@ uv run --no-project --with python-flint==0.9.0 python -m unittest discover -s to
 This is an offline qualification command; the first full six-case generation
 took about 32 minutes on the reference machine. It is not a build-time or frame
 rendering operation. C++ tests consume the versioned enclosures.
-
-Evidence under `out/build-ninja/analysis/vortex/exposure-lightbench/ex07b`:
-`mean-certificate-{generation,reproduction,generator-tests}.log`,
-`mean-certificate-existing-debug.json`, `mean-certificate-{debug,release}.json`,
-`mean-certificate-tidy-final/` and `mean-certificate-checkpoint.json`.

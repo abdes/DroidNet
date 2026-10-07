@@ -67,25 +67,14 @@ CPU/HLSL height-fog payload, authored layer translation, analytic `HeightFogComm
   `Oxygen.Vortex.SceneRendererPublication.Tests` 16/16.
 - VortexBasic build passed:
   `cmake --build out/build-ninja --config Debug --target oxygen-examples-vortexbasic --parallel 4`.
-- Focused VortexBasic enabled proof passed:
-  `tools/vortex/Verify-VortexHeightFogProof.ps1` against
-  `out/build-ninja/analysis/vortex/m04d2-heightfog-proof/vortexbasic_heightfog_enabled_frame5_capture.rdc`.
-  Validation report records `overall_verdict=pass`,
-  `stage15_fog_scope_count=1`, `stage15_fog_draw_count=1`,
-  `runtime_cli_observed=true`, `height_fog_scene_color_delta_max=43`,
-  and `height_fog_far_depth_sample_count=33`.
-- Focused VortexBasic disabled proof passed:
-  `tools/vortex/Verify-VortexHeightFogProof.ps1 -ExpectDisabled` against
-  `out/build-ninja/analysis/vortex/m04d2-heightfog-proof/vortexbasic_heightfog_disabled_frame5_capture.rdc`.
-  Validation report records `overall_verdict=pass`,
-  `stage15_fog_scope_count=0`, `stage15_fog_draw_count=0`, and
-  `runtime_cli_observed=false`.
-- City-scale RenderScene proof passed:
-  `tools/vortex/Verify-VortexHeightFogProof.ps1 -SkipRuntimeCliCheck` against
-  `out/build-ninja/analysis/vortex/m04d4-city-volumetric-proof/renderscene_city_volumetric_frame90_capture.rdc`.
-  Validation report records `overall_verdict=pass`,
-  `stage15_fog_scope_count=1`, `stage15_fog_draw_count=1`,
-  `height_fog_scene_color_delta_max=593.5`,
+- Validation report records `overall_verdict=pass`, `stage15_fog_scope_count=1`,
+  `stage15_fog_draw_count=1`, `runtime_cli_observed=true`,
+  `height_fog_scene_color_delta_max=43`, and
+  `height_fog_far_depth_sample_count=33`.
+- Validation report records `overall_verdict=pass`, `stage15_fog_scope_count=0`,
+  `stage15_fog_draw_count=0`, and `runtime_cli_observed=false`.
+- Validation report records `overall_verdict=pass`, `stage15_fog_scope_count=1`,
+  `stage15_fog_draw_count=1`, `height_fog_scene_color_delta_max=593.5`,
   `height_fog_far_depth_sample_count=53`, captured 672-byte
   `EnvironmentStaticData`, positive primary density, valid max
   opacity/min-transmittance, enabled/render-in-main-pass flags, and cubemap

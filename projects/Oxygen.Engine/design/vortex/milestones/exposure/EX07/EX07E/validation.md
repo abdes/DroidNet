@@ -935,7 +935,6 @@ failure in GenerationTracker. Material atlas return capacity is now secured duri
 growth, and material/geometry/shadow activation restores unexposed indices on
 failure. Existing multi-view publisher and repeated-frame-slot tests pass.
 
-Local JSON/log evidence is under `out/analysis/ex07e/e06-s12/{Release,Debug}`.
 This table is the durable S1/S2 result summary. Later-step checkpoint results
 follow below; native integrated qualification, Tracy integration, and final
 visual baseline acceptance remain open.
@@ -978,18 +977,16 @@ allocator access so mock-framework allocations are not confused with product wor
 
 ### Registration-construction fault coverage
 
-**S4 qualification limit (2026-09-24):** exhaustive Debug registration-construction
-fault injection reaches MSVC's `_Hash_vec` noexcept constructor allocating a
-16-byte checked-iterator proxy. The debugger records termination inside the STL
-before Oxygen can handle `bad_alloc`. The construction fixture therefore excludes
-allocations the size of `std::_Container_proxy`. It also excludes unrelated
-allocations of the same size; this is a test-coverage limit, not a product policy
-change. The exclusion is opt-in and used only by registration construction.
-View rollback and all retirement tests continue rejecting every allocation.
-The complete Debug registry suite now passes 76/76. Do not count the earlier
-aborted run as a pass. Current proof is
-`out/analysis/ex07e/e06-s4/Debug/Oxygen.Graphics.Common.ResourceRegistry.Tests.json`;
-the debugger evidence remains `out/analysis/ex07e/e06-s4/managed-oom-debugger.log`.
+**S4 qualification limit (2026-09-24):** exhaustive Debug
+registration-construction fault injection reaches MSVC's `_Hash_vec` noexcept
+constructor allocating a 16-byte checked-iterator proxy. The debugger records
+termination inside the STL before Oxygen can handle `bad_alloc`. The
+construction fixture therefore excludes allocations the size of
+`std::_Container_proxy`. It also excludes unrelated allocations of the same
+size; this is a test-coverage limit, not a product policy change. The exclusion
+is opt-in and used only by registration construction. View rollback and all
+retirement tests continue rejecting every allocation. The complete Debug
+registry suite now passes 76/76. Do not count the earlier aborted run as a pass.
 
 ### S5 closure — actual submission and retirement
 

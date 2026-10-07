@@ -69,7 +69,9 @@ Recorded evidence:
 
 **Qualification:** `validated`
 
-LLD/plan updated; result substrate, HZB tester, base-pass consumers, diagnostics facts, `vtx.occlusion.*` controls, and VortexBasic `--with-occlusion` proof scene/tooling exist. Validation: ShaderBake rebuilt 186 modules; focused `RendererCapability`, `OcclusionModule`, `SceneRendererPublication`, and `SceneRendererDeferredCore` tests passed 62/62; CDB/D3D12 audit report `out/build-ninja/analysis/vortex/occlusion/vortex-occlusion.debug-layer.report.txt` passed with 0 D3D12/DXGI errors; RenderDoc proof `vortex-occlusion.proof.report.txt` shows Stage 3 depth draws 3, Stage 5 occlusion dispatch 1, Stage 9 base-pass scene draws 2, and Stage 20 ground grid absent; manual visual confirmation approved.
+LLD/plan updated; result substrate, HZB tester, base-pass consumers, diagnostics
+facts, `vtx.occlusion.*` controls, and VortexBasic `--with-occlusion` proof
+scene/tooling exist.
 
 **Remaining work:** No open M05B closure gap.
 
@@ -129,14 +131,6 @@ Oxygen.Graphics.Direct3D12.ShaderBake oxygen-examples-vortexbasic
 Oxygen.Vortex.OcclusionModule Oxygen.Vortex.SceneRendererDeferredCore
 --parallel 4` passed; ShaderBake repacked 186 modules after the occlusion
   compute shader fix.
-- CDB/D3D12 debug-layer audit passed:
-  `out/build-ninja/analysis/vortex/occlusion/vortex-occlusion.debug-layer.report.txt`
-  records runtime exit code 0, no debugger break, 0 D3D12 errors, 0 DXGI
-  errors, and `overall_verdict=pass`.
-- RenderDoc proof passed:
-  `out/build-ninja/analysis/vortex/occlusion/vortex-occlusion.proof.report.txt`
-  records Stage 3 depth draws 3, Stage 5 occlusion dispatch 1, and Stage 9
-  base-pass draws 2 for the VortexBasic `--with-occlusion` proof scene. The
-  refreshed proof also records Stage 20 ground-grid scope count 0 after the
+- The refreshed proof also records Stage 20 ground-grid scope count 0 after the
   proof-scene cleanup.
 - Manual visual confirmation approved after the proof-scene cleanup.

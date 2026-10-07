@@ -60,8 +60,7 @@ Tasks, budgets, dependencies and results are recorded in
 
 An item closes with its named delivery and accept/reject evidence. Rejected
 experiments close without a production change. Final performance acceptance
-does not keep completed implementation items open. Store raw results once;
-analyses and the checkpoint manifest link them by path/hash.
+does not keep completed implementation items open.
 
 **Gate:** EX051-GATE passes with native timing distributions, controlled cost
 attribution, bounded resources, independently verified correctness and current
@@ -141,8 +140,6 @@ must not grow by more than 5% without an approved tradeoff. Record placement byt
 and cached-family populations separately. Baseline/candidate comparisons use the
 same executed workload and common correctness fixes, identified by source hashes.
 
-The numeric targets and their published context were established in the
-[approved baseline manifest](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/baseline-manifest.json).
 Keep workload quality and numeric targets fixed. An unrelated rendering
 bottleneck requires a separate owner decision.
 
@@ -257,10 +254,7 @@ hold, 300 smoothstep exit; secondary phase is +600. Its warmup already enforces
 300 frames/10 seconds (whole 1,200-frame cycles for I01/I02). Asset readiness,
 draws, actual formats, shadows and temporal history are checked by that harness.
 GPU JSON, CPU CSV and the run manifest are emitted once; untimed endpoint images
-and placement snapshots are separate from sampled frames. Existing
-[native checkpoint](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/native-benchmark-checkpoint-manifest.json)
-and [H5 checkpoint](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h5-closeout-manifest.json)
-remain prior evidence, not new runs or final acceptance.
+and placement snapshots are separate from sampled frames.
 
 Append the same bounded event schedule to the three 1080p I02 runs: seed/cut,
 Manual/Auto switch, brightness step, sharing/source loss, resize, remove/re-add
@@ -314,10 +308,6 @@ existing presented-output path. Do not rerun this matrix at intermediate items.
 4. Freeze source/runtime inputs during native collection. Use one runtime control
    selector for D01-D04 and no competing GPU work. Instrumentation stays frozen;
    no new overhead campaign is scheduled.
-5. Store each raw result once. Analyses contain derived tables and references to
-   input paths/hashes. One checkpoint manifest links commands, revisions, raw
-   results and the decision. Do not embed raw native payloads again in audits or
-   summaries. Preserve existing evidence and failed-run records.
 
 #### Deferred CPU optimization — later milestone
 
@@ -354,17 +344,12 @@ and depth readers. The existing 4K temporal-off entry point required by 10A is
 `ExposureLightingGpuTest.DISABLED_ProductionHdrAllocationAccounting`, with
 `OXYGEN_EXPOSURE_TIMING_WIDTH=3840` and precision `production`.
 
-The [current Release table](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/audit-current-Release-memory-table.json)
-indexes eight raw cases by source hash. The
-[matched 4K production audit](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/audit-matched-3840-production-Release.json)
-and the other matched audits linked in EX051-10 close the common-fix comparison;
-the earlier table's pending-comparison prose is superseded. Their trace is
-queue-drained except for explicit delayed consumers; it is neither a worst-case
-concurrency bound nor heap commitment/residency. Fixed-descriptor populations
-must stabilize after reader/fence retirement. The measured unrelated-attachment
-excess below is a correction target, not an acceptable permanent cache budget.
-Final timings/memory acceptance belong to EX051-13, and post-10A placement must
-be measured before claiming its reduction.
+Their trace is queue-drained except for explicit delayed consumers; it is
+neither a worst-case concurrency bound nor heap commitment/residency.
+Fixed-descriptor populations must stabilize after reader/fence retirement. The
+measured unrelated-attachment excess below is a correction target, not an
+acceptable permanent cache budget. Final timings/memory acceptance belong to
+EX051-13, and post-10A placement must be measured before claiming its reduction.
 
 ## Supporting records
 

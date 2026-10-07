@@ -15,10 +15,9 @@ Status: `validated`
 **Validated 2026-09-21.** The approved residual batch and Release include repair
 are committed as `9ff39edcc` and `dc9ef824e`. Scoped changed code is tidy-clean;
 65 selected Debug and 65 Release cases pass. A single matched I02 run confirms
-performance/resource preservation and four byte-identical endpoint images.
-The [checkpoint](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice52/checkpoint-manifest.json)
-records raw references, retained diagnostics and reused evidence. No new warning
-suppression was added. The following requirements governed the completed pass.
+performance/resource preservation and four byte-identical endpoint images. No
+new warning suppression was added. The following requirements governed the
+completed pass.
 
 **Scope revised 2026-09-21 under the recorded protocol.** The authoritative residual
 scope, reused evidence and change-specific checks are in
@@ -73,19 +72,12 @@ are preserved.
 **Slice status: validated, 2026-09-21.** The agreed residual batch is resolved;
 02 -> 04 -> 10 -> 12/GATE is closed. Implementation commits are `9ff39edcc`
 (owner quality) and `dc9ef824e` (approved blocking Release include repair).
-The [checkpoint manifest](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice52/checkpoint-manifest.json)
-is the single result record, including exact selected cases, commands, source
-hashes, build logs, raw checks, reused evidence and the final closeout commit.
 
 Scoped oxytidy resolves **151 of 166 owner findings**, with zero diagnostics on
-changed code, zero hidden parse failures, and no added suppressions or check/filter
-changes. The 15 unmodified residuals are nine literal ABI assertions, the
-existing documented log-rate sentinel, two public enum-size suggestions and
-three lease-copy suggestions. Their locations and dispositions remain in the
-[quality result](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice52/quality-result.json).
-The [include repair](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice52/include-repair-result.json)
-restores Release-only dependencies; the benchmark body and its one pre-existing
-lambda-style diagnostic remain unchanged. Unrelated existing Release build
+changed code, zero hidden parse failures, and no added suppressions or
+check/filter changes. The 15 unmodified residuals are nine literal ABI
+assertions, the existing documented log-rate sentinel, two public enum-size
+suggestions and three lease-copy suggestions. Unrelated existing Release build
 warnings are retained in the logs, unchanged.
 
 Both owning targets compile in Debug and Release. **10 service plus 55 native
@@ -96,29 +88,22 @@ Each successful check ran once per configuration. The Release include repair
 needed an incremental build retry, not another Debug/service test run. No new
 regression test, discovery comparison or broad suite was warranted.
 
-The [single matched I02 preservation result](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice52/preservation-result.json)
-compares 7,200 Release frames at 1080p against the accepted 5.1 run. Added CPU
-access guards triggered this check. Active CPU p95/p99 are **0.359673/0.458538 ms**
-versus **0.514935/0.625473 ms**; GPU p95 is **6.641664 ms** versus **6.436864 ms**,
-within the existing 5% threshold. GPU phase counts, recording/binding counts and
-resource counts/placement match; all four endpoint files are byte-identical.
-All 1,030 frozen inputs remain unchanged. This establishes preservation, not an
-attributed optimization gain; original CPU goals remain deferred. The existing
-48-run matrix, overhead campaign, fixture decomposition and broader test review
-were reused, not repeated. Slice 6 is closed in [EX06](../EX06/README.md#tasks-and-outcome).
+Added CPU access guards triggered this check. Active CPU p95/p99 are
+**0.359673/0.458538 ms** versus **0.514935/0.625473 ms**; GPU p95 is **6.641664
+ms** versus **6.436864 ms**, within the existing 5% threshold. GPU phase counts,
+recording/binding counts and resource counts/placement match; all four endpoint
+files are byte-identical. All 1,030 frozen inputs remain unchanged. This
+establishes preservation, not an attributed optimization gain; original CPU
+goals remain deferred. The existing 48-run matrix, overhead campaign, fixture
+decomposition and broader test review were reused, not repeated. Slice 6 is
+closed in [EX06](../EX06/README.md#tasks-and-outcome).
 
 Correctness and benchmarks use separate executables:
 `Oxygen.Vortex.Exposure.Tests` and `Oxygen.Vortex.Exposure.Benchmarks`.
-The [benchmark README](../../../../../src/Oxygen/Vortex/Benchmarks/README.md) owns usage;
-[split evidence](../../../../../out/build-ninja/analysis/vortex/exposure-benchmark-split/checkpoint-manifest.json)
-and the [Vortex test quality result](../../../../../out/clang-tidy/vortex-test-quality/quality-summary-corrected.json)
-retain the completed structural and test-review qualification.
 
 **EX052-02 approved batch.** Starting source `e779d08bf` superseded the old
-diagnostic locations. The scoped oxytidy refresh reports 166 warnings in the two
-owner pairs, with complete analysis and no parse failures:
-[raw report](../../../../../out/clang-tidy/ex052/run-20260921-090650-a4oadpqt/summary.json).
-The review approved these bounded groups before implementation:
+diagnostic locations. The review approved these bounded groups before
+implementation:
 
 | Finding and live owner                                                               | Change and concrete benefit                                                                                                                                                                          | Affected verification and stop                                                                                                                                                                  |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -144,21 +129,19 @@ only a demonstrated output/performance impact triggers a matched runtime check.
 
 #### Completed work to reuse
 
-| Delivered work                                       | Existing source/evidence                                                                                                                                                                                                                                                                                           | Consequence for 5.2                                                                                                                                                                                                                                |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native fixture extraction and scenario decomposition | `2c696c522`; [current layout and ownership](../../../../../src/Oxygen/Vortex/Test/Exposure/README.md), `Test/Exposure/Fixtures`, `Benchmarks` and the existing ExposureGpu CMake target                                                                                                                            | EX052-05/06 are already delivered. Keep the current fixture owners, executable, filters and opt-in workloads. Do not split or merge them again.                                                                                                    |
-| Complete Vortex test-quality review                  | `4f359ce2d`; [corrected review](../../../../../out/clang-tidy/vortex-test-quality/quality-summary-corrected.json) and [file ledger](../../../../../out/clang-tidy/vortex-test-quality/review-ledger.json): 156 files, 129 TUs plus 21 headers, zero diagnostics at that checkpoint, 876 Debug checks plus LinkTest | No repeat directory-wide test review, initializer sweep, suppression campaign or 47-target baseline run. Check subsequent changes against the later evidence below.                                                                                |
-| Recording/binding API and caller migration           | `22cea346b`; [checkpoint](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-corrections13/checkpoint-manifest.json): 589 Debug and 403 Release owning checks; 89-TU analysis with zero diagnostics on changed code                                                                    | Reuse lifecycle, failure/retry, publication, binding and queued-reader coverage. No new API migration or owning-suite run merely because 5.2 starts. This is changed-code cleanliness, not a claim that every existing owner file is warning-free. |
-| Accepted performance and output baseline             | [final 5.1 checkpoint](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/acceptance13/checkpoint-manifest.json) and [CPU decision](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-corrections13/decision-table.json)                                      | Preserve the user-accepted operating point. Do not reopen CPU targets, repeat the 48-run matrix, H1-H5/R091, overhead campaign or MultiView captures.                                                                                              |
+| Delivered work                                       | Existing source/evidence                                                                                                                                                                | Consequence for 5.2                                                                                                                                                                                                                                |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Native fixture extraction and scenario decomposition | `2c696c522`; [current layout and ownership](../../../../../src/Oxygen/Vortex/Test/Exposure/README.md), `Test/Exposure/Fixtures`, `Benchmarks` and the existing ExposureGpu CMake target | EX052-05/06 are already delivered. Keep the current fixture owners, executable, filters and opt-in workloads. Do not split or merge them again.                                                                                                    |
+| Complete Vortex test-quality review                  | `4f359ce2d`: 156 files, 129 TUs plus 21 headers, zero diagnostics at that checkpoint, 876 Debug checks plus LinkTest                                                                    | No repeat directory-wide test review, initializer sweep, suppression campaign or 47-target baseline run. Check subsequent changes against the later evidence below.                                                                                |
+| Recording/binding API and caller migration           | `22cea346b`: 589 Debug and 403 Release owning checks; 89-TU analysis with zero diagnostics on changed code                                                                              | Reuse lifecycle, failure/retry, publication, binding and queued-reader coverage. No new API migration or owning-suite run merely because 5.2 starts. This is changed-code cleanliness, not a claim that every existing owner file is warning-free. |
+| Accepted performance and output baseline             |                                                                                                                                                                                         | Preserve the user-accepted operating point. Do not reopen CPU targets, repeat the 48-run matrix, H1-H5/R091, overhead campaign or MultiView captures.                                                                                              |
 
 #### Remaining scope and admission rule
 
 Start with **ExposurePass and PostProcessService implementation/header pairs**.
-The existing [89-TU report](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-corrections13/tidy-final/summary.json)
-is the input; its raw logs already report 232 and 61 diagnostics respectively in
-the two implementation files. These are untriaged findings, not 293 proven bugs
-or an instruction to rewrite both files. The report's 1,733 diagnostics across
-all encountered files are not the 5.2 backlog.
+These are untriaged findings, not 293 proven bugs or an instruction to rewrite
+both files. The report's 1,733 diagnostics across all encountered files are not
+the 5.2 backlog.
 
 For each proposed fix, record one short entry: **live location/diagnostic,
 concrete defect or maintenance benefit, intended change, affected tests, and
@@ -257,11 +240,6 @@ deliverable.
 | EX052-11    | superseded | Performance/output preservation is conditional in 10; no separate timing or visual campaign.                                                                               |
 
 ## Residual-quality result
-
-**Validated 2026-09-21; implementation `9ff39edcc`, include repair `dc9ef824e`.**
-The [tracker result](#tasks-and-outcome)
-and [checkpoint](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice52/checkpoint-manifest.json)
-own the selected checks, raw evidence and excluded diagnostics.
 
 ExposurePass constructs suitability and composition constants through named
 local records matching the existing HLSL word order. Both remain 128 bytes and

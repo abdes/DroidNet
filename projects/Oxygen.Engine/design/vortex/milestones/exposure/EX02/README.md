@@ -25,7 +25,6 @@ the GPU correctly. Invalid settings retain the previous valid revision.
 
 ## Recorded qualification
 
-| Slice | Status | Boundary | Evidence |
-| ----- | ------ | -------- | -------- |
-
-| 2 — Settings and fixed exposure | validated | Canonical authored input, immutable pass snapshots, fixed/camera gain, per-view settings and public mask acceptance are qualified. | [Fixed gain](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/fixed-gain/evidence-manifest.json), [frame bindings](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/frame-binding/evidence-manifest.json), [configuration and mask acceptance](../../../../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r028-manifest.json) |
+| Slice                           | Status    | Boundary                                                                                                                           |
+| ------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 2 — Settings and fixed exposure | validated | Canonical authored input, immutable pass snapshots, fixed/camera gain, per-view settings and public mask acceptance are qualified. |

@@ -320,12 +320,9 @@ when evaluating visual changes.
 | H-BENCH-OPT-NATIVE        | Earlier no-Tracy primary 9.999 ms deferred / 7.230 forward; 4,096 lights 22.001 / 20.718 ms.                                                                                                                        | Earlier stage-timing operating points, before the later shadow correction. Never report 59.530 -> 9.999 as a same-instrumentation speedup.                                      |
 | H-SPONZA-4096M-DIAGNOSTIC | Post-fix diagnostic full-Tracy 72.406 ms / 13.81 FPS, p95 76.834; deferred 45.568, point draws 38.609, translucency 14.260 ms. Separate native log sample 65.477 ms / 15.27 FPS.                                    | Diagnostic evidence supporting E priorities; no recorded CPU preflight. Current A-SPONZA rows are the new comparison references.                                                |
 
-The versioned historical JSON retains source values and hashes. Original reports:
-[model 2](../../../../../../out/build-tracy-ninja/analysis/vortex/exposure-lightbench/ex07c/model2-results.md),
-[conventional shadows](../../../../../../out/analysis/light-shadow-audit-20260924/REPORT.md),
-[initial qualified count set](../../../../../../out/analysis/ex07d/qualified-20260924/accepted-summary.json).
-The interrupted original 4,096-light run and pre-lifetime-fix shadow attempts
-are not admitted as baselines. The 288.300 ms 4,096-light result was an intermediate
+The versioned historical JSON retains source values and hashes. The interrupted
+original 4,096-light run and pre-lifetime-fix shadow attempts are not admitted
+as baselines. The 288.300 ms 4,096-light result was an intermediate
 batch-retirement candidate, not a completed original reference.
 
 ## How E and F use this register
@@ -383,8 +380,8 @@ engine-side qualification are recorded in their linked reports above.
 
 ## Baseline qualification — task evidence
 
-| Credited work                                 | Evidence and accepted scope                                                                                                                                                                                                                                                                                                                    |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Model-2 MultiView operating point             | Accepted 2560x1440 quality/performance: mean frame 13.098 -> 7.804 ms, deferred total 8.427 -> 2.901 ms, native BRDF allocation 4,718,592 -> 65,536 bytes; numerical and settled-image evidence in the [model-2 report](../../../../../../out/build-tracy-ninja/analysis/vortex/exposure-lightbench/ex07c/model2-results.md).                  |
-| Conventional-shadow baseline and result       | Matched static New Sponza mean frame 168.99 -> 23.35 ms and shadow depths 152.71 -> 3.80 ms; shadow-enabled Instancing 43.84 FPS / 0.237 ms shadow depths. Focused allocation/cache/list tests and manual visual approval are recorded below and in the [shadow report](../../../../../../out/analysis/light-shadow-audit-20260924/REPORT.md). |
-| Reference, recipe and measurement foundations | B's qualified references, deterministic 1,024-light recipe, native preview, instruments and accepted collection-overhead result remain closed; [B audit](../EX07B/README.md). No repeated reference or overhead campaign.                                                                                                                      |
+| Credited work                                 | Evidence and accepted scope                                                                                                                                                                                                                       |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Model-2 MultiView operating point             | Accepted 2560x1440 quality/performance: mean frame 13.098 -> 7.804 ms, deferred total 8.427 -> 2.901 ms, native BRDF allocation 4,718,592 -> 65,536 bytes; numerical and settled-image evidence.                                                  |
+| Conventional-shadow baseline and result       | Matched static New Sponza mean frame 168.99 -> 23.35 ms and shadow depths 152.71 -> 3.80 ms; shadow-enabled Instancing 43.84 FPS / 0.237 ms shadow depths. Focused allocation/cache/list tests and manual visual approval are recorded below and. |
+| Reference, recipe and measurement foundations | B's qualified references, deterministic 1,024-light recipe, native preview, instruments and accepted collection-overhead result remain closed; [B audit](../EX07B/README.md). No repeated reference or overhead campaign.                         |

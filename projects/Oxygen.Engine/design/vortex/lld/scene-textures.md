@@ -330,8 +330,6 @@ The extension and R091 idle-frame lease release are committed as `8903305`.
 Seven focused Debug cases and eight Release cases on each side pass. The matched
 pre-H5/current comparison uses the same R091 fix and executed accounting body;
 all five peak categories and retired populations match within each control.
-See the [common-fix protocol](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/protocol-shared-idle-fix.json)
-and the [current Release memory table](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/audit-current-Release-memory-table.json).
 
 The following tables preserve the original Slice 5 texture-only checkpoint.
 
@@ -382,9 +380,6 @@ rendering passes remain in those passes' costs. Normal cases convert to FP16;
 temporal cases retain/copy FP32. Modeled primary texture reads range from
 399,716,096 to 1,605,690,368 bytes per captured frame, and modeled writes from
 75,008,000 to 419,553,280 bytes, with the exclusions above.
-[Release allocation phases](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/accounting-summary-Release.json)
-and [traffic/timing results](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/accounting-performance-Release.json).
-[Native reports, capture analysis, exact commands and scope](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/accounting-manifest.json).
 
 ### Allocation contract
 
@@ -794,18 +789,16 @@ the pool still refuses reuse while underlying resource owners remain.
 marks attachments unavailable until their frame's reclaimer callback. No CPU
 wait is added. FP32 accumulation and GPU-selected checked-half fallback remain.
 
-The [10A checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/color-ownership/checkpoint-manifest.json)
-records 56/56 passing checks and 644 unchanged frozen inputs. The 4K temporal-off
-trace has engine/combined/HDR peaks of 3747.207/3987.770/1603.203 MiB. In all three
-cycles, six warmed attachment families keep identical resource identities and
-descriptors through retained-color resize; all six retire to zero leases.
-The three-frame attachment population is independent of fallback readers.
-Queued consumers preserve five HDR outputs and both depth aliases, including
-release before submission/completion. Color/descriptor reuse is additionally
-covered by the 16 existing retained-pool tests and the focused family-reuse test.
-The earlier draft's extra color-retirement interval was diagnosed and corrected;
-its raw evidence remains separate. These are Debug lifecycle observations, not
-a matched-Release comparison with the historical table below. 05 owns the new
+The 4K temporal-off trace has engine/combined/HDR peaks of
+3747.207/3987.770/1603.203 MiB. In all three cycles, six warmed attachment
+families keep identical resource identities and descriptors through
+retained-color resize; all six retire to zero leases. The three-frame attachment
+population is independent of fallback readers. Queued consumers preserve five
+HDR outputs and both depth aliases, including release before
+submission/completion. Color/descriptor reuse is additionally covered by the 16
+existing retained-pool tests and the focused family-reuse test. The earlier
+draft's extra color-retirement interval was diagnosed and corrected. These are Debug lifecycle observations, not a
+matched-Release comparison with the historical table below. 05 owns the new
 format-benefit measurements and 13 owns final acceptance.
 
 **Source entry points:** trace `SceneRenderer::BuildSceneTextureLeaseKey` and

@@ -20,21 +20,19 @@ C's cone precision repair closes the 23 punctual-photometry residuals: the
 2,160-input probe now reports zero failures, with maximum budget fraction
 0.010959. Two formerly reserved words retain relative cone corrections in the
 unchanged 80-byte record; both direct families use compensated FP32 evaluation.
-An additional 294-case native matrix covers rotated axes, hard/soft/hemispherical
-cones and outer angles down to 1e-18 radians (maximum budget fraction 0.196322);
-omitting the corrections fails 22 negative controls. The admission verifier now
-requires this matrix too. Debug/Release each pass 29 native ABI/instrument,
-30 lighting-service and five image/material/workload tests. Both 233-module
-shader archives rebuild. RenderDoc checks all 16 corrected spot records in the
-33-light forward fixture and finite scene output. Oxytidy covers all eight
-changed C++ files/headers with no changed-line findings or new suppressions;
-seven existing whole-file findings remain. Seven admission-tool tests pass.
-Evidence under `out/build-ninja/analysis/vortex/exposure-lightbench/ex07c`:
-`cone-{native,cpu,images}-{debug,release}.json`, `cone-forward-report.txt`,
-`cone-tidy-changed-lines.json` and `cone-physical-admission.log`.
-This is punctual factor/ABI/image-consistency evidence, not full source calibration, finite-emitter
-or shadow qualification, an official-resolution workload baseline, or a
-performance improvement. Those C–F obligations remain open.
+An additional 294-case native matrix covers rotated axes,
+hard/soft/hemispherical cones and outer angles down to 1e-18 radians (maximum
+budget fraction 0.196322); omitting the corrections fails 22 negative controls.
+The admission verifier now requires this matrix too. Debug/Release each pass 29
+native ABI/instrument, 30 lighting-service and five image/material/workload
+tests. Both 233-module shader archives rebuild. RenderDoc checks all 16
+corrected spot records in the 33-light forward fixture and finite scene output.
+Oxytidy covers all eight changed C++ files/headers with no changed-line findings
+or new suppressions; seven existing whole-file findings remain. Seven
+admission-tool tests pass. This is punctual factor/ABI/image-consistency
+evidence, not full source calibration, finite-emitter or shadow qualification,
+an official-resolution workload baseline, or a performance improvement. Those
+C–F obligations remain open.
 
 C's BRDF moment-data work now has a runnable offline generator under
 `Test/Lighting/Tools/GgxMomentTable.cpp`; production does not depend on the CPU
@@ -53,16 +51,13 @@ orthographic image evidence are recorded below.
 
 The generator is oxytidy-clean. One/six-worker smoke outputs are byte-identical;
 11 malformed-data/CLI controls and an underresolved-table control are rejected.
-Build `Oxygen.Vortex.GgxMomentTable` in Release under `out/build-ninja`, then run
-`Oxygen.Vortex.GgxMomentTable.exe <candidate.json> 513 1025 6`.
-`InspectGgxMomentTable.py` checks anchors and optional `--refined-reference` data;
-`CertifyGgxMomentTableSamples.py` reuses `python-flint==0.9.0` / FLINT 3.6.0 for
-the ranked sample enclosures. Evidence in the same `ex07c` directory:
-`moments-513x1025{,-anchors,-stencil,-sample-certificates}.json`,
-`moments-513-stencil.json`, `moments-tool-validation.json` and
-`moments-tidy-verified/`. `BuildGgxMomentData.py` packages the sampled evidence and
-binary payload, then generates a private build header; the renderer links no
-CPU reference implementation.
+Build `Oxygen.Vortex.GgxMomentTable` in Release under `out/build-ninja`, then
+run `Oxygen.Vortex.GgxMomentTable.exe <candidate.json> 513 1025 6`.
+`InspectGgxMomentTable.py` checks anchors and optional `--refined-reference`
+data; `CertifyGgxMomentTableSamples.py` reuses `python-flint==0.9.0` / FLINT
+3.6.0 for the ranked sample enclosures. `BuildGgxMomentData.py` packages the
+sampled evidence and binary payload, then generates a private build header; the
+renderer links no CPU reference implementation.
 
 C's direct-BRDF cutover now uses one compensated correlated-GGX implementation
 for forward/deferred shading and their direct-BRDF diagnostics. It preserves the
@@ -264,13 +259,6 @@ view is outside the deferred totals. The dominant measured target is finite loca
 lighting, especially the main-view spot; further optimization is directed there.
 Tracy does not provide per-expression ALU/texture or integration-branch attribution.
 
-Evidence is under `out/build-tracy-ninja/analysis/vortex/exposure-lightbench/ex07c`:
-`final-Oxygen.Vortex.{LightingGpuAbi,LightingImageReference}-{debug,release}.json`,
-`final-Oxygen.{Examples.DemoShell.GraphicsToolingCli,Graphics.Common.Queues,
-Graphics.Common.GraphicsLifecycle,Graphics.Headless.All}-debug.json`,
-`resolution-cli-release.json`, `holistic-Oxygen.Graphics.{Common.Queues,
-Common.GraphicsLifecycle,Headless.All}-release.json`, and
-`multiview-1080p-{fullscreen.tracy,summary.json,detailed.json,analysis.md}`.
 The capture SHA256 is
 `e9944e412c1bb952925faa157fd7e9be961588e1901433164e7f6d84b052d6c1`.
 

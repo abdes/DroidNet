@@ -84,9 +84,7 @@ cmake --build out/build-ninja --config Debug --target Oxygen.Vortex.LightingRefe
 ```
 
 Use the existing VS developer environment for the build. The Release target and
-command use the same target name and test matrix. Logs, results, lint output and
-the source-hash checkpoint live under
-`out/build-ninja/analysis/vortex/exposure-lightbench/ex07b`.
+command use the same target name and test matrix.
 
 ## Independent high-precision endpoint anchors
 
@@ -126,8 +124,7 @@ uv run --no-project --with mpmath==1.3.0 python tools/vortex/GenerateGgxEndpoint
 
 The check reproduces the file byte-for-byte, and the generated JSON passes the
 repository formatter without modification. The new C++ endpoint test is
-oxytidy-clean. Evidence under `ex07b`: `endpoint-reference-{debug,release}.json`,
-`endpoint-reference-tidy-final/` and `endpoint-reference-checkpoint.json`.
+oxytidy-clean.
 
 ## Certified interior queries
 
@@ -185,11 +182,10 @@ The roughness-one furnace uses the analytic means directly.
 
 Debug and Release each pass all **16 reference tests**. Maximum combined furnace
 error `6.400e-5` against the `2e-3` budget and maximum relative reciprocity
-difference `6.553e-16` pass the specified limits. These are measured errors at the specified samples,
-not a whole-domain uncertainty certificate or a production shader result.
-All six changed C++ files, including headers and tests, are oxytidy-clean with
-no new suppressions. Evidence under `ex07b`: `coupled-reference-{debug,release}.json`,
-`coupled-reference-tidy-verified/` and `coupled-reference-checkpoint.json`.
+difference `6.553e-16` pass the specified limits. These are measured errors at
+the specified samples, not a whole-domain uncertainty certificate or a
+production shader result. All six changed C++ files, including headers and
+tests, are oxytidy-clean with no new suppressions.
 
 ## Independent punctual photometry
 
@@ -229,13 +225,11 @@ include exact rational values, the guarded regime, inverse-square ratios and
 the last representable distance below the range boundary.
 
 The owning Debug suite passes **21/21 tests**; focused Release passes all five
-new photometry tests. Maximum emitted-flux relative error is `8.025e-15` in both.
-The three new C++ files, including the header, are oxytidy-clean without
+new photometry tests. Maximum emitted-flux relative error is `8.025e-15` in
+both. The three new C++ files, including the header, are oxytidy-clean without
 suppressions. These tests qualify punctual photometry; finite geometry has its
-separate reference below. Decoding/GPU/image gates remain open, and no production
-lighting behavior changes here.
-Evidence under `ex07b`: `photometry-reference-{debug,release}.json`,
-`photometry-reference-tidy-verified/` and `photometry-reference-checkpoint.json`.
+separate reference below. Decoding/GPU/image gates remain open, and no
+production lighting behavior changes here.
 
 ## Finite sphere/disk reference
 
@@ -303,15 +297,12 @@ The finite-emitter matrix contains eleven tests:
 
 Debug and Release each pass all **32 reference tests**. The maximum absolute
 difference against the separate sphere surface integral is `1.134e-7` in the
-tested range/guard cases, within their `1e-10 + 1e-8*reference` comparison limit.
-All six changed C++ files,
-including headers, are oxytidy-clean without new suppressions. These checks
-qualify the listed numerical cases; broader source/BRDF sampling and uncertainty
-qualification remain open before this oracle can qualify production approximations.
-No renderer behavior or shadow technique changes in this checkpoint.
-Evidence under `ex07b`: `finite-reference-{debug,release}.json`,
-`finite-reference-narrow-tidy/`, `finite-narrow-negative.log` and
-`finite-reference-checkpoint.json`.
+tested range/guard cases, within their `1e-10 + 1e-8*reference` comparison
+limit. All six changed C++ files, including headers, are oxytidy-clean without
+new suppressions. These checks qualify the listed numerical cases; broader
+source/BRDF sampling and uncertainty qualification remain open before this
+oracle can qualify production approximations. No renderer behavior or shadow
+technique changes in this checkpoint.
 
 ### Off-axis and source-edge qualification
 
@@ -343,15 +334,11 @@ applicable. Their coordinates and Jacobians differ from the oracle's polar disk
 and apparent sphere cap. All comparisons retain `1e-7 + 1e-5*reference` limits.
 
 The Release finite-source suites pass **14/14 tests**, and the owning Debug
-suite passes **43/43**. Maximum relative
-differences are **1.838e-11 for disks** and **2.740e-6 for spheres**. The owning
-Debug comparisons match these results; the three changed C++ files are oxytidy-clean.
-The subsequent tilted/grazing matrix is below. Full coupled-RGB finite-source
-fixture qualification remains open. This checkpoint changes no production
-shader or runtime rendering cost.
-Evidence under `ex07b`: `finite-offaxis-{debug,release}.json`,
-`finite-offaxis-limit-negative.log`, `finite-offaxis-tidy-verified/` and
-`finite-offaxis-checkpoint.json`.
+suite passes **43/43**. Maximum relative differences are **1.838e-11 for disks**
+and **2.740e-6 for spheres**. The owning Debug comparisons match these results;
+the three changed C++ files are oxytidy-clean. The subsequent tilted/grazing
+matrix is below. Full coupled-RGB finite-source fixture qualification remains
+open. This checkpoint changes no production shader or runtime rendering cost.
 
 ### Tilted and grazing source geometry
 
@@ -383,16 +370,12 @@ the default remains 256. The independent sphere surface oracle partitions its
 own rows at the receiver view plane; it retains its separate area Jacobian and
 emission cosine.
 
-The Release finite-source run passes all 15 cases, with independent
-refinement pairs up to 1024/2048 for the hardest grazing inputs. The tilted disk
-matrix uses at most 2.546e-5 of its unchanged `1e-7 + 1e-5*reference` error
-budget; maximum sphere relative difference is 7.852e-8. The owning Debug suite
-passes **44/44 tests** and reproduces these comparison results. Both changed
-C++ files are oxytidy-clean.
-Full coupled-RGB finite-source validation remains separate.
-Evidence under `ex07b`: `finite-tilted-{debug,release}.json`,
-`finite-grazing-limit-negative.log`, `finite-tilted-tidy-verified/` and
-`finite-tilted-checkpoint.json`.
+The Release finite-source run passes all 15 cases, with independent refinement
+pairs up to 1024/2048 for the hardest grazing inputs. The tilted disk matrix
+uses at most 2.546e-5 of its unchanged `1e-7 + 1e-5*reference` error budget;
+maximum sphere relative difference is 7.852e-8. The owning Debug suite passes
+**44/44 tests** and reproduces these comparison results. Both changed C++ files
+are oxytidy-clean. Full coupled-RGB finite-source validation remains separate.
 
 ## Packed material decoding and native format probe
 
@@ -434,17 +417,14 @@ widen the frozen end-to-end packed-material/BRDF budget of `2% + 2e-5`.
 
 Debug and Release each pass all **25 native tests**, with no warning/error log
 entries. Both report maximum normal-component difference 2.006e-7, maximum
-sRGB-code error 0.429605 and maximum linear-color difference 0.00374875.
-The owning Debug CPU suite passes **36/36 tests**; focused Release passes all
-four new CPU material tests. All six changed C++ files,
-including fixture headers and tests, are oxytidy-clean without new suppressions.
-This qualifies decoding of supplied texels and reflectance operands. Texture
-sampling/factor composition, normal mapping, surface eligibility, actual base-pass
-writes and complete forward/deferred lighting images require their own fixtures.
-No production material or rendering behavior changes here.
-Evidence under `ex07b`: `material-native-{debug,release}.json`,
-`material-reference-{debug,release}.json`, `material-reference-tidy-verified/`,
-`material-normal-landmarks-tidy/` and `material-reference-checkpoint.json`.
+sRGB-code error 0.429605 and maximum linear-color difference 0.00374875. The
+owning Debug CPU suite passes **36/36 tests**; focused Release passes all four
+new CPU material tests. All six changed C++ files, including fixture headers and
+tests, are oxytidy-clean without new suppressions. This qualifies decoding of
+supplied texels and reflectance operands. Texture sampling/factor composition,
+normal mapping, surface eligibility, actual base-pass writes and complete
+forward/deferred lighting images require their own fixtures. No production
+material or rendering behavior changes here.
 
 ## Smooth/grazing furnace matrix
 
@@ -480,17 +460,15 @@ The tests check nonnegative lobes, separate integrated responses, the combined
 energy ceiling and unit-reflectance preservation. Omitting compensation loses
 energy; adding uncoupled Lambertian diffuse exceeds the unit-energy ceiling.
 
-The Debug and Release matrices pass: maximum single-scattering certificate distance
-is **1.283e-6**, and maximum combined furnace comparison error including the
-grazing-tail bound is **5.854e-5**, below **2e-3**. The largest tail bound is
-**3.933e-5**. The owning Debug suite passes **40/40 tests**, and the affected
-Release BRDF/furnace/finite-source suites pass **16/16**. All four changed C++
-files are oxytidy-clean without suppressions.
-This qualifies the specified CPU reference matrix, not production shaders or
-every arbitrary material/view query. Production numerical/image comparisons
-must still meet their frozen budgets on the final implementation.
-Evidence under `ex07b`: `furnace-reference-{debug,release}.json`,
-`furnace-reference-tidy-verified-final/` and `furnace-reference-checkpoint.json`.
+The Debug and Release matrices pass: maximum single-scattering certificate
+distance is **1.283e-6**, and maximum combined furnace comparison error
+including the grazing-tail bound is **5.854e-5**, below **2e-3**. The largest
+tail bound is **3.933e-5**. The owning Debug suite passes **40/40 tests**, and
+the affected Release BRDF/furnace/finite-source suites pass **16/16**. All four
+changed C++ files are oxytidy-clean without suppressions. This qualifies the
+specified CPU reference matrix, not production shaders or every arbitrary
+material/view query. Production numerical/image comparisons must still meet
+their frozen budgets on the final implementation.
 
 ## Coupled RGB finite-source composition
 
@@ -515,9 +493,7 @@ certificate for every sampled moment or a production RGB shader qualification.
 
 Debug and Release pass all **16 finite-source tests**. The final Release binary
 also passes the new case after the lint fixes. The changed C++ file is
-oxytidy-clean without suppressions. Evidence under `ex07b`:
-`finite-rgb-{debug,release}.json`, `finite-rgb-final-release.json`,
-`finite-rgb-tidy-verified/` and `finite-rgb-checkpoint.json`.
+oxytidy-clean without suppressions.
 
 ## Native punctual photometry probe and physical admission
 
@@ -567,10 +543,6 @@ The changed C++ file is oxytidy-clean without suppressions. The admission
 command exits **1**, as required for these unqualified physical results;
 all six admission-tool safety tests pass.
 
-Evidence under `ex07b`: `photometry-native-{debug,release}.json` and `.log`,
-`photometry-native-tidy-verified/`, `photometry-physical-admission.log`,
-`photometry-admission-tests.log` and `photometry-native-checkpoint.json`.
-
 ## Native direct-BRDF probe
 
 `BrdfGpu_test.cpp` compares **108 inputs / 648 channel responses** against the
@@ -613,25 +585,19 @@ after lint-only fixes. No warning/error log entries occur. The changed C++ file
 is oxytidy-clean. The admission checker exits **1** and reports both the 23
 photometry and 565 BRDF channel failures. All seven admission-tool tests pass.
 
-Evidence under `ex07b`: `brdf-native-{debug,release}.json` and `.log`,
-`brdf-native-final-release.json`, `brdf-native-tidy-verified/`, `brdf-physical-admission.log`,
-`brdf-admission-tests.log` and `brdf-native-checkpoint.json`.
-
 ## Shared bounded CPU capture foundation
 
 `Test/Support/CpuTimingCapture.{h,cpp}` replaces the exposure-only observer.
-`Oxygen.Vortex.Test.Support` (`oxygen::vortex-test-support`) compiles it once per configuration; the
-lighting instrumentation tests and exposure benchmarks both depend on that
-test-owned library. Tests do not compile or include benchmark implementation
-files. No shipping target links the collector, and this checkpoint adds no
-production profiling hooks or collection overhead.
-Its target uses Oxygen's module declaration and hierarchy helpers, standard
-compiler flags/C++23 requirements, header file sets, IDE arrangement and coverage
+`Oxygen.Vortex.Test.Support` (`oxygen::vortex-test-support`) compiles it once
+per configuration; the lighting instrumentation tests and exposure benchmarks
+both depend on that test-owned library. Tests do not compile or include
+benchmark implementation files. No shipping target links the collector, and this
+checkpoint adds no production profiling hooks or collection overhead. Its target
+uses Oxygen's module declaration and hierarchy helpers, standard compiler
+flags/C++23 requirements, header file sets, IDE arrangement and coverage
 configuration. The support module is static and has no install/export rule.
 Debug/Release support consumers build and all eight collector tests pass after
-this CMake correction. `ex07b/support-module-checkpoint.json` records target
-ownership and common compiler flags from all three generated configurations;
-`support-module-{debug,release}.json` records the executed test results.
+this CMake correction.
 
 Record capacity is an explicit strong type. Storage is reserved before capture;
 accepted callbacks copy labels into fixed storage and append only within the
@@ -665,11 +631,6 @@ GPU/resource collection and a native on/off overhead measurement remain required
 before B's instrumentation gate closes. The measurement protocol uses normal profiling/probe
 overhead only; do not add benchmark collection, formatting, allocation or I/O to
 the production frame path.
-
-Evidence under `ex07b`: `cpu-timing-{debug,release}.json`,
-`cpu-timing-{debug,release}-build.log`, exposure workload discovery logs,
-`cpu-timing-support-tidy/`, `cpu-timing-lint-baseline.json` and
-`cpu-timing-checkpoint.json`.
 
 ## Native serial-image accumulation fixture
 
@@ -717,11 +678,6 @@ path. An independently forced unculled reference remains necessary before this
 fixture can qualify a future spatial culler; do not silently reuse a culling
 defect in both compared images.
 
-Evidence under `ex07b`: `image-reference-{debug,release}.json` and `.log`,
-`image-reference-forward-final_capture.rdc`, `image-reference-renderdoc-final.txt`
-and `.rgba32f`, `image-reference-tidy-verified/`,
-`image-reference-final-clean/` and `image-reference-checkpoint.json`.
-
 ## Reference-test runtime improvement
 
 The same **45 tests**, cases, tolerances, refinement requirements and independent
@@ -758,12 +714,10 @@ are **4.108e-15** and **1.666e-15**, respectively. Release also passes all
 physical-admission failures remain unchanged C obligations. All five changed
 C++ files are oxytidy-clean.
 
-Evidence under `ex07b`: `reference-speed-before-{debug,release}.json`,
-`reference-speed-final-{debug,release}.json`, `reference-speed-native-release.json`,
-`reference-speed-final-tidy/` and `reference-speed-checkpoint.json`. The checkpoint
-records source/binary hashes, matching test names, per-test times and numerical
-deltas. The earlier `reference-speed-static-debug.json` run used an old executable
-during relinking and concurrent compiler load; it is explicitly excluded.
+The checkpoint records source/binary hashes, matching test names, per-test times
+and numerical deltas. The earlier `reference-speed-static-debug.json` run used
+an old executable during relinking and concurrent compiler load; it is
+explicitly excluded.
 
 ## Default material evaluation reference and native UV probe
 
@@ -796,10 +750,6 @@ Six new CPU checks take under a millisecond. Both configurations pass all
 needed for these independent additions. All four added C++ files/headers are
 oxytidy-clean. Actual sampled/raster comparisons were still open at that
 checkpoint; the completion audit records their subsequent closure.
-
-Evidence under `ex07b`: `material-evaluation-{debug,release}.json`,
-`material-evaluation-native-{debug,release}.json` and `.log`,
-`material-evaluation-tidy-fixed/` and `material-evaluation-checkpoint.json`.
 
 ## Native sampled material and G-buffer producer checks
 
@@ -836,10 +786,6 @@ nonconstant filtering/mips, alternate UV sets, extended materials or final
 physical lighting. Those boundaries remain distinct from the already qualified
 UV arithmetic and supplied-texel decoder probes.
 
-Evidence under `ex07b`: `material-raster-{debug,release}.json` and `.log`,
-`material-raster-final-release.json`, `material-raster-tidy-verified/` and
-`material-raster-checkpoint.json`.
-
 ## Independent full-list GPU image reference
 
 `UnculledLightingFixture` supplies a test-only compute pass with lights built
@@ -870,9 +816,8 @@ largest full-list error consumes **0.006329733** of the image budget.
 All eight changed C++/header files are oxytidy-clean across nine compilation
 contexts. Both builds and all native runs use the Ninja build tree.
 
-Evidence under `ex07b`: `unculled-{debug,release}.json`, `unculled-tone-{debug,release}.json`,
-their logs, and `unculled-tidy-final/`. The prior RenderDoc capture documents the
-raster light publication; it does not capture this newly added reference pass.
+The prior RenderDoc capture documents the raster light publication; it does not
+capture this newly added reference pass.
 
 ## Native CPU phase and GPU timeline coverage
 
@@ -919,13 +864,9 @@ changed C++/header files. Unchanged code retains 97 findings in the scene render
 deferred packet/pass implementation and publication test probe; no suppression
 was added. The new native test and phase additions have no remaining findings.
 
-Evidence under `ex07b`: `phase-{debug,release}.json`,
-`phase-cpu-{debug,release}.json`, `phase-image-{debug,release}.json`,
-`phase-profiler-release.json`, `phase-timestamps-release.json`,
-`phase-tidy-final/` and `phase-native-tidy-final/`. Resource-accounting
-qualification and native collection on/off overhead remain required before B
-closes. Shared forward shading and shadow sampling still need matched-control
-attribution rather than inventing independent GPU intervals.
+Resource-accounting qualification and native collection on/off overhead remain
+required before B closes. Shared forward shading and shadow sampling still need
+matched-control attribution rather than inventing independent GPU intervals.
 
 ## Bounded allocator-memory capture
 
@@ -985,13 +926,10 @@ consumer sweep also encounters an existing Clang error in
 the backend and new consumer compile contexts were checked separately, and both
 MSVC Ninja configurations build. No warning suppression is added.
 
-Evidence under `ex07b`: `memory-{debug,release}.json`,
-`memory-cpu-{debug,release}.json`, build/run logs, `memory-new-tidy-final/`,
-`memory-backend-tidy/` and the broad `memory-tidy/` attempt. The native JSON
-contains all five raw segment snapshots. Workload-specific attribution,
-allocation churn and between-sample peaks still require the benchmark integration;
-live-count deltas alone must not be presented as allocation churn. Native
-collection-overhead qualification also remains open.
+The native JSON contains all five raw segment snapshots. Workload-specific
+attribution, allocation churn and between-sample peaks still require the
+benchmark integration; live-count deltas alone must not be presented as
+allocation churn. Native collection-overhead qualification also remains open.
 
 ## Successful factory-call churn
 
@@ -1018,8 +956,6 @@ after byte-count overflow. Debug/Release each pass **13 CPU instrument tests**
 and **three native instrument tests**. This counts calls through these factories;
 it does not infer driver-object allocations or allocator-internal heap operations.
 
-Evidence under `ex07b`: `churn-cpu-{debug,release}.json`,
-`churn-{debug,release}.json`, build/run logs and `churn-tidy-final/`.
 The overhead benchmark will combine these event counts with the independently
 qualified allocator snapshots; changes in live allocation counts are not a
 substitute for event counts.
@@ -1065,8 +1001,7 @@ no successful buffer/texture creations occur inside these warmed windows.
 Release and Debug targets build, and Debug explicitly skips the Release-only
 measurement. The new benchmark is oxytidy-clean; the broad consumer run retains
 22 existing public-fixture-member warnings in `ExposureTestGraphics.h` and adds
-no suppression. Evidence is `collection-smoke.json`, its report directory and
-`collection-tidy-final/` under `ex07b`.
+no suppression.
 
 ### Full collection measurement
 
