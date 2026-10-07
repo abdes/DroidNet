@@ -92,6 +92,30 @@ foreach ($compiler in @(
 """)
 
     @unittest.skipUnless(os.name == "nt", "Windows build host policy")
+    def test_bare_compiler_resolves_through_path(self):
+        fake = self.root / "fake-cl" / "bin" / "Hostx64" / "x64"
+        fake.mkdir(parents=True)
+        (fake / "cl.exe").write_bytes(b"")
+        output = self.command("""
+$env:PATH = (Join-Path $PSScriptRoot 'fake-cl/bin/Hostx64/x64') + [IO.Path]::PathSeparator + $env:PATH
+Assert-OxygenWindowsBuildTools -Compiler 'cl'
+Assert-OxygenWindowsBuildTools -Compiler 'cl.exe'
+'RESOLVED'
+""")
+        self.assertIn("RESOLVED", output)
+
+    @unittest.skipUnless(os.name == "nt", "Windows build host policy")
+    def test_bare_compiler_resolving_to_hostx86_is_rejected(self):
+        fake = self.root / "fake-cl" / "bin" / "Hostx86" / "x64"
+        fake.mkdir(parents=True)
+        (fake / "cl.exe").write_bytes(b"")
+        self.command("""
+$env:PATH = (Join-Path $PSScriptRoot 'fake-cl/bin/Hostx86/x64') + [IO.Path]::PathSeparator + $env:PATH
+try { Assert-OxygenWindowsBuildTools -Compiler 'cl'; throw 'Accepted forbidden compiler' }
+catch { if ($_.Exception.Message -notlike 'Oxygen requires Hostx64*') { throw } }
+""")
+
+    @unittest.skipUnless(os.name == "nt", "Windows build host policy")
     def test_cached_hostx86_is_rejected_before_build_invocation(self):
         build = self.tree("ninja")
         (build / "CMakeCache.txt").write_text(

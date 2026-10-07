@@ -437,6 +437,16 @@ function Assert-OxygenWindowsBuildTools {
     }
     if (-not $Compiler) {
         $Compiler = (Get-Command cl.exe -CommandType Application -ErrorAction Stop).Source
+    } elseif ($Compiler -notmatch '[\\/]') {
+        # Conan toolchains cache the compiler as a bare "cl" (no path). The
+        # build resolves that name through the caller's PATH, so resolve it the
+        # same way and validate the tool. A correctly initialized 64-bit shell
+        # then passes without any extra options or a reconfigure.
+        $command = Get-Command $Compiler -CommandType Application -ErrorAction SilentlyContinue
+        if (-not $command) {
+            throw "Oxygen could not resolve compiler '$Compiler' on PATH. Initialize vcvars64.bat or a developer shell with -arch=x64 -host_arch=x64."
+        }
+        $Compiler = $command.Source
     }
     if ($Compiler -notmatch '(?i)[/\\]Hostx64[/\\]x64[/\\]cl\.exe$') {
         throw "Oxygen requires Hostx64\x64\cl.exe, not '$Compiler'. Initialize vcvars64.bat or -arch=x64 -host_arch=x64. Reconfigure a tree that cached Hostx86 tools; do not reuse it."
