@@ -18,6 +18,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
+#include "EditorModule/EditorCameraPlacement.h"
 #include "EditorModule/ViewRenderer.h"
 
 #include <Oxygen/Core/Constants.h>
@@ -830,6 +831,21 @@ void EditorView::ResolveSceneCamera(scene::Scene& scene) {
   }
 }
 
+namespace {
+
+  //! World frame of `node`'s parent, or none for a scene root.
+  auto ReadParentFrame(scene::SceneNode& node) -> viewport::ParentFrame {
+    viewport::ParentFrame frame;
+    if (auto parent = node.GetParent(); parent.has_value() && parent->IsAlive()) {
+      auto transform = parent->GetTransform();
+      frame.world_matrix = transform.GetWorldMatrix();
+      frame.world_rotation = transform.GetWorldRotation();
+    }
+    return frame;
+  }
+
+} // namespace
+
 void EditorView::SetPilotSceneCamera(const bool pilot) {
   pilot_requested_ = pilot;
   if (!pilot) {
@@ -862,26 +878,14 @@ void EditorView::SeatProxyOnSceneCamera() {
   // local pose: the camera's own world transform lags one frame behind a local
   // edit made this frame.
   auto authored = scene_camera_node_.GetTransform();
-  const auto local_position
-    = authored.GetLocalPosition().value_or(glm::vec3 { 0.0F });
-  const auto local_rotation = authored.GetLocalRotation().value_or(
-    glm::quat { 1.0F, 0.0F, 0.0F, 0.0F });
-  glm::vec3 position = local_position;
-  glm::quat rotation = local_rotation;
-  if (auto parent = scene_camera_node_.GetParent();
-    parent.has_value() && parent->IsAlive()) {
-    auto parent_transform = parent->GetTransform();
-    if (const auto parent_world = parent_transform.GetWorldMatrix();
-      parent_world.has_value()) {
-      position = glm::vec3(*parent_world * glm::vec4(local_position, 1.0F));
-    }
-    if (const auto parent_rotation = parent_transform.GetWorldRotation();
-      parent_rotation.has_value()) {
-      rotation = *parent_rotation * local_rotation;
-    }
-  }
-  pilot_written_position_ = local_position;
-  pilot_written_rotation_ = local_rotation;
+  const viewport::CameraPlacement local {
+    .position = authored.GetLocalPosition().value_or(glm::vec3 { 0.0F }),
+    .rotation = authored.GetLocalRotation().value_or(
+      glm::quat { 1.0F, 0.0F, 0.0F, 0.0F }),
+  };
+  const auto [position, rotation] = viewport::ToWorldPlacement(
+    local, ReadParentFrame(scene_camera_node_));
+  pilot_written_ = local;
 
   auto proxy = camera_node_.GetTransform();
   (void)proxy.SetLocalPosition(position);
@@ -907,16 +911,11 @@ void EditorView::SyncPilotedCamera() {
     return;
   }
   auto transform = scene_camera_node_.GetTransform();
-  constexpr float kPositionTolerance = 1.0e-4F;
-  constexpr float kRotationDotTolerance = 1.0e-6F;
-  const auto current_position
-    = transform.GetLocalPosition().value_or(pilot_written_position_);
-  const auto current_rotation
-    = transform.GetLocalRotation().value_or(pilot_written_rotation_);
-  if (glm::distance(current_position, pilot_written_position_)
-      > kPositionTolerance
-    || std::abs(glm::dot(current_rotation, pilot_written_rotation_))
-      < 1.0F - kRotationDotTolerance) {
+  const viewport::CameraPlacement current {
+    .position = transform.GetLocalPosition().value_or(pilot_written_.position),
+    .rotation = transform.GetLocalRotation().value_or(pilot_written_.rotation),
+  };
+  if (!viewport::IsSamePlacement(current, pilot_written_)) {
     // An authoring edit moved the camera (undo, redo, Inspector): the pilot
     // continues from there instead of overwriting it.
     SeatProxyOnSceneCamera();
@@ -927,8 +926,7 @@ void EditorView::SyncPilotedCamera() {
   if (!pose.has_value()) {
     return;
   }
-  pilot_written_position_ = pose->position;
-  pilot_written_rotation_ = pose->rotation;
+  pilot_written_ = { .position = pose->position, .rotation = pose->rotation };
   (void)transform.SetLocalPosition(pose->position);
   // The quaternion avoids an Euler round trip every frame (no gimbal jitter
   // for a camera looking straight down).
@@ -942,26 +940,13 @@ auto EditorView::ResolveEditorCameraPose(scene::SceneNode& node) const
   }
   // The editor camera is a scene root: its local pose is its world pose.
   auto proxy = scene::SceneNode(camera_node_).GetTransform();
-  auto world_position = proxy.GetLocalPosition().value_or(glm::vec3 { 0.0F });
-  auto world_rotation
-    = proxy.GetLocalRotation().value_or(glm::quat { 1.0F, 0.0F, 0.0F, 0.0F });
-
-  glm::vec3 local_position = world_position;
-  glm::quat local_rotation = world_rotation;
-  if (auto parent = node.GetParent(); parent.has_value() && parent->IsAlive()) {
-    auto parent_transform = parent->GetTransform();
-    if (const auto parent_world = parent_transform.GetWorldMatrix();
-      parent_world.has_value()) {
-      local_position
-        = glm::vec3(glm::inverse(*parent_world) * glm::vec4(world_position, 1.0F));
-    }
-    if (const auto parent_rotation = parent_transform.GetWorldRotation();
-      parent_rotation.has_value()) {
-      local_rotation = glm::inverse(*parent_rotation) * world_rotation;
-    }
-  }
-
-  local_rotation = glm::normalize(local_rotation);
+  const viewport::CameraPlacement world {
+    .position = proxy.GetLocalPosition().value_or(glm::vec3 { 0.0F }),
+    .rotation = proxy.GetLocalRotation().value_or(
+      glm::quat { 1.0F, 0.0F, 0.0F, 0.0F }),
+  };
+  const auto [local_position, local_rotation]
+    = viewport::ToParentPlacement(world, ReadParentFrame(node));
   EditorCameraPose pose {
     .position = local_position,
     .rotation = local_rotation,

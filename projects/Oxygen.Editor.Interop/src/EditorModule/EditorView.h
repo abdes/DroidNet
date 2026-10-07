@@ -23,6 +23,7 @@
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Vortex/Renderer.h>
 
+#include <EditorModule/EditorCameraPlacement.h>
 #include <EditorModule/EditorViewportCameraControlMode.h>
 #include <EditorModule/NodeRegistry.h>
 
@@ -298,8 +299,7 @@ namespace oxygen::interop::module {
     bool pilot_active_ { false };
     //! Local pose last written onto the piloted camera, to tell its own
     //! updates from authoring edits (undo, redo, Inspector).
-    glm::vec3 pilot_written_position_ { 0.0F };
-    glm::quat pilot_written_rotation_ { 1.0F, 0.0F, 0.0F, 0.0F };
+    viewport::CameraPlacement pilot_written_ {};
     ViewId view_id_{ kInvalidViewId };
 
     // Resources
