@@ -27,6 +27,7 @@
 
 #include <fmt/format.h>
 #include <glm/ext/vector_uint2.hpp>
+#include <glm/gtc/matrix_access.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -68,6 +69,7 @@
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Environment/Types/IblCaptureLease.h>
 #include <Oxygen/Vortex/Internal/CompositingPass.h>
 #include <Oxygen/Vortex/Internal/DeformationHistoryCache.h>
 #include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
@@ -91,12 +93,16 @@
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Types/CompositingTask.h>
 #include <Oxygen/Vortex/Types/DrawFrameBindings.h>
+#include <Oxygen/Vortex/Types/EnvironmentLightingState.h>
+#include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/Types/GroundGridConfig.h>
 #include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
+#include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
+#include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 #include <Oxygen/Vortex/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Vortex/Upload/RingBufferStaging.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
@@ -176,6 +182,62 @@ namespace {
   constexpr auto kCVarVortexOcclusionMaxCandidateCount
     = "vtx.occlusion.max_candidate_count";
 
+  //! Default and accepted range of a numeric tuning variable. The console
+  //! definition and the getter that clamps its value share one instance.
+  template <typename T> struct CVarRange {
+    T fallback;
+    T min;
+    T max;
+  };
+
+  constexpr CVarRange<double> kLocalFogMaxDensityRange {
+    .fallback = 0.01,
+    .min = 0.0,
+    .max = 1.0,
+  };
+  constexpr CVarRange<std::int64_t> kLocalFogTilePixelSizeRange {
+    .fallback = 128,
+    .min = 8,
+    .max = 512,
+  };
+  constexpr CVarRange<std::int64_t> kLocalFogTileMaxInstanceRange {
+    .fallback = 32,
+    .min = 1,
+    .max = 256,
+  };
+  constexpr CVarRange<double> kLocalFogStartDistanceRange {
+    .fallback = 20.0,
+    .min = 0.1,
+    .max = 1000.0,
+  };
+  constexpr CVarRange<std::int64_t> kAerialLutWidthRange {
+    .fallback = 64,
+    .min = 4,
+    .max = 256,
+  };
+  constexpr CVarRange<std::int64_t> kAerialLutDepthResolutionRange {
+    .fallback = 32,
+    .min = 4,
+    .max = 256,
+  };
+  constexpr CVarRange<double> kAerialLutDepthKmRange {
+    .fallback = 96.0,
+    .min = 0.1,
+    .max = 100000.0,
+  };
+  constexpr CVarRange<double> kAerialLutSamplesPerSliceRange {
+    .fallback = 2.0,
+    .min = 1.0,
+    .max = 64.0,
+  };
+  constexpr std::int64_t kOcclusionCandidateLimit
+    = std::int64_t { 256 } * std::int64_t { 256 };
+  constexpr CVarRange<std::int64_t> kOcclusionMaxCandidateRange {
+    .fallback = kOcclusionCandidateLimit,
+    .min = 1,
+    .max = kOcclusionCandidateLimit,
+  };
+
   constexpr auto kRendererStagingAlignment
     = packing::kStructuredBufferAlignment;
 
@@ -186,7 +248,7 @@ namespace {
 
   auto IsPerspectiveProjection(const ResolvedView& view) -> bool
   {
-    return std::abs(view.ProjectionMatrix()[2][3]) > 0.5F;
+    return std::abs(glm::column(view.ProjectionMatrix(), 2).w) > 0.5F;
   }
 
   auto ResolveBootstrapExtent(const CompositionView* composition_view)
@@ -235,14 +297,14 @@ namespace {
 
       const auto& fb_desc = view_ctx.composite_source->GetDescriptor();
       if (fb_desc.color_attachments.empty()
-        || !fb_desc.color_attachments[0].texture) {
+        || !fb_desc.color_attachments.front().texture) {
         LOG_F(ERROR,
           "View {} ('{}'/{}) composite_source has no color attachment texture",
           view_id.get(), view_ctx.metadata.name, view_ctx.metadata.purpose);
         return {};
       }
 
-      return fb_desc.color_attachments[0].texture;
+      return fb_desc.color_attachments.front().texture;
     } catch (const std::exception& ex) {
       LOG_F(ERROR, "View {} output could not be resolved: {}", view_id.get(),
         ex.what());
@@ -468,7 +530,7 @@ namespace {
     auto has_aux_descriptors = false;
     std::unordered_map<AuxOutputId, std::size_t> producers;
     for (std::size_t index = 0U; index < entries.size(); ++index) {
-      auto& entry = entries[index];
+      auto& entry = entries.at(index);
       entry.resolved_aux_inputs.clear();
       has_aux_descriptors = has_aux_descriptors
         || !entry.produced_aux_outputs.empty()
@@ -492,7 +554,7 @@ namespace {
     auto indegree = std::vector<std::size_t>(entries.size(), 0U);
     for (std::size_t consumer_index = 0U; consumer_index < entries.size();
       ++consumer_index) {
-      auto& consumer = entries[consumer_index];
+      auto& consumer = entries.at(consumer_index);
       for (const auto& input : consumer.consumed_aux_outputs) {
         CHECK_F(input.id.get() != 0U,
           "Runtime auxiliary input from view '{}' uses invalid AuxOutputId 0",
@@ -523,7 +585,7 @@ namespace {
           "output {}",
           consumer.debug_name, input.id.get());
 
-        const auto& producer = entries[producer_index];
+        const auto& producer = entries.at(producer_index);
         const auto output_it
           = std::ranges::find_if(producer.produced_aux_outputs,
             [&input](const CompositionView::AuxOutputDesc& output) -> bool {
@@ -546,8 +608,8 @@ namespace {
             .debug_name = std::string(output_it->debug_name),
           });
 
-        edges[producer_index].push_back(consumer_index);
-        ++indegree[consumer_index];
+        edges.at(producer_index).push_back(consumer_index);
+        ++indegree.at(consumer_index);
         LOG_F(INFO,
           "Vortex.AuxView.Dependency frame={} aux_id={} producer_view={} "
           "consumer_view={} kind={} valid=true",
@@ -562,14 +624,14 @@ namespace {
     while (ordered_indices.size() < entries.size()) {
       auto made_progress = false;
       for (std::size_t index = 0U; index < entries.size(); ++index) {
-        if (emitted[index] || indegree[index] != 0U) {
+        if (emitted.at(index) || indegree.at(index) != 0U) {
           continue;
         }
-        emitted[index] = true;
+        emitted.at(index) = true;
         ordered_indices.push_back(index);
-        for (const auto consumer_index : edges[index]) {
-          CHECK_GT_F(indegree[consumer_index], 0U);
-          --indegree[consumer_index];
+        for (const auto consumer_index : edges.at(index)) {
+          CHECK_GT_F(indegree.at(consumer_index), 0U);
+          --indegree.at(consumer_index);
         }
         made_progress = true;
       }
@@ -585,8 +647,8 @@ namespace {
         order_stream << ",";
       }
       first = false;
-      order_stream << entries[index].view_id.get();
-      ordered_entries.push_back(std::move(entries[index]));
+      order_stream << entries.at(index).view_id.get();
+      ordered_entries.push_back(std::move(entries.at(index)));
     }
     entries = std::move(ordered_entries);
     LOG_F(INFO, "Vortex.AuxView.Order frame={} view_ids={}",
@@ -596,12 +658,12 @@ namespace {
 } // namespace
 
 namespace {
-  std::atomic<std::uint64_t> next_exposure_lifetime { 1U };
-
   auto AllocateExposureLifetime() -> std::optional<std::uint64_t>
   {
+    // Process-wide, so lifetimes stay unique across renderer instances.
+    static std::atomic<std::uint64_t> next_exposure_lifetime { 1U };
     auto value = next_exposure_lifetime.load(std::memory_order_relaxed);
-    while (value != (std::numeric_limits<std::uint64_t>::max)()) {
+    while (value != std::numeric_limits<std::uint64_t>::max()) {
       if (next_exposure_lifetime.compare_exchange_weak(
             value, value + 1U, std::memory_order_relaxed)) {
         return value;
@@ -687,7 +749,7 @@ auto Renderer::IssueExposureTransitionLocked(
     }
     entry.lifetime = *lifetime;
   }
-  if (entry.generation == (std::numeric_limits<std::uint64_t>::max)()) {
+  if (entry.generation == std::numeric_limits<std::uint64_t>::max()) {
     return ::oxygen::Err(ExposureTransitionError::kGenerationExhausted);
   }
   const auto token = ExposureTransitionToken {
@@ -700,7 +762,9 @@ auto Renderer::IssueExposureTransitionLocked(
   const auto applied = entry.status ? entry.status->applied_generation : 0U;
   entry.status = ExposureTransitionStatus {
     .request = token,
+    .phase = ExposureTransitionPhase::kQueued,
     .applied_generation = applied,
+    .error = std::nullopt,
   };
   entry.implicit_request = implicit;
   return ::oxygen::Ok(token);
@@ -863,12 +927,15 @@ auto Renderer::RetryExposureTransition(const ExposureTransitionToken& token)
     return ::oxygen::Err(ExposureTransitionError::kRendererUnavailable);
   }
   const auto found = exposure_transitions_.find(token.target);
-  if (found == exposure_transitions_.end() || !found->second.status
-    || token.lifetime != found->second.lifetime || token.generation == 0U
-    || token.generation > found->second.generation) {
+  if (found == exposure_transitions_.end()) {
     return ::oxygen::Err(ExposureTransitionError::kUnknownToken);
   }
-  const auto& status = *found->second.status;
+  const auto& transition = found->second;
+  if (!transition.status || token.lifetime != transition.lifetime
+    || token.generation == 0U || token.generation > transition.generation) {
+    return ::oxygen::Err(ExposureTransitionError::kUnknownToken);
+  }
+  const auto& status = *transition.status;
   if (token.generation < status.request.generation) {
     return ::oxygen::Ok(ExposureTransitionPhase::kSuperseded);
   }
@@ -985,17 +1052,20 @@ auto Renderer::NeedsExposureAcknowledgement(
 {
   std::shared_lock lock(view_state_mutex_);
   const auto found = exposure_transitions_.find(token.target);
-  if (found == exposure_transitions_.end()
-    || found->second.lifetime != token.lifetime
-    || found->second.submitted_generation < token.generation
-    || !found->second.status) {
+  if (found == exposure_transitions_.end()) {
     return false;
   }
-  const auto& status = *found->second.status;
+  const auto& transition = found->second;
+  if (transition.lifetime != token.lifetime
+    || transition.submitted_generation < token.generation
+    || !transition.status) {
+    return false;
+  }
+  const auto& status = *transition.status;
   return status.request.generation >= token.generation
     && status.applied_generation < token.generation
-    && !(status.request.generation == token.generation
-      && status.phase == ExposureTransitionPhase::kRejected);
+    && (status.request.generation != token.generation
+      || status.phase != ExposureTransitionPhase::kRejected);
 }
 
 auto Renderer::CompleteExposureTransition(const ExposureTransitionToken& token,
@@ -1004,11 +1074,14 @@ auto Renderer::CompleteExposureTransition(const ExposureTransitionToken& token,
 {
   std::unique_lock lock(view_state_mutex_);
   const auto found = exposure_transitions_.find(token.target);
-  if (found == exposure_transitions_.end()
-    || found->second.lifetime != token.lifetime || !found->second.status) {
+  if (found == exposure_transitions_.end()) {
     return;
   }
-  auto& status = *found->second.status;
+  auto& transition = found->second;
+  if (transition.lifetime != token.lifetime || !transition.status) {
+    return;
+  }
+  auto& status = *transition.status;
   status.applied_generation
     = std::max(status.applied_generation, applied_generation);
   if (status.request.generation != token.generation) {
@@ -1111,6 +1184,9 @@ auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
   return true;
 }
 
+// Registration only allocates; running out of memory while installing the
+// console bindings is not recoverable.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 auto Renderer::RegisterConsoleBindings(
   observer_ptr<console::Console> console) noexcept -> void
 {
@@ -1150,28 +1226,28 @@ auto Renderer::RegisterConsoleBindings(
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarVortexLocalFogMaxDensityIntoVolumetricFog),
     .help = "Clamp local fog density when injecting into volumetric fog",
-    .default_value = 0.01,
+    .default_value = kLocalFogMaxDensityRange.fallback,
     .flags = console::CVarFlags::kArchive,
-    .min_value = 0.0,
-    .max_value = 1.0,
+    .min_value = kLocalFogMaxDensityRange.min,
+    .max_value = kLocalFogMaxDensityRange.max,
   });
 
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarVortexLocalFogTilePixelSize),
     .help = "Screen-space local fog tile size in pixels",
-    .default_value = 128,
+    .default_value = kLocalFogTilePixelSizeRange.fallback,
     .flags = console::CVarFlags::kArchive,
-    .min_value = 8,
-    .max_value = 512,
+    .min_value = static_cast<double>(kLocalFogTilePixelSizeRange.min),
+    .max_value = static_cast<double>(kLocalFogTilePixelSizeRange.max),
   });
 
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarVortexLocalFogTileMaxInstanceCount),
     .help = "Maximum local fog volumes retained per view/tile list",
-    .default_value = 32,
+    .default_value = kLocalFogTileMaxInstanceRange.fallback,
     .flags = console::CVarFlags::kArchive,
-    .min_value = 1,
-    .max_value = 256,
+    .min_value = static_cast<double>(kLocalFogTileMaxInstanceRange.min),
+    .max_value = static_cast<double>(kLocalFogTileMaxInstanceRange.max),
   });
 
   (void)console->RegisterCVar(console::CVarDefinition {
@@ -1195,10 +1271,10 @@ auto Renderer::RegisterConsoleBindings(
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarVortexLocalFogGlobalStartDistance),
     .help = "Global local fog start distance in meters",
-    .default_value = 20.0,
+    .default_value = kLocalFogStartDistanceRange.fallback,
     .flags = console::CVarFlags::kArchive,
-    .min_value = 0.1,
-    .max_value = 1000.0,
+    .min_value = kLocalFogStartDistanceRange.min,
+    .max_value = kLocalFogStartDistanceRange.max,
   });
 
   (void)console->RegisterCVar(console::CVarDefinition {
@@ -1259,37 +1335,37 @@ auto Renderer::RegisterConsoleBindings(
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarVortexAerialPerspectiveLutWidth),
     .help = "Sky atmosphere aerial perspective LUT screen resolution",
-    .default_value = int64_t { 64 },
+    .default_value = kAerialLutWidthRange.fallback,
     .flags = console::CVarFlags::kArchive,
-    .min_value = 4.0,
-    .max_value = 256.0,
+    .min_value = static_cast<double>(kAerialLutWidthRange.min),
+    .max_value = static_cast<double>(kAerialLutWidthRange.max),
   });
 
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarVortexAerialPerspectiveLutDepthResolution),
     .help = "Sky atmosphere aerial perspective LUT depth resolution",
-    .default_value = int64_t { 32 },
+    .default_value = kAerialLutDepthResolutionRange.fallback,
     .flags = console::CVarFlags::kArchive,
-    .min_value = 4.0,
-    .max_value = 256.0,
+    .min_value = static_cast<double>(kAerialLutDepthResolutionRange.min),
+    .max_value = static_cast<double>(kAerialLutDepthResolutionRange.max),
   });
 
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarVortexAerialPerspectiveLutDepthKm),
     .help = "Sky atmosphere aerial perspective LUT depth in kilometers",
-    .default_value = 96.0,
+    .default_value = kAerialLutDepthKmRange.fallback,
     .flags = console::CVarFlags::kArchive,
-    .min_value = 0.1,
-    .max_value = 100000.0,
+    .min_value = kAerialLutDepthKmRange.min,
+    .max_value = kAerialLutDepthKmRange.max,
   });
 
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarVortexAerialPerspectiveLutSampleCountMaxPerSlice),
     .help = "Sky atmosphere aerial perspective LUT max samples per depth slice",
-    .default_value = 2.0,
+    .default_value = kAerialLutSamplesPerSliceRange.fallback,
     .flags = console::CVarFlags::kArchive,
-    .min_value = 1.0,
-    .max_value = 64.0,
+    .min_value = kAerialLutSamplesPerSliceRange.min,
+    .max_value = kAerialLutSamplesPerSliceRange.max,
   });
 
   (void)console->RegisterCVar(console::CVarDefinition {
@@ -1304,10 +1380,10 @@ auto Renderer::RegisterConsoleBindings(
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarVortexOcclusionMaxCandidateCount),
     .help = "Maximum prepared draws submitted to the HZB occlusion tester",
-    .default_value = int64_t { 256 * 256 },
+    .default_value = kOcclusionMaxCandidateRange.fallback,
     .flags = console::CVarFlags::kArchive,
-    .min_value = 1,
-    .max_value = 256 * 256,
+    .min_value = static_cast<double>(kOcclusionMaxCandidateRange.min),
+    .max_value = static_cast<double>(kOcclusionMaxCandidateRange.max),
   });
 }
 
@@ -1352,6 +1428,9 @@ auto Renderer::ApplyConsoleCVars(
 {
 }
 
+// Teardown only allocates and locks; failing either while shutting down is
+// not recoverable, and the renderer must not leave a half-released state.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 auto Renderer::OnShutdown() noexcept -> void
 {
   {
@@ -1373,6 +1452,16 @@ auto Renderer::OnShutdown() noexcept -> void
   }
   for (const auto intent_view_id : published_intent_ids) {
     RemovePublishedRuntimeView(intent_view_id);
+  }
+
+  // Extensions may own renderer-bound services whose destructors still use
+  // renderer services, so release them before any of those services go away.
+  {
+    auto extensions = std::vector<ViewExtensionPtr> {};
+    {
+      std::scoped_lock lock(view_extension_mutex_);
+      extensions.swap(view_extensions_);
+    }
   }
 
   ResetPublicationState();
@@ -1576,6 +1665,7 @@ auto Renderer::PublishCurrentViewPreSceneFrameBindings(
       .material_shading_constants_slot = BindlessMaterialShadingConstantsSlot {
         prepared_frame->bindless_material_shading_slot,
       },
+      .procedural_grid_material_constants_slot = {},
       .instance_data_slot
       = BindlessInstanceDataSlot { prepared_frame->bindless_instance_data_slot },
       .current_skinned_pose_slot = BindlessSkinnedPosePublicationsSlot {
@@ -1952,9 +2042,9 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
     const auto& fb_desc = target_fb.GetDescriptor();
     CHECK_F(!fb_desc.color_attachments.empty(),
       "Compositing requires a color attachment");
-    CHECK_F(static_cast<bool>(fb_desc.color_attachments[0].texture),
+    CHECK_F(static_cast<bool>(fb_desc.color_attachments.front().texture),
       "Compositing target missing color texture");
-    auto& backbuffer = *fb_desc.color_attachments[0].texture;
+    auto& backbuffer = *fb_desc.color_attachments.front().texture;
 
     RenderContext comp_context {};
     comp_context.SetRenderer(this, gfx.get());
@@ -2034,10 +2124,12 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
         profiling::Vars(
           profiling::Var("label", FormatCompositingTaskScopeLabel(task))));
 
-      const auto source_view = task.type == CompositingTaskType::kCopy
-        ? task.copy.source_view_id
-        : task.type == CompositingTaskType::kBlend ? task.blend.source_view_id
-                                                   : kInvalidViewId;
+      auto source_view = kInvalidViewId;
+      if (task.type == CompositingTaskType::kCopy) {
+        source_view = task.copy.source_view_id;
+      } else if (task.type == CompositingTaskType::kBlend) {
+        source_view = task.blend.source_view_id;
+      }
       const auto status = source_view != kInvalidViewId
         ? scene_renderer.InspectViewRenderStatus(source_view)
         : std::nullopt;
@@ -2142,7 +2234,7 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
     if (pending.target_surface) {
       const auto surfaces = context->GetSurfaces();
       for (size_t i = 0; i < surfaces.size(); ++i) {
-        if (surfaces[i].get() == pending.target_surface.get()) {
+        if (surfaces.at(i).get() == pending.target_surface.get()) {
           context->SetSurfacePresentable(i, true);
           break;
         }
@@ -2156,8 +2248,9 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
 auto Renderer::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
 {
   // Offscreen inside-frame sessions do not pass through OnCompositing.
-  if (gpu_timeline_profiler_)
+  if (gpu_timeline_profiler_) {
     gpu_timeline_profiler_->OnFrameRecordTailResolve();
+  }
   if (imgui_runtime_ != nullptr) {
     imgui_runtime_->OnFrameEnd();
   }
@@ -2202,7 +2295,7 @@ auto Renderer::RegisterViewRenderGraph(
 auto Renderer::RegisterResolvedView(ViewId view_id, ResolvedView view) -> void
 {
   std::unique_lock lock(view_registration_mutex_);
-  resolved_views_.insert_or_assign(view_id, std::move(view));
+  resolved_views_.insert_or_assign(view_id, view);
 }
 
 auto Renderer::PublishRuntimeCompositionView(
@@ -2401,7 +2494,7 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
     it->second.consumed_aux_outputs = std::move(consumed_aux_outputs);
     it->second.debug_name = std::move(debug_name);
     it->second.exposure_override = std::move(exposure_override);
-    it->second.inherited_exposure = inherited_exposure;
+    it->second.inherited_exposure = std::move(inherited_exposure);
     if (old_handle != view_state_handle || source != kInvalidViewId) {
       it->second.pending_source_loss.reset();
     }
@@ -2445,6 +2538,9 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
         .exposure_override = std::move(exposure_override),
         .exposure_source_view_id = source,
         .inherited_exposure = std::move(inherited_exposure),
+        .pending_source_loss = nullptr,
+        .camera_observed = false,
+        .camera_identity = std::nullopt,
       };
   return published_view_id;
 }
@@ -2603,6 +2699,7 @@ auto Renderer::DetachPublishedRuntimeViewState(const ViewId intent_view_id)
   auto detached = DetachedPublishedRuntimeViewState {
     .published_view_id = found->second.published_view_id,
     .view_state_handle = found->second.view_state_handle,
+    .source_loss = nullptr,
   };
   const auto* root
     = ResolvePublishedExposureRootLocked(detached.published_view_id);
@@ -2620,12 +2717,13 @@ auto Renderer::DetachPublishedRuntimeViewState(const ViewId intent_view_id)
     loss->camera_ev = camera->second.CameraEv();
   }
   if (const auto control = exposure_transitions_.find(root->view_state_handle);
-    control != exposure_transitions_.end() && control->second.status) {
-    const auto& status = *control->second.status;
-    if (status.phase == ExposureTransitionPhase::kQueued
-      || status.phase == ExposureTransitionPhase::kRejected) {
-      loss->transition = status.request;
-      loss->rejection = status.error;
+    control != exposure_transitions_.end()) {
+    const auto& transition_status = control->second.status;
+    if (transition_status.has_value()
+      && (transition_status->phase == ExposureTransitionPhase::kQueued
+        || transition_status->phase == ExposureTransitionPhase::kRejected)) {
+      loss->transition = transition_status->request;
+      loss->rejection = transition_status->error;
     }
   }
   // Resolve every affected chain before mutating any edge.
@@ -2636,8 +2734,8 @@ auto Renderer::DetachPublishedRuntimeViewState(const ViewId intent_view_id)
         state.published_view_id, detached.published_view_id)) {
       consumers.push_back(intent);
       loss->consumers.push_back({
-        state.view_state_handle,
-        EnsureExposureLifetimeLocked(state.view_state_handle),
+        .handle = state.view_state_handle,
+        .lifetime = EnsureExposureLifetimeLocked(state.view_state_handle),
       });
     }
   }
@@ -2771,6 +2869,7 @@ auto Renderer::PruneStalePublishedRuntimeViews(
         stale_published_states.push_back(DetachedPublishedRuntimeViewState {
           .published_view_id = it->second.published_view_id,
           .view_state_handle = it->second.view_state_handle,
+          .source_loss = nullptr,
         });
         it = published_runtime_views_by_intent_.erase(it);
       } else {
@@ -2934,13 +3033,14 @@ auto Renderer::GetLocalFogEnabled() const noexcept -> bool
 auto Renderer::GetLocalFogGlobalStartDistanceMeters() const noexcept -> float
 {
   if (console_ != nullptr) {
-    double value = 20.0;
+    double value = kLocalFogStartDistanceRange.fallback;
     if (console_->TryGetCVarValue<double>(
           kCVarVortexLocalFogGlobalStartDistance, value)) {
-      return static_cast<float>(std::max(0.1, value));
+      return static_cast<float>(
+        std::max(kLocalFogStartDistanceRange.min, value));
     }
   }
-  return 20.0F;
+  return static_cast<float>(kLocalFogStartDistanceRange.fallback);
 }
 
 auto Renderer::GetLocalFogRenderIntoVolumetricFog() const noexcept -> bool
@@ -2958,13 +3058,13 @@ auto Renderer::GetLocalFogRenderIntoVolumetricFog() const noexcept -> bool
 auto Renderer::GetLocalFogMaxDensityIntoVolumetricFog() const noexcept -> float
 {
   if (console_ != nullptr) {
-    double value = 0.01;
+    double value = kLocalFogMaxDensityRange.fallback;
     if (console_->TryGetCVarValue<double>(
           kCVarVortexLocalFogMaxDensityIntoVolumetricFog, value)) {
-      return static_cast<float>(std::max(0.0, value));
+      return static_cast<float>(std::max(kLocalFogMaxDensityRange.min, value));
     }
   }
-  return 0.01F;
+  return static_cast<float>(kLocalFogMaxDensityRange.fallback);
 }
 
 auto Renderer::GetVolumetricFogDirectionalShadowsEnabled() const noexcept
@@ -3021,27 +3121,27 @@ auto Renderer::GetVolumetricFogHistoryMissSupersampleCount() const noexcept
 auto Renderer::GetLocalFogTilePixelSize() const noexcept -> std::uint32_t
 {
   if (console_ != nullptr) {
-    auto value = std::int64_t { 128 };
+    auto value = kLocalFogTilePixelSizeRange.fallback;
     if (console_->TryGetCVarValue<int64_t>(
           kCVarVortexLocalFogTilePixelSize, value)) {
-      return static_cast<std::uint32_t>(
-        std::clamp<std::int64_t>(value, 8, 512));
+      return static_cast<std::uint32_t>(std::clamp<std::int64_t>(value,
+        kLocalFogTilePixelSizeRange.min, kLocalFogTilePixelSizeRange.max));
     }
   }
-  return 128U;
+  return static_cast<std::uint32_t>(kLocalFogTilePixelSizeRange.fallback);
 }
 
 auto Renderer::GetLocalFogTileMaxInstanceCount() const noexcept -> std::uint32_t
 {
   if (console_ != nullptr) {
-    auto value = std::int64_t { 32 };
+    auto value = kLocalFogTileMaxInstanceRange.fallback;
     if (console_->TryGetCVarValue<int64_t>(
           kCVarVortexLocalFogTileMaxInstanceCount, value)) {
-      return static_cast<std::uint32_t>(
-        std::clamp<std::int64_t>(value, 1, 256));
+      return static_cast<std::uint32_t>(std::clamp<std::int64_t>(value,
+        kLocalFogTileMaxInstanceRange.min, kLocalFogTileMaxInstanceRange.max));
     }
   }
-  return 32U;
+  return static_cast<std::uint32_t>(kLocalFogTileMaxInstanceRange.fallback);
 }
 
 auto Renderer::GetLocalFogUseHzb() const noexcept -> bool
@@ -3058,53 +3158,57 @@ auto Renderer::GetLocalFogUseHzb() const noexcept -> bool
 auto Renderer::GetAerialPerspectiveLutWidth() const noexcept -> std::uint32_t
 {
   if (console_ != nullptr) {
-    auto value = std::int64_t { 64 };
+    auto value = kAerialLutWidthRange.fallback;
     if (console_->TryGetCVarValue<int64_t>(
           kCVarVortexAerialPerspectiveLutWidth, value)) {
-      return static_cast<std::uint32_t>(
-        std::clamp<std::int64_t>(value, 4, 256));
+      return static_cast<std::uint32_t>(std::clamp<std::int64_t>(
+        value, kAerialLutWidthRange.min, kAerialLutWidthRange.max));
     }
   }
-  return 64U;
+  return static_cast<std::uint32_t>(kAerialLutWidthRange.fallback);
 }
 
 auto Renderer::GetAerialPerspectiveLutDepthResolution() const noexcept
   -> std::uint32_t
 {
   if (console_ != nullptr) {
-    auto value = std::int64_t { 32 };
+    auto value = kAerialLutDepthResolutionRange.fallback;
     if (console_->TryGetCVarValue<int64_t>(
           kCVarVortexAerialPerspectiveLutDepthResolution, value)) {
       return static_cast<std::uint32_t>(
-        std::clamp<std::int64_t>(value, 4, 256));
+        std::clamp<std::int64_t>(value, kAerialLutDepthResolutionRange.min,
+          kAerialLutDepthResolutionRange.max));
     }
   }
-  return 32U;
+  return static_cast<std::uint32_t>(kAerialLutDepthResolutionRange.fallback);
 }
 
 auto Renderer::GetAerialPerspectiveLutDepthKm() const noexcept -> float
 {
   if (console_ != nullptr) {
-    double value = 96.0;
+    double value = kAerialLutDepthKmRange.fallback;
     if (console_->TryGetCVarValue<double>(
           kCVarVortexAerialPerspectiveLutDepthKm, value)) {
-      return static_cast<float>(std::clamp(value, 0.1, 100000.0));
+      return static_cast<float>(std::clamp(
+        value, kAerialLutDepthKmRange.min, kAerialLutDepthKmRange.max));
     }
   }
-  return 96.0F;
+  return static_cast<float>(kAerialLutDepthKmRange.fallback);
 }
 
 auto Renderer::GetAerialPerspectiveLutSampleCountMaxPerSlice() const noexcept
   -> float
 {
   if (console_ != nullptr) {
-    double value = 2.0;
+    double value = kAerialLutSamplesPerSliceRange.fallback;
     if (console_->TryGetCVarValue<double>(
           kCVarVortexAerialPerspectiveLutSampleCountMaxPerSlice, value)) {
-      return static_cast<float>(std::clamp(value, 1.0, 64.0));
+      return static_cast<float>(
+        std::clamp(value, kAerialLutSamplesPerSliceRange.min,
+          kAerialLutSamplesPerSliceRange.max));
     }
   }
-  return 2.0F;
+  return static_cast<float>(kAerialLutSamplesPerSliceRange.fallback);
 }
 
 auto Renderer::GetOcclusionEnabled() const noexcept -> bool
@@ -3121,14 +3225,14 @@ auto Renderer::GetOcclusionEnabled() const noexcept -> bool
 auto Renderer::GetOcclusionMaxCandidateCount() const noexcept -> std::uint32_t
 {
   if (console_ != nullptr) {
-    auto value = std::int64_t { 256 * 256 };
+    auto value = kOcclusionMaxCandidateRange.fallback;
     if (console_->TryGetCVarValue<int64_t>(
           kCVarVortexOcclusionMaxCandidateCount, value)) {
-      return static_cast<std::uint32_t>(
-        std::clamp<std::int64_t>(value, 1, 256 * 256));
+      return static_cast<std::uint32_t>(std::clamp<std::int64_t>(value,
+        kOcclusionMaxCandidateRange.min, kOcclusionMaxCandidateRange.max));
     }
   }
-  return 256U * 256U;
+  return static_cast<std::uint32_t>(kOcclusionMaxCandidateRange.fallback);
 }
 
 auto Renderer::GetLightingStagingProvider() -> upload::StagingProvider&
@@ -3162,8 +3266,9 @@ auto Renderer::GetUploadCoordinator() -> upload::UploadCoordinator&
 auto Renderer::AcquireIblCapture(const ViewId view)
   -> Result<environment::IblCaptureLease, environment::IblCaptureError>
 {
-  if (!scene_renderer_)
+  if (!scene_renderer_) {
     return Err(environment::IblCaptureError::kUnavailable);
+  }
   return scene_renderer_->AcquireIblCapture(view);
 }
 
@@ -3228,9 +3333,8 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
       .view_state_handle = ResolvePublishedRuntimeViewStateHandle(view.id),
       .exposure_view_state_handle = {},
       .is_scene_view = view.metadata.is_scene_view,
-      .is_reflection_capture
-      = view.metadata.purpose.find("reflection") != std::string::npos
-        || view.metadata.purpose.find("capture") != std::string::npos,
+      .is_reflection_capture = view.metadata.purpose.contains("reflection")
+        || view.metadata.purpose.contains("capture"),
       .with_atmosphere = view.metadata.with_atmosphere,
       .with_height_fog = view.metadata.with_height_fog,
       .with_local_fog = view.metadata.with_local_fog,
@@ -3246,10 +3350,12 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
       .composition_view = {},
       .shading_mode_override = ResolvePublishedRuntimeShadingMode(view.id),
       .render_mode_override = ResolvePublishedRuntimeRenderMode(view.id),
+      .shader_debug_mode_override = {},
       .resolved_view = {},
       .render_target = view.render_target,
       .composite_source = view.composite_source,
       .primary_target = primary_target,
+      .exposure_override = {},
     };
     if (const auto it = resolved_views_.find(view.id);
       it != resolved_views_.end()) {
@@ -3965,6 +4071,8 @@ auto Renderer::RenderGraphHarnessFacade::Finalize()
   CHECK_F(resolved_view_.has_value() || core_shader_inputs_.has_value(),
     "Render-graph harness requires either a resolved view or core shader "
     "inputs");
+  CHECK_F(render_graph_.has_value(),
+    "Render-graph harness validation admitted a missing render graph");
   const auto view_id = resolved_view_.has_value()
     ? resolved_view_->view_id
     : core_shader_inputs_.value().view_id;
@@ -4172,6 +4280,9 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> bool
     .view_kind = view_intent.view_kind,
     .feature_profile = view_intent.feature_profile,
     .feature_mask = view_intent.feature_mask,
+    .produced_aux_outputs = {},
+    .consumed_aux_outputs = {},
+    .resolved_aux_inputs = {},
     .composition_view = observer_ptr<const CompositionView> { &view_intent },
     .shading_mode_override = view_intent.shading_mode,
     .render_mode_override = view_intent.force_wireframe
@@ -4263,6 +4374,9 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
     .view_kind = view_intent.view_kind,
     .feature_profile = view_intent.feature_profile,
     .feature_mask = view_intent.feature_mask,
+    .produced_aux_outputs = {},
+    .consumed_aux_outputs = {},
+    .resolved_aux_inputs = {},
     .composition_view = observer_ptr<const CompositionView> { &view_intent },
     .shading_mode_override = view_intent.shading_mode,
     .render_mode_override = view_intent.force_wireframe
@@ -4449,8 +4563,10 @@ auto Renderer::OffscreenSceneFacade::Finalize()
     return oxygen::Err(std::move(report));
   }
 
-  const auto pipeline_input
-    = pipeline_.has_value() ? *pipeline_ : OffscreenPipelineInput {};
+  CHECK_F(frame_session_.has_value() && scene_source_.has_value()
+      && view_intent_.has_value() && output_target_.has_value(),
+    "Offscreen scene validation admitted an incomplete session");
+  const auto pipeline_input = pipeline_.value_or(OffscreenPipelineInput {});
   return oxygen::Ok(ValidatedOffscreenSceneSession(*renderer_, *frame_session_,
     *scene_source_, *view_intent_, *output_target_, pipeline_input));
 }

@@ -282,6 +282,9 @@ public:
 
     [[nodiscard]] auto GetViewId() const noexcept -> ViewId { return view_id_; }
 
+    // Awaited immediately by the caller that owns the recorder, like every
+    // render pass Execute.
+    // NOLINTNEXTLINE(*-avoid-reference-coroutine-parameters)
     auto Execute(graphics::CommandRecorder& recorder) const -> co::Co<void>
     {
       const auto& render_context = context_.GetRenderContext();
@@ -488,7 +491,7 @@ public:
       -> OffscreenSceneFacade&;
 
     OXGN_VRTX_NDAPI auto CanFinalize() const -> bool;
-    OXGN_VRTX_API auto Validate() const -> ValidationReport;
+    OXGN_VRTX_NDAPI auto Validate() const -> ValidationReport;
     OXGN_VRTX_API auto Finalize()
       -> oxygen::Result<ValidatedOffscreenSceneSession, ValidationReport>;
 
@@ -528,7 +531,7 @@ public:
     RendererConfig config, CapabilitySet capability_families);
 
   OXYGEN_MAKE_NON_COPYABLE(Renderer)
-  OXYGEN_DEFAULT_MOVABLE(Renderer)
+  OXYGEN_MAKE_NON_MOVABLE(Renderer)
 
   OXGN_VRTX_API ~Renderer() override;
 
