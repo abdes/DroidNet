@@ -711,6 +711,22 @@ auto UploadCoordinator::OnFrameStart(
   RetireCompleted(slot);
 }
 
+auto UploadCoordinator::OnFrameStart(vortex::RendererTag tag,
+  const frame::SequenceNumber sequence, const frame::Slot slot) -> void
+{
+  if (started_frame_ == std::pair { sequence, slot }) {
+    RetireCompleted();
+    return;
+  }
+  started_frame_ = std::pair { sequence, slot };
+  RetireCompleted(slot);
+  for (const auto& weak : providers_) {
+    if (const auto provider = weak.lock()) {
+      provider->NotifyFrameStart(tag, sequence, slot);
+    }
+  }
+}
+
 auto UploadCoordinator::SubmitAsync(UploadRequest req,
   std::shared_ptr<StagingProvider> provider) -> co::Co<UploadResult>
 {

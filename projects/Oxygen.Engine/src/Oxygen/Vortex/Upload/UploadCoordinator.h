@@ -13,6 +13,7 @@
 #include <optional>
 #include <span>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -106,6 +107,14 @@ public:
   OXGN_VRTX_API auto OnFrameStart(vortex::RendererTag tag, frame::Slot slot)
     -> void;
 
+  //! Start frame `sequence` in `slot`: recycle the slot in every provider,
+  //! then start the frame for their transient consumers so views into the
+  //! recycled memory are released before anything allocates from it.
+  //! Re-starting the frame in progress only polls completions: recycling its
+  //! slot again would overwrite memory its earlier work still reads.
+  OXGN_VRTX_API auto OnFrameStart(vortex::RendererTag tag,
+    frame::SequenceNumber sequence, frame::Slot slot) -> void;
+
   // OxCo helpers
   //! Lazy submission owns its request/provider. Source byte views remain
   //! borrowed until packing; producer captures may own their source storage.
@@ -119,6 +128,8 @@ public:
 private:
   OXGN_VRTX_API auto RetireCompleted(
     std::optional<frame::Slot> slot = std::nullopt) -> void;
+
+  std::optional<std::pair<frame::SequenceNumber, frame::Slot>> started_frame_;
 
   observer_ptr<Graphics> gfx_;
   UploadPolicy policy_;

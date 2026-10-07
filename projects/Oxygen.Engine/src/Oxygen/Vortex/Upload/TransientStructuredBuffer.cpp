@@ -4,9 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <expected>
+#include <memory>
+#include <span>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -59,9 +62,69 @@ TransientStructuredBuffer::TransientStructuredBuffer(observer_ptr<Graphics> gfx,
   if (debug_label_.empty()) {
     debug_label_ = "TransientStructuredBuffer";
   }
+  // Release recycled-slot views at frame start, before any other buffer on
+  // the same provider can allocate (and look up) the same ranges.
+  frame_anchor_ = std::make_shared<FrameAnchor>(this);
+  staging_->AddFrameListener(frame_anchor_);
 }
 
-TransientStructuredBuffer::~TransientStructuredBuffer() { Reset(); }
+TransientStructuredBuffer::TransientStructuredBuffer(
+  TransientStructuredBuffer&& other) noexcept
+  : gfx_(other.gfx_)
+  , staging_(other.staging_)
+  , stride_(other.stride_)
+  , inline_transfers_(other.inline_transfers_)
+  , debug_label_(std::move(other.debug_label_))
+  , domain_(other.domain_)
+  , current_slot_(std::exchange(other.current_slot_, frame::kInvalidSlot))
+  , current_frame_(other.current_frame_)
+  , slots_(std::move(other.slots_))
+  , frame_anchor_(std::move(other.frame_anchor_))
+{
+  for (auto& slot : other.slots_) {
+    slot.allocs.clear();
+  }
+  if (frame_anchor_) {
+    frame_anchor_->Retarget(this);
+  }
+}
+
+auto TransientStructuredBuffer::operator=(
+  TransientStructuredBuffer&& other) noexcept -> TransientStructuredBuffer&
+{
+  if (this == &other) {
+    return *this;
+  }
+  Reset();
+  if (frame_anchor_) {
+    frame_anchor_->Retarget(nullptr);
+  }
+  gfx_ = other.gfx_;
+  staging_ = other.staging_;
+  stride_ = other.stride_;
+  inline_transfers_ = other.inline_transfers_;
+  debug_label_ = std::move(other.debug_label_);
+  domain_ = other.domain_;
+  current_slot_ = std::exchange(other.current_slot_, frame::kInvalidSlot);
+  current_frame_ = other.current_frame_;
+  slots_ = std::move(other.slots_);
+  for (auto& slot : other.slots_) {
+    slot.allocs.clear();
+  }
+  frame_anchor_ = std::move(other.frame_anchor_);
+  if (frame_anchor_) {
+    frame_anchor_->Retarget(this);
+  }
+  return *this;
+}
+
+TransientStructuredBuffer::~TransientStructuredBuffer()
+{
+  if (frame_anchor_) {
+    frame_anchor_->Retarget(nullptr);
+  }
+  Reset();
+}
 
 auto TransientStructuredBuffer::OnFrameStart(
   frame::SequenceNumber sequence, frame::Slot slot) -> void
@@ -156,7 +219,9 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
     return std::unexpected(make_error_code(UploadError::kInvalidRequest));
   }
 
-  auto* const aligned_ptr = allocation.Ptr() + u_delta;
+  auto* const aligned_ptr = std::span(allocation.Ptr(), allocation.Size().get())
+                              .subspan(static_cast<std::size_t>(u_delta))
+                              .data();
 
   if (inline_transfers_) {
     inline_transfers_->NotifyInlineWrite(
@@ -174,27 +239,21 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
   try {
     auto& registry = gfx_->GetResourceRegistry();
 
+    // A registered view for this exact range belongs to another buffer that
+    // published it from the same recycled memory and has not released it.
+    // Borrowing its index is unsafe: the owner frees it at its next reset and
+    // the descriptor is immediately reissued for unrelated data, which shaders
+    // then read as this buffer's contents.
     if (const auto existing_srv
       = registry.FindShaderVisibleIndex(allocation.Buffer(), view_desc);
       existing_srv.has_value()) {
-      SlotAlloc alloc_entry {};
-      alloc_entry.allocation = std::move(allocation);
-      alloc_entry.srv_index = *existing_srv;
-      alloc_entry.sequence = current_frame_;
-      slot.allocs.emplace_back(std::move(alloc_entry));
-
-      TransientAllocation out {};
-      out.srv = *existing_srv;
-      out.mapped_ptr = aligned_ptr;
-      out.size_bytes = size_bytes;
-      out.sequence = current_frame_;
-      out.slot = current_slot_;
-      LOG_F(1,
-        "TransientStructuredBuffer::Allocate reused slot={} bytes={} "
-        "srv_index={} "
-        "ptr={}",
-        slot_index, size_bytes, out.srv.get(), fmt::ptr(out.mapped_ptr));
-      return out;
+      LOG_F(ERROR,
+        "TransientStructuredBuffer '{}': range [{}, +{}) stride {} still has "
+        "view {} from a previous use of this slot; its owner was not started "
+        "for the frame (StagingProvider::NotifyFrameStart)",
+        debug_label_, u_aligned_offset, size_bytes, stride_,
+        existing_srv->get());
+      return std::unexpected(make_error_code(UploadError::kInvalidRequest));
     }
 
     auto& allocator = gfx_->GetDescriptorAllocator();

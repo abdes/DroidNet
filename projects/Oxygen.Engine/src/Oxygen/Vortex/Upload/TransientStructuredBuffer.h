@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstring>
 #include <expected>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -85,7 +86,10 @@ public:
     bindless::DomainToken domain = bindless::generated::kGlobalSrvDomain);
 
   OXYGEN_MAKE_NON_COPYABLE(TransientStructuredBuffer)
-  OXYGEN_DEFAULT_MOVABLE(TransientStructuredBuffer)
+  OXGN_VRTX_API TransientStructuredBuffer(
+    TransientStructuredBuffer&& other) noexcept;
+  OXGN_VRTX_API auto operator=(TransientStructuredBuffer&& other) noexcept
+    -> TransientStructuredBuffer&;
 
   OXGN_VRTX_API ~TransientStructuredBuffer();
 
@@ -109,13 +113,13 @@ public:
 
     //! Check that this allocation was created in the provided frame
     //! sequence and therefore is still valid for consumption.
-    auto IsValid(frame::SequenceNumber seq) const noexcept -> bool
+    [[nodiscard]] auto IsValid(frame::SequenceNumber seq) const noexcept -> bool
     {
       return sequence == seq && srv.IsValid() && mapped_ptr != nullptr;
     }
 
     template <typename T>
-    auto TryWriteObject(const T& value) const noexcept -> bool
+    [[nodiscard]] auto TryWriteObject(const T& value) const noexcept -> bool
     {
       static_assert(std::is_trivially_copyable_v<T>,
         "TransientAllocation::TryWriteObject requires a trivially copyable "
@@ -129,7 +133,8 @@ public:
     }
 
     template <typename T, std::size_t Extent>
-    auto TryWriteRange(std::span<T, Extent> values) const noexcept -> bool
+    [[nodiscard]] auto TryWriteRange(std::span<T, Extent> values) const noexcept
+      -> bool
     {
       using ValueT = std::remove_const_t<T>;
       static_assert(std::is_trivially_copyable_v<ValueT>,
@@ -170,6 +175,30 @@ private:
     std::vector<SlotAlloc> allocs;
   };
 
+  //! Receives the provider's frame start for whichever object currently owns
+  //! this buffer's state; moves re-point it, destruction detaches it.
+  class FrameAnchor final : public StagingProvider::FrameListener {
+  public:
+    explicit FrameAnchor(TransientStructuredBuffer* owner) noexcept
+      : owner_(owner)
+    {
+    }
+    auto Retarget(TransientStructuredBuffer* owner) noexcept -> void
+    {
+      owner_ = owner;
+    }
+    auto OnStagingFrameStart(frame::SequenceNumber sequence, frame::Slot slot)
+      -> void override
+    {
+      if (owner_ != nullptr) {
+        owner_->OnFrameStart(sequence, slot);
+      }
+    }
+
+  private:
+    TransientStructuredBuffer* owner_;
+  };
+
   observer_ptr<Graphics> gfx_;
   StagingProvider* staging_; // stored as pointer for assignability
   std::uint32_t stride_;
@@ -181,6 +210,7 @@ private:
   // include the frame sequence they were created in.
   frame::SequenceNumber current_frame_ { frame::SequenceNumber { 0 } };
   std::array<SlotData, frame::kFramesInFlight.get()> slots_ {};
+  std::shared_ptr<FrameAnchor> frame_anchor_;
 
   auto ResetSlot(std::uint32_t slot_index) -> void;
   auto ReleaseAllocView(SlotAlloc& slot) -> void;

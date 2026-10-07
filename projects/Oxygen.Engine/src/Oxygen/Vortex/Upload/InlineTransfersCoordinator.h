@@ -8,7 +8,9 @@
 
 #include <atomic>
 #include <memory>
+#include <optional>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -46,11 +48,19 @@ public:
     SizeBytes size, std::string_view source_label) noexcept -> void;
 
   //! Called once per frame slot before transient buffers reset their views.
-  OXGN_VRTX_API auto OnFrameStart(vortex::RendererTag, frame::Slot slot)
-    -> void;
+  OXGN_VRTX_API auto OnFrameStart(
+    vortex::RendererTag /*unused*/, frame::Slot slot) -> void;
+
+  //! As above, then start frame `sequence` for the providers' transient
+  //! consumers. Re-starting the frame in progress does nothing: its slot and
+  //! the views published into it stay valid for its earlier work.
+  OXGN_VRTX_API auto OnFrameStart(vortex::RendererTag tag,
+    frame::SequenceNumber sequence, frame::Slot slot) -> void;
 
 private:
   auto RetireCompleted() -> void;
+
+  std::optional<std::pair<frame::SequenceNumber, frame::Slot>> started_frame_;
 
   observer_ptr<Graphics> gfx_;
   std::vector<std::weak_ptr<StagingProvider>> providers_;

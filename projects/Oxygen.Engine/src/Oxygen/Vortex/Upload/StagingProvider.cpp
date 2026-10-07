@@ -8,11 +8,14 @@
 #include <cstdint>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/ByteUnits.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 
 namespace oxygen::vortex::upload {
@@ -27,6 +30,25 @@ StagingProvider::Allocation::Allocation(std::shared_ptr<graphics::Buffer> buf,
   CHECK_NOTNULL_F(buffer);
   CHECK_NOTNULL_F(ptr);
   CHECK_F(size.get() > 0 && size.get() <= buffer->GetSize());
+}
+
+auto StagingProvider::AddFrameListener(std::weak_ptr<FrameListener> listener)
+  -> void
+{
+  frame_listeners_.push_back(std::move(listener));
+}
+
+auto StagingProvider::NotifyFrameStart(vortex::RendererTag /*tag*/,
+  const frame::SequenceNumber sequence, const frame::Slot slot) -> void
+{
+  std::erase_if(frame_listeners_, [&](const auto& weak) -> bool {
+    const auto listener = weak.lock();
+    if (!listener) {
+      return true;
+    }
+    listener->OnStagingFrameStart(sequence, slot);
+    return false;
+  });
 }
 
 StagingProvider::~StagingProvider()

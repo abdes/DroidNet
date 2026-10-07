@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <utility>
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -16,9 +17,11 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Test/Fixtures/RingBufferStagingFixture.h>
 #include <Oxygen/Vortex/Upload/Errors.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
+#include <Oxygen/Vortex/Upload/UploaderTag.h>
 
 using oxygen::vortex::upload::TransientStructuredBuffer;
 
@@ -558,6 +561,73 @@ NOLINT_TEST_F(TransientStructuredBufferTest,
   transient.OnFrameStart(frame::SequenceNumber { 1U }, slot);
   EXPECT_EQ(transient.GetActiveBuffer(), nullptr);
   EXPECT_FALSE(registry.FindShaderVisibleIndex(*buffer, view).has_value());
+}
+
+//! Two buffers sharing one ring must never share a descriptor: a slot recycled
+//! by the provider hands out the same ranges again, so stale views must be
+//! released at frame start, before the other buffer allocates the same range.
+NOLINT_TEST_F(TransientStructuredBufferTest,
+  RecycledSlotRangesNeverShareADescriptorBetweenBuffers)
+{
+  constexpr auto kStride = 16U;
+  auto first = TransientStructuredBuffer(GfxPtr(), Staging(), kStride);
+  auto second = TransientStructuredBuffer(GfxPtr(), Staging(), kStride);
+  const auto slot = frame::Slot { 0U };
+  const auto tag = oxygen::vortex::internal::RendererTagFactory::Get();
+
+  // Frame 1: the first buffer publishes range [0, 16) of the only partition.
+  Staging().OnFrameStart(internal::UploaderTagFactory::Get(), slot);
+  Staging().NotifyFrameStart(tag, frame::SequenceNumber { 1U }, slot);
+  first.OnFrameStart(frame::SequenceNumber { 1U }, slot);
+  const auto stale = first.Allocate(1U);
+  ASSERT_TRUE(stale.has_value());
+
+  // Frame 2 recycles the partition. The second buffer starts first and gets
+  // the same range; the first buffer starts lazily and allocates afterwards.
+  Staging().OnFrameStart(internal::UploaderTagFactory::Get(), slot);
+  Staging().NotifyFrameStart(tag, frame::SequenceNumber { 2U }, slot);
+  second.OnFrameStart(frame::SequenceNumber { 2U }, slot);
+  const auto reader = second.Allocate(1U);
+  ASSERT_TRUE(reader.has_value()) << reader.error().message();
+  first.OnFrameStart(frame::SequenceNumber { 2U }, slot);
+  const auto writer = first.Allocate(1U);
+  ASSERT_TRUE(writer.has_value()) << writer.error().message();
+
+  // The reader still owns a view of its own range; the writer's descriptor
+  // is a different one and does not alias it.
+  EXPECT_NE(reader->srv, writer->srv);
+  const auto* buffer = second.GetActiveBuffer();
+  ASSERT_NE(buffer, nullptr);
+  auto view = graphics::BufferViewDescription {};
+  view.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
+  view.visibility = graphics::DescriptorVisibility::kShaderVisible;
+  view.range = { 0U, kStride };
+  view.stride = kStride;
+  EXPECT_EQ(Gfx().GetResourceRegistry().FindShaderVisibleIndex(*buffer, view),
+    reader->srv);
+}
+
+//! A buffer moved after construction keeps receiving frame starts, so its
+//! recycled views are still released before other buffers allocate.
+NOLINT_TEST_F(
+  TransientStructuredBufferTest, MovedBufferStillReleasesAtFrameStart)
+{
+  constexpr auto kStride = 16U;
+  auto original = TransientStructuredBuffer(GfxPtr(), Staging(), kStride);
+  auto moved = TransientStructuredBuffer(std::move(original));
+  auto other = TransientStructuredBuffer(GfxPtr(), Staging(), kStride);
+  const auto slot = frame::Slot { 0U };
+  const auto tag = oxygen::vortex::internal::RendererTagFactory::Get();
+
+  Staging().OnFrameStart(internal::UploaderTagFactory::Get(), slot);
+  Staging().NotifyFrameStart(tag, frame::SequenceNumber { 1U }, slot);
+  moved.OnFrameStart(frame::SequenceNumber { 1U }, slot);
+  ASSERT_TRUE(moved.Allocate(1U).has_value());
+
+  Staging().OnFrameStart(internal::UploaderTagFactory::Get(), slot);
+  Staging().NotifyFrameStart(tag, frame::SequenceNumber { 2U }, slot);
+  other.OnFrameStart(frame::SequenceNumber { 2U }, slot);
+  EXPECT_TRUE(other.Allocate(1U).has_value());
 }
 
 } // namespace oxygen::vortex::upload

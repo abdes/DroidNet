@@ -10,6 +10,7 @@
 #include <expected>
 #include <memory>
 #include <string_view>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -171,6 +172,39 @@ public:
     return false;
   }
 
+  //! Per-frame consumer of this provider's memory that keeps shader-visible
+  //! views into it (e.g. TransientStructuredBuffer).
+  /*!
+   Views are keyed by buffer and byte range, and a recycled frame slot hands
+   out the same ranges again. Every listener must therefore release the views
+   it published in a slot before anything allocates from that slot again, not
+   lazily when it next allocates itself; otherwise a later allocation finds a
+   stale foreign view for its range.
+  */
+  class FrameListener {
+  public:
+    FrameListener() = default;
+    OXYGEN_MAKE_NON_COPYABLE(FrameListener)
+    OXYGEN_MAKE_NON_MOVABLE(FrameListener)
+    virtual ~FrameListener() = default;
+
+    //! The frame `sequence` starts in `slot`; release views from earlier
+    //! frames that used `slot`.
+    virtual auto OnStagingFrameStart(
+      frame::SequenceNumber sequence, frame::Slot slot) -> void = 0;
+  };
+
+  //! Register a listener; expired listeners are pruned on notification, so a
+  //! listener may be destroyed without unregistering.
+  OXGN_VRTX_API auto AddFrameListener(std::weak_ptr<FrameListener> listener)
+    -> void;
+
+  //! Start a frame for every live listener. The renderer calls this once per
+  //! frame, after the provider recycled the slot and before any allocation,
+  //! and not again when offscreen work re-enters the same frame.
+  OXGN_VRTX_API auto NotifyFrameStart(vortex::RendererTag /*tag*/,
+    frame::SequenceNumber sequence, frame::Slot slot) -> void;
+
   //! Optional telemetry; providers may override to expose stats.
   [[nodiscard]] auto GetStats() const -> const StagingStats& { return stats_; }
 
@@ -180,6 +214,7 @@ protected:
 
 private:
   StagingStats stats_ {};
+  std::vector<std::weak_ptr<FrameListener>> frame_listeners_;
 };
 
 } // namespace oxygen::vortex::upload

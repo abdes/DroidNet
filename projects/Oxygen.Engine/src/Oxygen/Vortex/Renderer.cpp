@@ -1811,10 +1811,12 @@ auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
 
   const auto tag = internal::RendererTagFactory::Get();
   if (uploader_) {
-    uploader_->OnFrameStart(tag, frame_slot_);
+    uploader_->OnFrameStart(
+      tag, context->GetFrameSequenceNumber(), frame_slot_);
   }
   if (inline_transfers_) {
-    inline_transfers_->OnFrameStart(tag, frame_slot_);
+    inline_transfers_->OnFrameStart(
+      tag, context->GetFrameSequenceNumber(), frame_slot_);
   }
   if (view_const_manager_) {
     view_const_manager_->OnFrameStart(frame_slot_);
@@ -3497,10 +3499,12 @@ auto Renderer::BeginStandaloneFrameExecution(const FrameSessionInput& session)
   // Offscreen work can run inside the current frame. Recycling its upload
   // slot twice erases tickets submitted by frame-start resource binders.
   if (uploader_ && !frame_already_started) {
-    uploader_->OnFrameStart(tag, frame_slot_);
+    uploader_->OnFrameStart(tag, session.frame_sequence, frame_slot_);
   }
+  // Re-entering the same frame repeats its sequence, so transient buffers on
+  // the inline providers keep every view published earlier in the frame.
   if (inline_transfers_) {
-    inline_transfers_->OnFrameStart(tag, frame_slot_);
+    inline_transfers_->OnFrameStart(tag, session.frame_sequence, frame_slot_);
   }
   if (view_const_manager_) {
     view_const_manager_->OnFrameStart(frame_slot_);

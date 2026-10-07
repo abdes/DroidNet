@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <memory>
 #include <string_view>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -81,6 +82,21 @@ auto InlineTransfersCoordinator::OnFrameStart(
       ++it;
     } else {
       it = providers_.erase(it);
+    }
+  }
+}
+
+auto InlineTransfersCoordinator::OnFrameStart(vortex::RendererTag tag,
+  const frame::SequenceNumber sequence, const frame::Slot slot) -> void
+{
+  if (started_frame_ == std::pair { sequence, slot }) {
+    return;
+  }
+  started_frame_ = std::pair { sequence, slot };
+  OnFrameStart(tag, slot);
+  for (const auto& weak : providers_) {
+    if (const auto provider = weak.lock()) {
+      provider->NotifyFrameStart(tag, sequence, slot);
     }
   }
 }
