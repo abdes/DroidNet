@@ -528,13 +528,18 @@ NOLINT_TEST_F(ExposureGpuTest, FogCompositionClampsViewportAndDepthEdges)
       = PublishFixtureData(environment_bindings);
     view_bindings.scene_texture_frame_slot = scene_slot;
     const auto view_slot = PublishFixtureData(view_bindings);
-    for (const auto distance : {
-           0.0F,
-           .25F,
-           1.0F,
-           4.0F,
+    // Off-axis receivers (lateral offset) lie farther than their view depth;
+    // the volume is sliced by view depth, so the lookup must ignore the offset.
+    for (const auto [distance, lateral] : {
+           std::pair { 0.0F, 0.0F },
+           std::pair { .25F, 0.0F },
+           std::pair { .25F, .6F },
+           std::pair { 1.0F, 0.0F },
+           std::pair { 4.0F, 0.0F },
+           std::pair { .0625F, .5F },
          }) {
       SCOPED_TRACE(distance);
+      SCOPED_TRACE(lateral);
       auto view = ViewConstants::GpuData {};
       view.view_frame_bindings_bslot = BindlessViewFrameBindingsSlot {
         view_slot,
@@ -546,7 +551,7 @@ NOLINT_TEST_F(ExposureGpuTest, FogCompositionClampsViewportAndDepthEdges)
       view.inverse_view_projection_matrix
         = glm::column(view.inverse_view_projection_matrix, 3,
           glm::vec4 {
-            0,
+            lateral,
             0,
             -distance,
             1,

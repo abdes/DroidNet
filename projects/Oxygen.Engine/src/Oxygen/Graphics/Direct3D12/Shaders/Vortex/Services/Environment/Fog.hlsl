@@ -39,10 +39,14 @@ static inline bool VolumetricFogFlagEnabled(uint flags, uint bit)
     return (flags & bit) != 0u;
 }
 
+// The froxel grid slices view-space depth along the camera axis, so the
+// lookup must use the receiver's view depth, not its radial distance: off-axis
+// the radial distance lands behind the surface, in cells that can be opaque
+// (exponential height fog grows without bound below its height offset).
 static float4 SampleIntegratedVolumetricFog(
     GpuVolumetricFogParams volumetric_fog,
     float2 uv,
-    float ray_length_m)
+    float view_depth_m)
 {
     if (!VolumetricFogFlagEnabled(volumetric_fog.flags, GPU_VOLUMETRIC_FOG_FLAG_ENABLED)
         || !VolumetricFogFlagEnabled(
@@ -56,13 +60,13 @@ static float4 SampleIntegratedVolumetricFog(
     const float depth_span =
         max(volumetric_fog.distance_m - volumetric_fog.start_distance_m, 1.0f);
     const float linear_depth_fraction =
-        saturate((ray_length_m - volumetric_fog.start_distance_m) / depth_span);
+        saturate((view_depth_m - volumetric_fog.start_distance_m) / depth_span);
     float depth_fraction = sqrt(linear_depth_fraction);
     if (abs(volumetric_fog.grid_z_params.x) > 1.0e-8f
         && abs(volumetric_fog.grid_z_params.z) > 1.0e-4f
         && volumetric_fog.grid_depth > 0u) {
         const float z_argument = max(
-            ray_length_m * volumetric_fog.grid_z_params.x
+            view_depth_m * volumetric_fog.grid_z_params.x
             + volumetric_fog.grid_z_params.y,
             1.0e-8f);
         const float z_slice =
@@ -127,7 +131,6 @@ float4 VortexFogPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
         input.uv,
         raw_depth,
         inverse_view_projection_matrix);
-    const float ray_length_m = length(world_position - camera_position);
     float4 height_fog = float4(0.0f, 0.0f, 0.0f, 1.0f);
     if (FogFlagEnabled(fog.flags, GPU_FOG_FLAG_HEIGHT_FOG_ENABLED)
         && (fog.primary_density > 0.0f || fog.secondary_density > 0.0f)) {
@@ -140,10 +143,12 @@ float4 VortexFogPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     }
     RecordHdrConsumerInput(height_fog.rgb, HDR_INPUT_HEIGHT_FOG);
     height_fog.rgb *= GetPreExposure();
+    const float view_depth_m =
+        max(-mul(view_matrix, float4(world_position, 1.0f)).z, 0.0f);
     const float4 volumetric_fog = SampleIntegratedVolumetricFog(
         env_data.volumetric_fog,
         input.uv,
-        ray_length_m);
+        view_depth_m);
     const float4 fog_result = ComposeFogResults(height_fog, volumetric_fog);
     const bool holdout = !reflection_capture && FogFlagEnabled(fog.flags, GPU_FOG_FLAG_HOLDOUT);
     return float4(holdout ? 0.0f.xxx : fog_result.rgb, 1.0f - fog_result.a);
