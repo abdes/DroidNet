@@ -72,32 +72,95 @@ namespace {
             const auto clip = input.projection * glm::vec4(position, 1.0F);
             return glm::vec3(clip) / clip.w;
           };
-          const auto hit_ndc = project(sample);
-          const auto uv = glm::vec2(hit_ndc) * glm::vec2(0.5F, -0.5F) + 0.5F;
+          const auto uv_of = [&](glm::vec3 position) {
+            return glm::vec2(project(position)) * glm::vec2(0.5F, -0.5F) + 0.5F;
+          };
+          const auto pixel_of = [](glm::vec2 coord) {
+            return (static_cast<unsigned>(coord.y * 64.0F) * 64U)
+              + static_cast<unsigned>(coord.x * 64.0F);
+          };
+          const auto inside = [](glm::vec2 coord) {
+            return coord.x >= 0.0F && coord.x < 1.0F && coord.y >= 0.0F
+              && coord.y < 1.0F;
+          };
+          // One occluder texel, `gap` in front of the probed sample; scenario
+          // 2 places it beyond the trace thickness so the ray misses it.
           auto pixels = std::vector<std::uint32_t>(
             64U * 64U, std::bit_cast<std::uint32_t>(reverse ? 0.0F : 1.0F));
-          float expected = 1.0F;
-          if (uv.x >= 0.0F && uv.x < 1.0F && uv.y >= 0.0F && uv.y < 1.0F) {
-            const auto gap = scenario == 2U ? 0.003F : 0.001F;
-            const auto stored = project(sample + glm::vec3(0, 0, gap)).z;
-            const auto x = static_cast<unsigned>(uv.x * 64U);
-            const auto y = static_cast<unsigned>(uv.y * 64U);
-            pixels.at(y * 64U + x) = std::bit_cast<std::uint32_t>(stored);
+          const auto gap = scenario == 2U ? 0.08F : 0.001F;
+          const auto occluder = sample + glm::vec3(0, 0, gap);
+          if (inside(uv_of(sample))) {
+            const auto stored
+              = std::bit_cast<std::uint32_t>(project(occluder).z);
+            pixels.at(pixel_of(uv_of(sample))) = stored;
             if (scenario == 3U) {
-              const auto start = project(origin);
-              const auto start_uv
-                = glm::vec2(start) * glm::vec2(0.5F, -0.5F) + 0.5F;
-              pixels.at(static_cast<unsigned>(start_uv.y * 64U) * 64U
-                + static_cast<unsigned>(start_uv.x * 64U))
-                = std::bit_cast<std::uint32_t>(stored);
-            } else if (scenario != 2U) {
-              const auto t = std::clamp((distance - 0.20F) / 0.05F, 0.0F, 1.0F);
-              const auto end = 1.0F - t * t * (3.0F - 2.0F * t);
-              const auto edge = std::clamp(64.0F
-                  * (std::min)({ uv.x, uv.y, 1.0F - uv.x, 1.0F - uv.y }) / 8.0F,
-                0.0F, 1.0F);
-              expected = 1.0F - end * edge;
+              // The start pixel shares the occluder depth: skipped as self.
+              pixels.at(pixel_of(uv_of(origin))) = stored;
             }
+          }
+          // CPU reference of the documented trace: 16 steps over 0.25 m, hits
+          // within twice the step behind the stored surface, the start pixel
+          // and the receiver's own plane rejected, edge and end fades.
+          const auto expected = [&]() -> float {
+            constexpr unsigned kSteps = 16U;
+            constexpr float kStep = 0.25F / static_cast<float>(kSteps);
+            const auto start = pixels.at(pixel_of(uv_of(origin)));
+            const auto background
+              = std::bit_cast<std::uint32_t>(reverse ? 0.0F : 1.0F);
+            const auto pixel_scale
+              = 2.0F / (std::abs(input.projection[1][1]) * 64.0F);
+            const auto view_ray = perspective ? glm::normalize(input.position)
+                                              : glm::vec3 { 0.0F, 0.0F, -1.0F };
+            const auto facing = glm::dot(input.normal, view_ray);
+            const auto view_sine
+              = std::sqrt((std::max)(0.0F, 1.0F - (facing * facing)));
+            for (unsigned i = 0U; i < kSteps; ++i) {
+              const auto step = kStep * static_cast<float>(i + 1U);
+              const auto at = origin + step * input.light_direction;
+              const auto clip = input.projection * glm::vec4(at, 1.0F);
+              const auto coord = uv_of(at);
+              if (clip.w <= 0.0F || clip.z < 0.0F || clip.z > clip.w
+                || !inside(coord)) {
+                break;
+              }
+              const auto value = pixels.at(pixel_of(coord));
+              if (value == background || value == start) {
+                continue;
+              }
+              const auto sample_depth = -at.z;
+              const auto stored_depth = -occluder.z;
+              const auto delta = sample_depth - stored_depth;
+              if (delta <= 0.0F || delta > 2.0F * kStep) {
+                continue;
+              }
+              const auto stored_point = perspective
+                ? at * (stored_depth / sample_depth)
+                : glm::vec3 { at.x, at.y, -stored_depth };
+              const auto footprint
+                = (pixel_scale * (perspective ? stored_depth : 1.0F)
+                    * view_sine)
+                + 0.001F;
+              if (std::abs(
+                    glm::dot(input.normal, stored_point - input.position))
+                <= footprint) {
+                continue;
+              }
+              const auto t = std::clamp((step - 0.20F) / 0.05F, 0.0F, 1.0F);
+              const auto end_weight = 1.0F - (t * t * (3.0F - (2.0F * t)));
+              const auto edge = std::clamp(64.0F
+                  * (std::min)({ coord.x, coord.y, 1.0F - coord.x,
+                    1.0F - coord.y })
+                  / 8.0F,
+                0.0F, 1.0F);
+              return 1.0F - (end_weight * edge);
+            }
+            return 1.0F;
+          }();
+          if (scenario == 0U && inside(uv_of(sample))) {
+            EXPECT_LT(expected, 1.0F) << "the probed occluder is a hit";
+          }
+          if (scenario == 2U || scenario == 3U) {
+            EXPECT_EQ(expected, 1.0F) << "the scenario must miss";
           }
           input.depth_srv
             = PublishPackedTexture(Format::kR32Float, pixels, 64U);

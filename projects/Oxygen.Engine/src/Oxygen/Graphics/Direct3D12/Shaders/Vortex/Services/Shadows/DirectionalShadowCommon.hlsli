@@ -22,11 +22,18 @@ static inline uint SelectDirectionalShadowCascade(
     return family.first_cascade + family.cascade_count - 1u;
 }
 
+// Hardware-filtered 3x3 PCF: nine bilinear comparison taps one texel apart
+// form a smooth 4x4 footprint, so edges stay soft on receivers the light
+// grazes instead of stretching texel steps into stripes. Each tap compares the
+// depth the receiver plane has at its offset (`depth_gradient`, depth per
+// shadow texel); the half-texel bilinear footprint adds the plane's rise across
+// it, so sloped receivers do not shadow themselves.
 static inline float SampleDirectionalShadowSurface(
     VortexShadowFrameBindings bindings,
     uint cascade_index,
     float2 shadow_uv,
-    float receiver_depth)
+    float receiver_depth,
+    float2 depth_gradient)
 {
     const VortexShadowCascadeBinding cascade = LoadShadowCascade(bindings, cascade_index);
     if (cascade.surface_srv == K_INVALID_BINDLESS_INDEX) {
@@ -36,28 +43,58 @@ static inline float SampleDirectionalShadowSurface(
     // Cascade selection and compact local lists can vary the surface per lane.
     Texture2DArray<float> shadow_surface =
         ResourceDescriptorHeap[NonUniformResourceIndex(cascade.surface_srv)];
-    const uint layer =
-        cascade.array_layer;
-    const float2 inverse_resolution =
+    SamplerComparisonState comparison_sampler =
+        SamplerDescriptorHeap[VORTEX_SAMPLER_SHADOW_COMPARISON];
+    const float layer = (float)cascade.array_layer;
+    const float2 texel_size =
         max(cascade.inverse_resolution, float2(0.000001f, 0.000001f));
-    const float2 texel_size = inverse_resolution;
-    const float2 texture_size = 1.0f / texel_size;
-    const int2 max_coord =
-        max(int2(texture_size) - int2(1, 1), int2(0, 0));
-    const int2 center = int2(shadow_uv * texture_size);
+    const float footprint_rise =
+        0.5f * (abs(depth_gradient.x) + abs(depth_gradient.y));
 
     float visibility = 0.0f;
     [unroll]
     for (int y = -1; y <= 1; ++y) {
         [unroll]
         for (int x = -1; x <= 1; ++x) {
-            const int2 coord = clamp(center + int2(x, y), int2(0, 0), max_coord);
-            const float stored_depth = shadow_surface.Load(int4(coord, (int)layer, 0));
-            visibility += receiver_depth >= stored_depth ? 1.0f : 0.0f;
+            const float2 offset = float2(x, y);
+            const float tap_depth = receiver_depth
+                + dot(depth_gradient, offset) + footprint_rise;
+            // Taps past the map edge reuse its border texels, not the
+            // sampler's lit border colour.
+            const float2 tap_uv = clamp(shadow_uv + offset * texel_size,
+                0.5f * texel_size, 1.0f - 0.5f * texel_size);
+            visibility += shadow_surface.SampleCmpLevelZero(comparison_sampler,
+                float3(tap_uv, layer), tap_depth);
         }
     }
 
     return visibility * (1.0f / 9.0f);
+}
+
+// Shadow-depth change per shadow texel across the receiver plane with normal
+// `normal`. The cascade projection is affine, so the plane's (u, v, depth)
+// normal is the cofactor transform of `normal`. The slope is limited to that of
+// a surface 88 degrees from the light, where lighting has nearly vanished.
+static inline float2 ComputeReceiverDepthGradient(
+    VortexShadowCascadeBinding cascade,
+    float3 normal,
+    float world_texel_size)
+{
+    const float2 texture_size =
+        1.0f / max(cascade.inverse_resolution, float2(0.000001f, 0.000001f));
+    const float3 u_axis = 0.5f * texture_size.x * cascade.light_view_projection[0].xyz;
+    const float3 v_axis = -0.5f * texture_size.y * cascade.light_view_projection[1].xyz;
+    const float3 depth_axis = cascade.light_view_projection[2].xyz;
+    const float n_u = dot(normal, cross(v_axis, depth_axis));
+    const float n_v = dot(normal, cross(depth_axis, u_axis));
+    const float n_depth = dot(normal, cross(u_axis, v_axis));
+    if (abs(n_depth) <= 1.0e-30f) {
+        return 0.0f.xx;
+    }
+    static const float kMaxReceiverSlope = 28.6f; // tan(88 degrees)
+    const float max_step =
+        kMaxReceiverSlope * world_texel_size * length(depth_axis);
+    return clamp(-float2(n_u, n_v) / n_depth, -max_step, max_step);
 }
 
 static inline float ComputeDirectionalCascadeVisibility(
@@ -94,8 +131,9 @@ static inline float ComputeDirectionalCascadeVisibility(
         return 1.0f;
     }
 
-    return SampleDirectionalShadowSurface(
-        bindings, cascade_index, shadow_uv, shadow_ndc.z);
+    return SampleDirectionalShadowSurface(bindings, cascade_index, shadow_uv,
+        shadow_ndc.z,
+        ComputeReceiverDepthGradient(cascade, safe_normal, world_texel_size));
 }
 
 static inline bool HasDirectionalConventionalShadowBindings(VortexShadowFrameBindings bindings)

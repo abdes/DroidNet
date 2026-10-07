@@ -140,8 +140,9 @@ BasePassGBuffer, directional/local direct-light and shadow receiver helpers.
 
 The full fixed algorithm is authoritative in
 [property-inspector.md#contact-shadow-algorithm](../../../../../design/editor/lld/property-inspector.md#contact-shadow-algorithm).
-It defines the 0.25 m/16-sample ray, geometric-normal bias, linear-depth thickness,
-self-hit rejection, edge/end fades and one-time multiplication with map visibility.
+It defines the 0.25 m/16-sample ray, geometric-normal bias, two-step linear-depth
+thickness, start-depth and receiver-plane self-hit rejection, edge/end fades and
+one-time multiplication with map visibility.
 No new inspector tuning parameters accompany the existing bool.
 
 ShadowService owns a dedicated per-view `ContactShadowCasterDepth` product/pass

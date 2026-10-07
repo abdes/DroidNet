@@ -63,7 +63,7 @@ float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Tar
         if (surface.receives_shadows
             && shadow_reference.projection_kind == SHADOW_PROJECTION_CASCADED_2D) {
             visibility = ComputeDirectionalShadowVisibility(light.selection_index,
-                world_position, surface.world_normal, light_dir);
+                world_position, surface.geometric_normal, light_dir);
         }
         visibility *= ComputeContactShadowVisibility(light.flags, surface.receives_shadows,
             world_position, surface.geometric_normal, light_dir);

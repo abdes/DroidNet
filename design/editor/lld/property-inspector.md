@@ -286,7 +286,8 @@ Receiver Off bypasses both conventional-map and contact attenuation, leaving
 other lighting/caster behavior unchanged.
 
 The fixed V0.1 engine profile is a 0.25 m ray, 16 point-depth samples, 0.001 m
-origin normal bias and 0.002 m view-depth hit thickness. These are engine constants,
+origin normal bias and a view-depth hit thickness of two steps (0.03125 m), so
+occluders between samples are not stepped over. These are engine constants,
 not new inspector sliders. For receiver world position P, use the normalized
 world geometric normal after sidedness/orientation correction, excluding
 normal-map perturbations: origin `P + 0.001 * N_geometric`. Trace toward the
@@ -297,7 +298,12 @@ Project samples with the current camera into its content rectangle and point
 sample caster depth at mip 0. Exclude the exact point-sampled start-depth value
 to prevent origin self-intersection. Decode both depths with the same projection
 to positive linear view-space metres. A hit requires
-`0 < ray_view_depth - caster_view_depth <= 0.002`. Stop at the first valid hit.
+`0 < ray_view_depth - caster_view_depth <= 0.03125`. A candidate whose caster
+point, reconstructed along the sample's eye ray, lies within
+`pixel_size * sin(view-normal angle) + 0.001` of the receiver's own plane is the
+receiver seen through point-sampled depth, not an occluder, and is skipped; this
+removes self-shadow bands on surfaces seen at a slope. Stop at the first valid
+hit.
 Invalid depth is a miss for that sample; leaving the content rectangle or
 crossing the camera near plane ends the remaining ray without a hit. Camera
 bars never supply occluder depth.

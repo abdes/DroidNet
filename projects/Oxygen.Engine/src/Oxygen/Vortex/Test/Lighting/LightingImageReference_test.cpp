@@ -18,10 +18,13 @@
 #include <vector>
 
 #include <glm/ext/vector_float3.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/quaternion.hpp>
 
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -470,6 +473,259 @@ namespace {
       }
     }
     RecordProperty("finite_shadow_images", cases);
+  }
+
+  //! Directional light grazing the fixture receiver (plane z = -1, normal +Z)
+  //! in a 64x64 view; renders shadowed/unshadowed visibility ratios.
+  class GrazingDirectionalShadowTest : public FiniteEmitterShadowImageTest {
+  protected:
+    static constexpr std::uint32_t kSize = 64U;
+
+    auto SetUp() -> void override
+    {
+      FiniteEmitterShadowImageTest::SetUp();
+      view.viewport.width = static_cast<float>(kSize);
+      view.viewport.height = static_cast<float>(kSize);
+      auto lens = camera.GetCameraAs<scene::PerspectiveCamera>();
+      ASSERT_TRUE(lens.has_value());
+      lens->get().SetViewport(view.viewport);
+      lens->get().SetAspectRatio(1.0F);
+      auto output = CreateRegisteredTexture({
+        .width = kSize,
+        .height = kSize,
+        .format = Format::kRGBA32Float,
+        .is_render_target = true,
+        .initial_state = graphics::ResourceStates::kCommon,
+      });
+      framebuffer = Backend().CreateFramebuffer(
+        graphics::FramebufferDesc {}.AddColorAttachment(output));
+      ASSERT_NE(framebuffer, nullptr);
+      SetSurface(data::MaterialDomain::kOpaque);
+      sun = scene->CreateNode("Grazing sun");
+      auto directional = std::make_unique<scene::DirectionalLight>();
+      directional->SetIntensityLux(10.0F);
+      directional->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+      ASSERT_TRUE(sun.AttachLight(std::move(directional)));
+    }
+
+    //! Light arrives `elevation_deg` above the receiver plane.
+    auto SetSunDirection(const float elevation_deg, const float azimuth_deg)
+      -> void
+    {
+      const float elevation = glm::radians(elevation_deg);
+      const float azimuth = glm::radians(azimuth_deg);
+      const glm::vec3 to_source { std::cos(elevation) * std::cos(azimuth),
+        std::cos(elevation) * std::sin(azimuth), std::sin(elevation) };
+      sun.GetTransform().SetLocalRotation(
+        glm::rotation(space::move::Forward, -to_source));
+    }
+
+    //! Shadowed over unshadowed red radiance per pixel; NaN where nothing
+    //! lit is visible.
+    auto RenderVisibility(const bool forward, std::vector<float>& visibility)
+      -> void
+    {
+      std::vector<exposure::Pixel> lit;
+      for (const bool shadowed : { false, true }) {
+        ASSERT_TRUE(
+          sun.EditLight<scene::DirectionalLight>([shadowed](auto& light) {
+            light.Common().casts_shadows = shadowed;
+          }));
+        ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 3U));
+        auto pixels = ReadFloatTexture(*probe->color);
+        ASSERT_EQ(pixels.size(), std::size_t { kSize } * kSize);
+        if (!shadowed) {
+          lit = std::move(pixels);
+          continue;
+        }
+        visibility.assign(
+          pixels.size(), std::numeric_limits<float>::quiet_NaN());
+        for (std::size_t i = 0; i < pixels.size(); ++i) {
+          const float reference = lit.at(i).at(0);
+          if (reference > 1.0e-6F) {
+            visibility.at(i) = pixels.at(i).at(0) / reference;
+          }
+        }
+      }
+    }
+
+    //! Places a copy of the receiver triangle, `scale_fraction` of its size,
+    //! with its plane `height_fraction` of the receiver distance above it.
+    auto AddBlocker(const float receiver_scale, const float scale_fraction,
+      const float height_fraction) -> void
+    {
+      if (!blocker.IsAlive()) {
+        blocker = scene->CreateNode("Shadow blocker");
+        blocker.GetRenderable().SetGeometry(
+          mesh_node.GetRenderable().GetGeometry());
+        expected_draws = 2U;
+      }
+      const float blocker_scale = scale_fraction * receiver_scale;
+      blocker.GetTransform().SetLocalScale(glm::vec3 { blocker_scale });
+      // The triangle lies at local z = -1.
+      blocker.GetTransform().SetLocalPosition(glm::vec3 { 0.0F, 0.0F,
+        blocker_scale - ((1.0F - height_fraction) * receiver_scale) });
+    }
+
+    scene::SceneNode sun;
+    scene::SceneNode blocker;
+  };
+
+  //! A receiver lit at a grazing angle must not shadow itself. The receiver is
+  //! the only caster, so any shadowing on it is acne.
+  NOLINT_TEST_F(
+    GrazingDirectionalShadowTest, GrazingLightDoesNotShadowItsOwnReceiver)
+  {
+    unsigned cases = 0;
+    // Distance coarsens the cascade texels.
+    for (const float scale : { 1.0F, 10.0F, 40.0F, 100.0F }) {
+      mesh_node.GetTransform().SetLocalScale(glm::vec3 { scale });
+      for (const float elevation_deg :
+        { 1.0F, 2.0F, 3.0F, 4.0F, 7.0F, 12.0F, 25.0F }) {
+        for (const float azimuth_deg : { 0.0F, 17.0F, 33.0F, 52.0F, 71.0F }) {
+          for (const bool forward : { false, true }) {
+            SCOPED_TRACE(scale);
+            SCOPED_TRACE(elevation_deg);
+            SCOPED_TRACE(azimuth_deg);
+            SCOPED_TRACE(forward);
+            SetSunDirection(elevation_deg, azimuth_deg);
+            std::vector<float> visibility;
+            ASSERT_NO_FATAL_FAILURE(RenderVisibility(forward, visibility));
+            const auto covered = std::ranges::count_if(
+              visibility, [](const float v) { return !std::isnan(v); });
+            const auto darkened = std::ranges::count_if(
+              visibility, [](const float v) { return v < 0.98F; });
+            ASSERT_GT(covered, kSize * kSize / 4U);
+            EXPECT_EQ(darkened, 0) << darkened << " of " << covered
+                                   << " receiver pixels shadow themselves";
+            ++cases;
+          }
+        }
+      }
+    }
+    RecordProperty("grazing_shadow_images", cases);
+  }
+
+  //! The receiver bias must not hide real occlusion. Both receivers lie
+  //! inside the shadow distance; with the earlier nearest-texel filter and no
+  //! receiver-plane bias they occluded 44 and 63 pixels.
+  NOLINT_TEST_F(GrazingDirectionalShadowTest, BlockerStillCastsItsShadow)
+  {
+    SetSunDirection(60.0F, 0.0F);
+    for (const float scale : { 1.0F, 40.0F }) {
+      SCOPED_TRACE(scale);
+      mesh_node.GetTransform().SetLocalScale(glm::vec3 { scale });
+      AddBlocker(scale, 0.25F, 0.5F);
+      std::vector<float> visibility;
+      ASSERT_NO_FATAL_FAILURE(RenderVisibility(false, visibility));
+      const auto occluded = std::ranges::count_if(
+        visibility, [](const float v) { return v < 0.5F; });
+      EXPECT_GT(occluded, kSize * kSize / 128U);
+    }
+  }
+
+  //! Contact shadows must not let a receiver shadow itself. Point-sampled
+  //! depth of the receiver's own neighbouring pixels is not an occluder; the
+  //! receiver is the only geometry, so contact-on and contact-off images must
+  //! match across distances, viewing angles and grazing light directions.
+  NOLINT_TEST_F(
+    GrazingDirectionalShadowTest, ContactShadowsDoNotShadowTheirOwnReceiver)
+  {
+    unsigned cases = 0;
+    for (const float view_angle_deg : { 20.0F, 40.0F, 60.0F, 75.0F }) {
+      for (const float distance : { 1.0F, 2.0F, 5.0F, 20.0F }) {
+        for (const float grazing_deg : { 50.0F, 65.0F, 80.0F, 86.0F }) {
+          SCOPED_TRACE(view_angle_deg);
+          SCOPED_TRACE(distance);
+          // Tilt the receiver plane (local z = -1) about X by the view angle
+          // and centre it `distance` in front of the camera.
+          const float tilt = glm::radians(view_angle_deg);
+          const float scale = distance;
+          mesh_node.GetTransform().SetLocalScale(glm::vec3 { scale });
+          mesh_node.GetTransform().SetLocalRotation(
+            glm::angleAxis(tilt, glm::vec3 { 1.0F, 0.0F, 0.0F }));
+          mesh_node.GetTransform().SetLocalPosition(glm::vec3 { 0.0F,
+            -scale * std::sin(tilt), -distance + (scale * std::cos(tilt)) });
+          const glm::vec3 normal { 0.0F, -std::sin(tilt), std::cos(tilt) };
+          // Light 80 degrees from the receiver normal, across the receiver.
+          SCOPED_TRACE(grazing_deg);
+          const float grazing = glm::radians(grazing_deg);
+          const glm::vec3 to_source
+            = glm::normalize((normal * std::cos(grazing))
+              + (glm::vec3 { 1.0F, 0.0F, 0.0F } * std::sin(grazing)));
+          sun.GetTransform().SetLocalRotation(
+            glm::rotation(space::move::Forward, -to_source));
+
+          std::vector<exposure::Pixel> without_contact;
+          for (const bool contact : { false, true }) {
+            ASSERT_TRUE(
+              sun.EditLight<scene::DirectionalLight>([contact](auto& light) {
+                light.Common().casts_shadows = true;
+                light.Common().shadow.contact_shadows = contact;
+              }));
+            ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
+            auto pixels = ReadFloatTexture(*probe->color);
+            ASSERT_EQ(pixels.size(), std::size_t { kSize } * kSize);
+            if (!contact) {
+              without_contact = std::move(pixels);
+              continue;
+            }
+            unsigned covered = 0;
+            unsigned darkened = 0;
+            for (std::size_t i = 0; i < pixels.size(); ++i) {
+              const float reference = without_contact.at(i).at(0);
+              if (reference <= 1.0e-6F) {
+                continue;
+              }
+              ++covered;
+              darkened += pixels.at(i).at(0) < 0.98F * reference ? 1U : 0U;
+            }
+            ASSERT_GT(covered, kSize * kSize / 8U);
+            EXPECT_EQ(darkened, 0U)
+              << darkened << " of " << covered
+              << " receiver pixels contact-shadow themselves";
+          }
+          ++cases;
+        }
+      }
+    }
+    RecordProperty("contact_self_shadow_images", cases);
+  }
+
+  //! A thin gap is what contact shadows exist for: a blocker 1 cm above the
+  //! receiver shadows it through the contact trace even with cascades unable
+  //! to resolve the gap.
+  NOLINT_TEST_F(GrazingDirectionalShadowTest, ContactShadowsResolveThinGaps)
+  {
+    // The receiver sits 1 m away, beyond a 0.3 m cascade range, so only the
+    // contact trace can see the 1 cm gap. The sun 5 degrees above the plane
+    // displaces the shadow about 11 cm beside the blocker's own image.
+    mesh_node.GetTransform().SetLocalScale(glm::vec3 { 1.0F });
+    AddBlocker(1.0F, 0.25F, 0.01F);
+    ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>(
+      [](auto& light) { light.CascadedShadows().max_shadow_distance = 0.3F; }));
+    SetSunDirection(5.0F, 0.0F);
+    std::vector<exposure::Pixel> without_contact;
+    for (const bool contact : { false, true }) {
+      ASSERT_TRUE(
+        sun.EditLight<scene::DirectionalLight>([contact](auto& light) {
+          light.Common().casts_shadows = true;
+          light.Common().shadow.contact_shadows = contact;
+        }));
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
+      auto pixels = ReadFloatTexture(*probe->color);
+      if (!contact) {
+        without_contact = std::move(pixels);
+        continue;
+      }
+      unsigned darkened = 0;
+      for (std::size_t i = 0; i < pixels.size(); ++i) {
+        darkened
+          += pixels.at(i).at(0) < 0.5F * without_contact.at(i).at(0) ? 1U : 0U;
+      }
+      EXPECT_GT(darkened, kSize * kSize / 64U)
+        << "contact shadows darkened " << darkened << " pixels";
+    }
   }
 
   NOLINT_TEST_F(LightingImageReferenceTest, MixedLocalLightsMatchSerialImages)

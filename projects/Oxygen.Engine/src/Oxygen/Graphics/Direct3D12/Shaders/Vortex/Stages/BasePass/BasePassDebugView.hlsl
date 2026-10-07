@@ -73,7 +73,7 @@ static float3 EvaluateBasePassDebugView(
     const GBufferData data = ReadGBuffer(uv, bindings);
     const float visibility = ComputeDirectionalShadowVisibility(
         shadow_light.selection_index, world_position,
-        data.world_normal,
+        data.geometric_normal,
         normalize(shadow_light.direction_to_source_ws));
     return saturate(visibility).xxx;
 #elif defined(DEBUG_MASKED_ALPHA_COVERAGE)

@@ -27,12 +27,26 @@ static float ContactLinearDepth(float device_depth, float4x4 projection)
         / (device_depth * projection[3][2] - projection[2][2]);
 }
 
+// Marches 16 steps of a 0.25 m ray toward the light over the contact depth.
+// A sample hits when it has passed behind the stored surface by less than
+// twice the per-step advance, so occluders between samples are not skipped.
+// Point-sampled depth of the receiver's own neighbouring pixels differs from
+// the ray by up to half a pixel of depth slope. Reconstructed along the ray,
+// such a point lies within half a pixel times sin(view-normal angle) of the
+// receiver plane; samples that close to it are the receiver, not occluders.
 static float TraceContactShadow(VortexShadowFrameBindings bindings,
     float4x4 view, float4x4 projection, bool reversed_depth,
     float3 world_position, float3 geometric_normal, float3 direction_to_light)
 {
-    const float3 origin = mul(view,
-        float4(world_position + 0.001f * geometric_normal, 1.0f)).xyz;
+    static const uint kSteps = 16u;
+    static const float kRayLength = 0.25f;
+    static const float kStepLength = kRayLength / float(kSteps);
+    static const float kThickness = 2.0f * kStepLength;
+    static const float kSurfaceOffset = 0.001f;
+
+    const float3 surface = mul(view, float4(world_position, 1.0f)).xyz;
+    const float3 normal = normalize(mul((float3x3)view, geometric_normal));
+    const float3 origin = surface + kSurfaceOffset * normal;
     const float3 ray = mul((float3x3)view, direction_to_light);
     float2 start_uv;
     if (!ProjectContactSample(origin, projection, start_uv)) return 1.0f;
@@ -40,9 +54,16 @@ static float TraceContactShadow(VortexShadowFrameBindings bindings,
     const int2 start_pixel = int2(bindings.contact_content_origin_px
         + start_uv * bindings.contact_content_extent_px);
     const float start_depth = depth.Load(int3(start_pixel, 0));
+    // World size of one pixel per unit of view depth (perspective) or in
+    // absolute terms (orthographic).
+    const bool perspective = projection[3][3] == 0.0f;
+    const float pixel_scale =
+        2.0f / (abs(projection[1][1]) * bindings.contact_content_extent_px.y);
+    const float3 view_ray = perspective ? normalize(surface) : float3(0.0f, 0.0f, -1.0f);
+    const float view_sine = sqrt(saturate(1.0f - dot(normal, view_ray) * dot(normal, view_ray)));
 
-    [loop] for (uint i = 0u; i < 16u; ++i) {
-        const float distance = 0.25f * float(i + 1u) / 16.0f;
+    [loop] for (uint i = 0u; i < kSteps; ++i) {
+        const float distance = kStepLength * float(i + 1u);
         const float3 sample_position = origin + distance * ray;
         float2 uv;
         if (!ProjectContactSample(sample_position, projection, uv)) break;
@@ -51,14 +72,23 @@ static float TraceContactShadow(VortexShadowFrameBindings bindings,
         const float stored = depth.Load(int3(pixel, 0));
         if (!isfinite(stored) || (reversed_depth ? stored <= 0.0f : stored >= 1.0f)
             || asuint(stored) == asuint(start_depth)) continue;
-        const float delta = -sample_position.z - ContactLinearDepth(stored, projection);
-        if (delta > 0.0f && delta <= 0.002f) {
-            const float2 edge_pixels = min(uv, 1.0f - uv)
-                * bindings.contact_content_extent_px;
-            const float edge_weight = saturate(min(edge_pixels.x, edge_pixels.y) / 8.0f);
-            const float end_weight = 1.0f - smoothstep(0.20f, 0.25f, distance);
-            return 1.0f - edge_weight * end_weight;
-        }
+        const float sample_depth = -sample_position.z;
+        const float stored_depth = ContactLinearDepth(stored, projection);
+        const float delta = sample_depth - stored_depth;
+        if (delta <= 0.0f || delta > kThickness) continue;
+        // The stored surface point along this sample's eye ray.
+        const float3 stored_point = perspective
+            ? sample_position * (stored_depth / sample_depth)
+            : float3(sample_position.xy, -stored_depth);
+        // One pixel of margin over the half-pixel bound.
+        const float footprint = pixel_scale * (perspective ? stored_depth : 1.0f)
+            * view_sine + kSurfaceOffset;
+        if (abs(dot(normal, stored_point - surface)) <= footprint) continue;
+        const float2 edge_pixels = min(uv, 1.0f - uv)
+            * bindings.contact_content_extent_px;
+        const float edge_weight = saturate(min(edge_pixels.x, edge_pixels.y) / 8.0f);
+        const float end_weight = 1.0f - smoothstep(0.20f, 0.25f, distance);
+        return 1.0f - edge_weight * end_weight;
     }
     return 1.0f;
 }
