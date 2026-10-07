@@ -727,13 +727,18 @@ struct AtmosphereLightOptions {
   };
   float angular_size { 2.0F
     * oxygen::engine::atmos::kDefaultSunDiskAngularRadiusRad };
+  //! Creates the light as a child, inheriting visibility, when set.
+  oxygen::scene::SceneNode* parent {};
 };
 
 auto AddAtmosphereDirectionalLight(oxygen::scene::Scene& scene,
   std::string_view name, const AtmosphereLightOptions& options)
   -> oxygen::scene::SceneNode
 {
-  auto node = scene.CreateNode(std::string(name));
+  auto node = options.parent != nullptr
+    ? scene.CreateChildNode(*options.parent, std::string(name))
+        .value_or(oxygen::scene::SceneNode {})
+    : scene.CreateNode(std::string(name));
   EXPECT_TRUE(node.IsAlive());
   node.GetTransform().SetLocalRotation(options.local_rotation);
   auto light = std::make_unique<oxygen::scene::DirectionalLight>();
@@ -1922,6 +1927,104 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     base_atmosphere_revision);
   EXPECT_GT(
     service.InspectAtmosphereState().stable_revision, stable_changed_revision);
+}
+
+//! Flag and role edits alone must reach the populated sky-capture inputs; the
+//! edits are applied and synchronized the way an editor property command does.
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  FlagAndRoleEditsInvalidatePopulatedSkyCaptureInputs)
+{
+  using oxygen::scene::AtmosphereLightSlot;
+  using oxygen::scene::SceneNodeFlags;
+  using oxygen::vortex::environment::internal::HashSkyCaptureInputs;
+
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 9U }, oxygen::frame::Slot { 1U });
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  auto group = scene->CreateNode("Group");
+  ASSERT_TRUE(group.IsAlive());
+  auto primary = AddAtmosphereDirectionalLight(*scene, "Primary",
+    {
+      .slot = AtmosphereLightSlot::kPrimary,
+      .disk_scale = { 1.0F, 1.0F, 1.0F },
+      .color_rgb = { 1.0F, 0.95F, 0.9F },
+      .illuminance_lux = 100000.0F,
+      .parent = &group,
+    });
+  scene->Update();
+
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 25U };
+  composition_view.with_atmosphere = true;
+  auto ctx = MakeRenderContext(ViewId { 25U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+  const auto publish = [&]() -> void {
+    std::ignore = oxygen::graphics::testing::SubmitCommands(*graphics_,
+      "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+        return service.PublishEnvironmentBindings(ctx, recorder);
+      });
+  };
+  const auto apply_edit = [&]() -> void {
+    scene->Update(false);
+    scene->SyncObservers();
+    publish();
+  };
+  const auto capture_key = [&]() -> std::uint64_t {
+    return HashSkyCaptureInputs(service.InspectAtmosphereState());
+  };
+  const auto slot_enabled = [&](const std::size_t slot) -> bool {
+    return service.InspectAtmosphereLightState()
+      .atmosphere_lights.at(slot)
+      .enabled;
+  };
+
+  publish();
+  ASSERT_TRUE(slot_enabled(0U));
+  const auto lit_key = capture_key();
+
+  // Hiding an ancestor while the light still inherits its visibility.
+  group.GetFlags()->get().SetLocalValue(SceneNodeFlags::kVisible, false);
+  apply_edit();
+  EXPECT_FALSE(slot_enabled(0U));
+  const auto unlit_key = capture_key();
+  EXPECT_NE(unlit_key, lit_key);
+
+  group.GetFlags()->get().SetLocalValue(SceneNodeFlags::kVisible, true);
+  apply_edit();
+  EXPECT_TRUE(slot_enabled(0U));
+  EXPECT_EQ(capture_key(), lit_key);
+
+  // Hiding the light node itself.
+  primary.GetFlags()->get().SetLocalValue(SceneNodeFlags::kVisible, false);
+  apply_edit();
+  EXPECT_FALSE(slot_enabled(0U));
+  EXPECT_EQ(capture_key(), unlit_key);
+
+  primary.GetFlags()->get().SetLocalValue(SceneNodeFlags::kVisible, true);
+  apply_edit();
+  EXPECT_TRUE(slot_enabled(0U));
+  EXPECT_EQ(capture_key(), lit_key);
+
+  // Reassigning the atmosphere role.
+  ASSERT_TRUE(
+    primary.EditLight<oxygen::scene::DirectionalLight>([](auto& light) -> void {
+      light.SetAtmosphereLightSlot(AtmosphereLightSlot::kSecondary);
+    }));
+  apply_edit();
+  EXPECT_FALSE(slot_enabled(0U));
+  EXPECT_TRUE(slot_enabled(1U));
+  EXPECT_NE(capture_key(), lit_key);
+
+  ASSERT_TRUE(
+    primary.EditLight<oxygen::scene::DirectionalLight>([](auto& light) -> void {
+      light.SetAtmosphereLightSlot(AtmosphereLightSlot::kNone);
+    }));
+  apply_edit();
+  EXPECT_FALSE(slot_enabled(0U));
+  EXPECT_FALSE(slot_enabled(1U));
+  EXPECT_EQ(capture_key(), unlit_key);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
