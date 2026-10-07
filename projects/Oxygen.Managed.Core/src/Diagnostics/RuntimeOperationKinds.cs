@@ -55,6 +55,11 @@ public static class RuntimeOperationKinds
     public const string ViewSetCameraControlMode = "Runtime.View.SetCameraControlMode";
 
     /// <summary>
+    /// Runtime engine view switch between the editor camera and an authored scene camera.
+    /// </summary>
+    public const string ViewSetSceneCamera = "Runtime.View.SetSceneCamera";
+
+    /// <summary>
     /// Runtime engine view editor camera movement speed change.
     /// </summary>
     public const string ViewSetCameraMovementSpeed = "Runtime.View.SetCameraMovementSpeed";

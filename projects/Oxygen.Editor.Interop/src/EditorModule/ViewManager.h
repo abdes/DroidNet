@@ -10,6 +10,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -78,6 +79,7 @@ namespace oxygen::interop::module {
 
     //! Applies a camera view preset to a specific view.
     void SetCameraViewPreset(ViewId engine_id, CameraViewPreset preset);
+    void SetSceneCamera(ViewId engine_id, std::optional<UuidKey> camera_node_id);
 
     //! Applies an editor camera navigation mode to a specific view.
     void SetCameraControlMode(

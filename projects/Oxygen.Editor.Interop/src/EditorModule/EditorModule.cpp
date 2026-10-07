@@ -18,6 +18,7 @@
 #include <Commands/SetViewCameraMovementSpeedCommand.h>
 #include <Commands/SetViewCameraPresetCommand.h>
 #include <Commands/SetViewCameraSettingsCommand.h>
+#include <Commands/SetViewSceneCameraCommand.h>
 #include <Commands/ShowViewCommand.h>
 #include <EditorModule/EditorCommand.h>
 #include <EditorModule/EditorCompositor.h>
@@ -608,7 +609,9 @@ namespace oxygen::interop::module {
         view->SetRenderingContext(view_ctx);
         view->OnSceneMutation();
 
-        if (input_snapshot) {
+        // A view looking through an authored camera does not navigate; the
+        // authored camera only changes through property edits.
+        if (input_snapshot && !view->IsViewingSceneCamera()) {
           const auto view_id = view->GetViewId();
 
           const auto active = (active_view_id_ != kInvalidViewId)
@@ -767,7 +770,7 @@ namespace oxygen::interop::module {
         continue;
       }
 
-      const auto camera_node = view->GetCameraNode();
+      const auto camera_node = view->GetRenderCameraNode();
       if (!camera_node.IsAlive()) {
         LOG_F(INFO, "OnPublishViews: view '{}' has no live camera; skipping",
           view->GetName());
@@ -1124,6 +1127,17 @@ namespace oxygen::interop::module {
 
     auto cmd = std::make_unique<SetViewCameraPresetCommand>(
       view_manager_.get(), view_id, preset);
+    command_queue_.Enqueue(std::move(cmd));
+  }
+
+  void EditorModule::SetViewSceneCamera(ViewId view_id,
+    std::optional<UuidKey> camera_node_id) {
+    if (view_id == kInvalidViewId || !view_manager_) {
+      return;
+    }
+
+    auto cmd = std::make_unique<SetViewSceneCameraCommand>(
+      view_manager_.get(), view_id, camera_node_id);
     command_queue_.Enqueue(std::move(cmd));
   }
 

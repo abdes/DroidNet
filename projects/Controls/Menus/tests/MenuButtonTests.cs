@@ -43,4 +43,23 @@ public sealed class MenuButtonTests : VisualUserInterfaceTests
             .Should()
             .BeSameAs(textBox, "pointer-opened menus leave focus alone so embedded editors can keep their TextBox focus");
     });
+
+    [TestMethod]
+    public Task Show_RaisesOpeningBeforeReadingMenuSource_Async() => EnqueueAsync(async () =>
+    {
+        var menuButton = new MenuButton { Content = "Camera" };
+        var openingCount = 0;
+        menuButton.Opening += (_, _) =>
+        {
+            openingCount++;
+            menuButton.MenuSource = new MenuBuilder().AddMenuItem("Scene Camera").Build();
+        };
+        await LoadTestContentAsync(menuButton).ConfigureAwait(true);
+
+        var shown = menuButton.Show(MenuNavigationMode.Programmatic);
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        _ = shown.Should().BeTrue("the Opening handler supplies the menu source before Show reads it");
+        _ = openingCount.Should().Be(1);
+    });
 }

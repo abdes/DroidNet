@@ -93,6 +93,12 @@ internal abstract class EngineSession
     /// <returns>The runtime operation result.</returns>
     public abstract Task<bool> SetViewCameraPresetAsync(RuntimeViewId viewId, CameraViewPreset preset);
 
+    /// <summary>Renders a view through an authored scene camera, or through its editor camera.</summary>
+    /// <param name="viewId">The viewId value.</param>
+    /// <param name="cameraNodeId">The camera node id, or <see langword="null"/> for the editor camera.</param>
+    /// <returns>The runtime operation result.</returns>
+    public abstract Task<bool> SetViewSceneCameraAsync(RuntimeViewId viewId, Guid? cameraNodeId);
+
     /// <summary>Sets the editor camera navigation mode.</summary>
     /// <param name="viewId">The viewId value.</param>
     /// <param name="mode">The mode value.</param>

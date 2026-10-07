@@ -150,6 +150,19 @@ namespace oxygen::interop::module {
     it->second.view->SetCameraViewPreset(preset);
   }
 
+  void ViewManager::SetSceneCamera(ViewId engine_id,
+    std::optional<UuidKey> camera_node_id) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto it = views_.find(engine_id);
+    if (it == views_.end() || !it->second.view) {
+      LOG_F(WARNING, "SetSceneCamera: invalid view id {}", engine_id.get());
+      return;
+    }
+
+    it->second.view->SetSceneCamera(camera_node_id);
+  }
+
   void ViewManager::SetCameraControlMode(
     ViewId engine_id,
     EditorViewportCameraControlMode mode) {

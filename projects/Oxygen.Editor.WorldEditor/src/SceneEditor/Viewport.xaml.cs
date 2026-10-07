@@ -282,6 +282,8 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         }
     }
 
+    private void OnCameraMenuOpening(object? sender, EventArgs e) => this.ViewModel?.RefreshCameraMenu();
+
     private void OnCameraNumberBoxValidate(object? sender, ValidationEventArgs<float> e)
     {
         if (sender is FrameworkElement { DataContext: ViewportCameraNumberBoxItemModel model } && e.NewValue is { } value)
@@ -1095,6 +1097,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                     this.LogViewCreated(viewModel.ViewportId, created);
                     await viewModel.ApplyCurrentCameraControlModeAsync().ConfigureAwait(true);
                     await viewModel.ApplyCurrentCameraSettingsAsync().ConfigureAwait(true);
+                    await viewModel.ApplyCurrentSceneCameraAsync().ConfigureAwait(true);
                 }
                 else
                 {

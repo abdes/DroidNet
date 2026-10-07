@@ -30,6 +30,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     private const string DegreeUnit = "\u00b0";
     private const string PerspectiveCameraModeGroup = "PerspectiveCameraMode";
     private const string OrthographicCameraGroup = "OrthographicCamera";
+    private const string SceneCameraGroup = "SceneCamera";
     private const string MovementSpeedText = "Movement Speed";
     private const string FieldOfViewText = "Field of View";
     private const string NearViewPlaneText = "Near View Plane";
@@ -153,6 +154,14 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(CameraControlModeLabel))]
     public partial CameraControlMode CameraControlMode { get; set; } = CameraControlMode.OrbitTurntable;
 
+    /// <summary>
+    /// Gets or sets the authored scene camera this viewport renders through, or <see langword="null"/>
+    /// when it renders through its editor camera.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CameraMenuLabel))]
+    public partial SceneCameraChoice? SceneCamera { get; set; }
+
     [ObservableProperty]
     public partial ShadingMode ShadingMode { get; set; } = ShadingMode.Wireframe;
 
@@ -207,7 +216,13 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Gets the display label for the combined camera menu button.
     /// </summary>
-    public string CameraMenuLabel => this.CameraType == CameraType.Perspective ? this.CameraControlModeLabel : this.CameraType.ToString();
+    public string CameraMenuLabel => this.SceneCamera?.Name
+        ?? (this.CameraType == CameraType.Perspective ? this.CameraControlModeLabel : this.CameraType.ToString());
+
+    /// <summary>
+    /// Gets or sets the source of the authored scene cameras listed in the camera menu.
+    /// </summary>
+    public Func<IReadOnlyList<SceneCameraChoice>>? SceneCamerasProvider { get; set; }
 
     /// <summary>
     /// Gets the display label for the editor camera control mode.
@@ -409,6 +424,39 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// Applies the currently selected editor camera control mode to the native view, when available.
     /// </summary>
     /// <returns>A task that completes when the mode has been submitted.</returns>
+    /// <summary>
+    /// Rebuilds the camera menu from the current scene cameras. A selected scene camera that
+    /// no longer exists is dropped in favor of the editor camera.
+    /// </summary>
+    internal void RefreshCameraMenu()
+    {
+        if (this.SceneCamera is { } current)
+        {
+            var match = this.GetSceneCameras().FirstOrDefault(camera => camera.NodeId == current.NodeId);
+            if (match is null)
+            {
+                _ = this.ApplySceneCameraAsync(camera: null);
+                return;
+            }
+
+            this.SceneCamera = match;
+        }
+
+        this.RebuildCameraMenu();
+    }
+
+    /// <summary>
+    /// Re-sends the selected scene camera, for example after the runtime view was recreated.
+    /// </summary>
+    /// <returns>A task that completes when the request was handled.</returns>
+    internal async Task ApplyCurrentSceneCameraAsync()
+    {
+        if (this.SceneCamera is not null)
+        {
+            await this.ApplySceneCameraAsync(this.SceneCamera).ConfigureAwait(true);
+        }
+    }
+
     internal async Task ApplyCurrentCameraControlModeAsync()
         => await this.ApplyCameraControlModeAsync(this.CameraControlMode).ConfigureAwait(true);
 
@@ -576,8 +624,24 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
             _ = builder.AddRadioMenuItem(
                 type.ToString(),
                 OrthographicCameraGroup,
-                this.CameraType == type,
+                this.SceneCamera is null && this.CameraType == type,
                 new RelayCommand(() => _ = this.ApplyOrthographicCameraPresetAsync(type)));
+        }
+
+        _ = builder.AddSeparator("Scene Cameras");
+        var sceneCameras = this.GetSceneCameras();
+        if (sceneCameras.Count == 0)
+        {
+            _ = builder.AddMenuItem(new MenuItemData { Text = "No cameras in scene", IsEnabled = false });
+        }
+
+        foreach (var camera in sceneCameras)
+        {
+            _ = builder.AddRadioMenuItem(
+                camera.Name,
+                SceneCameraGroup,
+                this.SceneCamera?.NodeId == camera.NodeId,
+                new RelayCommand(() => _ = this.ApplySceneCameraAsync(camera)));
         }
 
         _ = builder
@@ -602,7 +666,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         {
             Text = text,
             RadioGroupId = PerspectiveCameraModeGroup,
-            IsChecked = this.CameraType == CameraType.Perspective && this.CameraControlMode == mode,
+            IsChecked = this.SceneCamera is null && this.CameraType == CameraType.Perspective && this.CameraControlMode == mode,
             Command = new RelayCommand(() => _ = this.ApplyPerspectiveCameraModeAsync(mode)),
         };
 
@@ -624,9 +688,13 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
 
     private async Task ApplyCameraPresetAsync(CameraType type)
     {
+        if (this.SceneCamera is not null)
+        {
+            await this.ApplySceneCameraAsync(camera: null).ConfigureAwait(true);
+        }
+
         this.CameraType = type;
-        this.cameraMenu = this.BuildCameraMenu();
-        this.OnPropertyChanged(nameof(this.CameraMenu));
+        this.RebuildCameraMenu();
 
         if (!this.AssignedViewId.IsValid)
         {
@@ -670,11 +738,53 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         }
     }
 
+    private async Task ApplySceneCameraAsync(SceneCameraChoice? camera)
+    {
+        this.SceneCamera = camera;
+        this.RebuildCameraMenu();
+
+        if (!this.AssignedViewId.IsValid)
+        {
+            return;
+        }
+
+        try
+        {
+            var accepted = await this.EngineService.SetViewSceneCameraAsync(this.AssignedViewId, camera?.NodeId).ConfigureAwait(true);
+            if (!accepted)
+            {
+                this.PublishRuntimeWarning(
+                    RuntimeOperationKinds.ViewSetSceneCamera,
+                    FailureDomain.RuntimeView,
+                    DiagnosticCodes.ViewPrefix + "SCENE_CAMERA_REJECTED",
+                    "Scene camera was not applied",
+                    "The runtime rejected the scene camera for this viewport.");
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            this.PublishRuntimeFailure(
+                RuntimeOperationKinds.ViewSetSceneCamera,
+                FailureDomain.RuntimeView,
+                DiagnosticCodes.ViewPrefix + "SCENE_CAMERA_FAILED",
+                "Scene camera failed",
+                "The runtime could not render this viewport through the scene camera.",
+                ex);
+        }
+    }
+
+    private IReadOnlyList<SceneCameraChoice> GetSceneCameras() => this.SceneCamerasProvider?.Invoke() ?? [];
+
+    private void RebuildCameraMenu()
+    {
+        this.cameraMenu = this.BuildCameraMenu();
+        this.OnPropertyChanged(nameof(this.CameraMenu));
+    }
+
     private async Task ApplyCameraControlModeAsync(CameraControlMode mode)
     {
         this.CameraControlMode = mode;
-        this.cameraMenu = this.BuildCameraMenu();
-        this.OnPropertyChanged(nameof(this.CameraMenu));
+        this.RebuildCameraMenu();
 
         if (!this.AssignedViewId.IsValid)
         {

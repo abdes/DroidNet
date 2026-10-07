@@ -139,6 +139,14 @@ public sealed partial class EngineService
 
     [LoggerMessage(
         Level = LogLevel.Debug,
+        Message = "Requesting view with id '{ViewId}' to render through scene camera node '{CameraNodeId}' (none: editor camera).")]
+    private static partial void LogSetViewSceneCamera(ILogger logger, ulong viewId, Guid? cameraNodeId);
+
+    private void LogSetViewSceneCamera(RuntimeViewId viewId, Guid? cameraNodeId)
+        => LogSetViewSceneCamera(this.logger, viewId.Value, cameraNodeId);
+
+    [LoggerMessage(
+        Level = LogLevel.Debug,
         Message = "Requesting view with id '{ViewId}' to set camera control mode to '{Mode}'.")]
     private static partial void LogSetViewCameraControlMode(ILogger logger, ulong viewId, CameraControlMode mode);
 

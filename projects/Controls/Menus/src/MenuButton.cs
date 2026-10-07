@@ -100,9 +100,20 @@ public sealed partial class MenuButton : Button, IRootMenuSurface
         }
     }
 
+    /// <summary>
+    ///     Occurs when the menu is about to open, before <see cref="MenuSource"/> is read, so a
+    ///     handler can replace the source with up-to-date items.
+    /// </summary>
+    public event EventHandler? Opening;
+
     /// <inheritdoc />
     public bool Show(MenuNavigationMode navigationMode)
     {
+        if (!this.IsMenuOpen)
+        {
+            this.Opening?.Invoke(this, EventArgs.Empty);
+        }
+
         if (this.MenuSource is null)
         {
             return false;

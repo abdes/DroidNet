@@ -245,6 +245,16 @@ namespace Oxygen::Interop {
       -> System::Threading::Tasks::Task<bool>^;
 
     /// <summary>
+    /// Render an existing view through the authored camera on a scene node,
+    /// or through its editor camera when <paramref name="cameraNodeId"/> is
+    /// <see cref="System::Guid::Empty"/>. The request is enqueued and applied
+    /// on the engine thread.
+    /// </summary>
+    auto TrySetViewSceneCameraAsync(EngineContext^ ctx, ViewIdManaged viewId,
+      System::Guid cameraNodeId)
+      -> System::Threading::Tasks::Task<bool>^;
+
+    /// <summary>
     /// Set the editor camera navigation mode for an existing view.
     /// The request is enqueued and applied on the engine thread.
     /// </summary>

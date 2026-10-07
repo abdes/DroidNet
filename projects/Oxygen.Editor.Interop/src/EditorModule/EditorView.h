@@ -23,6 +23,7 @@
 #include <Oxygen/Vortex/Renderer.h>
 
 #include <EditorModule/EditorViewportCameraControlMode.h>
+#include <EditorModule/NodeRegistry.h>
 
 namespace oxygen {
   class Graphics;
@@ -133,7 +134,24 @@ namespace oxygen::interop::module {
     }
     [[nodiscard]] auto GetState() const -> ViewState;
     [[nodiscard]] auto IsVisible() const -> bool;
+    //! The editor's own navigation camera for this view.
     [[nodiscard]] auto GetCameraNode() const -> scene::SceneNode;
+
+    //! Renders the view through the authored camera on the scene node
+    //! `node_id`, or through the editor camera when it is empty.
+    /*!
+     The node is resolved by id every frame: while it is missing or has no
+     camera, the view falls back to the editor camera, and it returns to the
+     authored camera when the node does (for example after an undo). The
+     authored camera is never modified.
+    */
+    void SetSceneCamera(std::optional<UuidKey> node_id);
+
+    //! True when this frame renders through an authored scene camera.
+    [[nodiscard]] auto IsViewingSceneCamera() const -> bool;
+
+    //! The camera node this view renders through this frame.
+    [[nodiscard]] auto GetRenderCameraNode() const -> scene::SceneNode;
     [[nodiscard]] auto GetColorTexture() const
       -> std::shared_ptr<graphics::Texture> {
       return color_texture_;
@@ -216,6 +234,7 @@ namespace oxygen::interop::module {
     // Camera setup helpers (all scene mutations happen here)
     void CreateCamera(scene::Scene& scene);
     void UpdateCameraForFrame();
+    void ResolveSceneCamera(scene::Scene& scene);
     Config config_;
     ViewState state_{ ViewState::kCreating };
     bool visible_{ true };
@@ -237,6 +256,8 @@ namespace oxygen::interop::module {
     float ortho_half_height_{ 10.0f };
 
     scene::SceneNode camera_node_;
+    std::optional<UuidKey> scene_camera_id_;
+    scene::SceneNode scene_camera_node_;
     ViewId view_id_{ kInvalidViewId };
 
     // Resources

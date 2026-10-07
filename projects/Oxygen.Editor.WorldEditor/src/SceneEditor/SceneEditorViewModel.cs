@@ -19,6 +19,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Services;
@@ -365,6 +366,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             viewport.ClearColor = this.ChooseViewportClearColor(viewport.ViewportId);
             viewport.ToggleMaximizeCommand = new RelayCommand(() => this.ToggleMaximize(viewport));
             viewport.OnLayoutRequested = requestedLayout => this.ChangeLayoutCommand.Execute(requestedLayout);
+            viewport.SceneCamerasProvider = this.GetSceneCameras;
             this.LogCreatingViewport(newIndex, viewport);
             this.Viewports.Add(viewport);
         }
@@ -387,6 +389,13 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
         this.EnsureFocusedViewportIsValid();
     }
+
+    private IReadOnlyList<SceneCameraChoice> GetSceneCameras()
+        => this.scene is null
+            ? []
+            : [.. this.scene.AllNodes
+                .Where(node => node.Components.OfType<CameraComponent>().Any())
+                .Select(node => new SceneCameraChoice(node.Id, node.Name))];
 
     private RuntimeColor ChooseViewportClearColor(Guid viewportId)
     {

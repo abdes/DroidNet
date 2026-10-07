@@ -30,6 +30,10 @@ internal sealed partial class NativeEngineSession
         => this.Runner.TrySetViewCameraPresetAsync(this.context, new(viewId.Value), NativeSessionConversions.ToNative<CameraViewPresetManaged>(preset));
 
     /// <inheritdoc />
+    public override Task<bool> SetViewSceneCameraAsync(RuntimeViewId viewId, Guid? cameraNodeId)
+        => this.Runner.TrySetViewSceneCameraAsync(this.context, new(viewId.Value), cameraNodeId ?? Guid.Empty);
+
+    /// <inheritdoc />
     public override Task<bool> SetViewCameraControlModeAsync(RuntimeViewId viewId, CameraControlMode mode)
         => this.Runner.TrySetViewCameraControlModeAsync(this.context, new(viewId.Value), NativeSessionConversions.ToNative<CameraControlModeManaged>(mode));
 

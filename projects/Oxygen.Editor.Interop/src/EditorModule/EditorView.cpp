@@ -26,6 +26,7 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneTraversal.h>
 #include <Oxygen/Scene/Types/Traversal.h>
+#include <Oxygen/Vortex/SceneCameraViewResolver.h>
 
 namespace oxygen::interop::module {
 
@@ -312,6 +313,8 @@ void EditorView::RetargetScene(scene::Scene& scene) {
 
   scene_ = scene.weak_from_this();
   camera_node_ = {};
+  scene_camera_id_.reset();
+  scene_camera_node_ = {};
   initial_orientation_set_ = false;
   initial_scene_frame_applied_ = false;
   if (state_ == ViewState::kReleasing) {
@@ -344,6 +347,7 @@ void EditorView::OnSceneMutation() {
 
   // Update camera for this frame
   UpdateCameraForFrame();
+  ResolveSceneCamera(*scn);
 
   LOG_F(2, "EditorView '{}' OnSceneMutation: updated viewport camera for {}x{}",
     config_.name, width_, height_);
@@ -444,10 +448,18 @@ void EditorView::ResizeIfNeeded() {
 }
 
 void EditorView::ResizeIfNeeded(Graphics& gfx) {
+  // A Fixed camera renders only its content rectangle; the renderer composes
+  // the bars around it.
+  const auto content = vortex::ResolveCameraContentRect(GetRenderCameraNode(),
+    ViewPort { .top_left_x = 0.0F, .top_left_y = 0.0F, .width = width_,
+      .height = height_, .min_depth = 0.0F, .max_depth = 1.0F });
+  const auto content_width = std::max(1.0F, content.width);
+  const auto content_height = std::max(1.0F, content.height);
+
   bool need_resize = false;
   if (!color_texture_ ||
-      static_cast<float>(color_texture_->GetDescriptor().width) != width_ ||
-      static_cast<float>(color_texture_->GetDescriptor().height) != height_) {
+      static_cast<float>(color_texture_->GetDescriptor().width) != content_width ||
+      static_cast<float>(color_texture_->GetDescriptor().height) != content_height) {
     need_resize = true;
   }
 
@@ -461,8 +473,8 @@ void EditorView::ResizeIfNeeded(Graphics& gfx) {
         graphics::DeferredObjectRelease(framebuffer_, reclaimer);
 
       graphics::TextureDesc color_desc;
-      color_desc.width = static_cast<uint32_t>(width_);
-      color_desc.height = static_cast<uint32_t>(height_);
+      color_desc.width = static_cast<uint32_t>(content_width);
+      color_desc.height = static_cast<uint32_t>(content_height);
       color_desc.format = oxygen::Format::kRGBA8UNorm;
       color_desc.texture_type = oxygen::TextureType::kTexture2D;
       color_desc.is_render_target = true;
@@ -500,7 +512,7 @@ void EditorView::ResizeIfNeeded(Graphics& gfx) {
       LOG_F(INFO,
             "EditorView '{}' resized resources to {}x{} "
             "(color.use_clear_value={}, color.clear_value=({}, {}, {}, {}))",
-            config_.name, width_, height_, color_desc.use_clear_value,
+            config_.name, content_width, content_height, color_desc.use_clear_value,
             color_desc.clear_value.r, color_desc.clear_value.g,
             color_desc.clear_value.b, color_desc.clear_value.a);
   }
@@ -781,6 +793,37 @@ auto EditorView::GetCameraNode() const -> scene::SceneNode {
   return camera_node_;
 }
 
+void EditorView::SetSceneCamera(std::optional<UuidKey> node_id) {
+  scene_camera_id_ = node_id;
+  scene_camera_node_ = {};
+  if (auto scn = scene_.lock()) {
+    ResolveSceneCamera(*scn);
+  }
+}
+
+void EditorView::ResolveSceneCamera(scene::Scene& scene) {
+  scene_camera_node_ = {};
+  if (!scene_camera_id_.has_value()) {
+    return;
+  }
+  const auto handle = NodeRegistry::Lookup(*scene_camera_id_);
+  if (!handle.has_value()) {
+    return;
+  }
+  if (auto node = scene.GetNode(*handle); node.has_value() && node->IsAlive()
+    && node->HasCamera()) {
+    scene_camera_node_ = *node;
+  }
+}
+
+auto EditorView::IsViewingSceneCamera() const -> bool {
+  return scene_camera_node_.IsAlive();
+}
+
+auto EditorView::GetRenderCameraNode() const -> scene::SceneNode {
+  return IsViewingSceneCamera() ? scene_camera_node_ : camera_node_;
+}
+
 auto EditorView::GetOrthoHalfHeight() const noexcept -> float {
   return ortho_half_height_;
 }
@@ -801,7 +844,7 @@ void EditorView::RegisterWithRenderer(vortex::Renderer &renderer) {
   renderer_module_ = oxygen::observer_ptr<vortex::Renderer>(&renderer);
 
   if (renderer_) {
-    scene::SceneNode node = camera_node_;
+    scene::SceneNode node = GetRenderCameraNode();
     std::optional<ViewPort> viewport_override;
     if (current_context_) {
       viewport_override =

@@ -176,6 +176,11 @@ namespace oxygen::interop::module {
     //! Set the camera view preset for a specific view.
     void SetViewCameraPreset(ViewId view_id, CameraViewPreset preset);
 
+    //! Renders a view through the authored camera on a scene node, or through
+    //! its editor camera when `camera_node_id` is empty.
+    void SetViewSceneCamera(ViewId view_id,
+      std::optional<UuidKey> camera_node_id);
+
     //! Set the editor camera navigation mode for a specific view.
     void SetViewCameraControlMode(
       ViewId view_id,

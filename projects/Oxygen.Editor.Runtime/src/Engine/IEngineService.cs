@@ -305,6 +305,25 @@ public interface IEngineService : IAsyncDisposable
     public Task<bool> SetViewCameraControlModeAsync(RuntimeViewId viewId, CameraControlMode mode);
 
     /// <summary>
+    /// Render an existing view through the authored camera on a scene node, or through the
+    /// view's editor camera.
+    /// </summary>
+    /// <remarks>
+    /// The runtime resolves the node every frame. While the node is missing or has no camera,
+    /// the view renders through its editor camera. The authored camera is never modified, and
+    /// editor navigation does not apply while a scene camera is in use.
+    /// </remarks>
+    /// <param name="viewId">The id of the view to update.</param>
+    /// <param name="cameraNodeId">
+    ///     The scene node that carries the camera, or <see langword="null"/> for the editor camera.
+    /// </param>
+    /// <returns>
+    ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
+    ///     <see langword="false"/> on failure.
+    /// </returns>
+    public Task<bool> SetViewSceneCameraAsync(RuntimeViewId viewId, Guid? cameraNodeId);
+
+    /// <summary>
     /// Set the editor camera fly movement speed for an existing view.
     /// </summary>
     /// <param name="viewId">The id of the view to update.</param>

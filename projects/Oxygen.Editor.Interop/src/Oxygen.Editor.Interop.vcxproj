@@ -46,6 +46,9 @@
     <ClCompile Include="Commands\SetViewCameraPresetCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
+    <ClCompile Include="Commands\SetViewSceneCameraCommand.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
     <ClCompile Include="Commands\SetViewCameraSettingsCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
@@ -178,6 +181,7 @@
     <ClInclude Include="Commands\SetViewCameraMovementSpeedCommand.h" />
     <ClInclude Include="Commands\SetViewCameraPresetCommand.h" />
     <ClInclude Include="Commands\SetViewCameraSettingsCommand.h" />
+    <ClInclude Include="Commands\SetViewSceneCameraCommand.h" />
     <ClInclude Include="Commands\CreateSceneNodeCommand.h" />
     <ClInclude Include="Commands\RemoveSceneNodeCommand.h" />
     <ClInclude Include="Commands\RemoveSceneNodesCommand.h" />

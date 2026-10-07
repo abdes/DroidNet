@@ -66,7 +66,10 @@
                 </menus:MenuButton>
 
                 <!--  Combined camera projection, movement, and lens menu  -->
-                <menus:MenuButton Content="{x:Bind ViewModel.CameraMenuLabel, Mode=OneWay}" MenuSource="{x:Bind ViewModel.CameraMenu, Mode=OneWay}" />
+                <menus:MenuButton
+                    Content="{x:Bind ViewModel.CameraMenuLabel, Mode=OneWay}"
+                    MenuSource="{x:Bind ViewModel.CameraMenu, Mode=OneWay}"
+                    Opening="OnCameraMenuOpening" />
 
                 <!--  Shading mode menu: icon + text  -->
                 <menus:MenuButton Content="{x:Bind ViewModel.ShadingMode, Mode=OneWay}" MenuSource="{x:Bind ViewModel.ShadingMenu, Mode=OneWay}" />
