@@ -613,7 +613,7 @@ public class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
     }
 
 #if DEBUG
-    [Conditional("DEBUG")]
+    [System.Diagnostics.Conditional("DEBUG")]
     private void AssertInvariants()
     {
         if (this.root is null)
