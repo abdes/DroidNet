@@ -31,6 +31,9 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     private const string PerspectiveCameraModeGroup = "PerspectiveCameraMode";
     private const string OrthographicCameraGroup = "OrthographicCamera";
     private const string SceneCameraGroup = "SceneCamera";
+    private const string PilotCameraText = "Pilot Camera";
+    private const string AlignCameraText = "Align Selected Camera to View";
+    private const string LockedCameraText = "Unlock the camera to move it.";
     private const string MovementSpeedText = "Movement Speed";
     private const string FieldOfViewText = "Field of View";
     private const string NearViewPlaneText = "Near View Plane";
@@ -55,6 +58,8 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     private readonly ViewportCameraNumberBoxItemModel nearViewPlaneItem;
     private readonly ViewportCameraNumberBoxItemModel farViewPlaneItem;
     private IMenuSource? cameraMenu;
+    private CancellationTokenSource? pilotCommitDelay;
+    private bool pilotPoseDirty;
     private IMenuSource? shadingMenu;
     private IMenuSource? layoutMenu;
     private DataTemplate? cameraNumberBoxItemTemplate;
@@ -162,6 +167,13 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(CameraMenuLabel))]
     public partial SceneCameraChoice? SceneCamera { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether navigation moves the scene camera this viewport looks through.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CameraMenuLabel))]
+    public partial bool IsPilotingSceneCamera { get; set; }
+
     [ObservableProperty]
     public partial ShadingMode ShadingMode { get; set; } = ShadingMode.Wireframe;
 
@@ -216,13 +228,35 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Gets the display label for the combined camera menu button.
     /// </summary>
-    public string CameraMenuLabel => this.SceneCamera?.Name
-        ?? (this.CameraType == CameraType.Perspective ? this.CameraControlModeLabel : this.CameraType.ToString());
+    public string CameraMenuLabel => this.SceneCamera is { } camera
+        ? (this.IsPilotingSceneCamera ? $"Piloting {camera.Name}" : camera.Name)
+        : (this.CameraType == CameraType.Perspective ? this.CameraControlModeLabel : this.CameraType.ToString());
 
     /// <summary>
     /// Gets or sets the source of the authored scene cameras listed in the camera menu.
     /// </summary>
     public Func<IReadOnlyList<SceneCameraChoice>>? SceneCamerasProvider { get; set; }
+
+    /// <summary>
+    /// Gets or sets the source of the selected scene camera, the target of "Align to View".
+    /// </summary>
+    public Func<SceneCameraChoice?>? SelectedCameraProvider { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether a camera node is locked against edits; a locked camera cannot be piloted or aligned.
+    /// </summary>
+    public Func<Guid, bool>? CameraLockProvider { get; set; }
+
+    /// <summary>
+    /// Gets or sets the authoring commit for a camera pose read from this viewport: it records an
+    /// undoable edit of the node and completes with whether it applied.
+    /// </summary>
+    public Func<Guid, RuntimeViewCameraPose, Task<bool>>? CameraPoseCommitter { get; set; }
+
+    /// <summary>
+    /// Gets or sets how long navigation must pause before a pilot gesture is committed.
+    /// </summary>
+    internal TimeSpan PilotCommitDelay { get; set; } = TimeSpan.FromMilliseconds(300);
 
     /// <summary>
     /// Gets the display label for the editor camera control mode.
@@ -446,15 +480,96 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Re-sends the selected scene camera, for example after the runtime view was recreated.
+    /// Re-sends the selected scene camera and pilot state, for example after the runtime view was recreated.
     /// </summary>
     /// <returns>A task that completes when the request was handled.</returns>
     internal async Task ApplyCurrentSceneCameraAsync()
     {
-        if (this.SceneCamera is not null)
+        if (this.SceneCamera is not { } camera || !this.AssignedViewId.IsValid)
         {
-            await this.ApplySceneCameraAsync(this.SceneCamera).ConfigureAwait(true);
+            return;
         }
+
+        _ = await this.SendSceneCameraAsync(camera).ConfigureAwait(true);
+        if (this.IsPilotingSceneCamera)
+        {
+            _ = await this.SendScenePilotAsync(pilot: true).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>Renders this viewport through a scene camera.</summary>
+    /// <param name="camera">The camera to look through.</param>
+    /// <returns>A task that completes when the request was handled.</returns>
+    internal Task LookThroughCameraAsync(SceneCameraChoice camera) => this.ApplySceneCameraAsync(camera);
+
+    /// <summary>Returns this viewport to its editor camera.</summary>
+    /// <returns>A task that completes when the request was handled.</returns>
+    internal Task ReturnToEditorCameraAsync() => this.ApplySceneCameraAsync(camera: null);
+
+    /// <summary>Looks through a scene camera and pilots it: navigation moves the camera.</summary>
+    /// <param name="camera">The camera to pilot.</param>
+    /// <returns>A task that completes when the request was handled.</returns>
+    internal async Task PilotCameraAsync(SceneCameraChoice camera)
+    {
+        if (this.SceneCamera?.NodeId != camera.NodeId)
+        {
+            await this.ApplySceneCameraAsync(camera).ConfigureAwait(true);
+        }
+
+        await this.SetPilotAsync(pilot: true).ConfigureAwait(true);
+    }
+
+    /// <summary>Stops piloting, committing the last gesture first; the viewport keeps looking through the camera.</summary>
+    /// <returns>A task that completes when the request was handled.</returns>
+    internal Task StopPilotingAsync() => this.SetPilotAsync(pilot: false);
+
+    /// <summary>
+    /// Moves a scene camera to this viewport's editor camera, as one undoable edit.
+    /// </summary>
+    /// <param name="camera">The camera to move.</param>
+    /// <returns><see langword="true"/> when the camera was moved.</returns>
+    internal async Task<bool> AlignCameraToViewAsync(SceneCameraChoice camera)
+    {
+        if (this.SceneCamera is not null || !this.AssignedViewId.IsValid || this.IsLocked(camera.NodeId))
+        {
+            // Only the editor camera's pose is visible to the user as "the view".
+            return false;
+        }
+
+        return await this.CommitCameraPoseAsync(camera.NodeId).ConfigureAwait(true);
+    }
+
+    /// <summary>Moves the selected camera to this viewport's editor camera, as one undoable edit.</summary>
+    /// <returns>A task that completes when the request was handled.</returns>
+    internal async Task AlignSelectedCameraToViewAsync()
+    {
+        if (this.SelectedCameraProvider?.Invoke() is { } camera)
+        {
+            _ = await this.AlignCameraToViewAsync(camera).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Reports navigation input in this viewport. While piloting, a gesture is committed as one
+    /// undoable camera edit once no button or key is held and input has paused.
+    /// </summary>
+    /// <param name="inputHeld">Whether a mouse button or key is still held.</param>
+    internal void NotifyNavigationInput(bool inputHeld)
+    {
+        if (!this.IsPilotingSceneCamera)
+        {
+            return;
+        }
+
+        this.pilotPoseDirty = true;
+        this.CancelPilotCommit();
+        if (inputHeld)
+        {
+            return;
+        }
+
+        this.pilotCommitDelay = new CancellationTokenSource();
+        _ = this.CommitPilotAfterPauseAsync(this.pilotCommitDelay.Token);
     }
 
     internal async Task ApplyCurrentCameraControlModeAsync()
@@ -481,6 +596,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
             if (disposing)
             {
                 this.appearanceSettings.PropertyChanged -= this.AppearanceSettings_PropertyChanged;
+                this.CancelPilotCommit();
             }
 
             this.isDisposed = true;
@@ -644,6 +760,34 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
                 new RelayCommand(() => _ = this.ApplySceneCameraAsync(camera)));
         }
 
+        if (this.SceneCamera is { } viewed)
+        {
+            var locked = this.IsLocked(viewed.NodeId);
+            _ = builder.AddMenuItem(new MenuItemData
+            {
+                Text = PilotCameraText,
+                IsCheckable = true,
+                IsChecked = this.IsPilotingSceneCamera,
+                HelpText = locked ? LockedCameraText : null,
+                IsEnabled = !locked || this.IsPilotingSceneCamera,
+                Command = new RelayCommand(() => _ = this.SetPilotAsync(!this.IsPilotingSceneCamera)),
+            });
+        }
+
+        var selected = this.SelectedCameraProvider?.Invoke();
+        var alignDisabledReason = selected is null ? "Select a camera node to move it to this view."
+            : this.SceneCamera is not null ? "Return to the editor camera to align a camera to it."
+            : this.IsLocked(selected.NodeId) ? LockedCameraText
+            : null;
+        _ = builder.AddMenuItem(new MenuItemData
+        {
+            Text = selected is null ? AlignCameraText : $"Align '{selected.Name}' to View",
+            HelpText = alignDisabledReason,
+            AcceleratorText = "Ctrl+Shift+F",
+            IsEnabled = alignDisabledReason is null,
+            Command = new RelayCommand(() => _ = this.AlignSelectedCameraToViewAsync()),
+        });
+
         _ = builder
             .AddSeparator("View")
             .AddMenuItem(this.CreateCameraNumberBoxMenuItem(FieldOfViewText, this.fieldOfViewItem))
@@ -740,14 +884,24 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
 
     private async Task ApplySceneCameraAsync(SceneCameraChoice? camera)
     {
+        if (this.IsPilotingSceneCamera)
+        {
+            // The runtime ends the pilot when the viewed camera changes.
+            await this.FlushPilotPoseAsync().ConfigureAwait(true);
+            this.IsPilotingSceneCamera = false;
+        }
+
         this.SceneCamera = camera;
         this.RebuildCameraMenu();
 
-        if (!this.AssignedViewId.IsValid)
+        if (this.AssignedViewId.IsValid)
         {
-            return;
+            _ = await this.SendSceneCameraAsync(camera).ConfigureAwait(true);
         }
+    }
 
+    private async Task<bool> SendSceneCameraAsync(SceneCameraChoice? camera)
+    {
         try
         {
             var accepted = await this.EngineService.SetViewSceneCameraAsync(this.AssignedViewId, camera?.NodeId).ConfigureAwait(true);
@@ -760,6 +914,8 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
                     "Scene camera was not applied",
                     "The runtime rejected the scene camera for this viewport.");
             }
+
+            return accepted;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -770,10 +926,138 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
                 "Scene camera failed",
                 "The runtime could not render this viewport through the scene camera.",
                 ex);
+            return false;
+        }
+    }
+
+    private async Task SetPilotAsync(bool pilot)
+    {
+        if (pilot == this.IsPilotingSceneCamera
+            || (pilot && (this.SceneCamera is not { } camera || this.IsLocked(camera.NodeId))))
+        {
+            return;
+        }
+
+        if (!pilot)
+        {
+            await this.FlushPilotPoseAsync().ConfigureAwait(true);
+        }
+        else if (this.CameraType != CameraType.Perspective)
+        {
+            // The runtime pilots through the perspective editor camera.
+            this.CameraType = CameraType.Perspective;
+        }
+
+        this.IsPilotingSceneCamera = pilot;
+        this.RebuildCameraMenu();
+        if (this.AssignedViewId.IsValid)
+        {
+            _ = await this.SendScenePilotAsync(pilot).ConfigureAwait(true);
+        }
+    }
+
+    private async Task<bool> SendScenePilotAsync(bool pilot)
+    {
+        try
+        {
+            var accepted = await this.EngineService.SetViewScenePilotAsync(this.AssignedViewId, pilot).ConfigureAwait(true);
+            if (!accepted)
+            {
+                this.PublishRuntimeWarning(
+                    RuntimeOperationKinds.ViewSetScenePilot,
+                    FailureDomain.RuntimeView,
+                    DiagnosticCodes.ViewPrefix + "SCENE_PILOT_REJECTED",
+                    "Camera pilot was not applied",
+                    "The runtime rejected piloting the scene camera for this viewport.");
+            }
+
+            return accepted;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            this.PublishRuntimeFailure(
+                RuntimeOperationKinds.ViewSetScenePilot,
+                FailureDomain.RuntimeView,
+                DiagnosticCodes.ViewPrefix + "SCENE_PILOT_FAILED",
+                "Camera pilot failed",
+                "The runtime could not pilot the scene camera for this viewport.",
+                ex);
+            return false;
+        }
+    }
+
+    private async Task CommitPilotAfterPauseAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(this.PilotCommitDelay, cancellationToken).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        await this.FlushPilotPoseAsync().ConfigureAwait(true);
+    }
+
+    private void CancelPilotCommit()
+    {
+        this.pilotCommitDelay?.Cancel();
+        this.pilotCommitDelay?.Dispose();
+        this.pilotCommitDelay = null;
+    }
+
+    private async Task FlushPilotPoseAsync()
+    {
+        this.CancelPilotCommit();
+        if (!this.pilotPoseDirty || this.SceneCamera is not { } camera)
+        {
+            return;
+        }
+
+        this.pilotPoseDirty = false;
+        _ = await this.CommitCameraPoseAsync(camera.NodeId).ConfigureAwait(true);
+    }
+
+    private async Task<bool> CommitCameraPoseAsync(Guid nodeId)
+    {
+        if (this.CameraPoseCommitter is not { } commit || !this.AssignedViewId.IsValid)
+        {
+            return false;
+        }
+
+        try
+        {
+            var pose = await this.EngineService.GetViewCameraPoseAsync(this.AssignedViewId, nodeId).ConfigureAwait(true);
+            if (pose is null)
+            {
+                this.PublishRuntimeWarning(
+                    RuntimeOperationKinds.ViewGetCameraPose,
+                    FailureDomain.RuntimeView,
+                    DiagnosticCodes.ViewPrefix + "CAMERA_POSE_UNAVAILABLE",
+                    "Camera was not moved",
+                    "The runtime could not read the view pose for the camera node.");
+                return false;
+            }
+
+            return await commit(nodeId, pose).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            this.PublishRuntimeFailure(
+                RuntimeOperationKinds.ViewGetCameraPose,
+                FailureDomain.RuntimeView,
+                DiagnosticCodes.ViewPrefix + "CAMERA_POSE_FAILED",
+                "Camera move failed",
+                "The runtime could not read the view pose for the camera node.",
+                ex);
+            return false;
         }
     }
 
     private IReadOnlyList<SceneCameraChoice> GetSceneCameras() => this.SceneCamerasProvider?.Invoke() ?? [];
+
+    private bool IsLocked(Guid nodeId) => this.CameraLockProvider?.Invoke(nodeId) == true;
 
     private void RebuildCameraMenu()
     {

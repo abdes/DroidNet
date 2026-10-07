@@ -38,6 +38,42 @@ using namespace msclr::interop;
 
 namespace {
 
+  // Resolves a pinned TaskCompletionSource with a view camera pose, or null.
+  static void ResolveViewCameraPoseCallback(void* handlePtr,
+    std::optional<::oxygen::interop::module::EditorCameraPose> pose) {
+    using namespace Oxygen::Interop;
+    try {
+      System::IntPtr stored(handlePtr);
+      auto gh = System::Runtime::InteropServices::GCHandle::FromIntPtr(stored);
+      auto tcsObj
+        = safe_cast<TaskCompletionSource<ViewCameraPoseManaged^>^>(gh.Target);
+      if (tcsObj != nullptr) {
+        ViewCameraPoseManaged^ result = nullptr;
+        if (pose.has_value()) {
+          result = gcnew ViewCameraPoseManaged();
+          result->Position = System::Numerics::Vector3(
+            pose->position.x, pose->position.y, pose->position.z);
+          result->RotationDegrees = System::Numerics::Vector3(
+            pose->rotation_degrees.x, pose->rotation_degrees.y,
+            pose->rotation_degrees.z);
+          result->Scale = System::Numerics::Vector3(
+            pose->scale.x, pose->scale.y, pose->scale.z);
+          result->OrthographicSize = pose->orthographic_size.has_value()
+            ? System::Nullable<float>(*pose->orthographic_size)
+            : System::Nullable<float>();
+          result->FieldOfViewDegrees = pose->field_of_view_degrees.has_value()
+            ? System::Nullable<float>(*pose->field_of_view_degrees)
+            : System::Nullable<float>();
+        }
+        tcsObj->TrySetResult(result);
+      }
+      if (gh.IsAllocated) gh.Free();
+    }
+    catch (...) {
+      // Swallow: the native caller must not observe managed exceptions.
+    }
+  }
+
   // File-scope helper that resolves a pinned TaskCompletionSource and sets
   // the ViewIdManaged result. Kept in this file to avoid local lambda types
   // inside managed member functions.
@@ -396,6 +432,90 @@ namespace Oxygen::Interop {
     catch (...) {
       return System::Threading::Tasks::Task<bool>::FromResult(false);
     }
+  }
+
+  auto EngineRunner::TrySetViewScenePilotAsync(EngineContext^ ctx,
+    ViewIdManaged viewId, bool pilot)
+    -> System::Threading::Tasks::Task<bool>^
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (disposed_) {
+      throw gcnew ObjectDisposedException("EngineRunner");
+    }
+
+    ui_dispatcher_->VerifyAccess(
+      gcnew String(L"SetViewScenePilotAsync requires the UI thread. Call CreateEngine() on the UI thread first."));
+
+    auto native_ctx = ctx->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+
+    auto editor_module_opt =
+      native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (!editor_module_opt) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+
+    try {
+      editor_module_opt->get().SetViewScenePilot(viewId.ToNative(), pilot);
+      return System::Threading::Tasks::Task<bool>::FromResult(true);
+    }
+    catch (...) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+  }
+
+  auto EngineRunner::TryGetViewCameraPoseAsync(EngineContext^ ctx,
+    ViewIdManaged viewId, System::Guid nodeId)
+    -> System::Threading::Tasks::Task<ViewCameraPoseManaged^>^
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (disposed_) {
+      throw gcnew ObjectDisposedException("EngineRunner");
+    }
+
+    ui_dispatcher_->VerifyAccess(
+      gcnew String(L"GetViewCameraPoseAsync requires the UI thread. Call CreateEngine() on the UI thread first."));
+
+    auto native_ctx = ctx->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      return System::Threading::Tasks::Task::FromResult<ViewCameraPoseManaged^>(nullptr);
+    }
+
+    auto editor_module_opt =
+      native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (!editor_module_opt) {
+      return System::Threading::Tasks::Task::FromResult<ViewCameraPoseManaged^>(nullptr);
+    }
+
+    auto bytes = nodeId.ToByteArray();
+    oxygen::interop::module::UuidKey key {};
+    for (int i = 0; i < 16; ++i) {
+      key[i] = bytes[i];
+    }
+
+    auto tcs = gcnew TaskCompletionSource<ViewCameraPoseManaged^>(
+      TaskCreationOptions::RunContinuationsAsynchronously);
+    auto gh = System::Runtime::InteropServices::GCHandle::Alloc(
+      tcs, System::Runtime::InteropServices::GCHandleType::Normal);
+    void* handlePtr = System::Runtime::InteropServices::GCHandle::ToIntPtr(gh).ToPointer();
+
+    try {
+      // The command answers exactly once, also when it is dropped unexecuted,
+      // which frees the handle.
+      editor_module_opt->get().QueryViewCameraPose(viewId.ToNative(), key,
+        std::bind(&ResolveViewCameraPoseCallback, handlePtr,
+          std::placeholders::_1));
+    }
+    catch (...) {
+      ResolveViewCameraPoseCallback(handlePtr, std::nullopt);
+    }
+    return tcs->Task;
   }
 
   auto EngineRunner::TrySetViewCameraControlModeAsync(EngineContext^ ctx,

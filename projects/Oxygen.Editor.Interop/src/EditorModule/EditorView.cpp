@@ -28,6 +28,8 @@
 #include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Vortex/SceneCameraViewResolver.h>
 
+#include <Utils/EditorRotation.h>
+
 namespace oxygen::interop::module {
 
 namespace {
@@ -315,6 +317,8 @@ void EditorView::RetargetScene(scene::Scene& scene) {
   camera_node_ = {};
   scene_camera_id_.reset();
   scene_camera_node_ = {};
+  pilot_requested_ = false;
+  pilot_active_ = false;
   initial_orientation_set_ = false;
   initial_scene_frame_applied_ = false;
   if (state_ == ViewState::kReleasing) {
@@ -794,6 +798,10 @@ auto EditorView::GetCameraNode() const -> scene::SceneNode {
 }
 
 void EditorView::SetSceneCamera(std::optional<UuidKey> node_id) {
+  if (node_id != scene_camera_id_) {
+    pilot_requested_ = false;
+    pilot_active_ = false;
+  }
   scene_camera_id_ = node_id;
   scene_camera_node_ = {};
   if (auto scn = scene_.lock()) {
@@ -814,6 +822,174 @@ void EditorView::ResolveSceneCamera(scene::Scene& scene) {
     && node->HasCamera()) {
     scene_camera_node_ = *node;
   }
+  if (!scene_camera_node_.IsAlive()) {
+    // The pilot resumes from the camera's own pose when the node returns.
+    pilot_active_ = false;
+  } else if (pilot_requested_ && !pilot_active_) {
+    BeginPilot();
+  }
+}
+
+void EditorView::SetPilotSceneCamera(const bool pilot) {
+  pilot_requested_ = pilot;
+  if (!pilot) {
+    pilot_active_ = false;
+    return;
+  }
+  if (IsViewingSceneCamera() && !pilot_active_) {
+    BeginPilot();
+  }
+}
+
+auto EditorView::IsPilotingSceneCamera() const -> bool {
+  return pilot_active_ && IsViewingSceneCamera();
+}
+
+void EditorView::BeginPilot() {
+  if (!camera_node_.IsAlive() || !scene_camera_node_.IsAlive()) {
+    return;
+  }
+
+  // The editor camera is the navigation proxy; perspective navigation lets the
+  // pilot orbit and fly an orthographic camera too.
+  SetCameraViewPreset(CameraViewPreset::kPerspective);
+  SeatProxyOnSceneCamera();
+  pilot_active_ = true;
+}
+
+void EditorView::SeatProxyOnSceneCamera() {
+  // World pose from the parent's world transform and the camera's current
+  // local pose: the camera's own world transform lags one frame behind a local
+  // edit made this frame.
+  auto authored = scene_camera_node_.GetTransform();
+  const auto local_position
+    = authored.GetLocalPosition().value_or(glm::vec3 { 0.0F });
+  const auto local_rotation = authored.GetLocalRotation().value_or(
+    glm::quat { 1.0F, 0.0F, 0.0F, 0.0F });
+  glm::vec3 position = local_position;
+  glm::quat rotation = local_rotation;
+  if (auto parent = scene_camera_node_.GetParent();
+    parent.has_value() && parent->IsAlive()) {
+    auto parent_transform = parent->GetTransform();
+    if (const auto parent_world = parent_transform.GetWorldMatrix();
+      parent_world.has_value()) {
+      position = glm::vec3(*parent_world * glm::vec4(local_position, 1.0F));
+    }
+    if (const auto parent_rotation = parent_transform.GetWorldRotation();
+      parent_rotation.has_value()) {
+      rotation = *parent_rotation * local_rotation;
+    }
+  }
+  pilot_written_position_ = local_position;
+  pilot_written_rotation_ = local_rotation;
+
+  auto proxy = camera_node_.GetTransform();
+  (void)proxy.SetLocalPosition(position);
+  (void)proxy.SetLocalRotation(rotation);
+
+  // Orbit around the point the camera looks at on the ground, or ahead.
+  constexpr float kDefaultFocusDistance = 10.0F;
+  constexpr float kMaxFocusDistance = 1000.0F;
+  const glm::vec3 forward = rotation * oxygen::space::look::Forward;
+  float distance = kDefaultFocusDistance;
+  if (forward.z < -1.0e-3F) {
+    const float ground = -position.z / forward.z;
+    if (ground > 0.0F && ground < kMaxFocusDistance) {
+      distance = ground;
+    }
+  }
+  focus_point_ = position + forward * distance;
+  initial_orientation_set_ = true;
+}
+
+void EditorView::SyncPilotedCamera() {
+  if (!IsPilotingSceneCamera()) {
+    return;
+  }
+  auto transform = scene_camera_node_.GetTransform();
+  constexpr float kPositionTolerance = 1.0e-4F;
+  constexpr float kRotationDotTolerance = 1.0e-6F;
+  const auto current_position
+    = transform.GetLocalPosition().value_or(pilot_written_position_);
+  const auto current_rotation
+    = transform.GetLocalRotation().value_or(pilot_written_rotation_);
+  if (glm::distance(current_position, pilot_written_position_)
+      > kPositionTolerance
+    || std::abs(glm::dot(current_rotation, pilot_written_rotation_))
+      < 1.0F - kRotationDotTolerance) {
+    // An authoring edit moved the camera (undo, redo, Inspector): the pilot
+    // continues from there instead of overwriting it.
+    SeatProxyOnSceneCamera();
+    return;
+  }
+
+  auto pose = ResolveEditorCameraPose(scene_camera_node_);
+  if (!pose.has_value()) {
+    return;
+  }
+  pilot_written_position_ = pose->position;
+  pilot_written_rotation_ = pose->rotation;
+  (void)transform.SetLocalPosition(pose->position);
+  // The quaternion avoids an Euler round trip every frame (no gimbal jitter
+  // for a camera looking straight down).
+  (void)transform.SetLocalRotation(pose->rotation);
+}
+
+auto EditorView::ResolveEditorCameraPose(scene::SceneNode& node) const
+  -> std::optional<EditorCameraPose> {
+  if (!camera_node_.IsAlive() || !node.IsAlive()) {
+    return std::nullopt;
+  }
+  // The editor camera is a scene root: its local pose is its world pose.
+  auto proxy = scene::SceneNode(camera_node_).GetTransform();
+  auto world_position = proxy.GetLocalPosition().value_or(glm::vec3 { 0.0F });
+  auto world_rotation
+    = proxy.GetLocalRotation().value_or(glm::quat { 1.0F, 0.0F, 0.0F, 0.0F });
+
+  glm::vec3 local_position = world_position;
+  glm::quat local_rotation = world_rotation;
+  if (auto parent = node.GetParent(); parent.has_value() && parent->IsAlive()) {
+    auto parent_transform = parent->GetTransform();
+    if (const auto parent_world = parent_transform.GetWorldMatrix();
+      parent_world.has_value()) {
+      local_position
+        = glm::vec3(glm::inverse(*parent_world) * glm::vec4(world_position, 1.0F));
+    }
+    if (const auto parent_rotation = parent_transform.GetWorldRotation();
+      parent_rotation.has_value()) {
+      local_rotation = glm::inverse(*parent_rotation) * world_rotation;
+    }
+  }
+
+  local_rotation = glm::normalize(local_rotation);
+  EditorCameraPose pose {
+    .position = local_position,
+    .rotation = local_rotation,
+    .rotation_degrees = oxygen::interop::rotation::ToEulerDegrees(local_rotation),
+    .scale = node.GetTransform().GetLocalScale().value_or(glm::vec3 { 1.0F }),
+    .orthographic_size = std::nullopt,
+  };
+  const bool piloting_node = IsPilotingSceneCamera()
+    && scene_camera_node_.GetHandle() == node.GetHandle();
+  if (node.GetCameraAs<scene::PerspectiveCamera>() && !piloting_node) {
+    if (auto view_camera = scene::SceneNode(camera_node_)
+          .GetCameraAs<scene::PerspectiveCamera>();
+      view_camera) {
+      pose.field_of_view_degrees
+        = glm::degrees(view_camera->get().GetFieldOfView());
+    }
+  }
+  if (auto camera = node.GetCameraAs<scene::OrthographicCamera>(); camera) {
+    if (IsPilotingSceneCamera()
+      && scene_camera_node_.GetHandle() == node.GetHandle()) {
+      const auto extents = camera->get().GetExtents();
+      pose.orthographic_size = 0.5F * (extents[3] - extents[2]);
+    } else if (scene::SceneNode(camera_node_)
+                 .GetCameraAs<scene::OrthographicCamera>()) {
+      pose.orthographic_size = ortho_half_height_;
+    }
+  }
+  return pose;
 }
 
 auto EditorView::IsViewingSceneCamera() const -> bool {

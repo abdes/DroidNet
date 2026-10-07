@@ -5,10 +5,13 @@
 using System.ComponentModel;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls;
 using DroidNet.Controls.Menus;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
+using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.Documents.Selection;
@@ -367,6 +370,15 @@ public partial class SceneExplorerViewModel
             yield return (SceneExplorerCommandKind.MoveToSceneRoot, "Move to scene root", "hierarchy");
         }
 
+        if (node is not null && IsCameraNode(node))
+        {
+            var viewport = this.QueryCameraViewport();
+            var viewing = viewport?.ViewedCameraId == node.AttachedObject.Id;
+            yield return (SceneExplorerCommandKind.LookThroughCamera, viewing ? "Return to editor camera" : "Look through camera", "camera");
+            yield return (SceneExplorerCommandKind.PilotCamera, viewing && viewport!.IsPiloting ? "Stop piloting camera" : "Pilot camera", "camera");
+            yield return (SceneExplorerCommandKind.AlignCameraToView, "Align camera to view", "camera");
+        }
+
         if (targets.Count > 0 && targets.All(static row => row is SceneNodeAdapter))
         {
             var hidden = single && (node!.IsEffectivelyHiddenInEditor || this.interaction?.IsHidden(node.AttachedObject.Id) == true);
@@ -409,6 +421,11 @@ public partial class SceneExplorerViewModel
         var nodes = targets.OfType<SceneNodeAdapter>().ToArray();
         var single = targets.Count == 1;
         var creation = kind is SceneExplorerCommandKind.NewNode or SceneExplorerCommandKind.NewFolder;
+        if (kind is SceneExplorerCommandKind.LookThroughCamera or SceneExplorerCommandKind.PilotCamera or SceneExplorerCommandKind.AlignCameraToView)
+        {
+            return this.GetCameraActionDisabledReason(kind, nodes, single);
+        }
+
         var workspace = kind is SceneExplorerCommandKind.Hide or SceneExplorerCommandKind.Show or SceneExplorerCommandKind.Lock or SceneExplorerCommandKind.Unlock;
         if (kind == SceneExplorerCommandKind.Rename && context.Anchor is SceneAdapter && !context.Background)
         {
@@ -716,6 +733,11 @@ public partial class SceneExplorerViewModel
                 }
 
                 break;
+            case SceneExplorerCommandKind.LookThroughCamera:
+            case SceneExplorerCommandKind.PilotCamera:
+            case SceneExplorerCommandKind.AlignCameraToView:
+                await this.RequestCameraCommandAsync(kind, nodes[0]).ConfigureAwait(true);
+                return;
             case SceneExplorerCommandKind.ShowAll:
                 result = await this.commandService.SetEditorHiddenAsync(context.Document,
                     this.projection.Nodes.Select(static row => row.AttachedObject.Id).ToArray(), hidden: false).ConfigureAwait(true);
@@ -862,6 +884,59 @@ public partial class SceneExplorerViewModel
         if (args.PropertyName is nameof(this.Scene) or nameof(this.CurrentClipboardState))
         {
             this.RefreshContextActions();
+        }
+    }
+
+    private static bool IsCameraNode(SceneNodeAdapter node)
+        => node.AttachedObject.Components.OfType<CameraComponent>().Any();
+
+    /// <summary>What the window's active viewport shows, or null when no scene viewport exists.</summary>
+    private SceneCameraViewportState? QueryCameraViewport()
+    {
+        var request = this.messenger.Send(new SceneCameraViewportStateRequestMessage(this.windowId));
+        return request.HasReceivedResponse ? request.Response : null;
+    }
+
+    private string? GetCameraActionDisabledReason(SceneExplorerCommandKind kind, SceneNodeAdapter[] nodes, bool single)
+    {
+        if (!single || nodes is not [{ } node] || !IsCameraNode(node))
+        {
+            return "Select one camera node.";
+        }
+
+        if (this.QueryCameraViewport() is not { } viewport)
+        {
+            return "Open the scene in a viewport first.";
+        }
+
+        var piloting = viewport.IsPiloting && viewport.ViewedCameraId == node.AttachedObject.Id;
+        if (kind is SceneExplorerCommandKind.PilotCamera && !piloting || kind is SceneExplorerCommandKind.AlignCameraToView)
+        {
+            if (this.FindLockedContextRow(node) is { } locked)
+            {
+                return $"Locked by {locked.Label}.";
+            }
+        }
+
+        return kind is SceneExplorerCommandKind.AlignCameraToView && viewport.ViewedCameraId is not null
+            ? "The active viewport is looking through a scene camera; return it to the editor camera first."
+            : null;
+    }
+
+    private async Task RequestCameraCommandAsync(SceneExplorerCommandKind kind, Guid nodeId)
+    {
+        var viewport = this.QueryCameraViewport();
+        var viewing = viewport?.ViewedCameraId == nodeId;
+        var command = kind switch
+        {
+            SceneExplorerCommandKind.LookThroughCamera => viewing ? SceneCameraCommand.ReturnToEditorCamera : SceneCameraCommand.LookThrough,
+            SceneExplorerCommandKind.PilotCamera => viewing && viewport!.IsPiloting ? SceneCameraCommand.StopPiloting : SceneCameraCommand.Pilot,
+            _ => SceneCameraCommand.AlignToView,
+        };
+        var request = this.messenger.Send(new SceneCameraCommandMessage(this.windowId, nodeId, command));
+        if (request.HasReceivedResponse)
+        {
+            _ = await request.Response.ConfigureAwait(true);
         }
     }
 

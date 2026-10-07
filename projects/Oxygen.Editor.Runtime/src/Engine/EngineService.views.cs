@@ -118,6 +118,37 @@ public sealed partial class EngineService
     }
 
     /// <inheritdoc/>
+    public async Task<bool> SetViewScenePilotAsync(RuntimeViewId viewId, bool pilot)
+    {
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
+        try
+        {
+            var runner = this.EnsureIsRunning();
+            this.LogSetViewScenePilot(viewId, pilot);
+            return await this.AwaitRuntimeOperationAsync(runner.SetViewScenePilotAsync(viewId, pilot)).ConfigureAwait(true);
+        }
+        finally
+        {
+            _ = this.lifecycleGate.Release();
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<RuntimeViewCameraPose?> GetViewCameraPoseAsync(RuntimeViewId viewId, Guid nodeId)
+    {
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
+        try
+        {
+            var runner = this.EnsureIsRunning();
+            return await this.AwaitRuntimeOperationAsync(runner.GetViewCameraPoseAsync(viewId, nodeId)).ConfigureAwait(true);
+        }
+        finally
+        {
+            _ = this.lifecycleGate.Release();
+        }
+    }
+
+    /// <inheritdoc/>
     public async Task<bool> SetViewCameraControlModeAsync(RuntimeViewId viewId, CameraControlMode mode)
     {
         await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);

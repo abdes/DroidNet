@@ -11,6 +11,7 @@
 #include <optional>
 #include <string>
 
+#include <glm/gtc/quaternion.hpp>
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Base/Macros.h>
@@ -65,6 +66,22 @@ namespace oxygen::interop::module {
   };
 
   class ViewRenderer;
+
+  //! Pose that places a scene node at a view's editor camera, in the node's
+  //! parent space, using the editor's Euler convention.
+  struct EditorCameraPose {
+    glm::vec3 position { 0.0F };
+    glm::quat rotation { 1.0F, 0.0F, 0.0F, 0.0F };
+    //! `rotation` in the authoring Euler convention.
+    glm::vec3 rotation_degrees { 0.0F };
+    glm::vec3 scale { 1.0F };
+    //! Orthographic half-height for an orthographic camera node: the piloted
+    //! camera's own size, or the view's when it is orthographic.
+    std::optional<float> orthographic_size;
+    //! Vertical field of view, in degrees, for a perspective camera node when
+    //! the view is perspective; none while that camera is piloted.
+    std::optional<float> field_of_view_degrees;
+  };
   // struct ViewContext; // Removed forward declaration
 
   struct EditorViewContext {
@@ -152,6 +169,23 @@ namespace oxygen::interop::module {
 
     //! The camera node this view renders through this frame.
     [[nodiscard]] auto GetRenderCameraNode() const -> scene::SceneNode;
+
+    //! Pilots the viewed scene camera: navigation drives the editor camera,
+    //! which first takes the scene camera's world pose, and the scene camera
+    //! follows it every frame. The view keeps rendering through the scene
+    //! camera's own projection and framing.
+    void SetPilotSceneCamera(bool pilot);
+
+    //! True when navigation currently moves the viewed scene camera.
+    [[nodiscard]] auto IsPilotingSceneCamera() const -> bool;
+
+    //! Moves the piloted scene camera onto the editor camera's pose. Call after
+    //! navigation has been applied for the frame.
+    void SyncPilotedCamera();
+
+    //! Pose that would place `node` at this view's editor camera.
+    [[nodiscard]] auto ResolveEditorCameraPose(scene::SceneNode& node) const
+      -> std::optional<EditorCameraPose>;
     [[nodiscard]] auto GetColorTexture() const
       -> std::shared_ptr<graphics::Texture> {
       return color_texture_;
@@ -235,6 +269,8 @@ namespace oxygen::interop::module {
     void CreateCamera(scene::Scene& scene);
     void UpdateCameraForFrame();
     void ResolveSceneCamera(scene::Scene& scene);
+    void BeginPilot();
+    void SeatProxyOnSceneCamera();
     Config config_;
     ViewState state_{ ViewState::kCreating };
     bool visible_{ true };
@@ -258,6 +294,12 @@ namespace oxygen::interop::module {
     scene::SceneNode camera_node_;
     std::optional<UuidKey> scene_camera_id_;
     scene::SceneNode scene_camera_node_;
+    bool pilot_requested_ { false };
+    bool pilot_active_ { false };
+    //! Local pose last written onto the piloted camera, to tell its own
+    //! updates from authoring edits (undo, redo, Inspector).
+    glm::vec3 pilot_written_position_ { 0.0F };
+    glm::quat pilot_written_rotation_ { 1.0F, 0.0F, 0.0F, 0.0F };
     ViewId view_id_{ kInvalidViewId };
 
     // Resources

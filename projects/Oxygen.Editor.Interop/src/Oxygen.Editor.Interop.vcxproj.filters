@@ -102,6 +102,9 @@
     <ClCompile Include="EditorModule\EditorViewportWheelZoomFeature.cpp">
       <Filter>EditorModule\Viewport</Filter>
     </ClCompile>
+    <ClCompile Include="Commands\ViewCameraCommands.cpp">
+      <Filter>Commands</Filter>
+    </ClCompile>
     <ClCompile Include="Commands\SetViewSceneCameraCommand.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
@@ -196,6 +199,9 @@
     </ClInclude>
     <ClInclude Include="LogHandler.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="Views\ViewCameraPoseManaged.h">
+      <Filter>Views</Filter>
+    </ClInclude>
     <ClInclude Include="Views\ViewConfigManaged.h">
       <Filter>Views</Filter>
     </ClInclude>
@@ -282,6 +288,12 @@
     </ClInclude>
     <ClInclude Include="Views\CameraControlModeManaged.h">
       <Filter>EditorModule\Viewport</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\SetViewScenePilotCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\QueryViewCameraPoseCommand.h">
+      <Filter>Commands</Filter>
     </ClInclude>
     <ClInclude Include="Commands\SetViewSceneCameraCommand.h">
       <Filter>Commands</Filter>

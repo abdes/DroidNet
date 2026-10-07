@@ -284,6 +284,16 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
     private void OnCameraMenuOpening(object? sender, EventArgs e) => this.ViewModel?.RefreshCameraMenu();
 
+    private void OnAlignCameraToViewInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        _ = sender;
+        args.Handled = true;
+        if (this.ViewModel is { } viewModel)
+        {
+            _ = viewModel.AlignSelectedCameraToViewAsync();
+        }
+    }
+
     private void OnCameraNumberBoxValidate(object? sender, ValidationEventArgs<float> e)
     {
         if (sender is FrameworkElement { DataContext: ViewportCameraNumberBoxItemModel model } && e.NewValue is { } value)

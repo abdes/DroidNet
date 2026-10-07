@@ -46,6 +46,7 @@ public sealed partial class ViewportCameraControlModeTests
                 "Back",
                 string.Empty,
                 "No cameras in scene",
+                "Align Selected Camera to View",
                 string.Empty,
                 "Field of View",
                 "Near View Plane",

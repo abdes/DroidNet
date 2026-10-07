@@ -324,6 +324,30 @@ public interface IEngineService : IAsyncDisposable
     public Task<bool> SetViewSceneCameraAsync(RuntimeViewId viewId, Guid? cameraNodeId);
 
     /// <summary>
+    /// Start or stop piloting the scene camera a view looks through.
+    /// </summary>
+    /// <remarks>
+    /// While piloting, the view's editor camera takes the scene camera's pose and navigation moves
+    /// both; the runtime scene camera follows every frame. The authored document is not edited:
+    /// callers commit the resulting pose with <see cref="GetViewCameraPoseAsync"/>.
+    /// </remarks>
+    /// <param name="viewId">The id of the view to update.</param>
+    /// <param name="pilot">Whether navigation should move the scene camera.</param>
+    /// <returns>
+    ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
+    ///     <see langword="false"/> on failure.
+    /// </returns>
+    public Task<bool> SetViewScenePilotAsync(RuntimeViewId viewId, bool pilot);
+
+    /// <summary>
+    /// Read the pose that would place a scene node at a view's editor camera.
+    /// </summary>
+    /// <param name="viewId">The view whose editor camera supplies the pose.</param>
+    /// <param name="nodeId">The node the pose is expressed for, in its parent's space.</param>
+    /// <returns>The pose, or <see langword="null"/> when the view or node does not exist.</returns>
+    public Task<RuntimeViewCameraPose?> GetViewCameraPoseAsync(RuntimeViewId viewId, Guid nodeId);
+
+    /// <summary>
     /// Set the editor camera fly movement speed for an existing view.
     /// </summary>
     /// <param name="viewId">The id of the view to update.</param>

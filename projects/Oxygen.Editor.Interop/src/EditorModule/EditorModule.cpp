@@ -18,7 +18,10 @@
 #include <Commands/SetViewCameraMovementSpeedCommand.h>
 #include <Commands/SetViewCameraPresetCommand.h>
 #include <Commands/SetViewCameraSettingsCommand.h>
+#include <Commands/OrthographicCameraPropertyApplier.h>
+#include <Commands/QueryViewCameraPoseCommand.h>
 #include <Commands/SetViewSceneCameraCommand.h>
+#include <Commands/SetViewScenePilotCommand.h>
 #include <Commands/ShowViewCommand.h>
 #include <EditorModule/EditorCommand.h>
 #include <EditorModule/EditorCompositor.h>
@@ -609,9 +612,12 @@ namespace oxygen::interop::module {
         view->SetRenderingContext(view_ctx);
         view->OnSceneMutation();
 
-        // A view looking through an authored camera does not navigate; the
-        // authored camera only changes through property edits.
-        if (input_snapshot && !view->IsViewingSceneCamera()) {
+        // A view looking through a scene camera navigates only while piloting
+        // it. The editor camera is then the navigation proxy, and the scene
+        // camera follows it below.
+        const bool navigates
+          = !view->IsViewingSceneCamera() || view->IsPilotingSceneCamera();
+        if (input_snapshot && navigates) {
           const auto view_id = view->GetViewId();
 
           const auto active = (active_view_id_ != kInvalidViewId)
@@ -620,31 +626,52 @@ namespace oxygen::interop::module {
 
           const auto hovered = hover_view_id_;
 
+          // Piloting an orthographic camera: the wheel resizes it instead of
+          // dollying the proxy.
+          auto piloted = view->IsPilotingSceneCamera()
+            ? view->GetRenderCameraNode()
+            : scene::SceneNode {};
+          const bool ortho_pilot = piloted.IsAlive()
+            && piloted.GetCameraAs<scene::OrthographicCamera>().has_value();
+          const auto apply_wheel = [&](glm::vec3& focus_point,
+                                     float& ortho_half_height) {
+            if (!ortho_pilot) {
+              viewport_navigation_->ApplyWheelOnly(view->GetCameraNode(),
+                *input_snapshot, view->GetCameraControlMode(), focus_point,
+                ortho_half_height, view->GetCameraMovementSpeed(), dt_seconds);
+              return;
+            }
+            auto& camera
+              = piloted.GetCameraAs<scene::OrthographicCamera>()->get();
+            auto projection = OrthographicCameraProjection::From(camera);
+            float size = projection.orthographic_size;
+            viewport_navigation_->ApplyWheelOnly(piloted, *input_snapshot,
+              view->GetCameraControlMode(), focus_point, size,
+              view->GetCameraMovementSpeed(), dt_seconds);
+            if (size != projection.orthographic_size) {
+              projection.orthographic_size = size;
+              if (projection.IsValid()) {
+                projection.ApplyTo(camera);
+              }
+            }
+          };
+
           // Non-wheel navigation applies to the focused (active) viewport.
           if (active != kInvalidViewId && view_id == active) {
             auto focus_point = view->GetFocusPoint();
             auto ortho_half_height = view->GetOrthoHalfHeight();
 
+            viewport_navigation_->ApplyNonWheel(
+              view->GetCameraNode(),
+              *input_snapshot,
+              view->GetCameraControlMode(),
+              focus_point,
+              ortho_half_height,
+              view->GetCameraMovementSpeed(),
+              dt_seconds);
             // If the hovered view differs, keep wheel routing separate.
-            if (hovered != kInvalidViewId && hovered != active) {
-              viewport_navigation_->ApplyNonWheel(
-                view->GetCameraNode(),
-                *input_snapshot,
-                view->GetCameraControlMode(),
-                focus_point,
-                ortho_half_height,
-                view->GetCameraMovementSpeed(),
-                dt_seconds);
-            }
-            else {
-              viewport_navigation_->Apply(
-                view->GetCameraNode(),
-                *input_snapshot,
-                view->GetCameraControlMode(),
-                focus_point,
-                ortho_half_height,
-                view->GetCameraMovementSpeed(),
-                dt_seconds);
+            if (hovered == kInvalidViewId || hovered == active) {
+              apply_wheel(focus_point, ortho_half_height);
             }
 
             view->SetFocusPoint(focus_point);
@@ -655,18 +682,12 @@ namespace oxygen::interop::module {
           if (hovered != kInvalidViewId && hovered != active && view_id == hovered) {
             auto focus_point = view->GetFocusPoint();
             auto ortho_half_height = view->GetOrthoHalfHeight();
-            viewport_navigation_->ApplyWheelOnly(
-              view->GetCameraNode(),
-              *input_snapshot,
-              view->GetCameraControlMode(),
-              focus_point,
-              ortho_half_height,
-              view->GetCameraMovementSpeed(),
-              dt_seconds);
+            apply_wheel(focus_point, ortho_half_height);
             view->SetFocusPoint(focus_point);
             view->SetOrthoHalfHeight(ortho_half_height);
           }
         }
+        view->SyncPilotedCamera();
         view->ClearPhaseRecorder();
       }
     }
@@ -1139,6 +1160,26 @@ namespace oxygen::interop::module {
     auto cmd = std::make_unique<SetViewSceneCameraCommand>(
       view_manager_.get(), view_id, camera_node_id);
     command_queue_.Enqueue(std::move(cmd));
+  }
+
+  void EditorModule::SetViewScenePilot(ViewId view_id, bool pilot) {
+    if (view_id == kInvalidViewId || !view_manager_) {
+      return;
+    }
+
+    command_queue_.Enqueue(std::make_unique<SetViewScenePilotCommand>(
+      view_manager_.get(), view_id, pilot));
+  }
+
+  void EditorModule::QueryViewCameraPose(ViewId view_id, UuidKey node_id,
+    std::function<void(std::optional<EditorCameraPose>)> callback) {
+    if (view_id == kInvalidViewId || !view_manager_) {
+      callback(std::nullopt);
+      return;
+    }
+
+    command_queue_.Enqueue(std::make_unique<QueryViewCameraPoseCommand>(
+      view_manager_.get(), view_id, node_id, std::move(callback)));
   }
 
   void EditorModule::SetViewCameraControlMode(

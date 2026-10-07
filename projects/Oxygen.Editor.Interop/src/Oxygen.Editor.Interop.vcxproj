@@ -46,6 +46,9 @@
     <ClCompile Include="Commands\SetViewCameraPresetCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
+    <ClCompile Include="Commands\ViewCameraCommands.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
     <ClCompile Include="Commands\SetViewSceneCameraCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
@@ -182,6 +185,8 @@
     <ClInclude Include="Commands\SetViewCameraPresetCommand.h" />
     <ClInclude Include="Commands\SetViewCameraSettingsCommand.h" />
     <ClInclude Include="Commands\SetViewSceneCameraCommand.h" />
+    <ClInclude Include="Commands\SetViewScenePilotCommand.h" />
+    <ClInclude Include="Commands\QueryViewCameraPoseCommand.h" />
     <ClInclude Include="Commands\CreateSceneNodeCommand.h" />
     <ClInclude Include="Commands\RemoveSceneNodeCommand.h" />
     <ClInclude Include="Commands\RemoveSceneNodesCommand.h" />
@@ -233,6 +238,7 @@
     <ClInclude Include="Views\CameraControlModeManaged.h" />
     <ClInclude Include="Views\CameraViewPresetManaged.h" />
     <ClInclude Include="Views\ViewConfigManaged.h" />
+    <ClInclude Include="Views\ViewCameraPoseManaged.h" />
     <ClInclude Include="EditorModule\ThreadSafeQueue.h" />
     <ClInclude Include="EditorModule\ViewManager.h" />
     <ClInclude Include="EditorModule\ViewRenderer.h" />

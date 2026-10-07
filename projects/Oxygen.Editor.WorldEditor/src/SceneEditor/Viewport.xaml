@@ -11,6 +11,14 @@
     IsTabStop="True"
     mc:Ignorable="d">
 
+    <UserControl.KeyboardAccelerators>
+        <!--  Align the selected camera with this view (Unity's Align With View).  -->
+        <KeyboardAccelerator
+            Key="F"
+            Invoked="OnAlignCameraToViewInvoked"
+            Modifiers="Control,Shift" />
+    </UserControl.KeyboardAccelerators>
+
     <UserControl.Resources>
         <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
         <SolidColorBrush x:Key="FocusedViewportBorderBrush" Color="{ThemeResource SystemAccentColor}" />

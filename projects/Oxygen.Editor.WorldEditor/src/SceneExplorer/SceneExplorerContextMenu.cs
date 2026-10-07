@@ -61,6 +61,15 @@ public enum SceneExplorerCommandKind
 
     /// <summary>Show all nodes of the captured scene in editing viewports.</summary>
     ShowAll,
+
+    /// <summary>Look through the primary camera node in the active viewport, or return to the editor camera.</summary>
+    LookThroughCamera,
+
+    /// <summary>Pilot the primary camera node in the active viewport, or stop piloting it.</summary>
+    PilotCamera,
+
+    /// <summary>Move the primary camera node to the active viewport's editor camera.</summary>
+    AlignCameraToView,
 }
 
 /// <summary>

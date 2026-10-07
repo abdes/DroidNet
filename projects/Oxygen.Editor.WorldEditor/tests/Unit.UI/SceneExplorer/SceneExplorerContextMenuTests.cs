@@ -14,6 +14,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Documents.Commands;
+using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
@@ -239,6 +240,75 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         return Task.CompletedTask;
     });
 
+    [TestMethod]
+    public Task CameraNodeMenuSendsViewportCameraActionsToTheSceneEditor() => EnqueueAsync(async () =>
+    {
+        var harness = new AuthoringHarness(out var scene, out var node);
+        node.Components.Add(new PerspectiveCamera { Name = "Camera" });
+        var requests = new List<SceneCameraCommandMessage>();
+        harness.Messenger.Register<SceneCameraViewportStateRequestMessage>(this, (_, message) => message.Reply(new SceneCameraViewportState(ViewedCameraId: null, IsPiloting: false)));
+        harness.Messenger.Register<SceneCameraCommandMessage>(this, (_, message) =>
+        {
+            requests.Add(message);
+            message.Reply(Task.FromResult(true));
+        });
+        using var explorer = harness.Build();
+        await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
+        _ = await explorer.SetSelectedNodes([node.Id]).ConfigureAwait(true);
+        var row = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(true);
+
+        var menu = explorer.BuildContextMenuSource(row!);
+        _ = menu.Items.Where(item => item.Text is "Look through camera" or "Pilot camera" or "Align camera to view")
+            .Should().HaveCount(3).And.OnlyContain(item => item.IsEnabled);
+        await GetMenuCommand(menu, "Pilot camera").ExecuteAsync(parameter: null).ConfigureAwait(true);
+        await GetMenuCommand(menu, "Align camera to view").ExecuteAsync(parameter: null).ConfigureAwait(true);
+
+        _ = requests.Select(static request => (request.NodeId, request.Command)).Should()
+            .Equal((node.Id, SceneCameraCommand.Pilot), (node.Id, SceneCameraCommand.AlignToView));
+        harness.Messenger.UnregisterAll(this);
+    });
+
+    [TestMethod]
+    public Task CameraNodeMenuReflectsThePilotedViewport() => EnqueueAsync(async () =>
+    {
+        var harness = new AuthoringHarness(out var scene, out var node);
+        node.Components.Add(new OrthographicCamera { Name = "Camera" });
+        harness.Messenger.Register<SceneCameraViewportStateRequestMessage>(this, (_, message) => message.Reply(new SceneCameraViewportState(node.Id, IsPiloting: true)));
+        using var explorer = harness.Build();
+        await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
+        _ = await explorer.SetSelectedNodes([node.Id]).ConfigureAwait(true);
+        var row = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(true);
+
+        var menu = explorer.BuildContextMenuSource(row!);
+
+        _ = menu.Items.Select(static item => item.Text).Should().Contain(["Return to editor camera", "Stop piloting camera"]);
+        var align = menu.Items.Single(static item => item.Text == "Align camera to view");
+        _ = align.IsEnabled.Should().BeFalse();
+        _ = align.HelpText.Should().Contain("return it to the editor camera");
+        harness.Messenger.UnregisterAll(this);
+    });
+
+    [TestMethod]
+    public Task CameraNodeMenuNeedsASceneViewport() => EnqueueAsync(async () =>
+    {
+        var harness = new AuthoringHarness(out var scene, out var node);
+        node.Components.Add(new PerspectiveCamera { Name = "Camera" });
+        var plain = new SceneNode(scene) { Name = "Plain" };
+        scene.RootNodes.Add(plain);
+        using var explorer = harness.Build();
+        await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
+        _ = await explorer.SetSelectedNodes([node.Id]).ConfigureAwait(true);
+        var row = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(true);
+
+        var menu = explorer.BuildContextMenuSource(row!);
+
+        _ = menu.Items.Single(static item => item.Text == "Look through camera").HelpText.Should().Be("Open the scene in a viewport first.");
+        _ = await explorer.SetSelectedNodes([plain.Id]).ConfigureAwait(true);
+        var plainRow = await explorer.FindAdapterByNodeIdAsync(plain.Id).ConfigureAwait(true);
+        _ = explorer.BuildContextMenuSource(plainRow!).Items.Select(static item => item.Text).Should()
+            .NotContain(["Look through camera", "Pilot camera", "Align camera to view"]);
+    });
+
     private static IAsyncRelayCommand GetMenuCommand(IMenuSource menu, string label)
         => (IAsyncRelayCommand)menu.Items.Single(item => string.Equals(item.Text, label, StringComparison.Ordinal)).Command!;
 
@@ -277,6 +347,8 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
 
         public Mock<ISceneDocumentCommandService> Commands { get; }
 
+        public IMessenger Messenger { get; } = new StrongReferenceMessenger();
+
         public Scene AddScene(string name)
         {
             var added = new Scene(this.scene.Project) { Name = name };
@@ -289,7 +361,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         }
 
         public SceneExplorerViewModel Build()
-            => new(this.Manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), this.Documents.Object,
+            => new(this.Manager.Object, this.Messenger, Mock.Of<IRouter>(), this.Documents.Object,
                 default, this.Sync.Object, new SceneSelectionService(), this.Commands.Object);
     }
 }

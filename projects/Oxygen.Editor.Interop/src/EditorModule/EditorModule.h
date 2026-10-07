@@ -181,6 +181,14 @@ namespace oxygen::interop::module {
     void SetViewSceneCamera(ViewId view_id,
       std::optional<UuidKey> camera_node_id);
 
+    //! Starts or stops piloting the scene camera a view looks through.
+    void SetViewScenePilot(ViewId view_id, bool pilot);
+
+    //! Reports, on the engine thread, the pose that would place a scene node
+    //! at a view's editor camera; no value when the view or node is missing.
+    void QueryViewCameraPose(ViewId view_id, UuidKey node_id,
+      std::function<void(std::optional<EditorCameraPose>)> callback);
+
     //! Set the editor camera navigation mode for a specific view.
     void SetViewCameraControlMode(
       ViewId view_id,

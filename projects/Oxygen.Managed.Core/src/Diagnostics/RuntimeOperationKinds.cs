@@ -60,6 +60,16 @@ public static class RuntimeOperationKinds
     public const string ViewSetSceneCamera = "Runtime.View.SetSceneCamera";
 
     /// <summary>
+    /// Runtime engine view start or stop of piloting its scene camera.
+    /// </summary>
+    public const string ViewSetScenePilot = "Runtime.View.SetScenePilot";
+
+    /// <summary>
+    /// Runtime engine view read of its editor camera pose for a scene node.
+    /// </summary>
+    public const string ViewGetCameraPose = "Runtime.View.GetCameraPose";
+
+    /// <summary>
     /// Runtime engine view editor camera movement speed change.
     /// </summary>
     public const string ViewSetCameraMovementSpeed = "Runtime.View.SetCameraMovementSpeed";

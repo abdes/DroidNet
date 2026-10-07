@@ -17,6 +17,7 @@
 #include <Views/ViewConfigManaged.h>
 #include <Views/CameraControlModeManaged.h>
 #include <Views/CameraViewPresetManaged.h>
+#include <Views/ViewCameraPoseManaged.h>
 #include <Views/ViewIdManaged.h>
 
 namespace oxygen::graphics {
@@ -253,6 +254,24 @@ namespace Oxygen::Interop {
     auto TrySetViewSceneCameraAsync(EngineContext^ ctx, ViewIdManaged viewId,
       System::Guid cameraNodeId)
       -> System::Threading::Tasks::Task<bool>^;
+
+    /// <summary>
+    /// Start or stop piloting the scene camera a view looks through. While
+    /// piloting, navigation moves that camera. The request is enqueued and
+    /// applied on the engine thread.
+    /// </summary>
+    auto TrySetViewScenePilotAsync(EngineContext^ ctx, ViewIdManaged viewId,
+      bool pilot)
+      -> System::Threading::Tasks::Task<bool>^;
+
+    /// <summary>
+    /// Read the pose that would place a scene node at a view's editor camera,
+    /// in the node's parent space. Completes with <c>nullptr</c> when the view
+    /// or node does not exist.
+    /// </summary>
+    auto TryGetViewCameraPoseAsync(EngineContext^ ctx, ViewIdManaged viewId,
+      System::Guid nodeId)
+      -> System::Threading::Tasks::Task<ViewCameraPoseManaged^>^;
 
     /// <summary>
     /// Set the editor camera navigation mode for an existing view.
