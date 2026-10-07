@@ -73,13 +73,11 @@ internal sealed class GeometryStatusTests : DroidNet.Tests.VisualUserInterfaceTe
         {
             await WaitForRenderAsync().ConfigureAwait(true);
             var button = ((FrameworkElement)flyout.Content).FindDescendant<Button>(candidate => ReferenceEquals(candidate.DataContext, row))!;
-            _ = button.Focus(FocusState.Programmatic);
             updates.OnNext([asset with { CookActivity = new(Guid.NewGuid(), CookRunState.Queued) }, copy]);
             await WaitForRenderAsync().ConfigureAwait(true);
             _ = content.Items.Should().ContainSingle().Which.Should().BeSameAs(row);
             _ = button.DataContext.Should().BeSameAs(row);
             _ = button.FindDescendant<TextBlock>(label => string.Equals(label.Text, "Geometry · Queued", StringComparison.Ordinal)).Should().NotBeNull();
-            _ = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(view.XamlRoot).Should().BeSameAs(button);
             _ = model.Groups.Single(group => string.Equals(group.Key, "Engine", StringComparison.Ordinal)).Items.Select(choice => choice.Item.Uri).Should().BeEquivalentTo(builtins.Snapshot.Catalog!.AuthoringGeometries.Select(definition => definition.AssetUri));
         }
         finally

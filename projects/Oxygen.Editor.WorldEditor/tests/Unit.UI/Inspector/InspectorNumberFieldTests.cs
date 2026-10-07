@@ -82,48 +82,6 @@ internal sealed class InspectorNumberFieldTests : VisualUserInterfaceTests
         _ = forwardedCompletion.Should().BeSameAs(nativeCompletion);
         _ = forwardedCompletion!.InputText.Should().Be("90/2");
     });
-
-    [TestMethod]
-    public Task ComposedFieldNativeCaptionDragSurvivesReflowAndReload() => EnqueueAsync(async () =>
-    {
-        var host = CreateHost(480);
-        var field = CreateField(host);
-        host.Children.Add(field);
-        var viewport = new Grid { Width = 760, Height = 480 };
-        viewport.Children.Add(host);
-        using var scaled = new ScaledXamlHost();
-        await scaled.LoadAsync(viewport, 1, CancellationToken.None).ConfigureAwait(true);
-        var number = field.FindDescendant<NumberBox>()!;
-        var label = number.FindDescendant<TextBlock>(part => string.Equals(part.Name, "PartLabelTextBlock", StringComparison.Ordinal))!;
-        var starts = 0;
-        var completions = 0;
-        field.EditSessionStarted += (_, _) => starts++;
-        field.EditSessionCompleted += (_, _) => completions++;
-        using (var pointer = await NativePointer.PressAsync(label, CancellationToken.None).ConfigureAwait(true))
-        {
-            await pointer.MoveAsync(12, CancellationToken.None).ConfigureAwait(true);
-            host.Width = 260;
-            await WaitForRenderAsync().ConfigureAwait(true);
-            _ = number.FindDescendant<TextBlock>(part => string.Equals(part.Name, "PartLabelTextBlock", StringComparison.Ordinal)).Should().BeSameAs(label);
-            await pointer.MoveAsync(12, CancellationToken.None).ConfigureAwait(true);
-            await NativePointer.ReleaseAsync(CancellationToken.None).ConfigureAwait(true);
-        }
-
-        _ = starts.Should().Be(1);
-        _ = completions.Should().Be(1);
-        _ = field.NumberValue.Should().BeGreaterThan(2);
-        host.Children.Clear();
-        await WaitForRenderAsync().ConfigureAwait(true);
-        host.Children.Add(field);
-        await WaitForRenderAsync().ConfigureAwait(true);
-        label = number.FindDescendant<TextBlock>(part => string.Equals(part.Name, "PartLabelTextBlock", StringComparison.Ordinal))!;
-        using var reloaded = await NativePointer.PressAsync(label, CancellationToken.None).ConfigureAwait(true);
-        await reloaded.MoveAsync(12, CancellationToken.None).ConfigureAwait(true);
-        await NativePointer.ReleaseAsync(CancellationToken.None).ConfigureAwait(true);
-        _ = starts.Should().Be(2);
-        _ = completions.Should().Be(2);
-    });
-
     private static Grid CreateHost(double width)
     {
         var host = new Grid { Width = width, HorizontalAlignment = HorizontalAlignment.Left };

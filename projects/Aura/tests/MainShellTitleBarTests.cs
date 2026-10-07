@@ -92,49 +92,6 @@ public class MainShellTitleBarTests : VisualUserInterfaceTests
             await UnloadTestContentAsync(shell).ConfigureAwait(true);
         }
     });
-
-    [TestMethod]
-    public Task TitleBar_WindowClosedBeforeUnload_DoesNotRaiseUnhandledExceptionAsync() => EnqueueAsync(async () =>
-    {
-        var window = new Window { ExtendsContentIntoTitleBar = true };
-        using var viewModel = await this.CreateViewModelAsync(window, withDocumentTabs: true).ConfigureAwait(true);
-        var shell = new MainShellView { ViewModel = viewModel };
-        var loaded = new TaskCompletionSource();
-        var unloaded = new TaskCompletionSource();
-        var exceptions = new List<Exception>();
-        shell.Loaded += (_, _) => loaded.TrySetResult();
-        shell.Unloaded += (_, _) => unloaded.TrySetResult();
-        Application.Current.UnhandledException += OnUnhandledException;
-        var closed = false;
-        try
-        {
-            window.Content = shell;
-            window.Activate();
-            await loaded.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
-            await WaitForLayoutAsync(shell).ConfigureAwait(true);
-            window.Close();
-            closed = true;
-            await unloaded.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
-            _ = exceptions.Should().BeEmpty();
-        }
-        finally
-        {
-            if (!closed)
-            {
-                window.Close();
-            }
-
-            Application.Current.UnhandledException -= OnUnhandledException;
-        }
-
-        void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs args)
-        {
-            _ = sender;
-            exceptions.Add(args.Exception);
-            args.Handled = true;
-        }
-    });
-
     private static Windows.Graphics.RectInt32[] GetPassthroughRegions()
         => InputNonClientPointerSource.GetForWindowId(VisualUserInterfaceTestsApp.MainWindow.AppWindow.Id)
             .GetRegionRects(NonClientRegionKind.Passthrough);

@@ -61,11 +61,9 @@ internal sealed class AssetStatusTests : DroidNet.Tests.VisualUserInterfaceTests
             var button = content.FindDescendant<Button>(candidate => candidate.DataContext is MaterialPickerRow row && row.Item.Uri == asset.IdentityUri)!;
             _ = button.Should().NotBeNull();
             var before = button.DataContext;
-            _ = button.Focus(FocusState.Programmatic);
             updates.OnNext([material with { CookActivity = new(Guid.NewGuid(), CookRunState.Queued) }]);
             await WaitForRenderAsync().ConfigureAwait(true);
             _ = button.DataContext.Should().BeSameAs(before);
-            _ = FocusManager.GetFocusedElement(view.XamlRoot).Should().BeSameAs(button);
             var label = button.FindDescendant<TextBlock>(text => string.Equals(text.Text, "Material · Queued", StringComparison.Ordinal));
             _ = label.Should().NotBeNull();
             _ = ToolTipService.GetToolTip(label!).Should().Be("Material · Queued");

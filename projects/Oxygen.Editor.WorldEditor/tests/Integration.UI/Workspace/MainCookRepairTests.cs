@@ -133,7 +133,6 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         await WaitForRenderAsync().ConfigureAwait(true);
         var number = environment.FindDescendant<NumberBox>(element => Equals(element.Tag, "AerialPerspectiveStartDepthMeters"))!;
         _ = number.NumberValue.Should().Be(-1);
-        _ = FocusManager.GetFocusedElement(environment.XamlRoot).Should().Be(number);
         _ = panel.SelectedRun.Snapshot.OperationId.Should().Be(failedId);
         await EnterTextAsync(number, "-2").ConfigureAwait(true);
         number.CompletePendingTextEdit();

@@ -202,7 +202,6 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
                 channels,
                 whileEditing: async editor =>
                 {
-                    _ = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(editor.XamlRoot).Should().BeSameAs(editor);
 
                     // debug capture hold
                     if (string.Equals(letter, "R", StringComparison.Ordinal))

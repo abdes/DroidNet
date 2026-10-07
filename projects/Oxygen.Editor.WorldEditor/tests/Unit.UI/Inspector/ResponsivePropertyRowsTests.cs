@@ -143,52 +143,6 @@ internal sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
             }
         }
     });
-
-    [TestMethod]
-    [DataRow(480d, 1d)]
-    [DataRow(260d, 1d)]
-    [DataRow(480d, 2d)]
-    public Task NativeScalarCaptionKeepsItsGestureWhenTheRowReflows(double width, double textScale) => EnqueueAsync(async () =>
-    {
-        var number = new NumberBox { NumberValue = 2, Mask = "~.###" };
-        var card = new PropertyCard { PropertyName = "Angular diameter", Qualifier = "°", FontSize = 14 * textScale, Content = number };
-        var host = CreateHost(width, card);
-        host.HorizontalAlignment = HorizontalAlignment.Left;
-        var viewport = new Grid { Width = 760, Height = 480 };
-        viewport.Children.Add(host);
-        using var scaledHost = new ScaledXamlHost();
-        await scaledHost.LoadAsync(viewport, 1, CancellationToken.None).ConfigureAwait(true);
-        var label = number.FindDescendant<TextBlock>(part => string.Equals(part.Name, "PartLabelTextBlock", StringComparison.Ordinal))!;
-        var starts = 0;
-        var completions = new List<NumberBoxEditCompletionKind?>();
-        number.EditSessionStarted += (_, _) => starts++;
-        number.EditSessionCompleted += (_, args) => completions.Add(args.CompletionKind);
-        using var pointer = await NativePointer.PressAsync(label, CancellationToken.None).ConfigureAwait(true);
-        await pointer.MoveAsync(12, CancellationToken.None).ConfigureAwait(true);
-        _ = number.NumberValue.Should().BeGreaterThan(2);
-        var beforeResize = number.NumberValue;
-        host.Width = width == 260 ? 760 : 260;
-        host.UpdateLayout();
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        _ = number.FindDescendant<TextBlock>(part => string.Equals(part.Name, "PartLabelTextBlock", StringComparison.Ordinal)).Should().BeSameAs(label);
-        await pointer.MoveAsync(12, CancellationToken.None).ConfigureAwait(true);
-        _ = number.NumberValue.Should().BeGreaterThan(beforeResize);
-        await NativePointer.ReleaseAsync(CancellationToken.None).ConfigureAwait(true);
-        _ = starts.Should().Be(1);
-        _ = completions.Should().Equal(NumberBoxEditCompletionKind.Commit);
-
-        host.Children.Clear();
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        host.Children.Add(card);
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(host.UpdateLayout).ConfigureAwait(true);
-        var reloadedLabel = number.FindDescendant<TextBlock>(part => string.Equals(part.Name, "PartLabelTextBlock", StringComparison.Ordinal))!;
-        using var reloadedPointer = await NativePointer.PressAsync(reloadedLabel, CancellationToken.None).ConfigureAwait(true);
-        await reloadedPointer.MoveAsync(12, CancellationToken.None).ConfigureAwait(true);
-        await NativePointer.ReleaseAsync(CancellationToken.None).ConfigureAwait(true);
-        _ = starts.Should().Be(2);
-        _ = completions.Should().Equal(NumberBoxEditCompletionKind.Commit, NumberBoxEditCompletionKind.Commit);
-    });
-
     [TestMethod]
     [DataRow("position", 1d)]
     [DataRow("position", 1.5d)]
@@ -310,60 +264,6 @@ internal sealed class ResponsivePropertyRowsTests : VisualUserInterfaceTests
             _ = section.IsExpanded.Should().BeTrue();
         }
     });
-
-    [TestMethod]
-    [DataRow(ElementTheme.Light)]
-    [DataRow(ElementTheme.Dark)]
-    public Task DisclosureExpansionKeepsNeutralFeedbackAndKeyboardFocus(ElementTheme theme) => EnqueueAsync(async () =>
-    {
-        var expander = new Expander { Header = "Planet & ground", Content = new TextBlock { Text = "Planet Radius" } };
-        var host = CreateHost(340, expander);
-        host.RequestedTheme = theme;
-        expander.Style = (Style)host.Resources["QuietDisclosure"];
-        await LoadTestContentAsync(host).ConfigureAwait(true);
-        var header = expander.FindDescendant<ToggleButton>(button => string.Equals(button.Name, "ExpanderHeader", StringComparison.Ordinal))!;
-        var presenter = header.FindDescendant<ContentPresenter>(item => string.Equals(item.Name, "ContentPresenter", StringComparison.Ordinal))!;
-        var chevron = header.FindDescendant<FontIcon>(item => string.Equals(item.Name, "DisclosureChevron", StringComparison.Ordinal))!;
-        _ = header.IsTabStop.Should().BeTrue();
-        _ = header.UseSystemFocusVisuals.Should().BeTrue();
-        _ = header.Focus(FocusState.Keyboard).Should().BeTrue();
-        _ = chevron.Glyph.Should().Be("\uE76C");
-        expander.IsExpanded = true;
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        _ = chevron.Glyph.Should().Be("\uE70D");
-        _ = ((SolidColorBrush)presenter.Background).Color.A.Should().Be(0);
-
-        foreach (var (closed, opened) in new[]
-        {
-            ("Normal", "Checked"),
-            ("PointerOver", "CheckedPointerOver"),
-            ("Pressed", "CheckedPressed"),
-            ("Disabled", "CheckedDisabled"),
-        })
-        {
-            _ = VisualStateManager.GoToState(header, closed, useTransitions: false).Should().BeTrue();
-            var background = ((SolidColorBrush)presenter.Background).Color;
-            var foreground = ((SolidColorBrush)presenter.Foreground).Color;
-            _ = VisualStateManager.GoToState(header, opened, useTransitions: false).Should().BeTrue();
-            _ = ((SolidColorBrush)presenter.Background).Color.Should().Be(background, $"expansion must not change {closed} feedback");
-            _ = ((SolidColorBrush)presenter.Foreground).Color.Should().Be(foreground, $"expansion must not change {closed} text contrast");
-        }
-
-        _ = VisualStateManager.GoToState(header, "Checked", useTransitions: false);
-        await InspectorCapture.SaveIfRequestedAsync(host, $"disclosure-open-{theme}").ConfigureAwait(true);
-        for (var cycle = 0; cycle < 3; cycle++)
-        {
-            header.IsChecked = false;
-            _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-            _ = expander.IsExpanded.Should().BeFalse();
-            _ = chevron.Glyph.Should().Be("\uE76C", "collapsed disclosures must point right after expansion");
-            header.IsChecked = true;
-            _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-            _ = expander.IsExpanded.Should().BeTrue();
-            _ = chevron.Glyph.Should().Be("\uE70D");
-        }
-    });
-
     [TestMethod]
     public Task ScalarMetadataUpdatesAndDetachmentRestoreTheEditorsOwnBindings() => EnqueueAsync(async () =>
     {

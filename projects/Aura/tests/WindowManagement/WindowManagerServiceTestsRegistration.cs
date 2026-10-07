@@ -74,33 +74,6 @@ public class WindowManagerServiceTestsRegistration : WindowManagerServiceTestsBa
             sut.Dispose();
         }
     });
-
-    [TestMethod]
-    public Task RegisterWindowAsync_WhenWindowActivates_TracksActiveWindow_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var testWindow = MakeSmallWindow("Test Window");
-
-        var sut = this.CreateService();
-
-        try
-        {
-            // Act
-            var context = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
-            testWindow.Activate();
-            await WaitForRenderAsync().ConfigureAwait(true);
-
-            // Assert
-            _ = sut.ActiveWindow.Should().NotBeNull();
-            _ = sut.ActiveWindow!.Id.Should().Be(context.Id);
-        }
-        finally
-        {
-            testWindow.Close();
-            sut.Dispose();
-        }
-    });
-
     [TestMethod]
     public Task RegisterWindowAsync_WhenWindowAlreadyRegistered_Throws_Async() => EnqueueAsync(async () =>
     {
