@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 
@@ -35,6 +36,9 @@ namespace internal {
 
 namespace postprocess {
 
+  //! Display gamma used when no PostProcessVolume authors one.
+  inline constexpr float kDefaultDisplayGamma { 2.2F };
+
   class TonemapPass {
   public:
     struct Inputs {
@@ -48,8 +52,14 @@ namespace postprocess {
       observer_ptr<const graphics::Framebuffer> post_target;
       engine::ToneMapper tone_mapper { engine::ToneMapper::kAcesFitted };
       float exposure_value { 1.0F };
-      float gamma { 2.2F };
+      float gamma { kDefaultDisplayGamma };
       float bloom_intensity { 0.0F };
+      //! Foreground grading; 1, 1 and 0 are the identity.
+      float saturation { 1.0F };
+      float contrast { 1.0F };
+      float vignette_intensity { 0.0F };
+      //! Camera content rectangle in target UV (min.x, min.y, max.x, max.y).
+      std::array<float, 4> content_uv_rect { 0.0F, 0.0F, 1.0F, 1.0F };
       std::optional<Vec3> background_color;
       const graphics::Texture* scene_fallback { nullptr };
       ShaderVisibleIndex scene_fallback_srv { kInvalidShaderVisibleIndex };
@@ -79,9 +89,12 @@ namespace postprocess {
     auto UpdatePassConstants(RenderContext& ctx, const Inputs& inputs)
       -> ShaderVisibleIndex;
 
+    //! 32-bit words in the shader's 96-byte TonemapPassConstants.
+    static constexpr std::size_t kPassConstantWords { 24U };
+
     Renderer& renderer_;
     std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
-      std::array<std::uint32_t, 16U>>>
+      std::array<std::uint32_t, kPassConstantWords>>>
       constants_publisher_;
     std::optional<frame::SequenceNumber> constants_frame_;
   };

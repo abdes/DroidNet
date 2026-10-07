@@ -1149,6 +1149,9 @@ namespace {
           config.bloom_threshold = post_process->GetBloomThreshold();
           config.tone_mapper = post_process->GetToneMapper();
           config.gamma = post_process->GetDisplayGamma();
+          config.saturation = post_process->GetSaturation();
+          config.contrast = post_process->GetContrast();
+          config.vignette_intensity = post_process->GetVignetteIntensity();
         }
       }
     }
@@ -1187,6 +1190,9 @@ namespace {
       config.enable_bloom = false;
       config.bloom_intensity = 0.0F;
       config.bloom_threshold = 0.0F;
+      config.saturation = 1.0F;
+      config.contrast = 1.0F;
+      config.vignette_intensity = 0.0F;
     }
     return service.BuildPassConfig(config,
       captured_view ? captured_view->view_id : ctx.current_view.view_id,

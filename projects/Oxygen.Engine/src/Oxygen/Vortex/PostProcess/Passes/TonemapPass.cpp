@@ -42,29 +42,43 @@ namespace {
 
   namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
 
-  constexpr auto kPassConstantsStride = 256U;
-  constexpr auto kPassConstantsSlots = 8U;
-
   struct alignas(16) TonemapPassConstants {
-    std::uint32_t source_texture_index;
-    std::uint32_t exposure_buffer_index;
-    std::uint32_t bloom_texture_index;
-    std::uint32_t tone_mapper;
-    float exposure;
-    float gamma;
-    float bloom_intensity;
-    std::uint32_t frame_exposure_srv;
-    std::array<float, 3> background_color;
-    std::uint32_t background_enabled;
-    std::uint32_t fallback_texture_index;
-    std::uint32_t conversion_report_index;
-    std::uint32_t lighting_frame_slot;
-    std::uint32_t reserved { 0U };
+    std::uint32_t source_texture_index {};
+    std::uint32_t exposure_buffer_index {};
+    std::uint32_t bloom_texture_index {};
+    std::uint32_t tone_mapper {};
+    float exposure {};
+    float gamma {};
+    float bloom_intensity {};
+    std::uint32_t frame_exposure_srv {};
+    std::array<float, 3> background_color {};
+    std::uint32_t background_enabled {};
+    std::uint32_t fallback_texture_index {};
+    std::uint32_t conversion_report_index {};
+    std::uint32_t lighting_frame_slot {};
+    float saturation {};
+    float contrast {};
+    float vignette_intensity {};
+    std::uint32_t reserved0 { 0U };
+    std::uint32_t reserved1 { 0U };
+    std::array<float, 4> content_uv_rect {};
   };
 
-  static_assert(sizeof(TonemapPassConstants) == 64U);
-  static_assert(offsetof(TonemapPassConstants, fallback_texture_index) == 48U);
-  static_assert(offsetof(TonemapPassConstants, conversion_report_index) == 52U);
+  // Mirrors the HLSL constant layout: grading follows the lighting slot and
+  // the content rectangle starts the last 16-byte row.
+  constexpr std::size_t kWord = sizeof(std::uint32_t);
+  constexpr std::size_t kRow = 4U * kWord;
+  constexpr std::size_t kRows = 6U;
+  constexpr std::size_t kContentRectRow = kRows - 1U;
+  static_assert(sizeof(TonemapPassConstants) == kRows * kRow);
+  static_assert(
+    offsetof(TonemapPassConstants, fallback_texture_index) == 3U * kRow);
+  static_assert(offsetof(TonemapPassConstants, conversion_report_index)
+    == (3U * kRow) + kWord);
+  static_assert(offsetof(TonemapPassConstants, saturation)
+    == offsetof(TonemapPassConstants, lighting_frame_slot) + kWord);
+  static_assert(
+    offsetof(TonemapPassConstants, content_uv_rect) == kContentRectRow * kRow);
 
   auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
     -> graphics::ResourceViewType
@@ -104,9 +118,9 @@ namespace {
           table.view_type = RangeTypeToViewType(
             static_cast<bindless_d3d12::RangeType>(range.range_type));
           table.base_index = range.base_register;
-          table.count = range.num_descriptors
-              == (std::numeric_limits<std::uint32_t>::max)()
-            ? (std::numeric_limits<std::uint32_t>::max)()
+          table.count
+            = range.num_descriptors == std::numeric_limits<std::uint32_t>::max()
+            ? std::numeric_limits<std::uint32_t>::max()
             : range.num_descriptors;
         }
         binding.data = table;
@@ -330,8 +344,8 @@ auto TonemapPass::UpdatePassConstants(RenderContext& ctx, const Inputs& inputs)
     CHECK_NOTNULL_F(gfx.get());
     constants_publisher_
       = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
-        std::array<std::uint32_t, 16U>>>(observer_ptr { gfx.get() },
-        renderer_.GetStagingProvider(),
+        std::array<std::uint32_t, kPassConstantWords>>>(
+        observer_ptr { gfx.get() }, renderer_.GetStagingProvider(),
         observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
         "Vortex.PostProcess.Tonemap.Constants");
   }
@@ -359,10 +373,14 @@ auto TonemapPass::UpdatePassConstants(RenderContext& ctx, const Inputs& inputs)
     .fallback_texture_index = inputs.scene_fallback_srv.get(),
     .conversion_report_index = inputs.conversion_report_srv.get(),
     .lighting_frame_slot = ctx.current_view.lighting_frame_slot.get(),
+    .saturation = std::max(inputs.saturation, 0.0F),
+    .contrast = std::max(inputs.contrast, 0.0F),
+    .vignette_intensity = std::clamp(inputs.vignette_intensity, 0.0F, 1.0F),
+    .content_uv_rect = inputs.content_uv_rect,
   };
 
   const auto slot = constants_publisher_->Publish(ctx.current_view.view_id,
-    std::bit_cast<std::array<std::uint32_t, 16U>>(constants));
+    std::bit_cast<std::array<std::uint32_t, kPassConstantWords>>(constants));
   CHECK_F(slot.IsValid(), "Tonemap constants publication failed");
   return slot;
 }

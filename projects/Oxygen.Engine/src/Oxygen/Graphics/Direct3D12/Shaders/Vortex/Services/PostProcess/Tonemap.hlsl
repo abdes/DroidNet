@@ -32,7 +32,14 @@ struct TonemapPassConstants
     uint fallback_texture_index;
     uint conversion_report_index;
     uint lighting_frame_slot;
-    uint reserved;
+    float saturation;
+    float contrast;
+    float vignette_intensity;
+    uint reserved0;
+    uint reserved1;
+    // Camera content rectangle in target UV (min.xy, max.xy); grading and the
+    // vignette ellipse are defined over it.
+    float4 content_uv_rect;
 };
 
 [shader("vertex")]
@@ -92,9 +99,16 @@ float4 VortexTonemapPS(VortexFullscreenTriangleOutput input) : SV_Target0
         StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_exposure_srv];
         exposure *= frame[0].one_over_pre_exposure;
     }
-    float3 color = MapForeground((foreground + bloom) * exposure, pass.tone_mapper, pass.gamma);
+    const float2 content_extent = max(pass.content_uv_rect.zw - pass.content_uv_rect.xy, 1.0e-6f.xx);
+    const float2 content_uv = (input.uv - pass.content_uv_rect.xy) / content_extent;
+    const float vignette = VignetteFactor(content_uv, pass.vignette_intensity);
+    float3 color = GradeForeground((foreground + bloom) * exposure, pass.tone_mapper,
+        pass.saturation, pass.contrast, vignette, pass.gamma);
     if (pass.background_enabled != 0u) {
-        const float3 base = MapForeground(foreground * exposure, pass.tone_mapper, pass.gamma);
+        // The background colour stays outside grading; only the foreground it
+        // replaces is graded before composition.
+        const float3 base = GradeForeground(foreground * exposure, pass.tone_mapper,
+            pass.saturation, pass.contrast, vignette, pass.gamma);
         // Composite coverage in display-linear space. Bloom remains additive,
         // including its halo outside foreground geometry.
         const float3 composed = SrgbToLinear(color)
