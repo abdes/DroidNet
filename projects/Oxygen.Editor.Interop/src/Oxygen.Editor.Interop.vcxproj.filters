@@ -147,7 +147,13 @@
     <ClInclude Include="Commands\CreateBasicMeshCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>
-    <ClInclude Include="Commands\SetVisibilityCommand.h">
+    <ClInclude Include="Commands\LocalLightPropertyApplier.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\NodePropertyApplier.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\OrthographicCameraPropertyApplier.h">
       <Filter>Commands</Filter>
     </ClInclude>
     <ClInclude Include="Commands\ReparentSceneNodeCommand.h">

@@ -10,6 +10,9 @@
 #include <mutex>
 
 #include <Commands/DirectionalLightPropertyApplier.h>
+#include <Commands/LocalLightPropertyApplier.h>
+#include <Commands/NodePropertyApplier.h>
+#include <Commands/OrthographicCameraPropertyApplier.h>
 #include <Commands/PerspectiveCameraPropertyApplier.h>
 #include <Commands/PropertyApplierRegistry.h>
 #include <Commands/TransformPropertyApplier.h>
@@ -30,6 +33,12 @@ namespace oxygen::interop::module {
       reg.Register(std::make_unique<TransformPropertyApplier>());
       reg.Register(std::make_unique<PerspectiveCameraPropertyApplier>());
       reg.Register(std::make_unique<DirectionalLightPropertyApplier>());
+      reg.Register(std::make_unique<OrthographicCameraPropertyApplier>());
+      reg.Register(
+        std::make_unique<LocalLightPropertyApplier<scene::PointLight>>());
+      reg.Register(
+        std::make_unique<LocalLightPropertyApplier<scene::SpotLight>>());
+      reg.Register(std::make_unique<NodePropertyApplier>());
     });
   }
 

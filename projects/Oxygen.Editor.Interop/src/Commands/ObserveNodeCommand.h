@@ -16,6 +16,9 @@
 #include <vector>
 
 #include <Commands/DirectionalLightPropertyApplier.h>
+#include <Commands/LocalLightPropertyApplier.h>
+#include <Commands/NodePropertyApplier.h>
+#include <Commands/OrthographicCameraPropertyApplier.h>
 #include <Commands/PerspectiveCameraPropertyApplier.h>
 #include <Commands/TransformPropertyApplier.h>
 #include <EditorModule/EditorCommand.h>
@@ -63,9 +66,12 @@ public:
       if (auto node = context.Scene->GetNode(*handle);
         node && node->IsAlive()) {
         result.exists = true;
+        ReadFlags(*node, result);
         ReadTransform(*node, result);
         ReadCamera(*node, result);
         ReadLight(*node, result);
+        ReadLocalLight<scene::PointLight>(*node, result);
+        ReadLocalLight<scene::SpotLight>(*node, result);
         ReadGeometry(*node, result);
         const auto sun
           = context.Scene->GetDirectionalLightResolver().ResolvePrimarySun();
@@ -131,6 +137,73 @@ private:
         value.Exposure().iso);
       Add(result, ComponentId::kPerspectiveCamera,
         PerspectiveCameraField::kAspectMode, value.GetAspectMode());
+    }
+    if (const auto camera = node.GetCameraAs<scene::OrthographicCamera>()) {
+      const auto& value = camera->get();
+      const auto projection = OrthographicCameraProjection::From(value);
+      const auto add = [&result](OrthographicCameraField field, auto field_value) {
+        Add(result, ComponentId::kOrthographicCamera, field, field_value);
+      };
+      add(OrthographicCameraField::kOrthographicSize,
+        projection.orthographic_size);
+      add(OrthographicCameraField::kAspectRatio, projection.aspect_ratio);
+      add(OrthographicCameraField::kNearPlane, projection.near_plane);
+      add(OrthographicCameraField::kFarPlane, projection.far_plane);
+      add(OrthographicCameraField::kApertureF, value.Exposure().aperture_f);
+      add(OrthographicCameraField::kShutterRate, value.Exposure().shutter_rate);
+      add(OrthographicCameraField::kIso, value.Exposure().iso);
+      add(OrthographicCameraField::kAspectMode, value.GetAspectMode());
+    }
+  }
+
+  //! Reports effective flag values, so inheritance is observable.
+  static void ReadFlags(scene::SceneNode& node, NodeObservation& result)
+  {
+    const auto flags = node.GetFlags();
+    if (!flags) {
+      return;
+    }
+    for (const auto field : { NodeField::kVisible, NodeField::kCastsShadows,
+           NodeField::kReceivesShadows }) {
+      Add(result, ComponentId::kNode, field,
+        flags->get().GetEffectiveValue(*ToSceneNodeFlag(field)));
+    }
+  }
+
+  template <LocalLight T>
+  static void ReadLocalLight(scene::SceneNode& node, NodeObservation& result)
+  {
+    const auto reference = node.GetLightAs<T>();
+    if (!reference) {
+      return;
+    }
+    const auto& light = reference->get();
+    const auto& common = light.Common();
+    const auto component = std::same_as<T, scene::SpotLight>
+      ? ComponentId::kSpotLight
+      : ComponentId::kPointLight;
+    const auto add = [&result, component](LocalLightField field, auto value) {
+      Add(result, component, field, value);
+    };
+    add(LocalLightField::kColorR, common.color_rgb.r);
+    add(LocalLightField::kColorG, common.color_rgb.g);
+    add(LocalLightField::kColorB, common.color_rgb.b);
+    add(LocalLightField::kAffectsWorld, common.affects_world);
+    add(LocalLightField::kCastsShadows, common.casts_shadows);
+    add(LocalLightField::kShadowBias, common.shadow.bias);
+    add(LocalLightField::kShadowNormalBias, common.shadow.normal_bias);
+    add(LocalLightField::kContactShadows, common.shadow.contact_shadows);
+    add(LocalLightField::kShadowResolutionHint, common.shadow.resolution_hint);
+    add(LocalLightField::kExposureCompensation,
+      common.exposure_compensation_ev);
+    add(LocalLightField::kLuminousFluxLm, light.GetLuminousFluxLm());
+    add(LocalLightField::kRange, light.GetRange());
+    add(LocalLightField::kSourceRadius, light.GetSourceRadius());
+    if constexpr (std::same_as<T, scene::SpotLight>) {
+      add(LocalLightField::kInnerConeAngleRadians,
+        light.GetInnerConeAngleRadians());
+      add(LocalLightField::kOuterConeAngleRadians,
+        light.GetOuterConeAngleRadians());
     }
   }
 

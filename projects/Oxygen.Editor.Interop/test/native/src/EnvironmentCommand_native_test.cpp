@@ -18,7 +18,7 @@
 #include <Commands/PerspectiveCameraPropertyApplier.h>
 #include <Commands/PropertyApplierRegistry.h>
 #include <Commands/SetPropertiesCommand.h>
-#include <Commands/SetVisibilityCommand.h>
+#include <Commands/NodePropertyApplier.h>
 #include <Commands/SetEnvironmentCommand.h>
 #include <Commands/SetBackgroundColorCommand.h>
 #include <EditorModule/EditorCommand.h>
@@ -493,9 +493,16 @@ auto RunSetPropertiesDirectionalLightEditInvalidatesResolvedSun(
     AttachLightCommand attach_command(node.GetHandle(), std::move(candidate));
 
     attach_command.Execute(context);
+    PropertyApplierRegistry::Bootstrap();
     const auto visibility_revision = scene->GetEnvironmentAuthoringRevision();
-    SetVisibilityCommand(node.GetHandle(), false).Execute(context);
-    SetVisibilityCommand(node.GetHandle(), true).Execute(context);
+    const auto set_visible = [&](const bool visible) -> void {
+      SetPropertiesCommand(node.GetHandle(),
+        { { ComponentId::kNode, static_cast<std::uint16_t>(NodeField::kVisible),
+          visible ? 1.0F : 0.0F } })
+        .Execute(context);
+    };
+    set_visible(false);
+    set_visible(true);
     if (scene->GetEnvironmentAuthoringRevision() != visibility_revision + 2U) {
       throw std::runtime_error("Visibility edits did not publish authoring intent");
     }
@@ -505,7 +512,6 @@ auto RunSetPropertiesDirectionalLightEditInvalidatesResolvedSun(
     result.primary_sun_resolved_before
       = scene->GetDirectionalLightResolver().ResolvePrimarySun().has_value();
 
-    PropertyApplierRegistry::Bootstrap();
     std::vector<PropertyEntry> entries {
       { ComponentId::kDirectionalLight,
         static_cast<std::uint16_t>(

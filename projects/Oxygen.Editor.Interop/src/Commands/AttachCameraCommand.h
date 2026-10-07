@@ -17,6 +17,7 @@
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
+#include <Commands/OrthographicCameraPropertyApplier.h>
 #include <EditorModule/EditorCommand.h>
 
 namespace oxygen::interop::module {
@@ -81,14 +82,11 @@ namespace oxygen::interop::module {
   class AttachOrthographicCameraCommand final : public EditorCommand {
   public:
     AttachOrthographicCameraCommand(oxygen::scene::NodeHandle node,
-      float orthographic_size, float aspect_ratio, float near_plane,
-      float far_plane, oxygen::CameraAspectMode aspect_mode)
+      const OrthographicCameraProjection& projection,
+      oxygen::CameraAspectMode aspect_mode)
       : EditorCommand(oxygen::core::PhaseId::kSceneMutation)
       , node_(node)
-      , orthographic_size_(orthographic_size)
-      , aspect_ratio_(aspect_ratio)
-      , near_plane_(near_plane)
-      , far_plane_(far_plane)
+      , projection_(projection)
       , aspect_mode_(aspect_mode)
     {
     }
@@ -104,10 +102,7 @@ namespace oxygen::interop::module {
         return;
       }
 
-      if (!std::isfinite(orthographic_size_) || orthographic_size_ <= 0.0F
-        || !std::isfinite(aspect_ratio_) || aspect_ratio_ <= 0.0F
-        || !std::isfinite(near_plane_) || near_plane_ <= 0.0F
-        || !std::isfinite(far_plane_) || far_plane_ <= near_plane_
+      if (!projection_.IsValid()
         || (aspect_mode_ != oxygen::CameraAspectMode::kAuto
           && aspect_mode_ != oxygen::CameraAspectMode::kFixed)) {
         LOG_F(ERROR, "Rejected invalid orthographic camera projection");
@@ -115,21 +110,15 @@ namespace oxygen::interop::module {
       }
 
       auto camera = std::make_unique<oxygen::scene::OrthographicCamera>();
-      camera->SetOrthographicSize(orthographic_size_);
-      camera->SetAspectRatio(aspect_ratio_);
+      projection_.ApplyTo(*camera);
       camera->SetAspectMode(aspect_mode_);
-      camera->SetNearPlane(near_plane_);
-      camera->SetFarPlane(far_plane_);
 
       (void)scene_node_opt->ReplaceCamera(std::move(camera));
     }
 
   private:
     oxygen::scene::NodeHandle node_;
-    float orthographic_size_ = 10.0F;
-    float aspect_ratio_ = 16.0F / 9.0F;
-    float near_plane_ = 0.1F;
-    float far_plane_ = 1000.0F;
+    OrthographicCameraProjection projection_;
     oxygen::CameraAspectMode aspect_mode_ = oxygen::CameraAspectMode::kAuto;
   };
 

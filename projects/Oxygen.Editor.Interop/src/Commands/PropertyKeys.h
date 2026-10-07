@@ -41,6 +41,18 @@ namespace oxygen::interop::module {
 
     //! oxygen::scene::DirectionalLight.
     kDirectionalLight = 3,
+
+    //! oxygen::scene::OrthographicCamera.
+    kOrthographicCamera = 4,
+
+    //! oxygen::scene::PointLight.
+    kPointLight = 5,
+
+    //! oxygen::scene::SpotLight.
+    kSpotLight = 6,
+
+    //! Authored node rendering flags (local values on the scene node).
+    kNode = 7,
   };
 
   //! One scalar entry on the property-pipeline wire.

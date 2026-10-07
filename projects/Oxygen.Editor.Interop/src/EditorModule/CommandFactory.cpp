@@ -38,9 +38,6 @@
 #include <Commands/ReparentSceneNodesCommand.h>
 #include <Commands/SetLocalTransformCommand.h>
 #include <Commands/SetPropertiesCommand.h>
-#include <Commands/SetVisibilityCommand.h>
-#include <Commands/SetCastShadowsCommand.h>
-#include <Commands/SetReceiveShadowsCommand.h>
 #include <Commands/UpdateTransformsForNodesCommand.h>
 #include <EditorModule/CommandFactory.h>
 
@@ -122,31 +119,19 @@ namespace Oxygen::Interop::World {
       oxygen::scene::NodeHandle handle, float orthographicSize,
       float aspectRatio, float nearPlane, float farPlane,
       oxygen::CameraAspectMode aspectMode) {
-    return new AttachOrthographicCameraCommand(handle, orthographicSize,
-      aspectRatio, nearPlane, farPlane, aspectMode);
+    return new AttachOrthographicCameraCommand(handle,
+      OrthographicCameraProjection {
+        .orthographic_size = orthographicSize,
+        .aspect_ratio = aspectRatio,
+        .near_plane = nearPlane,
+        .far_plane = farPlane,
+      },
+      aspectMode);
   }
 
   DetachCameraCommand*
     CommandFactory::CreateDetachCamera(oxygen::scene::NodeHandle handle) {
     return new DetachCameraCommand(handle);
-  }
-
-  SetVisibilityCommand*
-    CommandFactory::CreateSetVisibility(oxygen::scene::NodeHandle handle,
-      bool visible) {
-    return new SetVisibilityCommand(handle, visible);
-  }
-
-  SetCastShadowsCommand*
-    CommandFactory::CreateSetCastShadows(oxygen::scene::NodeHandle handle,
-      bool castsShadows) {
-    return new SetCastShadowsCommand(handle, castsShadows);
-  }
-
-  SetReceiveShadowsCommand*
-    CommandFactory::CreateSetReceiveShadows(oxygen::scene::NodeHandle handle,
-      bool receivesShadows) {
-    return new SetReceiveShadowsCommand(handle, receivesShadows);
   }
 
   ReparentSceneNodeCommand*

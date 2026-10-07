@@ -160,9 +160,6 @@ value struct CookedRootBindingManaged {
       float orthographicSize, float aspectRatio, float nearPlane,
       float farPlane, System::Byte aspectMode);
     void DetachCamera(System::Guid nodeId);
-    void SetVisibility(System::Guid nodeId, bool visible);
-    void SetCastShadows(System::Guid nodeId, bool castsShadows);
-    void SetReceiveShadows(System::Guid nodeId, bool receivesShadows);
     void AttachDirectionalLight(System::Guid nodeId,
     float intensityLux, float angularSizeRadians, System::Numerics::Vector3 color,
     bool affectsWorld, int mobility, bool castsShadows, float shadowBias,

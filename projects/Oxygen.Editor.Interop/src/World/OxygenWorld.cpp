@@ -35,9 +35,6 @@
 #include <Commands/SetLocalTransformCommand.h>
 #include <Commands/SetMaterialOverrideCommand.h>
 #include <Commands/SetPropertiesCommand.h>
-#include <Commands/SetVisibilityCommand.h>
-#include <Commands/SetCastShadowsCommand.h>
-#include <Commands/SetReceiveShadowsCommand.h>
 #include <Commands/UpdateTransformsForNodesCommand.h>
 #include <EditorModule/CommandFactory.h>
 #include <EditorModule/EditorModule.h>
@@ -994,78 +991,6 @@ namespace Oxygen::Interop::World {
     const auto& handle = opt.value();
     auto cmd = std::unique_ptr<DetachCameraCommand>(
       commandFactory_->CreateDetachCamera(handle));
-    editor_module->get().Enqueue(std::move(cmd));
-  }
-
-  void OxygenWorld::SetVisibility(System::Guid nodeId, bool visible) {
-    auto native_ctx = context_->NativePtr();
-    if (!native_ctx || !native_ctx->engine)
-      return;
-
-    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
-    if (!editor_module)
-      return;
-
-    auto b = nodeId.ToByteArray();
-    std::array<uint8_t, 16> key{};
-    for (int i = 0; i < 16; ++i)
-      key[i] = b[i];
-
-    auto opt = NodeRegistry::Lookup(key);
-    if (!opt.has_value())
-      return;
-
-    const auto& handle = opt.value();
-    auto cmd = std::unique_ptr<SetVisibilityCommand>(
-      commandFactory_->CreateSetVisibility(handle, visible));
-    editor_module->get().Enqueue(std::move(cmd));
-  }
-
-  void OxygenWorld::SetCastShadows(System::Guid nodeId, bool castsShadows) {
-    auto native_ctx = context_->NativePtr();
-    if (!native_ctx || !native_ctx->engine)
-      return;
-
-    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
-    if (!editor_module)
-      return;
-
-    auto b = nodeId.ToByteArray();
-    std::array<uint8_t, 16> key{};
-    for (int i = 0; i < 16; ++i)
-      key[i] = b[i];
-
-    auto opt = NodeRegistry::Lookup(key);
-    if (!opt.has_value())
-      return;
-
-    const auto& handle = opt.value();
-    auto cmd = std::unique_ptr<SetCastShadowsCommand>(
-      commandFactory_->CreateSetCastShadows(handle, castsShadows));
-    editor_module->get().Enqueue(std::move(cmd));
-  }
-
-  void OxygenWorld::SetReceiveShadows(System::Guid nodeId, bool receivesShadows) {
-    auto native_ctx = context_->NativePtr();
-    if (!native_ctx || !native_ctx->engine)
-      return;
-
-    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
-    if (!editor_module)
-      return;
-
-    auto b = nodeId.ToByteArray();
-    std::array<uint8_t, 16> key{};
-    for (int i = 0; i < 16; ++i)
-      key[i] = b[i];
-
-    auto opt = NodeRegistry::Lookup(key);
-    if (!opt.has_value())
-      return;
-
-    const auto& handle = opt.value();
-    auto cmd = std::unique_ptr<SetReceiveShadowsCommand>(
-      commandFactory_->CreateSetReceiveShadows(handle, receivesShadows));
     editor_module->get().Enqueue(std::move(cmd));
   }
 

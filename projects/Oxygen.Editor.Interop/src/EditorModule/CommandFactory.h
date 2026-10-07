@@ -36,9 +36,6 @@ class SetGeometryCommand;
 class SetMaterialOverrideCommand;
 struct MaterialSlotTarget;
 enum class MaterialSlotAssignmentIntent : std::uint8_t;
-class SetVisibilityCommand;
-class SetCastShadowsCommand;
-class SetReceiveShadowsCommand;
 class ReparentSceneNodeCommand;
 class ReparentSceneNodesCommand;
 class UpdateTransformsForNodesCommand;
@@ -108,14 +105,8 @@ namespace Oxygen::Interop::World {
     virtual oxygen::interop::module::DetachCameraCommand*
       CreateDetachCamera(oxygen::scene::NodeHandle handle);
 
-    virtual oxygen::interop::module::SetVisibilityCommand*
-      CreateSetVisibility(oxygen::scene::NodeHandle handle, bool visible);
 
-    virtual oxygen::interop::module::SetCastShadowsCommand*
-      CreateSetCastShadows(oxygen::scene::NodeHandle handle, bool castsShadows);
 
-    virtual oxygen::interop::module::SetReceiveShadowsCommand*
-      CreateSetReceiveShadows(oxygen::scene::NodeHandle handle, bool receivesShadows);
 
     virtual oxygen::interop::module::ReparentSceneNodeCommand*
       CreateReparentSceneNode(oxygen::scene::NodeHandle child,

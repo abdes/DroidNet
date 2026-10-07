@@ -95,7 +95,8 @@ namespace oxygen::interop::module {
         applier->Apply(*sceneNode, run);
         applied = true;
         if (component == ComponentId::kDirectionalLight
-          || component == ComponentId::kTransform) {
+          || component == ComponentId::kTransform
+          || component == ComponentId::kNode) {
           context.Scene->NotifyEnvironmentAuthoringChange();
         }
       } else {
