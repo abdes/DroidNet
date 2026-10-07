@@ -47,7 +47,7 @@ public:
     std::shared_ptr<graphics::CommandList> command_list,
     observer_ptr<graphics::CommandQueue> target_queue);
 
-  ~CommandRecorder() = default;
+  ~CommandRecorder() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(CommandRecorder)
   OXYGEN_MAKE_NON_MOVABLE(CommandRecorder)
@@ -55,7 +55,7 @@ public:
   //! Returns the underlying native D3D12 command list for cases where backend
   //! implementations need direct access to the ID3D12GraphicsCommandList.
   //! Use sparingly; prefer the CommandRecorder abstraction where possible.
-  auto GetD3D12CommandList() const -> ID3D12GraphicsCommandList*;
+  [[nodiscard]] auto GetD3D12CommandList() const -> ID3D12GraphicsCommandList*;
 
   auto Begin() -> void override;
 
@@ -102,11 +102,11 @@ public:
     -> void override;
 
   auto BindFrameBuffer(const Framebuffer& framebuffer) -> void override;
+  //! Defaults belong to the graphics::CommandRecorder interface.
   auto ClearFramebuffer(const Framebuffer& framebuffer,
-    std::optional<std::vector<std::optional<Color>>> color_clear_values
-    = std::nullopt,
-    std::optional<float> depth_clear_value = std::nullopt,
-    std::optional<uint8_t> stencil_clear_value = std::nullopt) -> void override;
+    std::optional<std::vector<std::optional<Color>>> color_clear_values,
+    std::optional<float> depth_clear_value,
+    std::optional<uint8_t> stencil_clear_value) -> void override;
 
   //! Clears a depth-stencil view.
   /*!
@@ -182,7 +182,7 @@ private:
 
   size_t graphics_pipeline_hash_ = 0;
   size_t compute_pipeline_hash_ = 0;
-  std::unique_ptr<graphics::IGpuProfileCollector> tracy_gpu_collector_ {};
+  std::unique_ptr<graphics::IGpuProfileCollector> tracy_gpu_collector_;
 };
 
 } // namespace oxygen::graphics::d3d12

@@ -26,16 +26,12 @@
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
-#include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
-#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
@@ -61,12 +57,9 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using graphics::ClearFlags;
-using graphics::DescriptorVisibility;
 using graphics::Framebuffer;
 using graphics::FramebufferDesc;
 using graphics::ResourceStates;
-using graphics::ResourceViewType;
 using graphics::Texture;
 using graphics::TextureViewDescription;
 
@@ -98,48 +91,19 @@ NOLINT_TEST_F(ExposureGpuTest, QueuedHzbBuildsKeepTheirOwnDepthPyramids)
       }));
     auto depth = textures.back()->GetSceneDepthResource();
     sources.emplace_back(extent.x * extent.y);
-    auto& registry = Backend().GetResourceRegistry();
-    if (!registry.Contains(*depth)) {
-      registry.Register(depth);
-    }
-    const auto dsv_desc = TextureViewDescription {
-      .view_type = ResourceViewType::kTexture_DSV,
-      .visibility = DescriptorVisibility::kCpuOnly,
-      .format = depth->GetDescriptor().format,
-      .dimension = TextureType::kTexture2D,
-    };
-    auto dsv = registry.Find(*depth, dsv_desc);
-    if (!dsv->IsValid()) {
-      auto allocation
-        = renderer_->GetGraphics()->GetDescriptorAllocator().AllocateRaw(
-          ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly);
-      dsv = registry.RegisterView(*depth, std::move(allocation), dsv_desc);
-    }
-    CHECK_F(dsv->IsValid());
-    auto recorder = AcquireRecorder("HZB depth fixture pattern");
-    EnsureTracked(*recorder, depth, depth->GetDescriptor().initial_state);
-    recorder->RequireResourceState(*depth, ResourceStates::kDepthWrite);
-    recorder->FlushBarriers();
+    // Tracked registration: the fixture unregisters it at teardown.
+    RegisterResource(depth);
+    // Write the per-texel depth pattern by copy: clears could only match the
+    // depth texture's creation clear value.
     for (unsigned y = 0U; y < extent.y; ++y) {
       for (unsigned x = 0U; x < extent.x; ++x) {
-        const float value = static_cast<float>(
-                              (((x * 3U) + (y * 5U) + (view * 17U)) % 63U) + 1U)
+        sources.back().at((y * extent.x) + x)
+          = static_cast<float>(
+              (((x * 3U) + (y * 5U) + (view * 17U)) % 63U) + 1U)
           / 64.0F;
-        sources.back().at((y * extent.x) + x) = value;
-        const std::array rects {
-          Scissors {
-            .left = static_cast<int>(x),
-            .top = static_cast<int>(y),
-            .right = static_cast<int>(x + 1U),
-            .bottom = static_cast<int>(y + 1U),
-          },
-        };
-        recorder->ClearDepthStencilView(
-          *depth, dsv, ClearFlags::kDepth, value, 0U, rects);
       }
     }
-    recorder->RequireResourceStateFinal(
-      *depth, ResourceStates::kShaderResource);
+    UploadDepth(*depth, sources.back(), ResourceStates::kShaderResource);
   }
   WaitForQueueIdle();
   ctx_.frame_sequence = frame::SequenceNumber {

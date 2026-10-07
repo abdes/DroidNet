@@ -4,35 +4,69 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <array>
+#include <cstdint>
 #include <cstring>
+#include <memory>
+#include <optional>
+#include <ranges>
+#include <span>
 #include <stdexcept>
+#include <string>
+#include <type_traits>
+#include <utility>
 #include <variant>
+#include <vector>
 
-#include <wrl/client.h> // For Microsoft::WRL::ComPtr
+#include <basetsd.h>
+#include <d3d12.h>
+#include <d3dcommon.h>
+#include <dxgiformat.h>
+#include <minwindef.h>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/StaticVector.h>
 #include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Base/VariantHelpers.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Converters.h>
-#include <Oxygen/Graphics/Direct3D12/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/TextureReadback.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
-#include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
-#include <Oxygen/Graphics/common/Framebuffer.h>
 #include <Oxygen/Profiling/CpuProfileScope.h>
-#include <Oxygen/Tracy/D3D12.h>
+#include <Oxygen/Profiling/ProfileScope.h>
+#ifdef OXYGEN_WITH_TRACY
+#  include <Oxygen/Tracy/D3D12.h>
+#endif
 
 #if __has_include(<pix3.h>)
 #  include <pix3.h>
@@ -48,7 +82,7 @@ using oxygen::graphics::detail::TextureBarrierDesc;
 
 namespace {
 
-#if defined(OXYGEN_WITH_TRACY)
+#ifdef OXYGEN_WITH_TRACY
 
 constexpr uint8_t kTracyCollectorStateFlagActive = 1U << 0U;
 
@@ -128,8 +162,9 @@ auto ConvertResourceStates(oxygen::graphics::ResourceStates common_states)
   D3D12_RESOURCE_STATES d3d_states = {};
 
   // Define a local capturing lambda to handle the mapping
-  auto map_flag_if_present = [&](const ResourceStates flag_to_check,
-                               const D3D12_RESOURCE_STATES d3d12_equivalent) {
+  auto map_flag_if_present
+    = [&](const ResourceStates flag_to_check,
+        const D3D12_RESOURCE_STATES d3d12_equivalent) -> void {
     if ((common_states & flag_to_check) == flag_to_check) {
       d3d_states |= d3d12_equivalent;
     }
@@ -282,7 +317,8 @@ auto ProcessBarrierDesc(const MemoryBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
           .pResource = desc.resource->AsPointer<ID3D12Resource>() != nullptr
             ? desc.resource->AsPointer<ID3D12Resource>()
             : nullptr,
-        } };
+        },
+    };
   return d3d12_barrier;
 }
 
@@ -291,11 +327,11 @@ auto ProcessBarrierDesc(const MemoryBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
 CommandRecorder::CommandRecorder(std::weak_ptr<Graphics> graphics_weak,
   std::shared_ptr<graphics::CommandList> command_list,
   observer_ptr<graphics::CommandQueue> target_queue)
-  : Base(command_list, target_queue)
+  : Base(std::move(command_list), target_queue)
   , graphics_weak_(std::move(graphics_weak))
 {
   DCHECK_F(!graphics_weak_.expired(), "Graphics backend cannot be null");
-#if defined(OXYGEN_WITH_TRACY)
+#ifdef OXYGEN_WITH_TRACY
   if (target_queue != nullptr) {
     auto* d3d12_queue
       = static_cast<oxygen::graphics::d3d12::CommandQueue*>(target_queue.get());
@@ -443,13 +479,16 @@ auto CommandRecorder::SetVertexBuffers(const uint32_t num,
   DCHECK_EQ_F(
     command_list.GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
 
-  std::vector<D3D12_VERTEX_BUFFER_VIEW> vertex_buffer_views(num);
-  for (uint32_t i = 0; i < num; ++i) {
-    const auto buffer = std::static_pointer_cast<Buffer>(vertex_buffers[i]);
-    vertex_buffer_views[i].BufferLocation
-      = buffer->GetResource()->GetGPUVirtualAddress();
-    vertex_buffer_views[i].SizeInBytes = static_cast<UINT>(buffer->GetSize());
-    vertex_buffer_views[i].StrideInBytes = strides[i];
+  std::vector<D3D12_VERTEX_BUFFER_VIEW> vertex_buffer_views;
+  vertex_buffer_views.reserve(num);
+  for (const auto& [vertex_buffer, stride] :
+    std::views::zip(std::span(vertex_buffers, num), std::span(strides, num))) {
+    const auto buffer = std::static_pointer_cast<Buffer>(vertex_buffer);
+    vertex_buffer_views.push_back(D3D12_VERTEX_BUFFER_VIEW {
+      .BufferLocation = buffer->GetResource()->GetGPUVirtualAddress(),
+      .SizeInBytes = static_cast<UINT>(buffer->GetSize()),
+      .StrideInBytes = stride,
+    });
   }
 
   command_list.GetCommandList()->IASetVertexBuffers(
@@ -526,8 +565,8 @@ auto CommandRecorder::ExecuteIndirect(const graphics::Buffer& argument_buffer,
   ID3D12Resource* count_resource = nullptr;
   UINT64 count_buffer_offset = 0U;
   if (execution_desc.count_buffer != nullptr) {
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
     const auto& count_buf
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
       = static_cast<const Buffer&>(*execution_desc.count_buffer);
     count_resource = count_buf.GetResource();
     DCHECK_NOTNULL_F(count_resource);
@@ -557,10 +596,10 @@ auto CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc) -> void
   const auto& command_list = GetConcreteCommandList();
   auto* d3d12_command_list = command_list.GetCommandList();
 
+  // The D3D12 backend only overrides the const accessor; use the base one.
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto& allocator = static_cast<DescriptorAllocator&>(
-    const_cast<graphics::DescriptorAllocator&>(
-      graphics->GetDescriptorAllocator()));
+    graphics->oxygen::Graphics::GetDescriptorAllocator());
   // Ensure descriptor heaps are bound before setting a root signature that may
   // expect directly-indexed shader-visible heaps (D3D12 requirement). Bind
   // heaps first, set the root signature, then bind root descriptor tables.
@@ -593,10 +632,10 @@ auto CommandRecorder::SetPipelineState(ComputePipelineDesc desc) -> void
   const auto& command_list = GetConcreteCommandList();
   auto* d3d12_command_list = command_list.GetCommandList();
 
+  // The D3D12 backend only overrides the const accessor; use the base one.
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto& allocator = static_cast<DescriptorAllocator&>(
-    const_cast<graphics::DescriptorAllocator&>(
-      graphics->GetDescriptorAllocator()));
+    graphics->oxygen::Graphics::GetDescriptorAllocator());
   // Ensure descriptor heaps are bound before setting a compute root signature
   // which may depend on directly-indexed sampler/SRV heaps. Bind heaps, set
   // root signature, then bind root descriptor tables.
@@ -674,9 +713,15 @@ auto CommandRecorder::ExecuteBarriers(const std::span<const Barrier> barriers)
     const auto& desc_variant = barrier.GetDescriptor();
     d3d12_barriers.push_back(std::visit(
       Overloads {
-        [](const BufferBarrierDesc& desc) { return ProcessBarrierDesc(desc); },
-        [](const TextureBarrierDesc& desc) { return ProcessBarrierDesc(desc); },
-        [](const MemoryBarrierDesc& desc) { return ProcessBarrierDesc(desc); },
+        [](const BufferBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER {
+          return ProcessBarrierDesc(desc);
+        },
+        [](const TextureBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER {
+          return ProcessBarrierDesc(desc);
+        },
+        [](const MemoryBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER {
+          return ProcessBarrierDesc(desc);
+        },
       },
       desc_variant));
   }
@@ -689,14 +734,13 @@ auto CommandRecorder::ExecuteBarriers(const std::span<const Barrier> barriers)
 
 auto CommandRecorder::GetConcreteCommandList() const -> CommandList&
 {
-  // NOLINTNEXTLINE(*-pro-type-static-cast_down_cast)
+  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   return static_cast<CommandList&>(GetCommandList());
 }
 
 auto CommandRecorder::BindFrameBuffer(const Framebuffer& framebuffer) -> void
 {
-  // NOLINTNEXTLINE(*-pro-type-static-cast_down_cast)
-  const auto& fb = static_cast<const Framebuffer&>(framebuffer);
+  const auto& fb = framebuffer;
   StaticVector<D3D12_CPU_DESCRIPTOR_HANDLE, kMaxRenderTargets> rtvs;
   for (const auto& rtv : fb.GetRenderTargetViews()) {
     rtvs.emplace_back(rtv->AsInteger());
@@ -723,8 +767,7 @@ auto CommandRecorder::ClearFramebuffer(const Framebuffer& framebuffer,
 {
   using graphics::detail::GetFormatInfo;
 
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-  const auto& fb = static_cast<const Framebuffer&>(framebuffer);
+  const auto& fb = framebuffer;
 
   const auto& command_list_impl = GetConcreteCommandList();
   auto* d3d12_command_list = command_list_impl.GetCommandList();
@@ -734,27 +777,35 @@ auto CommandRecorder::ClearFramebuffer(const Framebuffer& framebuffer,
 
   // Clear color attachments
   const auto rtvs = fb.GetRenderTargetViews();
-  for (size_t i = 0; i < rtvs.size(); ++i) {
-    const auto& attachment = desc.color_attachments[i];
+  for (const auto& [i, rtv] : std::views::enumerate(rtvs)) {
+    const auto& attachment
+      = desc.color_attachments.at(static_cast<std::size_t>(i));
     const auto& format_info = GetFormatInfo(attachment.format);
     if (format_info.has_depth || format_info.has_stencil) {
       continue;
     }
-    const D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle { .ptr
-      = rtvs[i]->AsInteger() };
-    const Color clear_color = attachment.ResolveClearColor(
-      color_clear_values && i < color_clear_values->size()
-        ? (*color_clear_values)[i]
+    const D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle {
+      .ptr = rtv->AsInteger(),
+    };
+    const Color clear_color = attachment.ResolveClearColor(color_clear_values
+          && static_cast<std::size_t>(i) < color_clear_values->size()
+        ? color_clear_values->at(static_cast<std::size_t>(i))
         : std::nullopt);
-    const float color[4]
-      = { clear_color.r, clear_color.g, clear_color.b, clear_color.a };
-    d3d12_command_list->ClearRenderTargetView(rtv_handle, color, 0, nullptr);
+    const std::array color {
+      clear_color.r,
+      clear_color.g,
+      clear_color.b,
+      clear_color.a,
+    };
+    d3d12_command_list->ClearRenderTargetView(
+      rtv_handle, color.data(), 0, nullptr);
   }
 
   // Clear depth/stencil attachment
   if (desc.depth_attachment.IsValid()) {
-    const D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle { .ptr
-      = fb.GetDepthStencilView()->AsInteger() };
+    const D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle {
+      .ptr = fb.GetDepthStencilView()->AsInteger(),
+    };
     const auto& depth_format_info = GetFormatInfo(desc.depth_attachment.format);
 
     auto [depth, stencil] = desc.depth_attachment.ResolveDepthStencil(
@@ -930,38 +981,101 @@ auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
   DCHECK_F(graphics != nullptr, "Graphics backend is no longer valid");
   auto* device = graphics->GetCurrentDevice();
   const auto& desc = dst.GetDescriptor();
+  const auto& format_info = graphics::detail::GetFormatInfo(desc.format);
+  const bool depth_stencil = format_info.has_depth || format_info.has_stencil;
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+  const auto plane_count = static_cast<const Texture&>(dst).GetPlaneCount();
+  // D3D12 subresources are ordered mip, then array slice, then plane.
+  const auto array_size = desc.texture_type == TextureType::kTexture3D
+    ? 1U
+    : static_cast<UINT>(desc.array_size);
+  const auto plane_stride = desc.mip_levels * array_size;
 
   for (const auto& region : regions) {
     // Resolve destination slice and subresources
     auto dst_slice = region.dst_slice.Resolve(desc);
     auto subresources = region.dst_subresources.Resolve(desc, true);
+    CHECK_LT_F(region.plane_slice, plane_count,
+      "CopyBufferToTexture plane {} does not exist in `{}` ({} planes)",
+      region.plane_slice, desc.debug_name, plane_count);
+    // A caller layout repeats the region per array slice; mips differ in size.
+    CHECK_F(region.buffer_row_pitch == 0U || subresources.num_mip_levels == 1U,
+      "CopyBufferToTexture with a row pitch into `{}` must target one mip, "
+      "got {}",
+      desc.debug_name, subresources.num_mip_levels);
+    if (depth_stencil) {
+      // Depth and stencil data can only be copied as whole subresources.
+      const auto mip_width = (std::max)(1U, desc.width >> dst_slice.mip_level);
+      const auto mip_height
+        = (std::max)(1U, desc.height >> dst_slice.mip_level);
+      CHECK_F(dst_slice.x == 0U && dst_slice.y == 0U && dst_slice.z == 0U
+          && dst_slice.width == mip_width && dst_slice.height == mip_height,
+        "CopyBufferToTexture into depth/stencil `{}` must cover whole "
+        "subresources ({}x{} at mip {}), got {}x{} at ({}, {})",
+        desc.debug_name, mip_width, mip_height, dst_slice.mip_level,
+        dst_slice.width, dst_slice.height, dst_slice.x, dst_slice.y);
+    }
 
-    const UINT first_sub
-      = dst_slice.array_slice * desc.mip_levels + dst_slice.mip_level;
+    const UINT first_sub = (region.plane_slice * plane_stride)
+      + (dst_slice.array_slice * desc.mip_levels) + dst_slice.mip_level;
     const UINT num_sub
       = subresources.num_array_slices * subresources.num_mip_levels;
 
     std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> footprints(num_sub);
     std::vector<UINT> row_counts(num_sub);
+    std::vector<UINT64> row_sizes(num_sub);
     UINT64 total_bytes = 0;
 
     if (device) {
-      // Get a resource desc for the destination texture
+      // Get a resource desc for the destination texture. The device layout
+      // supplies each plane's copy format; it is also the buffer layout when
+      // the caller does not specify one.
       D3D12_RESOURCE_DESC rd = dst_native->GetDesc();
       device->GetCopyableFootprints(&rd, first_sub, num_sub, 0,
-        footprints.data(), row_counts.data(), nullptr, &total_bytes);
+        footprints.data(), row_counts.data(), row_sizes.data(), &total_bytes);
     }
+    const auto block
+      = (std::max)(1U, static_cast<UINT>(format_info.block_size));
 
     // Iterate each array slice / mip targeted
     for (UINT si = 0; si < subresources.num_array_slices; ++si) {
       for (UINT mi = 0; mi < subresources.num_mip_levels; ++mi) {
-        const UINT sub_index = si * subresources.num_mip_levels + mi;
-        const auto& fp = footprints[sub_index];
+        const UINT sub_index = (si * subresources.num_mip_levels) + mi;
+        const auto& fp = footprints.at(sub_index);
 
-        // Setup src (buffer) location using the placed footprint but adjust the
-        // offset by the region.buffer_offset if provided.
+        // Setup src (buffer) location. Without a caller row pitch the buffer
+        // holds the device's packed layout of the whole subresources;
+        // otherwise it holds the region in the caller's layout, one region per
+        // targeted subresource, and the device's preferred pitch (which may
+        // exceed the 256-byte minimum) must not be assumed.
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT adjusted_fp = fp;
-        adjusted_fp.Offset += static_cast<UINT64>(region.buffer_offset);
+        if (region.buffer_row_pitch == 0U) {
+          adjusted_fp.Offset += static_cast<UINT64>(region.buffer_offset);
+        } else {
+          const auto blocks_wide = (fp.Footprint.Width + block - 1U) / block;
+          const auto block_bytes
+            = blocks_wide == 0U ? 0U : row_sizes.at(sub_index) / blocks_wide;
+          const auto region_row_bytes
+            = block_bytes * ((dst_slice.width + block - 1U) / block);
+          CHECK_F(
+            region.buffer_row_pitch % D3D12_TEXTURE_DATA_PITCH_ALIGNMENT == 0U
+              && region.buffer_row_pitch >= region_row_bytes,
+            "CopyBufferToTexture row pitch {} for `{}` must be {}-byte "
+            "aligned and hold {} bytes per row",
+            region.buffer_row_pitch, desc.debug_name,
+            D3D12_TEXTURE_DATA_PITCH_ALIGNMENT, region_row_bytes);
+          const auto rows = (dst_slice.height + block - 1U) / block;
+          const auto slice_pitch = region.buffer_slice_pitch != 0U
+            ? region.buffer_slice_pitch
+            : region.buffer_row_pitch * rows;
+          adjusted_fp.Offset = region.buffer_offset
+            + (static_cast<UINT64>(sub_index) * slice_pitch * dst_slice.depth);
+          adjusted_fp.Footprint.Width = dst_slice.width;
+          adjusted_fp.Footprint.Height = dst_slice.height;
+          adjusted_fp.Footprint.Depth = dst_slice.depth;
+          adjusted_fp.Footprint.RowPitch
+            = static_cast<UINT>(region.buffer_row_pitch);
+        }
 
         D3D12_TEXTURE_COPY_LOCATION src_loc = {};
         src_loc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
@@ -972,8 +1086,8 @@ auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
         D3D12_TEXTURE_COPY_LOCATION dst_loc = {};
         dst_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
         dst_loc.pResource = dst_native;
-        const UINT dst_subresource_index
-          = (dst_slice.array_slice + si) * desc.mip_levels
+        const UINT dst_subresource_index = (region.plane_slice * plane_stride)
+          + ((dst_slice.array_slice + si) * desc.mip_levels)
           + (dst_slice.mip_level + mi);
         dst_loc.SubresourceIndex = dst_subresource_index;
 
@@ -1060,10 +1174,10 @@ auto CommandRecorder::CopyTexture(const graphics::Texture& src,
   for (UINT si = 0; si < resolved_src_sub.num_array_slices; ++si) {
     for (UINT mi = 0; mi < resolved_src_sub.num_mip_levels; ++mi) {
       const UINT src_subresource_index
-        = (resolved_src_sub.base_array_slice + si) * src_desc.mip_levels
+        = ((resolved_src_sub.base_array_slice + si) * src_desc.mip_levels)
         + (resolved_src_sub.base_mip_level + mi);
       const UINT dst_subresource_index
-        = (resolved_dst_sub.base_array_slice + si) * dst_desc.mip_levels
+        = ((resolved_dst_sub.base_array_slice + si) * dst_desc.mip_levels)
         + (resolved_dst_sub.base_mip_level + mi);
 
       // Setup source location
@@ -1095,7 +1209,9 @@ auto CommandRecorder::CopyTexture(const graphics::Texture& src,
 }
 
 // D3D12 specific command implementations
+// The depth/stencil value pair is fixed by the CommandRecorder interface.
 auto CommandRecorder::ClearDepthStencilView(const graphics::Texture& texture,
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   const NativeView& dsv, const ClearFlags clear_flags, const float depth,
   const uint8_t stencil) -> void
 {
@@ -1202,6 +1318,7 @@ auto CommandRecorder::BindIndexBuffer(
   DCHECK_EQ_F(
     command_list.GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
 
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
   const auto* d3d12_buffer = static_cast<const Buffer*>(&buffer);
   DCHECK_NOTNULL_F(d3d12_buffer, "Buffer must be a D3D12 buffer");
 

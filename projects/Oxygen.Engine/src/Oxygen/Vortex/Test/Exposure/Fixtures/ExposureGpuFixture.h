@@ -131,6 +131,20 @@ protected:
     std::span<const Pixel> pixels, std::uint32_t depth = 1U,
     Format format = Format::kRGBA32Float, bool bindless_texture = false)
     -> Signal;
+  //! Writes `depths` (row-major, one per texel of mip 0) into the depth plane
+  //! of `texture` by copy, then leaves it in `final_state`. Clears can only
+  //! write the value the texture was created with without a slow-clear hint.
+  auto UploadDepth(graphics::Texture& texture, std::span<const float> depths,
+    graphics::ResourceStates final_state
+    = graphics::ResourceStates::kDepthWrite) -> void;
+  //! Writes `color` to every texel of an RGBA32Float `texture` by copy.
+  auto FillColor(graphics::Texture& texture, const Pixel& color,
+    graphics::ResourceStates final_state
+    = graphics::ResourceStates::kRenderTarget) -> void;
+  //! Copies tightly packed mip-0 `texels` into plane 0 of `texture`.
+  auto WriteTexels(graphics::Texture& texture,
+    std::span<const std::byte> texels, std::uint32_t texel_bytes,
+    graphics::ResourceStates final_state) -> void;
   auto Uniform(float value, std::uint32_t width = 1U, std::uint32_t height = 1U)
     -> Signal;
   template <typename T>

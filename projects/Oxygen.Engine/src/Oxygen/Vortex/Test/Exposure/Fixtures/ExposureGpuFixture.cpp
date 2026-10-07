@@ -22,6 +22,8 @@
 #include <utility>
 #include <vector>
 
+#include <d3d12.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/GraphicsConfig.h>
@@ -351,6 +353,64 @@ auto ExposureGpuTest::MakeSignal(std::uint32_t width, std::uint32_t height,
     .texture = std::move(texture),
     .srv = srv,
   };
+}
+
+auto ExposureGpuTest::UploadDepth(Texture& texture,
+  const std::span<const float> depths, const ResourceStates final_state) -> void
+{
+  const auto& desc = texture.GetDescriptor();
+  CHECK_EQ_F(depths.size(), static_cast<std::size_t>(desc.width) * desc.height);
+  WriteTexels(texture, std::as_bytes(depths), sizeof(float), final_state);
+}
+
+auto ExposureGpuTest::FillColor(Texture& texture, const Pixel& color,
+  const ResourceStates final_state) -> void
+{
+  const auto& desc = texture.GetDescriptor();
+  CHECK_F(desc.format == Format::kRGBA32Float);
+  const std::vector<Pixel> texels(
+    static_cast<std::size_t>(desc.width) * desc.height, color);
+  WriteTexels(
+    texture, std::as_bytes(std::span { texels }), sizeof(Pixel), final_state);
+}
+
+auto ExposureGpuTest::WriteTexels(Texture& texture,
+  const std::span<const std::byte> texels, const std::uint32_t texel_bytes,
+  const ResourceStates final_state) -> void
+{
+  const auto& desc = texture.GetDescriptor();
+  const auto row_bytes = static_cast<std::uint64_t>(desc.width) * texel_bytes;
+  const auto pitch = ((row_bytes + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1U)
+                       / D3D12_TEXTURE_DATA_PITCH_ALIGNMENT)
+    * D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
+  std::vector<std::byte> bytes(static_cast<std::size_t>(pitch) * desc.height);
+  for (std::uint32_t y = 0U; y < desc.height; ++y) {
+    std::memcpy(bytes.data() + (y * pitch), texels.data() + (y * row_bytes),
+      static_cast<std::size_t>(row_bytes));
+  }
+  auto upload = CreateUploadBuffer(SizeBytes { bytes.size() });
+  upload->Update(bytes.data(), bytes.size(), 0U);
+  auto recorder = AcquireRecorder("Exposure fixture texel upload");
+  EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+  // A texture the queue has not seen is still in its creation state.
+  if (!recorder->AdoptKnownResourceState(texture)) {
+    recorder->BeginTrackingResourceState(texture, desc.initial_state);
+  }
+  recorder->RequireResourceState(texture, ResourceStates::kCopyDest);
+  recorder->FlushBarriers();
+  recorder->CopyBufferToTexture(*upload,
+    graphics::TextureUploadRegion {
+      .buffer_offset = 0U,
+      .buffer_row_pitch = pitch,
+      .buffer_slice_pitch = pitch * desc.height,
+      .dst_slice = { .width = desc.width, .height = desc.height, .depth = 1U },
+      .dst_subresources = { .base_mip_level = 0U,
+        .num_mip_levels = 1U,
+        .base_array_slice = 0U,
+        .num_array_slices = 1U, },
+    },
+    texture);
+  recorder->RequireResourceStateFinal(texture, final_state);
 }
 
 auto ExposureGpuTest::Uniform(

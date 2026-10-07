@@ -80,6 +80,10 @@ NOLINT_TEST_F(ExposureGpuTest, FogShadowsFollowAtmosphereSourceIdentity)
       .texture_type = TextureType::kTexture2DArray,
       .is_shader_resource = true,
       .is_render_target = true,
+      // Each surface is cleared once to its own reversed-Z depth below.
+      .clear_value
+      = graphics::Color { static_cast<float>(index), 0.0F, 0.0F, 0.0F },
+      .use_clear_value = true,
       .initial_state = ResourceStates::kCommon,
     });
     auto srv = allocator.AllocateBindless(
@@ -316,7 +320,11 @@ NOLINT_TEST_F(ExposureGpuTest, FogShadowsFollowAtmosphereSourceIdentity)
     {
       auto recorder
         = AcquireRecorder("Fog source identity production dispatch");
-      EnsureTracked(*recorder, output, ResourceStates::kCommon);
+      // The output is reused across cases; the previous readback left it in
+      // COPY_SOURCE, which the queue knows. Only a fresh texture is COMMON.
+      if (!recorder->AdoptKnownResourceState(*output)) {
+        EnsureTracked(*recorder, output, ResourceStates::kCommon);
+      }
       recorder->RequireResourceState(*output, ResourceStates::kUnorderedAccess);
       recorder->FlushBarriers();
       recorder->SetPipelineState(pipeline);
@@ -430,7 +438,11 @@ NOLINT_TEST_F(ExposureGpuTest, VolumetricPhaseScattersTowardEachAtmosphereLight)
     const auto constants = PublishFixtureData(params);
     {
       auto recorder = AcquireRecorder("Volumetric phase production dispatch");
-      EnsureTracked(*recorder, output, ResourceStates::kCommon);
+      // The output is reused across cases; the previous readback left it in
+      // COPY_SOURCE, which the queue knows. Only a fresh texture is COMMON.
+      if (!recorder->AdoptKnownResourceState(*output)) {
+        EnsureTracked(*recorder, output, ResourceStates::kCommon);
+      }
       recorder->RequireResourceState(*output, ResourceStates::kUnorderedAccess);
       recorder->FlushBarriers();
       recorder->SetPipelineState(pipeline);

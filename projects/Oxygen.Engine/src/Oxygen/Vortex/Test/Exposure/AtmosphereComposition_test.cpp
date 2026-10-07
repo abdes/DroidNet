@@ -108,10 +108,6 @@ namespace {
           .enable_velocity = false,
           .scene_color_format = Format::kRGBA32Float,
         });
-      framebuffer_ = Backend().CreateFramebuffer(graphics::FramebufferDesc {}
-          .AddColorAttachment(textures_->GetSceneColorResource())
-          .SetDepthAttachment(
-            { .texture = textures_->GetSceneDepthResource() }));
       ap_ = std::make_unique<environment::AtmosphereComposePass>(*renderer_);
       sky_ = std::make_unique<environment::SkyPass>(*renderer_);
       fog_ = std::make_unique<environment::FogPass>(*renderer_);
@@ -126,7 +122,6 @@ namespace {
       fog_.reset();
       sky_.reset();
       ap_.reset();
-      framebuffer_.reset();
       textures_.reset();
       scene_.reset();
       ExposureGpuTest::TearDown();
@@ -217,33 +212,17 @@ namespace {
       ctx_.view_constants = constants;
     }
 
+    //! Writes the case's color and depth by copy: clears could only use the
+    //! scene textures' creation clear values without slow-clear hints.
     auto Clear(const Pixel& color, float depth) -> void
     {
-      auto recorder = AcquireRecorder("Atmosphere fixture clear");
       auto& scene_color = textures_->GetSceneColor();
       auto& scene_depth = textures_->GetSceneDepth();
-      if (!recorder->AdoptKnownResourceState(scene_color)) {
-        recorder->BeginTrackingResourceState(
-          scene_color, ResourceStates::kCommon);
-      }
-      if (!recorder->AdoptKnownResourceState(scene_depth)) {
-        recorder->BeginTrackingResourceState(
-          scene_depth, ResourceStates::kCommon);
-      }
-      recorder->RequireResourceState(
-        scene_color, ResourceStates::kRenderTarget);
-      recorder->RequireResourceState(scene_depth, ResourceStates::kDepthWrite);
-      recorder->FlushBarriers();
-      recorder->ClearFramebuffer(*framebuffer_,
-        std::vector<std::optional<graphics::Color>> {
-          graphics::Color {
-            color.at(0),
-            color.at(1),
-            color.at(2),
-            color.at(3),
-          },
-        },
-        depth);
+      FillColor(scene_color, color, ResourceStates::kRenderTarget);
+      const auto& desc = scene_depth.GetDescriptor();
+      const std::vector<float> depths(
+        static_cast<std::size_t>(desc.width) * desc.height, depth);
+      UploadDepth(scene_depth, depths, ResourceStates::kDepthWrite);
     }
 
     auto DrawAerial() -> std::vector<Pixel>
@@ -279,7 +258,6 @@ namespace {
   private:
     std::unique_ptr<scene::Scene> scene_;
     std::unique_ptr<SceneTextures> textures_;
-    std::shared_ptr<graphics::Framebuffer> framebuffer_;
     std::unique_ptr<environment::AtmosphereComposePass> ap_;
     std::unique_ptr<environment::SkyPass> sky_;
     std::unique_ptr<environment::FogPass> fog_;

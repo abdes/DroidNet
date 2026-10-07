@@ -13,7 +13,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
-#include <Oxygen/Composition/ObjectMetadata.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -60,7 +60,7 @@ struct TextureDesc {
   // created at the time of memory binding. bool is_virtual = false; bool
   // is_tiled = false;
 
-  Color clear_value {}; //!< Optional clear value for RTV/DSV.
+  Color clear_value; //!< Optional clear value for RTV/DSV.
   bool use_clear_value = false;
 
   ResourceStates initial_state = ResourceStates::kUndefined;
@@ -171,10 +171,12 @@ struct TextureSubResourceSet {
   //! Returns a TextureSubResourceSet that represents the entire texture.
   static constexpr auto EntireTexture() -> TextureSubResourceSet
   {
-    return { .base_mip_level = 0,
+    return {
+      .base_mip_level = 0,
       .num_mip_levels = kAllMipLevels,
       .base_array_slice = 0,
-      .num_array_slices = kAllArraySlices };
+      .num_array_slices = kAllArraySlices,
+    };
   }
 
   //! Resolves any special values to concrete ranges based on the texture
@@ -232,7 +234,7 @@ struct TextureViewDescription {
   //! The sub-resource set to use for the view. This defines which mip levels
   //! and array slices to include in the view.
   TextureSubResourceSet sub_resources {
-    TextureSubResourceSet::EntireTexture()
+    TextureSubResourceSet::EntireTexture(),
   };
 
   //! Indicates if the view is read-only (for DSVs).
@@ -261,6 +263,10 @@ Semantics:
   that the region should be applied to; typically used when copying the same
   region into multiple array layers or mips. Resolve it with the destination
   texture descriptor before use.
+- plane_slice: format plane receiving the data. Color formats have one plane;
+  depth/stencil formats store depth in plane 0 and stencil in plane 1, and the
+  buffer holds that plane's texels (e.g. 32-bit float depth for D32 formats).
+  Depth and stencil planes can only be written as whole subresources.
 */
 struct TextureUploadRegion {
   uint64_t buffer_offset = 0;
@@ -269,8 +275,9 @@ struct TextureUploadRegion {
 
   TextureSlice dst_slice; // region within a single subresource
   TextureSubResourceSet dst_subresources {
-    TextureSubResourceSet::EntireTexture()
+    TextureSubResourceSet::EntireTexture(),
   };
+  uint32_t plane_slice = 0;
 };
 
 //! Describes a single copy region from a texture into a linear buffer.
@@ -289,9 +296,9 @@ struct TextureUploadRegion {
    texture descriptor before computing a footprint.
 */
 struct TextureBufferCopyRegion {
-  OffsetBytes buffer_offset {};
-  SizeBytes buffer_row_pitch {};
-  SizeBytes buffer_slice_pitch {};
+  OffsetBytes buffer_offset;
+  SizeBytes buffer_row_pitch;
+  SizeBytes buffer_slice_pitch;
   TextureSlice texture_slice {};
 };
 
@@ -304,9 +311,9 @@ struct LinearTextureExtent {
 
 //! Linear footprint for a texture-to-buffer copy.
 struct LinearTextureCopyFootprint {
-  SizeBytes row_pitch {};
-  SizeBytes slice_pitch {};
-  SizeBytes total_bytes {};
+  SizeBytes row_pitch;
+  SizeBytes slice_pitch;
+  SizeBytes total_bytes;
   uint32_t row_count = 0;
   uint32_t slice_count = 0;
 };

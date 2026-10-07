@@ -921,12 +921,12 @@ NOLINT_TEST_F(ExposureGpuTest, AuthoredLocalFogPreservesRadiometryThroughUpload)
       recorder->RequireResourceState(
         textures.GetSceneDepth(), ResourceStates::kDepthWrite);
       recorder->FlushBarriers();
-      recorder->ClearFramebuffer(*framebuffer,
-        std::vector<std::optional<Color>> {
-          Color {},
-        },
-        .5F);
+      // Clear to the creation clear values; the fog's 0.5 depth is uploaded
+      // by copy below.
+      recorder->ClearFramebuffer(*framebuffer);
     }
+    UploadDepth(textures.GetSceneDepth(), std::array { 0.5F },
+      ResourceStates::kDepthWrite);
     products.tile_data_ready = true;
     products.tile_data_texture_slot = tiles_slot;
     products.occupied_tile_buffer_slot = occupied_slot;
