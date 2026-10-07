@@ -44,7 +44,13 @@ uint ComputeClusterZSlice(float view_depth, LightGridMetadata grid)
         const float normalized_depth = saturate((clipped_depth - grid.near_depth_m) / depth_span);
         slice = log2(1.0f + curve_scale * normalized_depth) * slice_scale;
     }
-    return (uint)clamp(slice, 0.0f, (float)(grid.grid_size.z - 1u));
+    // GPU division and log2 are approximate, so a depth exactly on a slice
+    // boundary can evaluate a few ULPs low and floor into the previous slice.
+    // Boundaries belong to the upper slice; the tolerance is far below the
+    // half-slice spacing of any interior depth.
+    static const float kSliceBoundaryTolerance = 1.0f / 4096.0f;
+    return (uint)clamp(slice + kSliceBoundaryTolerance, 0.0f,
+        (float)(grid.grid_size.z - 1u));
 }
 
 uint ComputeClusterIndex(float2 screen_pos, float view_depth, LightGridMetadata grid)
