@@ -23,7 +23,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="proceduralGeometryDescriptors">The generated geometry descriptor service.</param>
 public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescriptorService proceduralGeometryDescriptors) : ISceneDescriptorGenerator
 {
-    private const int NativeSceneDescriptorVersion = 10;
+    private const int NativeSceneDescriptorVersion = 11;
     private const double MaximumExposureLogLuminance = 32;
     private static readonly Lazy<EditorSchemaCatalog> SceneSchemas = new(() =>
         EditorSchemaCatalog.LoadFromDirectory(Path.Combine(
@@ -88,9 +88,13 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
         var lightIssue = LightValidation.ValidateScene(scene);
         if (lightIssue is not null)
         {
-            diagnostics.Add(CreateDiagnostic(operationId, DiagnosticSeverity.Error,
+            diagnostics.Add(CreateDiagnostic(
+                operationId,
+                DiagnosticSeverity.Error,
                 ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
-                lightIssue, descriptorPath, descriptorVirtualPath));
+                lightIssue,
+                descriptorPath,
+                descriptorVirtualPath));
             return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, Dependencies: [], diagnostics);
         }
 
@@ -139,6 +143,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
         var nodes = new List<NativeSceneNode>();
         var renderables = new List<NativeRenderable>();
         var cameras = new List<NativePerspectiveCamera>();
+        var orthographicCameras = new List<NativeOrthographicCamera>();
         var directionalLights = new List<NativeDirectionalLight>();
         var pointLights = new List<NativePointLight>();
         var spotLights = new List<NativeSpotLight>();
@@ -188,7 +193,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             Name: ContentPipelinePaths.NormalizeSceneDescriptorName(Path.GetFileName(sceneInput.SourceRelativePath)),
             Nodes: nodes,
             Renderables: renderables.Count == 0 ? null : renderables,
-            Cameras: cameras.Count == 0 ? null : new NativeCameras(cameras),
+            Cameras: CreateCameras(cameras, orthographicCameras),
             Lights: lights,
             Environment: CreateEnvironment(scene.Environment),
             References: references);
@@ -282,13 +287,16 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
 
             foreach (var camera in node.Components.OfType<OrthographicCamera>())
             {
-                diagnostics.Add(CreateDiagnostic(
-                    operationId,
-                    DiagnosticSeverity.Warning,
-                    ContentPipelineDiagnosticCodes.SceneUnsupportedField,
-                    $"Scene node `{node.Name}` has orthographic camera `{camera.Name}`, which is not emitted by the ED-M07 descriptor slice.",
-                    descriptorPath,
-                    descriptorVirtualPath));
+                orthographicCameras.Add(new NativeOrthographicCamera(
+                    nodeIndex,
+                    camera.AspectMode == Oxygen.Managed.Core.CameraAspectMode.Auto ? "auto" : "fixed",
+                    camera.OrthographicSize,
+                    camera.AspectRatio,
+                    camera.NearPlane,
+                    camera.FarPlane,
+                    camera.ApertureF,
+                    camera.ShutterRate,
+                    camera.Iso));
             }
 
             foreach (var light in node.Components.OfType<DirectionalLightComponent>())
@@ -388,10 +396,13 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                 if (slot.Target.GeometryUri != geometry.Geometry.Uri || slot.Target.SlotId == Guid.Empty
                     || !assignedSlots.Add(slot.Target.SlotId))
                 {
-                    diagnostics.Add(CreateDiagnostic(operationId, DiagnosticSeverity.Error,
+                    diagnostics.Add(CreateDiagnostic(
+                        operationId,
+                        DiagnosticSeverity.Error,
                         ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
                         $"Scene node '{node.Name}' has an invalid or unresolved material-slot assignment.",
-                        descriptorPath, descriptorVirtualPath));
+                        descriptorPath,
+                        descriptorVirtualPath));
                     return;
                 }
 
@@ -402,19 +413,25 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                 }
                 catch (ArgumentException exception)
                 {
-                    diagnostics.Add(CreateDiagnostic(operationId, DiagnosticSeverity.Error,
+                    diagnostics.Add(CreateDiagnostic(
+                        operationId,
+                        DiagnosticSeverity.Error,
                         ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
                         $"Scene node '{node.Name}' references invalid material '{slot.Material.Uri}': {exception.Message}",
-                        descriptorPath, descriptorVirtualPath));
+                        descriptorPath,
+                        descriptorVirtualPath));
                     return;
                 }
 
                 if (materialRef is null)
                 {
-                    diagnostics.Add(CreateDiagnostic(operationId, DiagnosticSeverity.Error,
+                    diagnostics.Add(CreateDiagnostic(
+                        operationId,
+                        DiagnosticSeverity.Error,
                         ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
                         $"Scene node '{node.Name}' has an empty material assignment. Clear removes the slot override.",
-                        descriptorPath, descriptorVirtualPath));
+                        descriptorPath,
+                        descriptorVirtualPath));
                     return;
                 }
 
@@ -512,10 +529,18 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
         return [.. paths];
     }
 
+    private static NativeCameras? CreateCameras(
+        List<NativePerspectiveCamera> perspective,
+        List<NativeOrthographicCamera> orthographic)
+        => perspective.Count == 0 && orthographic.Count == 0
+            ? null
+            : new NativeCameras(perspective.Count == 0 ? null : perspective, orthographic.Count == 0 ? null : orthographic);
+
     private static bool IsDefaultMaterial(Uri? uri)
         => uri is not null && string.Equals(
             uri.AbsoluteUri,
-            AssetUris.BuildGeneratedUri("Materials/Default").AbsoluteUri, StringComparison.OrdinalIgnoreCase);
+            AssetUris.BuildGeneratedUri("Materials/Default").AbsoluteUri,
+            StringComparison.OrdinalIgnoreCase);
 
     private static bool IsEmptyAssetUri(Uri uri)
         => string.Equals(uri.ToString(), $"{AssetUris.Scheme}:///__uninitialized__", StringComparison.OrdinalIgnoreCase);
@@ -526,8 +551,11 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             ToArray(light.Color),
             light.CastsShadows,
             light.ExposureCompensation,
-            new NativeLightShadow(light.ShadowBias, light.ShadowNormalBias,
-                light.ContactShadows, (int)light.ShadowResolutionHint));
+            new NativeLightShadow(
+                light.ShadowBias,
+                light.ShadowNormalBias,
+                light.ContactShadows,
+                (int)light.ShadowResolutionHint));
 
     private static string? ValidateExposureRelationships(PostProcessEnvironmentData exposure)
     {

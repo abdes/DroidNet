@@ -56,6 +56,7 @@ public sealed class ComponentIdentityTests
                 },
                 new OrthographicCameraData
                 {
+                    AspectMode = Oxygen.Managed.Core.CameraAspectMode.Auto,
                     Id = duplicateId,
                     Name = "Camera 2",
                 },

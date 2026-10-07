@@ -32,7 +32,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
     /// <summary>The transform inspector realizes its controls without a generated XAML connection-ID cast failure.</summary>
     /// <returns>The XAML realization task.</returns>
     [TestMethod]
-    public Task TransformInspectorXamlRealizesItsNumericControls() => this.AssertInspectorRealizesAsync(
+    public Task TransformInspectorXamlRealizesItsNumericControls() => AssertInspectorRealizesAsync(
         static fixture => CreateModel("Transform", fixture),
         static model => new TransformView { ViewModel = (TransformViewModel)model },
         prepareFixture: null,
@@ -41,7 +41,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
     /// <summary>The camera inspector realizes its controls without a generated XAML connection-ID cast failure.</summary>
     /// <returns>The XAML realization task.</returns>
     [TestMethod]
-    public Task CameraInspectorXamlRealizesItsNumericControls() => this.AssertInspectorRealizesAsync(
+    public Task CameraInspectorXamlRealizesItsNumericControls() => AssertInspectorRealizesAsync(
         static fixture => CreateModel("Camera", fixture),
         static model => new PerspectiveCameraView { ViewModel = (PerspectiveCameraViewModel)model },
         prepareFixture: null,
@@ -50,16 +50,71 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
     /// <summary>The light inspector realizes its controls without a generated XAML connection-ID cast failure.</summary>
     /// <returns>The XAML realization task.</returns>
     [TestMethod]
-    public Task LightInspectorXamlRealizesItsNumericControls() => this.AssertInspectorRealizesAsync(
+    public Task LightInspectorXamlRealizesItsNumericControls() => AssertInspectorRealizesAsync(
         static fixture => CreateModel("Light", fixture),
         static model => new DirectionalLightView { ViewModel = (DirectionalLightViewModel)model },
         prepareFixture: null,
         assertRealizedAsync: null);
 
+    /// <summary>The orthographic camera inspector realizes its size and framing controls.</summary>
+    /// <returns>The XAML realization task.</returns>
+    [TestMethod]
+    public Task OrthographicCameraInspectorXamlRealizesItsControls() => AssertInspectorRealizesAsync(
+        static fixture => CreateModel("OrthographicCamera", fixture),
+        static model => new OrthographicCameraView { ViewModel = (OrthographicCameraViewModel)model },
+        prepareFixture: null,
+        assertRealizedAsync: static view =>
+        {
+            _ = view.FindDescendants().OfType<NumberBox>().Should().Contain(number => Equals(number.Tag, "OrthographicSize"));
+            _ = view.FindDescendants().OfType<ComboBox>().Should().ContainSingle().Which.SelectedItem.Should().Be(Oxygen.Managed.Core.CameraAspectMode.Auto);
+            return Task.CompletedTask;
+        });
+
+    /// <summary>The point light inspector realizes its emission and shadow controls.</summary>
+    /// <returns>The XAML realization task.</returns>
+    [TestMethod]
+    public Task PointLightInspectorXamlRealizesItsControls() => AssertInspectorRealizesAsync(
+        static fixture => CreateModel("PointLight", fixture),
+        static model => new PointLightView { ViewModel = (PointLightViewModel)model },
+        prepareFixture: null,
+        assertRealizedAsync: static view =>
+        {
+            _ = view.FindDescendants().OfType<NumberBox>().Select(number => number.Tag).Should().Contain(["LuminousFluxLumens", "Range", "SourceRadius"]);
+            return Task.CompletedTask;
+        });
+
+    /// <summary>The spot light inspector realizes its cone controls in display degrees.</summary>
+    /// <returns>The XAML realization task.</returns>
+    [TestMethod]
+    public Task SpotLightInspectorXamlRealizesItsConeControlsInDegrees() => AssertInspectorRealizesAsync(
+        static fixture => CreateModel("SpotLight", fixture),
+        static model => new SpotLightView { ViewModel = (SpotLightViewModel)model },
+        prepareFixture: null,
+        assertRealizedAsync: static view =>
+        {
+            var section = view.FindDescendant<Oxygen.Editor.Controls.PropertiesExpander>()!;
+            var outer = section.Items.OfType<Oxygen.Editor.Controls.InspectorNumberField>().Single(field => Equals(field.Tag, "OuterConeAngleRadians"));
+            _ = outer.NumberValue.Should().BeApproximately(0.5f * 180f / MathF.PI, 0.01f);
+            return Task.CompletedTask;
+        });
+
+    /// <summary>The node Rendering section realizes its three authored flag toggles.</summary>
+    /// <returns>The XAML realization task.</returns>
+    [TestMethod]
+    public Task NodeRenderingXamlRealizesItsFlagToggles() => AssertInspectorRealizesAsync(
+        static fixture => CreateModel("Rendering", fixture),
+        static model => new NodeRenderingView { ViewModel = (NodeRenderingViewModel)model },
+        prepareFixture: null,
+        assertRealizedAsync: static view =>
+        {
+            _ = view.FindDescendants().OfType<ToggleSwitch>().Should().HaveCount(3);
+            return Task.CompletedTask;
+        });
+
     /// <summary>The atmosphere-lights inspector realizes its controls without a generated XAML connection-ID cast failure.</summary>
     /// <returns>The XAML realization task.</returns>
     [TestMethod]
-    public Task AtmosphereLightsXamlRealizesItsNumericControls() => this.AssertInspectorRealizesAsync(
+    public Task AtmosphereLightsXamlRealizesItsNumericControls() => AssertInspectorRealizesAsync(
         static fixture => CreateModel("Environment", fixture),
         static model => new AtmosphereLightsSectionView { ViewModel = ((EnvironmentViewModel)model).AtmosphereLights },
         static fixture => fixture.Node.Components.OfType<DirectionalLightComponent>().Single().AtmosphereSlot = Oxygen.Editor.World.Serialization.AtmosphereLightSlot.Primary,
@@ -78,7 +133,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
     /// <summary>The material editor realizes its controls without a generated XAML connection-ID cast failure.</summary>
     /// <returns>The XAML realization task.</returns>
     [TestMethod]
-    public Task MaterialEditorXamlRealizesItsNumericControls() => this.AssertInspectorRealizesAsync(
+    public Task MaterialEditorXamlRealizesItsNumericControls() => AssertInspectorRealizesAsync(
         static fixture => CreateModel("Material", fixture),
         static model => new MaterialEditorView { ViewModel = (MaterialEditorViewModel)model },
         prepareFixture: null,
@@ -692,8 +747,9 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = owner.BringItemIntoView(item).Should().BeTrue();
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(owner.UpdateLayout).ConfigureAwait(true);
         var scroller = (ScrollViewer)scenario.View.FindName("ScenePropertyScroll");
-        var group = (Expander)await FindInspectorControlAsync(scroller, () => owner.FindDescendant<Expander>(candidate =>
-            candidate.ActualHeight > 0 && string.Equals(AutomationProperties.GetAutomationId(candidate), automationId, StringComparison.Ordinal)),
+        var group = (Expander)await FindInspectorControlAsync(
+            scroller,
+            () => owner.FindDescendant<Expander>(candidate => candidate.ActualHeight > 0 && string.Equals(AutomationProperties.GetAutomationId(candidate), automationId, StringComparison.Ordinal)),
             automationId,
             this.TestContext.CancellationToken).ConfigureAwait(true);
         _ = group.ApplyTemplate();
@@ -947,7 +1003,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         return (fixture, model, view);
     }
 
-    private async Task AssertInspectorRealizesAsync(
+    private static async Task AssertInspectorRealizesAsync(
         Func<SceneAuthoringFixture, IDisposable> createModel,
         Func<object, UserControl> createView,
         Action<SceneAuthoringFixture>? prepareFixture,

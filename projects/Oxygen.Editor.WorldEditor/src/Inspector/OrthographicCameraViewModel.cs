@@ -9,20 +9,20 @@ using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector;
 
-/// <summary>Owns camera selection and command lifetime; typed bindings are the sole scalar state.</summary>
-public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner
+/// <summary>Owns orthographic camera selection and command lifetime; typed bindings are the sole scalar state.</summary>
+public sealed partial class OrthographicCameraViewModel : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner
 {
     private readonly InspectorFieldDiagnostic unboundDiagnostic = new();
     private readonly InspectorEditSessionCoordinator? edits;
     private readonly List<IInspectorBindingRefresh> registrations = [];
-    private readonly PropertyBinding<CameraAspectMode> aspectModeBinding = new(SceneDocumentCommandService.PerspectiveCamera.AspectModeDescriptor);
+    private readonly PropertyBinding<CameraAspectMode> aspectModeBinding = new(SceneDocumentCommandService.OrthographicCamera.AspectModeDescriptor);
     private ICollection<SceneNode>? selectedItems;
     private bool disposed;
 
-    /// <summary>Initializes a new instance of the <see cref="PerspectiveCameraViewModel"/> class.</summary>
+    /// <summary>Initializes a new instance of the <see cref="OrthographicCameraViewModel"/> class.</summary>
     /// <param name="commandService">The existing camera command service.</param>
     /// <param name="commandContextProvider">The current captured document context.</param>
-    public PerspectiveCameraViewModel(
+    public OrthographicCameraViewModel(
         ISceneDocumentCommandService? commandService = null,
         Func<SceneDocumentCommandContext?>? commandContextProvider = null)
     {
@@ -32,15 +32,15 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
             this.edits.Diagnostics.Relate(this.NearPlane.Id.Id, this.FarPlane.Id.Id);
         }
 
-        this.Register(this.FieldOfView);
+        this.Register(this.OrthographicSize);
         this.Register(this.aspectModeBinding, nameof(this.AspectMode));
         this.Register(this.AspectRatio);
         this.Register(this.NearPlane);
         this.Register(this.FarPlane);
     }
 
-    /// <summary>Gets the degree-valued FOV binding and its mixed state.</summary>
-    public PropertyBinding<float> FieldOfView { get; } = new(SceneDocumentCommandService.PerspectiveCamera.FieldOfViewDegreesDescriptor);
+    /// <summary>Gets the half-height binding and its mixed state.</summary>
+    public PropertyBinding<float> OrthographicSize { get; } = new(SceneDocumentCommandService.OrthographicCamera.OrthographicSizeDescriptor);
 
     /// <summary>Gets or sets the framing policy through its guarded binding.</summary>
     public CameraAspectMode AspectMode
@@ -49,38 +49,41 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
         set => InspectorBindingRequests.Request(this.aspectModeBinding, value);
     }
 
+    /// <summary>Gets the retained Fixed aspect-ratio binding and its mixed state.</summary>
+    public PropertyBinding<float> AspectRatio { get; } = new(SceneDocumentCommandService.OrthographicCamera.AspectRatioDescriptor);
+
+    /// <summary>Gets the near-plane binding and its mixed state.</summary>
+    public PropertyBinding<float> NearPlane { get; } = new(SceneDocumentCommandService.OrthographicCamera.NearPlaneDescriptor);
+
+    /// <summary>Gets the far-plane binding and its mixed state.</summary>
+    public PropertyBinding<float> FarPlane { get; } = new(SceneDocumentCommandService.OrthographicCamera.FarPlaneDescriptor);
+
     /// <summary>Gets the framing policies offered by the inspector.</summary>
     public IReadOnlyList<CameraAspectMode> AspectModeOptions { get; } = Enum.GetValues<CameraAspectMode>();
 
-    /// <summary>Gets the aspect-ratio binding and its mixed state.</summary>
-    public PropertyBinding<float> AspectRatio { get; } = new(SceneDocumentCommandService.PerspectiveCamera.AspectRatioDescriptor);
-
-    /// <summary>Gets the near-plane binding and its mixed state.</summary>
-    public PropertyBinding<float> NearPlane { get; } = new(SceneDocumentCommandService.PerspectiveCamera.NearPlaneDescriptor);
-
-    /// <summary>Gets the far-plane binding and its mixed state.</summary>
-    public PropertyBinding<float> FarPlane { get; } = new(SceneDocumentCommandService.PerspectiveCamera.FarPlaneDescriptor);
-
-    /// <summary>Gets FOV feedback.</summary>
-    public InspectorFieldDiagnostic FieldOfViewDiagnostic => this.edits?.Diagnostics.Get(this.FieldOfView.Id.Id) ?? this.unboundDiagnostic;
+    /// <summary>Gets orthographic size feedback.</summary>
+    public InspectorFieldDiagnostic OrthographicSizeDiagnostic => this.Diagnostic(this.OrthographicSize.Id.Id);
 
     /// <summary>Gets aspect-ratio feedback.</summary>
-    public InspectorFieldDiagnostic AspectRatioDiagnostic => this.edits?.Diagnostics.Get(this.AspectRatio.Id.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic AspectRatioDiagnostic => this.Diagnostic(this.AspectRatio.Id.Id);
 
     /// <summary>Gets related near-plane feedback.</summary>
-    public InspectorFieldDiagnostic NearPlaneDiagnostic => this.edits?.Diagnostics.Get(this.NearPlane.Id.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic NearPlaneDiagnostic => this.Diagnostic(this.NearPlane.Id.Id);
 
     /// <summary>Gets related far-plane feedback.</summary>
-    public InspectorFieldDiagnostic FarPlaneDiagnostic => this.edits?.Diagnostics.Get(this.FarPlane.Id.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic FarPlaneDiagnostic => this.Diagnostic(this.FarPlane.Id.Id);
 
     /// <inheritdoc />
     public Guid EditScopeId => this.edits?.ScopeId ?? Guid.Empty;
 
     /// <inheritdoc />
-    public override string Header => "Perspective Camera";
+    public override string Header => "Orthographic Camera";
 
     /// <inheritdoc />
-    public override string Description => "Defines projection, clipping planes, and aspect ratio.";
+    public override string Description => "Defines the orthographic volume, clipping planes, and framing.";
+
+    /// <inheritdoc />
+    internal override InspectorFieldDiagnostics? ValidationFeedback => this.edits?.Diagnostics;
 
     /// <summary>Gets completion of submitted camera edits.</summary>
     internal Task PendingEdits => this.edits?.Pending ?? Task.CompletedTask;
@@ -114,16 +117,22 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
     /// <inheritdoc />
     public override void UpdateValues(ICollection<SceneNode> items)
     {
-        this.edits?.Bind(items.Where(node => node.Components.OfType<PerspectiveCamera>().Any()).Select(node => node.Id).ToArray());
-        this.selectedItems = items;
-        var targets = items.Where(node => node.Components.OfType<PerspectiveCamera>().Any())
-            .ToDictionary(static node => node.Id, static node => (object?)node.Components.OfType<PerspectiveCamera>().First());
+        var targets = items.Where(static node => node.Components.OfType<OrthographicCamera>().Any())
+            .ToDictionary(static node => node.Id, static node => (object?)node.Components.OfType<OrthographicCamera>().First());
         var nodes = targets.Keys.ToArray();
+        this.edits?.Bind(nodes);
+        this.selectedItems = items;
         foreach (var registration in this.registrations)
         {
             registration.Refresh(nodes, id => targets.GetValueOrDefault(id));
         }
     }
+
+    /// <inheritdoc />
+    protected override void OnInputEnabledChanged(bool enabled) => this.edits?.SetInputEnabled(enabled);
+
+    private InspectorFieldDiagnostic Diagnostic(Oxygen.Editor.Schemas.PropertyId id)
+        => this.edits?.Diagnostics.Get(id) ?? this.unboundDiagnostic;
 
     private void Register<T>(PropertyBinding<T> binding, string? property = null)
         => this.registrations.Add(new InspectorBindingRegistration<T>(

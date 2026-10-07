@@ -333,8 +333,12 @@ public interface ISceneEngineSync
     /// <param name="materialUri">The retained material, or null to clear its override.</param>
     /// <param name="cancellationToken">Cancels before dispatch.</param>
     /// <returns>The current binding outcome; unresolved identity is reported rather than remapped.</returns>
-    public Task<SyncOutcome> RestoreMaterialSlotAsync(Scene scene, SceneNode node, MaterialSlotTarget target,
-        Uri? materialUri, CancellationToken cancellationToken = default);
+    public Task<SyncOutcome> RestoreMaterialSlotAsync(
+        Scene scene,
+        SceneNode node,
+        MaterialSlotTarget target,
+        Uri? materialUri,
+        CancellationToken cancellationToken = default);
 
     // ============================================================================
     // Geometry Operations - LOD & Rendering Updates
@@ -351,25 +355,6 @@ public interface ISceneEngineSync
     ///     screen-space error, or fixed LOD).
     /// </remarks>
     public Task UpdateLodPolicyAsync(Guid nodeId, LevelOfDetailSlot lodSlot);
-
-    /// <summary>
-    ///     Updates rendering settings (e.g., visibility) for a geometry component.
-    /// </summary>
-    /// <param name="nodeId">The GUID of the node.</param>
-    /// <param name="renderingSlot">The RenderingSlot containing rendering settings.</param>
-    /// <returns>A task that completes when the rendering settings are updated.</returns>
-    public Task UpdateRenderingSettingsAsync(Guid nodeId, RenderingSlot renderingSlot);
-
-    /// <summary>
-    ///     Updates lighting settings (e.g., shadow casting/receiving) for a geometry component.
-    /// </summary>
-    /// <param name="nodeId">The GUID of the node.</param>
-    /// <param name="lightingSlot">The LightingSlot containing lighting settings.</param>
-    /// <returns>A task that completes when the lighting settings are updated.</returns>
-    /// <remarks>
-    ///     Controls whether the geometry casts shadows and receives shadows from other objects.
-    /// </remarks>
-    public Task UpdateLightingSettingsAsync(Guid nodeId, LightingSlot lightingSlot);
 
     /// <summary>
     ///     Updates live environment settings and returns per-field sync support.

@@ -170,6 +170,46 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         await this.OpenInitialSceneAsync().ConfigureAwait(true);
     }
 
+    /// <summary>Resolves a scene from a last-opened name by display name, file stem, or stable ID.</summary>
+    /// <param name="project">The project whose scenes are searched.</param>
+    /// <param name="lastOpenedScene">The persisted last-opened scene name.</param>
+    /// <returns>The matching scene, or <see langword="null"/> when no scene matches.</returns>
+    internal static Oxygen.Editor.World.Scene? ResolveSceneByNameOrId(IProject project, string? lastOpenedScene)
+    {
+        if (string.IsNullOrWhiteSpace(lastOpenedScene))
+        {
+            return null;
+        }
+
+        var sceneName = lastOpenedScene.EndsWith(Oxygen.Editor.Projects.Constants.SceneFileExtension, StringComparison.OrdinalIgnoreCase)
+            ? lastOpenedScene[..^Oxygen.Editor.Projects.Constants.SceneFileExtension.Length]
+            : System.IO.Path.GetFileNameWithoutExtension(lastOpenedScene);
+        return project.Scenes.FirstOrDefault(scene =>
+            string.Equals(scene.Name, lastOpenedScene, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(scene.Name, sceneName, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(scene.Id.ToString("D"), lastOpenedScene, StringComparison.OrdinalIgnoreCase));
+    }
+
+    internal static Oxygen.Editor.World.Scene? ResolveInitialScene(IProject project, ProjectContext context)
+    {
+        // Fresh activation may carry an explicit scene request (template StarterScene or a workflow open).
+        if (context.InitialSceneAssetUri is { } initialSceneAssetUri
+            && TryResolveSceneFromAssetUri(project, initialSceneAssetUri) is { } starterScene)
+        {
+            return starterScene;
+        }
+
+        // Otherwise the single loaded scene is the project's configured default, resolved by stable ID.
+        // A missing or invalid default is not silently replaced by last-opened or first-listed.
+        if (project.ProjectInfo.DefaultSceneId is { } defaultSceneId
+            && project.Scenes.FirstOrDefault(scene => scene.Id == defaultSceneId) is { } defaultScene)
+        {
+            return defaultScene;
+        }
+
+        return null;
+    }
+
     /// <inheritdoc />
     protected override void OnSetupChildContainer(IContainer childContainer)
     {
@@ -222,17 +262,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         childContainer.Register<SceneEditorView>(Reuse.Transient);
         childContainer.Register<MaterialEditorView>(Reuse.Transient);
         childContainer.Register<Oxygen.Editor.World.Inspection.CookedInspectionView>(Reuse.Transient);
-        childContainer.Register<TransformViewModel>(Reuse.Transient);
-        childContainer.Register<TransformView>(Reuse.Transient);
-        childContainer.Register<PerspectiveCameraViewModel>(Reuse.Transient);
-        childContainer.Register<PerspectiveCameraView>(Reuse.Transient);
-        childContainer.Register<DirectionalLightViewModel>(Reuse.Transient);
-        childContainer.Register<DirectionalLightView>(Reuse.Transient);
-        childContainer.Register<EnvironmentViewModel>(Reuse.Transient);
-        childContainer.Register<EnvironmentView>(Reuse.Transient);
-
-        childContainer.Register<GeometryViewModel>(Reuse.Transient);
-        childContainer.Register<GeometryView>(Reuse.Transient);
+        RegisterInspectorEditors(childContainer);
     }
 
     /// <inheritdoc />
@@ -277,13 +307,38 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         base.Dispose(disposing);
     }
 
+    private static void RegisterInspectorEditors(IContainer childContainer)
+    {
+        childContainer.Register<TransformViewModel>(Reuse.Transient);
+        childContainer.Register<TransformView>(Reuse.Transient);
+        childContainer.Register<PerspectiveCameraViewModel>(Reuse.Transient);
+        childContainer.Register<PerspectiveCameraView>(Reuse.Transient);
+        childContainer.Register<DirectionalLightViewModel>(Reuse.Transient);
+        childContainer.Register<DirectionalLightView>(Reuse.Transient);
+        childContainer.Register<OrthographicCameraViewModel>(Reuse.Transient);
+        childContainer.Register<OrthographicCameraView>(Reuse.Transient);
+        childContainer.Register<PointLightViewModel>(Reuse.Transient);
+        childContainer.Register<PointLightView>(Reuse.Transient);
+        childContainer.Register<SpotLightViewModel>(Reuse.Transient);
+        childContainer.Register<SpotLightView>(Reuse.Transient);
+        childContainer.Register<NodeRenderingViewModel>(Reuse.Transient);
+        childContainer.Register<NodeRenderingView>(Reuse.Transient);
+        childContainer.Register<EnvironmentViewModel>(Reuse.Transient);
+        childContainer.Register<EnvironmentView>(Reuse.Transient);
+        childContainer.Register<GeometryViewModel>(Reuse.Transient);
+        childContainer.Register<GeometryView>(Reuse.Transient);
+    }
+
     private static void RegisterContentServices(IContainer childContainer)
     {
-        childContainer.RegisterDelegate<Oxygen.Editor.ContentPipeline.Discovery.IBuiltinCatalogDiscovery>(resolver => new Oxygen.Editor.ContentPipeline.Discovery.BuiltinCatalogDiscovery(
-            resolver.Resolve<Oxygen.Editor.ContentPipeline.IBuiltinGeometryCatalogProvider>(),
-            resolver.Resolve<DroidNet.Storage.IAtomicFileStore>(), resolver.Resolve<DroidNet.Config.IPathFinder>(),
-            resolver.Resolve<Microsoft.Extensions.Logging.ILogger<Oxygen.Editor.ContentPipeline.Discovery.BuiltinCatalogDiscovery>>(),
-            resolver.Resolve<Oxygen.Managed.Core.Compatibility.INativeCompatibilityService>(Oxygen.Managed.Core.Compatibility.EditorNativeCompatibilityService.CookingServiceKey)), Reuse.Singleton);
+        childContainer.RegisterDelegate<Oxygen.Editor.ContentPipeline.Discovery.IBuiltinCatalogDiscovery>(
+            resolver => new Oxygen.Editor.ContentPipeline.Discovery.BuiltinCatalogDiscovery(
+                resolver.Resolve<Oxygen.Editor.ContentPipeline.IBuiltinGeometryCatalogProvider>(),
+                resolver.Resolve<DroidNet.Storage.IAtomicFileStore>(),
+                resolver.Resolve<DroidNet.Config.IPathFinder>(),
+                resolver.Resolve<Microsoft.Extensions.Logging.ILogger<Oxygen.Editor.ContentPipeline.Discovery.BuiltinCatalogDiscovery>>(),
+                resolver.Resolve<Oxygen.Managed.Core.Compatibility.INativeCompatibilityService>(Oxygen.Managed.Core.Compatibility.EditorNativeCompatibilityService.CookingServiceKey)),
+            Reuse.Singleton);
         childContainer.Register<ProjectAssetCatalog>(Reuse.Singleton);
         childContainer.RegisterMapping<IProjectAssetCatalog, ProjectAssetCatalog>();
         childContainer.RegisterMapping<IAssetCatalog, ProjectAssetCatalog>();
@@ -350,7 +405,8 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             var mountService = this.container.Resolve<Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountService>();
             var publication = this.container.Resolve<Oxygen.Editor.ContentPipeline.Publication.CookPublicationService>();
             using var reader = await publication.AcquireForMountAsync(project, CancellationToken.None).ConfigureAwait(true);
-            var bindings = reader.Roots.Zip(reader.RootPaths,
+            var bindings = reader.Roots.Zip(
+                reader.RootPaths,
                 static (root, path) => new RuntimeCookedRoot(path, root.Owner == Oxygen.Editor.ContentPipeline.Publication.CookPublicationRootOwner.Project ? root.Name : null)).ToArray();
             var mounts = await mountService.PrepareAsync(project, reader, CancellationToken.None).ConfigureAwait(true);
             stage = "native mount and preview resume";
@@ -361,19 +417,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             await catalog.RefreshAsync(reader, CancellationToken.None).ConfigureAwait(true);
             this.HasContentFailure = false;
             this.LogMountedRoots(mounts.Roots);
-            try
-            {
-                var cleanupFailures = await publication.MaintainAsync(project, CancellationToken.None).ConfigureAwait(true);
-                if (cleanupFailures.Count != 0)
-                {
-                    this.PublishCookedRootWarning("Cook.CleanupDeferred", "Unused output cleanup deferred",
-                        string.Join(Environment.NewLine, cleanupFailures), project.ProjectRoot);
-                }
-            }
-            catch (Exception cleanup) when (cleanup is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
-            {
-                this.PublishCookedRootWarning("Cook.CleanupDeferred", "Unused output cleanup deferred", cleanup.Message, project.ProjectRoot, cleanup);
-            }
+            await this.MaintainPublicationAsync(publication, project).ConfigureAwait(true);
         }
         catch (Exception exception)
         {
@@ -381,13 +425,42 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             this.ContentFailureTitle = mounted ? "Content Browser unavailable" : "Preview unavailable";
             this.ContentFailureMessage = $"Failed during {stage}: {exception.Message.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()}";
             this.HasContentFailure = true;
-            RuntimeOperationResults.PublishFailure(this.operationResults, this.statusReducer, RuntimeOperationKinds.CookedRootRefresh,
-                FailureDomain.AssetMount, AssetMountDiagnosticCodes.RefreshFailed, this.ContentFailureTitle,
-                this.ContentFailureMessage, this.CreateProjectScope(), project.ProjectRoot, exception, exception.ToString());
+            RuntimeOperationResults.PublishFailure(
+                this.operationResults,
+                this.statusReducer,
+                RuntimeOperationKinds.CookedRootRefresh,
+                FailureDomain.AssetMount,
+                AssetMountDiagnosticCodes.RefreshFailed,
+                this.ContentFailureTitle,
+                this.ContentFailureMessage,
+                this.CreateProjectScope(),
+                project.ProjectRoot,
+                exception,
+                exception.ToString());
             if (!mounted)
             {
                 await this.SuspendUnavailablePreviewAsync(project).ConfigureAwait(true);
             }
+        }
+    }
+
+    private async Task MaintainPublicationAsync(Oxygen.Editor.ContentPipeline.Publication.CookPublicationService publication, ProjectContext project)
+    {
+        try
+        {
+            var cleanupFailures = await publication.MaintainAsync(project, CancellationToken.None).ConfigureAwait(true);
+            if (cleanupFailures.Count != 0)
+            {
+                this.PublishCookedRootWarning(
+                    "Cook.CleanupDeferred",
+                    "Unused output cleanup deferred",
+                    string.Join(Environment.NewLine, cleanupFailures),
+                    project.ProjectRoot);
+            }
+        }
+        catch (Exception cleanup) when (cleanup is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            this.PublishCookedRootWarning("Cook.CleanupDeferred", "Unused output cleanup deferred", cleanup.Message, project.ProjectRoot, cleanup);
         }
     }
 
@@ -465,46 +538,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         {
             this.LogSceneRestorationFailed(ex, context.Name);
         }
-    }
-
-    /// <summary>Resolves a scene from a last-opened name by display name, file stem, or stable ID.</summary>
-    /// <param name="project">The project whose scenes are searched.</param>
-    /// <param name="lastOpenedScene">The persisted last-opened scene name.</param>
-    /// <returns>The matching scene, or <see langword="null"/> when no scene matches.</returns>
-    internal static Oxygen.Editor.World.Scene? ResolveSceneByNameOrId(IProject project, string? lastOpenedScene)
-    {
-        if (string.IsNullOrWhiteSpace(lastOpenedScene))
-        {
-            return null;
-        }
-
-        var sceneName = lastOpenedScene.EndsWith(Oxygen.Editor.Projects.Constants.SceneFileExtension, StringComparison.OrdinalIgnoreCase)
-            ? lastOpenedScene[..^Oxygen.Editor.Projects.Constants.SceneFileExtension.Length]
-            : System.IO.Path.GetFileNameWithoutExtension(lastOpenedScene);
-        return project.Scenes.FirstOrDefault(scene =>
-            string.Equals(scene.Name, lastOpenedScene, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(scene.Name, sceneName, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(scene.Id.ToString("D"), lastOpenedScene, StringComparison.OrdinalIgnoreCase));
-    }
-
-    internal static Oxygen.Editor.World.Scene? ResolveInitialScene(IProject project, ProjectContext context)
-    {
-        // Fresh activation may carry an explicit scene request (template StarterScene or a workflow open).
-        if (context.InitialSceneAssetUri is { } initialSceneAssetUri
-            && TryResolveSceneFromAssetUri(project, initialSceneAssetUri) is { } starterScene)
-        {
-            return starterScene;
-        }
-
-        // Otherwise the single loaded scene is the project's configured default, resolved by stable ID.
-        // A missing or invalid default is not silently replaced by last-opened or first-listed.
-        if (project.ProjectInfo.DefaultSceneId is { } defaultSceneId
-            && project.Scenes.FirstOrDefault(scene => scene.Id == defaultSceneId) is { } defaultScene)
-        {
-            return defaultScene;
-        }
-
-        return null;
     }
 
     [SuppressMessage(

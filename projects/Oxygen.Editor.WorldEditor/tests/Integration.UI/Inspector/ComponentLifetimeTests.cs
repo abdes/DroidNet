@@ -74,7 +74,9 @@ public sealed partial class ComponentLifetimeTests : DroidNet.Tests.VisualUserIn
         _ = delete.IsEnabled.Should().BeFalse();
         _ = (await fixture.Commands.RemoveComponentAsync(fixture.Context, node.Id, transform.Id).ConfigureAwait(true)).Succeeded.Should().BeFalse();
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-        _ = (await fixture.ReadNodeAsync(node.Id, cancellationToken).ConfigureAwait(true)).Properties.Should().HaveCount(9);
+        var native = await fixture.ReadNodeAsync(node.Id, cancellationToken).ConfigureAwait(true);
+        _ = native.Properties.Where(static value => value.ComponentId == (ushort)EngineComponentId.Transform).Select(static value => value.FieldId)
+            .Should().BeEquivalentTo(Enum.GetValues<TransformField>().Select(static field => (ushort)field), "the denied removal must leave the native transform intact");
     }
 
     private static async Task AssertComponentPresenceAsync(NativeSceneFixture fixture, SceneNodeEditorViewModel host, Guid nodeId, bool camera, bool present, CancellationToken cancellationToken)

@@ -33,6 +33,21 @@ public static class SceneDiagnosticCodes
     /// <summary>Perspective camera aspect ratio is not positive.</summary>
     public const string PerspectiveCameraAspectRatioNonPositive = DiagnosticCodes.ScenePrefix + "PerspectiveCamera.AspectRatio.NonPositive";
 
+    /// <summary>Orthographic camera size is not positive.</summary>
+    public const string OrthographicCameraSizeNonPositive = DiagnosticCodes.ScenePrefix + "OrthographicCamera.Size.NonPositive";
+
+    /// <summary>Orthographic camera aspect ratio is not positive.</summary>
+    public const string OrthographicCameraAspectRatioNonPositive = DiagnosticCodes.ScenePrefix + "OrthographicCamera.AspectRatio.NonPositive";
+
+    /// <summary>Orthographic camera near plane is not positive.</summary>
+    public const string OrthographicCameraNearPlaneNonPositive = DiagnosticCodes.ScenePrefix + "OrthographicCamera.NearPlane.NonPositive";
+
+    /// <summary>Orthographic camera near/far planes are invalid.</summary>
+    public const string OrthographicCameraNearFarInvalid = DiagnosticCodes.ScenePrefix + "OrthographicCamera.NearFar.Invalid";
+
+    /// <summary>A point or spot light candidate failed the canonical light contract.</summary>
+    public const string LocalLightInvalid = DiagnosticCodes.ScenePrefix + "LocalLight.Invalid";
+
     /// <summary>Directional light sun exclusivity was violated.</summary>
     public const string DirectionalLightSunExclusivity = DiagnosticCodes.ScenePrefix + "DirectionalLight.Sun.Exclusivity";
 

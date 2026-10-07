@@ -83,6 +83,8 @@ public sealed partial class SceneNodeEditorViewModel
 
             editor.SetInputEnabled(this.IsEditorInputEnabled(editor));
         }
+
+        this.renderingEditor.SetInputEnabled(this.IsEditorInputEnabled(this.renderingEditor));
     }
 
     private void SetComponentFilter(Type? componentType)

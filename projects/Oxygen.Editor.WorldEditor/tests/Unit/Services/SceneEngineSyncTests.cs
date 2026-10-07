@@ -199,7 +199,7 @@ public sealed partial class SceneEngineSyncTests
     }
 
     [TestMethod]
-    public async Task AttachCamera_WhenEngineNotRunning_ReturnsSkippedBeforeUnsupportedCamera()
+    public async Task AttachOrthographicCamera_WhenEngineNotRunning_ReturnsSkippedNotRunning()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         _ = engine.SetupGet(s => s.State).Returns(EngineServiceState.Ready);

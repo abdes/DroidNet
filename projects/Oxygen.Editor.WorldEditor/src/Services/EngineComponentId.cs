@@ -33,4 +33,16 @@ public enum EngineComponentId
 
     /// <summary><c>oxygen::scene::DirectionalLight</c>.</summary>
     DirectionalLight = 3,
+
+    /// <summary><c>oxygen::scene::OrthographicCamera</c>.</summary>
+    OrthographicCamera = 4,
+
+    /// <summary><c>oxygen::scene::PointLight</c>.</summary>
+    PointLight = 5,
+
+    /// <summary><c>oxygen::scene::SpotLight</c>.</summary>
+    SpotLight = 6,
+
+    /// <summary>Authored node rendering flags, applied as local scene-node values.</summary>
+    Node = 7,
 }

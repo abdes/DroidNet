@@ -30,7 +30,7 @@ internal static class InspectorEditorFactory
     /// <param name="logger">The scoped logging factory.</param>
     /// <param name="commands">The existing authoring service.</param>
     /// <param name="context">The current document context provider.</param>
-    /// <returns>The existing four component construction operations.</returns>
+    /// <returns>The component construction operations.</returns>
     internal static Dictionary<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>> Create(
         HostingContext hosting,
         IContentBrowserAssetProvider assets,
@@ -47,6 +47,9 @@ internal static class InspectorEditorFactory
             [typeof(TransformComponent)] = _ => new TransformViewModel(logger, commands, context),
             [typeof(GeometryComponent)] = _ => new GeometryViewModel(hosting, assets, materials, builtins, demand, slots, projects, commands, context),
             [typeof(PerspectiveCamera)] = _ => new PerspectiveCameraViewModel(commands, context),
+            [typeof(OrthographicCamera)] = _ => new OrthographicCameraViewModel(commands, context),
             [typeof(DirectionalLightComponent)] = _ => new DirectionalLightViewModel(commands, context),
+            [typeof(PointLightComponent)] = _ => new PointLightViewModel(commands, context),
+            [typeof(SpotLightComponent)] = _ => new SpotLightViewModel(commands, context),
         };
 }

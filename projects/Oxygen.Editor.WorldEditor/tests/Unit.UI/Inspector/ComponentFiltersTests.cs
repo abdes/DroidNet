@@ -76,7 +76,9 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var original = model.PropertyEditors.ToArray();
         var version = fixture.Context.Metadata.ChangeVersion;
-        _ = original.Should().HaveCount(2);
+        _ = original.Select(static editor => editor.GetType()).Should().Equal(
+            new[] { typeof(TransformViewModel), typeof(GeometryViewModel), typeof(NodeRenderingViewModel) },
+            "the node Rendering section follows every component section in the unfiltered view");
         var geometry = ComponentButton(view, typeof(GeometryComponent));
         _ = ((InspectorComponentFilter)geometry.Tag).Label.Should().Be("Geometry");
         Toggle(geometry);
@@ -194,10 +196,10 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
     });
 
-    /// <summary>Components without property editors remain removable and explain the empty section.</summary>
+    /// <summary>A point light filters to its own editor section and remains removable.</summary>
     /// <returns>The asynchronous component action regression.</returns>
     [TestMethod]
-    public Task ComponentWithoutEditorRemainsSelectableForRemoval() => EnqueueAsync(async () =>
+    public Task PointLightFilterShowsItsEditorAndRemainsRemovable() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
         MakeGeometryOnly(fixture);
@@ -215,8 +217,8 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         Toggle(ComponentButton(view, typeof(PointLightComponent)));
-        _ = model.PropertyEditors.Should().BeEmpty();
-        _ = model.UnavailableComponentEditorMessage.Should().Contain("Point Light");
+        _ = model.PropertyEditors.Should().ContainSingle().Which.Should().BeOfType<PointLightViewModel>();
+        _ = model.HasUnavailableComponentEditor.Should().BeFalse();
         var details = (SceneNodeDetailsView)view.FindName("NodeDetails");
         _ = ((Button)details.FindName("DeleteComponentButton")).IsEnabled.Should().BeTrue();
         _ = details.DeleteSelectedComponent().Should().BeTrue();
@@ -253,7 +255,8 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = model.IsAllComponentsSelected.Should().BeTrue();
         _ = model.SelectedNode.Should().BeSameAs(node);
-        _ = model.PropertyEditors.Should().HaveCount(2);
+        _ = model.PropertyEditors.Select(static editor => editor.GetType()).Should().Equal(
+            typeof(TransformViewModel), typeof(GeometryViewModel), typeof(NodeRenderingViewModel));
         _ = model.ComponentFilters.Should().NotContain(option => option.ComponentType == typeof(PerspectiveCamera));
         _ = metadata.IsDirty.Should().BeFalse();
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();

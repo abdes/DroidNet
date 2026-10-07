@@ -71,7 +71,7 @@ public sealed partial class SceneDocumentCommandService
             PerspectiveCameraKind => PerspectiveCamera.ById,
             DirectionalLightKind => DirectionalLight.ById,
             SceneEnvironmentKind => SceneEnvironment.ById,
-            _ => null,
+            _ => DescriptorOnlyCatalog(kind),
         };
 
     private static bool GestureMatches(
@@ -100,12 +100,12 @@ public sealed partial class SceneDocumentCommandService
         var targets = new Dictionary<Guid, object>();
         foreach (var node in ResolveNodes(context.Scene, ids.ToArray()))
         {
-            object? target = kind switch
+            var target = kind switch
             {
                 TransformKind => node.Components.OfType<TransformComponent>().FirstOrDefault(),
                 PerspectiveCameraKind => node.Components.OfType<PerspectiveCamera>().FirstOrDefault(),
                 DirectionalLightKind => node.Components.OfType<DirectionalLightComponent>().FirstOrDefault(),
-                _ => null,
+                _ => DescriptorOnlyTarget(kind, node),
             };
             if (target is not null)
             {
@@ -246,6 +246,7 @@ public sealed partial class SceneDocumentCommandService
                 {
                     PerspectiveCameraKind => ValidatePerspectiveCameraEdit(context.Scene, [nodeId], BuildPerspectiveCameraEditFromPropertyEdit(edit)),
                     DirectionalLightKind => ValidateDirectionalLightEdit(BuildDirectionalLightEditFromPropertyEdit(edit)),
+                    _ when IsDescriptorOnlyKind(kind) && FindNode(context.Scene, nodeId) is { } node => ValidateDescriptorOnlyCandidate(node, kind, edit),
                     _ => null,
                 };
             }
@@ -266,8 +267,12 @@ public sealed partial class SceneDocumentCommandService
                 pair => pair.Key,
                 pair => BuildDirectionalLightEditFromPropertyEdit(pair.Value))) is { } candidateFailure)
         {
-            return this.ValidationFailure(OperationKindForPropertyKind(kind), candidateFailure.Code,
-                candidateFailure.Title, candidateFailure.Message, context);
+            return this.ValidationFailure(
+                OperationKindForPropertyKind(kind),
+                candidateFailure.Code,
+                candidateFailure.Title,
+                candidateFailure.Message,
+                context);
         }
 
         return null;
@@ -390,7 +395,7 @@ public sealed partial class SceneDocumentCommandService
                     TransformKind => BuildTransformPropertyEntries(edit),
                     PerspectiveCameraKind => BuildPerspectiveCameraPropertyEntries(BuildPerspectiveCameraEditFromPropertyEdit(edit)),
                     DirectionalLightKind => BuildDirectionalLightPropertyEntries(BuildDirectionalLightEditFromPropertyEdit(edit)),
-                    _ => [],
+                    _ => BuildDescriptorOnlyPropertyEntries(gesture.Kind, edit),
                 };
                 sync = cancellationToken => this.sceneEngineSync.UpdatePropertiesAsync(scene, node, entries, revision, cancellationToken);
             }

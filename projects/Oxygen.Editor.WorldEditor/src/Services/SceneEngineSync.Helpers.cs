@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Managed.Assets.Catalog;
@@ -211,6 +213,36 @@ public sealed partial class SceneEngineSync
         }
     }
 
+    private static void ApplyCameraExposure(
+        WorldDispatch world,
+        SceneNode node,
+        EngineComponentId component,
+        CameraComponent camera,
+        ushort apertureField,
+        ushort shutterField,
+        ushort isoField)
+    {
+        ImmutableArray<RuntimePropertyValue> exposure =
+        [
+            new((ushort)component, apertureField, camera.ApertureF),
+            new((ushort)component, shutterField, camera.ShutterRate),
+            new((ushort)component, isoField, camera.Iso),
+        ];
+        world.Execute(new RuntimeSetProperties(node.Id, exposure));
+    }
+
+    /// <summary>Projects authored rendering flags as local native values on every projection path.</summary>
+    private static void ApplyNodeRendering(WorldDispatch world, SceneNode node)
+    {
+        ImmutableArray<RuntimePropertyValue> flags =
+        [
+            new((ushort)EngineComponentId.Node, (ushort)NodeField.Visible, node.IsVisible ? 1f : 0f),
+            new((ushort)EngineComponentId.Node, (ushort)NodeField.CastsShadows, node.CastsShadows ? 1f : 0f),
+            new((ushort)EngineComponentId.Node, (ushort)NodeField.ReceivesShadows, node.ReceivesShadows ? 1f : 0f),
+        ];
+        world.Execute(new RuntimeSetProperties(node.Id, flags));
+    }
+
     private static void ApplyGeometry(WorldDispatch world, SceneNode node, GeometryComponent geometry)
     {
         if (geometry.Geometry?.Uri != null)
@@ -234,7 +266,8 @@ public sealed partial class SceneEngineSync
                 GeometryPathMapper.ToEnginePath(slot.Target.GeometryUri),
                 slot.Target.SlotId,
                 slot.Target.LayoutRevision,
-                MaterialOverridePathMapper.ToEnginePath(slot.Material.Uri), MaterialSlotAssignmentIntent.RetainedAssignment));
+                MaterialOverridePathMapper.ToEnginePath(slot.Material.Uri),
+                MaterialSlotAssignmentIntent.RetainedAssignment));
         }
     }
 
@@ -243,29 +276,7 @@ public sealed partial class SceneEngineSync
         switch (light)
         {
             case DirectionalLightComponent directional:
-                world.Execute(new RuntimeAttachDirectionalLight(
-                    node.Id,
-                    directional.IntensityLux,
-                    directional.AngularSizeRadians,
-                    directional.Color,
-                    directional.AffectsWorld,
-                    0,
-                    directional.CastsShadows,
-                    directional.ShadowBias,
-                    directional.ShadowNormalBias,
-                    directional.ContactShadows,
-                    (int)directional.ShadowResolutionHint,
-                    directional.ExposureCompensation,
-                    (int)directional.AtmosphereSlot,
-                    directional.UsePerPixelAtmosphereTransmittance,
-                    directional.AtmosphereDiskLuminanceScaleRgb,
-                    directional.CascadeCount,
-                    (int)directional.SplitMode,
-                    directional.MaxShadowDistance,
-                    directional.CascadeDistances,
-                    directional.DistributionExponent,
-                    directional.TransitionFraction,
-                    directional.DistanceFadeoutFraction));
+                ApplyDirectionalLight(world, node, directional);
                 break;
 
             case PointLightComponent point:
@@ -303,6 +314,31 @@ public sealed partial class SceneEngineSync
                 break;
         }
     }
+
+    private static void ApplyDirectionalLight(WorldDispatch world, SceneNode node, DirectionalLightComponent directional)
+        => world.Execute(new RuntimeAttachDirectionalLight(
+            node.Id,
+            directional.IntensityLux,
+            directional.AngularSizeRadians,
+            directional.Color,
+            directional.AffectsWorld,
+            0,
+            directional.CastsShadows,
+            directional.ShadowBias,
+            directional.ShadowNormalBias,
+            directional.ContactShadows,
+            (int)directional.ShadowResolutionHint,
+            directional.ExposureCompensation,
+            (int)directional.AtmosphereSlot,
+            directional.UsePerPixelAtmosphereTransmittance,
+            directional.AtmosphereDiskLuminanceScaleRgb,
+            directional.CascadeCount,
+            (int)directional.SplitMode,
+            directional.MaxShadowDistance,
+            directional.CascadeDistances,
+            directional.DistributionExponent,
+            directional.TransitionFraction,
+            directional.DistanceFadeoutFraction));
 
     private static float ToEngineFieldOfViewRadians(float fieldOfViewDegrees)
     {

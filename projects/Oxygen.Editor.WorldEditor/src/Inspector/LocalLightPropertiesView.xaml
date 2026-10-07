@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.World.Inspector.LocalLightPropertiesView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:fields="using:Oxygen.Editor.World.Inspector.Controls"
+    xmlns:local="using:Oxygen.Editor.World.Inspector"
+    xmlns:ui="using:CommunityToolkit.WinUI">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="SceneInspectorStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <StackPanel Spacing="4">
+        <fields:InspectorRgbField
+            x:Name="ColorField"
+            Blue="{x:Bind ViewModel.ColorB, Mode=TwoWay}"
+            ChannelAutomationName="Color, linear RGB"
+            ColorPicked="OnRgbColorPicked"
+            EditOwner="{x:Bind ViewModel, Mode=OneWay}"
+            EditSessionCompleted="VectorEditCompleted"
+            EditSessionStarted="VectorEditStarted"
+            ErrorText="{x:Bind ViewModel.ColorDiagnostic.Message, Mode=OneWay}"
+            FontSize="14"
+            Green="{x:Bind ViewModel.ColorG, Mode=TwoWay}"
+            HasError="{x:Bind ViewModel.ColorDiagnostic.HasError, Mode=OneWay}"
+            Label="Color"
+            PickerAutomationName="Pick light color"
+            Qualifier="Linear RGB"
+            Red="{x:Bind ViewModel.ColorR, Mode=TwoWay}"
+            Tag="Color" />
+        <editorcontrols:InspectorNumberField
+            CardStyle="{StaticResource ScenePropertyCardStyle}"
+            EditSessionCompleted="NumberEditCompleted"
+            EditSessionStarted="NumberEditStarted"
+            ErrorText="{x:Bind ViewModel.LuminousFluxLumensDiagnostic.Message, Mode=OneWay}"
+            FontSize="14"
+            HasError="{x:Bind ViewModel.LuminousFluxLumensDiagnostic.HasError, Mode=OneWay}"
+            IsMixed="{x:Bind ViewModel.LuminousFluxLumens.IsMixed, Mode=OneWay}"
+            Label="Luminous flux"
+            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+            NumberValue="{x:Bind ViewModel.LuminousFluxLumens.Value, Mode=TwoWay}"
+            Qualifier="lm"
+            Tag="LuminousFluxLumens" />
+        <editorcontrols:InspectorNumberField
+            CardStyle="{StaticResource ScenePropertyCardStyle}"
+            EditSessionCompleted="NumberEditCompleted"
+            EditSessionStarted="NumberEditStarted"
+            ErrorText="{x:Bind ViewModel.RangeDiagnostic.Message, Mode=OneWay}"
+            FontSize="14"
+            HasError="{x:Bind ViewModel.RangeDiagnostic.HasError, Mode=OneWay}"
+            IsMixed="{x:Bind ViewModel.Range.IsMixed, Mode=OneWay}"
+            Label="Range"
+            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+            NumberValue="{x:Bind ViewModel.Range.Value, Mode=TwoWay}"
+            Qualifier="m"
+            Tag="Range" />
+        <editorcontrols:InspectorNumberField
+            CardStyle="{StaticResource ScenePropertyCardStyle}"
+            EditSessionCompleted="NumberEditCompleted"
+            EditSessionStarted="NumberEditStarted"
+            ErrorText="{x:Bind ViewModel.SourceRadiusDiagnostic.Message, Mode=OneWay}"
+            FontSize="14"
+            HasError="{x:Bind ViewModel.SourceRadiusDiagnostic.HasError, Mode=OneWay}"
+            IsMixed="{x:Bind ViewModel.SourceRadius.IsMixed, Mode=OneWay}"
+            Label="Source radius"
+            Mask="~.###"
+            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+            NumberValue="{x:Bind ViewModel.SourceRadius.Value, Mode=TwoWay}"
+            Qualifier="m"
+            Tag="SourceRadius" />
+        <editorcontrols:PropertyCard PropertyName="Affects world">
+            <ToggleSwitch AutomationProperties.Name="Affects world" IsOn="{x:Bind ViewModel.AffectsWorld, Mode=TwoWay}" />
+        </editorcontrols:PropertyCard>
+        <editorcontrols:InspectorNumberField
+            CardStyle="{StaticResource ScenePropertyCardStyle}"
+            EditSessionCompleted="NumberEditCompleted"
+            EditSessionStarted="NumberEditStarted"
+            ErrorText="{x:Bind ViewModel.ExposureCompensationDiagnostic.Message, Mode=OneWay}"
+            FontSize="14"
+            HasError="{x:Bind ViewModel.ExposureCompensationDiagnostic.HasError, Mode=OneWay}"
+            IsMixed="{x:Bind ViewModel.ExposureCompensation.IsMixed, Mode=OneWay}"
+            Label="Exposure"
+            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+            NumberValue="{x:Bind ViewModel.ExposureCompensation.Value, Mode=TwoWay}"
+            Qualifier="EV"
+            Tag="ExposureCompensation" />
+        <TextBlock FontWeight="SemiBold" Text="Shadows" />
+        <editorcontrols:PropertyCard PropertyName="Cast shadows">
+            <ToggleSwitch AutomationProperties.Name="Cast shadows" IsOn="{x:Bind ViewModel.CastsShadows, Mode=TwoWay}" />
+        </editorcontrols:PropertyCard>
+        <editorcontrols:PropertyCard PropertyName="Contact shadows">
+            <ToggleSwitch AutomationProperties.Name="Contact shadows" IsOn="{x:Bind ViewModel.ContactShadows, Mode=TwoWay}" />
+        </editorcontrols:PropertyCard>
+        <editorcontrols:PropertyCard PropertyName="Resolution">
+            <ComboBox
+                HorizontalAlignment="Stretch"
+                AutomationProperties.Name="Shadow resolution"
+                ItemsSource="{x:Bind ViewModel.ShadowResolutionOptions}"
+                SelectedItem="{x:Bind ViewModel.ShadowResolutionHint, Mode=TwoWay}" />
+        </editorcontrols:PropertyCard>
+        <editorcontrols:InspectorNumberField
+            CardStyle="{StaticResource ScenePropertyCardStyle}"
+            EditSessionCompleted="NumberEditCompleted"
+            EditSessionStarted="NumberEditStarted"
+            ErrorText="{x:Bind ViewModel.ShadowBiasDiagnostic.Message, Mode=OneWay}"
+            FontSize="14"
+            HasError="{x:Bind ViewModel.ShadowBiasDiagnostic.HasError, Mode=OneWay}"
+            IsMixed="{x:Bind ViewModel.ShadowBias.IsMixed, Mode=OneWay}"
+            Label="Depth bias"
+            Mask="~.####"
+            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+            NumberValue="{x:Bind ViewModel.ShadowBias.Value, Mode=TwoWay}"
+            Tag="ShadowBias" />
+        <editorcontrols:InspectorNumberField
+            CardStyle="{StaticResource ScenePropertyCardStyle}"
+            EditSessionCompleted="NumberEditCompleted"
+            EditSessionStarted="NumberEditStarted"
+            ErrorText="{x:Bind ViewModel.ShadowNormalBiasDiagnostic.Message, Mode=OneWay}"
+            FontSize="14"
+            HasError="{x:Bind ViewModel.ShadowNormalBiasDiagnostic.HasError, Mode=OneWay}"
+            IsMixed="{x:Bind ViewModel.ShadowNormalBias.IsMixed, Mode=OneWay}"
+            Label="Normal bias"
+            Mask="~.####"
+            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+            NumberValue="{x:Bind ViewModel.ShadowNormalBias.Value, Mode=TwoWay}"
+            Tag="ShadowNormalBias" />
+    </StackPanel>
+</UserControl>

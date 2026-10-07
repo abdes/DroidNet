@@ -263,18 +263,6 @@ public partial class SceneEngineSync
     private void LogLodPolicySyncUnsupported(Guid nodeId)
         => LogLodPolicySyncUnsupported(this.logger, nodeId);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Live rendering-settings sync is unsupported for node {NodeId}")]
-    private static partial void LogRenderingSettingsSyncUnsupported(ILogger logger, Guid nodeId);
-
-    private void LogRenderingSettingsSyncUnsupported(Guid nodeId)
-        => LogRenderingSettingsSyncUnsupported(this.logger, nodeId);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Live lighting-settings sync is unsupported for node {NodeId}")]
-    private static partial void LogLightingSettingsSyncUnsupported(ILogger logger, Guid nodeId);
-
-    private void LogLightingSettingsSyncUnsupported(Guid nodeId)
-        => LogLightingSettingsSyncUnsupported(this.logger, nodeId);
-
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to attach camera component to node {NodeId}")]
     private static partial void LogFailedToAttachCameraComponent(ILogger logger, Exception exception, Guid nodeId);
 
@@ -286,6 +274,12 @@ public partial class SceneEngineSync
 
     private void LogFailedToAttachLightComponent(Exception ex, Guid nodeId)
         => LogFailedToAttachLightComponent(this.logger, ex, nodeId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to apply authored rendering flags to node {NodeId}")]
+    private static partial void LogFailedToApplyNodeRendering(ILogger logger, Exception exception, Guid nodeId);
+
+    private void LogFailedToApplyNodeRendering(Exception ex, Guid nodeId)
+        => LogFailedToApplyNodeRendering(this.logger, ex, nodeId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Camera component type {CameraType} on node {NodeId} is not supported by live engine sync")]
     private static partial void LogUnsupportedCameraComponent(ILogger logger, string cameraType, Guid nodeId);

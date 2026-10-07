@@ -333,6 +333,22 @@ internal static class InspectorControls
         {
             ViewModel = transform,
         },
+        OrthographicCameraViewModel orthographic => new OrthographicCameraView
+        {
+            ViewModel = orthographic,
+        },
+        PointLightViewModel point => new PointLightView
+        {
+            ViewModel = point,
+        },
+        SpotLightViewModel spot => new SpotLightView
+        {
+            ViewModel = spot,
+        },
+        NodeRenderingViewModel rendering => new NodeRenderingView
+        {
+            ViewModel = rendering,
+        },
         _ => throw new ArgumentException("Expected a numeric inspector.", nameof(model)),
     };
 
@@ -342,6 +358,9 @@ internal static class InspectorControls
         PerspectiveCameraViewModel camera => camera.PendingEdits,
         DirectionalLightViewModel light => light.PendingEdits,
         EnvironmentViewModel environment => environment.PendingEdits,
+        OrthographicCameraViewModel orthographic => orthographic.PendingEdits,
+        LocalLightViewModel light => light.PendingEdits,
+        NodeRenderingViewModel rendering => rendering.PendingEdits,
         _ => throw new ArgumentException("Expected a numeric inspector.", nameof(model)),
     };
 

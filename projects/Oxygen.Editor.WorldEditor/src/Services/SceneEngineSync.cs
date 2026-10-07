@@ -253,13 +253,6 @@ public sealed partial class SceneEngineSync(
                 cancellationToken,
                 out var readinessOutcome)
             ? Task.FromResult(readinessOutcome)
-            : camera is not PerspectiveCamera
-            ? Task.FromResult(
-                Unsupported(
-                    SceneOperationKinds.EditPerspectiveCamera,
-                    scope,
-                    LiveSyncDiagnosticCodes.CameraUnsupported,
-                    $"Camera component '{camera.GetType().Name}' has no live sync adapter in ED-M04."))
             : this.ExecuteNodeSyncAsync(
             scene,
             node,
@@ -301,45 +294,6 @@ public sealed partial class SceneEngineSync(
     public Task<SyncOutcome> RestoreMaterialSlotAsync(
         Scene scene, SceneNode node, MaterialSlotTarget target, Uri? materialUri, CancellationToken cancellationToken = default)
         => this.SyncMaterialSlotAsync(scene, node, target, materialUri, MaterialSlotAssignmentIntent.RetainedAssignment, cancellationToken);
-
-    private Task<SyncOutcome> SyncMaterialSlotAsync(
-        Scene scene, SceneNode node, MaterialSlotTarget target, Uri? materialUri,
-        MaterialSlotAssignmentIntent intent, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(scene);
-        ArgumentNullException.ThrowIfNull(node);
-        ArgumentNullException.ThrowIfNull(target);
-
-        var scope = Scope(
-            scene,
-            node,
-            componentType: nameof(GeometryComponent),
-            assetVirtualPath: materialUri?.ToString());
-
-        return this.TryClassifyReadiness(
-                this.engineService,
-                scene,
-                SceneOperationKinds.EditMaterialSlot,
-                scope,
-                cancellationToken,
-                out var readinessOutcome)
-            ? Task.FromResult(readinessOutcome)
-            : this.ExecuteNodeSyncAsync(
-            scene,
-            node,
-            node.Id,
-            SceneOperationKinds.EditMaterialSlot,
-            nameof(GeometryComponent),
-            LiveSyncDiagnosticCodes.MaterialRejected,
-            LiveSyncDiagnosticCodes.MaterialFailed,
-            world => world.Execute(new RuntimeSetMaterialOverride(
-                node.Id,
-                GeometryPathMapper.ToEnginePath(target.GeometryUri),
-                target.SlotId,
-                target.LayoutRevision,
-                MaterialOverridePathMapper.ToEnginePath(materialUri), intent)),
-            cancellationToken);
-    }
 
     /// <inheritdoc/>
     public Task<EnvironmentSyncResult> UpdateEnvironmentAsync(
@@ -660,20 +614,6 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
-    public Task UpdateRenderingSettingsAsync(Guid nodeId, RenderingSlot renderingSlot)
-    {
-        this.LogRenderingSettingsSyncUnsupported(nodeId);
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc/>
-    public Task UpdateLightingSettingsAsync(Guid nodeId, LightingSlot lightingSlot)
-    {
-        this.LogLightingSettingsSyncUnsupported(nodeId);
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc/>
     public bool ShouldIssuePreviewSync(Guid sceneId, Guid nodeId, DateTimeOffset observedAt)
         => this.coalescer.ShouldIssuePreview(new SyncCoalescingKey(sceneId, nodeId), observedAt);
 
@@ -788,11 +728,9 @@ public sealed partial class SceneEngineSync(
             throw new InvalidOperationException("An exposure mask requires a saved project and a source mount.");
         }
 
-        return new(mask,
-            this.engineService.ContentStatus.Bindings.SingleOrDefault(root => string.Equals(root.ProjectMount, path[1..separator], StringComparison.OrdinalIgnoreCase))?.Path
-                ?? throw new InvalidOperationException("The exposure mask has no accepted cooked generation. Cook its content before previewing it."),
-            path[(separator + 1)..])
-        { ProjectMount = path[1..separator] };
+        var cookedRoot = this.engineService.ContentStatus.Bindings.SingleOrDefault(root => string.Equals(root.ProjectMount, path[1..separator], StringComparison.OrdinalIgnoreCase))?.Path
+            ?? throw new InvalidOperationException("The exposure mask has no accepted cooked generation. Cook its content before previewing it.");
+        return new(mask, cookedRoot, path[(separator + 1)..]) { ProjectMount = path[1..separator] };
     }
 
     private async Task<bool> SyncSceneCoreAsync(Scene scene, bool skipIfCurrent, CancellationToken cancellationToken)
@@ -1227,9 +1165,63 @@ public sealed partial class SceneEngineSync(
         }
     }
 
+    private Task<SyncOutcome> SyncMaterialSlotAsync(
+        Scene scene,
+        SceneNode node,
+        MaterialSlotTarget target,
+        Uri? materialUri,
+        MaterialSlotAssignmentIntent intent,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(target);
+
+        var scope = Scope(
+            scene,
+            node,
+            componentType: nameof(GeometryComponent),
+            assetVirtualPath: materialUri?.ToString());
+
+        return this.TryClassifyReadiness(
+                this.engineService,
+                scene,
+                SceneOperationKinds.EditMaterialSlot,
+                scope,
+                cancellationToken,
+                out var readinessOutcome)
+            ? Task.FromResult(readinessOutcome)
+            : this.ExecuteNodeSyncAsync(
+            scene,
+            node,
+            node.Id,
+            SceneOperationKinds.EditMaterialSlot,
+            nameof(GeometryComponent),
+            LiveSyncDiagnosticCodes.MaterialRejected,
+            LiveSyncDiagnosticCodes.MaterialFailed,
+            world => world.Execute(new RuntimeSetMaterialOverride(
+                node.Id,
+                GeometryPathMapper.ToEnginePath(target.GeometryUri),
+                target.SlotId,
+                target.LayoutRevision,
+                MaterialOverridePathMapper.ToEnginePath(materialUri),
+                intent)),
+            cancellationToken);
+    }
+
     private bool ApplyRenderableComponents(WorldDispatch world, SceneNode node)
     {
         var succeeded = true;
+        try
+        {
+            ApplyNodeRendering(world, node);
+        }
+        catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
+        {
+            succeeded = false;
+            this.LogFailedToApplyNodeRendering(ex, node.Id);
+        }
+
         var geometryComp = node.Components.OfType<GeometryComponent>().FirstOrDefault();
         if (geometryComp is not null)
         {
@@ -1285,12 +1277,18 @@ public sealed partial class SceneEngineSync(
                     perspective.NearPlane,
                     perspective.FarPlane,
                     perspective.AspectMode));
-                world.Execute(new RuntimeSetProperties(node.Id,
-                [
-                    new((ushort)EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.ApertureF, perspective.ApertureF),
-                    new((ushort)EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.ShutterRate, perspective.ShutterRate),
-                    new((ushort)EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.Iso, perspective.Iso),
-                ]));
+                ApplyCameraExposure(world, node, EngineComponentId.PerspectiveCamera, perspective, (ushort)PerspectiveCameraField.ApertureF, (ushort)PerspectiveCameraField.ShutterRate, (ushort)PerspectiveCameraField.Iso);
+                break;
+
+            case OrthographicCamera orthographic:
+                world.Execute(new RuntimeAttachOrthographicCamera(
+                    node.Id,
+                    orthographic.OrthographicSize,
+                    orthographic.AspectRatio,
+                    orthographic.NearPlane,
+                    orthographic.FarPlane,
+                    orthographic.AspectMode));
+                ApplyCameraExposure(world, node, EngineComponentId.OrthographicCamera, orthographic, (ushort)OrthographicCameraField.ApertureF, (ushort)OrthographicCameraField.ShutterRate, (ushort)OrthographicCameraField.Iso);
                 break;
 
             default:

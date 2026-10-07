@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.World.Inspector.PointLightView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:fields="using:Oxygen.Editor.World.Inspector.Controls"
+    xmlns:local="using:Oxygen.Editor.World.Inspector"
+    xmlns:ui="using:CommunityToolkit.WinUI">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="SceneInspectorStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <editorcontrols:PropertiesExpander
+        HorizontalAlignment="Stretch"
+        HorizontalContentAlignment="Stretch"
+        Description="{x:Bind ViewModel.Description, Mode=OneWay}"
+        Header="{x:Bind ViewModel.Header, Mode=OneWay}"
+        HeaderIcon="{ui:FontIcon Glyph='&#xE706;'}"
+        IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
+        <editorcontrols:PropertiesExpander.Items>
+            <local:LocalLightPropertiesView ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
+        </editorcontrols:PropertiesExpander.Items>
+    </editorcontrols:PropertiesExpander>
+</UserControl>

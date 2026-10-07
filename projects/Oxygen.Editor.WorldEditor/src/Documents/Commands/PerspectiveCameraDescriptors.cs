@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 #pragma warning disable IDE0130 // Authoring commands use the established WorldEditor namespace across this assembly.
@@ -19,7 +20,8 @@ internal sealed class PerspectiveCameraDescriptors
         PropertyDescriptor<float> fieldOfViewDegrees,
         PropertyDescriptor<float> aspectRatio,
         PropertyDescriptor<float> nearPlane,
-        PropertyDescriptor<float> farPlane)
+        PropertyDescriptor<float> farPlane,
+        PropertyDescriptor<CameraAspectMode> aspectMode)
     {
         this.FieldOfViewDegrees = new PropertyId<float>(fieldOfViewDegrees.Id);
         this.AspectRatio = new PropertyId<float>(aspectRatio.Id);
@@ -29,8 +31,10 @@ internal sealed class PerspectiveCameraDescriptors
         this.AspectRatioDescriptor = aspectRatio;
         this.NearPlaneDescriptor = nearPlane;
         this.FarPlaneDescriptor = farPlane;
+        this.AspectModeDescriptor = aspectMode;
         this.ById = new Dictionary<PropertyId, PropertyDescriptor>
         {
+            [aspectMode.Id] = aspectMode,
             [fieldOfViewDegrees.Id] = fieldOfViewDegrees,
             [aspectRatio.Id] = aspectRatio,
             [nearPlane.Id] = nearPlane,
@@ -49,6 +53,12 @@ internal sealed class PerspectiveCameraDescriptors
 
     /// <summary>Gets the typed property id for the far clipping plane.</summary>
     internal PropertyId<float> FarPlane { get; }
+
+    /// <summary>Gets the typed property id for the framing policy.</summary>
+    internal PropertyId<CameraAspectMode> AspectMode => new(this.AspectModeDescriptor.Id);
+
+    /// <summary>Gets the descriptor for the framing policy.</summary>
+    internal PropertyDescriptor<CameraAspectMode> AspectModeDescriptor { get; }
 
     /// <summary>Gets the descriptor for field of view.</summary>
     internal PropertyDescriptor<float> FieldOfViewDegreesDescriptor { get; }
@@ -110,7 +120,18 @@ internal sealed class PerspectiveCameraDescriptors
                 static value => float.IsFinite(value)
                     ? ValidationResult.Ok
                     : ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers."),
-                "perspective_camera.far_plane"));
+                "perspective_camera.far_plane"),
+            aspectMode: new(
+                id: new PropertyId<CameraAspectMode>(SceneDocumentCommandService.PerspectiveCameraKind, "/aspect_mode"),
+                reader: static target => ((PerspectiveCamera)target).AspectMode,
+                writer: static (target, value) => ((PerspectiveCamera)target).AspectMode = value,
+                validator: static value => Enum.IsDefined(value)
+                    ? ValidationResult.Ok
+                    : ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Unknown camera aspect mode."),
+                annotation: SceneEditorSchemaAnnotations.Get(
+                    "#/definitions/perspective_camera/aspect_mode",
+                    new EditorAnnotation { Group = "Projection", Label = "Aspect Mode", Renderer = "combobox" }),
+                engineCommandKey: "perspective_camera.aspect_mode"));
 
     private static PropertyDescriptor<float> FloatDescriptor(
         string pointer,

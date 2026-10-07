@@ -11,8 +11,10 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// <param name="AspectRatio">Optional aspect ratio.</param>
 /// <param name="NearPlane">Optional near plane.</param>
 /// <param name="FarPlane">Optional far plane.</param>
+/// <param name="AspectMode">Optional framing policy.</param>
 public sealed record PerspectiveCameraEdit(
     OptionalEditValue<float> FieldOfViewDegrees,
     OptionalEditValue<float> AspectRatio,
     OptionalEditValue<float> NearPlane,
-    OptionalEditValue<float> FarPlane);
+    OptionalEditValue<float> FarPlane,
+    OptionalEditValue<Oxygen.Managed.Core.CameraAspectMode> AspectMode = default);

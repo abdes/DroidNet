@@ -11,6 +11,7 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Services;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Editor.WorldEditor.Unit.Tests.Services;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
@@ -45,8 +46,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         creation.SetResult(new(creationRequest!.OperationId, creationRequest.Target.RunId, RuntimeCommandStatus.Accepted));
         _ = (await rebuilding.ConfigureAwait(false)).Should().BeTrue();
 
-        _ = requests.Select(request => request.Command).OfType<RuntimeSetProperties>().Should().ContainSingle().Which.Entries
-            .Should().ContainSingle().Which.Value.Should().Be(9);
+        _ = requests.PropertyEntries(node.Id, EngineComponentId.Transform).Should().Equal(RuntimePropertyRequests.PositionX(9));
         notification.SetResult(true);
         _ = await editing.ConfigureAwait(false);
     }
@@ -75,11 +75,10 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = (await synchronization.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
 
         _ = requests.Select(request => request.Command).OfType<RuntimeSetLocalTransform>().Should().ContainSingle().Which.Position.Should().Be(Vector3.Zero);
-        _ = requests.Select(request => request.Command).OfType<RuntimeSetProperties>().Should().BeEmpty("the snapshot supersedes both the offline edit and its undo");
+        _ = requests.PropertyEntries(node.Id, EngineComponentId.Transform).Should().BeEmpty("the snapshot supersedes both the offline edit and its undo");
         _ = synchronization.GetPendingPropertySyncCount(scene.Id).Should().Be(0);
         await context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = requests.Select(request => request.Command).OfType<RuntimeSetProperties>().Should().ContainSingle().Which.Entries
-            .Should().ContainSingle().Which.Value.Should().Be(7);
+        _ = requests.PropertyEntries(node.Id, EngineComponentId.Transform).Should().Equal(RuntimePropertyRequests.PositionX(7));
         _ = context.Metadata.ChangeVersion.Should().Be(3);
     }
 

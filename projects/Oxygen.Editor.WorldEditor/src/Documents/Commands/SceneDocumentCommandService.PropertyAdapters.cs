@@ -41,6 +41,7 @@ public sealed partial class SceneDocumentCommandService
             PerspectiveCameraKind => SceneOperationKinds.EditPerspectiveCamera,
             DirectionalLightKind => SceneOperationKinds.EditDirectionalLight,
             SceneEnvironmentKind => SceneOperationKinds.EditEnvironment,
+            _ when IsDescriptorOnlyKind(kind) => DescriptorOnlyOperationKind(kind),
             _ => SceneOperationKinds.EditTransform,
         };
 
@@ -54,7 +55,8 @@ public sealed partial class SceneDocumentCommandService
             GetOptional(edit, PerspectiveCamera.FieldOfViewDegrees),
             GetOptional(edit, PerspectiveCamera.AspectRatio),
             GetOptional(edit, PerspectiveCamera.NearPlane),
-            GetOptional(edit, PerspectiveCamera.FarPlane));
+            GetOptional(edit, PerspectiveCamera.FarPlane),
+            GetOptional(edit, PerspectiveCamera.AspectMode));
 
     private static DirectionalLightEdit BuildDirectionalLightEditFromPropertyEdit(PropertyEdit edit)
         => new(
@@ -148,7 +150,7 @@ public sealed partial class SceneDocumentCommandService
             GeometryKind => Geometry.ById,
             PerspectiveCameraKind => PerspectiveCamera.ById,
             DirectionalLightKind => DirectionalLight.ById,
-            _ => null,
+            _ => DescriptorOnlyCatalog(kind),
         };
 
         if (descriptors is null)

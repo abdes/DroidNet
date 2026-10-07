@@ -10,7 +10,7 @@ namespace Oxygen.Editor.World.Inspector.Editing;
 
 /// <summary>Owns typed binding subscriptions and routes requests through the existing captured-target coordinator.</summary>
 /// <typeparam name="T">The authored value type.</typeparam>
-internal sealed class InspectorBindingRegistration<T> : IDisposable
+internal sealed class InspectorBindingRegistration<T> : IInspectorBindingRefresh
 {
     private readonly PropertyBinding<T> binding;
     private readonly InspectorEditSessionCoordinator? coordinator;
@@ -53,10 +53,8 @@ internal sealed class InspectorBindingRegistration<T> : IDisposable
         }
     }
 
-    /// <summary>Refreshes canonical state while ignoring two-way control echoes.</summary>
-    /// <param name="nodes">Captured contributing node identities.</param>
-    /// <param name="targets">The current typed component lookup.</param>
-    internal void Refresh(IReadOnlyList<Guid> nodes, Func<Guid, object?> targets)
+    /// <inheritdoc />
+    public void Refresh(IReadOnlyList<Guid> nodes, Func<Guid, object?> targets)
     {
         var previous = this.binding.HasValue ? (object?)this.binding.Value : null;
         var wasMixed = this.binding.IsMixed;

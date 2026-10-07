@@ -557,6 +557,31 @@ with live effect and history/Undo/Save/reopen; orthographic framing with Auto re
 and Fixed fit; orthographic sync command attaches authored cameras to editor views.
 Preserve existing material-sidedness and mirrored-winding correctness.
 
+#### M08.2 status (2026-10-07)
+
+| Item                 | State                   | Delivered / remaining                                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 Invalidation       | landed_needs_validation | `SceneRenderer` syncs observers after `Update(false)`; `SetPropertiesCommand` updates and syncs after every applier run. Remaining: native flag/role-edit cache test.                                                                                                                                                                                                                                                           |
+| 2 Rendering section  | landed_needs_validation | Node descriptors, Interop `NodePropertyApplier` (`ComponentId::kNode`, local values), projection of authored flags on every node create/sync, inspector section after component sections. Dedicated Set{Visibility,CastShadows,ReceiveShadows} commands removed. Remaining: editor workflow check, Shown child under Hidden parent rendered.                                                                                    |
+| 3 Grading shaders    | planned                 | `PostProcessConfig` carries saturation/contrast/vignette; no shader consumer yet (`Tonemap.hlsl`, `Exposure.hlsl`).                                                                                                                                                                                                                                                                                                             |
+| 4 Framing            | partial                 | Orthographic Auto/Fixed per target in `OrthographicCamera::ProjectionMatrix(target)` and the view resolver; cooked `OrthographicCameraRecord.aspect_mode`; size/ratio descriptor schema; scene version 11 with all Examples descriptors migrated and recooked. Editor ortho inspector, perspective Aspect Mode selector, live attach, cooking. Remaining: Fixed content rectangle, bars after post-process, metering exclusion. |
+| 5 Point/spot editors | landed_needs_validation | Descriptors, Interop `LocalLightPropertyApplier`, inspectors (cones in degrees), history/save/cook/live. Remaining: editor workflow check.                                                                                                                                                                                                                                                                                      |
+
+Evidence: full native Debug build and Examples recook; 11 native test executables
+pass (Scene cameras, SceneNode, DirectionalLightResolver, Data.All, Cooker
+SceneDescriptor/Scene/Gltf/Fbx, Content.AssetLoader, SceneCameraViewResolver);
+Interop builds; World 79/79, ContentPipeline descriptor 41/41, WorldEditor
+Unit, Unit.UI and Integration.UI lanes pass in full on the owner's runs, with
+integration tests on one shared native engine and node observation checking the
+rendering flags through history and Save/reopen. Not run: Interop native tests,
+editor workflow checks.
+
+Resume order: grading shader consumers (item 3), then the Fixed framing content
+rectangle, bars and metering exclusion (item 4), each with native tests; then
+the native flag/role-edit cache test (item 1), status docs and editor workflow
+checks for items 1, 2 and 5. Editor projects cooked at scene version 10 must be
+recooked.
+
 ### M08.3 — Development harness and native visual gate
 
 Implement the named opt-in targets and standalone LLD's version-1 protocol.

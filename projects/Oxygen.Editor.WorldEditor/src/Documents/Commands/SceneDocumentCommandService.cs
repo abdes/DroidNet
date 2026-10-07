@@ -188,12 +188,7 @@ public sealed partial class SceneDocumentCommandService(
 
         if (targets.Count == 0)
         {
-            return this.ValidationFailure(
-                SceneOperationKinds.EditTransform,
-                SceneDiagnosticCodes.ComponentRemoveDenied,
-                "Transform was not edited",
-                "No selected node has a transform component.",
-                context);
+            return this.NoTargetComponent(context, SceneOperationKinds.EditTransform, "Transform was not edited", "No selected node has a transform component.");
         }
 
         if (!session.IsOneShot)
@@ -280,12 +275,7 @@ public sealed partial class SceneDocumentCommandService(
 
         if (targets.Count == 0)
         {
-            return this.ValidationFailure(
-                SceneOperationKinds.EditPerspectiveCamera,
-                SceneDiagnosticCodes.ComponentRemoveDenied,
-                "Camera was not edited",
-                "No selected node has a perspective camera component.",
-                context);
+            return this.NoTargetComponent(context, SceneOperationKinds.EditPerspectiveCamera, "Camera was not edited", "No selected node has a perspective camera component.");
         }
 
         var before = targets.ConvertAll(static target => CameraState.Capture(target.Node, target.Camera!));
@@ -377,13 +367,7 @@ public sealed partial class SceneDocumentCommandService(
         var node = FindNode(context.Scene, nodeId);
         if (node is null)
         {
-            var operationResultId = this.PublishSceneFailure(
-                SceneOperationKinds.AddComponent,
-                SceneDiagnosticCodes.ComponentAddDenied,
-                "Component was not added",
-                "The target scene node no longer exists.",
-                context);
-            return SceneCommandResults.Failure<GameComponent>(operationResultId);
+            return this.AddComponentDenied(context, "The target scene node no longer exists.");
         }
 
         if (this.RejectLockedTargets(context, SceneOperationKinds.AddComponent, [node]) is { } lockFailure)
@@ -393,13 +377,7 @@ public sealed partial class SceneDocumentCommandService(
 
         if (!CanAddComponent(node, componentType, out var reason))
         {
-            var operationResultId = this.PublishSceneFailure(
-                SceneOperationKinds.AddComponent,
-                SceneDiagnosticCodes.ComponentAddDenied,
-                "Component was not added",
-                reason,
-                context);
-            return SceneCommandResults.Failure<GameComponent>(operationResultId);
+            return this.AddComponentDenied(context, reason);
         }
 
         var component = CreateComponent(componentType);
@@ -655,7 +633,7 @@ public sealed partial class SceneDocumentCommandService(
            edit.ScaleZ.HasValue;
 
     private static bool HasAnyPerspectiveCameraField(PerspectiveCameraEdit edit)
-        => edit.FieldOfViewDegrees.HasValue || edit.AspectRatio.HasValue || edit.NearPlane.HasValue || edit.FarPlane.HasValue;
+        => edit.FieldOfViewDegrees.HasValue || edit.AspectRatio.HasValue || edit.NearPlane.HasValue || edit.FarPlane.HasValue || edit.AspectMode.HasValue;
 
     private static bool HasAnyDirectionalLightField(DirectionalLightEdit edit)
         => edit.Color.HasValue ||
@@ -868,6 +846,11 @@ public sealed partial class SceneDocumentCommandService(
         if (edit.FarPlane.HasValue)
         {
             camera.FarPlane = Get(edit.FarPlane);
+        }
+
+        if (edit.AspectMode.HasValue)
+        {
+            camera.AspectMode = Get(edit.AspectMode);
         }
     }
 
@@ -1457,6 +1440,17 @@ public sealed partial class SceneDocumentCommandService(
         _ = await this.SyncGeometryStatesAsync(context, states, SceneOperationKinds.EditGeometry).ConfigureAwait(true);
     }
 
+    private SceneCommandResult NoTargetComponent(SceneDocumentCommandContext context, string operationKind, string title, string message)
+        => this.ValidationFailure(operationKind, SceneDiagnosticCodes.ComponentRemoveDenied, title, message, context);
+
+    private SceneValueCommandResult<GameComponent> AddComponentDenied(SceneDocumentCommandContext context, string reason)
+        => SceneCommandResults.Failure<GameComponent>(this.PublishSceneFailure(
+            SceneOperationKinds.AddComponent,
+            SceneDiagnosticCodes.ComponentAddDenied,
+            "Component was not added",
+            reason,
+            context));
+
     private void RecordCameraHistory(SceneDocumentCommandContext context, IReadOnlyList<CameraState> before, IReadOnlyList<CameraState> after)
         => context.History.AddChange("Restore Camera", async () => await this.ApplyCameraStatesForHistoryAsync(context, before, after).ConfigureAwait(true));
 
@@ -1900,15 +1894,16 @@ public sealed partial class SceneDocumentCommandService(
             => this.Geometry.Geometry = this.GeometryUri is null ? null : new AssetReference<GeometryAsset>(this.GeometryUri);
     }
 
-    private sealed record CameraState(SceneNode Node, PerspectiveCamera Camera, float FieldOfView, float AspectRatio, float NearPlane, float FarPlane)
+    private sealed record CameraState(SceneNode Node, PerspectiveCamera Camera, float FieldOfView, float AspectRatio, float NearPlane, float FarPlane, Oxygen.Managed.Core.CameraAspectMode AspectMode)
     {
         public static CameraState Capture(SceneNode node, PerspectiveCamera camera)
-            => new(node, camera, camera.FieldOfView, camera.AspectRatio, camera.NearPlane, camera.FarPlane);
+            => new(node, camera, camera.FieldOfView, camera.AspectRatio, camera.NearPlane, camera.FarPlane, camera.AspectMode);
 
         public void Apply()
         {
             this.Camera.FieldOfView = this.FieldOfView;
             this.Camera.AspectRatio = this.AspectRatio;
+            this.Camera.AspectMode = this.AspectMode;
             this.Camera.NearPlane = this.NearPlane;
             this.Camera.FarPlane = this.FarPlane;
         }

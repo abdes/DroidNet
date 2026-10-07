@@ -90,6 +90,58 @@ public sealed partial class SceneEngineSyncTests
     }
 
     [TestMethod]
+    public async Task SceneProjection_AttachesOrthographicCameraAndProjectsAuthoredFlags()
+    {
+        var commands = CreateManagedWorld();
+        var requests = new List<RuntimeWorldRequest>();
+        _ = commands.Setup(value => value.Execute(It.IsAny<RuntimeWorldRequest>(), It.IsAny<CancellationToken>()))
+            .Returns((RuntimeWorldRequest request, CancellationToken _) =>
+            {
+                requests.Add(request);
+                return new RuntimeCommandResult(request.OperationId, request.Target.RunId, RuntimeCommandStatus.Accepted);
+            });
+        var engine = new Mock<IEngineService>();
+        _ = engine.SetupGet(value => value.State).Returns(EngineServiceState.Running);
+        _ = engine.SetupGet(value => value.WorldCommands).Returns(commands.Object);
+        using var sut = new SceneEngineSync(engine.Object);
+        var scene = CreateScene();
+        _ = sut.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
+        var parent = new SceneNode(scene) { Name = "Hidden parent", IsVisible = false, CastsShadows = true, ReceivesShadows = false };
+        var child = new SceneNode(scene) { Name = "Shown child", IsVisible = true };
+        parent.AddChild(child);
+        scene.RootNodes.Add(parent);
+        child.Components.Add(new OrthographicCamera
+        {
+            Name = "Top",
+            OrthographicSize = 5f,
+            AspectRatio = 2f,
+            AspectMode = Oxygen.Managed.Core.CameraAspectMode.Fixed,
+            NearPlane = 0.5f,
+            FarPlane = 50f,
+        });
+
+        _ = (await sut.SyncSceneAsync(scene, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
+
+        var camera = requests.Select(value => value.Command).OfType<RuntimeAttachOrthographicCamera>().Should().ContainSingle().Subject;
+        _ = camera.NodeId.Should().Be(child.Id);
+        _ = camera.OrthographicSize.Should().Be(5f);
+        _ = camera.AspectRatio.Should().Be(2f);
+        _ = camera.AspectMode.Should().Be(Oxygen.Managed.Core.CameraAspectMode.Fixed);
+        _ = camera.NearPlane.Should().Be(0.5f);
+        _ = camera.FarPlane.Should().Be(50f);
+        _ = Flags(parent.Id).Should().Equal(0f, 1f, 0f);
+        _ = Flags(child.Id).Should().Equal(1f, child.CastsShadows ? 1f : 0f, child.ReceivesShadows ? 1f : 0f);
+
+        IEnumerable<float> Flags(Guid nodeId)
+            => requests.Select(value => value.Command).OfType<RuntimeSetProperties>()
+                .Where(command => command.NodeId == nodeId)
+                .SelectMany(command => command.Entries)
+                .Where(entry => entry.ComponentId == (ushort)EngineComponentId.Node)
+                .OrderBy(entry => entry.FieldId)
+                .Select(entry => entry.Value);
+    }
+
+    [TestMethod]
     public async Task SavedMaterialProjectionAndHistoryUseRetainedIdentity()
     {
         var commands = CreateManagedWorld();
@@ -108,8 +160,10 @@ public sealed partial class SceneEngineSyncTests
         _ = sync.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
         var node = new SceneNode(scene) { Name = "Saved geometry" };
         scene.RootNodes.Add(node);
-        var target = new Oxygen.Editor.World.Slots.MaterialSlotTarget(new Uri("asset:///Engine/Generated/BasicShapes/Cube"),
-            Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
+        var target = new Oxygen.Editor.World.Slots.MaterialSlotTarget(
+            new Uri("asset:///Engine/Generated/BasicShapes/Cube"),
+            Guid.Parse("10000000-0000-0000-0000-000000000001"),
+            new string('a', 64));
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = new(target.GeometryUri) };
         geometry.OverrideSlots.Add(new Oxygen.Editor.World.Slots.MaterialsSlot { Target = target, Material = new(new Uri("asset:///Content/Materials/Saved.omat.json")) });
         node.Components.Add(geometry);

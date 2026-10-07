@@ -30,6 +30,9 @@ internal static class InspectorFieldCases
         var rotation = TransformConverter.QuaternionToEulerDegrees(transform.LocalRotation);
         var scale = transform.LocalScale;
         Add(1, [position.X, position.Y, position.Z, rotation.X, rotation.Y, rotation.Z, scale.X, scale.Y, scale.Z]);
+
+        // Node rendering flags (NodeField order); native observation reports them for every node.
+        Add(7, [node.IsVisible ? 1f : 0f, node.CastsShadows ? 1f : 0f, node.ReceivesShadows ? 1f : 0f]);
         if (node.Components.OfType<PerspectiveCamera>().FirstOrDefault() is { } camera)
         {
             Add(2, [camera.FieldOfView * MathF.PI / 180f, camera.AspectRatio, camera.NearPlane, camera.FarPlane, camera.ApertureF, camera.ShutterRate, camera.Iso, (float)camera.AspectMode]);

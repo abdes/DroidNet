@@ -82,6 +82,26 @@ public static class SceneOperationKinds
     public const string EditDirectionalLight = "Scene.Component.EditLight";
 
     /// <summary>
+    /// Orthographic camera component edit.
+    /// </summary>
+    public const string EditOrthographicCamera = "Scene.Component.EditOrthographicCamera";
+
+    /// <summary>
+    /// Point light component edit.
+    /// </summary>
+    public const string EditPointLight = "Scene.Component.EditPointLight";
+
+    /// <summary>
+    /// Spot light component edit.
+    /// </summary>
+    public const string EditSpotLight = "Scene.Component.EditSpotLight";
+
+    /// <summary>
+    /// Authored node rendering flags edit (scene visibility, cast and receive shadows).
+    /// </summary>
+    public const string EditNodeRendering = "Scene.Node.EditRendering";
+
+    /// <summary>
     /// Component add.
     /// </summary>
     public const string AddComponent = "Scene.Component.Add";

@@ -61,13 +61,25 @@ internal sealed record NativeMaterialSlotOverride(
     [property: JsonPropertyName("layout_revision")] string LayoutRevision);
 
 internal sealed record NativeCameras(
-    [property: JsonPropertyName("perspective")] IReadOnlyList<NativePerspectiveCamera>? Perspective);
+    [property: JsonPropertyName("perspective")] IReadOnlyList<NativePerspectiveCamera>? Perspective,
+    [property: JsonPropertyName("orthographic")] IReadOnlyList<NativeOrthographicCamera>? Orthographic);
 
 internal sealed record NativePerspectiveCamera(
     [property: JsonPropertyName("node")] int Node,
     [property: JsonPropertyName("fov_y")] float FieldOfViewY,
     [property: JsonPropertyName("aspect_ratio")] float AspectRatio,
     [property: JsonPropertyName("aspect_mode")] string AspectMode,
+    [property: JsonPropertyName("near_plane")] float NearPlane,
+    [property: JsonPropertyName("far_plane")] float FarPlane,
+    [property: JsonPropertyName("aperture_f")] float ApertureF,
+    [property: JsonPropertyName("shutter_rate")] float ShutterRate,
+    [property: JsonPropertyName("iso")] float Iso);
+
+internal sealed record NativeOrthographicCamera(
+    [property: JsonPropertyName("node")] int Node,
+    [property: JsonPropertyName("aspect_mode")] string AspectMode,
+    [property: JsonPropertyName("orthographic_size")] float OrthographicSize,
+    [property: JsonPropertyName("aspect_ratio")] float AspectRatio,
     [property: JsonPropertyName("near_plane")] float NearPlane,
     [property: JsonPropertyName("far_plane")] float FarPlane,
     [property: JsonPropertyName("aperture_f")] float ApertureF,

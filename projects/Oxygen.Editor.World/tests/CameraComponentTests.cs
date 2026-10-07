@@ -56,7 +56,7 @@ public class CameraComponentTests
     [TestMethod]
     public void OrthographicCamera_Hydrate_Dehydrate_RoundTrip()
     {
-        var cam = new OrthographicCamera { Name = "OrthoCam", NearPlane = 0.5f, FarPlane = 200f, OrthographicSize = 20f, ApertureF = 8f, ShutterRate = 60f, Iso = 200f };
+        var cam = new OrthographicCamera { Name = "OrthoCam", NearPlane = 0.5f, FarPlane = 200f, OrthographicSize = 20f, AspectRatio = 4f / 3f, AspectMode = CameraAspectMode.Fixed, ApertureF = 8f, ShutterRate = 60f, Iso = 200f };
 
         var dto = cam.Dehydrate();
 
@@ -66,11 +66,15 @@ public class CameraComponentTests
         _ = od.NearPlane.Should().Be(0.5f);
         _ = od.FarPlane.Should().Be(200f);
         _ = od.OrthographicSize.Should().Be(20f);
+        _ = od.AspectRatio.Should().Be(4f / 3f);
+        _ = od.AspectMode.Should().Be(CameraAspectMode.Fixed);
 
         var recreated = GameComponent.CreateAndHydrate(od) as OrthographicCamera;
         _ = recreated.Should().NotBeNull();
         _ = recreated!.Name.Should().Be("OrthoCam");
         _ = recreated.OrthographicSize.Should().Be(20f);
+        _ = recreated.AspectRatio.Should().Be(4f / 3f);
+        _ = recreated.AspectMode.Should().Be(CameraAspectMode.Fixed);
         _ = recreated.ApertureF.Should().Be(8f);
         _ = recreated.ShutterRate.Should().Be(60f);
         _ = recreated.Iso.Should().Be(200f);

@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>
@@ -9,8 +11,12 @@ namespace Oxygen.Editor.World.Serialization;
 /// </summary>
 public record OrthographicCameraData : CameraComponentData
 {
-    /// <summary>
-    /// Gets the orthographic half-size (extent) of the camera.
-    /// </summary>
-    public float OrthographicSize { get; init; }
+    /// <summary>Gets half of the visible height, in meters.</summary>
+    public float OrthographicSize { get; init; } = OrthographicCamera.DefaultOrthographicSize;
+
+    /// <summary>Gets the retained Fixed aspect ratio (width / height).</summary>
+    public float AspectRatio { get; init; } = OrthographicCamera.DefaultAspectRatio;
+
+    /// <summary>Gets the authored framing policy.</summary>
+    public required CameraAspectMode AspectMode { get; init; }
 }

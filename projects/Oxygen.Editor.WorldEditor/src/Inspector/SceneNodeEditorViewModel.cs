@@ -44,6 +44,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private readonly DispatcherQueue? dispatcher;
     private readonly InspectorSelectionObserver selectionObserver;
     private readonly EnvironmentViewModel environmentEditor;
+    private readonly NodeRenderingViewModel renderingEditor;
     private readonly ISceneSelectionService sceneSelectionService;
     private (Guid sceneId, string property)? pendingEnvironmentFocus;
 
@@ -124,6 +125,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             commandService,
             this.CreateCommandContext);
         this.environmentEditor = new EnvironmentViewModel(commandService, this.CreateCommandContext, assetProvider, this.InspectAtmosphereSource, hosting.DispatcherScheduler);
+        this.renderingEditor = new NodeRenderingViewModel(commandService, this.CreateCommandContext);
 
         this.items = this.messenger.Send(new SceneNodeSelectionRequestMessage()).SelectedEntities;
         this.activeScene = this.items.FirstOrDefault()?.Scene;
@@ -137,15 +139,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             this.items = [];
         }
 
-        if (this.activeScene is null)
-        {
-            var metadata = this.documentService.GetOpenDocuments(this.windowId).OfType<SceneDocumentMetadata>()
-                .FirstOrDefault(document => document.DocumentId == activeDocument);
-            if (metadata is not null)
-            {
-                this.activeScene = this.sceneEngineSync.GetDocumentScene(metadata);
-            }
-        }
+        this.activeScene ??= this.ResolveDocumentScene(activeDocument);
 
         if (interaction is { } interactionService)
         {
@@ -320,6 +314,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         }
 
         this.environmentEditor.Dispose();
+        this.renderingEditor.Dispose();
         this.editorInstances.Clear();
         this.boundEditors.Clear();
         this.LogDisposed();
@@ -358,16 +353,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.RefreshPendingLiveSyncState();
     }
 
-    /// <summary>Raises the change notifications for the selection-kind routing surface.</summary>
-    private void NotifySelectionRoutingChanged()
-    {
-        this.OnPropertyChanged(nameof(this.HasSelectionSummary));
-        this.OnPropertyChanged(nameof(this.HasSelectionNotice));
-        this.OnPropertyChanged(nameof(this.HasEnvironmentView));
-        this.OnPropertyChanged(nameof(this.SelectionSummaryText));
-        this.OnPropertyChanged(nameof(this.InspectorTitle));
-    }
-
     /// <inheritdoc/>
     protected override ICollection<IPropertyEditor<SceneNode>> FilterPropertyEditors()
     {
@@ -401,6 +386,13 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.LogFiltered(before, after);
 
         result.AddRange(filteredEditors.Values);
+
+        // Node rendering flags follow every component section, in the unfiltered view only.
+        if (this.selectedComponentType is null)
+        {
+            result.Add(this.renderingEditor);
+        }
+
         return result;
     }
 
@@ -421,6 +413,25 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
         this.environmentEditor.UpdateValues(selection);
         this.environmentEditor.SetInputEnabled(this.PropertyEditors.Contains(this.environmentEditor));
+        this.renderingEditor.UpdateValues(selection);
+        this.renderingEditor.SetInputEnabled(this.IsEditorInputEnabled(this.renderingEditor));
+    }
+
+    /// <summary>Raises the change notifications for the selection-kind routing surface.</summary>
+    private void NotifySelectionRoutingChanged()
+    {
+        this.OnPropertyChanged(nameof(this.HasSelectionSummary));
+        this.OnPropertyChanged(nameof(this.HasSelectionNotice));
+        this.OnPropertyChanged(nameof(this.HasEnvironmentView));
+        this.OnPropertyChanged(nameof(this.SelectionSummaryText));
+        this.OnPropertyChanged(nameof(this.InspectorTitle));
+    }
+
+    private Scene? ResolveDocumentScene(Guid? documentId)
+    {
+        var metadata = this.documentService.GetOpenDocuments(this.windowId).OfType<SceneDocumentMetadata>()
+            .FirstOrDefault(document => document.DocumentId == documentId);
+        return metadata is null ? null : this.sceneEngineSync.GetDocumentScene(metadata);
     }
 
     private bool IsEditorInputEnabled(ComponentPropertyEditor editor)
@@ -547,6 +558,11 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                 this.ApplyPendingEnvironmentFocus();
             }));
 
+        this.RegisterSelectionMessages(hosting);
+    }
+
+    private void RegisterSelectionMessages(HostingContext hosting)
+    {
         this.messenger.Register<SceneNodeSelectionChangedMessage>(this, (_, message) =>
             _ = hosting.Dispatcher.DispatchAsync(() =>
             {

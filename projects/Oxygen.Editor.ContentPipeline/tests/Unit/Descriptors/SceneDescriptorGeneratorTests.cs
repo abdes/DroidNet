@@ -200,28 +200,43 @@ public sealed class SceneDescriptorGeneratorTests
             input.OutputVirtualPath == "/Content/Materials/OxygenEditor_Default.omat");
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
-        var root = document.RootElement;
-        _ = root.GetProperty("version").GetInt32().Should().Be(10);
-        _ = root.GetProperty("name").GetString().Should().Be("Main");
-        _ = root.GetProperty("renderables")[0].GetProperty("geometry_ref").GetString()
-            .Should().Be("/Content/Geometry/Engine_Generated_BasicShapes_Cube.ogeo");
-        var assignments = root.GetProperty("renderables")[0].GetProperty("material_overrides");
-        _ = assignments.GetArrayLength().Should().Be(1);
-        _ = assignments[0].GetProperty("slot_id").GetGuid().Should().Be(slots.Slots[0].SlotId);
-        _ = assignments[0].GetProperty("material_ref").GetString()
-            .Should().Be("/Content/Materials/Red.omat");
-        _ = root.GetProperty("references").GetProperty("materials")[0].GetString()
-            .Should().Be("/Content/Materials/Red.omat");
-        _ = root.GetProperty("cameras").GetProperty("perspective").GetArrayLength().Should().Be(1);
-        _ = root.GetProperty("lights").GetProperty("directional").GetArrayLength().Should().Be(1);
-        var light = root.GetProperty("lights").GetProperty("directional")[0];
-        _ = light.GetProperty("atmosphere_light_slot").GetInt32().Should().Be(1);
-        _ = light.GetProperty("use_per_pixel_atmosphere_transmittance").GetBoolean().Should().BeTrue();
-        _ = light.GetProperty("atmosphere_disk_luminance_scale_rgb")[0].GetSingle().Should().Be(1.2f);
-        _ = light.GetProperty("cascade_count").GetInt32().Should().Be(3);
-        _ = light.GetProperty("cascade_distances")[3].GetSingle().Should().Be(90);
-        _ = light.GetProperty("common").GetProperty("shadow").GetProperty("contact_shadows").GetBoolean().Should().BeTrue();
-        _ = light.GetProperty("common").GetProperty("shadow").GetProperty("normal_bias").GetSingle().Should().Be(0.04f);
+        AssertSupportedSceneDescriptor(document.RootElement, slots.Slots[0].SlotId);
+    }
+
+    /// <summary>Emits orthographic framing as size, retained ratio and aspect mode, without diagnostics.</summary>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    public async Task GenerateAsyncShouldEmitOrthographicCameraFraming()
+    {
+        using var workspace = new DescriptorWorkspace();
+        var scope = CreateScope(workspace);
+        var scene = CreateScene(workspace.Project);
+        var node = new SceneNode(scene) { Name = "TopDown" };
+        _ = node.AddComponent(new OrthographicCamera
+        {
+            Name = "Camera",
+            OrthographicSize = 6f,
+            AspectRatio = 4f / 3f,
+            AspectMode = Oxygen.Managed.Core.CameraAspectMode.Fixed,
+            NearPlane = 0.5f,
+            FarPlane = 200f,
+        });
+        scene.RootNodes.Add(node);
+
+        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.Diagnostics.Should().BeEmpty();
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
+        var cameras = document.RootElement.GetProperty("cameras");
+        _ = cameras.TryGetProperty("perspective", out _).Should().BeFalse();
+        var camera = cameras.GetProperty("orthographic")[0];
+        _ = camera.GetProperty("node").GetInt32().Should().Be(0);
+        _ = camera.GetProperty("aspect_mode").GetString().Should().Be("fixed");
+        _ = camera.GetProperty("orthographic_size").GetSingle().Should().Be(6f);
+        _ = camera.GetProperty("aspect_ratio").GetSingle().Should().Be(4f / 3f);
+        _ = camera.GetProperty("near_plane").GetSingle().Should().Be(0.5f);
+        _ = camera.GetProperty("far_plane").GetSingle().Should().Be(200f);
     }
 
     /// <summary>Preserves saved boolean intent as explicit local source choices at every hierarchy depth.</summary>
@@ -272,8 +287,8 @@ public sealed class SceneDescriptorGeneratorTests
         _ = result.Diagnostics.Should().BeEmpty();
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         var root = document.RootElement;
-        _ = root.GetProperty("$schema").GetString().Should().Be("oxygen.scene-descriptor.v10");
-        _ = root.GetProperty("version").GetInt32().Should().Be(10);
+        _ = root.GetProperty("$schema").GetString().Should().Be("oxygen.scene-descriptor.v11");
+        _ = root.GetProperty("version").GetInt32().Should().Be(11);
         var nodes = root.GetProperty("nodes");
         _ = nodes.GetArrayLength().Should().Be(2);
         _ = nodes[1].GetProperty("parent").GetInt32().Should().Be(0);
@@ -568,7 +583,7 @@ public sealed class SceneDescriptorGeneratorTests
                 var result = await generator.GenerateAsync(savedScene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
                 _ = result.Diagnostics.Should().BeEmpty();
                 using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
-                _ = document.RootElement.GetProperty("version").GetInt32().Should().Be(10);
+                _ = document.RootElement.GetProperty("version").GetInt32().Should().Be(11);
                 var environment = document.RootElement.GetProperty("environment");
                 _ = environment.GetProperty("sky_atmosphere").GetProperty("enabled").GetBoolean().Should().BeFalse();
                 var post = environment.GetProperty("post_process_volume");
@@ -755,11 +770,11 @@ public sealed class SceneDescriptorGeneratorTests
     [DataRow("asset://host/Content/Scripts/Orbit.oscript.json")]
     [DataRow("asset:///Content/Scripts/Orbit.oscript.json?version=1")]
     [DataRow("relative/Orbit.oscript.json")]
-    public async Task SceneReferenceWithNonCanonicalAssetUriFailsGeneration(string uri)
+    public async Task SceneReferenceWithNonCanonicalAssetUriFailsGeneration(string reference)
     {
         using var workspace = new DescriptorWorkspace();
         var scene = CreateScene(workspace.Project);
-        scene.SetReferences(new SceneReferencesData { Scripts = [new Uri(uri, UriKind.RelativeOrAbsolute)] });
+        scene.SetReferences(new SceneReferencesData { Scripts = [new Uri(reference, UriKind.RelativeOrAbsolute)] });
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
 
         var result = await generator.GenerateAsync(scene, CreateScope(workspace), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -804,42 +819,6 @@ public sealed class SceneDescriptorGeneratorTests
             CookTargetKind.CurrentScene);
     }
 
-    private sealed partial class DescriptorWorkspace : IDisposable
-    {
-        public DescriptorWorkspace()
-        {
-            this.Root = Path.Combine(Path.GetTempPath(), "oxygen-scene-descriptor-tests", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(this.Root);
-            var projectInfo = new ProjectInfo("TestProject", Category.Games, this.Root)
-            {
-                AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-            };
-            this.Project = new Project(projectInfo) { Name = "TestProject" };
-        }
-
-        public string Root { get; }
-
-        public Project Project { get; }
-
-        public void Dispose()
-        {
-            if (Directory.Exists(this.Root))
-            {
-                Directory.Delete(this.Root, recursive: true);
-            }
-        }
-    }
-
-    private static async Task<Scene> RoundTripSavedSceneAsync(Scene scene, IProject project)
-    {
-        var stream = new MemoryStream();
-        await using var lifetime = stream.ConfigureAwait(false);
-        var serializer = new SceneSerializer(project);
-        await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
-        stream.Position = 0;
-        return await serializer.DeserializeAsync(stream).ConfigureAwait(false);
-    }
-
     private static PostProcessEnvironmentData CreatePostProcessSample(ExposureMode exposureMode, ToneMappingMode toneMapper, MeteringMode metering)
         => new()
         {
@@ -871,4 +850,65 @@ public sealed class SceneDescriptorGeneratorTests
             VignetteIntensity = 0.3f,
             DisplayGamma = 2.4f,
         };
+
+    private static void AssertSupportedSceneDescriptor(JsonElement root, Guid slotId)
+    {
+        _ = root.GetProperty("version").GetInt32().Should().Be(11);
+        _ = root.GetProperty("name").GetString().Should().Be("Main");
+        _ = root.GetProperty("renderables")[0].GetProperty("geometry_ref").GetString()
+            .Should().Be("/Content/Geometry/Engine_Generated_BasicShapes_Cube.ogeo");
+        var assignments = root.GetProperty("renderables")[0].GetProperty("material_overrides");
+        _ = assignments.GetArrayLength().Should().Be(1);
+        _ = assignments[0].GetProperty("slot_id").GetGuid().Should().Be(slotId);
+        _ = assignments[0].GetProperty("material_ref").GetString()
+            .Should().Be("/Content/Materials/Red.omat");
+        _ = root.GetProperty("references").GetProperty("materials")[0].GetString()
+            .Should().Be("/Content/Materials/Red.omat");
+        _ = root.GetProperty("cameras").GetProperty("perspective").GetArrayLength().Should().Be(1);
+        _ = root.GetProperty("lights").GetProperty("directional").GetArrayLength().Should().Be(1);
+        var light = root.GetProperty("lights").GetProperty("directional")[0];
+        _ = light.GetProperty("atmosphere_light_slot").GetInt32().Should().Be(1);
+        _ = light.GetProperty("use_per_pixel_atmosphere_transmittance").GetBoolean().Should().BeTrue();
+        _ = light.GetProperty("atmosphere_disk_luminance_scale_rgb")[0].GetSingle().Should().Be(1.2f);
+        _ = light.GetProperty("cascade_count").GetInt32().Should().Be(3);
+        _ = light.GetProperty("cascade_distances")[3].GetSingle().Should().Be(90);
+        _ = light.GetProperty("common").GetProperty("shadow").GetProperty("contact_shadows").GetBoolean().Should().BeTrue();
+        _ = light.GetProperty("common").GetProperty("shadow").GetProperty("normal_bias").GetSingle().Should().Be(0.04f);
+    }
+
+    private static async Task<Scene> RoundTripSavedSceneAsync(Scene scene, IProject project)
+    {
+        var stream = new MemoryStream();
+        await using var lifetime = stream.ConfigureAwait(false);
+        var serializer = new SceneSerializer(project);
+        await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
+        stream.Position = 0;
+        return await serializer.DeserializeAsync(stream).ConfigureAwait(false);
+    }
+
+    private sealed partial class DescriptorWorkspace : IDisposable
+    {
+        public DescriptorWorkspace()
+        {
+            this.Root = Path.Combine(Path.GetTempPath(), "oxygen-scene-descriptor-tests", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(this.Root);
+            var projectInfo = new ProjectInfo("TestProject", Category.Games, this.Root)
+            {
+                AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
+            };
+            this.Project = new Project(projectInfo) { Name = "TestProject" };
+        }
+
+        public string Root { get; }
+
+        public Project Project { get; }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(this.Root))
+            {
+                Directory.Delete(this.Root, recursive: true);
+            }
+        }
+    }
 }

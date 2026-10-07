@@ -51,7 +51,7 @@ public sealed partial class SceneEngineSyncTests
         creationCompletion.SetResult(Accepted(request));
         _ = (await syncing.ConfigureAwait(false)).Should().BeTrue();
 
-        _ = fixture.Requests.Select(value => value.Command).OfType<RuntimeSetProperties>().Should().BeEmpty();
+        _ = fixture.Requests.PropertyEntries(node.Id, EngineComponentId.Transform).Should().BeEmpty("the queued edit belonged to a node deleted before readiness");
         _ = fixture.Requests.Select(value => value.Command).OfType<RuntimeRemoveSceneNode>().Should().ContainSingle().Which.NodeId.Should().Be(node.Id);
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(0);
     }
@@ -77,7 +77,7 @@ public sealed partial class SceneEngineSyncTests
         await adding.ConfigureAwait(false);
 
         fixture.Commands.Verify(value => value.CreateNodeAsync(It.Is<RuntimeWorldRequest>(request => request.Command is RuntimeCreateNode && ((RuntimeCreateNode)request.Command).NodeId == added.Id), It.IsAny<CancellationToken>()), Times.Once);
-        _ = fixture.Requests.Select(value => value.Command).OfType<RuntimeSetProperties>().Should().ContainSingle().Which.Entries.Should().ContainSingle().Which.Value.Should().Be(9);
+        _ = fixture.Requests.PropertyEntries(added.Id, EngineComponentId.Transform).Should().Equal(RuntimePropertyRequests.PositionX(9));
         _ = added.IsActive.Should().BeTrue();
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(0);
     }
@@ -104,12 +104,10 @@ public sealed partial class SceneEngineSyncTests
 
         // Initial projection preserves the frozen physical-camera recipe;
         // the queued field-of-view edit must still be discarded on removal.
-        var projected = fixture.Requests.Select(value => value.Command).OfType<RuntimeSetProperties>().Should().ContainSingle().Subject;
-        _ = projected.Entries.Select(value => value.FieldId).Should().Equal(
-            (ushort)PerspectiveCameraField.ApertureF,
-            (ushort)PerspectiveCameraField.ShutterRate,
-            (ushort)PerspectiveCameraField.Iso);
-        _ = projected.Entries.Select(value => value.Value).Should().Equal(camera.ApertureF, camera.ShutterRate, camera.Iso);
+        _ = fixture.Requests.PropertyEntries(node.Id, EngineComponentId.PerspectiveCamera).Should().Equal(
+            new RuntimePropertyValue((ushort)EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.ApertureF, camera.ApertureF),
+            new RuntimePropertyValue((ushort)EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.ShutterRate, camera.ShutterRate),
+            new RuntimePropertyValue((ushort)EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.Iso, camera.Iso));
         _ = fixture.Requests.Select(value => value.Command).OfType<RuntimeDetachCamera>().Should().ContainSingle();
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(0);
     }
@@ -248,8 +246,7 @@ public sealed partial class SceneEngineSyncTests
 
         var initial = fixture.Requests.Select(value => value.Command).OfType<RuntimeSetLocalTransform>().Should().ContainSingle().Which;
         _ = initial.Position.X.Should().Be(1);
-        var replay = fixture.Requests.Select(value => value.Command).OfType<RuntimeSetProperties>().Should().ContainSingle().Which;
-        _ = replay.Entries.Should().ContainSingle().Which.Value.Should().Be(9);
+        _ = fixture.Requests.PropertyEntries(node.Id, EngineComponentId.Transform).Should().Equal(RuntimePropertyRequests.PositionX(9));
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(0);
         _ = node.IsActive.Should().BeTrue();
     }
@@ -264,7 +261,7 @@ public sealed partial class SceneEngineSyncTests
         var request = await createdRequest.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         SetPosition(node, metadata, 9);
         _ = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(9)], fixture.Sync.CaptureRevision(scene, metadata), this.TestContext.CancellationToken).ConfigureAwait(false);
-        fixture.RejectProperties = true;
+        fixture.RejectedPropertyComponent = EngineComponentId.Transform;
 
         creationCompletion.SetResult(Accepted(request));
         _ = (await sync.ConfigureAwait(false)).Should().BeFalse();
@@ -273,7 +270,7 @@ public sealed partial class SceneEngineSyncTests
         var failure = fixture.Results.Should().ContainSingle().Which;
         _ = failure.Message.Should().Be("Controlled property rejection");
         _ = failure.AffectedScope.DocumentId.Should().Be(metadata.DocumentId);
-        fixture.RejectProperties = false;
+        fixture.RejectedPropertyComponent = null;
         fixture.ResumeNodeCreation();
         _ = (await fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(0);
@@ -296,8 +293,7 @@ public sealed partial class SceneEngineSyncTests
         var stale = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(1)], older, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = stale.Status.Should().Be(SyncStatus.Cancelled);
-        _ = fixture.Requests.Select(value => value.Command).OfType<RuntimeSetProperties>().Should().ContainSingle().Which.Entries
-            .Should().ContainSingle().Which.Value.Should().Be(2);
+        _ = fixture.Requests.PropertyEntries(node.Id, EngineComponentId.Transform).Should().Equal(RuntimePropertyRequests.PositionX(2));
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(0);
     }
 
@@ -334,7 +330,7 @@ public sealed partial class SceneEngineSyncTests
 
         _ = (await fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
 
-        _ = fixture.Requests.Select(value => value.Command).OfType<RuntimeSetProperties>().Should().BeEmpty();
+        _ = fixture.Requests.PropertyEntries(node.Id, EngineComponentId.Transform).Should().BeEmpty();
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(0);
         fixture.Commands.Verify(value => value.CreateNodeAsync(It.IsAny<RuntimeWorldRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -388,7 +384,8 @@ public sealed partial class SceneEngineSyncTests
                     this.Requests.Enqueue(request);
                     return request.Command is RuntimeSetBackgroundColor background && this.RejectedBackground == background.Color
                         ? new(request.OperationId, request.Target.RunId, RuntimeCommandStatus.Rejected, "Controlled background rejection")
-                        : this.RejectProperties && request.Command is RuntimeSetProperties
+                        : request.Command is RuntimeSetProperties properties
+                            && properties.Entries.Any(entry => entry.ComponentId == (ushort?)this.RejectedPropertyComponent)
                         ? new(request.OperationId, request.Target.RunId, RuntimeCommandStatus.Rejected, "Controlled property rejection")
                         : Accepted(request);
                 });
@@ -405,7 +402,8 @@ public sealed partial class SceneEngineSyncTests
 
         public EngineServiceState State { get; set; } = EngineServiceState.Running;
 
-        public bool RejectProperties { get; set; }
+        /// <summary>Gets or sets the component whose property commands the runtime rejects.</summary>
+        public EngineComponentId? RejectedPropertyComponent { get; set; }
 
         public Vector3? RejectedBackground { get; set; }
 

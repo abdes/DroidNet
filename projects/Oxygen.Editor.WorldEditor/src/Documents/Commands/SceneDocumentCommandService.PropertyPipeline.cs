@@ -170,6 +170,8 @@ public sealed partial class SceneDocumentCommandService
                 "Property edit rejected",
                 "A single property edit can target only one component kind.",
                 context)
+            : IsDescriptorOnlyKind(kind)
+            ? await this.EditPropertiesForTargetsAsync(context, nodeIds.ToDictionary(id => id, _ => edit), label, session).ConfigureAwait(true)
             : !string.Equals(kind, TransformKind, StringComparison.Ordinal)
             ? await this.EditComponentPropertiesThroughExistingCommandAsync(
                 context,
@@ -395,11 +397,16 @@ public sealed partial class SceneDocumentCommandService
     {
         ArgumentNullException.ThrowIfNull(edit);
 
-        var entries = new List<EnginePropertyValueEntry>(capacity: 4);
+        var entries = new List<EnginePropertyValueEntry>(capacity: 5);
         AddOptional(entries, edit.FieldOfViewDegrees, PerspectiveCameraField.FieldOfViewYRadians, DegreesToRadians);
         AddOptional(entries, edit.AspectRatio, PerspectiveCameraField.AspectRatio);
         AddOptional(entries, edit.NearPlane, PerspectiveCameraField.NearPlane);
         AddOptional(entries, edit.FarPlane, PerspectiveCameraField.FarPlane);
+        if (edit.AspectMode.HasValue)
+        {
+            entries.Add(new(EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.AspectMode, (float)edit.AspectMode.Value));
+        }
+
         return entries;
     }
 
