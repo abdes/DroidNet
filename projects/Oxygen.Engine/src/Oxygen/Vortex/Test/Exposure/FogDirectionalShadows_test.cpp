@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -341,16 +342,19 @@ NOLINT_TEST_F(ExposureGpuTest, FogShadowsFollowAtmosphereSourceIdentity)
     const auto pixels = ReadFloatTexture(*output);
     ASSERT_EQ(pixels.size(), 1U);
     const double transmission = std::exp(-(std::numbers::sqrt2 - 1.0));
+    // Isotropic single scattering of 100000 lux over the cell: luminance in
+    // cd/m^2, stored with unit pre-exposure.
     const double lit
-      = (1.0 - transmission) * 100000.0 * 2e-5 / (4.0 * std::numbers::pi);
+      = (1.0 - transmission) * 100000.0 / (4.0 * std::numbers::pi);
+    const double lit_tolerance = 1e-5 * std::max(1.0, lit);
     const bool primary_lit
       = test.primary && (!test.shadows_enabled || test.secondary_occluded);
     const bool secondary_lit = test.secondary
       && (!test.shadows_enabled || !test.secondary_occluded
         || !test.secondary_requested);
-    EXPECT_NEAR(pixels.front().at(0), primary_lit ? lit : 0.0, 1e-5);
+    EXPECT_NEAR(pixels.front().at(0), primary_lit ? lit : 0.0, lit_tolerance);
     EXPECT_NEAR(pixels.front().at(1), 0.0, 1e-5);
-    EXPECT_NEAR(pixels.front().at(2), secondary_lit ? lit : 0.0, 1e-5);
+    EXPECT_NEAR(pixels.front().at(2), secondary_lit ? lit : 0.0, lit_tolerance);
     EXPECT_NEAR(pixels.front().at(3), transmission, 1e-5);
   }
 }
@@ -361,7 +365,6 @@ NOLINT_TEST_F(ExposureGpuTest, VolumetricPhaseScattersTowardEachAtmosphereLight)
   using graphics::ResourceStates;
   using graphics::ResourceViewType;
   constexpr auto kIlluminanceLux = 100000.0F;
-  constexpr auto kDirectionalRadianceScale = 2.0e-5;
   constexpr auto kTolerance = 1.0e-4;
   auto output = CreateRegisteredTexture({
     .width = 1U,
@@ -476,12 +479,16 @@ NOLINT_TEST_F(ExposureGpuTest, VolumetricPhaseScattersTowardEachAtmosphereLight)
       ASSERT_EQ(toward.size(), 1U);
       ASSERT_EQ(away.size(), 1U);
       const double g = anisotropy;
-      const double isotropic = (1.0 - transmission) * kIlluminanceLux
-        * kDirectionalRadianceScale / (4.0 * std::numbers::pi);
-      EXPECT_NEAR(toward.front().at(0),
-        isotropic * (1.0 - (g * g)) / std::pow(1.0 - g, 3.0), kTolerance);
-      EXPECT_NEAR(away.front().at(0),
-        isotropic * (1.0 - (g * g)) / std::pow(1.0 + g, 3.0), kTolerance);
+      const double isotropic
+        = (1.0 - transmission) * kIlluminanceLux / (4.0 * std::numbers::pi);
+      const double toward_expected
+        = isotropic * (1.0 - (g * g)) / std::pow(1.0 - g, 3.0);
+      const double away_expected
+        = isotropic * (1.0 - (g * g)) / std::pow(1.0 + g, 3.0);
+      EXPECT_NEAR(toward.front().at(0), toward_expected,
+        kTolerance * std::max(1.0, toward_expected));
+      EXPECT_NEAR(away.front().at(0), away_expected,
+        kTolerance * std::max(1.0, away_expected));
       EXPECT_NEAR(toward.front().at(3), transmission, kTolerance);
       EXPECT_NEAR(away.front().at(3), transmission, kTolerance);
       if (anisotropy > 0.0F) {

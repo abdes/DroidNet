@@ -64,7 +64,9 @@ namespace {
   constexpr std::uint32_t kThreadGroupSizeY = 4U;
   constexpr std::uint32_t kThreadGroupSizeZ = 4U;
   constexpr std::uint32_t kTileSizePixels = 8U;
-  constexpr std::uint32_t kDepthResolution = 32U;
+  // UE default r.VolumetricFog.GridSizeZ: 64 slices keep shafts and the
+  // ground boundary resolved over kilometre fog distances.
+  constexpr std::uint32_t kDepthResolution = 64U;
   constexpr float kDefaultVolumetricDistanceMeters = 100000.0F;
   constexpr float kUeVolumetricFogDepthDistributionScale = 32.0F;
   constexpr float kUeFroxelNearOffsetMeters = 9.5F;

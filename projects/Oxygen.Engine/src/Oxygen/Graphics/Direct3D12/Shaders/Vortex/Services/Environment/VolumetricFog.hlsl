@@ -505,10 +505,11 @@ static float4 EvaluateVolumetricFogSample(
     }
 
     const float3 sky_lighting = EvaluateSkyLightContribution(pass);
+    // Luminance in cd/m^2 per unit phase-weighted scattering; the store below
+    // applies pre-exposure like every other scene-colour producer.
     const float3 bounded_lighting =
-        (directional_lighting * pass.media1.static_lighting_scattering_intensity
-            + sky_lighting)
-        * 2.0e-5f;
+        directional_lighting * pass.media1.static_lighting_scattering_intensity
+        + sky_lighting;
     const float3 height_source =
         max(pass.media0.albedo_rgb, 0.0f.xxx) * bounded_lighting
         + max(pass.media1.emissive_rgb, 0.0f.xxx);

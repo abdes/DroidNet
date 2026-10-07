@@ -3299,7 +3299,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     0U);
   EXPECT_EQ(static_data->volumetric_fog.grid_width, 8U);
   EXPECT_EQ(static_data->volumetric_fog.grid_height, 8U);
-  EXPECT_EQ(static_data->volumetric_fog.grid_depth, 32U);
+  EXPECT_EQ(static_data->volumetric_fog.grid_depth, 64U);
   EXPECT_GT(static_data->volumetric_fog.grid_z_params.at(0), 0.0F);
   EXPECT_LT(static_data->volumetric_fog.grid_z_params.at(1), 1.0F);
   EXPECT_FLOAT_EQ(static_data->volumetric_fog.grid_z_params.at(2), 32.0F);

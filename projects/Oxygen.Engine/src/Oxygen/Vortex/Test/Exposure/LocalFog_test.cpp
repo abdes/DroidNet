@@ -440,7 +440,6 @@ NOLINT_TEST_F(ExposureGpuTest, LocalFogInjectionMatchesMixedMediumIntegral)
       const double opacity = -std::expm1(-total_density * length);
       const double light = test.scattering
         ? static_cast<double>(test.illuminance) / (4 * std::acos(-1.0))
-          * static_cast<double>(2e-5F)
         : 0;
       const double source = (static_cast<double>(test.global_density)
                               * (test.global_emission + light))
