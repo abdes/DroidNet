@@ -96,16 +96,21 @@ namespace {
   }
 
   struct CompositingPassConstants {
-    uint32_t source_texture_index;
-    uint32_t sampler_index;
-    float alpha;
-    std::uint32_t failed_view;
-    std::uint32_t lighting_frame_slot;
-    std::array<std::uint32_t, 3> reserved {};
+    uint32_t source_texture_index {};
+    uint32_t sampler_index {};
+    float alpha {};
+    std::uint32_t failed_view {};
+    std::uint32_t lighting_frame_slot {};
+    std::uint32_t fill {};
+    std::array<std::uint32_t, 2> reserved {};
+    std::array<float, 4> fill_color {};
   };
 
-  static_assert(sizeof(CompositingPassConstants) == 32,
-    "CompositingPassConstants must be 32 bytes");
+  // Byte size of the HLSL CompositingPassConstants layout.
+  constexpr std::size_t kCompositingPassConstantsSize = 48U;
+  static_assert(
+    sizeof(CompositingPassConstants) == kCompositingPassConstantsSize,
+    "CompositingPassConstants must match the shader layout");
 
   auto ClampViewport(const ViewPort& viewport, const uint32_t target_width,
     const uint32_t target_height) -> ViewPort
@@ -145,7 +150,9 @@ auto CompositingPass::ValidateConfig() -> void
   if (!config_) {
     throw std::runtime_error("CompositingPass: missing configuration");
   }
-  if (!config_->source_texture && !config_->failed_view) {
+  const auto needs_source
+    = !config_->failed_view && !config_->fill_color.has_value();
+  if (!config_->source_texture && needs_source) {
     throw std::runtime_error("CompositingPass: source texture is required");
   }
   if (!config_->viewport.IsValid()) {
@@ -153,7 +160,7 @@ auto CompositingPass::ValidateConfig() -> void
   }
 
   const auto& output = GetOutputTexture();
-  if (!config_->failed_view && &GetSourceTexture() == &output) {
+  if (needs_source && &GetSourceTexture() == &output) {
     throw std::runtime_error(
       "CompositingPass: source texture and output texture must be distinct");
   }
@@ -173,6 +180,7 @@ auto CompositingPass::ValidateConfig() -> void
   has_drawable_region_ = HasPositiveArea(clamped_viewport_);
 }
 
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
 auto CompositingPass::DoPrepareResources(graphics::CommandRecorder& recorder)
   -> co::Co<>
 {
@@ -192,14 +200,17 @@ auto CompositingPass::DoPrepareResources(graphics::CommandRecorder& recorder)
   EnsurePassConstantsBuffer();
 
   auto source_srv = kInvalidShaderVisibleIndex;
-  if (!config_->failed_view) {
+  const auto needs_source
+    = !config_->failed_view && !config_->fill_color.has_value();
+  if (needs_source) {
     const auto& source = GetSourceTexture();
     CheckTrackedTexture(recorder, source, "source");
-    recorder.RequireResourceState(source, graphics::ResourceStates::kShaderResource);
+    recorder.RequireResourceState(
+      source, graphics::ResourceStates::kShaderResource);
     recorder.FlushBarriers();
     source_srv = EnsureSourceTextureSrv(source);
   }
-  if (!config_->failed_view && !source_srv.IsValid()) {
+  if (needs_source && !source_srv.IsValid()) {
     throw std::runtime_error("CompositingPass: invalid source SRV index");
   }
   UpdatePassConstants(source_srv);
@@ -207,6 +218,7 @@ auto CompositingPass::DoPrepareResources(graphics::CommandRecorder& recorder)
   co_return;
 }
 
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
 auto CompositingPass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
 {
   if (!has_drawable_region_) {
@@ -314,7 +326,8 @@ auto CompositingPass::CreatePassConstantsChunk(FramePassConstantsState& state)
 
   const size_t chunk_index = state.chunks.size();
   const graphics::BufferDesc desc {
-    .size_bytes = kPassConstantsStride * kPassConstantsChunkSlots,
+    .size_bytes = static_cast<std::uint64_t>(kPassConstantsStride)
+      * kPassConstantsChunkSlots,
     .usage = graphics::BufferUsage::kConstant,
     .memory = graphics::BufferMemory::kUpload,
     .debug_name = fmt::format("{}_PassConstants_Frame{}_Chunk{}", GetName(),
@@ -460,6 +473,7 @@ auto CompositingPass::EnsureSourceTextureSrv(const graphics::Texture& texture)
 
   const auto srv_index = allocator.GetShaderVisibleIndex(srv_handle);
   auto srv_view = registry.RegisterView(
+    // NOLINTNEXTLINE(*-pro-type-const-cast) - views register on the resource
     const_cast<graphics::Texture&>(texture), std::move(srv_handle), srv_desc);
   if (!srv_view->IsValid()) {
     throw std::runtime_error(
@@ -473,12 +487,15 @@ auto CompositingPass::UpdatePassConstants(
   const ShaderVisibleIndex source_texture_index) -> void
 {
   const float alpha = detail::SanitizeCompositingAlphaValue(config_->alpha);
+  const auto fill = config_->fill_color.value_or(graphics::Color {});
   const CompositingPassConstants constants {
     .source_texture_index = source_texture_index.get(),
     .sampler_index = 0U,
     .alpha = alpha,
     .failed_view = config_->failed_view ? 1U : 0U,
     .lighting_frame_slot = config_->lighting_frame_slot.get(),
+    .fill = config_->fill_color.has_value() ? 1U : 0U,
+    .fill_color = { fill.r, fill.g, fill.b, fill.a * alpha },
   };
 
   auto& state = GetCurrentFramePassConstantsState();
@@ -491,9 +508,11 @@ auto CompositingPass::UpdatePassConstants(
   CHECK_NOTNULL_F(chunk.mapped_ptr);
   CHECK_LT_F(chunk.used_slots, kPassConstantsChunkSlots);
   const auto slot = chunk.used_slots++;
-  auto* slot_ptr = chunk.mapped_ptr
-    + static_cast<std::ptrdiff_t>(slot * kPassConstantsStride);
-  std::memcpy(slot_ptr, &constants, sizeof(constants));
+  const auto mapped = std::span(chunk.mapped_ptr,
+    std::size_t { kPassConstantsStride } * kPassConstantsChunkSlots);
+  std::memcpy(
+    mapped.subspan(std::size_t { slot } * kPassConstantsStride).data(),
+    &constants, sizeof(constants));
   SetPassConstantsIndex(chunk.indices.at(slot));
 }
 

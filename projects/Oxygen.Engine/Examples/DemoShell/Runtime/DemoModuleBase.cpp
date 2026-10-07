@@ -6,31 +6,44 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <filesystem>
 #include <memory>
-#include <ranges>
+#include <optional>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/AppWindow.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/SceneCameraViewResolver.h>
+#include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 
-#if defined(OXYGEN_BUILD_UI_TESTS)
+#ifdef OXYGEN_BUILD_UI_TESTS
 #  include "DemoShell/Services/SettingsService.h"
 #  include "DemoShell/Test/UiTestSession.h"
 #endif
@@ -114,7 +127,7 @@ namespace {
 
 } // namespace
 
-DemoModuleBase::DemoModuleBase(const DemoAppContext& app) noexcept
+DemoModuleBase::DemoModuleBase(const DemoAppContext& app)
   : app_(app)
 {
   LOG_SCOPE_FUNCTION(1);
@@ -134,8 +147,18 @@ auto DemoModuleBase::BuildDefaultWindowProperties() const
   -> platform::window::Properties
 {
   platform::window::Properties p("Oxygen Example");
-  p.extent = { .width = 1280U, .height = 720U };
-  p.flags = { .hidden = false, .resizable = true };
+  constexpr std::uint32_t kDefaultWidth = 1280U;
+  constexpr std::uint32_t kDefaultHeight = 720U;
+  p.extent = { .width = kDefaultWidth, .height = kDefaultHeight };
+  p.flags = {
+    .hidden = false,
+    .always_on_top = false,
+    .full_screen = false,
+    .maximized = false,
+    .minimized = false,
+    .resizable = true,
+    .borderless = false,
+  };
   if (app_.fullscreen) {
     p.flags.full_screen = true;
   }
@@ -145,37 +168,44 @@ auto DemoModuleBase::BuildDefaultWindowProperties() const
 auto DemoModuleBase::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
   -> bool
 {
-  DCHECK_NOTNULL_F(engine);
-#if defined(OXYGEN_BUILD_UI_TESTS)
-  if (testing::UiTestSession::Requested()) {
-    SettingsService::ForDemoApp()->SetPersistenceEnabled(
-      testing::UiTestSession::UsesIsolatedSettings());
-  }
+  try {
+    DCHECK_NOTNULL_F(engine);
+#ifdef OXYGEN_BUILD_UI_TESTS
+    if (testing::UiTestSession::Requested()) {
+      SettingsService::ForDemoApp()->SetPersistenceEnabled(
+        testing::UiTestSession::UsesIsolatedSettings());
+    }
 #endif
-  LOG_SCOPE_FUNCTION(1);
+    LOG_SCOPE_FUNCTION(1);
 
-  if (!app_.headless) {
-    DCHECK_NOTNULL_F(app_window_);
+    if (!app_.headless) {
+      DCHECK_NOTNULL_F(app_window_);
 
-    const auto props = BuildDefaultWindowProperties();
-    if (!app_window_->CreateAppWindow(props)) {
-      LOG_F(ERROR, "-failed- could not create application window");
+      const auto props = BuildDefaultWindowProperties();
+      if (!app_window_->CreateAppWindow(props)) {
+        LOG_F(ERROR, "-failed- could not create application window");
+        return false;
+      }
+    }
+
+    shell_ = OnAttachedImpl(engine);
+    if (!shell_) {
+      LOG_F(ERROR, "-failed- DemoShell initialization");
       return false;
     }
-  }
 
-  shell_ = OnAttachedImpl(engine);
-  if (!shell_) {
-    LOG_F(ERROR, "-failed- DemoShell initialization");
-    return false;
+    return true;
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "-failed- module attach threw: {}", ex.what());
+  } catch (...) {
+    LOG_F(ERROR, "-failed- module attach threw an unknown exception");
   }
-
-  return true;
+  return false;
 }
 
 auto DemoModuleBase::OnShutdown() noexcept -> void
 {
-#if defined(OXYGEN_BUILD_UI_TESTS)
+#ifdef OXYGEN_BUILD_UI_TESTS
   StopUiTests();
 #endif
   if (auto renderer = ResolveVortexRenderer(); renderer != nullptr) {
@@ -196,14 +226,15 @@ auto DemoModuleBase::GetShell() -> DemoShell&
   return *shell_;
 }
 
-#if defined(OXYGEN_BUILD_UI_TESTS)
+#ifdef OXYGEN_BUILD_UI_TESTS
 auto DemoModuleBase::StopUiTests() -> void { ui_tests_.reset(); }
 auto DemoModuleBase::UiTestOutputDirectory() const -> std::filesystem::path
 {
   return ui_tests_->OutputDirectory();
 }
 
-auto DemoModuleBase::OnFrameEnd(observer_ptr<engine::FrameContext>) -> void
+auto DemoModuleBase::OnFrameEnd(observer_ptr<engine::FrameContext> /*unused*/)
+  -> void
 try {
   if (!testing::UiTestSession::Requested() || app_.headless) {
     return;
@@ -454,9 +485,14 @@ auto DemoModuleBase::OnPublishViews(observer_ptr<engine::FrameContext> context)
     }
 
     auto vortex_view = NormalizeVortexCompositionView(view_intent, app_window_);
-    const auto width = ClampViewportDimension(vortex_view.view.viewport.width);
-    const auto height
-      = ClampViewportDimension(vortex_view.view.viewport.height);
+    // A Fixed camera renders only its content rectangle; the renderer composes
+    // the bars around it.
+    const auto content = vortex_view.camera.has_value()
+      ? vortex::ResolveCameraContentRect(
+          *vortex_view.camera, vortex_view.view.viewport)
+      : vortex_view.view.viewport;
+    const auto width = ClampViewportDimension(content.width);
+    const auto height = ClampViewportDimension(content.height);
     auto* target = EnsureSceneFramebuffer(view_intent.id, width, height);
     if (target == nullptr || !target->scene_framebuffer
       || !target->composite_framebuffer) {
@@ -475,9 +511,9 @@ auto DemoModuleBase::OnPublishViews(observer_ptr<engine::FrameContext> context)
         = observer_ptr { target->composite_framebuffer.get() },
       });
 
-    if (primary_scene_view == &view_intent) {
-      GetShell().OnRuntimeMainViewReady(view_intent.id,
-        view_intent.camera.value(), ResolveViewport(view_intent, app_window_));
+    if (primary_scene_view == &view_intent && view_intent.camera.has_value()) {
+      GetShell().OnRuntimeMainViewReady(view_intent.id, *view_intent.camera,
+        ResolveViewport(view_intent, app_window_));
     }
   }
 
@@ -529,8 +565,8 @@ auto DemoModuleBase::OnCompositing(observer_ptr<engine::FrameContext> context)
       layers.push_back(&view);
     }
   }
-  std::stable_sort(
-    layers.begin(), layers.end(), [](const auto* left, const auto* right) {
+  std::ranges::stable_sort(
+    layers, [](const auto* left, const auto* right) -> auto {
       return left->z_order < right->z_order;
     });
   for (const auto* layer : layers) {
@@ -556,7 +592,8 @@ auto DemoModuleBase::GetOrCreateViewId(std::string_view name) -> ViewId
     return it->second;
   }
 
-  static std::atomic<uint64_t> s_next_view_id { 1000 };
+  constexpr std::uint64_t kFirstViewId = 1000U;
+  static std::atomic<uint64_t> s_next_view_id { kFirstViewId };
   const ViewId new_id { s_next_view_id++ };
   view_registry_[name_str] = new_id;
   return new_id;
@@ -573,7 +610,7 @@ auto DemoModuleBase::OnFrameStartCommon(engine::FrameContext& context) -> void
     if (last_surface_) {
       const auto surfaces = context.GetSurfaces();
       for (size_t i = 0; i < surfaces.size(); ++i) {
-        if (surfaces[i] == last_surface_) {
+        if (surfaces.at(i) == last_surface_) {
           context.RemoveSurfaceAt(i);
           break;
         }
@@ -592,8 +629,8 @@ auto DemoModuleBase::OnFrameStartCommon(engine::FrameContext& context) -> void
   auto surfaces = context.GetSurfaces();
   auto surface = app_window_->GetSurface().lock();
   if (surface) {
-    const bool already_registered = std::ranges::any_of(
-      surfaces, [&](const auto& s) { return s.get() == surface.get(); });
+    const bool already_registered = std::ranges::any_of(surfaces,
+      [&](const auto& s) -> auto { return s.get() == surface.get(); });
     if (!already_registered) {
       context.AddSurface(observer_ptr { surface.get() });
       DLOG_F(1, "Add surface: '{}'", surface->GetName());

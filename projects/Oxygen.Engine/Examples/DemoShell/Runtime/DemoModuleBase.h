@@ -58,7 +58,7 @@ namespace testing {
 class DemoModuleBase : public engine::EngineModule, public Composition {
   OXYGEN_TYPED(DemoModuleBase)
 public:
-  explicit DemoModuleBase(const DemoAppContext& app) noexcept;
+  explicit DemoModuleBase(const DemoAppContext& app);
   ~DemoModuleBase() override;
 
   OXYGEN_MAKE_NON_COPYABLE(DemoModuleBase)

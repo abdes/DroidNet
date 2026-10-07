@@ -63,6 +63,7 @@ NOLINT_TEST_F(D3d12OrthographicCameraTest, DefaultParameters)
   EXPECT_EQ(camera_->GetExtents(),
     (std::array<float, 6> { -1, 1, -1, 1, 0.1f, 1000.0f }));
   EXPECT_FALSE(camera_->GetViewport().has_value());
+  EXPECT_EQ(camera_->GetAspectMode(), oxygen::CameraAspectMode::kAuto);
 }
 
 //! Setters and getters for extents and viewport
@@ -121,18 +122,18 @@ NOLINT_TEST_F(D3d12OrthographicCameraTest, ProjectionMatrix_Valid)
     << "Orthographic Y scale should be 2/(top-bottom)";
 }
 
-//! Explicit extents keep their exact frame unless Auto framing is requested.
+//! Fixed keeps the authored extents whatever the target aspect.
 NOLINT_TEST_F(D3d12OrthographicCameraTest, FixedFramingIgnoresTargetAspect)
 {
   // Arrange
   camera_->SetExtents(-2, 2, -1, 1, 1.0f, 100.0f);
+  camera_->SetAspectMode(oxygen::CameraAspectMode::kFixed);
   const oxygen::ViewPort wide { 0.f, 0.f, 1920.f, 1080.f, 0.f, 1.f };
 
   // Act
   const glm::mat4 proj = camera_->ProjectionMatrix(wide);
 
   // Assert
-  EXPECT_EQ(camera_->GetAspectMode(), oxygen::CameraAspectMode::kFixed);
   EXPECT_FLOAT_EQ(proj[0][0], 0.5f);
   EXPECT_FLOAT_EQ(proj[1][1], 1.0f);
 }

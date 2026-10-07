@@ -9,6 +9,7 @@
 #include <array>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Vortex/Passes/GraphicsRenderPass.h>
 
 namespace oxygen::graphics {
@@ -38,6 +40,8 @@ struct CompositingPassConfig {
   ViewPort viewport {};
   float alpha { 1.0F };
   bool failed_view { false };
+  //! Draws this colour, without a source texture, when set.
+  std::optional<graphics::Color> fill_color;
   ShaderVisibleIndex lighting_frame_slot { kInvalidShaderVisibleIndex };
   std::string debug_name { "CompositingPass" };
 };

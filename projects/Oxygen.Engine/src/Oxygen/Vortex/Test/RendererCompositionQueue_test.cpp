@@ -13,6 +13,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/View.h>
@@ -26,6 +27,8 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/FacadePresets.h>
@@ -49,6 +52,8 @@ using oxygen::graphics::QueueRole;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::Surface;
 using oxygen::graphics::Texture;
+using oxygen::scene::PerspectiveCamera;
+using oxygen::scene::Scene;
 using oxygen::vortex::CompositionView;
 using oxygen::vortex::IViewExtension;
 using oxygen::vortex::PostCompositionContext;
@@ -115,12 +120,13 @@ protected:
     }
   }
 
-  [[nodiscard]] auto MakeColorTexture(std::string_view debug_name) const
+  [[nodiscard]] auto MakeColorTexture(std::string_view debug_name,
+    const std::uint32_t width = 64U, const std::uint32_t height = 64U) const
     -> std::shared_ptr<Texture>
   {
     auto desc = oxygen::graphics::TextureDesc {};
-    desc.width = 64U;
-    desc.height = 64U;
+    desc.width = width;
+    desc.height = height;
     desc.format = Format::kRGBA8UNorm;
     desc.texture_type = TextureType::kTexture2D;
     desc.is_render_target = true;
@@ -423,6 +429,115 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
     graphics_->texture_copy_log_.copies.at(0).dst, surface_texture.get());
   EXPECT_TRUE(graphics_->draw_log_.draws.empty());
   EXPECT_TRUE(frame_context_->IsSurfacePresentable(0));
+}
+
+//! A Fixed camera renders its content size; composition adds bars first.
+NOLINT_TEST_F(RendererCompositionQueueTest,
+  RegisterRuntimeCompositionFramesFixedCameraWithBars)
+{
+  auto surface_texture = MakeColorTexture("Queue.FramedSurface");
+  auto surface = std::make_shared<FakeSurface>(surface_texture);
+  auto present_target = MakeFramebuffer(surface_texture);
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> {
+    surface.get(),
+  });
+
+  auto harness
+    = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
+      *renderer_,
+      Renderer::FrameSessionInput {
+        .frame_slot = oxygen::frame::Slot { 0U, },
+        .frame_sequence = oxygen::frame::SequenceNumber { 1U, },
+      },
+      oxygen::observer_ptr<Framebuffer> { present_target.get(), });
+  auto active_frame = harness.Finalize();
+  if (!active_frame.has_value()) {
+    FAIL() << "Expected active_frame to have a value";
+  }
+
+  auto scene = std::make_shared<Scene>("Queue.FramedScene", 4U);
+  auto camera_node = scene->CreateNode("camera");
+  ASSERT_TRUE(camera_node.AttachCamera(std::make_unique<PerspectiveCamera>()));
+  auto camera = camera_node.GetCameraAs<PerspectiveCamera>();
+  if (!camera.has_value()) {
+    FAIL() << "Expected camera to contain a value";
+  }
+  camera->get().SetAspectRatio(4.0F / 3.0F);
+  camera->get().SetAspectMode(oxygen::CameraAspectMode::kFixed);
+
+  constexpr auto kTarget = oxygen::ViewPort {
+    .top_left_x = 0.0F,
+    .top_left_y = 0.0F,
+    .width = 64.0F,
+    .height = 64.0F,
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
+  };
+  constexpr auto intent_view_id = ViewId { 43U };
+  auto view = oxygen::View {};
+  view.viewport = kTarget;
+  const auto publish = [&](const std::shared_ptr<Framebuffer>& target) {
+    return renderer_->PublishRuntimeCompositionView(*frame_context_,
+      Renderer::RuntimeViewPublishInput {
+        .composition_view
+        = CompositionView::ForScene(intent_view_id, view, camera_node),
+        .render_target = oxygen::observer_ptr { target.get() },
+        .composite_source = oxygen::observer_ptr { target.get() },
+      },
+      ShadingMode::kDeferred);
+  };
+
+  // A full-target render target cannot hold the 64x48 content image.
+  auto wrong_texture = MakeColorTexture("Queue.FramedWrongScene");
+  EXPECT_EQ(publish(MakeFramebuffer(wrong_texture)), oxygen::kInvalidViewId);
+
+  auto scene_texture = MakeColorTexture("Queue.FramedScene", 64U, 48U);
+  graphics_->GetResourceRegistry().Register(scene_texture);
+  auto scene_target = MakeFramebuffer(scene_texture);
+  const auto published_view_id = publish(scene_target);
+  ASSERT_NE(published_view_id, oxygen::kInvalidViewId);
+  const auto& published = frame_context_->GetViewContext(published_view_id);
+  EXPECT_FLOAT_EQ(published.view.viewport.width, 64.0F);
+  EXPECT_FLOAT_EQ(published.view.viewport.height, 48.0F);
+  EXPECT_EQ(published.view.scissor.bottom, 48);
+  EXPECT_FLOAT_EQ(camera->get().GetAspectRatio(), 4.0F / 3.0F);
+
+  graphics_->texture_copy_log_.copies.clear();
+  graphics_->draw_log_.draws.clear();
+  renderer_->RegisterRuntimeComposition(Renderer::RuntimeCompositionInput {
+    .layers = {
+      Renderer::RuntimeCompositionLayer {
+        .intent_view_id = intent_view_id,
+        .viewport = kTarget,
+        .opacity = 1.0F,
+      },
+    },
+    .composite_target = present_target,
+    .target_surface = surface,
+  });
+
+  auto loop = oxygen::co::testing::TestEventLoop {};
+  // co::Run retains this closure until synchronous completion, within the
+  // captured objects lifetimes.
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
+  oxygen::co::Run(loop, [&] -> oxygen::co::Co<void> {
+    co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
+      frame_context_.get(),
+    });
+  });
+
+  ASSERT_EQ(graphics_->draw_log_.draws.size(), 1U) << "one bar fill";
+  const auto& fill = graphics_->draw_log_.draws.at(0).viewport;
+  EXPECT_FLOAT_EQ(fill.top_left_y, 0.0F);
+  EXPECT_FLOAT_EQ(fill.height, 64.0F);
+  ASSERT_EQ(graphics_->texture_copy_log_.copies.size(), 1U);
+  const auto& copy = graphics_->texture_copy_log_.copies.at(0);
+  EXPECT_EQ(copy.src, scene_texture.get());
+  EXPECT_EQ(copy.dst, surface_texture.get());
+  EXPECT_EQ(copy.dst_slice.x, 0U);
+  EXPECT_EQ(copy.dst_slice.y, 8U);
+  EXPECT_EQ(copy.dst_slice.width, 64U);
+  EXPECT_EQ(copy.dst_slice.height, 48U);
 }
 
 NOLINT_TEST_F(RendererCompositionQueueTest,

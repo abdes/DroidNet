@@ -13,6 +13,7 @@
 
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Vortex/CompositionView.h>
 
 namespace oxygen::graphics {
@@ -27,6 +28,7 @@ enum class CompositingTaskType {
   kCopy,
   kBlend,
   kBlendTexture,
+  kFill,
   kTaa,
 };
 
@@ -50,6 +52,12 @@ struct TextureBlendTask {
   float alpha { 1.0F };
 };
 
+//! Solid colour over a target region, such as camera framing bars.
+struct FillTask {
+  ViewPort viewport {};
+  graphics::Color color { 0.0F, 0.0F, 0.0F, 1.0F };
+};
+
 //! Placeholder for future temporal AA tasks.
 struct TaaTask {
   float jitter_scale { 1.0F };
@@ -62,6 +70,7 @@ struct CompositingTask {
   CopyTask copy {};
   BlendTask blend {};
   TextureBlendTask texture_blend {};
+  FillTask fill {};
   TaaTask taa {};
 
   [[nodiscard]] static auto MakeCopy(ViewId view_id, ViewPort viewport,
@@ -100,6 +109,16 @@ struct CompositingTask {
         .viewport = viewport,
         .alpha = alpha,
       },
+    };
+  }
+
+  [[nodiscard]] static auto MakeFill(ViewPort viewport, graphics::Color color,
+    std::string debug_name = {}) -> CompositingTask
+  {
+    return CompositingTask {
+      .type = CompositingTaskType::kFill,
+      .debug_name = std::move(debug_name),
+      .fill = { .viewport = viewport, .color = color },
     };
   }
 };

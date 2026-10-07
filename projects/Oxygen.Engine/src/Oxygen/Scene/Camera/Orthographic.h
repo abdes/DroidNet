@@ -196,7 +196,7 @@ private:
   float top_ = 1.0F;
   float near_ = kDefaultNearPlane;
   float far_ = kDefaultFarPlane;
-  CameraAspectMode aspect_mode_ = CameraAspectMode::kFixed;
+  CameraAspectMode aspect_mode_ = CameraAspectMode::kAuto;
   CameraExposure exposure_ {};
   std::optional<ViewPort> viewport_;
   detail::TransformComponent* transform_ { nullptr };

@@ -119,6 +119,7 @@ struct TextureToTextureCopyLog {
     Texture* dst {
       nullptr,
     };
+    graphics::TextureSlice dst_slice {};
   };
   std::vector<Event> copies;
 };
@@ -167,6 +168,7 @@ struct DrawCommandLog {
     };
     std::optional<graphics::RasterizerStateDesc> rasterizer;
     std::string pipeline_name;
+    ViewPort viewport {};
   };
   std::vector<Event> draws;
 };
@@ -581,7 +583,10 @@ public:
     std::optional<graphics::NativeView> /*dsv*/) -> void override
   {
   }
-  auto SetViewport(const ViewPort& /*viewport*/) -> void override { }
+  auto SetViewport(const ViewPort& viewport) -> void override
+  {
+    current_viewport_ = viewport;
+  }
   auto SetScissors(const Scissors& /*scissors*/) -> void override { }
   auto Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset,
     uint32_t instance_offset) -> void override
@@ -594,6 +599,7 @@ public:
         .instance_offset = instance_offset,
         .rasterizer = current_rasterizer_,
         .pipeline_name = current_pipeline_name_,
+        .viewport = current_viewport_,
       });
     }
   }
@@ -714,7 +720,7 @@ public:
   auto CopyTexture(const Texture& src,
     const graphics::TextureSlice& /*src_slice*/,
     const graphics::TextureSubResourceSet& /*src_subresources*/, Texture& dst,
-    const graphics::TextureSlice& /*dst_slice*/,
+    const graphics::TextureSlice& dst_slice,
     const graphics::TextureSubResourceSet& /*dst_subresources*/)
     -> void override
   {
@@ -722,6 +728,7 @@ public:
       texture_copy_log_->copies.push_back(TextureToTextureCopyLog::Event {
         .src = &src,
         .dst = &dst,
+        .dst_slice = dst_slice,
       });
     }
   }
@@ -736,6 +743,7 @@ private:
   observer_ptr<const bool> recording_failure_;
   std::optional<graphics::RasterizerStateDesc> current_rasterizer_;
   std::string current_pipeline_name_;
+  ViewPort current_viewport_ {};
   BufferCommandLog* buffer_log_ {
     nullptr,
   };

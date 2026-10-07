@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -12,6 +14,7 @@
 #include <glm/ext/matrix_transform.hpp>
 
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
@@ -38,7 +41,56 @@ namespace {
     };
   }
 
+  // Authored ratio of a Fixed camera; nullopt when the camera fills.
+  auto ResolveFixedAspectRatio(scene::SceneNode& camera_node)
+    -> std::optional<float>
+  {
+    if (!camera_node.IsAlive() || !camera_node.HasCamera()) {
+      return std::nullopt;
+    }
+    auto ratio = std::optional<float> {};
+    if (auto cam = camera_node.GetCameraAs<scene::PerspectiveCamera>()) {
+      if (cam->get().GetAspectMode() == CameraAspectMode::kFixed) {
+        ratio = cam->get().GetAspectRatio();
+      }
+    } else if (auto camo
+      = camera_node.GetCameraAs<scene::OrthographicCamera>()) {
+      if (camo->get().GetAspectMode() == CameraAspectMode::kFixed) {
+        const auto ext = camo->get().GetExtents();
+        ratio = (ext.at(1) - ext.at(0)) / (ext.at(3) - ext.at(2));
+      }
+    }
+    if (!ratio.has_value() || !std::isfinite(*ratio) || *ratio <= 0.0F) {
+      return std::nullopt;
+    }
+    return ratio;
+  }
+
 } // namespace
+
+auto ResolveCameraContentRect(
+  scene::SceneNode camera_node, const ViewPort& target) -> ViewPort
+{
+  const auto ratio = ResolveFixedAspectRatio(camera_node);
+  if (!ratio.has_value() || !target.IsValid()) {
+    return target;
+  }
+
+  const auto width = std::floor(target.width);
+  const auto height = std::floor(target.height);
+  auto content = target;
+  if (const auto fit_width = std::round(height * *ratio); fit_width < width) {
+    content.width = std::max(1.0F, fit_width);
+    content.height = height;
+    content.top_left_x += std::floor((width - content.width) * 0.5F);
+  } else if (const auto fit_height = std::round(width / *ratio);
+    fit_height < height) {
+    content.width = width;
+    content.height = std::max(1.0F, fit_height);
+    content.top_left_y += std::floor((height - content.height) * 0.5F);
+  }
+  return content;
+}
 
 auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node,
   std::optional<oxygen::ViewPort> viewport_override,

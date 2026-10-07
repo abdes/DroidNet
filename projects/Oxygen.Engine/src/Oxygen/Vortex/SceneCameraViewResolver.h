@@ -17,6 +17,17 @@
 
 namespace oxygen::vortex {
 
+//! Integer rectangle, inside `target`, that shows the image of `camera_node`.
+/*!
+ Auto cameras, and nodes without a camera, fill the target. A Fixed camera
+ keeps its authored aspect ratio in a centred rectangle; the rest of the target
+ becomes letterbox or pillarbox bars. The result depends only on the authored
+ policy and the target extent, and never changes the camera.
+*/
+OXGN_VRTX_NDAPI auto ResolveCameraContentRect(
+  oxygen::scene::SceneNode camera_node, const oxygen::ViewPort& target)
+  -> oxygen::ViewPort;
+
 template <typename F>
 concept NodeLookupConcept = std::invocable<F, const oxygen::ViewId&>
   && std::convertible_to<std::invoke_result_t<F, const oxygen::ViewId&>,

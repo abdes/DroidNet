@@ -31,7 +31,9 @@ struct CompositingPassConstants {
     float alpha;
     uint failed_view;
     uint lighting_frame_slot;
-    uint3 reserved;
+    uint fill;
+    uint2 reserved;
+    float4 fill_color;
 };
 
 float4 PS(CompositingVSOutput input) : SV_TARGET
@@ -43,6 +45,9 @@ float4 PS(CompositingVSOutput input) : SV_TARGET
     ConstantBuffer<CompositingPassConstants> pass
         = ResourceDescriptorHeap[g_PassConstantsIndex];
 
+    if (pass.fill != 0u) {
+        return pass.fill_color;
+    }
     if (pass.failed_view != 0u || (pass.lighting_frame_slot != K_INVALID_BINDLESS_INDEX
         && !IsLightingPublicationReady(LoadLightingFrameBindings(pass.lighting_frame_slot)))) {
         return FailedViewColor(input.position.xy);

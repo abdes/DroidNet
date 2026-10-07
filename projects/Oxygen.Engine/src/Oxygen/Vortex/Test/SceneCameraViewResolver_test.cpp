@@ -28,6 +28,7 @@ using oxygen::scene::OrthographicCamera;
 using oxygen::scene::PerspectiveCamera;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
+using oxygen::vortex::ResolveCameraContentRect;
 using oxygen::vortex::SceneCameraViewResolver;
 
 TEST(SceneCameraViewResolverTest, TargetAspectDoesNotRewriteAuthoredCamera)
@@ -104,6 +105,82 @@ TEST(SceneCameraViewResolverTest, OrthographicAutoFollowsTargetAspect)
   EXPECT_FLOAT_EQ(glm::column(fixed.ProjectionMatrix(), 1).y
       / glm::column(fixed.ProjectionMatrix(), 0).x,
     4.0F / 3.0F);
+}
+
+auto ExpectRect(const ViewPort& actual, const float x, const float y,
+  const float width, const float height) -> void
+{
+  EXPECT_FLOAT_EQ(actual.top_left_x, x);
+  EXPECT_FLOAT_EQ(actual.top_left_y, y);
+  EXPECT_FLOAT_EQ(actual.width, width);
+  EXPECT_FLOAT_EQ(actual.height, height);
+}
+
+//! Fixed fits the authored ratio in a centred integer rectangle; Auto fills.
+TEST(SceneCameraViewResolverTest, ContentRectFitsFixedRatioWithBars)
+{
+  auto scene = std::make_shared<Scene>("resolver-content-rect", 4U);
+  auto camera_node = scene->CreateNode("camera");
+  ASSERT_TRUE(camera_node.AttachCamera(std::make_unique<PerspectiveCamera>()));
+  auto camera = camera_node.GetCameraAs<PerspectiveCamera>();
+  if (!camera.has_value()) {
+    FAIL() << "Expected camera to contain a value";
+  }
+  const auto hd = ViewPort { .width = 1920.0F, .height = 1080.0F };
+  const auto four_three = ViewPort { .width = 1440.0F, .height = 1080.0F };
+
+  camera->get().SetAspectRatio(4.0F / 3.0F);
+  camera->get().SetAspectMode(oxygen::CameraAspectMode::kAuto);
+  ExpectRect(ResolveCameraContentRect(camera_node, hd), 0, 0, 1920, 1080);
+
+  camera->get().SetAspectMode(oxygen::CameraAspectMode::kFixed);
+  ExpectRect(ResolveCameraContentRect(camera_node, hd), 240, 0, 1440, 1080);
+  ExpectRect(
+    ResolveCameraContentRect(camera_node, four_three), 0, 0, 1440, 1080);
+
+  camera->get().SetAspectRatio(16.0F / 9.0F);
+  ExpectRect(
+    ResolveCameraContentRect(camera_node, four_three), 0, 135, 1440, 810);
+  ExpectRect(ResolveCameraContentRect(camera_node, hd), 0, 0, 1920, 1080);
+
+  const auto offset = ViewPort {
+    .top_left_x = 10.0F,
+    .top_left_y = 20.0F,
+    .width = 1440.0F,
+    .height = 1080.0F,
+  };
+  ExpectRect(ResolveCameraContentRect(camera_node, offset), 10, 155, 1440, 810);
+  EXPECT_FLOAT_EQ(camera->get().GetAspectRatio(), 16.0F / 9.0F)
+    << "Framing must not rewrite the authored ratio";
+}
+
+//! Orthographic Fixed framing uses the ratio of its authored extents.
+TEST(SceneCameraViewResolverTest, OrthographicContentRectUsesExtentsRatio)
+{
+  auto scene = std::make_shared<Scene>("resolver-ortho-content-rect", 4U);
+  auto camera_node = scene->CreateNode("camera");
+  ASSERT_TRUE(camera_node.AttachCamera(std::make_unique<OrthographicCamera>()));
+  auto camera = camera_node.GetCameraAs<OrthographicCamera>();
+  if (!camera.has_value()) {
+    FAIL() << "Expected camera to contain a value";
+  }
+  camera->get().SetExtents(-2.0F, 2.0F, -1.5F, 1.5F, 0.1F, 100.0F);
+  const auto hd = ViewPort { .width = 1920.0F, .height = 1080.0F };
+
+  ExpectRect(ResolveCameraContentRect(camera_node, hd), 0, 0, 1920, 1080);
+  camera->get().SetAspectMode(oxygen::CameraAspectMode::kFixed);
+  ExpectRect(ResolveCameraContentRect(camera_node, hd), 240, 0, 1440, 1080);
+}
+
+//! Nodes without a camera, and invalid targets, are returned unchanged.
+TEST(SceneCameraViewResolverTest, ContentRectWithoutCameraFillsTarget)
+{
+  auto scene = std::make_shared<Scene>("resolver-no-camera", 4U);
+  const auto node = scene->CreateNode("empty");
+  const auto target = ViewPort { .width = 640.0F, .height = 480.0F };
+
+  ExpectRect(ResolveCameraContentRect(node, target), 0, 0, 640, 480);
+  ExpectRect(ResolveCameraContentRect(node, ViewPort {}), 0, 0, 0, 0);
 }
 
 TEST(SceneCameraViewResolverTest, UsesViewportOverrideWhenProvided)

@@ -23,6 +23,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
@@ -129,6 +130,58 @@ NOLINT_TEST_F(ExposureGpuTest, CompositionConstantsSurviveLaterSubmission)
       .75F,
       1,
     }));
+}
+
+//! Framing bars are opaque fills limited to their own rectangles.
+NOLINT_TEST_F(ExposureGpuTest, CompositionFillPaintsOnlyItsRectangle)
+{
+  const auto content = Uniform(.5F);
+  auto output = CreateRegisteredTexture({
+    .width = 4,
+    .height = 1,
+    .format = Format::kRGBA32Float,
+    .is_render_target = true,
+    .initial_state = ResourceStates::kCommon,
+  });
+  auto target = Backend().CreateFramebuffer(
+    FramebufferDesc {}.AddColorAttachment(output));
+  engine::FrameContext frame;
+  frame.SetFrameSlot(
+    frame::Slot { 0 }, engine::internal::EngineTagFactory::Get());
+  frame.SetFrameSequenceNumber(
+    frame::SequenceNumber { 1 }, engine::internal::EngineTagFactory::Get());
+  Backend().BeginFrame(frame::SequenceNumber { 1 }, frame::Slot { 0 });
+  renderer_->OnFrameStart(observer_ptr { &frame });
+  auto submission = CompositionSubmission {};
+  submission.composite_target = target;
+  submission.tasks.push_back(CompositingTask::MakeTextureBlend(
+    std::const_pointer_cast<Texture>(content.texture),
+    ViewPort { .width = 4, .height = 1 }, 1));
+  submission.tasks.push_back(CompositingTask::MakeFill(
+    ViewPort { .width = 1, .height = 1 }, graphics::Color { 0, 0, 0, 1 }));
+  submission.tasks.push_back(CompositingTask::MakeFill(
+    ViewPort { .top_left_x = 3, .width = 1, .height = 1 },
+    graphics::Color { 0, 0, 0, 1 }));
+  renderer_->RegisterComposition(std::move(submission), {});
+  auto loop = co::testing::TestEventLoop {};
+  // Run waits for completion, so the closure and captured locals outlive the
+  // coroutine.
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
+  co::Run(loop, [&] -> co::Co<void> {
+    co_await renderer_->OnCompositing(observer_ptr { &frame });
+  });
+  renderer_->OnFrameEnd(observer_ptr { &frame });
+  Backend().EndFrame(frame::SequenceNumber { 1 }, frame::Slot { 0 });
+  WaitForQueueIdle();
+
+  const auto pixels = ReadFloatTexture(*output);
+  ASSERT_EQ(pixels.size(), 4U);
+  constexpr auto kBar = Pixel { 0, 0, 0, 1 };
+  constexpr auto kContent = Pixel { .5F, .5F, .5F, 1 };
+  EXPECT_EQ(pixels.at(0), kBar);
+  EXPECT_EQ(pixels.at(1), kContent);
+  EXPECT_EQ(pixels.at(2), kContent);
+  EXPECT_EQ(pixels.at(3), kBar);
 }
 
 NOLINT_TEST_F(ExposureGpuTest, NativeExposureTimelineRecordsMeteringScopes)

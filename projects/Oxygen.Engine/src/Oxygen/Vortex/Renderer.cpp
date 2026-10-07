@@ -40,6 +40,7 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Graphics/Common/AllocationBudget.h>
@@ -282,6 +283,40 @@ namespace {
     return std::nullopt;
   }
 
+  auto IsSameRect(const ViewPort& a, const ViewPort& b) -> bool
+  {
+    return a.top_left_x == b.top_left_x && a.top_left_y == b.top_left_y
+      && a.width == b.width && a.height == b.height;
+  }
+
+  auto ToScissors(const ViewPort& viewport) -> Scissors
+  {
+    return {
+      .left = static_cast<std::int32_t>(viewport.top_left_x),
+      .top = static_cast<std::int32_t>(viewport.top_left_y),
+      .right = static_cast<std::int32_t>(viewport.top_left_x + viewport.width),
+      .bottom
+      = static_cast<std::int32_t>(viewport.top_left_y + viewport.height),
+    };
+  }
+
+  // Maps the framed content rectangle into a layer that shows the full target.
+  auto PlaceContentRect(const ViewPort& layer,
+    const std::pair<ViewPort, ViewPort>& framing) -> ViewPort
+  {
+    const auto& [target, content] = framing;
+    const auto scale_x = layer.width / target.width;
+    const auto scale_y = layer.height / target.height;
+    auto placed = layer;
+    placed.top_left_x
+      += std::round((content.top_left_x - target.top_left_x) * scale_x);
+    placed.top_left_y
+      += std::round((content.top_left_y - target.top_left_y) * scale_y);
+    placed.width = std::round(content.width * scale_x);
+    placed.height = std::round(content.height * scale_y);
+    return placed;
+  }
+
   auto ResolveViewOutputTexture(const engine::FrameContext& context,
     const ViewId view_id) -> std::shared_ptr<graphics::Texture>
   {
@@ -497,6 +532,9 @@ namespace {
       }
       return fmt::format(
         "Composite Blend Texture (alpha {:.2f})", task.texture_blend.alpha);
+    case CompositingTaskType::kFill:
+      return fmt::format("Composite Fill ({}x{})", task.fill.viewport.width,
+        task.fill.viewport.height);
     case CompositingTaskType::kTaa:
       return fmt::format(
         "Composite TAA (jitter {:.2f})", task.taa.jitter_scale);
@@ -2144,6 +2182,7 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
         : kInvalidShaderVisibleIndex;
       if (compositing_pass_config_->failed_view) {
         compositing_pass_config_->source_texture.reset();
+        compositing_pass_config_->fill_color.reset();
         compositing_pass_config_->viewport
           = task.type == CompositingTaskType::kCopy ? task.copy.viewport
                                                     : task.blend.viewport;
@@ -2153,6 +2192,7 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
         continue;
       }
 
+      compositing_pass_config_->fill_color.reset();
       switch (task.type) {
       case CompositingTaskType::kCopy: {
         auto source = resolve_composition_source(task.copy.source_view_id);
@@ -2204,6 +2244,16 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
         compositing_pass_config_->alpha = task.texture_blend.alpha;
         co_await compositing_pass_->PrepareResources(comp_context, recorder);
         co_await compositing_pass_->Execute(comp_context, recorder);
+        break;
+      }
+      case CompositingTaskType::kFill: {
+        compositing_pass_config_->source_texture.reset();
+        compositing_pass_config_->fill_color = task.fill.color;
+        compositing_pass_config_->viewport = task.fill.viewport;
+        compositing_pass_config_->alpha = 1.0F;
+        co_await compositing_pass_->PrepareResources(comp_context, recorder);
+        co_await compositing_pass_->Execute(comp_context, recorder);
+        compositing_pass_config_->fill_color.reset();
         break;
       }
       case CompositingTaskType::kTaa:
@@ -2340,8 +2390,29 @@ auto Renderer::PublishRuntimeCompositionView(
     }
   }
 
+  // Fixed cameras render at their content size; composition adds the bars.
+  const auto target_viewport = composition_view.view.viewport;
+  const auto content_viewport = composition_view.camera.has_value()
+    ? ResolveCameraContentRect(*composition_view.camera, target_viewport)
+    : target_viewport;
   engine::ViewContext view_context {};
   view_context.view = composition_view.view;
+  if (!IsSameRect(content_viewport, target_viewport)) {
+    const auto extent = ResolveFramebufferExtent(*render_target);
+    if (!extent.has_value()
+      || static_cast<float>(extent->x) != content_viewport.width
+      || static_cast<float>(extent->y) != content_viewport.height) {
+      LOG_F(ERROR,
+        "View {} frames a {}x{} camera image but its render target is not "
+        "that size; publication rejected",
+        composition_view.id, content_viewport.width, content_viewport.height);
+      return kInvalidViewId;
+    }
+    view_context.view.viewport = target_viewport;
+    view_context.view.viewport.width = content_viewport.width;
+    view_context.view.viewport.height = content_viewport.height;
+    view_context.view.scissor = ToScissors(view_context.view.viewport);
+  }
   view_context.metadata = {
     .name = std::string(composition_view.name),
     .purpose
@@ -2358,6 +2429,8 @@ auto Renderer::PublishRuntimeCompositionView(
   view_context.render_target = render_target;
   view_context.composite_source = composite_source;
 
+  const auto view_context_viewport = view_context.view.viewport;
+  const auto view_context_scissor = view_context.view.scissor;
   const auto published_view_id = UpsertPublishedRuntimeView(frame_context,
     composition_view.id, std::move(view_context),
     shading_mode_override.has_value() ? shading_mode_override
@@ -2387,6 +2460,8 @@ auto Renderer::PublishRuntimeCompositionView(
       = state.camera_observed && state.camera_identity != camera_identity;
     state.camera_observed = true;
     state.camera_identity = camera_identity;
+    state.framing_target = target_viewport;
+    state.framing_content = content_viewport;
   }
   if (camera_changed
     && composition_view.view_state_handle
@@ -2401,8 +2476,8 @@ auto Renderer::PublishRuntimeCompositionView(
       [camera_node](const ViewId& /*view_id*/) -> oxygen::scene::SceneNode {
         return camera_node;
       },
-      composition_view.view.viewport,
-      composition_view.view.scissor,
+      view_context_viewport,
+      view_context_scissor,
     };
     RegisterResolvedView(published_view_id, resolver(published_view_id));
   }
@@ -2541,6 +2616,8 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
         .pending_source_loss = nullptr,
         .camera_observed = false,
         .camera_identity = std::nullopt,
+        .framing_target = {},
+        .framing_content = {},
       };
   return published_view_id;
 }
@@ -2558,6 +2635,19 @@ auto Renderer::ResolvePublishedRuntimeViewId(
     return it->second.published_view_id;
   }
   return kInvalidViewId;
+}
+
+auto Renderer::ResolvePublishedRuntimeFraming(const ViewId intent_view_id) const
+  -> std::optional<std::pair<ViewPort, ViewPort>>
+{
+  std::shared_lock state_lock(view_state_mutex_);
+  const auto it = published_runtime_views_by_intent_.find(intent_view_id);
+  if (it == published_runtime_views_by_intent_.end()
+    || !it->second.framing_target.IsValid()
+    || IsSameRect(it->second.framing_target, it->second.framing_content)) {
+    return std::nullopt;
+  }
+  return std::pair { it->second.framing_target, it->second.framing_content };
 }
 
 auto Renderer::ResolvePublishedExposureRootLocked(ViewId published_view_id,
@@ -2925,12 +3015,22 @@ auto Renderer::RegisterRuntimeComposition(const RuntimeCompositionInput& input)
       "state for intent id {}",
       layer.intent_view_id.get());
 
+    auto viewport = layer.viewport;
+    if (const auto framing
+      = ResolvePublishedRuntimeFraming(layer.intent_view_id);
+      framing.has_value()) {
+      // Bars first, then the camera image over its centred content rectangle.
+      submission.tasks.push_back(CompositingTask::MakeFill(layer.viewport,
+        graphics::Color { 0.0F, 0.0F, 0.0F, std::min(layer.opacity, 1.0F) },
+        "Composite Framing Bars"));
+      viewport = PlaceContentRect(layer.viewport, *framing);
+    }
     if (layer.opacity >= 1.0F) {
       submission.tasks.push_back(
-        CompositingTask::MakeCopy(published_view_id, layer.viewport));
+        CompositingTask::MakeCopy(published_view_id, viewport));
     } else {
-      submission.tasks.push_back(CompositingTask::MakeBlend(
-        published_view_id, layer.viewport, layer.opacity));
+      submission.tasks.push_back(
+        CompositingTask::MakeBlend(published_view_id, viewport, layer.opacity));
     }
   }
 

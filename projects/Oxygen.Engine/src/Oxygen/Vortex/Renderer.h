@@ -867,6 +867,9 @@ private:
     std::shared_ptr<const ExposureSourceLoss> pending_source_loss;
     bool camera_observed { false };
     std::optional<scene::NodeHandle> camera_identity;
+    //! Target and camera content rectangles; equal when nothing is framed.
+    ViewPort framing_target {};
+    ViewPort framing_content {};
   };
 
   //! Caller holds view_state_mutex_; null means unknown, cyclic or forbidden.
@@ -898,6 +901,9 @@ private:
   [[nodiscard]] auto ResolvePublishedRuntimeFeatureProfile(
     ViewId published_view_id) const noexcept
     -> CompositionView::ViewFeatureProfile;
+  //! Target and content rectangles of a published view with framing bars.
+  [[nodiscard]] auto ResolvePublishedRuntimeFraming(ViewId intent_view_id) const
+    -> std::optional<std::pair<ViewPort, ViewPort>>;
   [[nodiscard]] auto ResolvePublishedRuntimeViewStateHandle(
     ViewId published_view_id) const noexcept
     -> CompositionView::ViewStateHandle;
