@@ -117,4 +117,40 @@ NOLINT_TEST(CameraExposureSerializationTest, InvalidProjectionCannotBeWritten)
   }
 }
 
+NOLINT_TEST(CameraExposureSerializationTest, OrthographicAspectModeRoundTrips)
+{
+  using oxygen::CameraAspectMode;
+  using oxygen::data::pak::world::OrthographicCameraRecord;
+  for (const auto mode :
+    { CameraAspectMode::kAuto, CameraAspectMode::kFixed }) {
+    OrthographicCameraRecord source;
+    source.aspect_mode = mode;
+    oxygen::serio::MemoryStream stream;
+    oxygen::serio::Writer writer(stream);
+    ASSERT_TRUE(oxygen::serio::Store(writer, source));
+    ASSERT_TRUE(stream.Seek(0));
+    oxygen::serio::Reader reader(stream);
+    OrthographicCameraRecord decoded;
+    ASSERT_TRUE(oxygen::serio::Load(reader, decoded));
+    EXPECT_EQ(decoded.aspect_mode, mode);
+  }
+}
+
+NOLINT_TEST(
+  CameraExposureSerializationTest, InvalidOrthographicVolumeIsRejected)
+{
+  using oxygen::data::pak::world::OrthographicCameraRecord;
+  std::array<OrthographicCameraRecord, 4> records {};
+  records.at(0).aspect_mode = static_cast<oxygen::CameraAspectMode>(UINT8_MAX);
+  records.at(1).right = records.at(1).left;
+  records.at(2).top = std::numeric_limits<float>::quiet_NaN();
+  records.at(3).far_plane = records.at(3).near_plane;
+  for (const auto& record : records) {
+    oxygen::serio::MemoryStream stream;
+    oxygen::serio::Writer writer(stream);
+    EXPECT_FALSE(oxygen::serio::Store(writer, record));
+    EXPECT_TRUE(stream.Data().empty());
+  }
+}
+
 } // namespace

@@ -130,6 +130,47 @@
         }
       }
     },
+    "orthographic_camera": {
+      "properties": {
+        "orthographic_size": {
+          "x-editor-label": "Orthographic Size",
+          "x-editor-group": "Projection",
+          "x-editor-order": 0,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.1,
+          "x-editor-unit": "m"
+        },
+        "aspect_mode": {
+          "x-editor-label": "Aspect Mode",
+          "x-editor-group": "Projection",
+          "x-editor-order": 5,
+          "x-editor-renderer": "combobox"
+        },
+        "aspect_ratio": {
+          "x-editor-label": "Fixed Aspect Ratio",
+          "x-editor-group": "Projection",
+          "x-editor-order": 10,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01
+        },
+        "near_plane": {
+          "x-editor-label": "Near Plane",
+          "x-editor-group": "Projection",
+          "x-editor-order": 20,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01,
+          "x-editor-unit": "m"
+        },
+        "far_plane": {
+          "x-editor-label": "Far Plane",
+          "x-editor-group": "Projection",
+          "x-editor-order": 30,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 1.0,
+          "x-editor-unit": "m"
+        }
+      }
+    },
     "light_shadow": {
       "properties": {
         "bias": {
@@ -281,6 +322,100 @@
           "x-editor-group": "Atmosphere",
           "x-editor-order": 20,
           "x-editor-renderer": "vector3-box"
+        }
+      }
+    },
+    "point_light": {
+      "properties": {
+        "luminous_flux_lm": {
+          "x-editor-label": "Luminous Flux",
+          "x-editor-group": "Emission",
+          "x-editor-order": 0,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 10.0,
+          "x-editor-unit": "lm"
+        },
+        "range": {
+          "x-editor-label": "Range",
+          "x-editor-group": "Emission",
+          "x-editor-order": 10,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.1,
+          "x-editor-unit": "m"
+        },
+        "source_radius": {
+          "x-editor-label": "Source Radius",
+          "x-editor-group": "Emission",
+          "x-editor-order": 20,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01,
+          "x-editor-unit": "m"
+        }
+      }
+    },
+    "spot_light": {
+      "properties": {
+        "luminous_flux_lm": {
+          "x-editor-label": "Luminous Flux",
+          "x-editor-group": "Emission",
+          "x-editor-order": 0,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 10.0,
+          "x-editor-unit": "lm"
+        },
+        "range": {
+          "x-editor-label": "Range",
+          "x-editor-group": "Emission",
+          "x-editor-order": 10,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.1,
+          "x-editor-unit": "m"
+        },
+        "source_radius": {
+          "x-editor-label": "Source Radius",
+          "x-editor-group": "Emission",
+          "x-editor-order": 20,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01,
+          "x-editor-unit": "m"
+        },
+        "inner_cone_angle_radians": {
+          "x-editor-label": "Inner Cone Angle",
+          "x-editor-group": "Cone",
+          "x-editor-order": 0,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.5,
+          "x-editor-unit": "deg"
+        },
+        "outer_cone_angle_radians": {
+          "x-editor-label": "Outer Cone Angle",
+          "x-editor-group": "Cone",
+          "x-editor-order": 10,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.5,
+          "x-editor-unit": "deg"
+        }
+      }
+    },
+    "node_flags": {
+      "properties": {
+        "visible": {
+          "x-editor-label": "Scene Visibility",
+          "x-editor-group": "Rendering",
+          "x-editor-order": 0,
+          "x-editor-renderer": "toggle"
+        },
+        "casts_shadows": {
+          "x-editor-label": "Cast Shadows",
+          "x-editor-group": "Rendering",
+          "x-editor-order": 10,
+          "x-editor-renderer": "toggle"
+        },
+        "receives_shadows": {
+          "x-editor-label": "Receive Shadows",
+          "x-editor-group": "Rendering",
+          "x-editor-order": 20,
+          "x-editor-renderer": "toggle"
         }
       }
     },

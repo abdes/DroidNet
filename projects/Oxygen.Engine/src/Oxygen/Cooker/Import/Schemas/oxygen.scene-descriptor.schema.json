@@ -9,7 +9,7 @@
     },
     "version": {
       "type": "integer",
-      "const": 10
+      "const": 11
     },
     "name": {
       "$ref": "#/definitions/identifier"
@@ -275,23 +275,26 @@
     "orthographic_camera": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["node"],
+      "required": ["node", "aspect_mode"],
       "properties": {
         "node": {
           "type": "integer",
           "minimum": 0
         },
-        "left": {
-          "type": "number"
+        "aspect_mode": {
+          "enum": ["auto", "fixed"]
         },
-        "right": {
-          "type": "number"
+        "orthographic_size": {
+          "description": "Half of the visible height in meters.",
+          "type": "number",
+          "exclusiveMinimum": 0.0,
+          "default": 10.0
         },
-        "bottom": {
-          "type": "number"
-        },
-        "top": {
-          "type": "number"
+        "aspect_ratio": {
+          "description": "Retained Fixed width / height.",
+          "type": "number",
+          "exclusiveMinimum": 0.0,
+          "default": 1.0
         },
         "near_plane": {
           "type": "number"

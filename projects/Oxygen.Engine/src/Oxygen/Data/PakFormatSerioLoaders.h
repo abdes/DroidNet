@@ -410,9 +410,8 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.aperture_f));
   CHECK_RESULT(reader.ReadInto(record.shutter_rate));
   CHECK_RESULT(reader.ReadInto(record.iso));
-  if (!std::isfinite(record.aperture_f) || record.aperture_f <= 0.0F
-    || !std::isfinite(record.shutter_rate) || record.shutter_rate <= 0.0F
-    || !std::isfinite(record.iso) || record.iso <= 0.0F) {
+  CHECK_RESULT(reader.ReadInto(record.aspect_mode));
+  if (!data::pak::world::HasValidOrthographicCameraValues(record)) {
     return ::oxygen::Err(std::errc::invalid_argument);
   }
 

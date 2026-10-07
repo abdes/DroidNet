@@ -4,11 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <glm/gtc/matrix_transform.hpp>
+
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
-#include <glm/gtc/matrix_transform.hpp>
 
 namespace oxygen::scene {
 
@@ -26,11 +27,28 @@ namespace oxygen::scene {
 */
 auto OrthographicCamera::ProjectionMatrix() const -> Mat4
 {
+  return ProjectionMatrix(ActiveViewport());
+}
+
+auto OrthographicCamera::ProjectionMatrix(const ViewPort& target) const -> Mat4
+{
   // Engine canonical orthographic projection: right-handed, z in [0,1],
   // reversed-Z, no Y-flip.
-  Mat4 proj = MakeReversedZOrthographicProjectionRH_ZO(
-    left_, right_, bottom_, top_, near_, far_);
-  return proj;
+  const auto [left, right, bottom, top] = ResolveExtents(target);
+  return MakeReversedZOrthographicProjectionRH_ZO(
+    left, right, bottom, top, near_, far_);
+}
+
+auto OrthographicCamera::ResolveExtents(const ViewPort& target) const
+  -> std::array<float, 4>
+{
+  if (aspect_mode_ != CameraAspectMode::kAuto || !target.IsValid()) {
+    return { left_, right_, bottom_, top_ };
+  }
+  const float half_width
+    = 0.5F * (top_ - bottom_) * (target.width / target.height);
+  const float centre_x = 0.5F * (left_ + right_);
+  return { centre_x - half_width, centre_x + half_width, bottom_, top_ };
 }
 
 void OrthographicCamera::UpdateDependencies(
@@ -107,7 +125,8 @@ auto OrthographicCamera::ActiveViewport() const -> ViewPort
 */
 auto OrthographicCamera::ClippingRectangle() const -> Vec4
 {
-  return { left_, bottom_, right_, top_ };
+  const auto [left, right, bottom, top] = ResolveExtents(ActiveViewport());
+  return { left, bottom, right, top };
 }
 
 } // namespace oxygen::scene

@@ -347,8 +347,8 @@ namespace {
           {"node":0,"aspect_mode":"fixed","aspect_ratio":1.5,"aperture_f":2.8,"shutter_rate":250,"iso":400},
           {"node":1,"aspect_mode":"auto"}],
         "orthographic": [
-          {"node":2,"aperture_f":8,"shutter_rate":60,"iso":200},
-          {"node":3}]
+          {"node":2,"aspect_mode":"fixed","orthographic_size":2,"aspect_ratio":1.5,"aperture_f":8,"shutter_rate":60,"iso":200},
+          {"node":3,"aspect_mode":"auto"}]
       }
     })"));
     ASSERT_TRUE(report.success);
@@ -366,6 +366,12 @@ namespace {
     EXPECT_EQ(CheckedAt(perspective, 0).aspect_mode, CameraAspectMode::kFixed);
     EXPECT_FLOAT_EQ(CheckedAt(perspective, 0).aspect_ratio, 1.5F);
     EXPECT_EQ(CheckedAt(perspective, 1).aspect_mode, CameraAspectMode::kAuto);
+    EXPECT_EQ(CheckedAt(orthographic, 0).aspect_mode, CameraAspectMode::kFixed);
+    EXPECT_EQ(CheckedAt(orthographic, 1).aspect_mode, CameraAspectMode::kAuto);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 0).left, -3.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 0).right, 3.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 0).bottom, -2.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 0).top, 2.0F);
     EXPECT_FLOAT_EQ(CheckedAt(orthographic, 0).aperture_f, 8.0F);
     EXPECT_FLOAT_EQ(CheckedAt(orthographic, 0).shutter_rate, 60.0F);
     EXPECT_FLOAT_EQ(CheckedAt(orthographic, 0).iso, 200.0F);

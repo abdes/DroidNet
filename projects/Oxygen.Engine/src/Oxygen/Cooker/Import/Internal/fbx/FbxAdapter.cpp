@@ -2929,6 +2929,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
           .top = half_h,
           .near_plane = near_plane,
           .far_plane = far_plane,
+          .aspect_mode = CameraAspectMode::kFixed,
         });
       } else {
         diagnostics.push_back(MakeWarningDiagnostic("scene.camera.unsupported",

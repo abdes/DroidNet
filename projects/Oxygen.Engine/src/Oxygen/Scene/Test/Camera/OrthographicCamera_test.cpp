@@ -121,6 +121,60 @@ NOLINT_TEST_F(D3d12OrthographicCameraTest, ProjectionMatrix_Valid)
     << "Orthographic Y scale should be 2/(top-bottom)";
 }
 
+//! Explicit extents keep their exact frame unless Auto framing is requested.
+NOLINT_TEST_F(D3d12OrthographicCameraTest, FixedFramingIgnoresTargetAspect)
+{
+  // Arrange
+  camera_->SetExtents(-2, 2, -1, 1, 1.0f, 100.0f);
+  const oxygen::ViewPort wide { 0.f, 0.f, 1920.f, 1080.f, 0.f, 1.f };
+
+  // Act
+  const glm::mat4 proj = camera_->ProjectionMatrix(wide);
+
+  // Assert
+  EXPECT_EQ(camera_->GetAspectMode(), oxygen::CameraAspectMode::kFixed);
+  EXPECT_FLOAT_EQ(proj[0][0], 0.5f);
+  EXPECT_FLOAT_EQ(proj[1][1], 1.0f);
+}
+
+//! Auto keeps the vertical extents and centre, deriving width per target.
+NOLINT_TEST_F(D3d12OrthographicCameraTest, AutoFramingDerivesWidthFromTarget)
+{
+  // Arrange
+  camera_->SetExtents(0, 4, -1, 1, 1.0f, 100.0f);
+  camera_->SetAspectMode(oxygen::CameraAspectMode::kAuto);
+  auto expected = TestOrthographicCamera {};
+  expected.SetExtents(1, 3, -1, 1, 1.0f, 100.0f);
+  const oxygen::ViewPort square { 0.f, 0.f, 100.f, 100.f, 0.f, 1.f };
+  const oxygen::ViewPort wide { 0.f, 0.f, 200.f, 100.f, 0.f, 1.f };
+
+  // Act
+  const glm::mat4 square_proj = camera_->ProjectionMatrix(square);
+  const glm::mat4 wide_proj = camera_->ProjectionMatrix(wide);
+
+  // Assert
+  EXPECT_EQ(square_proj, expected.ProjectionMatrix());
+  expected.SetExtents(0, 4, -1, 1, 1.0f, 100.0f);
+  EXPECT_EQ(wide_proj, expected.ProjectionMatrix());
+  EXPECT_EQ(
+    camera_->GetExtents(), (std::array<float, 6> { 0, 4, -1, 1, 1.0f, 100.0f }))
+    << "Resolving a target must not rewrite the authored extents";
+}
+
+//! Auto without a usable target keeps the authored extents.
+NOLINT_TEST_F(D3d12OrthographicCameraTest, AutoFramingWithoutTargetKeepsExtents)
+{
+  // Arrange
+  camera_->SetExtents(-2, 2, -1, 1, 1.0f, 100.0f);
+  camera_->SetAspectMode(oxygen::CameraAspectMode::kAuto);
+
+  // Act
+  const glm::mat4 proj = camera_->ProjectionMatrix(oxygen::ViewPort {});
+
+  // Assert
+  EXPECT_FLOAT_EQ(proj[0][0], 0.5f);
+}
+
 //! ActiveViewport returns correct value
 /*! Scenario: Check default and set viewport values. */
 NOLINT_TEST_F(D3d12OrthographicCameraTest, ActiveViewport_ReturnsSetOrDefault)

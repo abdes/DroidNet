@@ -735,18 +735,17 @@ namespace {
 
           auto camera = data::pak::world::OrthographicCameraRecord {};
           camera.node_index = node_index;
-          if (camera_doc.contains("left")) {
-            camera.left = camera_doc.at("left").get<float>();
-          }
-          if (camera_doc.contains("right")) {
-            camera.right = camera_doc.at("right").get<float>();
-          }
-          if (camera_doc.contains("bottom")) {
-            camera.bottom = camera_doc.at("bottom").get<float>();
-          }
-          if (camera_doc.contains("top")) {
-            camera.top = camera_doc.at("top").get<float>();
-          }
+          camera.aspect_mode = camera_doc.at("aspect_mode") == "fixed"
+            ? CameraAspectMode::kFixed
+            : CameraAspectMode::kAuto;
+          const auto half_height
+            = camera_doc.value("orthographic_size", camera.top);
+          const auto half_width
+            = half_height * camera_doc.value("aspect_ratio", 1.0F);
+          camera.left = -half_width;
+          camera.right = half_width;
+          camera.bottom = -half_height;
+          camera.top = half_height;
           if (camera_doc.contains("near_plane")) {
             camera.near_plane = camera_doc.at("near_plane").get<float>();
           }

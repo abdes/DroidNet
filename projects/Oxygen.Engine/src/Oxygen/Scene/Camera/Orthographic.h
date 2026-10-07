@@ -97,71 +97,23 @@ public:
     return { left_, right_, bottom_, top_, near_, far_ };
   }
 
-  //! Sets the orthographic size (height in world units).
+  //! Sets how the horizontal extents follow the render target.
   /*!
-   @param size The height of the orthographic view.
+   Fixed keeps the authored left/right extents. Auto keeps the authored vertical
+   extents and horizontal centre, and derives the width from each target's
+   aspect ratio.
+   @param mode The framing policy.
   */
-  auto SetOrthographicSize(float size) noexcept -> void
-  {
-    orthographic_size_ = size;
-  }
-
-  //! Gets the orthographic size.
-  /*!
-   @return The height of the orthographic view.
-  */
-  OXGN_SCN_NDAPI auto GetOrthographicSize() const noexcept -> float
-  {
-    return orthographic_size_;
-  }
-
-  //! Sets the aspect ratio for fixed aspect mode.
-  /*!
-   @param aspect_ratio The desired aspect ratio (width / height).
-  */
-  auto SetAspectRatio(float aspect_ratio) noexcept -> void
-  {
-    aspect_ratio_ = aspect_ratio;
-  }
-
-  //! Gets the aspect ratio.
-  /*!
-   @return The aspect ratio (width / height).
-  */
-  OXGN_SCN_NDAPI auto GetAspectRatio() const noexcept -> float
-  {
-    return aspect_ratio_;
-  }
-
-  //! Sets the aspect mode (Auto or Fixed).
-  /*!
-   @param mode The aspect mode to apply.
-  */
-  auto SetAspectMode(CameraAspectMode mode) noexcept -> void
+  auto SetAspectMode(const CameraAspectMode mode) noexcept -> void
   {
     aspect_mode_ = mode;
   }
 
-  //! Gets the aspect mode.
-  /*!
-   @return The aspect mode.
-  */
+  //! Gets the framing policy.
   OXGN_SCN_NDAPI auto GetAspectMode() const noexcept -> CameraAspectMode
   {
     return aspect_mode_;
   }
-
-  //! Sets the near plane distance.
-  /*!
-   @param near_plane The near plane distance.
-  */
-  auto SetNearPlane(float near_plane) noexcept -> void { near_ = near_plane; }
-
-  //! Sets the far plane distance.
-  /*!
-   @param far_plane The far plane distance.
-  */
-  auto SetFarPlane(float far_plane) noexcept -> void { far_ = far_plane; }
 
   //! Sets the camera exposure parameters.
   /*!
@@ -215,12 +167,16 @@ public:
   //! Returns the set viewport, or a default rectangle if unset.
   OXGN_SCN_NDAPI auto ActiveViewport() const -> ViewPort;
 
-  //! Returns the extents of the camera's box at the near plane, in view space.
+  //! Returns the extents of the camera's box at the near plane, in view space,
+  //! resolved against the active viewport.
   OXGN_SCN_NDAPI auto ClippingRectangle() const -> Vec4;
 
   //! Computes the orthographic projection matrix for this camera (engine
-  //! canonical).
+  //! canonical) against its active viewport.
   OXGN_SCN_NDAPI auto ProjectionMatrix() const -> Mat4;
+
+  //! Computes the projection for one render target without changing state.
+  OXGN_SCN_NDAPI auto ProjectionMatrix(const ViewPort& target) const -> Mat4;
 
 protected:
   OXGN_SCN_API auto UpdateDependencies(
@@ -228,6 +184,9 @@ protected:
     -> void override;
 
 private:
+  //! Returns (left, right, bottom, top) after applying the framing policy.
+  auto ResolveExtents(const ViewPort& target) const -> std::array<float, 4>;
+
   static constexpr float kDefaultNearPlane = 0.1F;
   static constexpr float kDefaultFarPlane = 1000.0F;
 
@@ -237,9 +196,7 @@ private:
   float top_ = 1.0F;
   float near_ = kDefaultNearPlane;
   float far_ = kDefaultFarPlane;
-  float orthographic_size_ = 10.0F;
-  float aspect_ratio_ = 16.0F / 9.0F;
-  CameraAspectMode aspect_mode_ = CameraAspectMode::kAuto;
+  CameraAspectMode aspect_mode_ = CameraAspectMode::kFixed;
   CameraExposure exposure_ {};
   std::optional<ViewPort> viewport_;
   detail::TransformComponent* transform_ { nullptr };

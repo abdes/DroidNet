@@ -329,6 +329,8 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
       EXPECT_FLOAT_EQ(CheckedAt(perspective, 0).far_plane, 250.0F);
       EXPECT_FLOAT_EQ(CheckedAt(ortho, 0).near_plane, 0.3F);
       EXPECT_FLOAT_EQ(CheckedAt(ortho, 0).far_plane, 40.0F);
+      EXPECT_EQ(
+        CheckedAt(ortho, 0).aspect_mode, oxygen::CameraAspectMode::kFixed);
 
       const std::array camera_parents { 1U, 3U, source_count - 1 };
       const std::array camera_positions {

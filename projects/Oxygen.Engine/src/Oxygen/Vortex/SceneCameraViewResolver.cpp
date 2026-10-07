@@ -97,7 +97,10 @@ auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node,
     far_plane = cam->get().GetFarPlane();
     camera_ev = cam->get().Exposure().GetEv();
   } else if (auto camo = camera_node.GetCameraAs<scene::OrthographicCamera>()) {
-    proj_m = camo->get().ProjectionMatrix();
+    const auto target = viewport_override && viewport_override->IsValid()
+      ? *viewport_override
+      : camo->get().ActiveViewport();
+    proj_m = camo->get().ProjectionMatrix(target);
     const auto ext = camo->get().GetExtents();
     near_plane = ext.at(4);
     far_plane = ext.at(kOrthographicFarExtentIndex);

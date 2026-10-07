@@ -3202,6 +3202,7 @@ void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)
     auto camera = std::make_unique<scene::OrthographicCamera>();
     camera->SetExtents(record.left, record.right, record.bottom, record.top,
       record.near_plane, record.far_plane);
+    camera->SetAspectMode(record.aspect_mode);
     camera->SetExposure({
       .aperture_f = record.aperture_f,
       .shutter_rate = record.shutter_rate,

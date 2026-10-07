@@ -315,6 +315,8 @@ inline auto HasValidPerspectiveCameraValues(
 
   ### Volume
   - Defined by a box (left, right, bottom, top, near, far) in local space.
+  - Fixed keeps these extents; Auto keeps the vertical extents and horizontal
+    centre and derives the width from each render target's aspect ratio.
 */
 struct OrthographicCameraRecord {
   SceneNodeIndexT node_index = 0; // Index of the owner node
@@ -327,12 +329,31 @@ struct OrthographicCameraRecord {
   float aperture_f = engine::kDefaultCameraApertureF;
   float shutter_rate = engine::kDefaultCameraShutterRate;
   float iso = engine::kDefaultCameraIso;
+  CameraAspectMode aspect_mode = CameraAspectMode::kFixed;
 };
 #pragma pack(pop)
-static_assert(sizeof(OrthographicCameraRecord) == 40);
+static_assert(sizeof(OrthographicCameraRecord) == 41);
 static_assert(offsetof(OrthographicCameraRecord, aperture_f) == 28);
 static_assert(offsetof(OrthographicCameraRecord, shutter_rate) == 32);
 static_assert(offsetof(OrthographicCameraRecord, iso) == 36);
+static_assert(offsetof(OrthographicCameraRecord, aspect_mode) == 40);
+
+//! The canonical finite orthographic volume contract shared by cooking and
+//! loading.
+inline auto HasValidOrthographicCameraValues(
+  const OrthographicCameraRecord& record) -> bool
+{
+  return (record.aspect_mode == CameraAspectMode::kAuto
+           || record.aspect_mode == CameraAspectMode::kFixed)
+    && std::isfinite(record.left) && std::isfinite(record.right)
+    && record.right > record.left && std::isfinite(record.bottom)
+    && std::isfinite(record.top) && record.top > record.bottom
+    && std::isfinite(record.near_plane) && std::isfinite(record.far_plane)
+    && record.far_plane > record.near_plane && std::isfinite(record.aperture_f)
+    && record.aperture_f > 0.0F && std::isfinite(record.shutter_rate)
+    && record.shutter_rate > 0.0F && std::isfinite(record.iso)
+    && record.iso > 0.0F;
+}
 
 //=== Scene: Lights and Environment -----------------------------------------//
 
