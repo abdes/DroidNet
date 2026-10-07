@@ -1061,7 +1061,7 @@ NOLINT_TEST_F(
     };
     service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
     auto requested = scene::ExposureSettings {};
-    requested.metering_mask = pending ? loader.MintSyntheticTextureKey()
+    requested.metering_mask = pending ? loader.MintHeldTextureKey()
                                       : content::ResourceKey {
                                           123U,
                                         };

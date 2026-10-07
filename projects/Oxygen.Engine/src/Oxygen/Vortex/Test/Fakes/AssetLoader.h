@@ -7,6 +7,7 @@
 #pragma once
 
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -45,6 +46,12 @@ public:
     std::function<void(std::shared_ptr<data::TextureResource>)> on_complete)
     override
   {
+    if (const auto held = held_textures_.find(key);
+      held != held_textures_.end()) {
+      held->second.push_back(std::move(on_complete));
+      return;
+    }
+
     const auto it = textures_.find(key);
     if (it != textures_.end()) {
       on_complete(it->second);
@@ -552,6 +559,33 @@ public:
     textures_.insert_or_assign(key, nullptr);
   }
 
+  //! Mints a texture key whose loads stay in flight until
+  //! CompleteHeldTexture, the way a real asynchronous load is still pending
+  //! in the frame that requested it.
+  [[nodiscard]] auto MintHeldTextureKey() -> content::ResourceKey
+  {
+    const auto key = MintSyntheticTextureKey();
+    held_textures_.try_emplace(key);
+    return key;
+  }
+
+  //! Completes every held load of `key` with `texture` (null fails them);
+  //! later loads of the key complete immediately with the same result.
+  auto CompleteHeldTexture(content::ResourceKey key,
+    std::shared_ptr<data::TextureResource> texture) -> void
+  {
+    const auto held = held_textures_.find(key);
+    if (held == held_textures_.end()) {
+      return;
+    }
+    auto callbacks = std::move(held->second);
+    held_textures_.erase(held);
+    textures_.insert_or_assign(key, texture);
+    for (auto& callback : callbacks) {
+      callback(texture);
+    }
+  }
+
   [[nodiscard]] auto PreloadCookedTexture(std::span<const std::uint8_t> payload)
     -> content::ResourceKey
   {
@@ -650,6 +684,9 @@ private:
     textures_;
   std::unordered_map<content::ResourceKey, std::vector<uint8_t>>
     cooked_payloads_;
+  std::unordered_map<content::ResourceKey,
+    std::vector<std::function<void(std::shared_ptr<data::TextureResource>)>>>
+    held_textures_;
   std::unordered_map<TypeId, std::unordered_map<std::uint64_t, EvictionHandler>>
     eviction_handlers_;
   std::uint64_t next_subscription_id_ {

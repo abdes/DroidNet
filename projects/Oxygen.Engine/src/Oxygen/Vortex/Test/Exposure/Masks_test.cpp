@@ -302,11 +302,13 @@ NOLINT_TEST_F(
       if (previous) {
         std::ignore = service.ResolveViewExposureSettings(handle, requested);
       }
-      requested.metering_mask = loader.MintSyntheticTextureKey();
+      requested.metering_mask = loader.MintHeldTextureKey();
       EXPECT_EQ(
         service.ResolveViewExposureSettings(handle, requested).mask_status,
         oxygen::vortex::ExposureMaskStatus::kPending);
       if (failure) {
+        // The in-flight load fails before the next frame.
+        loader.CompleteHeldTexture(requested.metering_mask, nullptr);
         ctx_.frame_sequence = frame::SequenceNumber {
           ++sequence_,
         };

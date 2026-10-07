@@ -730,7 +730,8 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   auto queue = graphics_->GetCommandQueue(
     oxygen::graphics::SingleQueueStrategy().KeyFor(QueueRole::kTransfer));
   ASSERT_NE(queue, nullptr);
-  queue->Signal(std::numeric_limits<std::uint64_t>::max());
+  // Completes every submitted upload. UINT64_MAX would be a removed device.
+  queue->Signal(queue->GetCurrentValue() + 1U);
   service.OnFrameStart(
     oxygen::frame::SequenceNumber {
       2U,
@@ -759,7 +760,7 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   EXPECT_EQ(accepted.revision, 2U);
   EXPECT_EQ(accepted.resolved.authored, requested);
   const auto valid_request = requested;
-  requested.metering_mask = loader.MintSyntheticTextureKey();
+  requested.metering_mask = loader.MintHeldTextureKey();
   requested.compensation_ev = -2.0F;
   const auto replacing = service.ResolveViewExposureSettings(
     Handle {
@@ -769,6 +770,7 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   EXPECT_EQ(replacing.mask_status, Status::kPending);
   EXPECT_EQ(replacing.mask, accepted.mask);
   EXPECT_EQ(replacing.revision, 2U);
+  loader.CompleteHeldTexture(requested.metering_mask, nullptr);
   service.OnFrameStart(
     oxygen::frame::SequenceNumber {
       4U,
@@ -969,7 +971,8 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   auto queue = graphics_->GetCommandQueue(
     oxygen::graphics::SingleQueueStrategy().KeyFor(QueueRole::kTransfer));
   ASSERT_NE(queue, nullptr);
-  queue->Signal(std::numeric_limits<std::uint64_t>::max());
+  // Completes every submitted upload. UINT64_MAX would be a removed device.
+  queue->Signal(queue->GetCurrentValue() + 1U);
   service.OnFrameStart(
     oxygen::frame::SequenceNumber {
       2U,
@@ -1108,11 +1111,13 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
       if (previous) {
         std::ignore = service.ResolveViewExposureSettings(handle, requested);
       }
-      requested.metering_mask = loader.MintSyntheticTextureKey();
+      // Synthetic keys fail inside the request; a held load stays pending.
+      requested.metering_mask = loader.MintHeldTextureKey();
       EXPECT_EQ(
         service.ResolveViewExposureSettings(handle, requested).mask_status,
         Status::kPending);
       if (failure) {
+        loader.CompleteHeldTexture(requested.metering_mask, nullptr);
         service.OnFrameStart(
           oxygen::frame::SequenceNumber {
             id,
@@ -1181,7 +1186,8 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   auto queue = graphics_->GetCommandQueue(
     oxygen::graphics::SingleQueueStrategy().KeyFor(QueueRole::kTransfer));
   ASSERT_NE(queue, nullptr);
-  queue->Signal(std::numeric_limits<std::uint64_t>::max());
+  // Completes every submitted upload. UINT64_MAX would be a removed device.
+  queue->Signal(queue->GetCurrentValue() + 1U);
   service.OnFrameStart(
     oxygen::frame::SequenceNumber {
       2U,

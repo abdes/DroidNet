@@ -45,6 +45,7 @@
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
+#include <Oxygen/Vortex/Lighting/Types/LightGridBuildStatus.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
@@ -53,9 +54,8 @@
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
-#include <Oxygen/Vortex/Types/LightingFrameBindings.h>
-#include <Oxygen/Vortex/Lighting/Types/LightGridBuildStatus.h>
 #include <Oxygen/Vortex/Types/ExposureTransition.h>
+#include <Oxygen/Vortex/Types/LightingFrameBindings.h>
 #include <Oxygen/Vortex/ViewExtension.h>
 
 namespace oxygen::vortex::testing::exposure {
@@ -713,6 +713,9 @@ NOLINT_TEST_F(
   fog.SetExtinctionSigmaTPerMeter(.01F);
   fog.SetHeightFalloffPerMeter(0.0F);
   fog.SetVolumetricFogDistance(1000.0F);
+  // Every pixel is sky, and the visible sky receives distant height fog. An
+  // opacity cap keeps the sky radiance metered through the unbounded layer.
+  fog.SetMaxOpacity(.5F);
   auto& sky
     = scene->GetEnvironment()->AddSystem<scene::environment::SkySphere>();
   sky.SetEnabled(true);

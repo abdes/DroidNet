@@ -76,6 +76,19 @@ void CS(uint3 thread : SV_DispatchThreadID)
     if (thread.x >= pass.count) {
         return;
     }
+    if (pass.reserved == 1048576u) {
+        // Foreground grading: (rgb, exposure), (saturation, contrast,
+        // vignette intensity, gamma), (content uv, tone mapper, unused).
+        const float4 color_exposure = asfloat(input[thread.x * 3u]);
+        const float4 grading = asfloat(input[thread.x * 3u + 1u]);
+        const float4 placement = asfloat(input[thread.x * 3u + 2u]);
+        const float vignette = VignetteFactor(placement.xy, grading.z);
+        const float3 graded = GradeForeground(color_exposure.rgb * color_exposure.w,
+            (uint)placement.z, grading.x, grading.y, vignette, grading.w);
+        output.Store4(thread.x * 32u, asuint(float4(graded, vignette)));
+        output.Store4(thread.x * 32u + 16u, 0u.xxxx);
+        return;
+    }
     if (pass.reserved == 524288u) {
         const float3 direction = VortexDistantSkySampleDirection(thread.x);
         output.Store4(thread.x * 32u, asuint(float4(direction, FOUR_PI / 64.0f)));
@@ -128,7 +141,7 @@ void CS(uint3 thread : SV_DispatchThreadID)
     if (pass.reserved == 8192u || pass.reserved == 4096u) {
         const uint4 settings = input[thread.x * 2u];
         const float4 ray = asfloat(input[thread.x * 2u + 1u]);
-        StructuredBuffer<LocalFogVolumeInstanceData> instances = ResourceDescriptorHeap[settings.x];
+        StructuredBuffer<LocalFogVolumeInstanceData> instances = ResourceDescriptorHeap[NonUniformResourceIndex(settings.x)];
         const LocalFogVolumeInstanceData encoded = instances[settings.y];
         const DecodedLocalFogVolumeInstanceData fog = DecodeLocalFogVolumeInstanceData(encoded);
         if (pass.reserved == 4096u) {
@@ -167,8 +180,8 @@ void CS(uint3 thread : SV_DispatchThreadID)
     if (pass.reserved == 512u) {
         const uint4 settings = input[thread.x * 2u];
         const float gain = asfloat(input[thread.x * 2u + 1u].x);
-        Texture2D<float4> source = ResourceDescriptorHeap[settings.x];
-        SamplerState linear_sampler = SamplerDescriptorHeap[settings.y];
+        Texture2D<float4> source = ResourceDescriptorHeap[NonUniformResourceIndex(settings.x)];
+        SamplerState linear_sampler = SamplerDescriptorHeap[NonUniformResourceIndex(settings.y)];
         const float4 value = source.SampleLevel(linear_sampler, asfloat(settings.zw), 0.0);
         output.Store4(thread.x * 32u, asuint(value * gain));
         output.Store4(thread.x * 32u + 16u, asuint(value));
@@ -176,7 +189,7 @@ void CS(uint3 thread : SV_DispatchThreadID)
     }
     if (pass.reserved == 256u) {
         const uint4 settings = input[thread.x];
-        Texture2D<float4> source = ResourceDescriptorHeap[settings.x];
+        Texture2D<float4> source = ResourceDescriptorHeap[NonUniformResourceIndex(settings.x)];
         const float4 value = source.Load(int3(0, 0, 0));
         output.Store4(thread.x * 32u, asuint(value * asfloat(settings.y)));
         output.Store4(thread.x * 32u + 16u, asuint(value));

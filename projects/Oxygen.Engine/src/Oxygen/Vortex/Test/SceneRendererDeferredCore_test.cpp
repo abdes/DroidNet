@@ -98,6 +98,12 @@
 #include <Oxygen/Vortex/ViewExtension.h>
 #include <Oxygen/Vortex/ViewFeatureProfile.h>
 
+namespace oxygen::engine::internal {
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
+} // namespace oxygen::engine::internal
+
 namespace {
 
 using oxygen::Graphics;
@@ -357,6 +363,18 @@ protected:
     scene_->Update();
   }
 
+  //! Starts `sequence` on the slot every render here uses, so per-frame
+  //! publications (shadow read sets, bindings) match the rendered frame.
+  auto StartFrame(const std::uint64_t sequence) -> void
+  {
+    using oxygen::engine::internal::EngineTagFactory;
+    frame_context_.SetFrameSequenceNumber(
+      oxygen::frame::SequenceNumber { sequence }, EngineTagFactory::Get());
+    frame_context_.SetFrameSlot(
+      oxygen::frame::Slot { 1U }, EngineTagFactory::Get());
+    scene_renderer_->OnFrameStart(frame_context_);
+  }
+
   auto RenderForView(const ViewId active_view_id,
     const ResolvedView& active_view,
     const ShaderDebugMode debug_mode = ShaderDebugMode::kDisabled,
@@ -365,7 +383,7 @@ protected:
     const bool with_atmosphere = false, const bool with_height_fog = false,
     const bool with_local_fog = false) -> RenderContext
   {
-    scene_renderer_->OnFrameStart(frame_context_);
+    StartFrame(1U);
     UpdateSceneTransforms();
 
     auto published_bindings = ViewFrameBindings {};
@@ -720,7 +738,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   RenderViewFamilySerializesSceneViewsAndRestoresCursor)
 {
-  scene_renderer_->OnFrameStart(frame_context_);
+  StartFrame(1U);
   UpdateSceneTransforms();
 
   auto context = RenderContext {};
@@ -783,7 +801,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   auto fault = std::make_shared<Fault>();
   fault->failed_view = first_view_id_;
   renderer_->RegisterViewExtension(fault);
-  scene_renderer_->OnFrameStart(frame_context_);
+  StartFrame(1U);
   UpdateSceneTransforms();
   auto context = RenderContext {};
   context.scene = oxygen::observer_ptr<Scene> { scene_.get() };
@@ -810,6 +828,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   EXPECT_EQ(context.current_view.view_id, oxygen::kInvalidViewId);
 
   fault->fail = false;
+  StartFrame(2U);
   context.frame_sequence = oxygen::frame::SequenceNumber { 2U };
   scene_renderer_->RenderViewFamily(context);
   const auto recovered
@@ -827,7 +846,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   RenderViewFamilyPublishesShadowDepthsOnlyForShadowedViews)
 {
   std::ignore = AddDirectionalLight("Sun");
-  scene_renderer_->OnFrameStart(frame_context_);
+  StartFrame(1U);
   UpdateSceneTransforms();
 
   auto context = RenderContext {};
@@ -877,7 +896,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DisabledPrepassKeepsCompletenessDisabledAndPublishesBaseDepth)
 {
-  scene_renderer_->OnFrameStart(frame_context_);
+  StartFrame(1U);
 
   auto context = RenderContext {};
   context.scene = oxygen::observer_ptr<Scene> {
@@ -1137,7 +1156,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   ForwardBasePassPublishesColorAndDepthWithoutGBuffers)
 {
-  scene_renderer_->OnFrameStart(frame_context_);
+  StartFrame(1U);
 
   auto context = RenderContext {};
   context.scene = oxygen::observer_ptr<Scene> {
