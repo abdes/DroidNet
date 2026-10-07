@@ -4,10 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Core/Version.h>
 #include <Oxygen/Core/version-info.h>
+#include <Oxygen/Testing/GTest.h>
 
 NOLINT_TEST(VersionTests, Major)
 {
@@ -30,13 +29,6 @@ NOLINT_TEST(VersionTests, Version)
     + "." + std::to_string(oxygen::version::Minor()) + "."
     + std::to_string(oxygen::version::Patch());
   EXPECT_EQ(oxygen::version::Version(), expectedVersion);
-}
-
-NOLINT_TEST(VersionTests, VersionFull)
-{
-  const std::string version = oxygen::version::Version();
-  const std::string versionFull = oxygen::version::VersionFull();
-  EXPECT_TRUE(versionFull.find(version) != std::string::npos);
 }
 
 NOLINT_TEST(VersionTests, NameVersion)

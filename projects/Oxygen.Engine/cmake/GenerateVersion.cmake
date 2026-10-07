@@ -8,11 +8,9 @@ oxygen_read_source_provenance("${OXYGEN_PROJECT_SOURCE_DIR}" OXYGEN_SOURCE)
 foreach(_part VERSION VERSION_MAJOR VERSION_MINOR VERSION_PATCH)
   set(META_${_part} "${OXYGEN_SOURCE_${_part}}")
 endforeach()
-set(META_VERSION_REVISION "${OXYGEN_SOURCE_REVISION}")
-set(
-  META_NAME_VERSION
-  "${META_PROJECT_NAME} v${META_VERSION} (${OXYGEN_SOURCE_SHORT_REVISION})"
-)
+# Binaries carry only the semantic version. The source revision lives in the
+# installed capsule, so a commit or an edit never changes the compiled SDK.
+set(META_NAME_VERSION "${META_PROJECT_NAME} v${META_VERSION}")
 configure_file("${OXYGEN_VERSION_TEMPLATE}" "${OXYGEN_VERSION_HEADER}" @ONLY)
 file(
   CONFIGURE

@@ -19,7 +19,6 @@ namespace @META_PROJECT_ID_LOWER@ {
     constexpr auto cVersionMajor = @META_VERSION_MAJOR@;
     constexpr auto cVersionMinor = @META_VERSION_MINOR@;
     constexpr auto cVersionPatch = @META_VERSION_PATCH@;
-    constexpr auto cVersionRevision = "@META_VERSION_REVISION@";
 
     constexpr auto cVersion = "@META_VERSION@";
     constexpr auto cNameVersion = "@META_NAME_VERSION@";

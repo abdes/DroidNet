@@ -21,7 +21,6 @@ OXGN_CORE_NDAPI auto Patch() -> std::uint8_t;
 OXGN_CORE_NDAPI auto Version() -> std::string;
 //! Product version and full component commit, with -dirty when modified.
 //! Unavailable source provenance is reported as unknown.
-OXGN_CORE_NDAPI auto VersionFull() -> std::string;
 //! Display name/version with a 12-character component revision and dirty
 //! status.
 OXGN_CORE_NDAPI auto NameVersion() -> std::string;

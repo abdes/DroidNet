@@ -1,5 +1,13 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
+    <!--
+      The installed engine SDK is an input of this project that Visual Studio's
+      fast up-to-date check cannot see: it tracks compiler and linker inputs, not
+      the SDK DLLs hashed into the receipt. Let MSBuild evaluate the project on
+      every build; RecordInteropNativeSdk rewrites its headers only when an SDK
+      hash changed, so an unchanged SDK costs no recompilation.
+    -->
+    <DisableFastUpToDateCheck>true</DisableFastUpToDateCheck>
     <NativeSdkCompileHeader>$(IntDir)NativeSdkCompile.h</NativeSdkCompileHeader>
     <NativeSdkReceiptHeader>$(IntDir)NativeSdkReceipt.h</NativeSdkReceiptHeader>
   </PropertyGroup>

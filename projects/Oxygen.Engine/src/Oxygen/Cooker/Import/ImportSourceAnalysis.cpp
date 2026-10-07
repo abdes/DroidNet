@@ -569,7 +569,7 @@ namespace detail {
     -> ImportSourceAnalysis
   {
     auto report = ImportSourceAnalysis {};
-    report.producer_version = oxygen::version::VersionFull();
+    report.producer_version = oxygen::version::Version();
     auto canceled = std::make_shared<co::Event>();
     const auto cancel_callback = std::stop_callback(stop_token,
       [&loop, canceled] { loop.Post([canceled] { canceled->Trigger(); }); });
