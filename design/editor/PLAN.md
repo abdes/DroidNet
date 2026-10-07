@@ -94,7 +94,8 @@ the user's Main/Lantern scene packaged and rendered from its PAK alone, and
 focused native origin/binding/cache evidence pass. Its
 [closure record](plan/ED-M08.F1-descriptor-local-references.md#closure-verification)
 retains the user's non-blocking managed/UI and load-cost decisions.
-M08.2 rendering and subsequent editor parity work are next.
+M08.2 rendering and view behavior is validated and closed on 2026-10-08; the
+M08.3 harness and subsequent editor parity work are next.
 
 ## 4. Milestone Roadmap
 

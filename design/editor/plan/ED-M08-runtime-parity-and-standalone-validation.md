@@ -1,8 +1,18 @@
 # ED-M08 — Runtime parity and standalone qualification
 
-Status: **in progress — M08.1 and M08.F1 validated; M08.2 native rendered behavior is next**
+Status: **in progress — M08.1, M08.F1 and M08.2 validated; M08.3 is next**
 
-Current: **M08.2 native rendering and view behavior.** M08.1 and [M08.F1 descriptor-local references](ED-M08.F1-descriptor-local-references.md) are validated. F1 closes on 2026-10-06 with user reference-authoring/live mount-tree checks, the user's Main/Lantern scene packaged and rendered from its PAK alone, and five existing focused native origin/binding/cache cases passing. [Closure evidence and approved scope](ED-M08.F1-descriptor-local-references.md#closure-verification) retain failing/unrun checks without claiming passes; final managed/UI qualification and load-cost measurement are non-blocking by user decision. M08.2's native data foundation (Local/Inherit flags, cast/receive extraction, receiver and contact-shadow GPU paths, the independent directional array with Primary/Secondary slots and per-light CSM shadows, and captured-sky IBL) is already landed; M08.2 now finishes the remaining authoring gaps — live invalidation on flag/role edits, the node "Rendering" section (Scene Visibility / Cast / Receive Shadows), color-grading shader consumers, camera framing bars with orthographic camera editor UI and sync command, and point/spot light editors — while the editor representation mask is deferred to M08.4. M08.4 is re-scoped to the remaining authoring surface: the representation mask and polish. M08.3 and M08.5–M08.8 remain unchanged.
+Current: **M08.3 development harness and native visual gate.** M08.1,
+[M08.F1 descriptor-local references](ED-M08.F1-descriptor-local-references.md)
+and M08.2 are validated. [Closure evidence and approved scope](ED-M08.F1-descriptor-local-references.md#closure-verification)
+for F1 retain failing/unrun checks without claiming passes; final managed/UI
+qualification and load-cost measurement are non-blocking by user decision.
+M08.2 closes the authoring surface: live invalidation on flag/role edits, the
+node "Rendering" section, colour grading, camera framing with orthographic
+cameras and editor viewing through authored cameras, and point/spot light
+editors. The editor representation mask is deferred to M08.4, which is
+re-scoped to the remaining authoring surface: the representation mask and
+polish. M08.3 and M08.5–M08.8 remain unchanged.
 See [owners](#2-implementation-document-map), [remaining increments](#m081-remaining-increments)
 and [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
@@ -557,29 +567,18 @@ with live effect and history/Undo/Save/reopen; orthographic framing with Auto re
 and Fixed fit; orthographic sync command attaches authored cameras to editor views.
 Preserve existing material-sidedness and mirrored-winding correctness.
 
-#### M08.2 status (2026-10-07)
+#### M08.2 status
 
-| Item                 | State                   | Delivered / remaining                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| -------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1 Invalidation       | landed_needs_validation | `SceneRenderer` syncs observers after `Update(false)`; `SetPropertiesCommand` updates and syncs after every applier run. Remaining: native flag/role-edit cache test.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| 2 Rendering section  | landed_needs_validation | Node descriptors, Interop `NodePropertyApplier` (`ComponentId::kNode`, local values), projection of authored flags on every node create/sync, inspector section after component sections. Dedicated Set{Visibility,CastShadows,ReceiveShadows} commands removed. Remaining: editor workflow check, Shown child under Hidden parent rendered.                                                                                                                                                                                                                                                                                                          |
-| 3 Grading shaders    | landed_needs_validation | `Tonemap.hlsl` grades the foreground in the fixed order (saturation, linear contrast about 0.18, tone curve, content-ellipse vignette, display gamma); `ColorGrading_test` covers neutral, golden, None, background and coverage cases. Remaining: editor workflow check.                                                                                                                                                                                                                                                                                                                                                                             |
-| 4 Framing            | partial                 | Orthographic Auto/Fixed per target in `OrthographicCamera::ProjectionMatrix(target)` and the view resolver; cooked `OrthographicCameraRecord.aspect_mode`; size/ratio descriptor schema; scene version 11 with all Examples descriptors migrated and recooked. Editor ortho inspector, perspective Aspect Mode selector, live attach, cooking. The renderer frames Fixed cameras: `ResolveCameraContentRect`, content-size publication, bars composed after post-processing (outside metering and grading); DemoShell camera panel exercises projection type and aspect. Remaining: editor viewing through an authored camera, editor workflow check. |
-| 5 Point/spot editors | landed_needs_validation | Descriptors, Interop `LocalLightPropertyApplier`, inspectors (cones in degrees), history/save/cook/live. Remaining: editor workflow check.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+Status: **validated — closed on 2026-10-08**. Every item passed the editor
+workflow checks above.
 
-Evidence: full native Debug build and Examples recook; 11 native test executables
-pass (Scene cameras, SceneNode, DirectionalLightResolver, Data.All, Cooker
-SceneDescriptor/Scene/Gltf/Fbx, Content.AssetLoader, SceneCameraViewResolver);
-Interop builds; World 79/79, ContentPipeline descriptor 41/41, WorldEditor
-Unit, Unit.UI and Integration.UI lanes pass in full on the owner's runs, with
-integration tests on one shared native engine and node observation checking the
-rendering flags through history and Save/reopen. Not run: Interop native tests,
-editor workflow checks.
-
-Resume order: editor viewing through an authored camera (item 4); then
-the native flag/role-edit cache test (item 1), status docs and editor workflow
-checks for items 1, 2 and 5. Editor projects cooked at scene version 10 must be
-recooked.
+| Item                 | Delivered                                                                                                                                                                                                                                                                                                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1 Invalidation       | Flag changes notify light observers during the scene update; `SceneRenderer` and `SetPropertiesCommand` sync observers after each update. Native tests cover visibility, inherited (ancestor) visibility and role edits reaching the resolved lights and the captured-sky inputs after population.                                                                                               |
+| 2 Rendering section  | Node descriptors and Interop `NodePropertyApplier` (`ComponentId::kNode`, local values); authored flags projected on every node create/sync. The section follows the component sections, appears only for nodes with geometry or a light, and shows the cast/receive flags only for geometry. A locally Shown child under a Hidden parent renders.                                               |
+| 3 Grading shaders    | `Tonemap.hlsl` grades the foreground in the fixed order (saturation, linear contrast about 0.18, tone curve, content-ellipse vignette, display gamma); `ColorGrading_test` covers neutral, golden, None, background and coverage cases.                                                                                                                                                          |
+| 4 Framing            | Orthographic and perspective Auto/Fixed framing per target, Fixed bars composed after post-processing (outside metering and grading), cooked `aspect_mode`, scene version 11. Editor camera inspectors and live attach. Viewports look through, pilot (with undoable pose commits) and align authored cameras from the viewport menu, Scene Explorer and Ctrl+Shift+F. Orthographic ground grid. |
+| 5 Point/spot editors | Descriptors, Interop `LocalLightPropertyApplier`, inspectors (cones in degrees), history/save/cook/live.                                                                                                                                                                                                                                                                                         |
 
 ### M08.3 — Development harness and native visual gate
 
