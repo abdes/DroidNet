@@ -28,6 +28,14 @@ class ResourceCreationCounter final {
 public:
   auto RecordBuffer(SizeBytes requested_bytes) noexcept -> void;
   auto RecordTexture() noexcept -> void;
+  //! Zero every count (fixtures that reuse a backend across tests).
+  auto Reset() noexcept -> void
+  {
+    buffers_.store(0U);
+    textures_.store(0U);
+    requested_buffer_bytes_.store(0U);
+    overflow_.store(false);
+  }
   [[nodiscard]] auto Snapshot() const noexcept
     -> std::optional<ResourceCreationCounts>;
 

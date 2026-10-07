@@ -230,6 +230,7 @@ auto ExposureGpuTest::PathFinderConfigJson() const -> std::string
 auto ExposureGpuTest::SetUp() -> void
 {
   ReadbackTestFixture::SetUp();
+  FailureBackend().ResetForTest();
   auto config = RendererConfig {};
   config.upload_queue_key = QueueKeyFor().get();
   renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config);

@@ -91,10 +91,21 @@ public:
 
 protected:
   //! Keeps direct pass checks on the renderer's existing GPU timeline.
+  /*!
+   Direct checks advance `ctx_.frame_sequence` on a fixed slot. A frame slot's
+   transient uploads are recycled when its next sequence starts, which the
+   engine only does after that slot's previous frame completed; recording a new
+   sequence first waits for the queue so the same guarantee holds here.
+  */
   template <typename Operation>
   auto SubmitCommands(const std::string_view name, Operation&& operation)
     -> std::invoke_result_t<Operation, graphics::CommandRecorder&>
   {
+    if (submitted_frame_.first != ctx_.frame_sequence
+      || submitted_frame_.second != ctx_.frame_slot) {
+      WaitForQueueIdle();
+      submitted_frame_ = { ctx_.frame_sequence, ctx_.frame_slot };
+    }
     return graphics::testing::SubmitCommands(Backend(), name,
       [&](graphics::CommandRecorder& recorder)
         -> std::invoke_result_t<Operation, graphics::CommandRecorder&> {
@@ -122,6 +133,11 @@ protected:
   };
 
   auto BackendConfigJson() const -> std::string override;
+  //! One device per suite; SetUp resets the failure backend's test state.
+  [[nodiscard]] auto SharesBackendAcrossTests() const -> bool override
+  {
+    return true;
+  }
   static auto CapturePath() -> std::string;
   auto BeginOptionalCapture() -> observer_ptr<graphics::FrameCaptureController>;
   auto PathFinderConfigJson() const -> std::string override;
@@ -256,6 +272,9 @@ protected:
   RenderContext ctx_;
   std::uint64_t sequence_ {
     0U,
+  };
+  std::pair<frame::SequenceNumber, frame::Slot> submitted_frame_ {
+    frame::SequenceNumber {}, frame::kInvalidSlot
   };
   postprocess::ExposurePass::StateLease last_state_;
 };

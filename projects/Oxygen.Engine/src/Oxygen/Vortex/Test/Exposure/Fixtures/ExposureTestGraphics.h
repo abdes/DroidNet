@@ -28,6 +28,9 @@ public:
   using graphics::d3d12::Graphics::Graphics;
   auto SetShaderOverride(graphics::ShaderRequest request,
     std::shared_ptr<graphics::IShaderByteCode> bytecode) -> void;
+  //! Restore the state of a freshly created backend for the next test: the
+  //! device is shared across a suite, but tests mutate these fields freely.
+  auto ResetForTest() -> void;
   auto GetShader(const graphics::ShaderRequest& request) const
     -> std::shared_ptr<graphics::IShaderByteCode> override;
   mutable std::weak_ptr<graphics::Texture> processed_sky;

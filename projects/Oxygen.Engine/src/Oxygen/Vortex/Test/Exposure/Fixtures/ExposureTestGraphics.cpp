@@ -34,6 +34,34 @@ using graphics::CommandRecorder;
 using graphics::Texture;
 using graphics::TextureDesc;
 
+auto ExposureFailureGraphics::ResetForTest() -> void
+{
+  processed_sky.reset();
+  count_resource_creations = false;
+  resource_creations.Reset();
+  track_resources = false;
+  account_texture_allocations = false;
+  accounting_iteration = 0U;
+  accounting_phase.clear();
+  peak_texture_bytes = 0U;
+  peak_hdr_bytes = 0U;
+  peak_buffer_bytes = 0U;
+  peak_placement_bytes = 0U;
+  peak_engine_placement_bytes = 0U;
+  peak_hdr_iteration = 0U;
+  allocation_peaks = nlohmann::json::object();
+  allocation_peak_history = nlohmann::json::array();
+  tracked_textures.clear();
+  tracked_buffers.clear();
+  recorder_names.clear();
+  record_recorder_names_ = true;
+  fail_next_exposure_recorder = false;
+  fail_next_frame_recorder = false;
+  fail_status_recorder = false;
+  fail_recorder_name.clear();
+  shader_overrides_.clear();
+}
+
 auto ExposureFailureGraphics::SetShaderOverride(graphics::ShaderRequest request,
   std::shared_ptr<graphics::IShaderByteCode> bytecode) -> void
 {

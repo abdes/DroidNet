@@ -70,6 +70,130 @@ protected:
       path_finder_config_json_ = "{}";
     }
 
+    if (SharesBackendAcrossTests()) {
+      // One device per test suite: creating a debug-layer device and
+      // enumerating adapters dominates small GPU tests. Each test still gets
+      // its own tracked resources, and a removed or faulted device, or a
+      // different configuration, is replaced before the next test uses it.
+      auto& shared = SharedBackend();
+      const auto key = backend_config_json_ + '\n' + path_finder_config_json_;
+      if (shared.graphics != nullptr
+        && (shared.key != key || !IsBackendUsable(*shared.graphics))) {
+        ReleaseSharedBackend();
+      }
+      if (shared.graphics == nullptr) {
+        CreateAndInstallBackend();
+        if (HasFatalFailure()) {
+          return;
+        }
+        shared.key = key;
+        shared.graphics = graphics_;
+        shared.queue_strategy = std::move(queue_strategy_);
+      }
+      graphics_ = shared.graphics;
+      return;
+    }
+
+    CreateAndInstallBackend();
+  }
+
+  //! Releases the suite's shared device, if any, once its tests are done.
+  static auto TearDownTestSuite() -> void { ReleaseSharedBackend(); }
+
+  auto TearDown() -> void override
+  {
+    if (SharesBackendAcrossTests()) {
+      pending_recordings_.clear();
+      CleanupTrackedResources();
+      // Drain this test's GPU work and deferred releases so the next test
+      // starts from an idle device; a device that cannot is not reused.
+      bool reusable = graphics_ != nullptr && IsBackendUsable(*graphics_);
+      if (reusable) {
+        try {
+          graphics_->Flush();
+        } catch (const std::exception& ex) {
+          LOG_F(WARNING, "Shared test device is not reusable: {}", ex.what());
+          reusable = false;
+        }
+      }
+      textures_.clear();
+      buffers_.clear();
+      graphics_.reset();
+      if (!reusable) {
+        ReleaseSharedBackend();
+      }
+      backend_config_json_.clear();
+      path_finder_config_json_.clear();
+      return;
+    }
+
+    pending_recordings_.clear();
+    CleanupTrackedResources();
+
+    if (graphics_ != nullptr) {
+      const ScopeGuard close_backend([this]() noexcept { graphics_->Close(); });
+      if (graphics_->GetBackendLifetime()->State()
+        == graphics::BackendLifecycle::kActive) {
+        graphics_->Flush();
+      }
+    }
+
+    textures_.clear();
+    buffers_.clear();
+    queue_strategy_.reset();
+    graphics_.reset();
+    backend_config_json_.clear();
+    path_finder_config_json_.clear();
+  }
+
+  //! Opt in to one device per test suite instead of one per test. Fixtures
+  //! that opt in must reset any backend state their tests mutate in SetUp.
+  [[nodiscard]] virtual auto SharesBackendAcrossTests() const -> bool
+  {
+    return false;
+  }
+
+private:
+  struct SharedBackendState {
+    std::string key;
+    std::shared_ptr<oxygen::graphics::d3d12::Graphics> graphics;
+    std::unique_ptr<oxygen::graphics::QueuesStrategy> queue_strategy;
+  };
+
+  static auto SharedBackend() -> SharedBackendState&
+  {
+    static SharedBackendState state;
+    return state;
+  }
+
+  static auto IsBackendUsable(oxygen::graphics::d3d12::Graphics& graphics)
+    -> bool
+  {
+    return graphics.GetBackendLifetime()->State()
+      == graphics::BackendLifecycle::kActive;
+  }
+
+  static auto ReleaseSharedBackend() -> void
+  {
+    auto& shared = SharedBackend();
+    if (shared.graphics != nullptr) {
+      const ScopeGuard close_backend(
+        [&shared]() noexcept { shared.graphics->Close(); });
+      if (IsBackendUsable(*shared.graphics)) {
+        try {
+          shared.graphics->Flush();
+        } catch (const std::exception& ex) {
+          LOG_F(WARNING, "Shared test device flush failed: {}", ex.what());
+        }
+      }
+    }
+    shared.graphics.reset();
+    shared.queue_strategy.reset();
+    shared.key.clear();
+  }
+
+  auto CreateAndInstallBackend() -> void
+  {
     queue_strategy_ = CreateQueueStrategy();
     ASSERT_NE(queue_strategy_, nullptr);
 
@@ -92,27 +216,7 @@ protected:
     ASSERT_NE(TryGetQueue(graphics::QueueRole::kGraphics), nullptr);
   }
 
-  auto TearDown() -> void override
-  {
-    pending_recordings_.clear();
-    CleanupTrackedResources();
-
-    if (graphics_ != nullptr) {
-      const ScopeGuard close_backend([this]() noexcept { graphics_->Close(); });
-      if (graphics_->GetBackendLifetime()->State()
-        == graphics::BackendLifecycle::kActive) {
-        graphics_->Flush();
-      }
-    }
-
-    textures_.clear();
-    buffers_.clear();
-    queue_strategy_.reset();
-    graphics_.reset();
-    backend_config_json_.clear();
-    path_finder_config_json_.clear();
-  }
-
+protected:
   [[nodiscard]] virtual auto BackendConfigJson() const -> std::string
   {
     return "{}";
