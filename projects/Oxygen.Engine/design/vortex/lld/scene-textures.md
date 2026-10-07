@@ -941,6 +941,16 @@ coverage/alpha/cutoff diagnostics retain CustomData RGB. This avoids another MRT
 or a wider attachment; normal-map perturbations do not alter the contact bias.
 The geometric normal uses the same sidedness/orientation helper as forward.
 
+Every octahedral lane maps [-1, 1] onto codes [0, max - 1] centred on
+(max - 1) / 2 (511 for UNORM10, 127 for UNORM8); the top code clamps. Zero and
+±1 therefore round-trip exactly, so axis-aligned normals decode unchanged and a
+flat receiver under a horizon light keeps N·L = 0 as in forward shading. The
+`* 0.5 + 0.5` mapping has no exact centre and tilts those normals by half a
+code, which leaks grazing direct light into deferred shading only. The shader
+selects the nearest code and writes it a quarter step high, because colour
+exports may narrow to FP16 toward zero before UNORM rounding; without the
+offset, codes in the upper half of a 10-bit lane can store one step low.
+
 ### 5.1 GPU Resources
 
 | Product                 | Format                                                                   | Size                  | Lifecycle                                                                                                       |

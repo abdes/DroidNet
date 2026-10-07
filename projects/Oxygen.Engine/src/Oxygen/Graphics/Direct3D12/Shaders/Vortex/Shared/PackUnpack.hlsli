@@ -38,6 +38,28 @@ static inline float3 OctahedronDecode(float2 encoded)
     return normalize(normal);
 }
 
+// Signed [-1, 1] values stored in UNORM lanes of `max_code` steps use codes
+// [0, max_code - 1] centred on (max_code - 1) / 2, so 0 and +/-1 round-trip
+// exactly and quantization is symmetric. The `* 0.5 + 0.5` mapping has no
+// exact centre and tilts axis-aligned octahedral normals by half a step.
+//
+// The code is chosen here and emitted a quarter step above its value: render
+// target exports may first narrow to FP16 toward zero (losing up to half a
+// 10-bit step in [0.5, 1)) before the UNORM conversion rounds, so an exact
+// code/max value can land one code low. The offset survives both paths.
+static inline float2 EncodeSignedUnormExactZero(float2 value, float2 max_code)
+{
+    const float2 half_range = 0.5f * (max_code - 1.0f);
+    const float2 code = round(clamp(value, -1.0f, 1.0f) * half_range + half_range);
+    return (code + 0.25f) / max_code;
+}
+
+static inline float2 DecodeSignedUnormExactZero(float2 stored, float2 max_code)
+{
+    const float2 half_range = 0.5f * (max_code - 1.0f);
+    return clamp((round(stored * max_code) - half_range) / half_range, -1.0f, 1.0f);
+}
+
 static inline float Pack2x8Unorm(float first, float second)
 {
     const uint first_unorm = uint(saturate(first) * 255.0f + 0.5f);

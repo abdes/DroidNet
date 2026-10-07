@@ -445,8 +445,9 @@ namespace {
             y = std::copysign(1.0 - std::abs(x), y);
             x = unfolded_x;
           }
-          check_code(words.at(0) & 1023U, (0.5 + (0.5 * x)) * 1023.0);
-          check_code((words.at(0) >> 10U) & 1023U, (0.5 + (0.5 * y)) * 1023.0);
+          // Octahedral codes centre on 511, so 0 and +/-1 are exact.
+          check_code(words.at(0) & 1023U, 511.0 + (511.0 * x));
+          check_code((words.at(0) >> 10U) & 1023U, 511.0 + (511.0 * y));
           check_code(words.at(1) & 255U, expected->material.metallic * 255.0);
           check_code((words.at(1) >> 8U) & 255U, 0.5 * 255.0);
           check_code((words.at(1) >> 16U) & 255U,
@@ -647,10 +648,10 @@ namespace {
               }
               const auto& n = expected_normal->normal;
               const auto norm = std::abs(n.x) + std::abs(n.y) + std::abs(n.z);
-              EXPECT_NEAR(words.at(0) & 1023U,
-                (0.5 + (0.5 * n.x / norm)) * 1023.0, 0.601);
+              EXPECT_NEAR(
+                words.at(0) & 1023U, 511.0 + (511.0 * n.x / norm), 0.601);
               EXPECT_NEAR((words.at(0) >> 10U) & 1023U,
-                (0.5 + (0.5 * n.y / norm)) * 1023.0, 0.601);
+                511.0 + (511.0 * n.y / norm), 0.601);
               for (unsigned channel = 0U; channel < 3U; ++channel) {
                 const auto linear = sample.at(channel);
                 const auto encoded = linear <= 0.0031308

@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <expected>
@@ -45,13 +46,14 @@ auto DecodeSrgb8(const std::uint8_t code) -> double
 auto DecodeGBufferTexel(const PackedGBufferTexel& texel) -> DecodedGBufferTexel
 {
   const auto packed_normal = texel.normal.get();
-  auto x
-    = ((2.0 * static_cast<double>(packed_normal & kNormalMask)) - kNormalMask)
-    / kNormalMask;
-  auto y
-    = ((2.0 * static_cast<double>((packed_normal >> kNormalBits) & kNormalMask))
-        - kNormalMask)
-    / kNormalMask;
+  // Codes [0, 1022] centre on 511, so 0 and +/-1 are exact; 1023 clamps.
+  constexpr auto kHalfRange = (kNormalMask - 1U) / 2U;
+  const auto signed_code = [](const std::uint32_t code) -> double {
+    return std::clamp(
+      (static_cast<double>(code) - kHalfRange) / kHalfRange, -1.0, 1.0);
+  };
+  auto x = signed_code(packed_normal & kNormalMask);
+  auto y = signed_code((packed_normal >> kNormalBits) & kNormalMask);
   const auto z = 1.0 - std::abs(x) - std::abs(y);
   if (z < 0.0) {
     const auto folded_x = std::copysign(1.0 - std::abs(y), x);

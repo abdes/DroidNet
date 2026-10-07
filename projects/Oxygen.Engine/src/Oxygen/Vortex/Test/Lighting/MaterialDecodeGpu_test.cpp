@@ -46,8 +46,8 @@ namespace {
     const auto normal_landmarks = std::array<std::uint32_t, 8> {
       0U,
       0x000FFFFFU,
-      512U | (512U << 10U),
       511U | (511U << 10U),
+      512U | (510U << 10U),
       767U | (767U << 10U),
       768U | (767U << 10U),
       256U | (256U << 10U),

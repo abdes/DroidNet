@@ -51,7 +51,7 @@ static inline GBufferOutput PackGBufferOutput(
     // Per-instance receiver state is independent of shared material/shading data.
     output.gbuffer_normal.w = surface.receives_shadows ? 1.0f : 0.0f;
     // Preserve the geometric normal for metric contact bias without another MRT.
-    const float2 geometric_oct = OctahedronEncode(geometric_normal) * 0.5f + 0.5f;
+    const float2 geometric_oct = EncodeGBufferGeometricNormal(geometric_normal);
     output.gbuffer_normal.z = geometric_oct.x;
     output.gbuffer_custom_data.w = geometric_oct.y;
     // Surviving opaque/masked fragments have full foreground coverage.

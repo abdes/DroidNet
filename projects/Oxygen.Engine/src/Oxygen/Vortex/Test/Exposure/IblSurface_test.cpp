@@ -1733,8 +1733,12 @@ namespace {
           }
           // Compare transport using the actual deferred shading normal. The
           // original images above retain the UNORM10 normal-packing difference.
-          const float nx = packed[2][0] * 2 - 1;
-          const float ny = packed[2][1] * 2 - 1;
+          // UNORM10 octahedral lanes centre on code 511 (see GBufferHelpers).
+          const auto unpack = [](float stored) {
+            return (std::round(stored * 1023.0F) - 511.0F) / 511.0F;
+          };
+          const float nx = unpack(packed[2][0]);
+          const float ny = unpack(packed[2][1]);
           const auto normal = glm::normalize(
             glm::vec3(nx, ny, 1 - std::abs(nx) - std::abs(ny)));
           ASSERT_GT(normal.z, 0);

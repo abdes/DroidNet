@@ -26,16 +26,29 @@ struct GBufferData
     float4 custom_data;
 };
 
+// Octahedral lanes: the shading normal uses GBufferNormal R/G (UNORM10); the
+// geometric normal uses GBufferNormal B (UNORM10) and GBufferCustomData A
+// (UNORM8).
+static const float2 kGBufferShadingNormalMaxCode = float2(1023.0f, 1023.0f);
+static const float2 kGBufferGeometricNormalMaxCode = float2(1023.0f, 255.0f);
+
 static inline float4 EncodeGBufferNormal(float3 world_normal)
 {
     const float2 encoded = OctahedronEncode(normalize(world_normal));
-    return float4(encoded * 0.5f + 0.5f, 0.0f, 1.0f);
+    return float4(EncodeSignedUnormExactZero(encoded, kGBufferShadingNormalMaxCode),
+        0.0f, 1.0f);
 }
 
 static inline float3 DecodeGBufferNormal(float4 gbuffer_normal)
 {
-    const float2 encoded = gbuffer_normal.xy * 2.0f - 1.0f;
-    return OctahedronDecode(encoded);
+    return OctahedronDecode(DecodeSignedUnormExactZero(
+        gbuffer_normal.xy, kGBufferShadingNormalMaxCode));
+}
+
+static inline float2 EncodeGBufferGeometricNormal(float3 geometric_normal)
+{
+    return EncodeSignedUnormExactZero(
+        OctahedronEncode(geometric_normal), kGBufferGeometricNormalMaxCode);
 }
 
 static inline float4 EncodeGBufferMaterial(
@@ -77,8 +90,9 @@ static inline GBufferData ReadGBuffer(float2 uv, SceneTextureBindingData binding
 
     data.world_normal = DecodeGBufferNormal(gbuffer_normal);
     data.receives_shadows = gbuffer_normal.w > 0.5f;
-    data.geometric_normal = OctahedronDecode(
-        float2(gbuffer_normal.z, data.custom_data.w) * 2.0f - 1.0f);
+    data.geometric_normal = OctahedronDecode(DecodeSignedUnormExactZero(
+        float2(gbuffer_normal.z, data.custom_data.w),
+        kGBufferGeometricNormalMaxCode));
     DecodeGBufferMaterial(gbuffer_material, data.metallic, data.specular,
         data.roughness, data.shading_model);
     DecodeGBufferBaseColor(

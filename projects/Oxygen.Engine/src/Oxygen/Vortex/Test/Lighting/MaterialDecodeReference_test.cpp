@@ -48,23 +48,29 @@ namespace {
     EXPECT_EQ(south.normal.x, 0.0);
     EXPECT_EQ(south.normal.y, 0.0);
     EXPECT_EQ(south.normal.z, -1.0);
+    // Axis-aligned normals are exact, so a flat receiver under a grazing
+    // light keeps N.L = 0 after packing.
     const auto north = DecodeGBufferTexel(
-      { .normal = PackedGBufferNormal { 512U | (512U << 10U) } });
-    EXPECT_GT(north.normal.x, 0.0);
-    EXPECT_GT(north.normal.y, 0.0);
-    EXPECT_GT(north.normal.z, 0.99999);
-    EXPECT_NEAR(
-      std::hypot(north.normal.x, north.normal.y, north.normal.z), 1.0, 1.0e-15);
+      { .normal = PackedGBufferNormal { 511U | (511U << 10U) } });
+    EXPECT_EQ(north.normal.x, 0.0);
+    EXPECT_EQ(north.normal.y, 0.0);
+    EXPECT_EQ(north.normal.z, 1.0);
     const auto poisoned_unused_lanes = DecodeGBufferTexel({
-      .normal = PackedGBufferNormal { 512U | (512U << 10U) | 0xFFF00000U },
+      .normal = PackedGBufferNormal { 511U | (511U << 10U) | 0xFFF00000U },
     });
     EXPECT_EQ(north.normal.x, poisoned_unused_lanes.normal.x);
     EXPECT_EQ(north.normal.y, poisoned_unused_lanes.normal.y);
     EXPECT_EQ(north.normal.z, poisoned_unused_lanes.normal.z);
+    const auto tilted = DecodeGBufferTexel(
+      { .normal = PackedGBufferNormal { 512U | (512U << 10U) } });
+    EXPECT_GT(tilted.normal.x, 0.0);
+    EXPECT_GT(tilted.normal.y, 0.0);
+    EXPECT_NEAR(std::hypot(tilted.normal.x, tilted.normal.y, tilted.normal.z),
+      1.0, 1.0e-15);
     const auto opposite = DecodeGBufferTexel(
-      { .normal = PackedGBufferNormal { 511U | (511U << 10U) } });
-    EXPECT_EQ(opposite.normal.x, -north.normal.x);
-    EXPECT_EQ(opposite.normal.y, -north.normal.y);
+      { .normal = PackedGBufferNormal { 510U | (510U << 10U) } });
+    EXPECT_EQ(opposite.normal.x, -tilted.normal.x);
+    EXPECT_EQ(opposite.normal.y, -tilted.normal.y);
   }
 
   NOLINT_TEST(
