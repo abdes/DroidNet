@@ -61,6 +61,9 @@ public sealed partial class NativeLoopCleanupTests
         new(3, 27, 0.5f),
         new(3, 28, 1.25f),
         new(3, 29, 2f),
+        new(7, 0, 1f),
+        new(7, 1, 0f),
+        new(7, 2, 1f),
     ];
 
     private async Task CheckNativeNodeAsync(RuntimeCommandDispatcher commands)
