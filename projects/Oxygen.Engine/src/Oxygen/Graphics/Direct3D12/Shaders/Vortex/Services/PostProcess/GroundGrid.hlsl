@@ -48,6 +48,35 @@ struct GroundGridPSOutput
     float depth : SV_Depth;
 };
 
+// Camera-relative point on the view ray through `ndc` at clip depth `z`.
+float3 UnprojectRelative(float4x4 inv_view_proj, float2 ndc, float z)
+{
+    const float4 p = mul(inv_view_proj, float4(ndc, z, 1.0));
+    return p.xyz / p.w;
+}
+
+// Camera-relative view ray through `ndc`, for perspective and orthographic
+// projections alike. Two finite clip depths are unprojected (0.5 and 1 stay
+// finite with reverse-Z and an infinite far plane); the farther point is the
+// longer camera-relative vector under both projections. The origin is moved
+// back along the ray onto the plane through the camera that faces the view
+// direction: the camera itself for perspective, the pixel's own point on that
+// plane for orthographic, where rays are parallel.
+void PixelRay(float4x4 inv_view_proj, float2 ndc, out float3 origin, out float3 dir)
+{
+    const float3 a = UnprojectRelative(inv_view_proj, ndc, 0.5);
+    const float3 b = UnprojectRelative(inv_view_proj, ndc, 1.0);
+    const bool b_farther = dot(b, b) > dot(a, a);
+    const float3 nearer = b_farther ? a : b;
+    dir = normalize(b_farther ? b - a : a - b);
+
+    const float3 ca = UnprojectRelative(inv_view_proj, float2(0.0, 0.0), 0.5);
+    const float3 cb = UnprojectRelative(inv_view_proj, float2(0.0, 0.0), 1.0);
+    const float3 forward = normalize(dot(cb, cb) > dot(ca, ca) ? cb - ca : ca - cb);
+
+    origin = nearer - dir * (dot(nearer, forward) / max(dot(dir, forward), EPSILON));
+}
+
 [shader("vertex")]
 VortexFullscreenTriangleOutput VortexGroundGridVS(uint vertex_id : SV_VertexID)
 {
@@ -81,10 +110,9 @@ GroundGridPSOutput VortexGroundGridPS(VortexFullscreenTriangleOutput input)
     const float horizon_boost = pass.horizon_boost;
 
     const float2 ndc = float2(input.uv.x * 2.0 - 1.0, 1.0 - input.uv.y * 2.0);
-    const float4 clip = float4(ndc, 1.0, 1.0);
-    float4 world_rel = mul(pass.inv_view_proj, clip);
-    world_rel.xyz /= world_rel.w;
-    float3 ray_dir = normalize(world_rel.xyz);
+    float3 ray_origin;
+    float3 ray_dir;
+    PixelRay(pass.inv_view_proj, ndc, ray_origin, ray_dir);
 
     const float denom = ray_dir.z;
     if (abs(denom) < EPSILON) {
@@ -92,12 +120,12 @@ GroundGridPSOutput VortexGroundGridPS(VortexFullscreenTriangleOutput input)
     }
 
     const float rel_plane_z = plane_height - camera_position.z;
-    const float t = rel_plane_z / denom;
+    const float t = (rel_plane_z - ray_origin.z) / denom;
     if (t <= 0.0) {
         discard;
     }
 
-    const float3 pos_rel = ray_dir * t;
+    const float3 pos_rel = ray_origin + ray_dir * t;
     const float3 pos_abs_approx = camera_position + pos_rel;
     const float4 clip_pos = mul(projection_matrix, mul(view_matrix, float4(pos_abs_approx, 1.0)));
     const float ndc_depth = clip_pos.z / clip_pos.w;
