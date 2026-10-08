@@ -1,9 +1,9 @@
 # ED-M08 — Runtime parity and standalone qualification
 
-Status: **in progress — M08.1, M08.F1 and M08.2 validated; M08.V1 is next**
+Status: **in progress — M08.1, M08.F1 and M08.2 validated; M08.V0 is next**
 
-Current: **M08.V1 multi-viewport layouts**, then M08.V2 viewport state
-persistence, before M08.3. M08.1,
+Current: **M08.V0 viewport robustness**, then M08.V1 multi-viewport layouts
+and M08.V2 viewport state persistence, before M08.3. M08.1,
 [M08.F1 descriptor-local references](ED-M08.F1-descriptor-local-references.md)
 and M08.2 are validated. [Closure evidence and approved scope](ED-M08.F1-descriptor-local-references.md#closure-verification)
 for F1 retain failing/unrun checks without claiming passes; final managed/UI
@@ -137,7 +137,7 @@ from missing editor exposure. Current M08 obligations are not future TODOs.
 Each slice ends with focused checks and a buildable code/test/doc commit. Native
 contracts and rendered behavior pass before editor implementation relies on them.
 M02's remaining supported-viewport evidence is a closeout gate; M09 tools are not
-an entry dependency. Order: M08.1 → M08.F1 → M08.2 → M08.V1 → M08.V2 →
+an entry dependency. Order: M08.1 → M08.F1 → M08.2 → M08.V0 → M08.V1 → M08.V2 →
 M08.3–M08.8.
 
 ### M08.1 — Native canonical data, producers and primitives
@@ -585,6 +585,25 @@ workflow checks above.
 | 4 Framing            | Orthographic and perspective Auto/Fixed framing per target, Fixed bars composed after post-processing (outside metering and grading), cooked `aspect_mode`, scene version 11. Editor camera inspectors and live attach. Viewports look through, pilot (with undoable pose commits) and align authored cameras from the viewport menu, Scene Explorer and Ctrl+Shift+F. Orthographic ground grid. |
 | 5 Point/spot editors | Descriptors, Interop `LocalLightPropertyApplier`, inspectors (cones in degrees), history/save/cook/live.                                                                                                                                                                                                                                                                                         |
 
+### M08.V0 — Viewport robustness prerequisites
+
+Interop view and compositing corrections that M08.V1 builds on. Each lands
+as its own buildable commit; no user-visible behaviour changes except R7.
+
+| Item                   | Change and rationale                                                                                                                                                                                                                            |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1 Frame logging       | Per-frame, per-view publication and composition logs move to debug verbosity: they scale with pane count and distort the V1 cost measurement.                                                                                                   |
+| R2 Composite targets   | Surface composite framebuffers carry no depth attachment; composition writes colour only, and a depth texture per backbuffer per surface is wasted GPU memory.                                                                                  |
+| R3 Dead paths          | Remove the unused `EditorCompositor` copy path and the `EditorView` renderer registration/render-graph members; composition goes only through `Renderer::RegisterRuntimeComposition`.                                                           |
+| R4 Target identity     | A view names its compositing target by surface key, not a raw `Surface*`, so a view outliving its surface can never present into a new surface at a reused address.                                                                             |
+| R5 Resize flush        | One GPU queue flush per frame covers every surface resized that frame, instead of one flush per surface.                                                                                                                                        |
+| R6 Editor camera scene | Editor navigation cameras live in an editor-owned camera scene, not the authored scene: their state survives scene replacement, authored traversals and observations see only authored nodes, and navigation stops mutating the authored scene. |
+| R7 Clear colour        | Every pane uses one neutral clear colour; the per-pane diagnostic palette is removed.                                                                                                                                                           |
+
+Checks: a native test renders and frames through a camera-scene camera,
+including a scene replacement that keeps the editor camera pose; existing
+Interop and viewport lifetime tests pass.
+
 ### M08.V1 — Multi-viewport layouts
 
 Multi-viewport support returns to scope (decision `DB-006` supersedes `DB-002`).
@@ -619,6 +638,16 @@ closes the gaps; the contract is the
    the inset. Any throttling of unfocused panes is decided from that
    measurement, not assumed.
 
+Known defects closed by these items: a recreated view (dock move, document
+switch, maximize) loses its editor camera and preset; a preset requested before
+the native camera exists is dropped; maximize/restore discards the other panes
+and leaks their view models, as does any layout shrink; Align to View
+(`Ctrl+Shift+F`) reaches whichever pane WinUI finds first; two panes can pilot
+one camera; the wheel does not focus its pane. Panes capture their editor
+camera state before a view is released and recreate the view with it.
+Maximize is presentation only: the layout and pane indexes are unchanged and
+the hidden panes release their views but keep their state.
+
 Owners: WorldEditor `SceneEditorViewModel`, `ViewportViewModel` and the
 `Viewport` control; Runtime surface leases and view lifetimes; Interop
 `EditorModule` views and `EditorCompositor`; Vortex `CompositionView`.
@@ -650,12 +679,14 @@ reach cooked output. The storage contract is
 3. **Write.** Shortly after navigation stops, on any layout, preset, mode or
    camera-assignment change, and when the document closes. Writes are
    serialized per project, and a stale restore never overwrites newer state.
-4. **Native.** A view command sets the editor camera pose (position, rotation,
-   focus point and orthographic size); the existing view camera pose query
-   reports it back.
+4. **Native.** View creation accepts the editor camera state (position,
+   rotation, focus point and orthographic size), the view preset and the
+   viewed scene camera, so a restored pane is correct on its first presented
+   frame; a view query reports the editor camera state back. A separate set
+   command would land after the default camera had presented.
 
 Owners: WorldEditor viewport-state service with `IEditorSettingsManager`;
-`ViewportViewModel`; Runtime and Interop view camera commands.
+`ViewportViewModel`; Runtime and Interop view creation and camera query.
 
 Checks: reopen restores each layout and pane; no scene dirty state or history
 entry from navigation or restore; deleted-camera fallback; project and scene
