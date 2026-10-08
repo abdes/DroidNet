@@ -34,17 +34,6 @@ namespace Oxygen.Editor.World.SceneEditor;
 /// </summary>
 public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDocumentConflictParticipant, IDisposable
 {
-    // A small palette of candidate clear colors shared by viewports. We wrap the
-    // palette here so the Scene Editor decides the per-viewport colors.
-    private static readonly RuntimeColor[] DefaultViewportClearColors = [
-        new RuntimeColor(0.10f, 0.12f, 0.15f, 1.0f), // default blue-ish
-        new RuntimeColor(0.18f, 0.09f, 0.09f, 1.0f), // warm
-        new RuntimeColor(0.09f, 0.18f, 0.09f, 1.0f), // green
-        new RuntimeColor(0.09f, 0.12f, 0.18f, 1.0f), // deep blue
-        new RuntimeColor(0.18f, 0.12f, 0.08f, 1.0f), // orange
-        new RuntimeColor(0.14f, 0.09f, 0.18f, 1.0f), // purple
-    ];
-
     private readonly IMessenger messenger;
     private readonly ILogger logger;
     private readonly ILoggerFactory? loggerFactory;
@@ -363,7 +352,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
                 this.loggerFactory);
             var newIndex = this.Viewports.Count;
 
-            viewport.ClearColor = this.ChooseViewportClearColor(viewport.ViewportId);
             viewport.ToggleMaximizeCommand = new RelayCommand(() => this.ToggleMaximize(viewport));
             viewport.OnLayoutRequested = requestedLayout => this.ChangeLayoutCommand.Execute(requestedLayout);
             this.AttachCameraServices(viewport);
@@ -388,50 +376,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         }
 
         this.EnsureFocusedViewportIsValid();
-    }
-
-    private RuntimeColor ChooseViewportClearColor(Guid viewportId)
-    {
-        // FIXME: (Debugging) Choose a color for this viewport deterministically using the viewport GUID.
-        var paletteLen = DefaultViewportClearColors.Length;
-        var preferred = (int)(((uint)viewportId.GetHashCode()) % (uint)paletteLen);
-
-        // Build a set of colors already assigned to current viewports so
-        // we can avoid duplicates when possible.
-        var used = new HashSet<int>(this.Viewports
-            .Select(vm =>
-            {
-                // map existing color back to palette index; if not found, -1
-                for (var idx = 0; idx < DefaultViewportClearColors.Length; idx++)
-                {
-                    var c = DefaultViewportClearColors[idx];
-                    if (vm.ClearColor.R == c.R && vm.ClearColor.G == c.G && vm.ClearColor.B == c.B && vm.ClearColor.A == c.A)
-                    {
-                        return idx;
-                    }
-                }
-
-                return -1;
-            })
-            .Where(i => i >= 0));
-
-        var chosen = -1;
-        for (var i = 0; i < paletteLen; i++)
-        {
-            var idx = (preferred + i) % paletteLen;
-            if (!used.Contains(idx))
-            {
-                chosen = idx;
-                break;
-            }
-        }
-
-        if (chosen < 0)
-        {
-            chosen = preferred; // fall back to preferred if all are used
-        }
-
-        return DefaultViewportClearColors[chosen];
     }
 
     private void EnsureFocusedViewportIsValid()

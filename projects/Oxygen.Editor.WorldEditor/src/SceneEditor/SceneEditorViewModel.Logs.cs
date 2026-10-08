@@ -5,7 +5,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.LevelEditor;
-using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Documents;
 
 namespace Oxygen.Editor.World.SceneEditor;
@@ -43,14 +42,11 @@ public partial class SceneEditorViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "Creating viewport VM (Index={Index}) Id={ViewportId} for document {DocumentId} with ClearColor={R},{G},{B},{A}")]
-    private static partial void LogCreatingViewport(ILogger logger, int index, Guid viewportId, Guid? documentId, float r, float g, float b, float a);
-
-    private void LogCreatingViewport(int index, Guid viewportId, RuntimeColor color)
-        => LogCreatingViewport(this.logger, index, viewportId, this.Metadata?.DocumentId, color.R, color.G, color.B, color.A);
+        Message = "Creating viewport VM (Index={Index}) Id={ViewportId} for document {DocumentId}")]
+    private static partial void LogCreatingViewport(ILogger logger, int index, Guid viewportId, Guid? documentId);
 
     private void LogCreatingViewport(int index, ViewportViewModel viewport)
-        => this.LogCreatingViewport(index, viewport.ViewportId, viewport.ClearColor);
+        => LogCreatingViewport(this.logger, index, viewport.ViewportId, this.Metadata?.DocumentId);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
