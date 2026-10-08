@@ -81,6 +81,13 @@ public partial class ViewportViewModel
         this.SelectionPicked?.Invoke(new ViewportSelection(picked, mode));
     }
 
+    /// <summary>Clears the selection (Escape with nothing in progress); a pick still in flight is dropped.</summary>
+    internal void ClearSelection()
+    {
+        ++this.pickGeneration;
+        this.SelectionPicked?.Invoke(new ViewportSelection([], ViewportSelectionMode.Replace));
+    }
+
     /// <summary>Frames the selected nodes with the pane's editor camera (F).</summary>
     /// <returns>A task that completes when the request has been submitted.</returns>
     internal Task FrameSelectionAsync()

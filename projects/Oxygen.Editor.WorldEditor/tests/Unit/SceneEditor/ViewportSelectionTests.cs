@@ -98,6 +98,26 @@ public sealed class ViewportSelectionTests
     }
 
     [TestMethod]
+    public async Task ClearSelection_ShouldClearAndDropAPickInFlight()
+    {
+        var pending = new TaskCompletionSource<RuntimePickResult?>();
+        var engine = new Mock<IEngineService>(MockBehavior.Strict);
+        _ = engine.Setup(service => service.PickViewAsync(ViewId, It.IsAny<RuntimePickRect>())).Returns(pending.Task);
+        using var sut = CreateViewport(engine.Object);
+        var picks = new List<ViewportSelection>();
+        sut.SelectionPicked = picks.Add;
+
+        var pick = sut.PickAsync(new RuntimePickRect(0, 0, 7, 7), ViewportSelectionMode.Replace, isMarquee: false);
+        sut.ClearSelection();
+        pending.SetResult(new RuntimePickResult([Hit(A, 0.0f)], WorldPosition: null));
+        await pick.ConfigureAwait(false);
+
+        _ = picks.Should().ContainSingle();
+        _ = picks[0].NodeIds.Should().BeEmpty();
+        _ = picks[0].Mode.Should().Be(ViewportSelectionMode.Replace);
+    }
+
+    [TestMethod]
     public async Task FrameSelectionAsync_ShouldFrameTheSelectedNodes()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);

@@ -402,10 +402,11 @@ light icon; Ctrl+click toggles membership and Shift+click adds. Empty-space
 click clears selection; a modified empty click changes nothing. A left drag
 beyond a small threshold draws a marquee that selects every node with visible
 pixels inside it, with the same modifiers; the node nearest its centre becomes
-active. Escape cancels the marquee. Workspace-hidden nodes are not pickable;
-locked nodes are selectable but not manipulable. Picking has no category
-filter. A viewport pick scrolls the active Explorer row into view without
-taking keyboard focus.
+active. Escape ends what is in progress first (a gizmo drag, then a
+marquee); with nothing in progress it clears the selection, with no undo
+entry. Workspace-hidden nodes are not pickable; locked nodes are selectable
+but not manipulable. Picking has no category filter. A viewport pick scrolls
+the active Explorer row into view without taking keyboard focus.
 SceneExplorer and Inspector consume the same document-scoped selection service.
 A gizmo hit takes precedence over object picking; Alt/RMB navigation never
 selects objects. Picking results include scene/document/view lifetime and are

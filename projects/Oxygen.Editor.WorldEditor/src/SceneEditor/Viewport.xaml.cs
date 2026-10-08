@@ -953,13 +953,28 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.MarqueeRectangle.Visibility = Visibility.Collapsed;
     }
 
-    /// <summary>Handles the pane's own keys: F frames the selection, Shift+F the whole scene, Escape cancels a marquee.</summary>
+    /// <summary>Handles the pane's own keys: F frames the selection, Shift+F the whole scene, Escape cancels a marquee or clears the selection.</summary>
     /// <returns><see langword="true"/> when the key was handled and must not reach the engine.</returns>
     private bool TryHandleSelectionKey(ViewportViewModel viewModel, KeyRoutedEventArgs e)
     {
-        if (e.Key == VirtualKey.Escape && this.selectionStart is not null)
+        if (e.Key == VirtualKey.Escape)
         {
-            this.CancelSelectionGesture();
+            // Escape ends what is in progress first: the engine cancels a gizmo drag, then a
+            // marquee is dropped; with nothing in progress it clears the selection.
+            if (viewModel.IsGizmoDragging || e.KeyStatus.RepeatCount > 1)
+            {
+                return false;
+            }
+
+            if (this.selectionStart is not null)
+            {
+                this.CancelSelectionGesture();
+            }
+            else
+            {
+                viewModel.ClearSelection();
+            }
+
             return true;
         }
 

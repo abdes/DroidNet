@@ -1,9 +1,9 @@
 # ED-M08 — Runtime parity and editor authoring workspace
 
-Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2, M08.3 and M08.4
-validated; rescoped on 2026-10-08; M08.5 is next**
+Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2 and M08.3–M08.5
+validated; rescoped on 2026-10-08; M08.6 is next**
 
-Current: **M08.5 transform gizmos and snapping**. The
+Current: **M08.6 scene helpers and orientation**. The
 [rescope](#retired-by-the-rescope) retires the development-only parity harness
 (former M08.3 and M08.5–M08.8) and the former M08.4 audit, and replaces them
 with what the editor still lacks as an authoring tool: viewport picking,
@@ -1053,7 +1053,7 @@ UI tests never drive the system mouse or need window focus.
       viewport state survives reopening per M08.V2.
 - [x] HUD, view modes and scene toolbar (M08.3).
 - [x] Picking, outline and framing (M08.4).
-- [ ] Gizmos, snapping and viewport editing shortcuts (M08.5).
+- [x] Gizmos, snapping and viewport editing shortcuts (M08.5).
 - [ ] Scene helpers, editable light handles and orientation triad (M08.6).
 - [ ] Content Browser layout, views and working commands (M08.7).
 - [ ] Rename, move, cut/copy/paste and delete with reference updates (M08.8).
