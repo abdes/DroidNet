@@ -42,7 +42,7 @@ internal sealed class ModelImportScenario : DroidNet.Tests.VisualUserInterfaceTe
         _ = locator.Setup(value => value.ResolveView(It.IsAny<object>())).Returns(() => new SceneImportDialogView());
         var state = new ContentBrowserState(services.Projects);
         state.SetSelectedFolders(["/Content/Models"]);
-        return new(services.Runs, new ViewModelToView(locator.Object), state, services.Projects, Mock.Of<IProjectManagerService>(), Mock.Of<IAuthoringTargetResolver>(), services.Pipeline, provider, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer(), services.Storage, new StrongReferenceMessenger(), dialogs, windows.Object);
+        return new(services.Runs, new ViewModelToView(locator.Object), state, services.Projects, Mock.Of<IProjectManagerService>(), Mock.Of<IAuthoringTargetResolver>(), services.Pipeline, provider, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer(), services.Storage, new StrongReferenceMessenger(), dialogs, windows.Object, Mock.Of<IAssetShell>());
     }
 
     internal static ContentDialog? FindImportDialog(XamlRoot root) => VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Select(static popup => popup.Child is ContentDialog dialog ? dialog : popup.Child?.FindDescendant<ContentDialog>()).FirstOrDefault(static dialog => dialog is not null);
