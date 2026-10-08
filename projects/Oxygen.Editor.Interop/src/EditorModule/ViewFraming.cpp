@@ -54,6 +54,14 @@ namespace oxygen::interop::module {
       bool empty_ { true };
     };
 
+    [[nodiscard]] auto WorldPosition(scene::SceneNode& node) -> glm::vec3 {
+      return node.GetTransform().GetWorldPosition().value_or(glm::vec3 { 0.0F });
+    }
+
+    //! The world sphere of a node's geometry. A renderable reports (0,0,0,0)
+    //! while its bounds are unavailable (unresolved LOD, no declared bounds);
+    //! that is not geometry at the origin, so the node's own position stands
+    //! in for it with the default extent.
     [[nodiscard]] auto GeometrySphere(scene::SceneNode& node)
       -> std::optional<FrameSphere> {
       auto renderable = node.GetRenderable();
@@ -63,17 +71,16 @@ namespace oxygen::interop::module {
       const auto sphere = renderable.GetWorldBoundingSphere();
       if (!std::isfinite(sphere.x) || !std::isfinite(sphere.y)
         || !std::isfinite(sphere.z) || !std::isfinite(sphere.w)
-        || sphere.w < 0.0F) {
-        return std::nullopt;
+        || sphere.w <= 0.0F) {
+        return FrameSphere {
+          .center = WorldPosition(node),
+          .radius = kFramePointRadius,
+        };
       }
       return FrameSphere {
         .center = { sphere.x, sphere.y, sphere.z },
         .radius = sphere.w,
       };
-    }
-
-    [[nodiscard]] auto WorldPosition(scene::SceneNode& node) -> glm::vec3 {
-      return node.GetTransform().GetWorldPosition().value_or(glm::vec3 { 0.0F });
     }
 
     //! Adds the geometry of `node` and its descendants; true when any.

@@ -14,7 +14,12 @@
 #include <glm/vector_relational.hpp>
 
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/RenderablePolicies.h>
 
 #include <EditorModule/EditorView.h>
 #include <EditorModule/ViewFraming.h>
@@ -37,6 +42,28 @@ auto MakeScene(const char* name) -> std::shared_ptr<oxygen::scene::Scene> {
 auto IsNear(const glm::vec3& a, const glm::vec3& b, const float tolerance)
   -> bool {
   return glm::all(glm::epsilonEqual(a, b, tolerance));
+}
+
+//! A cube whose asset declares no bounds, as streamed or generated geometry
+//! can be before its bounds are known.
+auto MakeUnboundedCube() -> std::shared_ptr<oxygen::data::GeometryAsset> {
+  auto [vertices, indices] = *oxygen::data::MakeCubeMeshAsset();
+  oxygen::data::pak::geometry::MeshViewDesc view {};
+  view.vertex_count = static_cast<uint32_t>(vertices.size());
+  view.index_count = static_cast<uint32_t>(indices.size());
+  auto mesh = oxygen::data::MeshBuilder(0, "/Cube")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("cube", oxygen::data::MaterialAsset::CreateDefault())
+                .WithMeshView(view)
+                .EndSubMesh()
+                .Build();
+  oxygen::data::pak::geometry::GeometryAssetDesc desc {};
+  desc.lod_count = 1;
+  std::vector<std::shared_ptr<oxygen::data::Mesh>> meshes;
+  meshes.push_back(std::move(mesh));
+  return std::make_shared<oxygen::data::GeometryAsset>(
+    oxygen::data::AssetKey::FromVirtualPath("/Cube"), desc, std::move(meshes));
 }
 
 //! Runs a framing move to its end.
@@ -94,6 +121,29 @@ public:
     (void)scene->DestroyNode(node);
 
     Assert::IsFalse(ResolveNodesFrameSphere(*scene, handles).has_value());
+  }
+
+  //! Unavailable geometry bounds are reported as a zero sphere at the origin;
+  //! Frame All must not treat that as geometry, or it frames everything
+  //! between the world origin and content placed far from it.
+  [TestMethod]
+  void GeometryWithoutBoundsFramesItsNodeNotTheOrigin() {
+    const auto scene = MakeScene("Authored");
+    auto far = scene->CreateNode("Far");
+    (void)far.GetTransform().SetLocalPosition({ 500.0F, 0.0F, 0.0F });
+    auto renderable = far.GetRenderable();
+    renderable.SetGeometry(MakeUnboundedCube());
+    // A distance policy has no LOD until a view evaluates it.
+    renderable.SetLodPolicy(oxygen::scene::DistancePolicy {});
+    scene->Update();
+    const auto reported = renderable.GetWorldBoundingSphere();
+    Assert::AreEqual(0.0F, reported.w, L"the renderable must report unavailable bounds");
+
+    const auto sphere = ResolveSceneFrameSphere(*scene);
+
+    Assert::IsTrue(sphere.has_value());
+    Assert::IsTrue(IsNear(sphere->center, { 500.0F, 0.0F, 0.0F }, 1.0e-3F));
+    Assert::IsTrue(sphere->radius < 10.0F);
   }
 
   [TestMethod]
