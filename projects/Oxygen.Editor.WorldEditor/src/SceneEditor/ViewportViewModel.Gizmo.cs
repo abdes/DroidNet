@@ -7,6 +7,7 @@ using System.Numerics;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.WorldEditor.SceneEditor;
 
 namespace Oxygen.Editor.LevelEditor;
 
@@ -14,6 +15,8 @@ namespace Oxygen.Editor.LevelEditor;
 public partial class ViewportViewModel
 {
     private double displayScale = 1.0;
+    private bool gizmoHovered;
+    private bool helperHovered;
 
     /// <summary>Gets or sets the scene's viewport tools, shared by its panes.</summary>
     [ObservableProperty]
@@ -27,9 +30,12 @@ public partial class ViewportViewModel
     [ObservableProperty]
     public partial GizmoFeedback? GizmoFeedback { get; private set; }
 
-    /// <summary>Gets a value indicating whether the pointer is over a gizmo handle in this pane.</summary>
-    /// <remarks>A press there drags the gizmo, so it must not start a selection.</remarks>
-    public bool IsGizmoHovered { get; private set; }
+    /// <summary>
+    /// Gets a value indicating whether the pointer is over a gizmo handle, a helper handle or the
+    /// orientation triad in this pane.
+    /// </summary>
+    /// <remarks>A press there drags the handle or picks a view, so it must not start a selection.</remarks>
+    public bool IsGizmoHovered => this.gizmoHovered || this.helperHovered;
 
     /// <summary>Gets the number of gizmo drags this pane has started; a selection gesture that saw it change yields.</summary>
     public int GizmoDragCount { get; private set; }
@@ -48,7 +54,7 @@ public partial class ViewportViewModel
         }
     }
 
-    /// <summary>Gets or sets the receiver of <see cref="DisplayScale"/> changes, which resizes the gizmo.</summary>
+    /// <summary>Gets or sets the receiver of <see cref="DisplayScale"/> changes, which resizes the gizmo and helpers.</summary>
     public Action? DisplayScaleChanged { get; set; }
 
     /// <summary>Gets or sets the receiver of the pane's editing shortcuts.</summary>
@@ -116,18 +122,74 @@ public partial class ViewportViewModel
             => [.. Enumerable.Range(0, 3).Where(i => (mask & (1 << i)) != 0).Select(i => "XYZ"[i].ToString())];
     }
 
+    /// <summary>Formats the value a helper handle drag applies, as the pointer readout shows it.</summary>
+    /// <param name="handle">The dragged handle.</param>
+    /// <param name="value">Metres for a range, radians for a cone angle.</param>
+    /// <returns>The readout, for example "Range 5.00 m" or "Outer cone 30.0°".</returns>
+    internal static string FormatHelperReadout(RuntimeHelperHandle handle, float value)
+        => handle switch
+        {
+            RuntimeHelperHandle.InnerCone => string.Create(CultureInfo.InvariantCulture, $"Inner cone {float.RadiansToDegrees(value):0.0}°"),
+            RuntimeHelperHandle.OuterCone => string.Create(CultureInfo.InvariantCulture, $"Outer cone {float.RadiansToDegrees(value):0.0}°"),
+            _ => string.Create(CultureInfo.InvariantCulture, $"Range {value:0.00} m"),
+        };
+
+    /// <summary>The orthographic view a triad click selects: from the clicked axis, or from its opposite when the pane already looks from that axis.</summary>
+    /// <param name="axis">The clicked axis.</param>
+    /// <param name="current">The pane's current view.</param>
+    /// <returns>The view to select, or <see langword="null"/> for no axis.</returns>
+    internal static CameraType? AxisView(RuntimeGizmoHandle axis, CameraType current)
+    {
+        (CameraType Toward, CameraType Away)? views = axis switch
+        {
+            RuntimeGizmoHandle.X => (CameraType.Right, CameraType.Left),
+            RuntimeGizmoHandle.Y => (CameraType.Front, CameraType.Back),
+            RuntimeGizmoHandle.Z => (CameraType.Top, CameraType.Bottom),
+            _ => null,
+        };
+        return views is { } pair ? (current == pair.Toward ? pair.Away : pair.Toward) : null;
+    }
+
     /// <summary>Records whether the pointer is over a gizmo handle.</summary>
     /// <param name="hovering">Whether it is.</param>
-    internal void SetGizmoHover(bool hovering) => this.IsGizmoHovered = hovering;
+    internal void SetGizmoHover(bool hovering) => this.gizmoHovered = hovering;
+
+    /// <summary>Records whether the pointer is over a helper handle or the orientation triad.</summary>
+    /// <param name="hovering">Whether it is.</param>
+    internal void SetHelperHover(bool hovering) => this.helperHovered = hovering;
+
+    /// <summary>Looks along an orientation triad axis the user clicked.</summary>
+    /// <param name="axis">The clicked axis.</param>
+    /// <returns>A task that completes when the view was requested.</returns>
+    internal Task SelectAxisViewAsync(RuntimeGizmoHandle axis)
+    {
+        var current = this.SceneCamera is null ? this.CameraType : CameraType.Perspective;
+        return AxisView(axis, current) is { } view ? this.ApplyOrthographicCameraPresetAsync(view) : Task.CompletedTask;
+    }
 
     /// <summary>Starts showing a gizmo drag of this pane.</summary>
     internal void BeginGizmoDrag()
     {
         this.GizmoDragCount++;
-        this.IsGizmoHovered = false;
+        this.gizmoHovered = false;
+        this.helperHovered = false;
         this.IsGizmoDragging = true;
         this.GizmoFeedback = null;
         this.MarkNavigated();
+    }
+
+    /// <summary>Shows a running helper handle drag's latest value.</summary>
+    /// <param name="gizmoEvent">The drag's latest event.</param>
+    internal void UpdateHelperDrag(RuntimeGizmoEvent gizmoEvent)
+    {
+        if (this.IsGizmoDragging)
+        {
+            this.GizmoFeedback = new GizmoFeedback(
+                FormatHelperReadout(gizmoEvent.HelperHandle, gizmoEvent.Value),
+                gizmoEvent.PointerPixel,
+                PivotPixel: null,
+                IsRejected: false);
+        }
     }
 
     /// <summary>Shows a running drag's latest value.</summary>

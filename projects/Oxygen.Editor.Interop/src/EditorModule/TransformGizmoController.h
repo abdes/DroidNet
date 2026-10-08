@@ -22,6 +22,7 @@
 
 #include <EditorModule/InputAccumulator.h>
 #include <EditorModule/NodeRegistry.h>
+#include <EditorModule/SceneHelpers.h>
 #include <EditorModule/TransformGizmo.h>
 
 namespace oxygen::scene {
@@ -53,9 +54,15 @@ namespace oxygen::interop::module {
     kUpdate,
     kCommit,
     kCancel,
+    //! An orientation triad axis was clicked: `handle` is kX, kY or kZ.
+    kViewAxis,
   };
 
   //! A gizmo interaction the editor applies to the authored scene.
+  /*!
+   Scene helpers report through the same events: their hover, their handle
+   drags, which edit one light's value, and orientation triad clicks.
+  */
   struct TransformGizmoEvent {
     TransformGizmoEventKind kind { TransformGizmoEventKind::kHover };
     ViewId view { kInvalidViewId };
@@ -73,6 +80,13 @@ namespace oxygen::interop::module {
     //! The pivot and the pointer in the view's pixels.
     std::optional<glm::vec2> pivot_pixel;
     glm::vec2 pointer_pixel { 0.0F };
+    //! The event comes from a scene helper or the orientation triad.
+    bool helper { false };
+    //! For helper drags: the light edited, the handle and its value, in
+    //! metres or radians.
+    UuidKey node {};
+    HelperHandle helper_handle { HelperHandle::kNone };
+    float value { 0.0F };
   };
 
   //! Hit tests, drags and draws the transform gizmo of the selection.
@@ -101,9 +115,18 @@ namespace oxygen::interop::module {
     //! Handles a view's input before navigation sees it, removing what the
     //! gizmo takes.
     void ProcessInput(EditorView& view, AccumulatedInput& input);
-    //! The gizmo's geometry for a view this frame, or null.
-    [[nodiscard]] auto BuildOverlay(EditorView& view)
-      -> std::shared_ptr<const vortex::ViewOverlay>;
+    //! Adds the gizmo's geometry for a view this frame to `overlay`.
+    void BuildOverlay(EditorView& view, vortex::ViewOverlay& overlay);
+    //! True while the pointer is over a gizmo handle in `view`.
+    [[nodiscard]] auto IsHovering(ViewId view) const noexcept -> bool
+    {
+      return view == hover_view_ && hovered_ != GizmoHandle::kNone;
+    }
+
+    //! What a view shows, as the gizmo projects it; none for a view without
+    //! a camera or extent.
+    [[nodiscard]] static auto CameraOf(EditorView& view)
+      -> std::optional<GizmoCamera>;
 
   private:
     struct Resolution {
@@ -112,8 +135,6 @@ namespace oxygen::interop::module {
     };
 
     [[nodiscard]] auto Resolve() const -> std::optional<Resolution>;
-    [[nodiscard]] static auto CameraOf(EditorView& view)
-      -> std::optional<GizmoCamera>;
     void SetHover(ViewId view, GizmoHandle handle);
     void CancelDrag();
     void Emit(TransformGizmoEvent event);

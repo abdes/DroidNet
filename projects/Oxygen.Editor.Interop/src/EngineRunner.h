@@ -305,15 +305,16 @@ namespace Oxygen::Interop {
 
     /// <summary>
     /// Set how an existing view presents the scene: its view mode, ground
-    /// grid and selection outline. The request is enqueued and applied on the
-    /// engine thread.
+    /// grid, selection outline and light and camera icons. The request is
+    /// enqueued and applied on the engine thread.
     /// </summary>
     auto TrySetViewRenderOptionsAsync(
       EngineContext^ ctx,
       ViewIdManaged viewId,
       ViewModeManaged viewMode,
       bool showGrid,
-      bool showSelectionOutline)
+      bool showSelectionOutline,
+      bool showIcons)
       -> System::Threading::Tasks::Task<bool>^;
 
     /// <summary>
@@ -356,13 +357,21 @@ namespace Oxygen::Interop {
       float displayScale) -> bool;
 
     /// <summary>
-    /// Cancels a running gizmo drag at the next frame.
+    /// Cancels a running gizmo or helper handle drag at the next frame.
     /// </summary>
     auto TryCancelTransformGizmoDrag(EngineContext^ ctx) -> bool;
 
     /// <summary>
-    /// Receives the gizmo's hover and drag events on the engine thread; null
-    /// stops them. Once this returns, the previous listener is not called.
+    /// Sets the workspace state the light and camera helpers follow: hidden
+    /// nodes have no icon or helper, locked nodes no draggable handles.
+    /// </summary>
+    auto TrySetSceneHelpers(EngineContext^ ctx, array<System::Guid>^ hidden,
+      array<System::Guid>^ locked, float displayScale) -> bool;
+
+    /// <summary>
+    /// Receives the gizmo's and the scene helpers' hover, drag and triad
+    /// events on the engine thread; null stops them. Once this returns, the
+    /// previous listener is not called.
     /// </summary>
     auto TrySetTransformGizmoListener(EngineContext^ ctx,
       System::Action<TransformGizmoEventManaged^>^ listener) -> bool;

@@ -18,19 +18,21 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.World.SceneEditor;
 
 /// <summary>
-/// The transform gizmo of the scene's selection: which nodes it moves, and applying its drags
-/// through the authoring commands so a drag previews live, commits one undo entry and cancels
-/// exactly.
+/// The transform gizmo and scene helpers of the scene's selection: which nodes they act on, and
+/// applying their drags through the authoring commands so a drag previews live, commits one undo
+/// entry and cancels exactly.
 /// </summary>
 /// <remarks>
-/// The engine hit tests and drags the gizmo and reports each drag's new local transforms; this
-/// view model is the only writer of the authored scene. An Alt-drag previews on the originals and,
-/// on release, restores them and duplicates them at the dragged transforms, so a cancelled Alt-drag
-/// leaves no copy and no history.
+/// The engine hit tests and drags the gizmo and the light helpers' handles, and reports each drag's
+/// new local transforms or light value; this view model is the only writer of the authored scene.
+/// An Alt-drag previews on the originals and, on release, restores them and duplicates them at the
+/// dragged transforms, so a cancelled Alt-drag leaves no copy and no history. Icons, helpers and
+/// the orientation triad are engine overlays: they never reach the authored scene.
 /// </remarks>
 public partial class SceneEditorViewModel
 {
     private const string GizmoSessionKey = "Viewport.Transform";
+    private const string HelperSessionKey = "Viewport.Helper";
 
     private SynchronizationContext? gizmoContext;
     private GizmoTransaction? gizmoTransaction;
@@ -73,7 +75,35 @@ public partial class SceneEditorViewModel
         return edits;
     }
 
-    /// <summary>Applies one gizmo interaction reported by the engine; runs on the UI thread.</summary>
+    /// <summary>Builds the property edit a light helper's handle drag applies.</summary>
+    /// <param name="node">The light's node.</param>
+    /// <param name="handle">The dragged handle.</param>
+    /// <param name="value">Metres for a range, radians for a cone angle.</param>
+    /// <returns>The edit, or <see langword="null"/> when the node has no light with that value.</returns>
+    internal static PropertyEdit? BuildHelperEdit(SceneNode node, RuntimeHelperHandle handle, float value)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        var descriptors = node.Components.OfType<SpotLightComponent>().Any() ? SceneDocumentCommandService.SpotLight
+            : node.Components.OfType<PointLightComponent>().Any() ? SceneDocumentCommandService.PointLight
+            : null;
+        var descriptor = handle switch
+        {
+            RuntimeHelperHandle.Range => descriptors?.RangeDescriptor,
+            RuntimeHelperHandle.InnerCone => descriptors?.InnerConeAngleRadiansDescriptor,
+            RuntimeHelperHandle.OuterCone => descriptors?.OuterConeAngleRadiansDescriptor,
+            _ => null,
+        };
+        if (descriptor is null)
+        {
+            return null;
+        }
+
+        var edit = new PropertyEdit();
+        edit.Set(new PropertyId<float>(descriptor.Id), value);
+        return edit;
+    }
+
+    /// <summary>Applies one gizmo or helper interaction reported by the engine; runs on the UI thread.</summary>
     /// <param name="gizmoEvent">The interaction.</param>
     internal void ApplyGizmoEvent(RuntimeGizmoEvent gizmoEvent)
     {
@@ -83,6 +113,12 @@ public partial class SceneEditorViewModel
         }
 
         var viewport = this.Viewports.FirstOrDefault(pane => pane.AssignedViewId == gizmoEvent.ViewId);
+        if (gizmoEvent.Helper)
+        {
+            this.ApplyHelperEvent(viewport, gizmoEvent);
+            return;
+        }
+
         switch (gizmoEvent.Kind)
         {
             case RuntimeGizmoEventKind.Hover:
@@ -96,7 +132,7 @@ public partial class SceneEditorViewModel
                 transaction.Viewport.UpdateGizmoDrag(gizmoEvent);
                 if (gizmoEvent.Representable)
                 {
-                    this.QueueGizmoTargets(transaction, gizmoEvent.Targets);
+                    this.QueueGizmoEdits(transaction, TransformEdits(transaction.Tool, gizmoEvent.Targets));
                 }
 
                 break;
@@ -107,7 +143,7 @@ public partial class SceneEditorViewModel
                 transaction.Completion = this.CompleteGizmoTransactionAsync(
                     transaction,
                     gizmoEvent.Kind == RuntimeGizmoEventKind.Commit,
-                    gizmoEvent.Representable ? gizmoEvent.Targets : null);
+                    gizmoEvent.Representable ? TransformEdits(transaction.Tool, gizmoEvent.Targets) : null);
                 break;
             default:
                 break;
@@ -133,6 +169,16 @@ public partial class SceneEditorViewModel
             : targets.Count > 0 ? targets[^1] : null;
         return targets;
     }
+
+    private static GizmoEdits TransformEdits(RuntimeTransformTool tool, IReadOnlyList<RuntimeGizmoTarget> targets)
+        => new(BuildGizmoEdits(tool, targets), GizmoLabel(tool, targets.Count), targets);
+
+    private static string HelperLabel(RuntimeHelperHandle handle) => handle switch
+    {
+        RuntimeHelperHandle.InnerCone => "Inner cone angle",
+        RuntimeHelperHandle.OuterCone => "Outer cone angle",
+        _ => "Light range",
+    };
 
     private static string GizmoLabel(RuntimeTransformTool tool, int count)
     {
@@ -180,6 +226,52 @@ public partial class SceneEditorViewModel
         viewport.DisplayScaleChanged = this.UpdateTransformGizmo;
     }
 
+    private void ApplyHelperEvent(ViewportViewModel? viewport, RuntimeGizmoEvent gizmoEvent)
+    {
+        switch (gizmoEvent.Kind)
+        {
+            case RuntimeGizmoEventKind.Hover:
+                viewport?.SetHelperHover(gizmoEvent.Hovering);
+                break;
+            case RuntimeGizmoEventKind.ViewAxis when viewport is not null:
+                _ = viewport.SelectAxisViewAsync(gizmoEvent.Handle);
+                break;
+            case RuntimeGizmoEventKind.Begin when viewport is not null && this.scene is not null:
+                this.gizmoTransaction = new GizmoTransaction(viewport, RuntimeTransformTool.Select, duplicate: false, this.CreateCommandContext())
+                {
+                    SessionKey = HelperSessionKey,
+                };
+                viewport.BeginGizmoDrag();
+                viewport.UpdateHelperDrag(gizmoEvent);
+                break;
+            case RuntimeGizmoEventKind.Update when this.gizmoTransaction is { } transaction && ReferenceEquals(transaction.Viewport, viewport):
+                transaction.Viewport.UpdateHelperDrag(gizmoEvent);
+                if (this.HelperEdits(gizmoEvent) is { } edits)
+                {
+                    this.QueueGizmoEdits(transaction, edits);
+                }
+
+                break;
+            case RuntimeGizmoEventKind.Commit or RuntimeGizmoEventKind.Cancel
+                when this.gizmoTransaction is { } transaction && ReferenceEquals(transaction.Viewport, viewport):
+                this.gizmoTransaction = null;
+                transaction.Viewport.EndGizmoDrag();
+                transaction.Completion = this.CompleteGizmoTransactionAsync(
+                    transaction,
+                    gizmoEvent.Kind == RuntimeGizmoEventKind.Commit,
+                    this.HelperEdits(gizmoEvent));
+                break;
+            default:
+                break;
+        }
+    }
+
+    private GizmoEdits? HelperEdits(RuntimeGizmoEvent gizmoEvent)
+        => this.scene?.AllNodes.FirstOrDefault(node => node.Id == gizmoEvent.NodeId) is { } node
+            && BuildHelperEdit(node, gizmoEvent.HelperHandle, gizmoEvent.Value) is { } edit
+            ? new(new Dictionary<Guid, PropertyEdit> { [node.Id] = edit }, HelperLabel(gizmoEvent.HelperHandle), [])
+            : null;
+
     private void OnTransformToolsChanged(object? sender, EventArgs e) => this.UpdateTransformGizmo();
 
     private void OnInteractionStateChanged(object? sender, EventArgs e) => this.UpdateTransformGizmo();
@@ -207,14 +299,38 @@ public partial class SceneEditorViewModel
 
         var targets = this.GetGizmoTargets(out var activeNodeId);
         var settings = this.TransformTools.Settings;
+        var displayScale = (float)(this.GetActiveViewport()?.DisplayScale ?? 1.0);
         var gizmo = new RuntimeTransformGizmo(
             this.TransformTools.Tool,
             settings.Space,
             settings.Snap,
             targets,
             activeNodeId,
-            (float)(this.GetActiveViewport()?.DisplayScale ?? 1.0));
+            displayScale);
         _ = this.SetTransformGizmoAsync(gizmo);
+        _ = this.SetSceneHelpersAsync(displayScale);
+    }
+
+    /// <summary>Tells the helpers which nodes are hidden, and which selected ones are locked.</summary>
+    private async Task SetSceneHelpersAsync(float displayScale)
+    {
+        var interaction = this.Interaction;
+        var selected = (this.SelectionService?.GetContext(this.Metadata.DocumentId).SelectedNodeIds ?? []).ToHashSet();
+        IReadOnlyList<Guid> locked = interaction is null || this.scene is null
+            ? []
+            : [.. this.scene.AllNodes.Where(node => selected.Contains(node.Id) && interaction.GetLockOwner(node) is not null).Select(static node => node.Id)];
+        var helpers = new RuntimeSceneHelpers([.. interaction?.HiddenNodeIds() ?? []], locked, displayScale);
+        try
+        {
+            if (!await this.engineService.SetSceneHelpersAsync(helpers).ConfigureAwait(true))
+            {
+                this.LogSceneHelpersRejected();
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            this.LogSceneHelpersFailed(ex);
+        }
     }
 
     private async Task SetTransformGizmoAsync(RuntimeTransformGizmo gizmo)
@@ -257,10 +373,10 @@ public partial class SceneEditorViewModel
             .Where(node => !node.Ancestors().Any(ancestor => selected.Contains(ancestor.Id)))];
     }
 
-    private void QueueGizmoTargets(GizmoTransaction transaction, IReadOnlyList<RuntimeGizmoTarget> targets)
+    private void QueueGizmoEdits(GizmoTransaction transaction, GizmoEdits edits)
     {
         // Latest wins: while one preview applies, newer results replace the pending one.
-        transaction.Pending = targets;
+        transaction.Pending = edits;
         if (!transaction.IsPumping)
         {
             transaction.IsPumping = true;
@@ -272,15 +388,15 @@ public partial class SceneEditorViewModel
     {
         try
         {
-            while (transaction.Pending is { } targets)
+            while (transaction.Pending is { } edits)
             {
                 transaction.Pending = null;
-                transaction.Session ??= EditSessionToken.Begin([.. targets.Select(static target => target.NodeId)], GizmoSessionKey);
-                transaction.Applied = targets;
+                transaction.Session ??= EditSessionToken.Begin([.. edits.Edits.Keys], transaction.SessionKey);
+                transaction.Applied = edits;
                 _ = await this.commandService.EditPropertiesForTargetsAsync(
                     transaction.Context,
-                    BuildGizmoEdits(transaction.Tool, targets),
-                    GizmoLabel(transaction.Tool, targets.Count),
+                    edits.Edits,
+                    edits.Label,
                     transaction.Session).ConfigureAwait(true);
             }
         }
@@ -290,11 +406,11 @@ public partial class SceneEditorViewModel
         }
     }
 
-    private async Task CompleteGizmoTransactionAsync(GizmoTransaction transaction, bool commit, IReadOnlyList<RuntimeGizmoTarget>? final)
+    private async Task CompleteGizmoTransactionAsync(GizmoTransaction transaction, bool commit, GizmoEdits? final)
     {
-        if (commit && final is { Count: > 0 })
+        if (commit && final is { Edits.Count: > 0 })
         {
-            this.QueueGizmoTargets(transaction, final);
+            this.QueueGizmoEdits(transaction, final);
         }
         else
         {
@@ -321,16 +437,16 @@ public partial class SceneEditorViewModel
 
         _ = await this.commandService.EditPropertiesForTargetsAsync(
             transaction.Context,
-            BuildGizmoEdits(transaction.Tool, applied),
-            GizmoLabel(transaction.Tool, applied.Count),
+            applied.Edits,
+            applied.Label,
             session).ConfigureAwait(true);
 
         if (commit && transaction.Duplicate)
         {
-            var transforms = applied.ToDictionary(
+            var transforms = applied.Targets.ToDictionary(
                 static target => target.NodeId,
                 static target => new TransformData { Name = "Transform", Position = target.Position, Rotation = target.Rotation, Scale = target.Scale });
-            await this.DuplicateInPlaceAsync(transaction.Context, [.. applied.Select(static target => target.NodeId)], transforms).ConfigureAwait(true);
+            await this.DuplicateInPlaceAsync(transaction.Context, [.. applied.Targets.Select(static target => target.NodeId)], transforms).ConfigureAwait(true);
         }
     }
 
@@ -405,11 +521,14 @@ public partial class SceneEditorViewModel
         /// <summary>Gets or sets the property gesture, opened by the first change.</summary>
         public EditSessionToken? Session { get; set; }
 
+        /// <summary>Gets the key of the property gesture the drag opens.</summary>
+        public string SessionKey { get; init; } = GizmoSessionKey;
+
         /// <summary>Gets or sets the newest results not applied yet.</summary>
-        public IReadOnlyList<RuntimeGizmoTarget>? Pending { get; set; }
+        public GizmoEdits? Pending { get; set; }
 
         /// <summary>Gets or sets the results applied last.</summary>
-        public IReadOnlyList<RuntimeGizmoTarget>? Applied { get; set; }
+        public GizmoEdits? Applied { get; set; }
 
         public bool IsPumping { get; set; }
 
@@ -417,4 +536,13 @@ public partial class SceneEditorViewModel
 
         public Task Completion { get; set; } = Task.CompletedTask;
     }
+
+    /// <summary>The property edits one drag result applies, with its history label.</summary>
+    /// <param name="Edits">One edit per node.</param>
+    /// <param name="Label">The undo entry's label.</param>
+    /// <param name="Targets">A transform drag's results, which an Alt-drag duplicates at; empty for helpers.</param>
+    private sealed record GizmoEdits(
+        IReadOnlyDictionary<Guid, PropertyEdit> Edits,
+        string Label,
+        IReadOnlyList<RuntimeGizmoTarget> Targets);
 }

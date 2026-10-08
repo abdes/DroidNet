@@ -8,16 +8,21 @@ using Moq;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.LevelEditor;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Schemas;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Editor.WorldEditor.SceneEditor;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
 
 /// <summary>
 /// The viewport tools: tool choice and cycling, the per-user snapping and space preferences, the
-/// drag readout and the property edits a gizmo drag submits.
+/// drag readout, the property edits a gizmo or light helper drag submits, and the views the
+/// orientation triad selects.
 /// </summary>
 [TestClass]
 [TestCategory("Viewport Tools")]
@@ -133,6 +138,48 @@ public sealed class TransformToolsTests
         _ = scale.GetTyped(transform.ScaleY, out var scaleY).Should().BeTrue();
         _ = scaleY.Should().Be(3.0F);
         _ = scale.Contains(transform.RotationX.Id).Should().BeFalse();
+    }
+
+    [TestMethod]
+    public void HelperEdits_ChangeOnlyTheDraggedLightValue()
+    {
+        var scene = new Scene(new Mock<IProject>().Object) { Name = "Scene" };
+        var spot = new SceneNode(scene) { Name = "Spot" };
+        _ = spot.AddComponent(new SpotLightComponent { Name = "Spot" });
+        var point = new SceneNode(scene) { Name = "Point" };
+        _ = point.AddComponent(new PointLightComponent { Name = "Point" });
+        var empty = new SceneNode(scene) { Name = "Empty" };
+
+        var outer = SceneEditorViewModel.BuildHelperEdit(spot, RuntimeHelperHandle.OuterCone, 0.6F);
+        var range = SceneEditorViewModel.BuildHelperEdit(point, RuntimeHelperHandle.Range, 7.5F);
+
+        _ = outer!.Ids.Should().BeEquivalentTo([SceneDocumentCommandService.SpotLight.OuterConeAngleRadiansDescriptor!.Id]);
+        _ = outer.GetTyped(new PropertyId<float>(SceneDocumentCommandService.SpotLight.OuterConeAngleRadiansDescriptor!.Id), out var radians).Should().BeTrue();
+        _ = radians.Should().Be(0.6F);
+        _ = range!.Ids.Should().BeEquivalentTo([SceneDocumentCommandService.PointLight.RangeDescriptor.Id]);
+        _ = SceneEditorViewModel.BuildHelperEdit(point, RuntimeHelperHandle.InnerCone, 0.2F).Should().BeNull();
+        _ = SceneEditorViewModel.BuildHelperEdit(empty, RuntimeHelperHandle.Range, 1.0F).Should().BeNull();
+    }
+
+    [TestMethod]
+    public void HelperReadout_NamesTheValueAndItsUnit()
+    {
+        _ = ViewportViewModel.FormatHelperReadout(RuntimeHelperHandle.Range, 5.0F).Should().Be("Range 5.00 m");
+        _ = ViewportViewModel.FormatHelperReadout(RuntimeHelperHandle.OuterCone, MathF.PI / 6).Should().Be("Outer cone 30.0°");
+        _ = ViewportViewModel.FormatHelperReadout(RuntimeHelperHandle.InnerCone, MathF.PI / 12).Should().Be("Inner cone 15.0°");
+    }
+
+    [TestMethod]
+    public void TriadAxes_LookFromTheClickedAxisAndFlipOnASecondClick()
+    {
+        _ = ViewportViewModel.AxisView(RuntimeGizmoHandle.X, CameraType.Perspective).Should().Be(CameraType.Right);
+        _ = ViewportViewModel.AxisView(RuntimeGizmoHandle.Y, CameraType.Top).Should().Be(CameraType.Front);
+        _ = ViewportViewModel.AxisView(RuntimeGizmoHandle.Z, CameraType.Front).Should().Be(CameraType.Top);
+        _ = ViewportViewModel.AxisView(RuntimeGizmoHandle.X, CameraType.Right).Should().Be(CameraType.Left);
+        _ = ViewportViewModel.AxisView(RuntimeGizmoHandle.Y, CameraType.Front).Should().Be(CameraType.Back);
+        _ = ViewportViewModel.AxisView(RuntimeGizmoHandle.Z, CameraType.Top).Should().Be(CameraType.Bottom);
+        _ = ViewportViewModel.AxisView(RuntimeGizmoHandle.Z, CameraType.Bottom).Should().Be(CameraType.Top);
+        _ = ViewportViewModel.AxisView(RuntimeGizmoHandle.None, CameraType.Top).Should().BeNull();
     }
 
     private static async Task<TransformToolSettingsService> LoadAsync(TransformToolSettingsService.Preferences stored)

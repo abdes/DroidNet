@@ -100,8 +100,8 @@ viewport state persistence are validated and closed on 2026-10-08. The
 2026-10-08 rescope retires the development-only parity harness and adds the
 viewport editing tools (absorbing ED-M09) and the Content Browser redesign,
 including reference-aware rename/move. M08.3 viewport HUD, M08.4 picking,
-selection outline and framing, and M08.5 transform gizmos and snapping are
-validated on 2026-10-08; M08.6 is next.
+selection outline and framing, M08.5 transform gizmos and snapping, and M08.6
+scene helpers and orientation are validated on 2026-10-08; M08.7 is next.
 
 ## 4. Milestone Roadmap
 

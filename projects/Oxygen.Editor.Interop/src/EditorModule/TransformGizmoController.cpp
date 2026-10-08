@@ -221,15 +221,15 @@ namespace oxygen::interop::module {
     SetHover(view_id, handle);
   }
 
-  auto TransformGizmoController::BuildOverlay(EditorView& view)
-    -> std::shared_ptr<const vortex::ViewOverlay>
+  void TransformGizmoController::BuildOverlay(
+    EditorView& view, vortex::ViewOverlay& overlay)
   {
     if (view.IsInset() || settings_.tool == TransformTool::kSelect) {
-      return nullptr;
+      return;
     }
     const auto camera = CameraOf(view);
     if (!camera.has_value()) {
-      return nullptr;
+      return;
     }
     auto visual = GizmoVisual {
       .tool = settings_.tool,
@@ -241,16 +241,11 @@ namespace oxygen::interop::module {
     if (visual.drag == nullptr) {
       const auto resolution = Resolve();
       if (!resolution.has_value()) {
-        return nullptr;
+        return;
       }
       visual.frame = resolution->frame;
     }
-    auto overlay = std::make_shared<vortex::ViewOverlay>();
-    BuildGizmoOverlay(*camera, visual, *overlay);
-    if (overlay->IsEmpty()) {
-      return nullptr;
-    }
-    return overlay;
+    BuildGizmoOverlay(*camera, visual, overlay);
   }
 
   auto TransformGizmoController::Resolve() const -> std::optional<Resolution>

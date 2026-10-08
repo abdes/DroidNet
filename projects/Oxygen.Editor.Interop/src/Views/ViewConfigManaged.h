@@ -57,6 +57,7 @@ namespace Oxygen::Interop {
       ViewMode = ViewModeManaged::Lit;
       ShowGrid = true;
       ShowSelectionOutline = true;
+      ShowIcons = true;
     }
 
     // Human readable name for the view
@@ -100,6 +101,9 @@ namespace Oxygen::Interop {
     /// <summary>Whether the view outlines the selected nodes.</summary>
     property bool ShowSelectionOutline;
 
+    /// <summary>Whether the view shows light and camera icons.</summary>
+    property bool ShowIcons;
+
     native::interop::module::EditorView::Config ToNative() {
       native::interop::module::EditorView::Config n;
       n.name = msclr::interop::marshal_as<std::string>(Name);
@@ -129,6 +133,7 @@ namespace Oxygen::Interop {
       n.render_options.view_mode = ToNativeViewMode(ViewMode);
       n.render_options.show_grid = ShowGrid;
       n.render_options.show_selection_outline = ShowSelectionOutline;
+      n.render_options.show_icons = ShowIcons;
 
       return n;
     }

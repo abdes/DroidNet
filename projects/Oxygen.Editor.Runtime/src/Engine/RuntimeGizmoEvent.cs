@@ -6,7 +6,11 @@ using System.Numerics;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
-/// <summary>A transform gizmo interaction for the editor to apply to the authored scene.</summary>
+/// <summary>A transform gizmo or scene helper interaction for the editor to apply.</summary>
+/// <remarks>
+/// Scene helpers report through the same events, with <paramref name="Helper"/> set: their hover,
+/// handle drags that edit one light's value, and orientation triad clicks.
+/// </remarks>
 /// <param name="Kind">What happened.</param>
 /// <param name="ViewId">The view of the interaction.</param>
 /// <param name="Tool">The dragged gizmo's tool.</param>
@@ -19,6 +23,10 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="ReadoutValues">Metres per axis, degrees (in X) or scale factors.</param>
 /// <param name="PivotPixel">The pivot in the view's physical pixels, when in front of the camera.</param>
 /// <param name="PointerPixel">The pointer in the view's physical pixels.</param>
+/// <param name="Helper">The event comes from a scene helper or the orientation triad.</param>
+/// <param name="NodeId">For helper drags: the light being edited.</param>
+/// <param name="HelperHandle">For helper drags: the dragged handle.</param>
+/// <param name="Value">For helper drags: metres for a range, radians for a cone angle.</param>
 public sealed record RuntimeGizmoEvent(
     RuntimeGizmoEventKind Kind,
     RuntimeViewId ViewId,
@@ -31,4 +39,8 @@ public sealed record RuntimeGizmoEvent(
     int ReadoutAxes,
     Vector3 ReadoutValues,
     Vector2? PivotPixel,
-    Vector2 PointerPixel);
+    Vector2 PointerPixel,
+    bool Helper = false,
+    Guid NodeId = default,
+    RuntimeHelperHandle HelperHandle = RuntimeHelperHandle.None,
+    float Value = 0f);

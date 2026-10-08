@@ -60,6 +60,7 @@ namespace oxygen::interop::module {
 } // namespace oxygen::interop::module
 
 #include "EditorModule/InputAccumulator.h"
+#include "EditorModule/SceneHelperController.h"
 #include "EditorModule/ThreadSafeQueue.h"
 #include "EditorModule/TransformGizmoController.h"
 #include "EditorModule/ViewManager.h"
@@ -230,8 +231,8 @@ namespace oxygen::interop::module {
     void SetViewRenderOptions(
       ViewId view_id, const EditorViewRenderOptions& options);
 
-    //! Picks the scene nodes with visible geometry inside a rectangle of a
-    //! view, in pixels of the view's surface.
+    //! Picks the scene nodes with visible geometry or a light or camera icon
+    //! inside a rectangle of a view, in pixels of the view's surface.
     /*!
      The callback runs exactly once, on the engine thread a few frames later:
      with the hits, or with no value when the view is not rendering, or when
@@ -256,6 +257,13 @@ namespace oxygen::interop::module {
     [[nodiscard]] auto GetTransformGizmo() noexcept -> TransformGizmoController&
     {
       return transform_gizmo_;
+    }
+
+    //! Light and camera icons, selected helpers and the orientation triad:
+    //! their settings and event listener are callable from any thread.
+    [[nodiscard]] auto GetSceneHelpers() noexcept -> SceneHelperController&
+    {
+      return scene_helpers_;
     }
 
     //! The last completed frame's rate and duration, readable from any thread.
@@ -355,6 +363,7 @@ namespace oxygen::interop::module {
     std::vector<PendingPick> pending_picks_;
 
     TransformGizmoController transform_gizmo_;
+    SceneHelperController scene_helpers_;
 
     // Command queue for scene mutations
     ThreadSafeQueue<std::unique_ptr<EditorCommand>> command_queue_;

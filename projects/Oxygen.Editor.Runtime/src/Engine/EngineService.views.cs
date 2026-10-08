@@ -297,18 +297,23 @@ public sealed partial class EngineService
                 return false;
             }
 
-            // Each session's module needs the listener once.
-            if (!ReferenceEquals(this.gizmoListenerSession, running))
-            {
-                if (!running.SetTransformGizmoListener(this.OnGizmoEvent))
-                {
-                    return false;
-                }
+            return this.EnsureGizmoListener(running) && running.SetTransformGizmo(gizmo);
+        }
+        finally
+        {
+            _ = this.lifecycleGate.Release();
+        }
+    }
 
-                this.gizmoListenerSession = running;
-            }
-
-            return running.SetTransformGizmo(gizmo);
+    /// <inheritdoc/>
+    public async Task<bool> SetSceneHelpersAsync(RuntimeSceneHelpers helpers)
+    {
+        ArgumentNullException.ThrowIfNull(helpers);
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
+        try
+        {
+            return this.State == EngineServiceState.Running && this.session is { } running
+                && this.EnsureGizmoListener(running) && running.SetSceneHelpers(helpers);
         }
         finally
         {

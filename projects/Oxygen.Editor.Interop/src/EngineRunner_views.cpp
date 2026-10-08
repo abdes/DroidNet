@@ -693,7 +693,8 @@ namespace Oxygen::Interop {
     ViewIdManaged viewId,
     ViewModeManaged viewMode,
     bool showGrid,
-    bool showSelectionOutline)
+    bool showSelectionOutline,
+    bool showIcons)
     -> System::Threading::Tasks::Task<bool>^
   {
     if (ctx == nullptr) {
@@ -724,6 +725,7 @@ namespace Oxygen::Interop {
       options.view_mode = ToNativeViewMode(viewMode);
       options.show_grid = showGrid;
       options.show_selection_outline = showSelectionOutline;
+      options.show_icons = showIcons;
       editor_module_opt->get().SetViewRenderOptions(viewId.ToNative(), options);
       return System::Threading::Tasks::Task<bool>::FromResult(true);
     }
@@ -953,7 +955,53 @@ namespace Oxygen::Interop {
       return false;
     }
     editor_module_opt->get().GetTransformGizmo().RequestCancel();
+    editor_module_opt->get().GetSceneHelpers().RequestCancel();
     return true;
+  }
+
+  auto EngineRunner::TrySetSceneHelpers(EngineContext^ ctx,
+    array<System::Guid>^ hidden, array<System::Guid>^ locked,
+    float displayScale) -> bool
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (disposed_) {
+      return false;
+    }
+
+    auto native_ctx = ctx->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      return false;
+    }
+    auto editor_module_opt =
+      native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (!editor_module_opt) {
+      return false;
+    }
+
+    oxygen::interop::module::SceneHelperSettings settings;
+    settings.display_scale = displayScale > 0.0F ? displayScale : 1.0F;
+    if (hidden != nullptr) {
+      for each (System::Guid id in hidden) {
+        settings.hidden.push_back(
+          detail::ToNativeKey<oxygen::interop::module::UuidKey>(id));
+      }
+    }
+    if (locked != nullptr) {
+      for each (System::Guid id in locked) {
+        settings.locked.push_back(
+          detail::ToNativeKey<oxygen::interop::module::UuidKey>(id));
+      }
+    }
+    try {
+      editor_module_opt->get().GetSceneHelpers().SetSettings(
+        std::move(settings));
+      return true;
+    }
+    catch (...) {
+      return false;
+    }
   }
 
   auto EngineRunner::TrySetTransformGizmoListener(EngineContext^ ctx,
@@ -974,13 +1022,16 @@ namespace Oxygen::Interop {
     }
 
     auto& gizmo = editor_module_opt->get().GetTransformGizmo();
+    auto& helpers = editor_module_opt->get().GetSceneHelpers();
     if (listener == nullptr) {
       gizmo.SetListener({});
+      helpers.SetListener({});
       return true;
     }
     // The native listener owns a handle to the delegate; replacing it frees
     // the handle only after any running call returns.
     gizmo.SetListener(TransformGizmoListener(listener));
+    helpers.SetListener(TransformGizmoListener(listener));
     return true;
   }
 

@@ -421,6 +421,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         menu.Items.Add(CreateToggle("Grid", viewModel.ShowGrid, value => viewModel.ShowGrid = value));
         menu.Items.Add(CreateToggle("Selection outline", viewModel.ShowSelectionOutline, value => viewModel.ShowSelectionOutline = value));
+        menu.Items.Add(CreateToggle("Icons", viewModel.ShowIcons, value => viewModel.ShowIcons = value));
         menu.Items.Add(CreateToggle("Camera preview", viewModel.ShowCameraPreview, value => viewModel.ShowCameraPreview = value));
         menu.Items.Add(CreateToggle("Statistics", viewModel.ShowStatistics, value => viewModel.ShowStatistics = value));
 

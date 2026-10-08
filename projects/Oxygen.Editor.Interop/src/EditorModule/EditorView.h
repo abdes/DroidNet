@@ -115,6 +115,8 @@ namespace oxygen::interop::module {
     EditorViewMode view_mode { EditorViewMode::kLit };
     bool show_grid { true };
     bool show_selection_outline { true };
+    //! Light and camera icons; selected nodes' helpers show regardless.
+    bool show_icons { true };
   };
 
   //! What a frame request did to a view's editor camera.

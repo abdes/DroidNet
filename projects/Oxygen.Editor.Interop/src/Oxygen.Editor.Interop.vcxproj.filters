@@ -126,6 +126,12 @@
     <ClCompile Include="EditorModule\TransformGizmoController.cpp">
       <Filter>EditorModule</Filter>
     </ClCompile>
+    <ClCompile Include="EditorModule\SceneHelpers.cpp">
+      <Filter>EditorModule</Filter>
+    </ClCompile>
+    <ClCompile Include="EditorModule\SceneHelperController.cpp">
+      <Filter>EditorModule</Filter>
+    </ClCompile>
     <ClCompile Include="Commands\SetViewCameraSettingsCommand.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
@@ -335,6 +341,12 @@
       <Filter>EditorModule</Filter>
     </ClInclude>
     <ClInclude Include="EditorModule\TransformGizmoController.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\SceneHelpers.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\SceneHelperController.h">
       <Filter>EditorModule</Filter>
     </ClInclude>
     <ClInclude Include="Views\ViewPickManaged.h">

@@ -165,11 +165,16 @@ internal abstract class EngineSession
     /// <returns>The runtime operation result.</returns>
     public abstract bool SetTransformGizmo(RuntimeTransformGizmo gizmo);
 
-    /// <summary>Cancels a running gizmo drag at the next frame.</summary>
+    /// <summary>Cancels a running gizmo or helper handle drag at the next frame.</summary>
     /// <returns>The runtime operation result.</returns>
     public abstract bool CancelTransformGizmoDrag();
 
-    /// <summary>Receives the gizmo's interactions on the engine thread.</summary>
+    /// <summary>Sets the workspace state the light and camera helpers follow.</summary>
+    /// <param name="helpers">The hidden and locked nodes and the display scale.</param>
+    /// <returns>The runtime operation result.</returns>
+    public abstract bool SetSceneHelpers(RuntimeSceneHelpers helpers);
+
+    /// <summary>Receives the gizmo's and the scene helpers' interactions on the engine thread.</summary>
     /// <param name="listener">The receiver, or <see langword="null"/> to stop.</param>
     /// <returns>The runtime operation result.</returns>
     public abstract bool SetTransformGizmoListener(Action<RuntimeGizmoEvent>? listener);

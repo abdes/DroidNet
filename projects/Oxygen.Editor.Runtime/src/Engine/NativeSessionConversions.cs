@@ -57,7 +57,11 @@ internal static class NativeSessionConversions
             gizmoEvent.ReadoutAxes,
             gizmoEvent.ReadoutValues,
             gizmoEvent.PivotPixel,
-            gizmoEvent.PointerPixel);
+            gizmoEvent.PointerPixel,
+            gizmoEvent.Helper,
+            gizmoEvent.NodeId,
+            (RuntimeHelperHandle)(int)gizmoEvent.HelperHandle,
+            gizmoEvent.Value);
 
     /// <summary>Creates the native view config while preserving omitted native defaults.</summary>
     /// <param name="config">The editor's managed view request.</param>
@@ -75,6 +79,7 @@ internal static class NativeSessionConversions
             ViewMode = ToNative<ViewModeManaged>(config.ViewMode),
             ShowGrid = config.ShowGrid,
             ShowSelectionOutline = config.ShowSelectionOutline,
+            ShowIcons = config.ShowIcons,
         };
         if (config.EditorCamera is { } camera)
         {

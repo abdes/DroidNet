@@ -454,6 +454,18 @@ public interface IEngineService : IAsyncDisposable
     public Task<bool> CancelTransformGizmoDragAsync();
 
     /// <summary>
+    /// Set the workspace state the editing views' light and camera icons and selected helpers
+    /// follow. Their handle drags and orientation triad clicks report through
+    /// <see cref="GizmoEvent"/>.
+    /// </summary>
+    /// <param name="helpers">The hidden and locked nodes and the display scale.</param>
+    /// <returns>
+    ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
+    ///     <see langword="false"/> on failure.
+    /// </returns>
+    public Task<bool> SetSceneHelpersAsync(RuntimeSceneHelpers helpers);
+
+    /// <summary>
     /// Gets the rate and duration of the last completed engine frame. Cheap enough to poll from the
     /// UI thread.
     /// </summary>

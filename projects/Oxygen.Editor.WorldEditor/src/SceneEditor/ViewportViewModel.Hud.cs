@@ -52,6 +52,10 @@ public partial class ViewportViewModel
     [ObservableProperty]
     public partial bool ShowSelectionOutline { get; set; } = true;
 
+    /// <summary>Gets or sets a value indicating whether the pane shows light and camera icons.</summary>
+    [ObservableProperty]
+    public partial bool ShowIcons { get; set; } = true;
+
     /// <summary>Gets or sets a value indicating whether the focused pane previews the selected camera in an inset.</summary>
     [ObservableProperty]
     public partial bool ShowCameraPreview { get; set; } = true;
@@ -97,7 +101,7 @@ public partial class ViewportViewModel
     /// <summary>Gets or sets the source of the scene's node count shown by the statistics readout.</summary>
     public Func<int>? NodeCountProvider { get; set; }
 
-    private ViewportRenderOptions CurrentRenderOptions => new(this.ViewMode, this.ShowGrid, this.ShowSelectionOutline);
+    private ViewportRenderOptions CurrentRenderOptions => new(this.ViewMode, this.ShowGrid, this.ShowSelectionOutline, this.ShowIcons);
 
     /// <summary>Re-reads the engine frame statistics into <see cref="StatisticsText"/>.</summary>
     internal void RefreshStatistics()
@@ -263,6 +267,12 @@ public partial class ViewportViewModel
     }
 
     partial void OnShowSelectionOutlineChanged(bool value)
+    {
+        _ = this.ApplyCurrentRenderOptionsAsync();
+        this.RaiseStateChanged();
+    }
+
+    partial void OnShowIconsChanged(bool value)
     {
         _ = this.ApplyCurrentRenderOptionsAsync();
         this.RaiseStateChanged();

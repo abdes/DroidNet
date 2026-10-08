@@ -68,7 +68,8 @@ internal sealed partial class NativeEngineSession
             new(viewId.Value),
             NativeSessionConversions.ToNative<ViewModeManaged>(options.ViewMode),
             options.ShowGrid,
-            options.ShowSelectionOutline);
+            options.ShowSelectionOutline,
+            options.ShowIcons);
 
     /// <inheritdoc />
     public override async Task<RuntimePickResult?> PickViewAsync(RuntimeViewId viewId, RuntimePickRect rect)
@@ -101,6 +102,10 @@ internal sealed partial class NativeEngineSession
     /// <inheritdoc />
     public override bool CancelTransformGizmoDrag()
         => this.Runner.TryCancelTransformGizmoDrag(this.context);
+
+    /// <inheritdoc />
+    public override bool SetSceneHelpers(RuntimeSceneHelpers helpers)
+        => this.Runner.TrySetSceneHelpers(this.context, [.. helpers.HiddenNodeIds], [.. helpers.LockedNodeIds], helpers.DisplayScale);
 
     /// <inheritdoc />
     public override bool SetTransformGizmoListener(Action<RuntimeGizmoEvent>? listener)

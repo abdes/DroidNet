@@ -21,4 +21,7 @@ public enum RuntimeGizmoEventKind
 
     /// <summary>The drag was cancelled; the targets keep their starting transforms.</summary>
     Cancel = 4,
+
+    /// <summary>An orientation triad axis was clicked; the handle names it.</summary>
+    ViewAxis = 5,
 }

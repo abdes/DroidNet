@@ -102,6 +102,11 @@ namespace oxygen::interop::module {
     [[nodiscard]] auto Ray(const glm::vec2& pixel) const -> GizmoRay;
     //! World length one pixel spans at `point`'s depth.
     [[nodiscard]] auto PixelSize(const glm::vec3& point) const -> float;
+    //! The point under a pixel at mid-depth, inside the view volume whichever
+    //! way depth runs; screen-space overlays are drawn through it.
+    [[nodiscard]] auto Unproject(const glm::vec2& pixel) const -> glm::vec3;
+    //! Device depth of `point`, as the depth buffer stores it.
+    [[nodiscard]] auto DeviceDepth(const glm::vec3& point) const -> float;
 
   private:
     glm::mat4 view_projection_ { 1.0F };

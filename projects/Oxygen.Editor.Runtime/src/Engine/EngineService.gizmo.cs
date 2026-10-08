@@ -18,6 +18,23 @@ public sealed partial class EngineService
     /// <inheritdoc />
     public event EventHandler<RuntimeGizmoEventArgs>? GizmoEvent;
 
+    // Each session's module needs the listener once; the caller holds the lifecycle gate.
+    private bool EnsureGizmoListener(EngineSession running)
+    {
+        if (ReferenceEquals(this.gizmoListenerSession, running))
+        {
+            return true;
+        }
+
+        if (!running.SetTransformGizmoListener(this.OnGizmoEvent))
+        {
+            return false;
+        }
+
+        this.gizmoListenerSession = running;
+        return true;
+    }
+
     // Runs on the engine thread: queue and return, so the frame never waits for a subscriber.
     private void OnGizmoEvent(RuntimeGizmoEvent gizmoEvent)
     {

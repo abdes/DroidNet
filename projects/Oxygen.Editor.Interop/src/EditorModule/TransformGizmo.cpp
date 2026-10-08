@@ -802,6 +802,21 @@ namespace oxygen::interop::module {
     return 2.0F * depth / (focal * viewport_size.y);
   }
 
+  auto GizmoCamera::Unproject(const glm::vec2& pixel) const -> glm::vec3
+  {
+    const auto local = (pixel - viewport_origin) / viewport_size;
+    const auto ndc = glm::vec2 { local.x * 2.0F - 1.0F, 1.0F - local.y * 2.0F };
+    const auto unprojected
+      = inverse_view_projection_ * glm::vec4(ndc, 0.5F, 1.0F);
+    return glm::vec3(unprojected) / unprojected.w;
+  }
+
+  auto GizmoCamera::DeviceDepth(const glm::vec3& point) const -> float
+  {
+    const auto clip = view_projection_ * glm::vec4(point, 1.0F);
+    return std::abs(clip.w) > 1.0e-6F ? clip.z / clip.w : 0.0F;
+  }
+
   auto GizmoFrame::Axis(const int index) const -> glm::vec3
   {
     auto unit = glm::vec3 { 0.0F };

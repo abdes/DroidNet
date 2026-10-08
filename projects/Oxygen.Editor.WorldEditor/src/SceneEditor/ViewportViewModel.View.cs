@@ -89,6 +89,7 @@ public partial class ViewportViewModel
         this.ViewMode = state.ViewMode;
         this.ShowGrid = state.ShowGrid;
         this.ShowSelectionOutline = state.ShowSelectionOutline;
+        this.ShowIcons = state.ShowIcons;
         this.ShowCameraPreview = state.ShowCameraPreview;
         this.ShowStatistics = state.ShowStatistics;
     }
@@ -105,7 +106,8 @@ public partial class ViewportViewModel
             this.ShowGrid,
             this.ShowCameraPreview,
             this.ShowStatistics,
-            this.ShowSelectionOutline);
+            this.ShowSelectionOutline,
+            this.ShowIcons);
 
     private static CameraViewPreset ToPreset(CameraType type) => type switch
     {
@@ -155,6 +157,7 @@ public partial class ViewportViewModel
                 ViewMode = this.ViewMode,
                 ShowGrid = this.ShowGrid,
                 ShowSelectionOutline = this.ShowSelectionOutline,
+                ShowIcons = this.ShowIcons,
             }).ConfigureAwait(true);
             if (!created.IsValid)
             {

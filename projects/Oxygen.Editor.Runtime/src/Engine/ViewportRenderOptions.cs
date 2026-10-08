@@ -8,7 +8,9 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="ViewMode">What the view renders.</param>
 /// <param name="ShowGrid">Whether the view shows the ground grid.</param>
 /// <param name="ShowSelectionOutline">Whether the view outlines the selected nodes.</param>
+/// <param name="ShowIcons">Whether the view shows light and camera icons.</param>
 public readonly record struct ViewportRenderOptions(
     ViewportViewMode ViewMode,
     bool ShowGrid,
-    bool ShowSelectionOutline);
+    bool ShowSelectionOutline,
+    bool ShowIcons = true);

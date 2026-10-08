@@ -250,6 +250,7 @@ public sealed record SceneViewportState(
 /// <param name="ShowCameraPreview">Whether the pane previews the selected camera in an inset.</param>
 /// <param name="ShowStatistics">Whether the pane shows the frame statistics readout.</param>
 /// <param name="ShowSelectionOutline">Whether the pane outlines the selected nodes.</param>
+/// <param name="ShowIcons">Whether the pane shows light and camera icons.</param>
 public sealed record ViewportPaneState(
     CameraType CameraType,
     CameraControlMode ControlMode,
@@ -259,7 +260,8 @@ public sealed record ViewportPaneState(
     bool ShowGrid = true,
     bool ShowCameraPreview = true,
     bool ShowStatistics = false,
-    bool ShowSelectionOutline = true);
+    bool ShowSelectionOutline = true,
+    bool ShowIcons = true);
 
 /// <summary>
 /// A pane's editor camera, stored as plain fields: the settings serializer does not write the

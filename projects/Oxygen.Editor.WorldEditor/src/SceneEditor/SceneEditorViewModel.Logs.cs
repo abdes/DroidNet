@@ -140,4 +140,22 @@ public partial class SceneEditorViewModel
 
     private void LogTransformGizmoRejected()
         => LogTransformGizmoRejected(this.logger, this.Metadata?.DocumentId);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "The runtime rejected the scene helpers of document {DocumentId}; no engine session is running")]
+    private static partial void LogSceneHelpersRejected(ILogger logger, Guid? documentId);
+
+    private void LogSceneHelpersRejected()
+        => LogSceneHelpersRejected(this.logger, this.Metadata?.DocumentId);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "The runtime could not update the scene helpers of document {DocumentId}")]
+    private static partial void LogSceneHelpersFailed(ILogger logger, Exception exception, Guid? documentId);
+
+    private void LogSceneHelpersFailed(Exception exception)
+        => LogSceneHelpersFailed(this.logger, exception, this.Metadata?.DocumentId);
 }

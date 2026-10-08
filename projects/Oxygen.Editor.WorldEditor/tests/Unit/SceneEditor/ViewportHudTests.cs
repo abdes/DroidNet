@@ -105,6 +105,28 @@ public sealed class ViewportHudTests
     }
 
     [TestMethod]
+    public void ShowIcons_ShouldSendTheIconsWithTheOtherOptionsAndPersist()
+    {
+        var engine = new Mock<IEngineService>(MockBehavior.Strict);
+        _ = engine
+            .Setup(service => service.SetViewRenderOptionsAsync(
+                It.Is<RuntimeViewId>(id => id.Value == ViewId.Value),
+                new ViewportRenderOptions(ViewportViewMode.Lit, true, true, false)))
+            .ReturnsAsync(value: true);
+        using var sut = CreateViewport(engine.Object);
+        sut.AssignedViewId = ViewId;
+        var stateChanges = 0;
+        sut.StateChanged += (_, _) => stateChanges++;
+
+        _ = sut.ShowIcons.Should().BeTrue();
+        sut.ShowIcons = false;
+
+        engine.VerifyAll();
+        _ = stateChanges.Should().Be(1);
+        _ = sut.CaptureState().ShowIcons.Should().BeFalse();
+    }
+
+    [TestMethod]
     public void ViewMode_WhenRuntimeRejectsIt_ShouldPublishWarning()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
@@ -197,6 +219,7 @@ public sealed class ViewportHudTests
         source.ShowCameraPreview = false;
         source.ShowStatistics = true;
         source.ShowSelectionOutline = false;
+        source.ShowIcons = false;
         source.CameraType = CameraType.Front;
 
         var state = source.CaptureState();
@@ -213,7 +236,8 @@ public sealed class ViewportHudTests
             ShowGrid: false,
             ShowCameraPreview: false,
             ShowStatistics: true,
-            ShowSelectionOutline: false));
+            ShowSelectionOutline: false,
+            ShowIcons: false));
     }
 
     private static ViewportViewModel CreateViewport(IEngineService engine, IOperationResultPublisher? results = null)

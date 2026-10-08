@@ -8,6 +8,7 @@
 
 #include "pch.h"
 
+#include <algorithm>
 #include <bit>
 
 #include <EditorModule/SceneAssetRequests.h>
@@ -364,14 +365,33 @@ namespace oxygen::interop::module {
     SyncSurfacesWithFrameContext(*context, surfaces);
 
     // Drain and dispatch input from the accumulator to the engine's input
-    // system. The transform gizmo takes its drags out first.
+    // system. The transform gizmo, then the scene helpers, take their drags
+    // out first; a running helper drag keeps the pointer from the gizmo.
     transform_gizmo_.BeginFrame(scene_.get(), scene_generation_->load());
+    {
+      std::vector<UuidKey> selected;
+      std::optional<UuidKey> active;
+      {
+        std::lock_guard lock(outline_mutex_);
+        selected = outline_nodes_;
+        active = outline_active_;
+      }
+      scene_helpers_.BeginFrame(
+        scene_.get(), scene_generation_->load(), selected, active);
+    }
     for (auto* view : view_manager_->GetAllViews()) {
       const auto view_id = view->GetViewId();
       auto batch = input_accumulator_->Drain(view_id);
 
       UpdateViewRoutingFromInputBatch(view_id, batch);
-      transform_gizmo_.ProcessInput(*view, batch);
+      if (scene_helpers_.IsDragging()) {
+        scene_helpers_.ProcessInput(*view, batch, false);
+        transform_gizmo_.ProcessInput(*view, batch);
+      } else {
+        transform_gizmo_.ProcessInput(*view, batch);
+        scene_helpers_.ProcessInput(
+          *view, batch, transform_gizmo_.IsHovering(view_id));
+      }
 
       const bool has_mouse = (batch.mouse_delta.dx != 0.0F) || (batch.mouse_delta.dy != 0.0F);
       const bool has_wheel = (batch.scroll_delta.dx != 0.0F) || (batch.scroll_delta.dy != 0.0F);
@@ -876,7 +896,13 @@ namespace oxygen::interop::module {
       if (!view->IsInset() && config.render_options.show_selection_outline) {
         composition_view.outline = outline;
       }
-      composition_view.overlay = transform_gizmo_.BuildOverlay(*view);
+      // Helpers first: the gizmo draws over them.
+      auto overlay = std::make_shared<vortex::ViewOverlay>();
+      scene_helpers_.BuildOverlay(*view, *overlay);
+      transform_gizmo_.BuildOverlay(*view, *overlay);
+      if (!overlay->IsEmpty()) {
+        composition_view.overlay = std::move(overlay);
+      }
 
       const auto published_view_id = renderer.PublishRuntimeCompositionView(
         *context,
@@ -963,7 +989,14 @@ namespace oxygen::interop::module {
         continue;
       }
       const auto generation = scene_generation_->load();
+      // Icons are hit now, where the pointer saw them; they come first
+      // when as close as geometry, because they draw over it.
+      auto icons = std::vector<HelperIconHit> {};
+      if (auto* view = view_manager_->GetView(pick.view_id)) {
+        icons = scene_helpers_.PickIcons(*view, pick.rect);
+      }
       auto completion = [scene_generation = scene_generation_, generation,
+                          icons = std::move(icons),
                           callback = std::move(pick.callback)](
                           vortex::ViewPickResult result) {
         if (result.status != vortex::ViewPickResult::Status::kCompleted
@@ -973,7 +1006,15 @@ namespace oxygen::interop::module {
         }
         EditorPickResult picked;
         picked.world_position = result.world_position;
-        picked.hits.reserve(result.hits.size());
+        picked.hits.reserve(icons.size() + result.hits.size());
+        for (const auto& icon : icons) {
+          picked.hits.push_back(EditorPickHit {
+            .node = icon.id,
+            .depth = icon.depth,
+            .geometry_slot = 0U,
+            .center_distance = icon.center_distance,
+          });
+        }
         for (const auto& hit : result.hits) {
           // Nodes the editor did not create (none today) are not pickable.
           if (const auto id = NodeRegistry::ReverseLookup(hit.node)) {
@@ -984,6 +1025,15 @@ namespace oxygen::interop::module {
               .center_distance = hit.center_distance,
             });
           }
+        }
+        if (!icons.empty()) {
+          // Closest to the centre first, a node hit by its icon and its
+          // geometry listed once.
+          std::ranges::stable_sort(picked.hits, {}, &EditorPickHit::center_distance);
+          std::unordered_set<UuidKey, UuidKeyHash> seen;
+          std::erase_if(picked.hits, [&](const EditorPickHit& hit) {
+            return !seen.insert(hit.node).second;
+          });
         }
         callback(std::move(picked));
       };

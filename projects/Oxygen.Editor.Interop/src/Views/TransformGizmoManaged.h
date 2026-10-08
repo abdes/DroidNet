@@ -49,6 +49,17 @@ namespace Oxygen::Interop {
     Update = 2,
     Commit = 3,
     Cancel = 4,
+    /// <summary>An orientation triad axis was clicked.</summary>
+    ViewAxis = 5,
+  };
+
+  /// <summary>A scene helper part the pointer can drag to edit a
+  /// light.</summary>
+  public enum class HelperHandleManaged : System::Int32 {
+    None = 0,
+    Range = 1,
+    InnerCone = 2,
+    OuterCone = 3,
   };
 
   /// <summary>A manipulated node's new local transform.</summary>
@@ -98,6 +109,29 @@ namespace Oxygen::Interop {
     /// <summary>The pointer in the view's pixels.</summary>
     property System::Numerics::Vector2 PointerPixel;
 
+    /// <summary>The event comes from a scene helper or the orientation
+    /// triad.</summary>
+    property bool Helper;
+
+    /// <summary>For helper drags: the light being edited.</summary>
+    property System::Guid NodeId;
+
+    /// <summary>For helper drags: the dragged handle.</summary>
+    property HelperHandleManaged HelperHandle;
+
+    /// <summary>For helper drags: metres for a range, radians for a cone
+    /// angle.</summary>
+    property float Value;
+
+    static System::Guid ToGuid(
+      const ::oxygen::interop::module::UuidKey& id) {
+      auto bytes = gcnew array<System::Byte>(16);
+      for (int b = 0; b < 16; ++b) {
+        bytes[b] = id[static_cast<std::size_t>(b)];
+      }
+      return System::Guid(bytes);
+    }
+
     static TransformGizmoEventManaged^ FromNative(
       const ::oxygen::interop::module::TransformGizmoEvent& event) {
       auto managed = gcnew TransformGizmoEventManaged();
@@ -112,12 +146,8 @@ namespace Oxygen::Interop {
         static_cast<int>(event.targets.size()));
       for (int i = 0; i < managed->Targets->Length; ++i) {
         const auto& target = event.targets[static_cast<std::size_t>(i)];
-        auto bytes = gcnew array<System::Byte>(16);
-        for (int b = 0; b < 16; ++b) {
-          bytes[b] = target.id[static_cast<std::size_t>(b)];
-        }
         auto item = gcnew TransformGizmoTargetManaged();
-        item->NodeId = System::Guid(bytes);
+        item->NodeId = ToGuid(target.id);
         item->Position = System::Numerics::Vector3(
           target.position.x, target.position.y, target.position.z);
         item->Rotation = System::Numerics::Quaternion(target.rotation.x,
@@ -135,6 +165,11 @@ namespace Oxygen::Interop {
       }
       managed->PointerPixel = System::Numerics::Vector2(
         event.pointer_pixel.x, event.pointer_pixel.y);
+      managed->Helper = event.helper;
+      managed->NodeId = ToGuid(event.node);
+      managed->HelperHandle
+        = static_cast<HelperHandleManaged>(event.helper_handle);
+      managed->Value = event.value;
       return managed;
     }
   };

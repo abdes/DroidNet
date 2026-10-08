@@ -122,6 +122,8 @@ internal sealed class FakeEngineSession : EngineSession
 
     public override bool CancelTransformGizmoDrag() => true;
 
+    public override bool SetSceneHelpers(RuntimeSceneHelpers helpers) => true;
+
     public override bool SetTransformGizmoListener(Action<RuntimeGizmoEvent>? listener) => true;
 
     public override RuntimeFrameStatistics GetFrameStatistics() => default;

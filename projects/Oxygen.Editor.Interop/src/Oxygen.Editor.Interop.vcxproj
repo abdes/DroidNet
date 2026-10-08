@@ -58,6 +58,12 @@
     <ClCompile Include="EditorModule\TransformGizmoController.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
+    <ClCompile Include="EditorModule\SceneHelpers.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="EditorModule\SceneHelperController.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
     <ClCompile Include="Commands\SetViewCameraPresetCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
@@ -196,6 +202,8 @@
     <ClInclude Include="EditorModule\ViewFraming.h" />
     <ClInclude Include="EditorModule\TransformGizmo.h" />
     <ClInclude Include="EditorModule\TransformGizmoController.h" />
+    <ClInclude Include="EditorModule\SceneHelpers.h" />
+    <ClInclude Include="EditorModule\SceneHelperController.h" />
     <ClInclude Include="Views\ViewPickManaged.h" />
     <ClInclude Include="Views\TransformGizmoManaged.h" />
     <ClInclude Include="Commands\SetViewCameraPresetCommand.h" />
