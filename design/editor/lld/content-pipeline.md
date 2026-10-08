@@ -828,7 +828,10 @@ One-time migration normalizes useful older sidecars/output paths and their
 authored references together, then rebuilds affected content. Production reimport
 accepts only the canonical settings/layout; it does not retain version-2 grouped
 path behavior. Changing a sidecar alone cannot relocate content because native
-asset keys derive from virtual paths. Ownership,
+asset keys derive from virtual paths; output groups move only through the
+reference-aware relocation in
+[Content Browser §9.5](content-browser-asset-identity.md#95-asset-relocation),
+which rewrites the sidecar with the files. Ownership,
 collision checks, folder cooking and source inspection cover every disjoint
 output namespace, without claiming the whole mount for one imported model.
 

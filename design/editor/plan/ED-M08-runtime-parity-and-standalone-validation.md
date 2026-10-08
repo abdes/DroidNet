@@ -957,10 +957,21 @@ is [Content Browser LLD §9.5](../lld/content-browser-asset-identity.md#95-asset
    companion files such as `.import.json`), a folder prefix mapping, and the
    rewritten references for every referrer. The plan rejects name collisions,
    invalid names, read-only or derived targets, moves out of the authoring
-   mounts, and import-owned outputs (they move by changing the import
-   destination). A confirmation lists affected referrers whenever there are
-   any.
-3. **Transaction.** The plan runs under the existing project coordinator
+   mounts, and renaming or moving the importer's fixed type folders
+   (`Materials`, `Geometry`, `Scenes` at a mount root). A confirmation lists
+   affected referrers whenever there are any.
+3. **Imported model outputs.** A model import owns one output group in its
+   mount: `Materials/<group>`, `Geometry/<group>` and `Scenes/<group>`, named
+   by the sidecar's `OutputDirectory` (which may be nested, such as
+   `Vehicles/Car`). Renaming or moving a folder inside a type folder that is,
+   or contains, an output group relocates it in all three type folders
+   together: the plan applies the same prefix mapping to the matching folder
+   under each type folder, rewrites `OutputDirectory` in every affected
+   sidecar, checks collisions in all three, and the confirmation names every
+   folder that moves. Moving a single output asset out of its group, or a
+   group to another mount, is rejected. Reimport and cooking then write to
+   the new group; changing an import's destination is this same operation.
+4. **Transaction.** The plan runs under the existing project coordinator
    admission, like cooking: rewritten referrers are staged, then files move
    and referrers are replaced atomically through the journaled file store, and
    any failure rolls back completely. Open clean documents are updated in
@@ -969,17 +980,19 @@ is [Content Browser LLD §9.5](../lld/content-browser-asset-identity.md#95-asset
    incremental cooking republishes the moved assets and their referrers while
    publication retires the old keys. The operation result offers Undo, which
    runs the reverse relocation; it does not enter scene history.
-4. **Copy, Duplicate and Delete.** Copy/Paste and Duplicate create new paths
+5. **Copy, Duplicate and Delete.** Copy/Paste and Duplicate create new paths
    with a unique name and rewrite no referrers. Delete shows the referrers,
    requires confirmation when any exist, moves files to the Recycle Bin, and
    leaves referrers with the existing missing-reference diagnostics.
 
 Checks: rename and move of a material, geometry descriptor, scene, source
 model with its sidecar and a populated folder, each with referrers in saved
-and open documents; collisions and read-only targets rejected; an injected
-failure leaves sources and publication unchanged; Undo restores paths and
-references; cooked output and the live viewport show the moved assets with no
-stale key; delete with and without referrers.
+and open documents; renaming one imported output folder relocates all three
+group folders and the sidecar, and a later reimport writes only to the new
+group; type-folder renames, collisions and read-only targets rejected; an
+injected failure leaves sources and publication unchanged; Undo restores paths
+and references; cooked output and the live viewport show the moved assets with
+no stale key; delete with and without referrers.
 
 ### M08.9 — Asset thumbnails and previews
 

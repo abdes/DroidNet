@@ -563,7 +563,18 @@ identity and must update every authored referrer in one transaction.
 - **Plan.** Source moves with their companion files, a folder prefix mapping
   and the rewritten references of every referrer. Rejected: collisions, invalid
   names, read-only or derived targets, moves out of authoring mounts and
-  import-owned outputs, which move by changing the import destination.
+  renaming or moving the importer's fixed type folders (`Materials`,
+  `Geometry`, `Scenes` at a mount root).
+- **Imported outputs.** A model import owns one output group in its mount,
+  `Materials/<group>`, `Geometry/<group>` and `Scenes/<group>`, where the group
+  is the sidecar's `OutputDirectory` and may be nested. Renaming or moving a
+  folder inside a type folder that is, or contains, an output group applies the
+  same prefix mapping under all three type folders, rewrites `OutputDirectory`
+  in every affected sidecar and checks collisions in all three; the
+  confirmation names every folder that moves. This is also how an import's
+  destination changes. Moving one output asset out of its group, or a group to
+  another mount, is rejected. Renaming the retained source bundle rewrites the
+  sidecar's bundle path.
 - **Transaction.** Runs under the project coordinator admission. Referrers are
   staged, files move and referrers are replaced through the journaled file
   store; any failure restores every file. A referencing document with unsaved
