@@ -227,20 +227,17 @@ public interface IEngineService : IAsyncDisposable
 
     /// <summary>
     /// Destroy a previously created engine view. Returns true if the destroy
-    /// request was accepted by the native engine.
+    /// request was accepted by the native engine, or when the engine is no longer
+    /// running: a stopped engine has already released every view.
     /// </summary>
     /// <param name="viewId">The id of the view to destroy.</param>
     /// <returns>
     ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
     ///     <see langword="false"/> on failure.
     /// </returns>
-    /// <throws cref="InvalidOperationException">>If used in an invalid state.</throws>
     /// <remarks>
-    ///     Allowed only in the following states:
-    ///     <list type="bullet">
-    ///      <item><see cref="EngineServiceState.Running"/></item>
-    ///     </list>
-    ///     Using it in any other state throws an exception.
+    ///     Safe in every state, including during and after shutdown, so view owners can release
+    ///     their views in any teardown order.
     /// </remarks>
     public Task<bool> DestroyViewAsync(RuntimeViewId viewId);
 

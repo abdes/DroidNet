@@ -42,10 +42,16 @@ public sealed partial class EngineService
         await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
-            var runner = this.EnsureIsRunning();
             this.commandDispatcher.UnregisterView(viewId.Value);
+            if (this.disposalRequested || this.State != EngineServiceState.Running)
+            {
+                // Views exist only in a running engine; a stopped engine released them all.
+                this.LogViewReleasedWithEngine(viewId, this.State);
+                return true;
+            }
+
             this.LogDestroyView(viewId);
-            return await this.AwaitRuntimeOperationAsync(runner.DestroyViewAsync(viewId)).ConfigureAwait(true);
+            return await this.AwaitRuntimeOperationAsync(this.session!.DestroyViewAsync(viewId)).ConfigureAwait(true);
         }
         finally
         {

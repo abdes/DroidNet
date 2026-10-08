@@ -56,6 +56,19 @@ public sealed partial class EngineServiceShutdownTests
     }
 
     [TestMethod]
+    public async Task DestroyView_AfterShutdown_ReportsTheViewReleased()
+    {
+        // Viewport controls can unload after the window has already stopped the engine.
+        var native = new FakeEngineSession();
+        var service = await this.StartAsync(native).ConfigureAwait(false);
+        await using var lifetime = service.ConfigureAwait(false);
+        var view = await service.CreateViewAsync(new RuntimeViewConfig { Name = "Pane" }).ConfigureAwait(false);
+        await service.ShutdownAsync().ConfigureAwait(false);
+
+        _ = (await service.DestroyViewAsync(view).ConfigureAwait(false)).Should().BeTrue();
+    }
+
+    [TestMethod]
     public async Task DisposalFailure_IsLogged()
     {
         var logger = new Mock<ILogger>();

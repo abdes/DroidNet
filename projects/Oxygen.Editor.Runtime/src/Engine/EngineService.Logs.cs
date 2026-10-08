@@ -115,6 +115,14 @@ public sealed partial class EngineService
 
     [LoggerMessage(
         Level = LogLevel.Debug,
+        Message = "View '{ViewId}' was released with the engine (state {State}).")]
+    private static partial void LogViewReleasedWithEngine(ILogger logger, ulong viewId, EngineServiceState state);
+
+    private void LogViewReleasedWithEngine(RuntimeViewId viewId, EngineServiceState state)
+        => LogViewReleasedWithEngine(this.logger, viewId.Value, state);
+
+    [LoggerMessage(
+        Level = LogLevel.Debug,
         Message = "Requesting view with id '{ViewId}' to be hidden.")]
     private static partial void LogHideView(ILogger logger, ulong viewId);
 
