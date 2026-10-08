@@ -127,6 +127,40 @@ public sealed partial class DialogServiceTests : WindowManagerServiceTestsBase
     });
 
     [TestMethod]
+    public Task ShowAsync_WithMaxWidth_RaisesTheDialogWidthCap_Async() => EnqueueAsync(async () =>
+    {
+        var windowManager = this.CreateService();
+
+        try
+        {
+            var (ownerXamlRoot, managedWindow) = await PrepareOwnerWindowAsync(windowManager).ConfigureAwait(true);
+            var dialogService = new DialogService(windowManager);
+
+            var showTask = dialogService.ShowAsync(
+                new DialogSpec("Wide", "Body")
+                {
+                    PrimaryButtonText = "Close",
+                    CloseButtonText = string.Empty,
+                    DefaultButton = DialogButton.Primary,
+                    MaxWidth = 760,
+                },
+                managedWindow.Id,
+                this.TestContext.CancellationToken);
+
+            var dialog = await this.WaitForSingleDialogAsync(ownerXamlRoot, TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+            _ = dialog.Resources["ContentDialogMaxWidth"].Should().Be(760.0);
+
+            var primaryButton = await this.WaitForDialogButtonAsync(dialog, DialogButton.Primary, expectedText: "Close", timeout: TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+            InvokeButton(primaryButton);
+            _ = await showTask.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(true);
+        }
+        finally
+        {
+            windowManager.Dispose();
+        }
+    });
+
+    [TestMethod]
     public Task ShowAsync_ViewModelDialogWithoutConverter_Throws_Async() => EnqueueAsync(async () =>
     {
         // Arrange

@@ -186,7 +186,7 @@ public sealed class DialogService : IDialogService
             throw new DialogServiceException("The owner window root content has no XamlRoot.");
         }
 
-        return new ContentDialog
+        var dialog = new ContentDialog
         {
             XamlRoot = rootElement.XamlRoot,
             Title = spec.Title,
@@ -196,6 +196,14 @@ public sealed class DialogService : IDialogService
             CloseButtonText = spec.CloseButtonText,
             DefaultButton = MapDefaultButton(spec.DefaultButton),
         };
+
+        // ContentDialog reads its width cap from this theme resource when its template applies.
+        if (spec.MaxWidth is { } maxWidth && double.IsFinite(maxWidth) && maxWidth > 0)
+        {
+            dialog.Resources["ContentDialogMaxWidth"] = maxWidth;
+        }
+
+        return dialog;
     }
 
     private static UIElement ResolveViewFromViewModel(object viewModel)

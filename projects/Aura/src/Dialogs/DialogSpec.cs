@@ -38,4 +38,10 @@ public sealed record DialogSpec(string Title, object? Content)
     /// The dialog prevents dismissal and repeated actions while this operation is running.
     /// </summary>
     public Func<Task<bool>>? PrimaryAction { get; init; }
+
+    /// <summary>
+    ///     Gets an optional maximum dialog width, in DIPs, for content wider than the default dialog. The dialog still
+    ///     never exceeds its window.
+    /// </summary>
+    public double? MaxWidth { get; init; }
 }
