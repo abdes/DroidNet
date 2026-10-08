@@ -10,9 +10,35 @@
 
 #include <EditorModule/ViewManager.h>
 
+#include <Oxygen/Scene/Scene.h>
+
 namespace oxygen::interop::module {
 
-  ViewManager::ViewManager() = default;
+  namespace {
+    // One camera per editor view; a handful of panes and insets per document.
+    constexpr std::size_t kCameraSceneCapacity = 64U;
+
+    [[nodiscard]] auto SurfaceExtent(const graphics::Surface& surface)
+      -> std::pair<uint32_t, uint32_t> {
+      auto width = static_cast<uint32_t>(surface.Width());
+      auto height = static_cast<uint32_t>(surface.Height());
+      if (const auto back = surface.GetCurrentBackBuffer()) {
+        const auto& desc = back->GetDescriptor();
+        if (desc.width > 0 && desc.height > 0) {
+          width = desc.width;
+          height = desc.height;
+        }
+      }
+      return { width, height };
+    }
+  } // namespace
+
+  ViewManager::ViewManager(const SurfaceRegistry& registry)
+    : registry_(registry)
+    , camera_scene_(std::make_shared<scene::Scene>(
+        "EditorViewCameras", kCameraSceneCapacity)) {
+  }
+
   ViewManager::~ViewManager() = default;
 
   void ViewManager::CreateViewNow(EditorView::Config config,
@@ -22,6 +48,11 @@ namespace oxygen::interop::module {
     CHECK_NOTNULL_F(active_frame_ctx_.get());
 
     try {
+      if (config.compositing_target.has_value()) {
+        if (const auto surface = registry_.FindSurface(*config.compositing_target)) {
+          std::tie(config.width, config.height) = SurfaceExtent(*surface);
+        }
+      }
       auto view = std::make_unique<EditorView>(config);
       // Resolve the scene from the active FrameContext rather than caching
       // it so we don't hold cross-frame references.
@@ -32,7 +63,7 @@ namespace oxygen::interop::module {
           callback(false, kInvalidViewId);
         return;
       }
-      view->Initialize(*scene);
+      view->Initialize(*scene, *camera_scene_);
 
       const ViewId view_id { next_view_id_++ };
       view->SetViewId(view_id);
@@ -125,7 +156,7 @@ namespace oxygen::interop::module {
   }
 
   void ViewManager::OnFrameStart(engine::FrameContext& frame_ctx) {
-    DLOG_F(INFO, "ViewManager::OnFrameStart (frame_ctx={}, current_phase={})",
+    DLOG_F(2, "ViewManager::OnFrameStart (frame_ctx={}, current_phase={})",
       fmt::ptr(&frame_ctx), static_cast<int>(frame_ctx.GetCurrentPhase()));
     active_frame_ctx_ = observer_ptr{ &frame_ctx };
   }
@@ -242,41 +273,21 @@ namespace oxygen::interop::module {
     return active_frame_ctx_.get() != nullptr;
   }
 
-  void ViewManager::OnSurfaceResized(graphics::Surface* surface) {
-    DLOG_SCOPE_FUNCTION(INFO);
-
+  void ViewManager::OnSurfaceResized(
+    const SurfaceRegistry::GuidKey& key, const graphics::Surface& surface) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (!surface) {
-      return;
-    }
-
-    uint32_t width = surface->Width();
-    uint32_t height = surface->Height();
-
-    // Try to get more accurate dimensions from backbuffer if available
-    auto back = surface->GetCurrentBackBuffer();
-    if (back) {
-      const auto& desc = back->GetDescriptor();
-      if (desc.width > 0 && desc.height > 0) {
-        width = desc.width;
-        height = desc.height;
-      }
-    }
-
-    LOG_F(INFO, "Surface {} resized to {}x{} (backbuffer={})", fmt::ptr(surface),
-      width, height, back ? "yes" : "no");
-
+    const auto [width, height] = SurfaceExtent(surface);
     for (auto& [id, entry] : views_) {
-      if (entry.view) {
-        const auto& config = entry.view->GetConfig();
-        if (config.compositing_target.has_value() &&
-          config.compositing_target.value() == surface) {
-          LOG_F(INFO, "Resizing view '{}' to {}x{}", config.name, width, height);
-          entry.view->Resize(width, height);
-        }
+      if (entry.view && entry.view->GetConfig().compositing_target == key) {
+        entry.view->Resize(width, height);
       }
     }
+  }
+
+  void ViewManager::UpdateCameraScene() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    camera_scene_->Update();
   }
 
   // EndFrame removed: FinalizeViews is used instead.
@@ -298,7 +309,7 @@ namespace oxygen::interop::module {
         ++registered_count;
       }
     }
-    DLOG_F(INFO,
+    DLOG_F(2,
       "ViewManager::FinalizeViews (registered_editor_view_intents={})",
       registered_count);
 

@@ -180,15 +180,10 @@ namespace Oxygen::Interop {
     native_cfg.height = static_cast<uint32_t>(cfg->Height);
     native_cfg.clear_color = cfg->ClearColor.ToNative();
 
-    // If caller supplied a compositing target GUID, try to resolve to a
-    // native surface pointer via the surface registry.
+    // The view names its surface by key; the engine thread resolves it every
+    // frame, so a released surface is never reached through a stale address.
     if (cfg->CompositingTarget.HasValue) {
-      auto key = ToGuidKey(cfg->CompositingTarget.Value);
-      auto registry = GetSurfaceRegistry();
-      auto surface = registry->FindSurface(key);
-      if (surface) {
-        native_cfg.compositing_target = surface.get();
-      }
+      native_cfg.compositing_target = ToGuidKey(cfg->CompositingTarget.Value);
     }
 
     // Prepare TaskCompletionSource for ViewIdManaged result and pin it.

@@ -54,6 +54,19 @@ namespace oxygen::interop::module {
     //! 16-byte key type used to identify registered surfaces.
     using GuidKey = std::array<std::uint8_t, 16>;
 
+    //! FNV-1a hash of a surface key, for keyed containers.
+    struct GuidHasher {
+      auto operator()(const GuidKey& key) const noexcept -> std::size_t {
+        std::size_t hash = 1469598103934665603ULL;
+        for (auto byte : key) {
+          hash ^= static_cast<std::size_t>(byte);
+          hash *= 1099511628211ULL;
+        }
+
+        return hash;
+      }
+    };
+
     //! The type of the callback invoked when a surface operation has been
     //! processed.
     using OnProcessed = std::function<void(bool)>;
@@ -152,26 +165,6 @@ namespace oxygen::interop::module {
         : std::shared_ptr<oxygen::graphics::Surface>();
     }
 
-    //! Check whether a raw surface pointer is present in the registry
-    /*!
-      This is a convenience method used by engine modules (e.g. the editor
-      compositor) which hold raw `graphics::Surface *` targets. It avoids
-      exposing callers to map keys and provides a cheap pointer-based
-      existence check.
-    */
-    auto ContainsSurface(const oxygen::graphics::Surface* surface) const -> bool {
-      if (surface == nullptr) {
-        return false;
-      }
-      std::scoped_lock lock(mutex_);
-      for (const auto& pair : entries_) {
-        if (pair.second.get() == surface) {
-          return true;
-        }
-      }
-      return false;
-    }
-
     auto SnapshotSurfaces() const -> std::vector<
       std::pair<GuidKey, std::shared_ptr<oxygen::graphics::Surface>>> {
       std::scoped_lock lock(mutex_);
@@ -263,18 +256,6 @@ namespace oxygen::interop::module {
     }
 
   private:
-    struct GuidHasher {
-      auto operator()(const GuidKey& key) const noexcept -> std::size_t {
-        std::size_t hash = 1469598103934665603ULL;
-        for (auto byte : key) {
-          hash ^= static_cast<std::size_t>(byte);
-          hash *= 1099511628211ULL;
-        }
-
-        return hash;
-      }
-    };
-
     mutable std::mutex mutex_;
     std::unordered_map<GuidKey, std::shared_ptr<oxygen::graphics::Surface>,
       GuidHasher>

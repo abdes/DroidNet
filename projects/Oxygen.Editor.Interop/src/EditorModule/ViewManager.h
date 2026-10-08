@@ -18,6 +18,7 @@
 #include <Oxygen/Core/Types/View.h>
 
 #include <EditorModule/EditorView.h>
+#include <EditorModule/SurfaceRegistry.h>
 
 namespace oxygen {
   namespace engine {
@@ -34,7 +35,7 @@ namespace oxygen::interop::module {
   public:
     using OnViewCreated = std::function<void(bool success, ViewId view_id)>;
 
-    ViewManager();
+    explicit ViewManager(const SurfaceRegistry& registry);
     ~ViewManager();
 
     OXYGEN_MAKE_NON_COPYABLE(ViewManager)
@@ -68,8 +69,12 @@ namespace oxygen::interop::module {
     // view publication is handled by EditorModule::OnPublishViews.
     void FinalizeViews();
 
-    // Called when a surface is resized to update dependent views
-    void OnSurfaceResized(graphics::Surface* surface);
+    //! Resizes the views presenting to the surface registered under `key`.
+    void OnSurfaceResized(
+      const SurfaceRegistry::GuidKey& key, const graphics::Surface& surface);
+
+    //! Propagates this frame's editor camera navigation to world transforms.
+    void UpdateCameraScene();
 
     // Accessors
     auto GetView(ViewId engine_id) -> EditorView*;
@@ -111,6 +116,10 @@ namespace oxygen::interop::module {
     // CreateViewNow.
 
 
+    const SurfaceRegistry& registry_;
+    //! Editor-only scene holding the views' navigation cameras. Declared
+    //! before the views so it outlives them.
+    std::shared_ptr<scene::Scene> camera_scene_;
     mutable std::mutex mutex_;
     // pending_creates_ removed; EditorModule manages command queuing.
     observer_ptr<engine::FrameContext> active_frame_ctx_{}; // non-owning pointer

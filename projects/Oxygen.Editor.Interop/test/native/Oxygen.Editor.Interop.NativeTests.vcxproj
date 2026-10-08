@@ -79,8 +79,15 @@
     <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Commands\SetMaterialOverrideCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
+    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\EditorModule\EditorView.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\EditorModule\NodeRegistry.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
     <ClCompile Include="src\AssetRequests_native_test.cpp" />
     <ClCompile Include="src\EditorCameraPlacement_native_test.cpp" />
+    <ClCompile Include="src\EditorViewCameraScene_native_test.cpp" />
     <ClCompile Include="src\EnvironmentCommand_native_test.cpp" />
     <ClCompile Include="src\InputAccumulator_native_test.cpp" />
   </ItemGroup>

@@ -51,7 +51,7 @@ namespace oxygen::interop::module {
   class SurfaceRegistry;
   class EditorCommand;
   class SceneAssetRequests;
-  class EditorCompositor;
+  class SurfaceFramebuffers;
 } // namespace oxygen::interop::module
 
 #include "EditorModule/InputAccumulator.h"
@@ -61,7 +61,6 @@ namespace oxygen::interop::module {
 namespace oxygen::interop::module {
 
   class InputAccumulatorAdapter;
-  class RenderGraph;
 
   //! One accepted physical source and its optional project-owned logical mount.
   struct CookedRootBinding {
@@ -133,12 +132,6 @@ namespace oxygen::interop::module {
       -> oxygen::co::Co<> override;
     auto OnCompositing(oxygen::observer_ptr<oxygen::engine::FrameContext> context)
       -> oxygen::co::Co<> override;
-
-    // Ensure framebuffers for all registered surfaces (creates depth textures
-    // and one framebuffer per backbuffer slot). Mirrors
-    // AppWindow::EnsureFramebuffers from the examples so editor behavior matches
-    // the sample exactly.
-    auto EnsureFramebuffers() -> bool;
 
     // Scene management API
     // Create scene and invoke optional completion callback on the engine thread
@@ -264,7 +257,7 @@ namespace oxygen::interop::module {
 
     // New Architecture Components
     std::unique_ptr<ViewManager> view_manager_;
-    std::unique_ptr<EditorCompositor> compositor_;
+    std::unique_ptr<SurfaceFramebuffers> framebuffers_;
     std::unique_ptr<InputAccumulator> input_accumulator_;
     std::unique_ptr<InputAccumulatorAdapter> input_accumulator_adapter_;
 

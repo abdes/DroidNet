@@ -26,6 +26,7 @@
 #include <EditorModule/EditorCameraPlacement.h>
 #include <EditorModule/EditorViewportCameraControlMode.h>
 #include <EditorModule/NodeRegistry.h>
+#include <EditorModule/SurfaceRegistry.h>
 
 namespace oxygen {
   class Graphics;
@@ -66,8 +67,6 @@ namespace oxygen::interop::module {
     kBack,
   };
 
-  class ViewRenderer;
-
   //! Pose that places a scene node at a view's editor camera, in the node's
   //! parent space, using the editor's Euler convention.
   struct EditorCameraPose {
@@ -104,17 +103,14 @@ namespace oxygen::interop::module {
     struct Config {
       std::string name;
       std::string purpose;
-      std::optional<graphics::Surface*> compositing_target;
+      //! Key of the registered surface the view presents to.
+      std::optional<SurfaceRegistry::GuidKey> compositing_target;
 
-      // Compositing target dimensions have higher priority. Defaults are 1x1 to
-      // prevent invalid textures but still indicate a misconfigured view.
-      uint32_t width = 1;  // Fallback width if no compositing target
-      uint32_t height = 1; // Fallback height if no compositing target
+      // Initial extent; the view follows its surface's size once it has one.
+      // Defaults are 1x1 to prevent invalid textures.
+      uint32_t width = 1;
+      uint32_t height = 1;
       graphics::Color clear_color{ 0.1f, 0.2f, 0.38f, 1.0f };
-
-      // Resolves actual extent from compositing target if available, otherwise
-      // uses configured width/height
-      auto ResolveExtent() const -> SubPixelExtent;
     };
 
     explicit EditorView(Config config);
@@ -129,7 +125,11 @@ namespace oxygen::interop::module {
       ClearPhaseRecorder(); // Clear phase-specific pointers after OnSceneMutation
 
     // Phase hooks
-    void Initialize(scene::Scene& scene);
+    //! Binds the authored scene the view renders and creates the editor
+    //! camera in `camera_scene`, which is editor-owned and outlives scene
+    //! replacement.
+    void Initialize(scene::Scene& scene, scene::Scene& camera_scene);
+    //! Renders a replacement authored scene; the editor camera keeps its pose.
     void RetargetScene(scene::Scene& scene);
     void OnSceneMutation(); // Uses context from SetRenderingContext
     auto OnPreRender(vortex::Renderer& renderer) -> oxygen::co::Co<>;
@@ -187,10 +187,6 @@ namespace oxygen::interop::module {
     //! Pose that would place `node` at this view's editor camera.
     [[nodiscard]] auto ResolveEditorCameraPose(scene::SceneNode& node) const
       -> std::optional<EditorCameraPose>;
-    [[nodiscard]] auto GetColorTexture() const
-      -> std::shared_ptr<graphics::Texture> {
-      return color_texture_;
-    }
     [[nodiscard]] auto GetFramebuffer() const
       -> std::shared_ptr<graphics::Framebuffer> {
       return framebuffer_;
@@ -248,14 +244,6 @@ namespace oxygen::interop::module {
       float near_plane,
       float far_plane) noexcept;
 
-    // Renderer registration
-    void RegisterWithRenderer(vortex::Renderer& renderer);
-    void UnregisterFromRenderer(vortex::Renderer& renderer);
-
-    // Render graph customization
-    void
-      SetRenderGraph(std::shared_ptr<vortex::Renderer::RenderGraphFactory> factory);
-
   public:
     //! Gets the current orthographic half-height used to derive extents.
     auto GetOrthoHalfHeight() const noexcept -> float;
@@ -267,7 +255,7 @@ namespace oxygen::interop::module {
     void ResizeIfNeeded();
     void ResizeIfNeeded(Graphics& graphics);
     // Camera setup helpers (all scene mutations happen here)
-    void CreateCamera(scene::Scene& scene);
+    void CreateCamera(scene::Scene& camera_scene);
     void UpdateCameraForFrame();
     void ResolveSceneCamera(scene::Scene& scene);
     void BeginPilot();
@@ -307,13 +295,9 @@ namespace oxygen::interop::module {
     std::shared_ptr<graphics::Texture> depth_texture_;
     std::shared_ptr<graphics::Framebuffer> framebuffer_;
 
-    // Rendering
-    std::unique_ptr<ViewRenderer> renderer_;
-    std::shared_ptr<vortex::Renderer::RenderGraphFactory> render_graph_factory_;
-
     std::weak_ptr<Graphics> graphics_;
     std::weak_ptr<scene::Scene> scene_;
-    oxygen::observer_ptr<vortex::Renderer> renderer_module_{ nullptr };
+    std::weak_ptr<scene::Scene> camera_scene_;
 
     // Phase-specific context (valid only during OnSceneMutation)
     const EditorViewContext* current_context_{ nullptr };

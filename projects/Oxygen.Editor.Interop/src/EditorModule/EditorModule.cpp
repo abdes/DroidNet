@@ -24,11 +24,11 @@
 #include <Commands/SetViewScenePilotCommand.h>
 #include <Commands/ShowViewCommand.h>
 #include <EditorModule/EditorCommand.h>
-#include <EditorModule/EditorCompositor.h>
 #include <EditorModule/EditorModule.h>
 #include <EditorModule/EditorViewportNavigation.h>
 #include <EditorModule/InputAccumulatorAdapter.h>
 #include <EditorModule/NodeRegistry.h>
+#include <EditorModule/SurfaceFramebuffers.h>
 #include <EditorModule/SurfaceRegistry.h>
 
 #include <Oxygen/Content/AssetLoader.h>
@@ -161,7 +161,7 @@ namespace oxygen::interop::module {
       throw std::invalid_argument(
         "EditorModule requires a non-null surface registry.");
     }
-    view_manager_ = std::make_unique<ViewManager>();
+    view_manager_ = std::make_unique<ViewManager>(*registry_);
     input_accumulator_ = std::make_unique<InputAccumulator>();
     viewport_navigation_ = std::make_unique<EditorViewportNavigation>();
   }
@@ -196,10 +196,7 @@ namespace oxygen::interop::module {
       std::make_unique<InputAccumulatorAdapter>(std::move(writer));
 
     graphics_ = engine->GetGraphics();
-    if (auto gfx = graphics_.lock()) {
-      compositor_ =
-        std::make_unique<EditorCompositor>(gfx, *view_manager_, *registry_);
-    }
+    framebuffers_ = std::make_unique<SurfaceFramebuffers>(graphics_);
 
     // Keep a non-owning reference to the engine so we can access other
     // engine modules (renderer) during command recording.
@@ -291,7 +288,7 @@ namespace oxygen::interop::module {
       const bool has_keys = !batch.key_events.empty();
       const bool has_buttons = !batch.button_events.empty();
       if (has_mouse || has_wheel || has_keys || has_buttons) {
-        LOG_F(INFO,
+        DLOG_F(2,
           "EditorModule input: draining+dispatching view={} mouse(dx={},dy={}) wheel(dx={},dy={}) keys={} buttons={} pos(x={},y={})",
           view_id.get(),
           batch.mouse_delta.dx, batch.mouse_delta.dy,
@@ -455,6 +452,9 @@ namespace oxygen::interop::module {
       auto& cb = entry.second.second;
 
       CHECK_NOTNULL_F(surface);
+      if (framebuffers_) {
+        framebuffers_->Invalidate(key);
+      }
       try {
         gfx->RegisterDeferredRelease(std::move(surface));
       }
@@ -477,54 +477,50 @@ namespace oxygen::interop::module {
     auto snapshot = registry_->SnapshotSurfaces();
     std::vector<std::shared_ptr<graphics::Surface>> surfaces;
     surfaces.reserve(snapshot.size());
-    for (const auto& pair : snapshot) {
-      const auto& key = pair.first;
-      const auto& surface = pair.second;
-
+    std::vector<std::pair<SurfaceRegistry::GuidKey, graphics::Surface*>> resizing;
+    for (const auto& [key, surface] : snapshot) {
       CHECK_NOTNULL_F(surface);
-
-      // If a resize was requested by the caller, apply it explicitly here
       if (surface->ShouldResize()) {
-        DLOG_F(INFO, "Applying resize for a surface (ptr={}).",
-          fmt::ptr(surface.get()));
+        resizing.emplace_back(key, surface.get());
+      }
+      surfaces.emplace_back(surface);
+    }
 
-        if (!graphics_.expired()) {
-          auto gfx = graphics_.lock();
-          try {
-            gfx->FlushCommandQueues();
-          }
-          catch (...) {
-            DLOG_F(WARNING,
-              "Graphics::FlushCommandQueues threw during pre-resize; continuing.");
-          }
-        }
+    if (resizing.empty()) {
+      return surfaces;
+    }
 
-        // Note: EditorView and EditorCompositor resources should be released or
-        // resized in response to surface resize.
-        if (compositor_) {
-          compositor_->CleanupSurface(*surface);
-        }
+    // A swap chain cannot resize while the GPU still holds its backbuffers. One
+    // flush covers every surface resized this frame (a splitter drag resizes
+    // several panes together).
+    if (const auto gfx = graphics_.lock()) {
+      try {
+        gfx->FlushCommandQueues();
+      }
+      catch (...) {
+        DLOG_F(WARNING,
+          "Graphics::FlushCommandQueues threw during pre-resize; continuing.");
+      }
+    }
 
-        surface->Resize();
-
-        if (view_manager_) {
-          view_manager_->OnSurfaceResized(surface.get());
-        }
-
-        auto resize_callbacks = registry_->DrainResizeCallbacks(key);
-        auto back = surface->GetCurrentBackBuffer();
-        bool ok = (back != nullptr);
-        for (auto& rcb : resize_callbacks) {
-          try {
-            rcb(ok);
-          }
-          catch (...) {
-            /* swallow */
-          }
-        }
+    for (const auto& [key, surface] : resizing) {
+      DLOG_F(INFO, "Applying resize for surface '{}'.", surface->GetName());
+      if (framebuffers_) {
+        framebuffers_->Invalidate(key);
       }
 
-      surfaces.emplace_back(surface);
+      surface->Resize();
+      view_manager_->OnSurfaceResized(key, *surface);
+
+      const bool ok = surface->GetCurrentBackBuffer() != nullptr;
+      for (auto& callback : registry_->DrainResizeCallbacks(key)) {
+        try {
+          callback(ok);
+        }
+        catch (...) {
+          /* swallow */
+        }
+      }
     }
 
     return surfaces;
@@ -690,111 +686,51 @@ namespace oxygen::interop::module {
         view->SyncPilotedCamera();
         view->ClearPhaseRecorder();
       }
+      view_manager_->UpdateCameraScene();
     }
     co_return;
   }
 
   auto EditorModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
     -> co::Co<> {
-    if (preview_paused_) {
-      co_return;
-    }
-    if (context == nullptr || engine_ == nullptr || !view_manager_ || !compositor_) {
-      co_return;
-    }
-
-    if (graphics_.expired()) {
+    if (preview_paused_ || context == nullptr || engine_ == nullptr
+      || !view_manager_) {
       co_return;
     }
 
     auto renderer_opt = engine_->GetModule<oxygen::vortex::Renderer>();
-    if (!renderer_opt.has_value()) {
-      co_return;
-    }
-
-    auto gfx = graphics_.lock();
-    if (!gfx) {
+    const auto gfx = graphics_.lock();
+    if (!renderer_opt.has_value() || !gfx) {
       co_return;
     }
 
     auto& renderer = renderer_opt->get();
-    auto registered_views = view_manager_->GetAllRegisteredViews();
-    if (registered_views.empty()) {
-      LOG_F(INFO, "EditorModule::OnPublishViews: no registered editor views");
-      co_return;
-    }
-
-    auto surfaces = registry_->SnapshotSurfaces();
-    LOG_F(INFO, "EditorModule::OnPublishViews: registered_views={} surfaces={}",
-      registered_views.size(), surfaces.size());
-    const auto find_target_surface =
-      [&surfaces](const graphics::Surface* target)
-      -> std::shared_ptr<graphics::Surface> {
-      if (target == nullptr) {
-        return {};
-      }
-      for (const auto& [_, surface] : surfaces) {
-        if (surface.get() == target) {
-          return surface;
-        }
-      }
-      return {};
-    };
-
-    for (auto* view : registered_views) {
-      if (!view || !view->IsVisible()) {
-        LOG_F(INFO,
-          "EditorModule::OnPublishViews: skipping null/hidden editor view");
-        continue;
-      }
-
-      const auto intent_view_id = view->GetViewId();
-      if (intent_view_id == kInvalidViewId) {
-        LOG_F(INFO,
-          "EditorModule::OnPublishViews: view '{}' has invalid intent id",
-          view->GetName());
+    for (auto* view : view_manager_->GetAllRegisteredViews()) {
+      if (view == nullptr || !view->IsVisible()
+        || view->GetViewId() == kInvalidViewId) {
         continue;
       }
 
       const auto& config = view->GetConfig();
       if (!config.compositing_target.has_value()
-        || config.compositing_target.value() == nullptr) {
-        LOG_F(INFO,
-          "EditorModule::OnPublishViews: view '{}' has no compositing target",
-          view->GetName());
-        continue;
-      }
-
-      auto* target_surface_raw = config.compositing_target.value();
-      auto target_surface = find_target_surface(target_surface_raw);
-      if (!target_surface) {
-        LOG_F(INFO,
-          "OnPublishViews: view '{}' targets an unregistered surface; skipping",
+        || !registry_->FindSurface(*config.compositing_target)) {
+        DLOG_F(2, "OnPublishViews: view '{}' has no registered surface",
           view->GetName());
         continue;
       }
 
       view->EnsureRenderTarget(*gfx);
       const auto scene_fb = view->GetFramebuffer();
-      if (!scene_fb) {
-        LOG_F(INFO, "OnPublishViews: no scene framebuffer for view '{}'",
-          view->GetName());
-        continue;
-      }
-
       const auto width = view->GetWidth();
       const auto height = view->GetHeight();
-      if (width <= 0.0F || height <= 0.0F) {
-        LOG_F(INFO,
-          "EditorModule::OnPublishViews: view '{}' has invalid extent {}x{}",
-          view->GetName(), width, height);
-        continue;
-      }
-
       const auto camera_node = view->GetRenderCameraNode();
-      if (!camera_node.IsAlive()) {
-        LOG_F(INFO, "OnPublishViews: view '{}' has no live camera; skipping",
-          view->GetName());
+      if (!scene_fb || width <= 0.0F || height <= 0.0F
+        || !camera_node.IsAlive()) {
+        DLOG_F(2,
+          "OnPublishViews: view '{}' is not ready (framebuffer={}, extent={}x{}, "
+          "camera={})",
+          view->GetName(), scene_fb != nullptr, width, height,
+          camera_node.IsAlive());
         continue;
       }
 
@@ -814,8 +750,8 @@ namespace oxygen::interop::module {
         .bottom = static_cast<int32_t>(height),
       };
 
-      auto composition_view =
-        vortex::CompositionView::ForScene(intent_view_id, view_desc, camera_node);
+      auto composition_view = vortex::CompositionView::ForScene(
+        view->GetViewId(), view_desc, camera_node);
       composition_view.name = config.name;
       composition_view.clear_color = config.clear_color;
       composition_view.with_atmosphere = true;
@@ -831,11 +767,9 @@ namespace oxygen::interop::module {
           .composite_source = observer_ptr { scene_fb.get() },
         },
         vortex::ShadingMode::kDeferred);
-      LOG_F(INFO,
-        "EditorModule::OnPublishViews: published editor view '{}' intent={} "
-        "published={} extent={}x{} scene_fb={}",
-        view->GetName(), intent_view_id.get(), published_view_id.get(), width,
-        height, fmt::ptr(scene_fb.get()));
+      DLOG_F(2, "OnPublishViews: view '{}' intent={} published={} extent={}x{}",
+        view->GetName(), view->GetViewId().get(), published_view_id.get(),
+        width, height);
     }
 
     co_return;
@@ -848,9 +782,6 @@ namespace oxygen::interop::module {
     if (context == nullptr) {
       co_return;
     }
-    // Ensure framebuffers are created for all surfaces
-    EnsureFramebuffers();
-
     if (engine_ && view_manager_) {
       auto renderer_opt = engine_->GetModule<oxygen::vortex::Renderer>();
       if (renderer_opt.has_value()) {
@@ -895,128 +826,63 @@ namespace oxygen::interop::module {
   }
 
   auto EditorModule::OnCompositing(observer_ptr<engine::FrameContext> context) -> co::Co<> {
-    if (preview_paused_) {
-      co_return;
-    }
-    if (context == nullptr || engine_ == nullptr || !view_manager_ || !compositor_) {
-      LOG_F(INFO,
-        "EditorModule::OnCompositing: missing context/engine/view_manager/"
-        "compositor");
+    if (preview_paused_ || context == nullptr || engine_ == nullptr
+      || !view_manager_ || !framebuffers_) {
       co_return;
     }
 
     auto renderer_opt = engine_->GetModule<oxygen::vortex::Renderer>();
     if (!renderer_opt.has_value()) {
-      LOG_F(INFO, "EditorModule::OnCompositing: Vortex renderer not available");
       co_return;
     }
 
-    auto surfaces = registry_->SnapshotSurfaces();
-    auto registered_views = view_manager_->GetAllRegisteredViews();
-    LOG_F(INFO, "EditorModule::OnCompositing: registered_views={} surfaces={}",
-      registered_views.size(), surfaces.size());
-    const auto find_target_surface =
-      [&surfaces](const graphics::Surface* target)
-      -> std::shared_ptr<graphics::Surface> {
-      if (target == nullptr) {
-        return {};
-      }
-      for (const auto& [_, surface] : surfaces) {
-        if (surface.get() == target) {
-          return surface;
-        }
-      }
-      return {};
-    };
-
     auto& renderer = renderer_opt->get();
-    for (auto* view : registered_views) {
-      if (!view || !view->IsVisible()) {
-        LOG_F(INFO,
-          "EditorModule::OnCompositing: skipping null/hidden editor view");
-        continue;
-      }
-
-      const auto intent_view_id = view->GetViewId();
-      if (intent_view_id == kInvalidViewId) {
-        LOG_F(INFO,
-          "EditorModule::OnCompositing: view '{}' has invalid intent id",
-          view->GetName());
-        continue;
-      }
-
-      const auto published_view_id =
-        renderer.ResolvePublishedRuntimeViewId(intent_view_id);
-      if (published_view_id == kInvalidViewId) {
-        LOG_F(INFO,
-          "OnCompositing: view '{}' has no published runtime view; skipping",
-          view->GetName());
+    for (auto* view : view_manager_->GetAllRegisteredViews()) {
+      if (view == nullptr || !view->IsVisible()
+        || view->GetViewId() == kInvalidViewId
+        || renderer.ResolvePublishedRuntimeViewId(view->GetViewId())
+          == kInvalidViewId) {
         continue;
       }
 
       const auto& config = view->GetConfig();
-      if (!config.compositing_target.has_value()
-        || config.compositing_target.value() == nullptr) {
-        LOG_F(INFO,
-          "EditorModule::OnCompositing: view '{}' has no compositing target",
-          view->GetName());
+      if (!config.compositing_target.has_value()) {
         continue;
       }
-
-      auto* target_surface_raw = config.compositing_target.value();
-      auto target_surface = find_target_surface(target_surface_raw);
+      const auto& key = *config.compositing_target;
+      auto target_surface = registry_->FindSurface(key);
       if (!target_surface) {
-        LOG_F(INFO,
-          "OnCompositing: view '{}' targets an unregistered surface; skipping",
-          view->GetName());
         continue;
       }
 
-      auto target_fb = compositor_->GetCurrentFramebufferForSurface(
-        *target_surface_raw);
-      if (!target_fb) {
-        LOG_F(INFO,
-          "OnCompositing: no current presentation framebuffer for view '{}'",
-          view->GetName());
-        continue;
-      }
-
+      auto target_fb = framebuffers_->GetCurrent(key, *target_surface);
       const auto width = view->GetWidth();
       const auto height = view->GetHeight();
-      if (width <= 0.0F || height <= 0.0F) {
-        LOG_F(INFO,
-          "EditorModule::OnCompositing: view '{}' has invalid extent {}x{}",
-          view->GetName(), width, height);
+      if (!target_fb || width <= 0.0F || height <= 0.0F) {
+        DLOG_F(2, "OnCompositing: view '{}' has no target or extent",
+          view->GetName());
         continue;
       }
 
-      const ViewPort viewport {
-        .top_left_x = 0.0F,
-        .top_left_y = 0.0F,
-        .width = width,
-        .height = height,
-        .min_depth = 0.0F,
-        .max_depth = 1.0F,
-      };
-
-      const auto* target_fb_raw = target_fb.get();
       renderer.RegisterRuntimeComposition(
         vortex::Renderer::RuntimeCompositionInput {
           .layers = {
             vortex::Renderer::RuntimeCompositionLayer {
-              .intent_view_id = intent_view_id,
-              .viewport = viewport,
+              .intent_view_id = view->GetViewId(),
+              .viewport = ViewPort {
+                .top_left_x = 0.0F,
+                .top_left_y = 0.0F,
+                .width = width,
+                .height = height,
+                .min_depth = 0.0F,
+                .max_depth = 1.0F,
+              },
               .opacity = 1.0F,
             },
           },
           .composite_target = std::move(target_fb),
           .target_surface = std::move(target_surface),
         });
-      LOG_F(INFO,
-        "EditorModule::OnCompositing: registered composition for view '{}' "
-        "intent={} published={} surface={} target_fb={} viewport={}x{}",
-        view->GetName(), intent_view_id.get(), published_view_id.get(),
-        fmt::ptr(target_surface_raw), fmt::ptr(target_fb_raw), width, height);
     }
 
     co_return;
@@ -1064,17 +930,6 @@ namespace oxygen::interop::module {
     if (view_manager_) {
       view_manager_->RetargetAllViews(*scene_);
     }
-  }
-
-  auto EditorModule::EnsureFramebuffers() -> bool {
-    auto snapshot = registry_->SnapshotSurfaces();
-    for (const auto& p : snapshot) {
-      const auto& surface = p.second;
-      if (surface) {
-        compositor_->EnsureFramebuffersForSurface(*surface);
-      }
-    }
-    return true;
   }
 
   void EditorModule::CreateViewAsync(EditorView::Config config,

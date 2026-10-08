@@ -71,7 +71,7 @@
     <ClCompile Include="EditorModule\CommandFactory.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="EditorModule\EditorCompositor.cpp">
+    <ClCompile Include="EditorModule\SurfaceFramebuffers.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
     <ClCompile Include="EditorModule\EditorModule.cpp">
@@ -110,13 +110,7 @@
     <ClCompile Include="EditorModule\NodeRegistry.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
-    <ClCompile Include="EditorModule\RenderGraph.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
     <ClCompile Include="EditorModule\ViewManager.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
-    <ClCompile Include="EditorModule\ViewRenderer.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
     <ClCompile Include="EngineRunner.cpp">
@@ -212,7 +206,7 @@
     <ClInclude Include="EditorModule\CommandFactory.h" />
     <ClInclude Include="EditorModule\SceneAssetRequests.h" />
     <ClInclude Include="EditorModule\EditorCommand.h" />
-    <ClInclude Include="EditorModule\EditorCompositor.h" />
+    <ClInclude Include="EditorModule\SurfaceFramebuffers.h" />
     <ClInclude Include="EditorModule\EditorModule.h" />
     <ClInclude Include="EditorModule\EditorViewportNavigation.h" />
     <ClInclude Include="EditorModule\EditorViewportCameraControlMode.h" />
@@ -227,7 +221,6 @@
     <ClInclude Include="EditorModule\InputAccumulator.h" />
     <ClInclude Include="EditorModule\InputAccumulatorAdapter.h" />
     <ClInclude Include="EditorModule\NodeRegistry.h" />
-    <ClInclude Include="EditorModule\RenderGraph.h" />
     <ClInclude Include="EditorModule\SurfaceRegistry.h" />
     <ClInclude Include="Input\OxygenInput.h" />
     <ClInclude Include="LogHandler.h" />
@@ -241,7 +234,6 @@
     <ClInclude Include="Views\ViewCameraPoseManaged.h" />
     <ClInclude Include="EditorModule\ThreadSafeQueue.h" />
     <ClInclude Include="EditorModule\ViewManager.h" />
-    <ClInclude Include="EditorModule\ViewRenderer.h" />
     <ClInclude Include="EngineContext.h" />
     <ClInclude Include="EngineRunner.h" />
     <ClInclude Include="RenderThreadContext.h" />

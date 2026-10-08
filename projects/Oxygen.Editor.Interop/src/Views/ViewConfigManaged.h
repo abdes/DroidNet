@@ -23,10 +23,8 @@ namespace Oxygen::Interop {
   /// <summary>
   /// Managed mirror of <c>oxygen::interop::module::EditorView::Config</c>.
   /// Represents the configuration used to create views from managed callers.
-  /// Note: the managed compositing target is represented as an optional
-  /// <see cref="System::Guid"/> (surface id). Mapping a Guid to a native
-  /// surface pointer is performed by the caller (EngineRunner / surface
-  /// registry) and is intentionally not done inside this DTO.
+  /// The compositing target is the optional surface id, carried natively as
+  /// the surface registry key.
   /// </summary>
   public
   ref class ViewConfigManaged sealed {
@@ -65,9 +63,13 @@ namespace Oxygen::Interop {
       m->Height = n.height;
       m->ClearColor = ColorManaged::FromNative(n.clear_color);
 
-      // compositing_target is a native pointer -> we cannot directly convert
-      // it to a GUID here. Leave CompositingTarget empty.
-      m->CompositingTarget = System::Nullable<Guid>();
+      if (n.compositing_target.has_value()) {
+        auto bytes = gcnew cli::array<System::Byte>(16);
+        for (int i = 0; i < 16; ++i) {
+          bytes[i] = (*n.compositing_target)[static_cast<std::size_t>(i)];
+        }
+        m->CompositingTarget = Guid(bytes);
+      }
 
       return m;
     }
@@ -80,11 +82,14 @@ namespace Oxygen::Interop {
       n.height = Height;
       n.clear_color = ClearColor.ToNative();
 
-      // NOTE: CompositingTarget is represented on managed side as a GUID. The
-      // mapping of GUID -> native surface pointer is performed by the
-      // EngineRunner / SurfaceRegistry when creating the view. For now we
-      // leave compositing_target unset here (it will be handled by the caller).
-      n.compositing_target = std::optional<native::graphics::Surface*>();
+      if (CompositingTarget.HasValue) {
+        auto bytes = CompositingTarget.Value.ToByteArray();
+        native::interop::module::SurfaceRegistry::GuidKey key {};
+        for (int i = 0; i < 16; ++i) {
+          key[static_cast<std::size_t>(i)] = bytes[i];
+        }
+        n.compositing_target = key;
+      }
 
       return n;
     }

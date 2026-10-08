@@ -18,7 +18,7 @@
     <ClCompile Include="EngineRunner_views.cpp" />
     <ClCompile Include="RenderThreadContext.cpp" />
     <ClCompile Include="UiThreadDispatcher.cpp" />
-    <ClCompile Include="EditorModule\EditorCompositor.cpp">
+    <ClCompile Include="EditorModule\SurfaceFramebuffers.cpp">
       <Filter>EditorModule</Filter>
     </ClCompile>
     <ClCompile Include="EditorModule\EditorView.cpp">
@@ -30,13 +30,7 @@
     <ClCompile Include="EditorModule\NodeRegistry.cpp">
       <Filter>EditorModule</Filter>
     </ClCompile>
-    <ClCompile Include="EditorModule\RenderGraph.cpp">
-      <Filter>EditorModule</Filter>
-    </ClCompile>
     <ClCompile Include="EditorModule\ViewManager.cpp">
-      <Filter>EditorModule</Filter>
-    </ClCompile>
-    <ClCompile Include="EditorModule\ViewRenderer.cpp">
       <Filter>EditorModule</Filter>
     </ClCompile>
     <ClCompile Include="World\OxygenWorld.cpp">
@@ -182,9 +176,6 @@
     <ClInclude Include="EditorModule\NodeRegistry.h">
       <Filter>EditorModule</Filter>
     </ClInclude>
-    <ClInclude Include="EditorModule\RenderGraph.h">
-      <Filter>EditorModule</Filter>
-    </ClInclude>
     <ClInclude Include="World\OxygenWorld.h">
       <Filter>World</Filter>
     </ClInclude>
@@ -208,13 +199,10 @@
     <ClInclude Include="EditorModule\ViewManager.h">
       <Filter>EditorModule</Filter>
     </ClInclude>
-    <ClInclude Include="EditorModule\ViewRenderer.h">
-      <Filter>EditorModule</Filter>
-    </ClInclude>
     <ClInclude Include="Views\ColorManaged.h">
       <Filter>Views</Filter>
     </ClInclude>
-    <ClInclude Include="EditorModule\EditorCompositor.h">
+    <ClInclude Include="EditorModule\SurfaceFramebuffers.h">
       <Filter>EditorModule</Filter>
     </ClInclude>
     <ClInclude Include="Utils\TokenHelpers.h">

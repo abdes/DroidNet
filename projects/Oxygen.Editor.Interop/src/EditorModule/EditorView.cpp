@@ -19,7 +19,6 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 #include "EditorModule/EditorCameraPlacement.h"
-#include "EditorModule/ViewRenderer.h"
 
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
@@ -226,43 +225,10 @@ auto ApplyPerspectiveProjectionSettings(scene::PerspectiveCamera& camera,
 
 } // namespace
 
-auto EditorView::Config::ResolveExtent() const -> SubPixelExtent {
-  if (compositing_target.has_value() && compositing_target.value()) {
-    auto *surface = compositing_target.value();
-    float w = static_cast<float>(surface->Width());
-    float h = static_cast<float>(surface->Height());
-
-    // Try to get more accurate dimensions from backbuffer if available
-    auto back = surface->GetCurrentBackBuffer();
-    if (back) {
-      const auto &desc = back->GetDescriptor();
-      if (desc.width > 0 && desc.height > 0) {
-        w = static_cast<float>(desc.width);
-        h = static_cast<float>(desc.height);
-      }
-    }
-    return {.width = w, .height = h};
-  }
-
-  // Warn about misconfigured views using default 1x1 dimensions
-  if (width == 1 && height == 1) {
-    LOG_F(WARNING,
-          "View '{}' has no compositing target and is using default 1x1 "
-          "dimensions. This likely indicates a misconfigured view.",
-          name);
-  }
-
-  return {.width = static_cast<float>(width),
-          .height = static_cast<float>(height)};
-}
-
-EditorView::EditorView(Config config) : config_(std::move(config)) {
-  renderer_ = std::make_unique<ViewRenderer>();
-
-  // Initialize dimensions from config
-  auto extent = config_.ResolveExtent();
-  width_ = extent.width;
-  height_ = extent.height;
+EditorView::EditorView(Config config)
+  : config_(std::move(config))
+  , width_(static_cast<float>(config_.width))
+  , height_(static_cast<float>(config_.height)) {
 }
 
 EditorView::~EditorView() {
@@ -297,13 +263,14 @@ void EditorView::SetRenderingContext(const EditorViewContext &ctx) {
 
 void EditorView::ClearPhaseRecorder() { current_context_ = nullptr; }
 
-void EditorView::Initialize(scene::Scene &scene) {
+void EditorView::Initialize(scene::Scene &scene, scene::Scene &camera_scene) {
   if (state_ != ViewState::kCreating) {
     return;
   }
 
-  // Store scene reference for later use
   scene_ = scene.weak_from_this();
+  camera_scene_ = camera_scene.weak_from_this();
+  CreateCamera(camera_scene);
 
   state_ = ViewState::kReady;
   LOG_F(INFO, "EditorView '{}' initialized.", config_.name);
@@ -314,14 +281,13 @@ void EditorView::RetargetScene(scene::Scene& scene) {
     return;
   }
 
+  // The editor camera lives in the camera scene and keeps its pose; only the
+  // authored camera the view looked through belonged to the old scene.
   scene_ = scene.weak_from_this();
-  camera_node_ = {};
   scene_camera_id_.reset();
   scene_camera_node_ = {};
   pilot_requested_ = false;
   pilot_active_ = false;
-  initial_orientation_set_ = false;
-  initial_scene_frame_applied_ = false;
   if (state_ == ViewState::kReleasing) {
     state_ = ViewState::kReady;
   }
@@ -343,11 +309,6 @@ void EditorView::OnSceneMutation() {
   auto scn = scene_.lock();
   if (!scn) {
     return;
-  }
-
-  // Create camera if this is the first time
-  if (!camera_node_.IsAlive()) {
-    CreateCamera(*scn);
   }
 
   // Update camera for this frame
@@ -424,17 +385,11 @@ void EditorView::ReleaseResources() {
       graphics::DeferredObjectRelease(framebuffer_, reclaimer);
   }
 
-  // Unregister from engine if we have the renderer
-  if (renderer_ && renderer_module_) {
-    renderer_->UnregisterFromEngine(*renderer_module_);
-  }
-  renderer_module_ = nullptr;
-
   // Detach camera and destroy node
   if (camera_node_.IsAlive()) {
     camera_node_.DetachCamera();
-    if (auto scn = scene_.lock()) {
-      scn->DestroyNode(camera_node_);
+    if (auto cameras = camera_scene_.lock()) {
+      cameras->DestroyNode(camera_node_);
     }
   }
 
@@ -523,9 +478,8 @@ void EditorView::ResizeIfNeeded(Graphics& gfx) {
   }
 }
 
-void EditorView::CreateCamera(scene::Scene &scene) {
-  // Create camera node in the scene
-  camera_node_ = scene.CreateNode(config_.name + "_Camera");
+void EditorView::CreateCamera(scene::Scene &camera_scene) {
+  camera_node_ = camera_scene.CreateNode(config_.name + "_Camera");
 
   auto camera = std::make_unique<scene::PerspectiveCamera>();
   const float aspect =
@@ -994,40 +948,6 @@ auto EditorView::SetOrthoHalfHeight(const float half_height) noexcept -> void {
     return;
   }
   ortho_half_height_ = std::max(0.001f, half_height);
-}
-
-void EditorView::RegisterWithRenderer(vortex::Renderer &renderer) {
-  if (view_id_ == kInvalidViewId) {
-    return;
-  }
-
-  // Store renderer for cleanup
-  renderer_module_ = oxygen::observer_ptr<vortex::Renderer>(&renderer);
-
-  if (renderer_) {
-    scene::SceneNode node = GetRenderCameraNode();
-    std::optional<ViewPort> viewport_override;
-    if (current_context_) {
-      viewport_override =
-        current_context_->frame_context.GetViewContext(view_id_).view.viewport;
-    }
-    vortex::SceneCameraViewResolver scene_resolver(
-        [node](const ViewId &) { return node; }, viewport_override);
-    auto resolved_view = scene_resolver(view_id_);
-
-    renderer_->RegisterWithEngine(renderer, view_id_, std::move(resolved_view));
-  }
-}
-
-void EditorView::UnregisterFromRenderer(vortex::Renderer &renderer) {
-  if (renderer_) {
-    renderer_->UnregisterFromEngine(renderer);
-  }
-}
-
-void EditorView::SetRenderGraph(
-    std::shared_ptr<vortex::Renderer::RenderGraphFactory> factory) {
-  render_graph_factory_ = std::move(factory);
 }
 
 } // namespace oxygen::interop::module
