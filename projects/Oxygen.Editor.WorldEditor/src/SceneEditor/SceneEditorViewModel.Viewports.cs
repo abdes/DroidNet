@@ -4,8 +4,6 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DroidNet.Aura.Settings;
-using DroidNet.Config;
 using DryIoc;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Projects;
@@ -58,13 +56,6 @@ public partial class SceneEditorViewModel
         this.ApplyFocusedViewportFlags();
         this.SaveViewportState();
     }
-
-    private static ViewportPaneState CapturePane(ViewportViewModel viewport)
-        => new(
-            viewport.CameraType,
-            viewport.CameraControlMode,
-            ViewportCameraState.From(viewport.EditorCamera),
-            viewport.SceneCamera?.NodeId);
 
     partial void OnCurrentLayoutChanging(SceneViewLayout value)
     {
@@ -151,6 +142,7 @@ public partial class SceneEditorViewModel
         {
             var viewport = this.Viewports[i];
             viewport.IsMaximized = false;
+            viewport.CurrentLayout = targetLayout;
 
             // The first viewport is considered the main camera
             viewport.UpdateLayoutMetadata(i, i == 0);
@@ -166,11 +158,11 @@ public partial class SceneEditorViewModel
             this.engineService,
             this.operationResults,
             this.statusReducer,
-            this.container.Resolve<ISettingsService<IAppearanceSettings>>(),
             this.loggerFactory);
         viewport.ToggleMaximizeCommand = new RelayCommand(() => this.ToggleMaximize(viewport));
         viewport.OnLayoutRequested = requestedLayout => this.ChangeLayoutCommand.Execute(requestedLayout);
         viewport.PilotStarting = this.StopOtherPilotsAsync;
+        viewport.NodeCountProvider = () => this.scene?.AllNodes.Count() ?? 0;
         this.AttachCameraServices(viewport);
         return viewport;
     }
@@ -187,7 +179,7 @@ public partial class SceneEditorViewModel
             }
         }
 
-        viewport.RestoreState(pane.CameraType, pane.ControlMode, pane.EditorCamera?.ToRuntime(), camera);
+        viewport.RestoreState(pane, camera);
     }
 
     private void ReleaseViewport(ViewportViewModel viewport)
@@ -297,7 +289,7 @@ public partial class SceneEditorViewModel
         states.Update(
             project,
             this.Metadata.DocumentId,
-            new SceneViewportState(this.CurrentLayout, Math.Max(focused, 0), [.. this.Viewports.Select(CapturePane)]));
+            new SceneViewportState(this.CurrentLayout, Math.Max(focused, 0), [.. this.Viewports.Select(static viewport => viewport.CaptureState())]));
     }
 
     [RelayCommand]
@@ -309,7 +301,7 @@ public partial class SceneEditorViewModel
     {
         if (this.GetActiveViewport() is { } viewport)
         {
-            await viewport.AlignSelectedCameraToViewAsync().ConfigureAwait(true);
+            await viewport.AlignSelectedCameraToViewCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         }
     }
 }

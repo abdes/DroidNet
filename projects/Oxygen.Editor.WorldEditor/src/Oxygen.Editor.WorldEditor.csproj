@@ -11,10 +11,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Content Remove="Assets\Resources\ViewportIcons.xaml" />
-    </ItemGroup>
-
-    <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
         <PackageReference Include="CommunityToolkit.WinUI.Collections" />
         <PackageReference Include="CommunityToolkit.WinUI.Controls.Segmented" />

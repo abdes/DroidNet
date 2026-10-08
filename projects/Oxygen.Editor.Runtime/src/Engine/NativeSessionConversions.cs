@@ -37,6 +37,8 @@ internal static class NativeSessionConversions
             CameraPreset = ToNative<CameraViewPresetManaged>(config.CameraPreset),
             SceneCamera = config.SceneCameraNodeId,
             InsetHost = config.InsetHost is { } host ? new ViewIdManaged(host.Value) : null,
+            ViewMode = ToNative<ViewModeManaged>(config.ViewMode),
+            ShowGrid = config.ShowGrid,
         };
         if (config.EditorCamera is { } camera)
         {

@@ -3,11 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using DroidNet.Aura.Settings;
-using DroidNet.Config;
-using DroidNet.Controls.Menus;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI.Xaml;
 using Moq;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
@@ -24,105 +20,56 @@ public sealed partial class ViewportCameraControlModeTests
     private static readonly SceneCameraChoice MapCamera = new(Guid.Parse("8d0f3a52-5c1e-4b8e-9a51-3f2b1c6d7e02"), "Map");
 
     [TestMethod]
-    public void CameraMenu_ShouldExposeProjectionFlyAndViewSettings()
+    public void CameraFlyout_ShouldOfferPerspectiveModesAndOrthographicDirections()
     {
         using var sut = CreateViewportViewModel(new Mock<IEngineService>(MockBehavior.Strict).Object);
 
-        var menu = sut.CameraMenu;
-
-        _ = menu.Items.Select(item => item.Text)
-            .Should().Equal(
-                string.Empty,
-                "Turntable",
-                "Trackball",
-                "Fly",
-                "Movement Speed",
-                string.Empty,
-                "Top",
-                "Bottom",
-                "Left",
-                "Right",
-                "Front",
-                "Back",
-                string.Empty,
-                "No cameras in scene",
-                "Align Selected Camera to View",
-                string.Empty,
-                "Field of View",
-                "Near View Plane",
-                "Far View Plane");
-        _ = menu.Items.Where(item => item.IsSeparator).Select(item => item.SeparatorLabel)
-            .Should().Equal("Perspective", "Orthographic", "Scene Cameras", "View");
-        _ = menu.Items.Single(item => string.Equals(item.Text, "No cameras in scene", StringComparison.Ordinal))
-            .IsEnabled.Should().BeFalse();
-        _ = menu.Items.Where(item => string.Equals(item.RadioGroupId, "PerspectiveCameraMode", StringComparison.Ordinal))
-            .Should().HaveCount(3);
-        _ = menu.Items.Where(item => string.Equals(item.RadioGroupId, "OrthographicCamera", StringComparison.Ordinal))
-            .Should().HaveCount(6);
-        _ = menu.Items.Single(item => string.Equals(item.Text, "Fly", StringComparison.Ordinal))
-            .RadioGroupId.Should().Be("PerspectiveCameraMode");
-        _ = menu.Items.Single(item => string.Equals(item.Text, "Turntable", StringComparison.Ordinal))
-            .IsChecked.Should().BeTrue();
+        _ = sut.PerspectiveModes.Select(option => option.Label).Should().Equal("Turntable", "Trackball", "Fly");
+        _ = sut.PerspectiveModes.Should().OnlyContain(option => option.HasDescription);
+        _ = sut.OrthographicViews.Select(option => option.Label).Should().Equal("Top", "Bottom", "Front", "Back", "Left", "Right");
+        _ = SelectedLabels(sut).Should().Equal("Turntable");
+        _ = sut.HasSceneCameras.Should().BeFalse();
         _ = sut.CameraControlModeLabel.Should().Be("Turntable");
         _ = sut.CameraMenuLabel.Should().Be("Turntable");
+        _ = sut.IsPerspectiveView.Should().BeTrue();
     }
 
     [TestMethod]
-    public void CameraMenu_ShouldExposeNumberBoxModelsForInteractiveRows()
+    public void CameraNumberFields_ShouldExposeRangesForNumberBoxValidation()
     {
         using var sut = CreateViewportViewModel(new Mock<IEngineService>(MockBehavior.Strict).Object);
 
-        var menu = sut.CameraMenu;
-
-        var movementSpeedItem = GetNumberBoxModel(menu, "Movement Speed");
-        var fieldOfViewItem = GetNumberBoxModel(menu, "Field of View");
-        var nearViewPlaneItem = GetNumberBoxModel(menu, "Near View Plane");
-        var farViewPlaneItem = GetNumberBoxModel(menu, "Far View Plane");
-
-        _ = movementSpeedItem.Minimum.Should().Be(1.0f);
-        _ = movementSpeedItem.Maximum.Should().Be(float.PositiveInfinity);
-        _ = fieldOfViewItem.Minimum.Should().Be(0.0f);
-        _ = fieldOfViewItem.Maximum.Should().Be(180.0f);
-        _ = fieldOfViewItem.Unit.Should().Be("\u00b0");
-        _ = nearViewPlaneItem.Unit.Should().Be("m");
-        _ = farViewPlaneItem.Unit.Should().Be("m");
+        _ = sut.MovementSpeedField.Minimum.Should().Be(1.0f);
+        _ = sut.MovementSpeedField.Maximum.Should().Be(float.PositiveInfinity);
+        _ = sut.MovementSpeedField.IsInRange(1.0f).Should().BeTrue();
+        _ = sut.MovementSpeedField.IsInRange(0.99f).Should().BeFalse();
+        _ = sut.FieldOfViewField.Unit.Should().Be("°");
+        _ = sut.FieldOfViewField.IsInRange(180.0f).Should().BeTrue();
+        _ = sut.FieldOfViewField.IsInRange(181.0f).Should().BeFalse();
+        _ = sut.FieldOfViewField.IsInRange(float.NaN).Should().BeFalse();
+        _ = sut.NearViewPlaneField.Unit.Should().Be("m");
+        _ = sut.FarViewPlaneField.Unit.Should().Be("m");
+        _ = sut.ClippingSummary.Should().Contain("0.1").And.Contain("1000").And.EndWith(" m");
     }
 
     [TestMethod]
-    public void CameraNumberBoxModels_ShouldExposeRangesForNumberBoxValidation()
-    {
-        using var sut = CreateViewportViewModel(new Mock<IEngineService>(MockBehavior.Strict).Object);
-
-        var movementSpeedItem = GetNumberBoxModel(sut.CameraMenu, "Movement Speed");
-        var fieldOfViewItem = GetNumberBoxModel(sut.CameraMenu, "Field of View");
-
-        _ = movementSpeedItem.IsInRange(1.0f).Should().BeTrue();
-        _ = movementSpeedItem.IsInRange(0.99f).Should().BeFalse();
-        _ = fieldOfViewItem.IsInRange(180.0f).Should().BeTrue();
-        _ = fieldOfViewItem.IsInRange(181.0f).Should().BeFalse();
-        _ = fieldOfViewItem.IsInRange(float.NaN).Should().BeFalse();
-
-        sut.FieldOfViewDegrees = 500.0f;
-
-        _ = sut.FieldOfViewDegrees.Should().Be(500.0f);
-    }
-
-    [TestMethod]
-    public void MovementSpeed_WhenNativeViewExists_ShouldSendSpeedToEngine()
+    public void FlySpeed_ShouldClampToTheMinimumAndSendSpeedToEngine()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         var viewId = new RuntimeViewId(43);
         _ = engine
-            .Setup(service => service.SetViewCameraMovementSpeedAsync(
-                It.Is<RuntimeViewId>(id => id.Value == viewId.Value),
-                12.0f))
+            .Setup(service => service.SetViewCameraMovementSpeedAsync(It.Is<RuntimeViewId>(id => id.Value == viewId.Value), It.IsAny<float>()))
             .ReturnsAsync(value: true);
         using var sut = CreateViewportViewModel(engine.Object);
         sut.AssignedViewId = viewId;
 
-        sut.MovementSpeed = 12.0f;
+        sut.FlySpeed = 12.0;
+        _ = sut.MovementSpeed.Should().Be(12.0f);
+        sut.FlySpeed = 0.25;
 
-        engine.VerifyAll();
+        _ = sut.MovementSpeed.Should().Be(1.0f);
+        engine.Verify(service => service.SetViewCameraMovementSpeedAsync(It.IsAny<RuntimeViewId>(), 12.0f), Times.Once);
+        engine.Verify(service => service.SetViewCameraMovementSpeedAsync(It.IsAny<RuntimeViewId>(), 1.0f), Times.Once);
     }
 
     [TestMethod]
@@ -146,6 +93,26 @@ public sealed partial class ViewportCameraControlModeTests
     }
 
     [TestMethod]
+    public void ResetLens_ShouldRestoreLensDefaultsOnly()
+    {
+        var engine = new Mock<IEngineService>(MockBehavior.Loose);
+        using var sut = CreateViewportViewModel(engine.Object);
+        sut.CameraControlMode = CameraControlMode.Fly;
+        sut.MovementSpeed = 7.0f;
+        sut.FieldOfViewDegrees = 40.0f;
+        sut.NearViewPlane = 2.0f;
+        sut.FarViewPlane = 20.0f;
+
+        sut.ResetLensCommand.Execute(parameter: null);
+
+        _ = sut.FieldOfViewDegrees.Should().Be(90.0f);
+        _ = sut.NearViewPlane.Should().Be(0.1f);
+        _ = sut.FarViewPlane.Should().Be(1000.0f);
+        _ = sut.MovementSpeed.Should().Be(7.0f);
+        _ = sut.CameraControlMode.Should().Be(CameraControlMode.Fly);
+    }
+
+    [TestMethod]
     public async Task ApplyCurrentCameraControlMode_WhenNativeViewExists_ShouldSendModeToEngine()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
@@ -163,12 +130,11 @@ public sealed partial class ViewportCameraControlModeTests
 
         engine.VerifyAll();
         _ = sut.CameraControlModeLabel.Should().Be("Fly");
-        _ = sut.CameraMenu.Items.Single(item => string.Equals(item.Text, "Fly", StringComparison.Ordinal))
-            .IsChecked.Should().BeTrue();
+        _ = SelectedLabels(sut).Should().Equal("Fly");
     }
 
     [TestMethod]
-    public void FlyMenuItem_WhenNativeViewExists_ShouldApplyPerspectivePresetAndFlyMode()
+    public async Task FlyOption_WhenNativeViewExists_ShouldApplyPerspectivePresetAndFlyMode()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         var viewId = new RuntimeViewId(45);
@@ -185,16 +151,16 @@ public sealed partial class ViewportCameraControlModeTests
         using var sut = CreateViewportViewModel(engine.Object);
         sut.AssignedViewId = viewId;
 
-        sut.CameraMenu.Items.Single(item => string.Equals(item.Text, "Fly", StringComparison.Ordinal)).Command?.Execute(parameter: null);
+        await Choose(sut.PerspectiveModes, "Fly").ConfigureAwait(false);
 
         engine.VerifyAll();
         _ = sut.CameraType.Should().Be(CameraType.Perspective);
         _ = sut.CameraControlMode.Should().Be(CameraControlMode.Fly);
-        _ = sut.CameraMenu.Items.Single(item => string.Equals(item.Text, "Fly", StringComparison.Ordinal)).IsChecked.Should().BeTrue();
+        _ = SelectedLabels(sut).Should().Equal("Fly");
     }
 
     [TestMethod]
-    public void OrthographicMenuItem_WhenCurrentModeIsFly_ShouldSwitchBackToOrbitMode()
+    public async Task OrthographicOption_WhenCurrentModeIsFly_ShouldSwitchBackToOrbitMode()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         var viewId = new RuntimeViewId(46);
@@ -212,12 +178,13 @@ public sealed partial class ViewportCameraControlModeTests
         sut.AssignedViewId = viewId;
         sut.CameraControlMode = CameraControlMode.Fly;
 
-        sut.CameraMenu.Items.Single(item => string.Equals(item.Text, "Top", StringComparison.Ordinal)).Command?.Execute(parameter: null);
+        await Choose(sut.OrthographicViews, "Top").ConfigureAwait(false);
 
         engine.VerifyAll();
         _ = sut.CameraType.Should().Be(CameraType.Top);
         _ = sut.CameraControlMode.Should().Be(CameraControlMode.OrbitTurntable);
-        _ = sut.CameraMenu.Items.Single(item => string.Equals(item.Text, "Top", StringComparison.Ordinal)).IsChecked.Should().BeTrue();
+        _ = sut.IsPerspectiveView.Should().BeFalse();
+        _ = SelectedLabels(sut).Should().Equal("Top");
     }
 
     [TestMethod]
@@ -244,20 +211,20 @@ public sealed partial class ViewportCameraControlModeTests
     }
 
     [TestMethod]
-    public void CameraMenu_ShouldListSceneCamerasUnchecked()
+    public void RefreshSceneCameras_ShouldListSceneCamerasUnselected()
     {
         using var sut = CreateViewportViewModel(new Mock<IEngineService>(MockBehavior.Strict).Object);
         sut.SceneCamerasProvider = () => [MainCamera, MapCamera];
 
-        var items = sut.CameraMenu.Items.Where(item => string.Equals(item.RadioGroupId, "SceneCamera", StringComparison.Ordinal)).ToList();
+        sut.RefreshSceneCameras();
 
-        _ = items.Select(item => item.Text).Should().Equal("Main", "Map");
-        _ = items.Should().OnlyContain(item => !item.IsChecked);
-        _ = sut.CameraMenu.Items.Should().NotContain(item => string.Equals(item.Text, "No cameras in scene", StringComparison.Ordinal));
+        _ = sut.SceneCameraOptions.Select(option => option.Label).Should().Equal("Main", "Map");
+        _ = sut.SceneCameraOptions.Should().OnlyContain(option => !option.IsSelected);
+        _ = sut.HasSceneCameras.Should().BeTrue();
     }
 
     [TestMethod]
-    public void SceneCameraMenuItem_ShouldRenderThroughThatCamera()
+    public async Task SceneCameraOption_ShouldRenderThroughThatCamera()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         var viewId = new RuntimeViewId(51);
@@ -269,18 +236,18 @@ public sealed partial class ViewportCameraControlModeTests
         using var sut = CreateViewportViewModel(engine.Object);
         sut.AssignedViewId = viewId;
         sut.SceneCamerasProvider = () => [MainCamera, MapCamera];
+        sut.RefreshSceneCameras();
 
-        sut.CameraMenu.Items.Single(item => string.Equals(item.Text, "Map", StringComparison.Ordinal)).Command?.Execute(parameter: null);
+        await Choose(sut.SceneCameraOptions, "Map").ConfigureAwait(false);
 
         engine.VerifyAll();
         _ = sut.SceneCamera.Should().Be(MapCamera);
         _ = sut.CameraMenuLabel.Should().Be("Map");
-        _ = sut.CameraMenu.Items.Single(item => string.Equals(item.Text, "Map", StringComparison.Ordinal)).IsChecked.Should().BeTrue();
-        _ = sut.CameraMenu.Items.Single(item => string.Equals(item.Text, "Turntable", StringComparison.Ordinal)).IsChecked.Should().BeFalse();
+        _ = SelectedLabels(sut).Should().Equal("Map");
     }
 
     [TestMethod]
-    public void EditorCameraMenuItem_WhenViewingSceneCamera_ShouldReturnToEditorCamera()
+    public async Task OrthographicOption_WhenViewingSceneCamera_ShouldReturnToEditorCamera()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         var viewId = new RuntimeViewId(52);
@@ -297,18 +264,19 @@ public sealed partial class ViewportCameraControlModeTests
         using var sut = CreateViewportViewModel(engine.Object);
         sut.AssignedViewId = viewId;
         sut.SceneCamerasProvider = () => [MainCamera];
-        sut.CameraMenu.Items.Single(item => string.Equals(item.Text, "Main", StringComparison.Ordinal)).Command?.Execute(parameter: null);
+        sut.RefreshSceneCameras();
+        await Choose(sut.SceneCameraOptions, "Main").ConfigureAwait(false);
 
-        sut.CameraMenu.Items.Single(item => string.Equals(item.Text, "Top", StringComparison.Ordinal)).Command?.Execute(parameter: null);
+        await Choose(sut.OrthographicViews, "Top").ConfigureAwait(false);
 
         engine.VerifyAll();
         _ = sut.SceneCamera.Should().BeNull();
         _ = sut.CameraMenuLabel.Should().Be("Top");
-        _ = sut.CameraMenu.Items.Single(item => string.Equals(item.Text, "Main", StringComparison.Ordinal)).IsChecked.Should().BeFalse();
+        _ = SelectedLabels(sut).Should().Equal("Top");
     }
 
     [TestMethod]
-    public void RefreshCameraMenu_WhenSelectedCameraIsGone_ShouldReturnToEditorCamera()
+    public async Task RefreshSceneCameras_WhenViewedCameraIsGone_ShouldReturnToEditorCamera()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         var viewId = new RuntimeViewId(53);
@@ -319,19 +287,19 @@ public sealed partial class ViewportCameraControlModeTests
         using var sut = CreateViewportViewModel(engine.Object);
         sut.AssignedViewId = viewId;
         sut.SceneCamerasProvider = () => cameras;
-        sut.CameraMenu.Items.Single(item => string.Equals(item.Text, "Map", StringComparison.Ordinal)).Command?.Execute(parameter: null);
+        sut.RefreshSceneCameras();
+        await Choose(sut.SceneCameraOptions, "Map").ConfigureAwait(false);
         _ = cameras.Remove(MapCamera);
 
-        sut.RefreshCameraMenu();
+        sut.RefreshSceneCameras();
 
         engine.Verify(service => service.SetViewSceneCameraAsync(It.IsAny<RuntimeViewId>(), null), Times.Once);
         _ = sut.SceneCamera.Should().BeNull();
-        _ = sut.CameraMenu.Items.Where(item => string.Equals(item.RadioGroupId, "SceneCamera", StringComparison.Ordinal))
-            .Select(item => item.Text).Should().Equal("Main");
+        _ = sut.SceneCameraOptions.Select(option => option.Label).Should().Equal("Main");
     }
 
     [TestMethod]
-    public void RefreshCameraMenu_ShouldFollowRenamedAndAddedCameras()
+    public async Task RefreshSceneCameras_ShouldFollowRenamedAndAddedCameras()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         _ = engine
@@ -341,42 +309,37 @@ public sealed partial class ViewportCameraControlModeTests
         using var sut = CreateViewportViewModel(engine.Object);
         sut.AssignedViewId = new RuntimeViewId(54);
         sut.SceneCamerasProvider = () => cameras;
-        sut.CameraMenu.Items.Single(item => string.Equals(item.Text, "Main", StringComparison.Ordinal)).Command?.Execute(parameter: null);
+        sut.RefreshSceneCameras();
+        await Choose(sut.SceneCameraOptions, "Main").ConfigureAwait(false);
         var renamed = MainCamera with { Name = "Hero" };
         cameras = [renamed, MapCamera];
 
-        sut.RefreshCameraMenu();
+        sut.RefreshSceneCameras();
 
         _ = sut.SceneCamera.Should().Be(renamed);
         _ = sut.CameraMenuLabel.Should().Be("Hero");
-        _ = sut.CameraMenu.Items.Where(item => string.Equals(item.RadioGroupId, "SceneCamera", StringComparison.Ordinal))
-            .Select(item => (item.Text, item.IsChecked)).Should().Equal(("Hero", true), ("Map", false));
+        _ = sut.SceneCameraOptions.Select(option => (option.Label, option.IsSelected)).Should().Equal(("Hero", true), ("Map", false));
     }
 
     private static ViewportViewModel CreateViewportViewModel(
         IEngineService engineService,
         IOperationResultPublisher? operationResults = null)
-    {
-        var appearanceSettings = new Mock<ISettingsService<IAppearanceSettings>>(MockBehavior.Loose);
-        _ = appearanceSettings
-            .SetupGet(service => service.Settings)
-            .Returns(new AppearanceSettings { AppThemeMode = ElementTheme.Default });
-
-        return new ViewportViewModel(
+        => new(
             Guid.NewGuid(),
             engineService,
             operationResults ?? new CapturingOperationResultPublisher(),
             new OperationStatusReducer(),
-            appearanceSettings.Object,
             NullLoggerFactory.Instance);
-    }
 
-    private static ViewportCameraNumberBoxItemModel GetNumberBoxModel(IMenuSource menu, string text)
-    {
-        var content = menu.Items.Single(item => string.Equals(item.Text, text, StringComparison.Ordinal)).InteractiveContent;
-        _ = content.Should().BeOfType<ViewportCameraNumberBoxItemModel>();
-        return (ViewportCameraNumberBoxItemModel)content!;
-    }
+    private static Task Choose(IEnumerable<ViewportOption> options, string label)
+        => options.Single(option => string.Equals(option.Label, label, StringComparison.Ordinal)).ChooseCommand.ExecuteAsync(parameter: null);
+
+    private static IEnumerable<string> SelectedLabels(ViewportViewModel viewport)
+        => viewport.PerspectiveModes
+            .Concat(viewport.OrthographicViews)
+            .Concat(viewport.SceneCameraOptions)
+            .Where(option => option.IsSelected)
+            .Select(option => option.Label);
 
     private sealed class CapturingOperationResultPublisher : IOperationResultPublisher
     {

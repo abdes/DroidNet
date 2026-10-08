@@ -70,6 +70,12 @@ namespace oxygen::interop::module {
 
   using CookedRootSet = std::shared_ptr<const std::vector<CookedRootBinding>>;
 
+  //! The rate and duration of the last completed engine frame.
+  struct EditorFrameStatistics {
+    float frames_per_second { 0.0F };
+    float frame_time_ms { 0.0F };
+  };
+
   //! An engine module, that connects the editor to the Oxygen engine.
   /*!
    Because this is an engine modules, it is fully aware of the frame lifecycle,
@@ -196,6 +202,14 @@ namespace oxygen::interop::module {
       ViewId view_id,
       float speed_units_per_second);
 
+    //! Sets how a specific view presents the scene.
+    void SetViewRenderOptions(
+      ViewId view_id, const EditorViewRenderOptions& options);
+
+    //! The last completed frame's rate and duration, readable from any thread.
+    [[nodiscard]] auto GetFrameStatistics() const noexcept
+      -> EditorFrameStatistics;
+
     void SetViewCameraSettings(
       ViewId view_id,
       float field_of_view_y_radians,
@@ -256,6 +270,8 @@ namespace oxygen::interop::module {
     std::atomic<bool> roots_dirty_{ false };
 
     std::chrono::steady_clock::time_point last_frame_time_{};
+    //! The last completed frame's statistics, both floats packed in one word.
+    std::atomic<std::uint64_t> frame_statistics_{ 0 };
 
     // Command queue for scene mutations
     ThreadSafeQueue<std::unique_ptr<EditorCommand>> command_queue_;

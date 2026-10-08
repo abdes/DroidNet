@@ -75,6 +75,11 @@ public static class RuntimeOperationKinds
     public const string ViewSetCameraMovementSpeed = "Runtime.View.SetCameraMovementSpeed";
 
     /// <summary>
+    /// Viewport view mode and ground grid update.
+    /// </summary>
+    public const string ViewSetRenderOptions = "Runtime.View.SetRenderOptions";
+
+    /// <summary>
     /// Runtime engine view camera lens and clipping settings change.
     /// </summary>
     public const string ViewSetCameraSettings = "Runtime.View.SetCameraSettings";

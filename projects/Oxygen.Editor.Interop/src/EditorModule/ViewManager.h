@@ -94,6 +94,10 @@ namespace oxygen::interop::module {
     //! Applies the base fly camera movement speed to a specific view.
     void SetCameraMovementSpeed(ViewId engine_id, float speed_units_per_second);
 
+    //! Applies how a specific view presents the scene.
+    void SetRenderOptions(
+      ViewId engine_id, const EditorViewRenderOptions& options);
+
     //! Applies camera lens and clipping settings to a specific view.
     void SetCameraViewSettings(
       ViewId engine_id,

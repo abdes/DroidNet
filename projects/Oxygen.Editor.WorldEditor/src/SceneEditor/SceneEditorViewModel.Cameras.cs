@@ -57,7 +57,7 @@ public partial class SceneEditorViewModel
             }
         });
 
-        // Selecting one camera node previews it in the focused pane.
+        // Selecting one camera node previews it in the focused pane; the selection also scopes Browse to Asset.
         this.messenger.Register<SceneNodeSelectionChangedMessage>(this, (_, message) =>
         {
             var foreign = message.DocumentId is { } documentId
@@ -68,6 +68,7 @@ public partial class SceneEditorViewModel
                 return;
             }
 
+            this.UpdateSelectedNodes(message.SelectedEntities);
             this.selectedCamera = message.SelectedEntities is [{ } node] && node.Components.OfType<CameraComponent>().Any()
                 ? new SceneCameraChoice(node.Id, node.Name)
                 : null;

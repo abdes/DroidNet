@@ -753,16 +753,16 @@ every control in it real.
    validated near/far and a lens reset that leaves mode, speed and pose
    unchanged; and the existing scene-camera look-through, Pilot and Align to
    View entries. The button label names the mode or orthographic direction.
-3. **View modes.** Lit, Unlit, Wireframe, Lit + wireframe and Detail lighting,
-   plus a Buffer visualization submenu (base colour, world normals, roughness,
-   metalness, linear depth, directional shadow mask). Each maps to the existing
-   per-view Vortex `RenderMode`/`ShaderDebugMode`, applies only to its pane and
-   persists with the pane state. The inert shading enum and its Wireframe
-   default are removed.
+3. **View modes.** Lit, Unlit (base colour), Wireframe and Lit + wireframe; a
+   Lighting group (direct only, indirect only); and a Buffer visualization group
+   (world normals, roughness, metalness, linear depth, directional shadow mask).
+   Each maps to the existing per-view Vortex `RenderMode`/`ShaderDebugMode`,
+   applies only to its pane and persists with the pane state. The inert shading
+   enum and its Wireframe default are removed.
 4. **Show flyout.** Grid (the existing ground-grid pass, in every projection),
-   Statistics (a corner readout of frame time, FPS, draw count and node count
-   from engine frame statistics) and the camera preview inset. Icons and
-   Selection outline join in M08.4/M08.6. The former Show FPS, Show Stats,
+   Statistics (a corner readout of FPS and frame time from engine frame
+   statistics, and the scene's node count) and the camera preview inset. Icons
+   and Selection outline join in M08.4/M08.6. The former Show FPS, Show Stats,
    Stat1–3 and Show Toolbar toggles are removed.
 5. **Layout picker.** A flyout of pictograms for the 14 layouts in their
    groups (One Pane, Four Quadrants; Two, Three and Four Panes with Main

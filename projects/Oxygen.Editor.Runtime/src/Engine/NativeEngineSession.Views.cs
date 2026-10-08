@@ -60,4 +60,15 @@ internal sealed partial class NativeEngineSession
     /// <inheritdoc />
     public override Task<bool> SetViewCameraSettingsAsync(RuntimeViewId viewId, float fieldOfViewDegrees, float nearPlane, float farPlane)
         => this.Runner.TrySetViewCameraSettingsAsync(this.context, new(viewId.Value), fieldOfViewDegrees, nearPlane, farPlane);
+
+    /// <inheritdoc />
+    public override Task<bool> SetViewRenderOptionsAsync(RuntimeViewId viewId, ViewportViewMode viewMode, bool showGrid)
+        => this.Runner.TrySetViewRenderOptionsAsync(this.context, new(viewId.Value), NativeSessionConversions.ToNative<ViewModeManaged>(viewMode), showGrid);
+
+    /// <inheritdoc />
+    public override RuntimeFrameStatistics GetFrameStatistics()
+    {
+        var statistics = this.Runner.GetFrameStatistics(this.context);
+        return new(statistics.FramesPerSecond, statistics.FrameTimeMilliseconds);
+    }
 }

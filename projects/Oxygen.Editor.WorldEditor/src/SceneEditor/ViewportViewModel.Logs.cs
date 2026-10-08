@@ -4,7 +4,6 @@
 
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-using Microsoft.UI.Xaml;
 using Oxygen.Editor.Runtime.Engine;
 
 namespace Oxygen.Editor.LevelEditor;
@@ -23,45 +22,6 @@ public partial class ViewportViewModel
     [Conditional("DEBUG")]
     private void LogInitialized()
         => LogInitialized(this.logger, this.DocumentId);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "Effective theme override set to {Theme}")]
-    private static partial void LogEffectiveThemeSet(ILogger logger, ElementTheme theme);
-
-    [Conditional("DEBUG")]
-    private void LogEffectiveThemeSet(ElementTheme theme)
-        => LogEffectiveThemeSet(this.logger, theme);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Warning,
-        Message = "Error rebuilding menus after theme change")]
-    private static partial void LogMenuRebuildFailed(ILogger logger, Exception exception);
-
-    private void LogMenuRebuildFailed(Exception exception)
-        => LogMenuRebuildFailed(this.logger, exception);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "ResolveIcon called with empty or null name")]
-    private static partial void LogResolveIconEmptyName(ILogger logger);
-
-    [Conditional("DEBUG")]
-    private void LogResolveIconEmptyName()
-        => LogResolveIconEmptyName(this.logger);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "ResolveIcon called before theme seeded")]
-    private static partial void LogResolveIconBeforeTheme(ILogger logger);
-
-    [Conditional("DEBUG")]
-    private void LogResolveIconBeforeTheme()
-        => LogResolveIconBeforeTheme(this.logger);
 
     [LoggerMessage(
         SkipEnabledCheck = true,

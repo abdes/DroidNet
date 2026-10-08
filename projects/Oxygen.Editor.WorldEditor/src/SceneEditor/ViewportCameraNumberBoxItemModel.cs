@@ -7,9 +7,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace Oxygen.Editor.LevelEditor;
 
 /// <summary>
-/// View-model data for a numeric camera menu row rendered with a DroidNet NumberBox.
+/// View-model data for a numeric camera setting edited with a DroidNet NumberBox.
 /// </summary>
-internal sealed class ViewportCameraNumberBoxItemModel : ObservableObject
+public sealed class ViewportCameraNumberBoxItemModel : ObservableObject
 {
     private readonly Action<float>? onNumberValueChanged;
     private float numberValue;
@@ -23,7 +23,7 @@ internal sealed class ViewportCameraNumberBoxItemModel : ObservableObject
     /// <param name="unit">Unit label displayed next to the editor.</param>
     /// <param name="mask">DroidNet NumberBox display mask.</param>
     /// <param name="multiplier">DroidNet NumberBox adjustment multiplier.</param>
-    /// <param name="width">Preferred NumberBox width inside the menu.</param>
+    /// <param name="width">Preferred NumberBox width inside the flyout.</param>
     /// <param name="onNumberValueChanged">Optional callback used by the owning view model.</param>
     public ViewportCameraNumberBoxItemModel(
         float value,
@@ -81,7 +81,7 @@ internal sealed class ViewportCameraNumberBoxItemModel : ObservableObject
     public int Multiplier { get; }
 
     /// <summary>
-    /// Gets the preferred NumberBox width inside the menu.
+    /// Gets the preferred NumberBox width inside the flyout.
     /// </summary>
     public double Width { get; }
 

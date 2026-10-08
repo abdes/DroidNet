@@ -7,6 +7,7 @@
 #pragma once
 #pragma managed(push, off)
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -94,6 +95,27 @@ namespace oxygen::interop::module {
     float ortho_half_height { 10.0F };
   };
 
+  //! What a pane renders: the lit scene or one of its diagnostic views.
+  enum class EditorViewMode : std::uint8_t {
+    kLit = 0,
+    kUnlit,
+    kWireframe,
+    kLitWireframe,
+    kDirectLighting,
+    kIndirectLighting,
+    kWorldNormals,
+    kRoughness,
+    kMetalness,
+    kLinearDepth,
+    kShadowMask,
+  };
+
+  //! How a pane presents the scene; editor view state, never authored data.
+  struct EditorViewRenderOptions {
+    EditorViewMode view_mode { EditorViewMode::kLit };
+    bool show_grid { true };
+  };
+
   struct EditorViewContext {
     engine::FrameContext& frame_context;
     Graphics& graphics;
@@ -132,6 +154,9 @@ namespace oxygen::interop::module {
       //! A camera preview inset composed over this host view's surface; the
       //! inset presents nothing on its own.
       std::optional<ViewId> inset_host;
+      //! Presentation from the first frame; an inset always renders lit and
+      //! without the grid.
+      EditorViewRenderOptions render_options {};
     };
 
     explicit EditorView(Config config);
@@ -222,6 +247,11 @@ namespace oxygen::interop::module {
       return framebuffer_;
     }
     [[nodiscard]] auto GetConfig() const -> const Config& { return config_; }
+
+    //! Changes how the view presents the scene from the next frame on.
+    void SetRenderOptions(const EditorViewRenderOptions& options) noexcept {
+      config_.render_options = options;
+    }
     [[nodiscard]] auto GetWidth() const -> float { return width_; }
     [[nodiscard]] auto GetHeight() const -> float { return height_; }
 

@@ -179,6 +179,14 @@ public sealed partial class EngineService
 
     [LoggerMessage(
         Level = LogLevel.Debug,
+        Message = "Requesting view with id '{ViewId}' to render '{ViewMode}' with grid '{ShowGrid}'.")]
+    private static partial void LogSetViewRenderOptions(ILogger logger, ulong viewId, ViewportViewMode viewMode, bool showGrid);
+
+    private void LogSetViewRenderOptions(RuntimeViewId viewId, ViewportViewMode viewMode, bool showGrid)
+        => LogSetViewRenderOptions(this.logger, viewId.Value, viewMode, showGrid);
+
+    [LoggerMessage(
+        Level = LogLevel.Debug,
         Message = "Requesting view with id '{ViewId}' to set camera settings to fov '{FieldOfViewDegrees}', near '{NearPlane}', far '{FarPlane}'.")]
     private static partial void LogSetViewCameraSettings(ILogger logger, ulong viewId, float fieldOfViewDegrees, float nearPlane, float farPlane);
 

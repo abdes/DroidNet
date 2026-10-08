@@ -240,6 +240,19 @@ namespace oxygen::interop::module {
     it->second.view->SetCameraMovementSpeed(speed_units_per_second);
   }
 
+  void ViewManager::SetRenderOptions(
+    ViewId engine_id, const EditorViewRenderOptions& options) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto it = views_.find(engine_id);
+    if (it == views_.end() || !it->second.view) {
+      LOG_F(WARNING, "SetRenderOptions: invalid view id {}", engine_id.get());
+      return;
+    }
+
+    it->second.view->SetRenderOptions(options);
+  }
+
   void ViewManager::SetCameraViewSettings(
     ViewId engine_id,
     float field_of_view_y_radians,

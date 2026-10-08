@@ -21,6 +21,7 @@ using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Managed.Core.Diagnostics;
 using Windows.System;
 using Windows.UI.Core;
+using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
 namespace Oxygen.Editor.LevelEditor;
 
@@ -31,6 +32,10 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 {
     private const string LoggerCategoryName = "Oxygen.Editor.LevelEditor.Viewport";
     private const uint MinimumPixelExtent = 2;
+    private const double CompactWidth = 600;
+    private const double NarrowWidth = 400;
+
+    private static readonly TimeSpan StatisticsInterval = TimeSpan.FromMilliseconds(500);
 
     private static readonly bool EnableInputDebugLogs =
         string.Equals(
@@ -74,6 +79,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
     private bool hasPointerPosition;
 
     private bool lastAltKeyDown;
+    private DispatcherQueueTimer? statisticsTimer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Viewport"/> class.
@@ -134,6 +140,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.UnregisterInputHandlers();
 
         this.UnregisterSwapChainPanelSizeChanged();
+        this.StopStatisticsTimer();
 
         // No theme listeners to remove; view does not interfere with theme settings.
         await this.DetachSurfaceAsync("Dispose").ConfigureAwait(true);
@@ -268,31 +275,97 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         this.RefreshLogger(current);
         this.LogViewModelChanged(GetViewportId(previous), GetViewportId(current));
-        this.ApplyCameraMenuTemplates(current);
 
         _ = this.HandleViewModelChangeAsync(previous, current);
     }
 
-    private void ApplyCameraMenuTemplates(ViewportViewModel? viewModel)
+    private void OnCameraFlyoutOpening(object? sender, object e) => this.ViewModel?.RefreshSceneCameras();
+
+    private void OnFlyoutChoiceClick(object sender, RoutedEventArgs e)
     {
-        if (viewModel is null)
+        // A choice applies at once; the flyout closes like a menu.
+        this.CameraFlyout.Hide();
+        this.ViewModeFlyout.Hide();
+        this.LayoutFlyout.Hide();
+    }
+
+    private void OnCameraNumberBoxValidate(object? sender, ValidationEventArgs<float> e)
+    {
+        if (sender is FrameworkElement { Tag: ViewportCameraNumberBoxItemModel model } && e.NewValue is { } value)
+        {
+            e.IsValid = model.IsInRange(value);
+        }
+    }
+
+    private void OnSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // Labels go first; a narrow pane then folds Show and Layout into Viewport settings.
+        var state = e.NewSize.Width < NarrowWidth ? "Narrow" : e.NewSize.Width < CompactWidth ? "Compact" : "Wide";
+        _ = VisualStateManager.GoToState(this, state, useTransitions: false);
+    }
+
+    private void OnSettingsFlyoutOpening(object? sender, object e)
+    {
+        if (sender is not MenuFlyout menu || this.ViewModel is not { } viewModel)
         {
             return;
         }
 
-        if (this.Resources["ViewportCameraNumberBoxItemTemplate"] is DataTemplate numberBoxTemplate)
+        menu.Items.Clear();
+        menu.Items.Add(CreateToggle("Grid", viewModel.ShowGrid, value => viewModel.ShowGrid = value));
+        menu.Items.Add(CreateToggle("Camera preview", viewModel.ShowCameraPreview, value => viewModel.ShowCameraPreview = value));
+        menu.Items.Add(CreateToggle("Statistics", viewModel.ShowStatistics, value => viewModel.ShowStatistics = value));
+
+        var layouts = new MenuFlyoutSubItem { Text = "Layout" };
+        foreach (var group in viewModel.LayoutGroups)
         {
-            viewModel.ApplyCameraMenuInteractiveContentTemplate(numberBoxTemplate);
+            if (layouts.Items.Count > 0)
+            {
+                layouts.Items.Add(new MenuFlyoutSeparator());
+            }
+
+            foreach (var option in group.Options)
+            {
+                layouts.Items.Add(new RadioMenuFlyoutItem
+                {
+                    Text = $"{group.Title} · {option.Label}",
+                    GroupName = "ViewportLayout",
+                    IsChecked = option.IsSelected,
+                    Command = option.ChooseCommand,
+                });
+            }
+        }
+
+        menu.Items.Add(new MenuFlyoutSeparator());
+        menu.Items.Add(layouts);
+
+        static ToggleMenuFlyoutItem CreateToggle(string text, bool isChecked, Action<bool> apply)
+        {
+            var item = new ToggleMenuFlyoutItem { Text = text, IsChecked = isChecked };
+            item.Click += (_, _) => apply(item.IsChecked);
+            return item;
         }
     }
 
-    private void OnCameraMenuOpening(object? sender, EventArgs e) => this.ViewModel?.RefreshCameraMenu();
-
-    private void OnCameraNumberBoxValidate(object? sender, ValidationEventArgs<float> e)
+    private void StartStatisticsTimer()
     {
-        if (sender is FrameworkElement { DataContext: ViewportCameraNumberBoxItemModel model } && e.NewValue is { } value)
+        if (this.statisticsTimer is null)
         {
-            e.IsValid = model.IsInRange(value);
+            this.statisticsTimer = this.DispatcherQueue.CreateTimer();
+            this.statisticsTimer.Interval = StatisticsInterval;
+            this.statisticsTimer.Tick += this.OnStatisticsTick;
+        }
+
+        this.statisticsTimer.Start();
+    }
+
+    private void StopStatisticsTimer() => this.statisticsTimer?.Stop();
+
+    private void OnStatisticsTick(DispatcherQueueTimer sender, object args)
+    {
+        if (this.ViewModel is { ShowStatistics: true } viewModel)
+        {
+            viewModel.RefreshStatistics();
         }
     }
 
@@ -378,6 +451,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         }
 
         this.RegisterInputHandlers();
+        this.StartStatisticsTimer();
 
         _ = this.AttachSurfaceAsync("Loaded");
     }
@@ -488,6 +562,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.UnregisterSwapChainPanelSizeChanged();
 
         this.UnregisterInputHandlers();
+        this.StopStatisticsTimer();
 
         await this.DetachSurfaceAsync("ActiveLoadCountZero").ConfigureAwait(true);
     }

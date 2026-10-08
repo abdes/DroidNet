@@ -136,6 +136,17 @@ internal abstract class EngineSession
     /// <returns>The runtime operation result.</returns>
     public abstract Task<bool> SetViewCameraSettingsAsync(RuntimeViewId viewId, float fieldOfViewDegrees, float nearPlane, float farPlane);
 
+    /// <summary>Sets how a view presents the scene.</summary>
+    /// <param name="viewId">The view to update.</param>
+    /// <param name="viewMode">What the view renders.</param>
+    /// <param name="showGrid">Whether the view shows the ground grid.</param>
+    /// <returns>The runtime operation result.</returns>
+    public abstract Task<bool> SetViewRenderOptionsAsync(RuntimeViewId viewId, ViewportViewMode viewMode, bool showGrid);
+
+    /// <summary>Gets the rate and duration of the last completed engine frame.</summary>
+    /// <returns>The frame statistics.</returns>
+    public abstract RuntimeFrameStatistics GetFrameStatistics();
+
     /// <summary>Releases context ownership after loop termination.</summary>
     public abstract void DestroyContext();
 

@@ -217,4 +217,24 @@ public sealed partial class EngineService
             _ = this.lifecycleGate.Release();
         }
     }
+
+    /// <inheritdoc/>
+    public async Task<bool> SetViewRenderOptionsAsync(RuntimeViewId viewId, ViewportViewMode viewMode, bool showGrid)
+    {
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
+        try
+        {
+            var runner = this.EnsureIsRunning();
+            this.LogSetViewRenderOptions(viewId, viewMode, showGrid);
+            return await this.AwaitRuntimeOperationAsync(runner.SetViewRenderOptionsAsync(viewId, viewMode, showGrid)).ConfigureAwait(true);
+        }
+        finally
+        {
+            _ = this.lifecycleGate.Release();
+        }
+    }
+
+    /// <inheritdoc/>
+    public RuntimeFrameStatistics? GetFrameStatistics()
+        => this.State == EngineServiceState.Running && this.session is { } running ? running.GetFrameStatistics() : null;
 }

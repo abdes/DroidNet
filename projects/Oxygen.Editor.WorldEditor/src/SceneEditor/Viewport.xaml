@@ -1,4 +1,4 @@
-﻿<UserControl
+<UserControl
     x:Class="Oxygen.Editor.LevelEditor.Viewport"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -7,85 +7,550 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dnc="using:DroidNet.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:menus="using:DroidNet.Controls.Menus"
     IsTabStop="True"
+    SizeChanged="OnSizeChanged"
     mc:Ignorable="d">
 
     <UserControl.Resources>
-        <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
-        <SolidColorBrush x:Key="FocusedViewportBorderBrush" Color="{ThemeResource SystemAccentColor}" />
-        <DataTemplate x:Key="ViewportCameraNumberBoxItemTemplate">
-            <Grid
-                Width="184"
-                HorizontalAlignment="Stretch"
-                ColumnSpacing="6">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+        <ctkcvt:BoolToVisibilityConverter
+            x:Key="BoolNegationToVisibilityConverter"
+            FalseValue="Visible"
+            TrueValue="Collapsed" />
 
-                <dnc:NumberBox
-                    MinWidth="{Binding Width}"
+        <!--  The HUD floats over the render, so its colors follow the render, not the app theme.  -->
+        <SolidColorBrush x:Key="HudChipBrush" Color="#E6263540" />
+        <SolidColorBrush x:Key="HudChipBorderBrush" Color="#33D7E8ED" />
+        <SolidColorBrush x:Key="HudForegroundBrush" Color="#FFEDF4F7" />
+        <SolidColorBrush x:Key="HudMutedForegroundBrush" Color="#FFB2C4CF" />
+        <SolidColorBrush x:Key="FocusedViewportBorderBrush" Color="{ThemeResource SystemAccentColor}" />
+
+        <!--
+            DropDownButton's default style lives only in its theme dictionary; this keyed
+            style sets properties over it without BasedOn.
+        -->
+        <Style x:Key="HudDropDownStyle" TargetType="DropDownButton">
+            <Setter Property="Height" Value="32" />
+            <Setter Property="MinWidth" Value="32" />
+            <Setter Property="Padding" Value="8,0,6,0" />
+            <Setter Property="Background" Value="{StaticResource HudChipBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource HudChipBorderBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource HudForegroundBrush}" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+
+        <Style
+            x:Key="HudIconButtonStyle"
+            BasedOn="{StaticResource DefaultButtonStyle}"
+            TargetType="Button">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="{StaticResource HudChipBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource HudChipBorderBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource HudForegroundBrush}" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+
+        <Style x:Key="HudGlyphStyle" TargetType="FontIcon">
+            <Setter Property="FontFamily" Value="{StaticResource SymbolThemeFontFamily}" />
+            <Setter Property="FontSize" Value="14" />
+        </Style>
+
+        <Style x:Key="FlyoutSectionHeaderStyle" TargetType="TextBlock">
+            <Setter Property="Margin" Value="8,12,8,4" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Style>
+
+        <Style x:Key="FlyoutHintStyle" TargetType="TextBlock">
+            <Setter Property="Margin" Value="8,4,8,0" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Style>
+
+        <Style x:Key="FlyoutFieldLabelStyle" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+
+        <Style
+            x:Key="FlyoutRowButtonStyle"
+            BasedOn="{StaticResource DefaultButtonStyle}"
+            TargetType="Button">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="8,5" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+
+        <Style x:Key="FlyoutPresenterStyle" TargetType="FlyoutPresenter">
+            <Setter Property="Padding" Value="6,2,6,8" />
+            <Setter Property="MaxHeight" Value="640" />
+        </Style>
+
+        <!--  One flyout choice: a check mark when current, the label and an optional description.  -->
+        <DataTemplate x:Key="OptionTemplate" x:DataType="controls:ViewportOption">
+            <Button
+                Click="OnFlyoutChoiceClick"
+                Command="{x:Bind ChooseCommand}"
+                Style="{StaticResource FlyoutRowButtonStyle}">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="16" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon
+                        Margin="0,2,0,0"
+                        VerticalAlignment="Top"
+                        FontSize="12"
+                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                        Glyph="&#xE73E;"
+                        Visibility="{x:Bind IsSelected, Mode=OneWay}" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock FontSize="13" Text="{x:Bind Label}" />
+                        <TextBlock
+                            FontSize="11"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="{x:Bind Description}"
+                            Visibility="{x:Bind HasDescription}" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+        </DataTemplate>
+
+        <!--  An orthographic direction: a compact tile in a three-column grid.  -->
+        <DataTemplate x:Key="TileOptionTemplate" x:DataType="controls:ViewportOption">
+            <Grid>
+                <Button
                     HorizontalAlignment="Stretch"
-                    HorizontalValueAlignment="Left"
-                    Mask="{Binding Mask}"
-                    Multiplier="{Binding Multiplier}"
-                    NumberValue="{Binding NumberValue, Mode=TwoWay}"
-                    Validate="OnCameraNumberBoxValidate"
-                    WithPadding="False" />
-                <TextBlock
-                    Grid.Column="1"
-                    MinWidth="12"
-                    VerticalAlignment="Center"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Text="{Binding Unit}" />
+                    Click="OnFlyoutChoiceClick"
+                    Command="{x:Bind ChooseCommand}"
+                    Content="{x:Bind Label}"
+                    FontSize="12" />
+                <Border
+                    BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                    BorderThickness="2"
+                    CornerRadius="4"
+                    IsHitTestVisible="False"
+                    Visibility="{x:Bind IsSelected, Mode=OneWay}" />
             </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="OptionGroupTemplate" x:DataType="controls:ViewportOptionGroup">
+            <StackPanel>
+                <TextBlock
+                    Style="{StaticResource FlyoutSectionHeaderStyle}"
+                    Text="{x:Bind Title}"
+                    Visibility="{x:Bind HasTitle}" />
+                <ItemsControl ItemTemplate="{StaticResource OptionTemplate}" ItemsSource="{x:Bind Options}" />
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate x:Key="LayoutOptionTemplate" x:DataType="controls:ViewportLayoutOption">
+            <Grid ToolTipService.ToolTip="{x:Bind Label}">
+                <Button
+                    Width="64"
+                    Padding="4,6"
+                    AutomationProperties.Name="{x:Bind Label}"
+                    Click="OnFlyoutChoiceClick"
+                    Command="{x:Bind ChooseCommand}">
+                    <StackPanel Spacing="4">
+                        <controls:ViewportLayoutPictogram HorizontalAlignment="Center" Layout="{x:Bind Layout}" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            FontSize="10"
+                            Text="{x:Bind Label}"
+                            TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Button>
+                <Border
+                    BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                    BorderThickness="2"
+                    CornerRadius="4"
+                    IsHitTestVisible="False"
+                    Visibility="{x:Bind IsSelected, Mode=OneWay}" />
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="LayoutGroupTemplate" x:DataType="controls:ViewportLayoutGroup">
+            <StackPanel>
+                <TextBlock Style="{StaticResource FlyoutSectionHeaderStyle}" Text="{x:Bind Title}" />
+                <ItemsRepeater
+                    Margin="8,0"
+                    ItemTemplate="{StaticResource LayoutOptionTemplate}"
+                    ItemsSource="{x:Bind Options}">
+                    <ItemsRepeater.Layout>
+                        <StackLayout Orientation="Horizontal" Spacing="4" />
+                    </ItemsRepeater.Layout>
+                </ItemsRepeater>
+            </StackPanel>
         </DataTemplate>
     </UserControl.Resources>
 
     <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <SwapChainPanel x:Name="SwapChainPanel" Canvas.ZIndex="0" />
 
-        <!--  Overlay  -->
+        <!--  HUD row  -->
         <Grid
             Margin="8"
             VerticalAlignment="Top"
-            Canvas.ZIndex="100">
+            Canvas.ZIndex="100"
+            ColumnSpacing="4">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <!--  Left: Primary menu (toaster) , Camera and Shading Menus  -->
-            <StackPanel Orientation="Horizontal" Spacing="4">
-                <!--  Primary menu: toaster icon only  -->
-                <menus:MenuButton MenuSource="{x:Bind ViewModel.LayoutMenu, Mode=OneWay}">
-                    <menus:MenuButton.Content>
-                        <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE700;" />
-                    </menus:MenuButton.Content>
-                </menus:MenuButton>
+            <!--  View camera  -->
+            <DropDownButton
+                AutomationProperties.Name="View camera"
+                Style="{StaticResource HudDropDownStyle}"
+                ToolTipService.ToolTip="View camera: navigation mode, direction and lens">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon Glyph="&#xE714;" Style="{StaticResource HudGlyphStyle}" />
+                    <TextBlock
+                        x:Name="CameraLabel"
+                        MaxWidth="140"
+                        VerticalAlignment="Center"
+                        Text="{x:Bind ViewModel.CameraMenuLabel, Mode=OneWay}"
+                        TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <DropDownButton.Flyout>
+                    <Flyout
+                        x:Name="CameraFlyout"
+                        FlyoutPresenterStyle="{StaticResource FlyoutPresenterStyle}"
+                        Opening="OnCameraFlyoutOpening"
+                        Placement="BottomEdgeAlignedLeft">
+                        <StackPanel Width="288">
+                            <TextBlock Style="{StaticResource FlyoutSectionHeaderStyle}" Text="Perspective" />
+                            <ItemsControl ItemTemplate="{StaticResource OptionTemplate}" ItemsSource="{x:Bind ViewModel.PerspectiveModes, Mode=OneWay}" />
 
-                <!--  Combined camera projection, movement, and lens menu  -->
-                <menus:MenuButton
-                    Content="{x:Bind ViewModel.CameraMenuLabel, Mode=OneWay}"
-                    MenuSource="{x:Bind ViewModel.CameraMenu, Mode=OneWay}"
-                    Opening="OnCameraMenuOpening" />
+                            <TextBlock Style="{StaticResource FlyoutSectionHeaderStyle}" Text="Orthographic" />
+                            <ItemsRepeater
+                                Margin="8,0"
+                                ItemTemplate="{StaticResource TileOptionTemplate}"
+                                ItemsSource="{x:Bind ViewModel.OrthographicViews, Mode=OneWay}">
+                                <ItemsRepeater.Layout>
+                                    <UniformGridLayout
+                                        ItemsStretch="Fill"
+                                        MaximumRowsOrColumns="3"
+                                        MinColumnSpacing="4"
+                                        MinItemWidth="80"
+                                        MinRowSpacing="4" />
+                                </ItemsRepeater.Layout>
+                            </ItemsRepeater>
 
-                <!--  Shading mode menu: icon + text  -->
-                <menus:MenuButton Content="{x:Bind ViewModel.ShadingMode, Mode=OneWay}" MenuSource="{x:Bind ViewModel.ShadingMenu, Mode=OneWay}" />
-            </StackPanel>
+                            <TextBlock Style="{StaticResource FlyoutSectionHeaderStyle}" Text="Fly speed" />
+                            <Grid Margin="8,0" ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="72" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Slider
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="Fly speed"
+                                    Maximum="50"
+                                    Minimum="1"
+                                    StepFrequency="0.5"
+                                    Value="{x:Bind ViewModel.FlySpeed, Mode=TwoWay}" />
+                                <dnc:NumberBox
+                                    Grid.Column="1"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalValueAlignment="Right"
+                                    Mask="{x:Bind ViewModel.MovementSpeedField.Mask}"
+                                    Multiplier="{x:Bind ViewModel.MovementSpeedField.Multiplier}"
+                                    NumberValue="{x:Bind ViewModel.MovementSpeedField.NumberValue, Mode=TwoWay}"
+                                    Tag="{x:Bind ViewModel.MovementSpeedField}"
+                                    Validate="OnCameraNumberBoxValidate"
+                                    WithPadding="False" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Style="{StaticResource FlyoutFieldLabelStyle}"
+                                    Text="m/s" />
+                            </Grid>
+                            <TextBlock Style="{StaticResource FlyoutHintStyle}" Text="Fly: right-drag to look, WASD to move, Q/E down and up, Shift for speed." />
 
-            <!--  Right: Maximize/Restore  -->
-            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <Button
-                    Background="Transparent"
-                    BorderThickness="0"
-                    Command="{x:Bind ViewModel.ToggleMaximizeCommand}"
-                    ToolTipService.ToolTip="Maximize/Restore Viewport">
-                    <FontIcon FontFamily="Segoe Fluent Icons" Glyph="{x:Bind ViewModel.MaximizeGlyph, Mode=OneWay}" />
-                </Button>
-            </StackPanel>
+                            <StackPanel Visibility="{x:Bind ViewModel.IsPerspectiveView, Mode=OneWay}">
+                                <TextBlock Style="{StaticResource FlyoutSectionHeaderStyle}" Text="Lens" />
+                                <Grid Margin="8,0" ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="72" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource FlyoutFieldLabelStyle}" Text="Vertical field of view" />
+                                    <dnc:NumberBox
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalValueAlignment="Right"
+                                        Mask="{x:Bind ViewModel.FieldOfViewField.Mask}"
+                                        Multiplier="{x:Bind ViewModel.FieldOfViewField.Multiplier}"
+                                        NumberValue="{x:Bind ViewModel.FieldOfViewField.NumberValue, Mode=TwoWay}"
+                                        Tag="{x:Bind ViewModel.FieldOfViewField}"
+                                        Validate="OnCameraNumberBoxValidate"
+                                        WithPadding="False" />
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Style="{StaticResource FlyoutFieldLabelStyle}"
+                                        Text="°" />
+                                </Grid>
+                            </StackPanel>
+
+                            <Expander
+                                Margin="8,8,8,0"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch">
+                                <Expander.Header>
+                                    <Grid>
+                                        <TextBlock FontSize="12" Text="Clipping" />
+                                        <TextBlock
+                                            HorizontalAlignment="Right"
+                                            FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{x:Bind ViewModel.ClippingSummary, Mode=OneWay}" />
+                                    </Grid>
+                                </Expander.Header>
+                                <Grid ColumnSpacing="8" RowSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="72" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition />
+                                        <RowDefinition />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Style="{StaticResource FlyoutFieldLabelStyle}" Text="Near" />
+                                    <dnc:NumberBox
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalValueAlignment="Right"
+                                        Mask="{x:Bind ViewModel.NearViewPlaneField.Mask}"
+                                        Multiplier="{x:Bind ViewModel.NearViewPlaneField.Multiplier}"
+                                        NumberValue="{x:Bind ViewModel.NearViewPlaneField.NumberValue, Mode=TwoWay}"
+                                        Tag="{x:Bind ViewModel.NearViewPlaneField}"
+                                        Validate="OnCameraNumberBoxValidate"
+                                        WithPadding="False" />
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Style="{StaticResource FlyoutFieldLabelStyle}"
+                                        Text="m" />
+                                    <TextBlock
+                                        Grid.Row="1"
+                                        Style="{StaticResource FlyoutFieldLabelStyle}"
+                                        Text="Far" />
+                                    <dnc:NumberBox
+                                        Grid.Row="1"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalValueAlignment="Right"
+                                        Mask="{x:Bind ViewModel.FarViewPlaneField.Mask}"
+                                        Multiplier="{x:Bind ViewModel.FarViewPlaneField.Multiplier}"
+                                        NumberValue="{x:Bind ViewModel.FarViewPlaneField.NumberValue, Mode=TwoWay}"
+                                        Tag="{x:Bind ViewModel.FarViewPlaneField}"
+                                        Validate="OnCameraNumberBoxValidate"
+                                        WithPadding="False" />
+                                    <TextBlock
+                                        Grid.Row="1"
+                                        Grid.Column="2"
+                                        Style="{StaticResource FlyoutFieldLabelStyle}"
+                                        Text="m" />
+                                </Grid>
+                            </Expander>
+                            <HyperlinkButton
+                                Margin="4,4,0,0"
+                                Command="{x:Bind ViewModel.ResetLensCommand}"
+                                Content="Reset lens"
+                                FontSize="12"
+                                ToolTipService.ToolTip="Restore field of view and clipping; mode, speed and pose are unchanged" />
+
+                            <TextBlock Style="{StaticResource FlyoutSectionHeaderStyle}" Text="Scene cameras" />
+                            <ItemsControl
+                                ItemTemplate="{StaticResource OptionTemplate}"
+                                ItemsSource="{x:Bind ViewModel.SceneCameraOptions, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.HasSceneCameras, Mode=OneWay}" />
+                            <TextBlock
+                                Style="{StaticResource FlyoutHintStyle}"
+                                Text="The scene has no cameras."
+                                Visibility="{x:Bind ViewModel.HasSceneCameras, Mode=OneWay, Converter={StaticResource BoolNegationToVisibilityConverter}}" />
+                            <Button
+                                Margin="8,6,8,0"
+                                HorizontalAlignment="Stretch"
+                                Command="{x:Bind ViewModel.TogglePilotCommand}"
+                                Content="{x:Bind ViewModel.PilotLabel, Mode=OneWay}"
+                                IsEnabled="{x:Bind ViewModel.CanPilot, Mode=OneWay}" />
+                            <TextBlock Style="{StaticResource FlyoutHintStyle}" Text="{x:Bind ViewModel.PilotHint, Mode=OneWay}" />
+                            <Button
+                                Margin="8,8,8,0"
+                                HorizontalAlignment="Stretch"
+                                Command="{x:Bind ViewModel.AlignSelectedCameraToViewCommand}"
+                                IsEnabled="{x:Bind ViewModel.CanAlignCamera, Mode=OneWay}"
+                                ToolTipService.ToolTip="Ctrl+Shift+F">
+                                <TextBlock Text="{x:Bind ViewModel.AlignCameraLabel, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                            </Button>
+                            <TextBlock Style="{StaticResource FlyoutHintStyle}" Text="{x:Bind ViewModel.AlignCameraDisabledReason, Mode=OneWay}" />
+
+                            <Border
+                                Margin="0,12,0,0"
+                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                BorderThickness="0,1,0,0">
+                                <TextBlock Style="{StaticResource FlyoutHintStyle}" Text="Editor viewpoint only · scene cameras are unchanged" />
+                            </Border>
+                        </StackPanel>
+                    </Flyout>
+                </DropDownButton.Flyout>
+            </DropDownButton>
+
+            <!--  View mode  -->
+            <DropDownButton
+                Grid.Column="1"
+                AutomationProperties.Name="View mode"
+                Style="{StaticResource HudDropDownStyle}"
+                ToolTipService.ToolTip="View mode">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon Glyph="&#xE706;" Style="{StaticResource HudGlyphStyle}" />
+                    <TextBlock
+                        x:Name="ViewModeText"
+                        VerticalAlignment="Center"
+                        Text="{x:Bind ViewModel.ViewModeLabel, Mode=OneWay}" />
+                </StackPanel>
+                <DropDownButton.Flyout>
+                    <Flyout
+                        x:Name="ViewModeFlyout"
+                        FlyoutPresenterStyle="{StaticResource FlyoutPresenterStyle}"
+                        Placement="BottomEdgeAlignedLeft">
+                        <ItemsControl
+                            Width="232"
+                            ItemTemplate="{StaticResource OptionGroupTemplate}"
+                            ItemsSource="{x:Bind ViewModel.ViewModeGroups, Mode=OneWay}" />
+                    </Flyout>
+                </DropDownButton.Flyout>
+            </DropDownButton>
+
+            <!--  Show  -->
+            <DropDownButton
+                x:Name="ShowButton"
+                Grid.Column="2"
+                AutomationProperties.Name="Show"
+                Style="{StaticResource HudDropDownStyle}"
+                ToolTipService.ToolTip="Show overlays">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon Glyph="&#xE7B3;" Style="{StaticResource HudGlyphStyle}" />
+                    <TextBlock
+                        x:Name="ShowLabel"
+                        VerticalAlignment="Center"
+                        Text="Show" />
+                </StackPanel>
+                <DropDownButton.Flyout>
+                    <Flyout FlyoutPresenterStyle="{StaticResource FlyoutPresenterStyle}" Placement="BottomEdgeAlignedLeft">
+                        <StackPanel Width="200" Padding="8,8,8,0">
+                            <CheckBox Content="Grid" IsChecked="{x:Bind ViewModel.ShowGrid, Mode=TwoWay}" />
+                            <CheckBox Content="Camera preview" IsChecked="{x:Bind ViewModel.ShowCameraPreview, Mode=TwoWay}" />
+                            <CheckBox Content="Statistics" IsChecked="{x:Bind ViewModel.ShowStatistics, Mode=TwoWay}" />
+                        </StackPanel>
+                    </Flyout>
+                </DropDownButton.Flyout>
+            </DropDownButton>
+
+            <!--  Layout  -->
+            <Button
+                x:Name="LayoutButton"
+                Grid.Column="4"
+                AutomationProperties.Name="Viewport layout"
+                Style="{StaticResource HudIconButtonStyle}"
+                ToolTipService.ToolTip="Viewport layout">
+                <FontIcon Glyph="&#xF0E2;" Style="{StaticResource HudGlyphStyle}" />
+                <Button.Flyout>
+                    <Flyout
+                        x:Name="LayoutFlyout"
+                        FlyoutPresenterStyle="{StaticResource FlyoutPresenterStyle}"
+                        Placement="BottomEdgeAlignedRight">
+                        <ItemsControl ItemTemplate="{StaticResource LayoutGroupTemplate}" ItemsSource="{x:Bind ViewModel.LayoutGroups, Mode=OneWay}" />
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+
+            <!--  Viewport settings: the controls a narrow pane cannot show  -->
+            <Button
+                x:Name="SettingsButton"
+                Grid.Column="5"
+                AutomationProperties.Name="Viewport settings"
+                Style="{StaticResource HudIconButtonStyle}"
+                ToolTipService.ToolTip="Viewport settings"
+                Visibility="Collapsed">
+                <FontIcon Glyph="&#xE9E9;" Style="{StaticResource HudGlyphStyle}" />
+                <Button.Flyout>
+                    <MenuFlyout Opening="OnSettingsFlyoutOpening" Placement="BottomEdgeAlignedRight" />
+                </Button.Flyout>
+            </Button>
+
+            <!--  Maximize / restore  -->
+            <Button
+                Grid.Column="6"
+                AutomationProperties.Name="{x:Bind ViewModel.MaximizeToolTip, Mode=OneWay}"
+                Command="{x:Bind ViewModel.ToggleMaximizeCommand, Mode=OneWay}"
+                Style="{StaticResource HudIconButtonStyle}"
+                ToolTipService.ToolTip="{x:Bind ViewModel.MaximizeToolTip, Mode=OneWay}">
+                <FontIcon Glyph="{x:Bind ViewModel.MaximizeGlyph, Mode=OneWay}" Style="{StaticResource HudGlyphStyle}" />
+            </Button>
         </Grid>
+
+        <!--  Navigation hint: the focused pane, until the user navigates with its camera.  -->
+        <Border
+            x:Name="GestureHint"
+            Margin="8"
+            Padding="10,5"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            Background="{StaticResource HudChipBrush}"
+            BorderBrush="{StaticResource HudChipBorderBrush}"
+            BorderThickness="1"
+            Canvas.ZIndex="100"
+            CornerRadius="4"
+            IsHitTestVisible="False"
+            Visibility="{x:Bind ViewModel.IsGestureHintVisible, Mode=OneWay}">
+            <TextBlock
+                FontSize="11"
+                Foreground="{StaticResource HudMutedForegroundBrush}"
+                TextTrimming="CharacterEllipsis">
+                <Run
+                    FontWeight="SemiBold"
+                    Foreground="{StaticResource HudForegroundBrush}"
+                    Text="{x:Bind ViewModel.CameraMenuLabel, Mode=OneWay}" />
+                <Run Text="  " />
+                <Run Text="{x:Bind ViewModel.GestureHint, Mode=OneWay}" />
+            </TextBlock>
+        </Border>
+
+        <!--  Frame statistics  -->
+        <Border
+            Margin="8"
+            Padding="10,5"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            Background="{StaticResource HudChipBrush}"
+            BorderBrush="{StaticResource HudChipBorderBrush}"
+            BorderThickness="1"
+            Canvas.ZIndex="100"
+            CornerRadius="4"
+            IsHitTestVisible="False"
+            Visibility="{x:Bind ViewModel.ShowStatistics, Mode=OneWay}">
+            <TextBlock
+                FontFamily="Consolas"
+                FontSize="11"
+                Foreground="{StaticResource HudForegroundBrush}"
+                Text="{x:Bind ViewModel.StatisticsText, Mode=OneWay}" />
+        </Border>
 
         <!--  Focus highlight drawn as overlay so it does not affect layout/measure.  -->
         <Border
@@ -93,6 +558,29 @@
             BorderThickness="2"
             Canvas.ZIndex="101"
             IsHitTestVisible="False"
-            Visibility="{x:Bind ViewModel.IsFocused, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+            Visibility="{x:Bind ViewModel.IsFocused, Mode=OneWay}" />
+        <VisualStateManager.VisualStateGroups>
+            <!--  The pane's width decides its HUD density; see OnSizeChanged.  -->
+            <VisualStateGroup x:Name="DensityStates">
+                <VisualState x:Name="Wide" />
+                <VisualState x:Name="Compact">
+                    <VisualState.Setters>
+                        <Setter Target="CameraLabel.Visibility" Value="Collapsed" />
+                        <Setter Target="ViewModeText.Visibility" Value="Collapsed" />
+                        <Setter Target="ShowLabel.Visibility" Value="Collapsed" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Narrow">
+                    <VisualState.Setters>
+                        <Setter Target="CameraLabel.Visibility" Value="Collapsed" />
+                        <Setter Target="ViewModeText.Visibility" Value="Collapsed" />
+                        <Setter Target="ShowButton.Visibility" Value="Collapsed" />
+                        <Setter Target="LayoutButton.Visibility" Value="Collapsed" />
+                        <Setter Target="SettingsButton.Visibility" Value="Visible" />
+                        <Setter Target="GestureHint.Visibility" Value="Collapsed" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
     </Grid>
 </UserControl>

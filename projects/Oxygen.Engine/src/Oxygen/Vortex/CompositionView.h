@@ -82,8 +82,10 @@ struct CompositionView {
       kTranslucency = 1ULL << 3U,
       kDiagnostics = 1ULL << 4U,
       kVolumetrics = 1ULL << 5U,
+      //! The ground grid, an authoring aid that a view can opt out of.
+      kGroundGrid = 1ULL << 6U,
       kAll = kSceneLighting | kShadows | kEnvironment | kTranslucency
-        | kDiagnostics | kVolumetrics,
+        | kDiagnostics | kVolumetrics | kGroundGrid,
     };
 
     ViewFeatureBits bits { kAll };

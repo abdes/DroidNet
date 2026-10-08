@@ -375,4 +375,24 @@ public interface IEngineService : IAsyncDisposable
     ///     <see langword="false"/> on failure.
     /// </returns>
     public Task<bool> SetViewCameraSettingsAsync(RuntimeViewId viewId, float fieldOfViewDegrees, float nearPlane, float farPlane);
+
+    /// <summary>
+    /// Set how an existing view presents the scene: its view mode and ground grid. This is viewport
+    /// state; it never changes the authored scene.
+    /// </summary>
+    /// <param name="viewId">The id of the view to update.</param>
+    /// <param name="viewMode">What the view renders.</param>
+    /// <param name="showGrid">Whether the view shows the ground grid.</param>
+    /// <returns>
+    ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
+    ///     <see langword="false"/> on failure.
+    /// </returns>
+    public Task<bool> SetViewRenderOptionsAsync(RuntimeViewId viewId, ViewportViewMode viewMode, bool showGrid);
+
+    /// <summary>
+    /// Gets the rate and duration of the last completed engine frame. Cheap enough to poll from the
+    /// UI thread.
+    /// </summary>
+    /// <returns>The statistics, or <see langword="null"/> when the engine is not running.</returns>
+    public RuntimeFrameStatistics? GetFrameStatistics();
 }

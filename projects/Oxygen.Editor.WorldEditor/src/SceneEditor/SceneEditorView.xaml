@@ -46,7 +46,8 @@
                 x:Name="SaveButton"
                 Command="{x:Bind ViewModel.SaveCommand}"
                 Label="Save"
-                ToolBarLabelPosition="Collapsed">
+                ToolBarLabelPosition="Collapsed"
+                ToolTipService.ToolTip="Save (Ctrl+S)">
                 <dnc:ToolBarButton.Icon>
                     <FontIconSource Glyph="&#xE105;" />
                 </dnc:ToolBarButton.Icon>
@@ -56,18 +57,10 @@
             </dnc:ToolBarButton>
 
             <dnc:ToolBarButton
-                Command="{x:Bind ViewModel.LocateInContentBrowserCommand}"
-                Label="Locate"
-                ToolBarLabelPosition="Collapsed">
-                <dnc:ToolBarButton.Icon>
-                    <FontIconSource Glyph="&#xE8B7;" />
-                </dnc:ToolBarButton.Icon>
-            </dnc:ToolBarButton>
-
-            <dnc:ToolBarButton
                 Command="{x:Bind ViewModel.CookCurrentSceneCommand}"
-                Label="Cook Scene"
-                ToolBarLabelPosition="Collapsed">
+                Label="Cook scene"
+                ToolBarLabelPosition="Collapsed"
+                ToolTipService.ToolTip="Cook scene">
                 <dnc:ToolBarButton.Icon>
                     <FontIconSource Glyph="&#xE895;" />
                 </dnc:ToolBarButton.Icon>
@@ -76,12 +69,42 @@
             <dnc:ToolBarSeparator />
 
             <dnc:ToolBarElementHost>
-                <menus:MenuButton Chrome="Transparent" MenuSource="{x:Bind ViewModel.QuickAddMenu, Mode=OneWay}">
+                <menus:MenuButton
+                    AutomationProperties.Name="Add"
+                    Chrome="Transparent"
+                    MenuSource="{x:Bind ViewModel.QuickAddMenu, Mode=OneWay}"
+                    ToolTipService.ToolTip="Add a node in front of the focused viewport">
                     <menus:MenuButton.Content>
-                        <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE710;" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon FontSize="14" Glyph="&#xE710;" />
+                            <TextBlock VerticalAlignment="Center" Text="Add" />
+                        </StackPanel>
                     </menus:MenuButton.Content>
                 </menus:MenuButton>
             </dnc:ToolBarElementHost>
+
+            <dnc:ToolBarButton
+                Command="{x:Bind ViewModel.BrowseToAssetCommand}"
+                Label="Browse to asset"
+                ToolBarLabelPosition="Collapsed"
+                ToolTipService.ToolTip="Browse to the selection's assets (Ctrl+B)">
+                <dnc:ToolBarButton.Icon>
+                    <FontIconSource Glyph="&#xE8B7;" />
+                </dnc:ToolBarButton.Icon>
+                <dnc:ToolBarButton.KeyboardAccelerators>
+                    <KeyboardAccelerator Key="B" Modifiers="Control" />
+                </dnc:ToolBarButton.KeyboardAccelerators>
+            </dnc:ToolBarButton>
+
+            <dnc:ToolBarButton
+                Command="{x:Bind ViewModel.SelectEnvironmentCommand}"
+                Label="Environment"
+                ToolBarLabelPosition="Collapsed"
+                ToolTipService.ToolTip="Scene environment: sky, sun and atmosphere">
+                <dnc:ToolBarButton.Icon>
+                    <FontIconSource Glyph="&#xE909;" />
+                </dnc:ToolBarButton.Icon>
+            </dnc:ToolBarButton>
 
             <!--  Spacer for center content (if needed)  -->
             <dnc:ToolBarElementHost>

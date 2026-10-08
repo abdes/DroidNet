@@ -30,6 +30,11 @@ public static class SceneOperationKinds
     public const string NodeCreateLight = "Scene.Node.CreateLight";
 
     /// <summary>
+    /// Camera scene node creation.
+    /// </summary>
+    public const string NodeCreateCamera = "Scene.Node.CreateCamera";
+
+    /// <summary>
     /// Scene node rename.
     /// </summary>
     public const string NodeRename = "Scene.Node.Rename";

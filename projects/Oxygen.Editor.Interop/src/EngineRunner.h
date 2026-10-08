@@ -17,6 +17,7 @@
 #include <Views/ViewConfigManaged.h>
 #include <Views/CameraControlModeManaged.h>
 #include <Views/CameraViewPresetManaged.h>
+#include <Views/ViewModeManaged.h>
 #include <Views/EditorCameraStateManaged.h>
 #include <Views/ViewCameraPoseManaged.h>
 #include <Views/ViewIdManaged.h>
@@ -299,6 +300,22 @@ namespace Oxygen::Interop {
       ViewIdManaged viewId,
       float speedUnitsPerSecond)
       -> System::Threading::Tasks::Task<bool>^;
+
+    /// <summary>
+    /// Set how an existing view presents the scene: its view mode and ground
+    /// grid. The request is enqueued and applied on the engine thread.
+    /// </summary>
+    auto TrySetViewRenderOptionsAsync(
+      EngineContext^ ctx,
+      ViewIdManaged viewId,
+      ViewModeManaged viewMode,
+      bool showGrid)
+      -> System::Threading::Tasks::Task<bool>^;
+
+    /// <summary>
+    /// Gets the rate and duration of the last completed engine frame.
+    /// </summary>
+    auto GetFrameStatistics(EngineContext^ ctx) -> FrameStatisticsManaged;
 
     /// <summary>
     /// Set camera lens and clipping parameters for an existing view.

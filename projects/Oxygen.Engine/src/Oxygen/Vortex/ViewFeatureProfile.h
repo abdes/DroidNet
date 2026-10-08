@@ -95,7 +95,7 @@ struct ViewFeatureProfileSpec {
     return ViewFeatureProfileSpec {
       .profile = profile,
       .feature_mask = MakeFeatureMask(Mask::kSceneLighting | Mask::kShadows
-        | Mask::kTranslucency | Mask::kDiagnostics),
+        | Mask::kTranslucency | Mask::kDiagnostics | Mask::kGroundGrid),
       .capability_requirements = {
         .required = Family::kScenePreparation | Family::kDeferredShading
           | Family::kLightingData | Family::kFinalOutputComposition,
@@ -107,7 +107,7 @@ struct ViewFeatureProfileSpec {
       .profile = profile,
       .feature_mask = MakeFeatureMask(Mask::kSceneLighting
         | Mask::kEnvironment | Mask::kVolumetrics | Mask::kTranslucency
-        | Mask::kDiagnostics),
+        | Mask::kDiagnostics | Mask::kGroundGrid),
       .capability_requirements = {
         .required = Family::kScenePreparation | Family::kDeferredShading
           | Family::kLightingData | Family::kFinalOutputComposition,
@@ -119,7 +119,8 @@ struct ViewFeatureProfileSpec {
     return ViewFeatureProfileSpec {
       .profile = profile,
       .feature_mask = MakeFeatureMask(Mask::kSceneLighting | Mask::kShadows
-        | Mask::kEnvironment | Mask::kTranslucency | Mask::kDiagnostics),
+        | Mask::kEnvironment | Mask::kTranslucency | Mask::kDiagnostics
+        | Mask::kGroundGrid),
       .capability_requirements = {
         .required = Family::kScenePreparation | Family::kDeferredShading
           | Family::kLightingData | Family::kEnvironmentLighting

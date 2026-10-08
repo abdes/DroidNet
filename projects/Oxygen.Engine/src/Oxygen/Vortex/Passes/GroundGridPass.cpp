@@ -287,6 +287,8 @@ auto GroundGridPass::Record(RenderContext& ctx,
   const auto& config = renderer_.GetGroundGridConfig();
   auto state = RecordState {
     .requested = config.enabled && ctx.current_view.view_id != kInvalidViewId
+      && ctx.current_view.feature_mask.Has(
+        CompositionView::ViewFeatureMask::kGroundGrid)
       && ctx.current_view.resolved_view != nullptr && target != nullptr,
   };
   if (!state.requested) {

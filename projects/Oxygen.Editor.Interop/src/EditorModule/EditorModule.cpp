@@ -7,6 +7,9 @@
 #pragma unmanaged
 
 #include "pch.h"
+
+#include <bit>
+
 #include <EditorModule/SceneAssetRequests.h>
 
 #include <Commands/CreateSceneCommand.h>
@@ -18,6 +21,7 @@
 #include <Commands/SetViewCameraMovementSpeedCommand.h>
 #include <Commands/SetViewCameraPresetCommand.h>
 #include <Commands/SetViewCameraSettingsCommand.h>
+#include <Commands/SetViewRenderOptionsCommand.h>
 #include <Commands/OrthographicCameraPropertyApplier.h>
 #include <Commands/QueryViewCameraPoseCommand.h>
 #include <Commands/QueryViewEditorCameraCommand.h>
@@ -89,6 +93,77 @@ namespace oxygen::interop::module {
       }
 
       surfaces.clear();
+    }
+
+    //! Maps a pane's presentation onto the view it publishes. An inset is a
+    //! camera preview: it always renders lit, without the ground grid.
+    void ApplyRenderOptions(
+      vortex::CompositionView& view, const EditorView& editor_view) {
+      using Mask = vortex::CompositionView::ViewFeatureMask;
+      const auto options = editor_view.IsInset()
+        ? EditorViewRenderOptions { .show_grid = false }
+        : editor_view.GetConfig().render_options;
+      if (!options.show_grid) {
+        view.feature_mask.bits = vortex::CompositionView::ViewFeatureBits {
+          view.feature_mask.bits.get() & ~Mask::kGroundGrid,
+        };
+      }
+
+      auto& settings = view.render_settings;
+      switch (options.view_mode) {
+      case EditorViewMode::kLit:
+        break;
+      case EditorViewMode::kUnlit:
+        settings.shader_debug_mode = vortex::ShaderDebugMode::kBaseColor;
+        break;
+      case EditorViewMode::kWireframe:
+        settings.render_mode = vortex::RenderMode::kWireframe;
+        break;
+      case EditorViewMode::kLitWireframe:
+        settings.render_mode = vortex::RenderMode::kOverlayWireframe;
+        break;
+      case EditorViewMode::kDirectLighting:
+        settings.shader_debug_mode
+          = vortex::ShaderDebugMode::kDirectLightingOnly;
+        break;
+      case EditorViewMode::kIndirectLighting:
+        settings.shader_debug_mode = vortex::ShaderDebugMode::kIblOnly;
+        break;
+      case EditorViewMode::kWorldNormals:
+        settings.shader_debug_mode = vortex::ShaderDebugMode::kWorldNormals;
+        break;
+      case EditorViewMode::kRoughness:
+        settings.shader_debug_mode = vortex::ShaderDebugMode::kRoughness;
+        break;
+      case EditorViewMode::kMetalness:
+        settings.shader_debug_mode = vortex::ShaderDebugMode::kMetalness;
+        break;
+      case EditorViewMode::kLinearDepth:
+        settings.shader_debug_mode = vortex::ShaderDebugMode::kSceneDepthLinear;
+        break;
+      case EditorViewMode::kShadowMask:
+        settings.shader_debug_mode
+          = vortex::ShaderDebugMode::kDirectionalShadowMask;
+        break;
+      }
+    }
+
+    [[nodiscard]] auto PackFrameStatistics(
+      const EditorFrameStatistics& statistics) noexcept -> std::uint64_t {
+      return (static_cast<std::uint64_t>(
+                std::bit_cast<std::uint32_t>(statistics.frames_per_second))
+               << 32U)
+        | std::bit_cast<std::uint32_t>(statistics.frame_time_ms);
+    }
+
+    [[nodiscard]] auto UnpackFrameStatistics(const std::uint64_t packed) noexcept
+      -> EditorFrameStatistics {
+      return EditorFrameStatistics {
+        .frames_per_second
+        = std::bit_cast<float>(static_cast<std::uint32_t>(packed >> 32U)),
+        .frame_time_ms
+        = std::bit_cast<float>(static_cast<std::uint32_t>(packed)),
+      };
     }
 
     class EditorInputWriter final : public IInputWriter {
@@ -271,6 +346,15 @@ namespace oxygen::interop::module {
     // available so FrameStart commands (executed later in this method)
     // can perform immediate registration via ViewManager::CreateViewAsync.
     view_manager_->OnFrameStart(*context);
+
+    // The frame timing still describes the previous, completed frame.
+    frame_statistics_.store(PackFrameStatistics(EditorFrameStatistics {
+      .frames_per_second = context->GetModuleTimingData().current_fps,
+      .frame_time_ms = std::chrono::duration<float, std::milli>(
+        context->GetFrameTiming().frame_duration)
+                         .count(),
+    }),
+      std::memory_order_relaxed);
 
     ProcessSurfaceRegistrations();
     ProcessSurfaceDestructions();
@@ -777,6 +861,7 @@ namespace oxygen::interop::module {
       composition_view.with_height_fog = false;
       composition_view.with_local_fog = false;
       composition_view.shading_mode = vortex::ShadingMode::kDeferred;
+      ApplyRenderOptions(composition_view, *view);
 
       const auto published_view_id = renderer.PublishRuntimeCompositionView(
         *context,
@@ -1115,6 +1200,22 @@ namespace oxygen::interop::module {
     auto cmd = std::make_unique<SetViewCameraMovementSpeedCommand>(
       view_manager_.get(), view_id, speed_units_per_second);
     command_queue_.Enqueue(std::move(cmd));
+  }
+
+  void EditorModule::SetViewRenderOptions(
+    ViewId view_id, const EditorViewRenderOptions& options) {
+    if (view_id == kInvalidViewId || !view_manager_) {
+      return;
+    }
+
+    command_queue_.Enqueue(std::make_unique<SetViewRenderOptionsCommand>(
+      view_manager_.get(), view_id, options));
+  }
+
+  auto EditorModule::GetFrameStatistics() const noexcept
+    -> EditorFrameStatistics {
+    return UnpackFrameStatistics(
+      frame_statistics_.load(std::memory_order_relaxed));
   }
 
   void EditorModule::SetViewCameraSettings(

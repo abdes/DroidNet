@@ -110,6 +110,10 @@ internal sealed class FakeEngineSession : EngineSession
 
     public override Task<bool> SetViewCameraSettingsAsync(RuntimeViewId viewId, float fieldOfViewDegrees, float nearPlane, float farPlane) => Task.FromResult(true);
 
+    public override Task<bool> SetViewRenderOptionsAsync(RuntimeViewId viewId, ViewportViewMode viewMode, bool showGrid) => Task.FromResult(true);
+
+    public override RuntimeFrameStatistics GetFrameStatistics() => default;
+
     public override void DestroyContext()
     {
         this.Step("Destroy context");

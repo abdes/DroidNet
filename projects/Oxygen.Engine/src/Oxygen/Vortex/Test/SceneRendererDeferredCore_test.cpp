@@ -44,6 +44,7 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -2600,6 +2601,56 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     graphics_->graphics_pipeline_log_.binds, [](const auto& bind) -> bool {
       return bind.desc.GetName() == "Vortex.Stage20.GroundGrid";
     }));
+  EXPECT_EQ(graphics_->draw_log_.draws.size(), 0U);
+}
+
+NOLINT_TEST_F(
+  SceneRendererDeferredCoreTest, GroundGridPassSkipsViewsWithoutGroundGrid)
+{
+  using Mask = oxygen::vortex::CompositionView::ViewFeatureMask;
+  renderer_->SetGroundGridConfig(oxygen::vortex::GroundGridConfig {
+    .enabled = true,
+  });
+
+  auto color_desc = oxygen::graphics::TextureDesc {};
+  color_desc.width = 64U;
+  color_desc.height = 64U;
+  color_desc.format = oxygen::Format::kRGBA8UNorm;
+  color_desc.texture_type = oxygen::TextureType::kTexture2D;
+  color_desc.is_render_target = true;
+  color_desc.is_shader_resource = true;
+  color_desc.initial_state = oxygen::graphics::ResourceStates::kCommon;
+  color_desc.debug_name = "SceneRendererDeferredCoreTest.GroundGridTarget";
+  auto framebuffer_desc = oxygen::graphics::FramebufferDesc {};
+  framebuffer_desc.AddColorAttachment({
+    .texture = graphics_->CreateTexture(color_desc),
+  });
+  const auto target = graphics_->CreateFramebuffer(framebuffer_desc);
+  const auto scene_textures = oxygen::vortex::SceneTextures(*graphics_,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = false,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    });
+  auto context = RenderForView(first_view_id_, first_resolved_view_);
+  context.current_view.feature_mask = Mask {
+    .bits = oxygen::vortex::CompositionView::ViewFeatureBits {
+      Mask::kAll & ~Mask::kGroundGrid,
+    },
+  };
+  auto grid = oxygen::vortex::GroundGridPass(*renderer_);
+
+  graphics_->draw_log_.draws.clear();
+  const auto state = grid.Record(context,
+    *graphics_->AcquireCommandRecorder(
+      graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
+      "Ground grid opt-out"),
+    scene_textures, oxygen::observer_ptr { target.get() });
+
+  EXPECT_TRUE(Mask {}.Has(Mask::kGroundGrid));
+  EXPECT_FALSE(state.requested);
   EXPECT_EQ(graphics_->draw_log_.draws.size(), 0U);
 }
 

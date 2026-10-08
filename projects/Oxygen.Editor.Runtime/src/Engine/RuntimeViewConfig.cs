@@ -43,4 +43,10 @@ public sealed record RuntimeViewConfig
     /// <see cref="CompositingTarget"/> and receives no input.
     /// </summary>
     public RuntimeViewId? InsetHost { get; init; }
+
+    /// <summary>Gets what the view renders from its first frame.</summary>
+    public ViewportViewMode ViewMode { get; init; } = ViewportViewMode.Lit;
+
+    /// <summary>Gets a value indicating whether the view shows the ground grid from its first frame.</summary>
+    public bool ShowGrid { get; init; } = true;
 }

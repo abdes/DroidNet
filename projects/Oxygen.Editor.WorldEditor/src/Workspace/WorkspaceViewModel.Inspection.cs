@@ -58,7 +58,9 @@ public partial class WorkspaceViewModel
             || request.Project.ProjectId != project.ProjectId
             || !string.Equals(request.Project.ProjectRoot, project.ProjectRoot, StringComparison.OrdinalIgnoreCase)
             || Dockable.FromId("cb") is not { ViewModel: ContentBrowserViewModel browser } dockable
-            || !await browser.ShowAssetAsync(request.AssetUri).ConfigureAwait(true))
+            || !await (request.AssetUris is [var single]
+                ? browser.ShowAssetAsync(single)
+                : browser.ShowAssetsAsync(request.AssetUris)).ConfigureAwait(true))
         {
             return false;
         }

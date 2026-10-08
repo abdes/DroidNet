@@ -5,6 +5,7 @@
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Services;
+using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -76,23 +77,33 @@ public partial class ViewportViewModel
     /// Restores the pane's kept state before it has a view. A pane never reopens piloting: the
     /// camera it piloted is only looked through.
     /// </summary>
-    /// <param name="cameraType">The view preset.</param>
-    /// <param name="controlMode">The editor camera control mode.</param>
-    /// <param name="editorCamera">The editor camera state, or <see langword="null"/> to frame the scene.</param>
-    /// <param name="sceneCamera">The scene camera to look through, if any.</param>
-    internal void RestoreState(
-        CameraType cameraType,
-        CameraControlMode controlMode,
-        RuntimeEditorCamera? editorCamera,
-        SceneCameraChoice? sceneCamera)
+    /// <param name="state">The kept pane state.</param>
+    /// <param name="sceneCamera">The scene camera to look through, resolved from the kept state, if any.</param>
+    internal void RestoreState(ViewportPaneState state, SceneCameraChoice? sceneCamera)
     {
-        this.CameraType = cameraType;
-        this.CameraControlMode = controlMode;
-        this.EditorCamera = editorCamera;
+        this.CameraType = state.CameraType;
+        this.CameraControlMode = state.ControlMode;
+        this.EditorCamera = state.EditorCamera?.ToRuntime();
         this.SceneCamera = sceneCamera;
         this.IsPilotingSceneCamera = false;
-        this.RebuildCameraMenu();
+        this.ViewMode = state.ViewMode;
+        this.ShowGrid = state.ShowGrid;
+        this.ShowCameraPreview = state.ShowCameraPreview;
+        this.ShowStatistics = state.ShowStatistics;
     }
+
+    /// <summary>Captures the state the pane keeps across sessions.</summary>
+    /// <returns>The pane state, with the editor camera last read from the view.</returns>
+    internal ViewportPaneState CaptureState()
+        => new(
+            this.CameraType,
+            this.CameraControlMode,
+            ViewportCameraState.From(this.EditorCamera),
+            this.SceneCamera?.NodeId,
+            this.ViewMode,
+            this.ShowGrid,
+            this.ShowCameraPreview,
+            this.ShowStatistics);
 
     private static CameraViewPreset ToPreset(CameraType type) => type switch
     {
@@ -139,6 +150,8 @@ public partial class ViewportViewModel
                 CameraPreset = ToPreset(this.CameraType),
                 EditorCamera = this.EditorCamera,
                 SceneCameraNodeId = this.SceneCamera?.NodeId,
+                ViewMode = this.ViewMode,
+                ShowGrid = this.ShowGrid,
             }).ConfigureAwait(true);
             if (!created.IsValid)
             {
@@ -157,7 +170,7 @@ public partial class ViewportViewModel
             this.viewName = name;
             this.LogViewCreated(created);
 
-            // Preset, editor camera and scene camera were part of the creation; these follow it.
+            // Preset, cameras, view mode and grid were part of the creation; these follow it.
             await this.ApplyCurrentCameraControlModeAsync().ConfigureAwait(true);
             await this.ApplyCurrentCameraSettingsAsync().ConfigureAwait(true);
             if (this.IsPilotingSceneCamera)
@@ -248,7 +261,7 @@ public partial class ViewportViewModel
 
     private async Task ReconcileInsetCoreAsync()
     {
-        var desired = this.AssignedViewId.IsValid && this.surfaceId is not null
+        var desired = this.AssignedViewId.IsValid && this.surfaceId is not null && this.ShowCameraPreview
             && this.requestedInsetCamera is { } requested && this.SceneCamera?.NodeId != requested.NodeId
             ? requested
             : null;

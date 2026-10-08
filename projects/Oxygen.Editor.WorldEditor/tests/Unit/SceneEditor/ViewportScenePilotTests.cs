@@ -4,10 +4,7 @@
 
 using System.Numerics;
 using AwesomeAssertions;
-using DroidNet.Aura.Settings;
-using DroidNet.Config;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI.Xaml;
 using Moq;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
@@ -29,26 +26,27 @@ public sealed class ViewportScenePilotTests
     private static readonly RuntimeViewCameraPose Pose = new(new Vector3(1, 2, 3), new Vector3(10, 20, 30), Vector3.One, OrthographicSize: null);
 
     [TestMethod]
-    public void PilotCameraMenuItem_ShouldPilotTheViewedCamera()
+    public async Task TogglePilot_ShouldPilotTheViewedCamera()
     {
         var engine = CreateEngine();
         using var sut = CreateViewport(engine.Object);
-        sut.CameraMenu.Items.Single(item => item.Text == "Main").Command?.Execute(parameter: null);
+        await sut.LookThroughCameraAsync(MainCamera).ConfigureAwait(false);
 
-        sut.CameraMenu.Items.Single(item => item.Text == "Pilot Camera").Command?.Execute(parameter: null);
+        await sut.TogglePilotCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
 
         engine.Verify(service => service.SetViewScenePilotAsync(It.Is<RuntimeViewId>(id => id.Value == ViewId.Value), true), Times.Once);
         _ = sut.IsPilotingSceneCamera.Should().BeTrue();
         _ = sut.CameraMenuLabel.Should().Be("Piloting Main");
-        _ = sut.CameraMenu.Items.Single(item => item.Text == "Pilot Camera").IsChecked.Should().BeTrue();
+        _ = sut.PilotLabel.Should().Be("Stop piloting");
     }
 
     [TestMethod]
-    public void PilotCameraMenuItem_ShouldOnlyAppearWhileViewingASceneCamera()
+    public void Pilot_ShouldOnlyBeAvailableWhileViewingASceneCamera()
     {
         using var sut = CreateViewport(CreateEngine().Object);
 
-        _ = sut.CameraMenu.Items.Should().NotContain(item => item.Text == "Pilot Camera");
+        _ = sut.CanPilot.Should().BeFalse();
+        _ = sut.PilotHint.Should().Be("Look through a scene camera to pilot it.");
     }
 
     [TestMethod]
@@ -127,10 +125,10 @@ public sealed class ViewportScenePilotTests
         using var sut = CreateViewport(engine.Object, commits);
         sut.SelectedCameraProvider = () => MainCamera;
 
-        var align = sut.CameraMenu.Items.Single(item => item.Text == "Align 'Main' to View");
-        _ = align.IsEnabled.Should().BeTrue();
-        _ = align.AcceleratorText.Should().Be("Ctrl+Shift+F");
-        await sut.AlignSelectedCameraToViewAsync().ConfigureAwait(false);
+        sut.RefreshSceneCameras();
+        _ = sut.AlignCameraLabel.Should().Be("Align 'Main' to view");
+        _ = sut.CanAlignCamera.Should().BeTrue();
+        await sut.AlignSelectedCameraToViewCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
 
         _ = commits.Should().ContainSingle().Which.Should().Be((MainCamera.NodeId, Pose));
     }
@@ -148,7 +146,8 @@ public sealed class ViewportScenePilotTests
 
         _ = aligned.Should().BeFalse();
         _ = commits.Should().BeEmpty();
-        _ = sut.CameraMenu.Items.Single(item => item.Text == "Align 'Main' to View").IsEnabled.Should().BeFalse();
+        _ = sut.CanAlignCamera.Should().BeFalse();
+        _ = sut.AlignCameraDisabledReason.Should().Be("Return to the editor camera to align a camera to it.");
     }
 
     [TestMethod]
@@ -164,7 +163,7 @@ public sealed class ViewportScenePilotTests
         await sut.PilotCameraAsync(MainCamera).ConfigureAwait(false);
 
         _ = sut.IsPilotingSceneCamera.Should().BeFalse();
-        _ = sut.CameraMenu.Items.Single(item => item.Text == "Pilot Camera").IsEnabled.Should().BeFalse();
+        _ = sut.CanPilot.Should().BeFalse();
         _ = commits.Should().BeEmpty();
         engine.Verify(service => service.SetViewScenePilotAsync(It.IsAny<RuntimeViewId>(), It.IsAny<bool>()), Times.Never);
     }
@@ -181,14 +180,11 @@ public sealed class ViewportScenePilotTests
 
     private static ViewportViewModel CreateViewport(IEngineService engine, List<(Guid NodeId, RuntimeViewCameraPose Pose)>? commits = null)
     {
-        var appearanceSettings = new Mock<ISettingsService<IAppearanceSettings>>(MockBehavior.Loose);
-        _ = appearanceSettings.SetupGet(service => service.Settings).Returns(new AppearanceSettings { AppThemeMode = ElementTheme.Default });
         var viewport = new ViewportViewModel(
             Guid.NewGuid(),
             engine,
             Mock.Of<IOperationResultPublisher>(),
             new OperationStatusReducer(),
-            appearanceSettings.Object,
             NullLoggerFactory.Instance)
         {
             AssignedViewId = ViewId,

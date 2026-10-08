@@ -2,69 +2,57 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.ComponentModel;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DroidNet.Aura.Settings;
-using DroidNet.Config;
-using DroidNet.Controls.Menus;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Diagnostics;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.LevelEditor;
 
 /// <summary>
-/// ViewModel for the Viewport control, managing camera, shading, and menus.
+/// ViewModel for one viewport pane: its editor camera, the scene camera it looks through, and the
+/// view camera flyout that controls both.
 /// </summary>
 public partial class ViewportViewModel : ObservableObject, IDisposable
 {
-    private const string DegreeUnit = "\u00b0";
-    private const string PerspectiveCameraModeGroup = "PerspectiveCameraMode";
-    private const string OrthographicCameraGroup = "OrthographicCamera";
-    private const string SceneCameraGroup = "SceneCamera";
-    private const string PilotCameraText = "Pilot Camera";
-    private const string AlignCameraText = "Align Selected Camera to View";
+    private const string DegreeUnit = "°";
     private const string LockedCameraText = "Unlock the camera to move it.";
-    private const string MovementSpeedText = "Movement Speed";
-    private const string FieldOfViewText = "Field of View";
-    private const string NearViewPlaneText = "Near View Plane";
-    private const string FarViewPlaneText = "Far View Plane";
+    private const float DefaultFieldOfViewDegrees = 90.0f;
+    private const float DefaultNearViewPlane = 0.1f;
+    private const float DefaultFarViewPlane = 1000.0f;
 
-    private static readonly CameraType[] OrthographicCameraTypes =
+    private static readonly CameraControlMode[] PerspectiveModeValues =
+    [
+        CameraControlMode.OrbitTurntable,
+        CameraControlMode.OrbitTrackball,
+        CameraControlMode.Fly,
+    ];
+
+    // Display order of the orthographic grid: three rows of opposite pairs read left to right.
+    private static readonly CameraType[] OrthographicViewValues =
     [
         CameraType.Top,
         CameraType.Bottom,
-        CameraType.Left,
-        CameraType.Right,
         CameraType.Front,
         CameraType.Back,
+        CameraType.Left,
+        CameraType.Right,
     ];
 
     private readonly ILogger logger;
-    private readonly ISettingsService<IAppearanceSettings> appearanceSettings;
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
-    private readonly ViewportCameraNumberBoxItemModel movementSpeedItem;
-    private readonly ViewportCameraNumberBoxItemModel fieldOfViewItem;
-    private readonly ViewportCameraNumberBoxItemModel nearViewPlaneItem;
-    private readonly ViewportCameraNumberBoxItemModel farViewPlaneItem;
-    private IMenuSource? cameraMenu;
+    private readonly List<SceneCameraChoice> sceneCameraChoices = [];
     private CancellationTokenSource? pilotCommitDelay;
     private CancellationTokenSource? navigationSettleDelay;
     private bool pilotPoseDirty;
-    private IMenuSource? shadingMenu;
-    private IMenuSource? layoutMenu;
-    private DataTemplate? cameraNumberBoxItemTemplate;
-    private ElementTheme? effectiveThemeOverride;
     private bool isDisposed;
 
     /// <summary>
@@ -74,10 +62,6 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// <param name="engineService">The shared engine service.</param>
     /// <param name="operationResults">The host-level operation result publisher.</param>
     /// <param name="statusReducer">The shared operation status reducer.</param>
-    /// <param name="appearanceSettings">
-    ///     The <see cref="ISettingsService{IAppearanceSettings}" /> used to provide appearance and theme settings.
-    ///     This service supplies the current theme and notifies the view model of changes.
-    /// </param>
     /// <param name="loggerFactory">
     ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
     ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
@@ -87,7 +71,6 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         IEngineService engineService,
         IOperationResultPublisher operationResults,
         IStatusReducer statusReducer,
-        ISettingsService<IAppearanceSettings> appearanceSettings,
         ILoggerFactory? loggerFactory = null)
     {
         this.LoggerFactory = loggerFactory;
@@ -97,73 +80,65 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         this.EngineService = engineService;
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
-        this.appearanceSettings = appearanceSettings;
-        this.movementSpeedItem = this.CreateCameraNumberBoxModel(
+        this.MovementSpeedField = this.CreateCameraNumberField(
             value: 1.0f,
             minimum: 1.0f,
             maximum: float.PositiveInfinity,
-            unit: string.Empty,
+            unit: "m/s",
             propertyName: nameof(this.MovementSpeed));
-        this.fieldOfViewItem = this.CreateCameraNumberBoxModel(
-            value: 90.0f,
+        this.FieldOfViewField = this.CreateCameraNumberField(
+            value: DefaultFieldOfViewDegrees,
             minimum: 0.0f,
             maximum: 180.0f,
             unit: DegreeUnit,
             propertyName: nameof(this.FieldOfViewDegrees));
-        this.nearViewPlaneItem = this.CreateCameraNumberBoxModel(
-            value: 0.1f,
+        this.NearViewPlaneField = this.CreateCameraNumberField(
+            value: DefaultNearViewPlane,
             minimum: 0.0f,
             maximum: float.PositiveInfinity,
             unit: "m",
             propertyName: nameof(this.NearViewPlane),
             mask: "~.###");
-        this.farViewPlaneItem = this.CreateCameraNumberBoxModel(
-            value: 1000.0f,
+        this.FarViewPlaneField = this.CreateCameraNumberField(
+            value: DefaultFarViewPlane,
             minimum: 0.0f,
             maximum: float.PositiveInfinity,
             unit: "m",
             propertyName: nameof(this.FarViewPlane),
             mask: "~.###");
 
-        // Seed effective theme from settings and subscribe for changes.
-        this.SetEffectiveTheme(this.appearanceSettings.Settings.AppThemeMode);
-        this.appearanceSettings.PropertyChanged += this.AppearanceSettings_PropertyChanged;
+        this.PerspectiveModes =
+        [
+            new ViewportOption("Turntable", "Orbit with a level horizon", () => this.ApplyPerspectiveCameraModeAsync(CameraControlMode.OrbitTurntable)),
+            new ViewportOption("Trackball", "Orbit freely, including roll", () => this.ApplyPerspectiveCameraModeAsync(CameraControlMode.OrbitTrackball)),
+            new ViewportOption("Fly", "Move through the scene", () => this.ApplyPerspectiveCameraModeAsync(CameraControlMode.Fly)),
+        ];
+        this.OrthographicViews = [.. OrthographicViewValues.Select(type => new ViewportOption(type.ToString(), description: null, () => this.ApplyOrthographicCameraPresetAsync(type)))];
+        this.ViewModeGroups = BuildViewModeGroups(this.ApplyViewModeAsync);
+        this.LayoutGroups = this.BuildLayoutGroups();
         this.ToggleMaximizeCommand = new RelayCommand(() => this.IsMaximized = !this.IsMaximized);
+        this.UpdateCameraOptions();
+        this.UpdateViewModeOptions();
+        this.UpdateLayoutOptions();
         this.LogInitialized();
     }
 
     /// <summary>
-    /// Raised when state the pane keeps across sessions changed: its preset, control mode or viewed
-    /// camera, or its editor camera once navigation has paused.
+    /// Raised when state the pane keeps across sessions changed: its preset, control mode, viewed
+    /// camera or presentation, or its editor camera once navigation has paused.
     /// </summary>
     public event EventHandler? StateChanged;
 
-    // Overlay view toggles
-    [ObservableProperty]
-    public partial bool ShowFps { get; set; }
-
-    [ObservableProperty]
-    public partial bool ShowStats { get; set; }
-
-    [ObservableProperty]
-    public partial bool ShowToolbar { get; set; }
-
-    [ObservableProperty]
-    public partial bool Stat1 { get; set; }
-
-    [ObservableProperty]
-    public partial bool Stat2 { get; set; }
-
-    [ObservableProperty]
-    public partial bool Stat3 { get; set; }
-
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CameraMenuLabel))]
+    [NotifyPropertyChangedFor(nameof(IsPerspectiveView))]
+    [NotifyPropertyChangedFor(nameof(GestureHint))]
     public partial CameraType CameraType { get; set; } = CameraType.Perspective;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CameraMenuLabel))]
     [NotifyPropertyChangedFor(nameof(CameraControlModeLabel))]
+    [NotifyPropertyChangedFor(nameof(GestureHint))]
     public partial CameraControlMode CameraControlMode { get; set; } = CameraControlMode.OrbitTurntable;
 
     /// <summary>
@@ -172,6 +147,10 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CameraMenuLabel))]
+    [NotifyPropertyChangedFor(nameof(IsPerspectiveView))]
+    [NotifyPropertyChangedFor(nameof(CanPilot))]
+    [NotifyPropertyChangedFor(nameof(PilotHint))]
+    [NotifyPropertyChangedFor(nameof(GestureHint))]
     public partial SceneCameraChoice? SceneCamera { get; set; }
 
     /// <summary>
@@ -179,16 +158,19 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CameraMenuLabel))]
+    [NotifyPropertyChangedFor(nameof(CanPilot))]
+    [NotifyPropertyChangedFor(nameof(PilotHint))]
+    [NotifyPropertyChangedFor(nameof(PilotLabel))]
+    [NotifyPropertyChangedFor(nameof(GestureHint))]
     public partial bool IsPilotingSceneCamera { get; set; }
 
     [ObservableProperty]
-    public partial ShadingMode ShadingMode { get; set; } = ShadingMode.Wireframe;
-
-    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(MaximizeGlyph))]
+    [NotifyPropertyChangedFor(nameof(MaximizeToolTip))]
     public partial bool IsMaximized { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsGestureHintVisible))]
     public partial bool IsFocused { get; set; }
 
     /// <summary>
@@ -227,20 +209,88 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// </summary>
     public bool IsPrimaryViewport { get; private set; }
 
-    /// <summary>
-    /// Gets the menu source for viewport camera projection, movement, and lens settings.
-    /// </summary>
-    public IMenuSource CameraMenu => this.cameraMenu ??= this.BuildCameraMenu();
+    /// <summary>Gets the perspective navigation modes offered by the view camera flyout.</summary>
+    public IReadOnlyList<ViewportOption> PerspectiveModes { get; }
+
+    /// <summary>Gets the orthographic directions offered by the view camera flyout.</summary>
+    public IReadOnlyList<ViewportOption> OrthographicViews { get; }
+
+    /// <summary>Gets the scene cameras the pane can look through, refreshed when the flyout opens.</summary>
+    public ObservableCollection<ViewportOption> SceneCameraOptions { get; } = [];
+
+    /// <summary>Gets a value indicating whether the scene has a camera to look through.</summary>
+    public bool HasSceneCameras => this.SceneCameraOptions.Count > 0;
+
+    /// <summary>Gets the fly movement speed field.</summary>
+    public ViewportCameraNumberBoxItemModel MovementSpeedField { get; }
+
+    /// <summary>Gets the vertical field of view field, in degrees.</summary>
+    public ViewportCameraNumberBoxItemModel FieldOfViewField { get; }
+
+    /// <summary>Gets the near clipping distance field, in metres.</summary>
+    public ViewportCameraNumberBoxItemModel NearViewPlaneField { get; }
+
+    /// <summary>Gets the far clipping distance field, in metres.</summary>
+    public ViewportCameraNumberBoxItemModel FarViewPlaneField { get; }
 
     /// <summary>
-    /// Gets the display label for the combined camera menu button.
+    /// Gets the display label for the view camera button: the navigation mode, orthographic
+    /// direction or viewed scene camera.
     /// </summary>
     public string CameraMenuLabel => this.SceneCamera is { } camera
         ? (this.IsPilotingSceneCamera ? $"Piloting {camera.Name}" : camera.Name)
         : (this.CameraType == CameraType.Perspective ? this.CameraControlModeLabel : this.CameraType.ToString());
 
     /// <summary>
-    /// Gets or sets the source of the authored scene cameras listed in the camera menu.
+    /// Gets the display label for the editor camera control mode.
+    /// </summary>
+    public string CameraControlModeLabel => this.CameraControlMode switch
+    {
+        CameraControlMode.OrbitTurntable => "Turntable",
+        CameraControlMode.OrbitTrackball => "Trackball",
+        CameraControlMode.Fly => "Fly",
+        _ => "Camera",
+    };
+
+    /// <summary>Gets a value indicating whether the pane shows the scene through its perspective editor camera.</summary>
+    public bool IsPerspectiveView => this.SceneCamera is null && this.CameraType == CameraType.Perspective;
+
+    /// <summary>Gets a value indicating whether the viewed scene camera can be piloted, or piloting stopped.</summary>
+    public bool CanPilot => this.SceneCamera is { } camera && (this.IsPilotingSceneCamera || !this.IsLocked(camera.NodeId));
+
+    /// <summary>Gets the label of the pilot action.</summary>
+    public string PilotLabel => this.IsPilotingSceneCamera ? "Stop piloting" : "Pilot camera";
+
+    /// <summary>Gets why piloting is unavailable, or what piloting does.</summary>
+    public string PilotHint => this.SceneCamera is not { } camera
+        ? "Look through a scene camera to pilot it."
+        : !this.IsPilotingSceneCamera && this.IsLocked(camera.NodeId)
+            ? LockedCameraText
+            : "Navigation moves the camera; each pause is one undoable edit.";
+
+    /// <summary>Gets the label of the Align to View action, naming the selected camera.</summary>
+    public string AlignCameraLabel => this.SelectedCameraProvider?.Invoke() is { } selected
+        ? $"Align '{selected.Name}' to view"
+        : "Align selected camera to view";
+
+    /// <summary>Gets why Align to View is unavailable, or <see langword="null"/> when it is available.</summary>
+    public string? AlignCameraDisabledReason => this.SelectedCameraProvider?.Invoke() switch
+    {
+        null => "Select a camera node to move it to this view.",
+        _ when this.SceneCamera is not null => "Return to the editor camera to align a camera to it.",
+        { } selected when this.IsLocked(selected.NodeId) => LockedCameraText,
+        _ => null,
+    };
+
+    /// <summary>Gets a value indicating whether Align to View is available.</summary>
+    public bool CanAlignCamera => this.AlignCameraDisabledReason is null;
+
+    /// <summary>Gets the clipping range summary shown on the Clipping disclosure.</summary>
+    public string ClippingSummary
+        => string.Create(CultureInfo.CurrentCulture, $"{this.NearViewPlane:0.###}–{this.FarViewPlane:0.###} m");
+
+    /// <summary>
+    /// Gets or sets the authored scene cameras listed in the view camera flyout.
     /// </summary>
     public Func<IReadOnlyList<SceneCameraChoice>>? SceneCamerasProvider { get; set; }
 
@@ -267,33 +317,19 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     public Func<ViewportViewModel, Guid, Task>? PilotStarting { get; set; }
 
     /// <summary>
-    /// Gets or sets how long navigation must pause before a pilot gesture is committed.
-    /// </summary>
-    internal TimeSpan PilotCommitDelay { get; set; } = TimeSpan.FromMilliseconds(300);
-
-    /// <summary>
-    /// Gets or sets how long navigation must pause before the editor camera counts as moved.
-    /// </summary>
-    internal TimeSpan NavigationSettleDelay { get; set; } = TimeSpan.FromMilliseconds(500);
-
-    /// <summary>
-    /// Gets the display label for the editor camera control mode.
-    /// </summary>
-    public string CameraControlModeLabel => this.CameraControlMode switch
-    {
-        CameraControlMode.OrbitTurntable => "Turntable",
-        CameraControlMode.OrbitTrackball => "Trackball",
-        CameraControlMode.Fly => "Fly",
-        _ => "Camera",
-    };
-
-    /// <summary>
     /// Gets or sets the editor fly movement speed.
     /// </summary>
     public float MovementSpeed
     {
-        get => this.movementSpeedItem.NumberValue;
-        set => this.movementSpeedItem.NumberValue = value;
+        get => this.MovementSpeedField.NumberValue;
+        set => this.MovementSpeedField.NumberValue = value;
+    }
+
+    /// <summary>Gets or sets the fly movement speed as edited by the flyout slider.</summary>
+    public double FlySpeed
+    {
+        get => this.MovementSpeed;
+        set => this.MovementSpeed = (float)Math.Max(value, this.MovementSpeedField.Minimum);
     }
 
     /// <summary>
@@ -301,8 +337,8 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// </summary>
     public float FieldOfViewDegrees
     {
-        get => this.fieldOfViewItem.NumberValue;
-        set => this.fieldOfViewItem.NumberValue = value;
+        get => this.FieldOfViewField.NumberValue;
+        set => this.FieldOfViewField.NumberValue = value;
     }
 
     /// <summary>
@@ -310,8 +346,8 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// </summary>
     public float NearViewPlane
     {
-        get => this.nearViewPlaneItem.NumberValue;
-        set => this.nearViewPlaneItem.NumberValue = value;
+        get => this.NearViewPlaneField.NumberValue;
+        set => this.NearViewPlaneField.NumberValue = value;
     }
 
     /// <summary>
@@ -319,14 +355,9 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// </summary>
     public float FarViewPlane
     {
-        get => this.farViewPlaneItem.NumberValue;
-        set => this.farViewPlaneItem.NumberValue = value;
+        get => this.FarViewPlaneField.NumberValue;
+        set => this.FarViewPlaneField.NumberValue = value;
     }
-
-    /// <summary>
-    /// Gets the menu source for the Shading menu. Built lazily on first access.
-    /// </summary>
-    public IMenuSource ShadingMenu => this.shadingMenu ??= this.BuildShadingMenu();
 
     /// <summary>
     /// Gets or sets the command to toggle maximize state.
@@ -339,24 +370,27 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     public RuntimeColor ClearColor { get; } = new(0.1f, 0.12f, 0.15f, 1.0f);
 
     /// <summary>
-    /// Gets the menu source for the Layout menu. Built lazily on first access.
-    /// </summary>
-    public IMenuSource LayoutMenu => this.layoutMenu ??= this.BuildLayoutMenu();
-
-    /// <summary>
-    /// Gets or sets callback invoked when a layout is requested from the viewport's layout menu.
-    /// </summary>
-    public Action<SceneViewLayout>? OnLayoutRequested { get; set; }
-
-    /// <summary>
     /// Gets the glyph for the maximize/restore button.
     /// </summary>
-    public string MaximizeGlyph => this.IsMaximized ? "\uE923" : "\uE922";
+    public string MaximizeGlyph => this.IsMaximized ? "" : "";
+
+    /// <summary>Gets the tooltip of the maximize/restore button.</summary>
+    public string MaximizeToolTip => this.IsMaximized ? "Restore viewport layout" : "Maximize viewport";
 
     /// <summary>
     /// Gets the logger factory.
     /// </summary>
     public ILoggerFactory? LoggerFactory { get; }
+
+    /// <summary>
+    /// Gets or sets how long navigation must pause before a pilot gesture is committed.
+    /// </summary>
+    internal TimeSpan PilotCommitDelay { get; set; } = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>
+    /// Gets or sets how long navigation must pause before the editor camera counts as moved.
+    /// </summary>
+    internal TimeSpan NavigationSettleDelay { get; set; } = TimeSpan.FromMilliseconds(500);
 
     /// <summary>
     /// Dispose of transient subscriptions.
@@ -381,29 +415,6 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
             IsPrimary = this.IsPrimaryViewport,
             Tag = tag,
         };
-
-    /// <summary>
-    /// Set the effective theme used for selecting themed resources (Light/Dark).
-    /// Call this from the view (code-behind) using the view's ActualTheme.
-    /// </summary>
-    /// <param name="theme">The theme reported by the view (ActualTheme).</param>
-    public void UpdateTheme(ElementTheme theme) => this.SetEffectiveTheme(theme);
-
-    /// <summary>
-    /// Applies the view-owned template used to render camera menu NumberBox rows.
-    /// </summary>
-    /// <param name="numberBoxItemTemplate">The template that renders <see cref="ViewportCameraNumberBoxItemModel"/> instances.</param>
-    public void ApplyCameraMenuInteractiveContentTemplate(DataTemplate numberBoxItemTemplate)
-    {
-        ArgumentNullException.ThrowIfNull(numberBoxItemTemplate);
-
-        this.cameraNumberBoxItemTemplate = numberBoxItemTemplate;
-        if (this.cameraMenu is not null)
-        {
-            this.cameraMenu = this.BuildCameraMenu();
-            this.OnPropertyChanged(nameof(this.CameraMenu));
-        }
-    }
 
     /// <summary>
     /// Updates the layout metadata for the viewport, setting its index and primary status.
@@ -473,28 +484,40 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
             technicalMessage: this.CreateViewportTechnicalMessage(exception));
 
     /// <summary>
-    /// Applies the currently selected editor camera control mode to the native view, when available.
+    /// Re-reads the scene cameras for the view camera flyout. A viewed scene camera that no longer
+    /// exists is dropped in favor of the editor camera.
     /// </summary>
-    /// <returns>A task that completes when the mode has been submitted.</returns>
-    /// <summary>
-    /// Rebuilds the camera menu from the current scene cameras. A selected scene camera that
-    /// no longer exists is dropped in favor of the editor camera.
-    /// </summary>
-    internal void RefreshCameraMenu()
+    internal void RefreshSceneCameras()
     {
+        var cameras = this.GetSceneCameras();
         if (this.SceneCamera is { } current)
         {
-            var match = this.GetSceneCameras().FirstOrDefault(camera => camera.NodeId == current.NodeId);
+            var match = cameras.FirstOrDefault(camera => camera.NodeId == current.NodeId);
             if (match is null)
             {
                 _ = this.ApplySceneCameraAsync(camera: null);
-                return;
             }
-
-            this.SceneCamera = match;
+            else
+            {
+                this.SceneCamera = match;
+            }
         }
 
-        this.RebuildCameraMenu();
+        this.sceneCameraChoices.Clear();
+        this.sceneCameraChoices.AddRange(cameras);
+        this.SceneCameraOptions.Clear();
+        foreach (var camera in cameras)
+        {
+            this.SceneCameraOptions.Add(new ViewportOption(camera.Name, description: null, () => this.ApplySceneCameraAsync(camera)));
+        }
+
+        this.OnPropertyChanged(nameof(this.HasSceneCameras));
+        this.OnPropertyChanged(nameof(this.AlignCameraLabel));
+        this.OnPropertyChanged(nameof(this.AlignCameraDisabledReason));
+        this.OnPropertyChanged(nameof(this.CanAlignCamera));
+        this.OnPropertyChanged(nameof(this.PilotHint));
+        this.OnPropertyChanged(nameof(this.CanPilot));
+        this.UpdateCameraOptions();
     }
 
     /// <summary>Renders this viewport through a scene camera.</summary>
@@ -539,16 +562,6 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         return await this.CommitCameraPoseAsync(camera.NodeId).ConfigureAwait(true);
     }
 
-    /// <summary>Moves the selected camera to this viewport's editor camera, as one undoable edit.</summary>
-    /// <returns>A task that completes when the request was handled.</returns>
-    internal async Task AlignSelectedCameraToViewAsync()
-    {
-        if (this.SelectedCameraProvider?.Invoke() is { } camera)
-        {
-            _ = await this.AlignCameraToViewAsync(camera).ConfigureAwait(true);
-        }
-    }
-
     /// <summary>
     /// Reports navigation input in this viewport. While piloting, a gesture is committed as one
     /// undoable camera edit once no button or key is held and input has paused.
@@ -556,6 +569,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// <param name="inputHeld">Whether a mouse button or key is still held.</param>
     internal void NotifyNavigationInput(bool inputHeld)
     {
+        this.MarkNavigated();
         this.ScheduleNavigationSettled(inputHeld);
         if (!this.IsPilotingSceneCamera)
         {
@@ -573,6 +587,10 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         _ = this.CommitPilotAfterPauseAsync(this.pilotCommitDelay.Token);
     }
 
+    /// <summary>
+    /// Applies the currently selected editor camera control mode to the native view, when available.
+    /// </summary>
+    /// <returns>A task that completes when the mode has been submitted.</returns>
     internal async Task ApplyCurrentCameraControlModeAsync()
         => await this.ApplyCameraControlModeAsync(this.CameraControlMode).ConfigureAwait(true);
 
@@ -596,7 +614,6 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         {
             if (disposing)
             {
-                this.appearanceSettings.PropertyChanged -= this.AppearanceSettings_PropertyChanged;
                 this.CancelPilotCommit();
                 this.CancelNavigationSettled();
             }
@@ -605,25 +622,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         }
     }
 
-    private static MenuItemData CreateToggleMenuItem(string text, Func<bool> getter, Action<bool> setter, string? accelerator = null)
-        => new()
-        {
-            Text = text,
-            IsCheckable = true,
-            IsChecked = getter(),
-            AcceleratorText = accelerator,
-            Command = new RelayCommand<MenuItemData?>(item =>
-            {
-                if (item is null)
-                {
-                    return;
-                }
-
-                setter(item.IsChecked);
-            }),
-        };
-
-    private ViewportCameraNumberBoxItemModel CreateCameraNumberBoxModel(
+    private ViewportCameraNumberBoxItemModel CreateCameraNumberField(
         float value,
         float minimum,
         float maximum,
@@ -638,189 +637,49 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
             mask,
             onNumberValueChanged: changedValue => this.OnCameraNumberBoxValueChanged(propertyName, changedValue));
 
-    partial void OnIsMaximizedChanged(bool oldValue, bool newValue)
+    partial void OnCameraTypeChanged(CameraType value)
     {
-        // keep MaximizeGlyph synched with IsMaximized
-        this.OnPropertyChanged(nameof(this.MaximizeGlyph));
+        this.UpdateCameraOptions();
+        this.ResetGestureHint();
+        this.RaiseStateChanged();
     }
 
-    partial void OnCameraTypeChanged(CameraType value) => this.RaiseStateChanged();
-
-    partial void OnCameraControlModeChanged(CameraControlMode value) => this.RaiseStateChanged();
-
-    partial void OnSceneCameraChanged(SceneCameraChoice? value) => this.RaiseStateChanged();
-
-    private void SetEffectiveTheme(ElementTheme theme)
+    partial void OnCameraControlModeChanged(CameraControlMode value)
     {
-        var hadCameraMenu = this.cameraMenu is not null;
-        var hadShadingMenu = this.shadingMenu is not null;
-        var hadLayoutMenu = this.layoutMenu is not null;
-
-        this.effectiveThemeOverride = theme;
-        this.LogEffectiveThemeSet(theme);
-
-        try
-        {
-            if (hadShadingMenu)
-            {
-                this.shadingMenu = this.BuildShadingMenu();
-                this.OnPropertyChanged(nameof(this.ShadingMenu));
-            }
-
-            if (hadCameraMenu)
-            {
-                this.cameraMenu = this.BuildCameraMenu();
-                this.OnPropertyChanged(nameof(this.CameraMenu));
-            }
-
-            if (hadLayoutMenu)
-            {
-                this.layoutMenu = this.BuildLayoutMenu();
-                this.OnPropertyChanged(nameof(this.LayoutMenu));
-            }
-        }
-        catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
-        {
-            this.LogMenuRebuildFailed(ex);
-        }
+        this.UpdateCameraOptions();
+        this.ResetGestureHint();
+        this.RaiseStateChanged();
     }
 
-    private void AppearanceSettings_PropertyChanged(object? sender, PropertyChangedEventArgs? e)
+    partial void OnSceneCameraChanged(SceneCameraChoice? value)
     {
-        if (string.Equals(e?.PropertyName, nameof(IAppearanceSettings.AppThemeMode), StringComparison.Ordinal))
-        {
-            var theme = this.appearanceSettings.Settings.AppThemeMode;
-            this.SetEffectiveTheme(theme);
-        }
+        this.UpdateCameraOptions();
+        this.ResetGestureHint();
+        this.OnPropertyChanged(nameof(this.AlignCameraDisabledReason));
+        this.OnPropertyChanged(nameof(this.CanAlignCamera));
+        this.RaiseStateChanged();
     }
 
-    private IconSource? ResolveIcon(string name)
+    /// <summary>Marks the option of each flyout list that describes the pane's current camera.</summary>
+    private void UpdateCameraOptions()
     {
-        // The settings service seeds the VM's effective theme; assert it's present.
-        if (string.IsNullOrWhiteSpace(name))
+        var editorCamera = this.SceneCamera is null;
+        for (var i = 0; i < PerspectiveModeValues.Length; i++)
         {
-            this.LogResolveIconEmptyName();
-            return null;
+            this.PerspectiveModes[i].IsSelected = editorCamera && this.CameraType == CameraType.Perspective
+                && this.CameraControlMode == PerspectiveModeValues[i];
         }
 
-        if (!this.effectiveThemeOverride.HasValue)
+        for (var i = 0; i < OrthographicViewValues.Length; i++)
         {
-            this.LogResolveIconBeforeTheme();
-            return null;
+            this.OrthographicViews[i].IsSelected = editorCamera && this.CameraType == OrthographicViewValues[i];
         }
 
-        var app = Application.Current;
-        if (app is null)
+        for (var i = 0; i < this.SceneCameraOptions.Count && i < this.sceneCameraChoices.Count; i++)
         {
-            return null;
+            this.SceneCameraOptions[i].IsSelected = this.SceneCamera?.NodeId == this.sceneCameraChoices[i].NodeId;
         }
-
-        var preferred = this.effectiveThemeOverride.Value == ElementTheme.Dark ? "Dark" : "Light";
-        var key = $"Icon.{name}";
-
-        // Only look in the ThemeDictionary that matches the effective theme.
-        foreach (var md in app.Resources.MergedDictionaries)
-        {
-            if (md?.ThemeDictionaries is not { } td)
-            {
-                continue;
-            }
-
-            if (td.TryGetValue(preferred, out var pdObj) && pdObj is ResourceDictionary pd && pd.TryGetValue(key, out var pdVal) && pdVal is IconSource pdIcon)
-            {
-                return pdIcon;
-            }
-        }
-
-        // No fallback: if the icon isn't found in the matching ThemeDictionary return null.
-        return null;
     }
-
-    private IMenuSource BuildCameraMenu()
-    {
-        var builder = new MenuBuilder(this.LoggerFactory);
-
-        this.AddPerspectiveCameraItems(builder);
-
-        _ = builder.AddSeparator("Orthographic");
-        foreach (var type in OrthographicCameraTypes)
-        {
-            _ = builder.AddRadioMenuItem(
-                type.ToString(),
-                OrthographicCameraGroup,
-                this.SceneCamera is null && this.CameraType == type,
-                new RelayCommand(() => _ = this.ApplyOrthographicCameraPresetAsync(type)));
-        }
-
-        _ = builder.AddSeparator("Scene Cameras");
-        var sceneCameras = this.GetSceneCameras();
-        if (sceneCameras.Count == 0)
-        {
-            _ = builder.AddMenuItem(new MenuItemData { Text = "No cameras in scene", IsEnabled = false });
-        }
-
-        foreach (var camera in sceneCameras)
-        {
-            _ = builder.AddRadioMenuItem(
-                camera.Name,
-                SceneCameraGroup,
-                this.SceneCamera?.NodeId == camera.NodeId,
-                new RelayCommand(() => _ = this.ApplySceneCameraAsync(camera)));
-        }
-
-        if (this.SceneCamera is { } viewed)
-        {
-            var locked = this.IsLocked(viewed.NodeId);
-            _ = builder.AddMenuItem(new MenuItemData
-            {
-                Text = PilotCameraText,
-                IsCheckable = true,
-                IsChecked = this.IsPilotingSceneCamera,
-                HelpText = locked ? LockedCameraText : null,
-                IsEnabled = !locked || this.IsPilotingSceneCamera,
-                Command = new RelayCommand(() => _ = this.SetPilotAsync(!this.IsPilotingSceneCamera)),
-            });
-        }
-
-        var selected = this.SelectedCameraProvider?.Invoke();
-        var alignDisabledReason = selected is null ? "Select a camera node to move it to this view."
-            : this.SceneCamera is not null ? "Return to the editor camera to align a camera to it."
-            : this.IsLocked(selected.NodeId) ? LockedCameraText
-            : null;
-        _ = builder.AddMenuItem(new MenuItemData
-        {
-            Text = selected is null ? AlignCameraText : $"Align '{selected.Name}' to View",
-            HelpText = alignDisabledReason,
-            AcceleratorText = "Ctrl+Shift+F",
-            IsEnabled = alignDisabledReason is null,
-            Command = new RelayCommand(() => _ = this.AlignSelectedCameraToViewAsync()),
-        });
-
-        _ = builder
-            .AddSeparator("View")
-            .AddMenuItem(this.CreateCameraNumberBoxMenuItem(FieldOfViewText, this.fieldOfViewItem))
-            .AddMenuItem(this.CreateCameraNumberBoxMenuItem(NearViewPlaneText, this.nearViewPlaneItem))
-            .AddMenuItem(this.CreateCameraNumberBoxMenuItem(FarViewPlaneText, this.farViewPlaneItem));
-
-        return builder.Build();
-    }
-
-    private void AddPerspectiveCameraItems(MenuBuilder builder)
-        => _ = builder
-            .AddSeparator("Perspective")
-            .AddMenuItem(this.CreatePerspectiveCameraModeItem("Turntable", CameraControlMode.OrbitTurntable))
-            .AddMenuItem(this.CreatePerspectiveCameraModeItem("Trackball", CameraControlMode.OrbitTrackball))
-            .AddMenuItem(this.CreatePerspectiveCameraModeItem("Fly", CameraControlMode.Fly))
-            .AddMenuItem(this.CreateCameraNumberBoxMenuItem(MovementSpeedText, this.movementSpeedItem));
-
-    private MenuItemData CreatePerspectiveCameraModeItem(string text, CameraControlMode mode)
-        => new()
-        {
-            Text = text,
-            RadioGroupId = PerspectiveCameraModeGroup,
-            IsChecked = this.SceneCamera is null && this.CameraType == CameraType.Perspective && this.CameraControlMode == mode,
-            Command = new RelayCommand(() => _ = this.ApplyPerspectiveCameraModeAsync(mode)),
-        };
 
     private async Task ApplyPerspectiveCameraModeAsync(CameraControlMode mode)
     {
@@ -846,7 +705,6 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         }
 
         this.CameraType = type;
-        this.RebuildCameraMenu();
 
         if (!this.AssignedViewId.IsValid)
         {
@@ -900,7 +758,6 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         }
 
         this.SceneCamera = camera;
-        this.RebuildCameraMenu();
 
         if (this.AssignedViewId.IsValid)
         {
@@ -941,6 +798,29 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         }
     }
 
+    [RelayCommand]
+    private Task TogglePilot() => this.SetPilotAsync(!this.IsPilotingSceneCamera);
+
+    /// <summary>Moves the selected camera to this viewport's editor camera, as one undoable edit.</summary>
+    /// <returns>A task that completes when the request was handled.</returns>
+    [RelayCommand]
+    private async Task AlignSelectedCameraToView()
+    {
+        if (this.SelectedCameraProvider?.Invoke() is { } camera)
+        {
+            _ = await this.AlignCameraToViewAsync(camera).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>Restores the lens defaults; navigation mode, speed and pose are unchanged.</summary>
+    [RelayCommand]
+    private void ResetLens()
+    {
+        this.FieldOfViewDegrees = DefaultFieldOfViewDegrees;
+        this.NearViewPlane = DefaultNearViewPlane;
+        this.FarViewPlane = DefaultFarViewPlane;
+    }
+
     private async Task SetPilotAsync(bool pilot)
     {
         var camera = this.SceneCamera;
@@ -969,7 +849,6 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         }
 
         this.IsPilotingSceneCamera = pilot;
-        this.RebuildCameraMenu();
         if (this.AssignedViewId.IsValid)
         {
             _ = await this.SendScenePilotAsync(pilot).ConfigureAwait(true);
@@ -1114,16 +993,9 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
 
     private bool IsLocked(Guid nodeId) => this.CameraLockProvider?.Invoke(nodeId) == true;
 
-    private void RebuildCameraMenu()
-    {
-        this.cameraMenu = this.BuildCameraMenu();
-        this.OnPropertyChanged(nameof(this.CameraMenu));
-    }
-
     private async Task ApplyCameraControlModeAsync(CameraControlMode mode)
     {
         this.CameraControlMode = mode;
-        this.RebuildCameraMenu();
 
         if (!this.AssignedViewId.IsValid)
         {
@@ -1155,24 +1027,18 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         }
     }
 
-    private MenuItemData CreateCameraNumberBoxMenuItem(string text, ViewportCameraNumberBoxItemModel model)
-        => new()
-        {
-            Text = text,
-            InteractiveContent = model,
-            InteractiveContentTemplate = this.cameraNumberBoxItemTemplate,
-        };
-
     private void OnCameraNumberBoxValueChanged(string propertyName, float value)
     {
         this.OnPropertyChanged(propertyName);
 
         if (string.Equals(propertyName, nameof(this.MovementSpeed), StringComparison.Ordinal))
         {
+            this.OnPropertyChanged(nameof(this.FlySpeed));
             _ = this.ApplyCameraMovementSpeedAsync(value);
             return;
         }
 
+        this.OnPropertyChanged(nameof(this.ClippingSummary));
         _ = this.ApplyCameraSettingsAsync();
     }
 
@@ -1242,61 +1108,6 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
                 "The runtime could not apply the camera settings for this viewport.",
                 ex);
         }
-    }
-
-    private IMenuSource BuildShadingMenu()
-    {
-        var builder = new MenuBuilder(this.LoggerFactory);
-
-        foreach (var mode in new[] { ShadingMode.Wireframe, ShadingMode.Shaded, ShadingMode.Rendered })
-        {
-            _ = builder.AddRadioMenuItem(mode.ToString(), "ShadingMode", this.ShadingMode == mode, new RelayCommand(() => this.ShadingMode = mode));
-        }
-
-        return builder.Build();
-    }
-
-    private IMenuSource BuildLayoutMenu()
-    {
-        var builder = new MenuBuilder(this.LoggerFactory);
-        _ = builder.AddMenuItem(CreateToggleMenuItem("Show FPS", () => this.ShowFps, v => this.ShowFps = v, "Ctrl+Shift+H"))
-            .AddMenuItem(CreateToggleMenuItem("Show Stats", () => this.ShowStats, v => this.ShowStats = v, "Shift+L"))
-            .AddSubmenu("Stats", submenu => submenu
-                .AddMenuItem(CreateToggleMenuItem("Stat1", () => this.Stat1, v => this.Stat1 = v))
-                .AddMenuItem(CreateToggleMenuItem("Stat2", () => this.Stat2, v => this.Stat2 = v))
-                .AddMenuItem(CreateToggleMenuItem("Stat3", () => this.Stat3, v => this.Stat3 = v)))
-            .AddMenuItem(CreateToggleMenuItem("Show Toolbar", () => this.ShowToolbar, v => this.ShowToolbar = v, "Ctrl+Shift+T"))
-            .AddSeparator();
-
-        // Layouts submenu with grouped panes and themed icons
-        _ = builder.AddSubmenu("Layouts", layouts =>
-        {
-            _ = layouts.AddMenuItem("One Pane", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.OnePane)), this.ResolveIcon("OnePane"));
-            _ = layouts.AddMenuItem("Four Quadrants", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.FourQuad)), this.ResolveIcon("FourQuad"));
-            _ = layouts.AddSubmenu("Two Panes", two =>
-            {
-                _ = two.AddMenuItem("Main Left", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.TwoMainLeft)), this.ResolveIcon("TwoMainLeft"));
-                _ = two.AddMenuItem("Main Right", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.TwoMainRight)), this.ResolveIcon("TwoMainRight"));
-                _ = two.AddMenuItem("Main Top", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.TwoMainTop)), this.ResolveIcon("TwoMainTop"));
-                _ = two.AddMenuItem("Main Bottom", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.TwoMainBottom)), this.ResolveIcon("TwoMainBottom"));
-            });
-            _ = layouts.AddSubmenu("Three Panes", three =>
-            {
-                _ = three.AddMenuItem("Main Left", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.ThreeMainLeft)), this.ResolveIcon("ThreeMainLeft"));
-                _ = three.AddMenuItem("Main Right", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.ThreeMainRight)), this.ResolveIcon("ThreeMainRight"));
-                _ = three.AddMenuItem("Main Top", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.ThreeMainTop)), this.ResolveIcon("ThreeMainTop"));
-                _ = three.AddMenuItem("Main Bottom", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.ThreeMainBottom)), this.ResolveIcon("ThreeMainBottom"));
-            });
-            _ = layouts.AddSubmenu("Four Panes", four =>
-            {
-                _ = four.AddMenuItem("Main Left", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.FourMainLeft)), this.ResolveIcon("FourMainLeft"));
-                _ = four.AddMenuItem("Main Right", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.FourMainRight)), this.ResolveIcon("FourMainRight"));
-                _ = four.AddMenuItem("Main Top", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.FourMainTop)), this.ResolveIcon("FourMainTop"));
-                _ = four.AddMenuItem("Main Bottom", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.FourMainBottom)), this.ResolveIcon("FourMainBottom"));
-            });
-        });
-
-        return builder.Build();
     }
 
     private AffectedScope CreateAffectedScope()

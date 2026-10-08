@@ -90,29 +90,20 @@ public partial class SceneEditorViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "Locate-in-content-browser requested for document {DocumentId}")]
-    private static partial void LogLocateInContentBrowserRequested(ILogger logger, Guid? documentId);
+        Message = "Browse to {AssetCount} asset(s) of the selection in document {DocumentId}")]
+    private static partial void LogBrowseToAssetRequested(ILogger logger, int assetCount, Guid? documentId);
 
-    private void LogLocateInContentBrowserRequested()
-        => LogLocateInContentBrowserRequested(this.logger, this.Metadata?.DocumentId);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Information,
-        Message = "Request to add primitive {Kind} to document {DocumentId}")]
-    private static partial void LogRequestToAddPrimitive(ILogger logger, string kind, Guid? documentId);
-
-    private void LogRequestToAddPrimitive(string kind)
-        => LogRequestToAddPrimitive(this.logger, kind, this.Metadata?.DocumentId);
+    private void LogBrowseToAssetRequested(int assetCount)
+        => LogBrowseToAssetRequested(this.logger, assetCount, this.Metadata?.DocumentId);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "Request to add light {Kind} to document {DocumentId}")]
-    private static partial void LogRequestToAddLight(ILogger logger, string kind, Guid? documentId);
+        Message = "Quick Add {Item} to document {DocumentId}")]
+    private static partial void LogQuickAddRequested(ILogger logger, string item, Guid? documentId);
 
-    private void LogRequestToAddLight(string kind)
-        => LogRequestToAddLight(this.logger, kind, this.Metadata?.DocumentId);
+    private void LogQuickAddRequested(string item)
+        => LogQuickAddRequested(this.logger, item, this.Metadata?.DocumentId);
 
     [LoggerMessage(
         SkipEnabledCheck = true,

@@ -130,7 +130,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         Uri? inspected = null;
         messenger.Register<ShowAssetRequestMessage>(this, (_, request) =>
         {
-            revealed = request.AssetUri;
+            revealed = request.AssetUris.Single();
             request.Reply(Task.FromResult(true));
         });
         messenger.Register<OpenCookedInspectionRequestMessage>(this, (_, request) =>

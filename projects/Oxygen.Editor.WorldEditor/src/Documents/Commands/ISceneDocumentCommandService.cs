@@ -71,16 +71,38 @@ public interface ISceneDocumentCommandService
     /// </summary>
     /// <param name="context">The document command context.</param>
     /// <param name="kind">The primitive kind.</param>
+    /// <param name="placement">Where the root node is created; the scene origin when <see langword="null"/>.</param>
     /// <returns>The command result with the created node.</returns>
-    public Task<SceneValueCommandResult<SceneNode>> CreatePrimitiveAsync(SceneDocumentCommandContext context, string kind);
+    public Task<SceneValueCommandResult<SceneNode>> CreatePrimitiveAsync(SceneDocumentCommandContext context, string kind, NodePlacement? placement = null);
 
     /// <summary>
     /// Creates a light scene node.
     /// </summary>
     /// <param name="context">The document command context.</param>
     /// <param name="kind">The light kind.</param>
+    /// <param name="placement">
+    /// Where the root node is created; the light kind's default position when <see langword="null"/>.
+    /// A placement without a rotation keeps the kind's default orientation.
+    /// </param>
     /// <returns>The command result with the created node.</returns>
-    public Task<SceneValueCommandResult<SceneNode>> CreateLightAsync(SceneDocumentCommandContext context, string kind);
+    public Task<SceneValueCommandResult<SceneNode>> CreateLightAsync(SceneDocumentCommandContext context, string kind, NodePlacement? placement = null);
+
+    /// <summary>
+    /// Creates a camera scene node.
+    /// </summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="kind">The camera kind: <c>Perspective</c> or <c>Orthographic</c>.</param>
+    /// <param name="placement">Where the root node is created; the scene origin when <see langword="null"/>.</param>
+    /// <returns>The command result with the created node.</returns>
+    public Task<SceneValueCommandResult<SceneNode>> CreateCameraAsync(SceneDocumentCommandContext context, string kind, NodePlacement? placement = null);
+
+    /// <summary>
+    /// Creates an empty root scene node.
+    /// </summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="placement">Where the root node is created; the scene origin when <see langword="null"/>.</param>
+    /// <returns>The command result with the created node.</returns>
+    public Task<SceneValueCommandResult<SceneNode>> CreateEmptyNodeAsync(SceneDocumentCommandContext context, NodePlacement? placement = null);
 
     /// <summary>
     /// Edits transform component values on one or more nodes.

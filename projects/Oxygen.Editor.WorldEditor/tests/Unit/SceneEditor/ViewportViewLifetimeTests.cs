@@ -4,10 +4,7 @@
 
 using System.Numerics;
 using AwesomeAssertions;
-using DroidNet.Aura.Settings;
-using DroidNet.Config;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI.Xaml;
 using Moq;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
@@ -38,7 +35,7 @@ public sealed class ViewportViewLifetimeTests
         var engine = new FakeEngine();
         using var sut = CreateViewport(engine.Service.Object);
         await sut.CreateViewAsync(Surface, "Pane", 640, 480).ConfigureAwait(false);
-        sut.CameraMenu.Items.Single(item => item.Text == "Top").Command?.Execute(parameter: null);
+        await sut.OrthographicViews.Single(option => option.Label == "Top").ChooseCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
 
         await sut.ReleaseViewAsync().ConfigureAwait(false);
         await sut.CreateViewAsync(Surface, "Pane", 640, 480).ConfigureAwait(false);
@@ -133,14 +130,11 @@ public sealed class ViewportViewLifetimeTests
 
     private static ViewportViewModel CreateViewport(IEngineService engine)
     {
-        var appearanceSettings = new Mock<ISettingsService<IAppearanceSettings>>(MockBehavior.Loose);
-        _ = appearanceSettings.SetupGet(service => service.Settings).Returns(new AppearanceSettings { AppThemeMode = ElementTheme.Default });
         return new ViewportViewModel(
             Guid.NewGuid(),
             engine,
             Mock.Of<IOperationResultPublisher>(),
             new OperationStatusReducer(),
-            appearanceSettings.Object,
             NullLoggerFactory.Instance)
         {
             SceneCamerasProvider = () => [MainCamera],

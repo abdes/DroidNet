@@ -29,6 +29,7 @@
 #include <EngineRunner.h>
 #include <Views/CameraControlModeManaged.h>
 #include <Views/CameraViewPresetManaged.h>
+#include <Views/ViewModeManaged.h>
 #include <Views/EditorCameraStateManaged.h>
 #include <Views/ViewConfigManaged.h>
 #include <Views/ViewIdManaged.h>
@@ -620,6 +621,72 @@ namespace Oxygen::Interop {
     catch (...) {
       return System::Threading::Tasks::Task<bool>::FromResult(false);
     }
+  }
+
+  auto EngineRunner::TrySetViewRenderOptionsAsync(
+    EngineContext^ ctx,
+    ViewIdManaged viewId,
+    ViewModeManaged viewMode,
+    bool showGrid)
+    -> System::Threading::Tasks::Task<bool>^
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (disposed_) {
+      throw gcnew ObjectDisposedException("EngineRunner");
+    }
+
+    ui_dispatcher_->VerifyAccess(
+      gcnew String(L"SetViewRenderOptionsAsync requires the UI thread. Call CreateEngine() on the UI thread first."));
+
+    auto native_ctx = ctx->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+
+    auto editor_module_opt =
+      native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (!editor_module_opt) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+
+    try {
+      // Member assignment, not designated initializers: those crash the
+      // C++/CLI compiler in managed functions.
+      oxygen::interop::module::EditorViewRenderOptions options;
+      options.view_mode = ToNativeViewMode(viewMode);
+      options.show_grid = showGrid;
+      editor_module_opt->get().SetViewRenderOptions(viewId.ToNative(), options);
+      return System::Threading::Tasks::Task<bool>::FromResult(true);
+    }
+    catch (...) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+  }
+
+  auto EngineRunner::GetFrameStatistics(EngineContext^ ctx)
+    -> FrameStatisticsManaged
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+
+    FrameStatisticsManaged statistics;
+    auto native_ctx = ctx->NativePtr();
+    if (disposed_ || !native_ctx || !native_ctx->engine) {
+      return statistics;
+    }
+
+    auto editor_module_opt =
+      native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (editor_module_opt) {
+      const auto frame = editor_module_opt->get().GetFrameStatistics();
+      statistics.FramesPerSecond = frame.frames_per_second;
+      statistics.FrameTimeMilliseconds = frame.frame_time_ms;
+    }
+
+    return statistics;
   }
 
   auto EngineRunner::TrySetViewCameraSettingsAsync(

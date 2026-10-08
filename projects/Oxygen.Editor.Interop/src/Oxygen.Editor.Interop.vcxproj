@@ -43,6 +43,9 @@
     <ClCompile Include="Commands\SetViewCameraMovementSpeedCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
+    <ClCompile Include="Commands\SetViewRenderOptionsCommand.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
     <ClCompile Include="Commands\SetViewCameraPresetCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
@@ -176,6 +179,7 @@
     <ClInclude Include="Commands\SetMaterialOverrideCommand.h" />
     <ClInclude Include="Commands\SetViewCameraControlModeCommand.h" />
     <ClInclude Include="Commands\SetViewCameraMovementSpeedCommand.h" />
+    <ClInclude Include="Commands\SetViewRenderOptionsCommand.h" />
     <ClInclude Include="Commands\SetViewCameraPresetCommand.h" />
     <ClInclude Include="Commands\SetViewCameraSettingsCommand.h" />
     <ClInclude Include="Commands\SetViewSceneCameraCommand.h" />
@@ -232,6 +236,7 @@
     <ClInclude Include="Views\ColorManaged.h" />
     <ClInclude Include="Views\CameraControlModeManaged.h" />
     <ClInclude Include="Views\CameraViewPresetManaged.h" />
+    <ClInclude Include="Views\ViewModeManaged.h" />
     <ClInclude Include="Views\ViewConfigManaged.h" />
     <ClInclude Include="Views\ViewCameraPoseManaged.h" />
     <ClInclude Include="Views\EditorCameraStateManaged.h" />

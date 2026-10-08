@@ -108,6 +108,7 @@ public sealed partial class ViewportStateService(
             && panes.All(static pane => pane is not null
                 && Enum.IsDefined(pane.CameraType)
                 && Enum.IsDefined(pane.ControlMode)
+                && Enum.IsDefined(pane.ViewMode)
                 && pane.EditorCamera?.IsFinite() != false);
 
     private Dictionary<Guid, SceneViewportState> Activate(ProjectContext project)
@@ -244,11 +245,19 @@ public sealed record SceneViewportState(
 /// <param name="ControlMode">The editor camera control mode.</param>
 /// <param name="EditorCamera">The editor camera, or <see langword="null"/> when the pane never had a view.</param>
 /// <param name="SceneCameraId">The stable node ID of the scene camera the pane looks through, if any.</param>
+/// <param name="ViewMode">What the pane renders: the lit scene or a diagnostic view.</param>
+/// <param name="ShowGrid">Whether the pane draws the ground grid.</param>
+/// <param name="ShowCameraPreview">Whether the pane previews the selected camera in an inset.</param>
+/// <param name="ShowStatistics">Whether the pane shows the frame statistics readout.</param>
 public sealed record ViewportPaneState(
     CameraType CameraType,
     CameraControlMode ControlMode,
     ViewportCameraState? EditorCamera,
-    Guid? SceneCameraId);
+    Guid? SceneCameraId,
+    ViewportViewMode ViewMode = ViewportViewMode.Lit,
+    bool ShowGrid = true,
+    bool ShowCameraPreview = true,
+    bool ShowStatistics = false);
 
 /// <summary>
 /// A pane's editor camera, stored as plain fields: the settings serializer does not write the

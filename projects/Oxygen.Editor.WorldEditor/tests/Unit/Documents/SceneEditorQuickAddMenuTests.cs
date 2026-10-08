@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
+using DroidNet.Controls.Menus;
 using DroidNet.Documents;
 using DryIoc;
 using Microsoft.UI;
@@ -20,31 +21,46 @@ using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
-/// <summary>Verifies the scene editor quick-add palette exposes the canonical primitive kinds.</summary>
+/// <summary>Verifies the scene editor Quick Add menu: an empty node, the canonical primitives, lights and cameras.</summary>
 [TestClass]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository's discovery configuration.")]
 public sealed class SceneEditorQuickAddMenuTests
 {
+    /// <summary>The menu offers an empty node, then shapes, lights and cameras.</summary>
+    [TestMethod]
+    public void QuickAddMenuOffersEmptyNodeShapesLightsAndCameras()
+    {
+        using var fixture = new Fixture();
+        var items = fixture.Editor.QuickAddMenu.Items;
+
+        _ = items.Where(item => !item.IsSeparator).Select(item => item.Text).Should().Equal("Empty node", "Shapes", "Lights", "Cameras");
+        _ = Submenu(items, "Lights").Select(item => item.Text).Should().Equal("Directional light", "Point light", "Spot light");
+        _ = Submenu(items, "Cameras").Select(item => item.Text).Should().Equal("Perspective camera", "Orthographic camera");
+    }
+
     /// <summary>The Shapes submenu lists exactly the ten engine built-in authoring geometries.</summary>
     [TestMethod]
     public void QuickAddMenuShapesOfferEveryCanonicalPrimitiveKind()
     {
         using var fixture = new Fixture();
-        var shapes = fixture.Editor.QuickAddMenu.Items.Single(item => string.Equals(item.Text, "Shapes", StringComparison.Ordinal));
+        var shapes = Submenu(fixture.Editor.QuickAddMenu.Items, "Shapes");
 
-        _ = shapes.SubItems.Select(item => item.Text).Should().Equal(
+        _ = shapes.Select(item => item.Text).Should().Equal(
             "Sphere",
             "Cube",
             "Cylinder",
             "Cone",
             "Plane",
             "Capsule",
-            "IcoSphere",
+            "Icosphere",
             "Torus",
             "Quad",
-            "SubdividedCube");
-        _ = shapes.SubItems.Should().OnlyContain(item => !item.IsSeparator && item.Command != null);
+            "Subdivided cube");
+        _ = shapes.Should().OnlyContain(item => !item.IsSeparator && item.Command != null);
     }
+
+    private static IEnumerable<MenuItemData> Submenu(IEnumerable<MenuItemData> items, string text)
+        => items.Single(item => string.Equals(item.Text, text, StringComparison.Ordinal)).SubItems;
 
     private sealed class Fixture : IDisposable
     {

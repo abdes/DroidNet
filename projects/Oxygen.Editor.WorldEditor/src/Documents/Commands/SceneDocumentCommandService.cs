@@ -74,7 +74,7 @@ public sealed partial class SceneDocumentCommandService(
 
     /// <inheritdoc />
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
-    public async Task<SceneValueCommandResult<SceneNode>> CreatePrimitiveAsync(SceneDocumentCommandContext context, string kind)
+    public async Task<SceneValueCommandResult<SceneNode>> CreatePrimitiveAsync(SceneDocumentCommandContext context, string kind, NodePlacement? placement = null)
     {
         using var authoring = EnterAuthoring(context);
         if (authoring is null)
@@ -91,6 +91,7 @@ public sealed partial class SceneDocumentCommandService(
                 Name = "Geometry",
                 Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri($"BasicShapes/{normalized}")),
             });
+            ApplyPlacement(node, placement);
 
             await this.AddRootNodeAsync(context, node, SceneOperationKinds.NodeCreatePrimitive, $"Create {normalized}").ConfigureAwait(true);
             return SceneCommandResults.Success(node);
@@ -110,7 +111,7 @@ public sealed partial class SceneDocumentCommandService(
 
     /// <inheritdoc />
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
-    public async Task<SceneValueCommandResult<SceneNode>> CreateLightAsync(SceneDocumentCommandContext context, string kind)
+    public async Task<SceneValueCommandResult<SceneNode>> CreateLightAsync(SceneDocumentCommandContext context, string kind, NodePlacement? placement = null)
     {
         using var authoring = EnterAuthoring(context);
         if (authoring is null)
@@ -123,6 +124,7 @@ public sealed partial class SceneDocumentCommandService(
             var normalized = NormalizeLightKind(kind);
             var node = new SceneNode(context.Scene) { Name = $"{normalized} Light" };
             ApplyLightTransform(node, normalized);
+            ApplyPlacement(node, placement);
             var light = CreateLightComponent(normalized);
 
             _ = node.AddComponent(light);
@@ -141,6 +143,59 @@ public sealed partial class SceneDocumentCommandService(
                 ex);
             return SceneCommandResults.Failure<SceneNode>(operationResultId);
         }
+    }
+
+    /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
+    public async Task<SceneValueCommandResult<SceneNode>> CreateCameraAsync(SceneDocumentCommandContext context, string kind, NodePlacement? placement = null)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return SceneCommandResults.Failure<SceneNode>();
+        }
+
+        try
+        {
+            CameraComponent camera = kind.Trim() switch
+            {
+                "Perspective" => new PerspectiveCamera { Name = "Perspective Camera" },
+                "Orthographic" => new OrthographicCamera { Name = "Orthographic Camera" },
+                _ => throw new NotSupportedException($"Camera kind '{kind}' is not supported."),
+            };
+            var node = new SceneNode(context.Scene) { Name = "Camera" };
+            ApplyPlacement(node, placement);
+            _ = node.AddComponent(camera);
+
+            await this.AddRootNodeAsync(context, node, SceneOperationKinds.NodeCreateCamera, $"Create {camera.Name}").ConfigureAwait(true);
+            return SceneCommandResults.Success(node);
+        }
+        catch (Exception ex)
+        {
+            var operationResultId = this.PublishSceneFailure(
+                SceneOperationKinds.NodeCreateCamera,
+                DiagnosticCodes.ScenePrefix + "CREATE_CAMERA_FAILED",
+                "Camera was not created",
+                $"The {kind} camera could not be created.",
+                context,
+                ex);
+            return SceneCommandResults.Failure<SceneNode>(operationResultId);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<SceneValueCommandResult<SceneNode>> CreateEmptyNodeAsync(SceneDocumentCommandContext context, NodePlacement? placement = null)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return SceneCommandResults.Failure<SceneNode>();
+        }
+
+        var node = new SceneNode(context.Scene) { Name = "Node" };
+        ApplyPlacement(node, placement);
+        await this.AddRootNodeAsync(context, node, SceneOperationKinds.NodeCreate, "Create Node").ConfigureAwait(true);
+        return SceneCommandResults.Success(node);
     }
 
     /// <inheritdoc />
@@ -575,6 +630,21 @@ public sealed partial class SceneDocumentCommandService(
             "Spot" => System.Numerics.Quaternion.CreateFromYawPitchRoll(0f, -0.7853982f, 0f),
             _ => System.Numerics.Quaternion.Identity,
         };
+    }
+
+    private static void ApplyPlacement(SceneNode node, NodePlacement? placement)
+    {
+        // Created nodes are scene roots: their local transform is their world transform.
+        if (placement is null || node.Components.OfType<TransformComponent>().FirstOrDefault() is not { } transform)
+        {
+            return;
+        }
+
+        transform.LocalPosition = placement.Position;
+        if (placement.Rotation is { } rotation)
+        {
+            transform.LocalRotation = rotation;
+        }
     }
 
     private static LightComponent CreateLightComponent(string kind)

@@ -16,6 +16,7 @@
 #include "Views/ColorManaged.h"
 #include "Views/EditorCameraStateManaged.h"
 #include "Views/ViewIdManaged.h"
+#include "Views/ViewModeManaged.h"
 
 namespace Oxygen::Interop {
 
@@ -53,6 +54,8 @@ namespace Oxygen::Interop {
       ClearColor = ColorManaged{ 0.1f, 0.2f, 0.38f, 1.0f };
       CompositingTarget = System::Nullable<Guid>();
       CameraPreset = CameraViewPresetManaged::Perspective;
+      ViewMode = ViewModeManaged::Lit;
+      ShowGrid = true;
     }
 
     // Human readable name for the view
@@ -89,6 +92,10 @@ namespace Oxygen::Interop {
     /// </summary>
     property System::Nullable<ViewIdManaged> InsetHost;
 
+    property ViewModeManaged ViewMode;
+
+    property bool ShowGrid;
+
     native::interop::module::EditorView::Config ToNative() {
       native::interop::module::EditorView::Config n;
       n.name = msclr::interop::marshal_as<std::string>(Name);
@@ -115,6 +122,8 @@ namespace Oxygen::Interop {
       if (InsetHost.HasValue) {
         n.inset_host = InsetHost.Value.ToNative();
       }
+      n.render_options.view_mode = ToNativeViewMode(ViewMode);
+      n.render_options.show_grid = ShowGrid;
 
       return n;
     }
