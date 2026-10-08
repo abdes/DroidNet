@@ -44,10 +44,13 @@ public:
   OXGN_VRTX_NDAPI auto GetName() const noexcept -> std::string_view override;
   OXGN_VRTX_API auto SetName(std::string_view name) noexcept -> void override;
 
-protected:
-  OXGN_VRTX_NDAPI auto Context() const -> const RenderContext&;
+  //! Root bindings of the Vortex bindless root signature, shared by every
+  //! graphics pipeline, including passes that are not RenderPass objects.
   OXGN_VRTX_NDAPI static auto BuildRootBindings()
     -> std::vector<graphics::RootBindingItem>;
+
+protected:
+  OXGN_VRTX_NDAPI auto Context() const -> const RenderContext&;
   OXGN_VRTX_NDAPI static auto RootConstantsBindingSlot()
     -> graphics::BindingSlotDesc;
 

@@ -65,6 +65,15 @@ struct PreparedSceneFrame {
     draw_bounding_spheres; // one per draw metadata record
   std::span<const sceneprep::RenderItemData>
     render_items; // per-view collected items captured at scene-prep finalize
+
+  //! The scene node and geometry slot that produced a draw. Instanced draws
+  //! batch only one node's instances, so every draw has exactly one source.
+  struct DrawSource {
+    scene::NodeHandle node {};
+    std::uint32_t submesh_index { 0U };
+  };
+  //! One per draw metadata record, in draw order.
+  std::span<const DrawSource> draw_sources;
   std::span<const ShadowCasterSource> shadow_caster_sources;
   std::span<const MaterialShadingConstants> shadow_materials;
   std::span<const std::uint64_t> shadow_texture_revisions;

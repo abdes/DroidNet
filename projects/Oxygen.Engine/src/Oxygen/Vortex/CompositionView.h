@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -26,6 +27,7 @@
 #include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
+#include <Oxygen/Vortex/Types/ViewOutline.h>
 
 namespace oxygen::graphics {
 class CommandRecorder;
@@ -290,6 +292,9 @@ struct CompositionView {
   //! Callback for recording view-specific SDR commands (HUD, Gizmos, ImGui).
   //! Executed in the correct hardware phase (Post-Tonemap for HDR views).
   std::function<void(graphics::CommandRecorder&)> on_overlay;
+
+  //! Scene nodes outlined in this view this frame; null outlines nothing.
+  std::shared_ptr<const ViewOutline> outline;
 
   [[nodiscard]] auto GetShadingMode() const noexcept
     -> const std::optional<ShadingMode>&

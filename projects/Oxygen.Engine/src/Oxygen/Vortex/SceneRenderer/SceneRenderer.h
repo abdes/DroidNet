@@ -72,6 +72,8 @@ class ShadowService;
 class PostProcessService;
 struct ExposureSourceLoss;
 class GroundGridPass;
+class SelectionOutlinePass;
+class ViewPickPass;
 class EnvironmentLightingService;
 class IndirectLightingService;
 class ScreenHzbModule;
@@ -314,6 +316,8 @@ private:
   std::unique_ptr<EnvironmentLightingService> environment_;
   std::unique_ptr<IndirectLightingService> indirect_;
   std::unique_ptr<GroundGridPass> ground_grid_pass_;
+  std::unique_ptr<SelectionOutlinePass> selection_outline_pass_;
+  std::unique_ptr<ViewPickPass> view_pick_pass_;
   std::unique_ptr<PostProcessService> post_process_;
 };
 

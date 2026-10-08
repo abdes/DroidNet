@@ -517,6 +517,24 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .permutations=std::array<std::string_view, 1> { "OXYGEN_HDR_OUTPUT" }
   },
   ShaderFileSpec {
+    .path="Vortex/Services/Editor/SelectionOutline.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kPixel, .name="VortexSelectionOutlineMaskPS" } },
+    .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" }
+  },
+  ShaderFileSpec {
+    .path="Vortex/Services/Editor/SelectionOutlineComposite.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kPixel, .name="VortexSelectionOutlineCompositePS" },
+      EntryPoint { .type=kVertex, .name="VortexSelectionOutlineCompositeVS" } }
+  },
+  ShaderFileSpec {
+    .path="Vortex/Services/Editor/ViewPick.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kPixel, .name="VortexViewPickPS" } },
+    .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" }
+  },
+  ShaderFileSpec {
     .path="Vortex/Services/PostProcess/BloomDownsample.hlsl",
     .entries=std::array {
       EntryPoint { .type=kPixel, .name="VortexBloomDownsamplePS" } }
@@ -581,12 +599,14 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - VortexEnvironmentAtmosphere/Fog/LocalFog/Probe refresh families: 12 entries
 // - VortexPostProcessTonemap: 2 entries
 // - VortexPostProcessGroundGrid: 4 entries
+// - VortexSelectionOutline: 4 (mask PS x ALPHA_TEST, composite VS + PS)
+// - VortexViewPick: 2 (PS x ALPHA_TEST)
 // - VortexPostProcessBloomDownsample: 1 entry
 // - VortexPostProcessBloomUpsample: 1 entry
 // - VortexPostProcessExposure: 3 entries
 // - LightCulling: 1
 // - ImGui: 2 entries
 // - Compositing: 2 entries
-// Total: 109
+// Total: 115
 
 } // namespace oxygen::graphics::d3d12

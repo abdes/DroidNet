@@ -2462,6 +2462,7 @@ auto Renderer::PublishRuntimeCompositionView(
     state.camera_identity = camera_identity;
     state.framing_target = target_viewport;
     state.framing_content = content_viewport;
+    state.outline = composition_view.outline;
   }
   if (camera_changed
     && composition_view.view_state_handle
@@ -2618,6 +2619,8 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
         .camera_identity = std::nullopt,
         .framing_target = {},
         .framing_content = {},
+        .outline = nullptr,
+        .pending_pick = nullptr,
       };
   return published_view_id;
 }
@@ -2635,6 +2638,84 @@ auto Renderer::ResolvePublishedRuntimeViewId(
     return it->second.published_view_id;
   }
   return kInvalidViewId;
+}
+
+auto Renderer::RequestPublishedRuntimeViewPick(
+  const ViewId intent_view_id, std::shared_ptr<ViewPickRequest> request) -> void
+{
+  if (request == nullptr) {
+    return;
+  }
+  // Replaced and rejected requests complete after the lock is released.
+  auto released = std::shared_ptr<ViewPickRequest> {};
+  {
+    std::unique_lock state_lock(view_state_mutex_);
+    const auto it = published_runtime_views_by_intent_.find(intent_view_id);
+    if (it == published_runtime_views_by_intent_.end()) {
+      released = std::move(request);
+    } else {
+      // The rendered image is the content rectangle of the published target.
+      const auto& target = it->second.framing_target;
+      const auto& content = it->second.framing_content;
+      const auto& rect = request->Rect();
+      const auto left
+        = static_cast<float>(rect.x) - (content.top_left_x - target.top_left_x);
+      const auto top
+        = static_cast<float>(rect.y) - (content.top_left_y - target.top_left_y);
+      const auto right
+        = (std::min)(left + static_cast<float>(rect.width), content.width);
+      const auto bottom
+        = (std::min)(top + static_cast<float>(rect.height), content.height);
+      const auto clipped_left = (std::max)(left, 0.0F);
+      const auto clipped_top = (std::max)(top, 0.0F);
+      if (right <= clipped_left || bottom <= clipped_top) {
+        // Entirely on the bars: nothing is rendered there to hit.
+        state_lock.unlock();
+        request->Complete(ViewPickResult {
+          .status = ViewPickResult::Status::kCompleted,
+          .hits = {},
+          .world_position = std::nullopt,
+        });
+        return;
+      }
+      released = std::exchange(it->second.pending_pick,
+        std::make_shared<ViewPickRequest>(
+          ViewPickRect {
+            .x = static_cast<std::uint32_t>(clipped_left),
+            .y = static_cast<std::uint32_t>(clipped_top),
+            .width = static_cast<std::uint32_t>(right - clipped_left),
+            .height = static_cast<std::uint32_t>(bottom - clipped_top),
+          },
+          [request = std::move(request)](ViewPickResult result) -> void {
+            request->Complete(std::move(result));
+          }));
+    }
+  }
+  released.reset();
+}
+
+auto Renderer::FindPublishedRuntimeViewOutline(
+  const ViewId published_view_id) const -> std::shared_ptr<const ViewOutline>
+{
+  std::shared_lock state_lock(view_state_mutex_);
+  for (const auto& [_, state] : published_runtime_views_by_intent_) {
+    if (state.published_view_id == published_view_id) {
+      return state.outline;
+    }
+  }
+  return nullptr;
+}
+
+auto Renderer::TakePublishedRuntimeViewPick(const ViewId published_view_id)
+  -> std::shared_ptr<ViewPickRequest>
+{
+  std::unique_lock state_lock(view_state_mutex_);
+  for (auto& [_, state] : published_runtime_views_by_intent_) {
+    if (state.published_view_id == published_view_id) {
+      return std::exchange(state.pending_pick, nullptr);
+    }
+  }
+  return nullptr;
 }
 
 auto Renderer::ResolvePublishedRuntimeFraming(const ViewId intent_view_id) const
@@ -2790,6 +2871,7 @@ auto Renderer::DetachPublishedRuntimeViewState(const ViewId intent_view_id)
     .published_view_id = found->second.published_view_id,
     .view_state_handle = found->second.view_state_handle,
     .source_loss = nullptr,
+    .pending_pick = std::move(found->second.pending_pick),
   };
   const auto* root
     = ResolvePublishedExposureRootLocked(detached.published_view_id);

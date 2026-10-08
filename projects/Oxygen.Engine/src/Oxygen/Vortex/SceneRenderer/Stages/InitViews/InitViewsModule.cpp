@@ -458,6 +458,7 @@ namespace {
     storage.normal_matrices.clear();
     storage.partitions.clear();
     storage.draw_bounding_spheres.clear();
+    storage.draw_sources.clear();
 
     auto& prepared_frame = storage.prepared_frame;
     prepared_frame = {};
@@ -493,6 +494,15 @@ namespace {
       storage.draw_bounding_spheres.assign(
         draw_bounding_spheres.begin(), draw_bounding_spheres.end());
       prepared_frame.draw_bounding_spheres = storage.draw_bounding_spheres;
+      const auto draw_sources = draw_emitter->GetVelocityPublicationSources();
+      storage.draw_sources.reserve(draw_sources.size());
+      for (const auto& source : draw_sources) {
+        storage.draw_sources.push_back(PreparedSceneFrame::DrawSource {
+          .node = source.node_handle,
+          .submesh_index = source.submesh_index,
+        });
+      }
+      prepared_frame.draw_sources = storage.draw_sources;
       const auto shadow_sources = draw_emitter->GetShadowCasterSources();
       storage.shadow_caster_sources.assign(
         shadow_sources.begin(), shadow_sources.end());
@@ -662,6 +672,7 @@ void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     storage.normal_matrices.clear();
     storage.partitions.clear();
     storage.draw_bounding_spheres.clear();
+    storage.draw_sources.clear();
     storage.prepared_frame = {};
   }
 

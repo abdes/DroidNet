@@ -85,6 +85,8 @@ m_gtest_program(RenderContext SOURCES "RenderContext_test.cpp")
 
 m_gtest_program(AcceptedDrawView SOURCES "Types/AcceptedDrawView_test.cpp")
 
+m_gtest_program(ViewPickPass SOURCES "Passes/ViewPickPass_test.cpp")
+
 m_gtest_program(
   SceneRendererShell
   SOURCES

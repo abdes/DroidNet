@@ -45,6 +45,8 @@
 #include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
 #include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
+#include <Oxygen/Vortex/Types/ViewOutline.h>
+#include <Oxygen/Vortex/Types/ViewPick.h>
 #include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 #include <Oxygen/Vortex/ViewExtension.h>
 #include <Oxygen/Vortex/ViewFeatureProfile.h>
@@ -633,6 +635,22 @@ public:
     std::optional<ShaderDebugMode> shader_debug_mode_override = {}) -> ViewId;
   OXGN_VRTX_NDAPI auto ResolvePublishedRuntimeViewId(
     ViewId intent_view_id) const noexcept -> ViewId;
+  //! Picks a published runtime view the next time it renders.
+  /*!
+   The rectangle is in the view's published viewport, which includes bars
+   around a Fixed-aspect camera image; it is clipped to the rendered image. A
+   pending request for the same view is replaced and completes cancelled, as
+   does a request for an unknown view or one removed before it renders. The
+   completion runs on the engine thread and must not call the renderer.
+  */
+  OXGN_VRTX_API auto RequestPublishedRuntimeViewPick(
+    ViewId intent_view_id, std::shared_ptr<ViewPickRequest> request) -> void;
+  //! The outline a published view requested this frame, or null.
+  [[nodiscard]] OXGN_VRTX_API auto FindPublishedRuntimeViewOutline(
+    ViewId published_view_id) const -> std::shared_ptr<const ViewOutline>;
+  //! Takes the pick request waiting for a published view's render, if any.
+  [[nodiscard]] OXGN_VRTX_API auto TakePublishedRuntimeViewPick(
+    ViewId published_view_id) -> std::shared_ptr<ViewPickRequest>;
   auto GetRigidTransformHistoryCache() noexcept
     -> internal::RigidTransformHistoryCache&
   {
@@ -870,6 +888,9 @@ private:
     //! Target and camera content rectangles; equal when nothing is framed.
     ViewPort framing_target {};
     ViewPort framing_content {};
+    std::shared_ptr<const ViewOutline> outline;
+    //! Rectangle already in rendered-image pixels.
+    std::shared_ptr<ViewPickRequest> pending_pick;
   };
 
   //! Caller holds view_state_mutex_; null means unknown, cyclic or forbidden.
@@ -883,6 +904,8 @@ private:
       CompositionView::kInvalidViewStateHandle
     };
     std::shared_ptr<const ExposureSourceLoss> source_loss;
+    //! Released after the state lock, so its cancellation runs unlocked.
+    std::shared_ptr<ViewPickRequest> pending_pick;
   };
 
   static constexpr frame::SequenceNumber kPublishedRuntimeViewMaxIdleFrames {
