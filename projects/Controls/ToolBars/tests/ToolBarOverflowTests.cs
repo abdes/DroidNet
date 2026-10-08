@@ -157,6 +157,84 @@ public sealed class ToolBarOverflowTests : VisualUserInterfaceTests
         _ = ((FrameworkElement)items.ContainerFromIndex(1)).Visibility.Should().Be(Visibility.Visible);
     });
 
+    /// <summary>Lower priorities overflow first, and the menu keeps toolbar order.</summary>
+    /// <returns>The asynchronous priority regression.</returns>
+    [TestMethod]
+    public Task LowerPriorityItemsOverflowFirst() => EnqueueAsync(async () =>
+    {
+        var toolbar = new ToolBar { Width = 400, Padding = new Thickness(0) };
+        var low = new ToolBarButton { Label = "Low", Width = 60 };
+        var high = new ToolBarButton { Label = "High", Width = 60 };
+        var middle = new ToolBarButton { Label = "Middle", Width = 60 };
+        ToolBar.SetOverflowPriority(high, 2);
+        ToolBar.SetOverflowPriority(middle, 1);
+        toolbar.PrimaryItems.Add(low);
+        toolbar.PrimaryItems.Add(high);
+        toolbar.PrimaryItems.Add(middle);
+        await LoadTestContentAsync(toolbar).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var overflowButton = GetPartOrFail<Button>(toolbar, ToolBar.OverflowButtonPartName);
+        var items = GetPartOrFail<ItemsControl>(toolbar, ToolBar.PrimaryItemsControlPartName);
+
+        // Room for two of the three commands, with or without the overflow button's width.
+        toolbar.Width = 165;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = ((FrameworkElement)items.ContainerFromItem(low)).Visibility.Should().Be(Visibility.Collapsed);
+        _ = ((FrameworkElement)items.ContainerFromItem(high)).Visibility.Should().Be(Visibility.Visible);
+        _ = ((FrameworkElement)items.ContainerFromItem(middle)).Visibility.Should().Be(Visibility.Visible);
+
+        // Room for one command.
+        toolbar.Width = 110;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = ((FrameworkElement)items.ContainerFromItem(high)).Visibility.Should().Be(Visibility.Visible);
+        var overflow = (MenuFlyout)overflowButton.Flyout;
+        _ = overflow.Items.OfType<MenuFlyoutItem>().Select(item => item.Text).Should().Equal("Low", "Middle");
+    });
+
+    /// <summary>An overflowed toggle shows and changes the button's checked state.</summary>
+    /// <returns>The asynchronous toggle regression.</returns>
+    [TestMethod]
+    public Task OverflowedToggleKeepsItsCheckedState() => EnqueueAsync(async () =>
+    {
+        var toolbar = new ToolBar { Width = 60 };
+        var snap = new ToolBarToggleButton { Label = "Snap", Width = 120, IsChecked = true };
+        toolbar.PrimaryItems.Add(snap);
+        await LoadTestContentAsync(toolbar).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var overflow = (MenuFlyout)GetPartOrFail<Button>(toolbar, ToolBar.OverflowButtonPartName).Flyout;
+        var item = overflow.Items.OfType<ToggleMenuFlyoutItem>().Single();
+        _ = item.IsChecked.Should().BeTrue();
+        item.IsChecked = false;
+        _ = snap.IsChecked.Should().BeFalse();
+    });
+
+    /// <summary>A disabled command's reason stays reachable through its container and the overflow menu.</summary>
+    /// <returns>The asynchronous unavailable-command regression.</returns>
+    [TestMethod]
+    public Task DisabledCommandKeepsItsReasonVisible() => EnqueueAsync(async () =>
+    {
+        const string reason = "Not available yet.";
+        var toolbar = new ToolBar { Width = 400 };
+        var rename = new ToolBarButton { Label = "Rename", Width = 80, IsEnabled = false };
+        ToolTipService.SetToolTip(rename, reason);
+        toolbar.PrimaryItems.Add(rename);
+        await LoadTestContentAsync(toolbar).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var container = (FrameworkElement)GetPartOrFail<ItemsControl>(toolbar, ToolBar.PrimaryItemsControlPartName).ContainerFromItem(rename);
+        _ = ToolTipService.GetToolTip(container).Should().Be(reason);
+
+        // IsEnabledChanged is raised asynchronously.
+        rename.IsEnabled = true;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = ToolTipService.GetToolTip(container).Should().BeNull();
+
+        rename.IsEnabled = false;
+        toolbar.Width = 40;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var overflow = (MenuFlyout)GetPartOrFail<Button>(toolbar, ToolBar.OverflowButtonPartName).Flyout;
+        _ = ToolTipService.GetToolTip(overflow.Items.OfType<MenuFlyoutItem>().Single()).Should().Be(reason);
+    });
+
     private static T GetPartOrFail<T>(ToolBar toolbar, string name)
         where T : FrameworkElement
     {

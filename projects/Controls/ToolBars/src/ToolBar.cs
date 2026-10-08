@@ -7,6 +7,7 @@ using System.Collections.Specialized;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
@@ -162,7 +163,7 @@ public partial class ToolBar : Control
         return 0.0;
     }
 
-    private static MenuFlyoutItem? CreateMenuItemForCommand(object commandItem, ToolBar owner)
+    private static MenuFlyoutItemBase? CreateMenuItemForCommand(object commandItem, ToolBar owner)
     {
         if (commandItem is ToolBarButton button)
         {
@@ -173,6 +174,7 @@ public partial class ToolBar : Control
                 CommandParameter = button.CommandParameter,
             };
             menuItem.SetBinding(IsEnabledProperty, new Binding { Source = button, Path = new PropertyPath(nameof(IsEnabled)), Mode = BindingMode.OneWay });
+            CopyToolTip(button, menuItem);
             if (button.Flyout is { } flyout)
             {
                 menuItem.Click += (_, _) => owner.ShowOverflowedFlyout(flyout);
@@ -192,12 +194,16 @@ public partial class ToolBar : Control
 
         if (commandItem is ToolBarToggleButton toggleButton)
         {
-            var menuItem = new MenuFlyoutItem
+            // The menu entry is the same toggle: it shows and changes the button's checked state.
+            var menuItem = new ToggleMenuFlyoutItem
             {
                 Text = toggleButton.Label ?? string.Empty,
                 Command = toggleButton.Command,
                 CommandParameter = toggleButton.CommandParameter,
             };
+            menuItem.SetBinding(ToggleMenuFlyoutItem.IsCheckedProperty, new Binding { Source = toggleButton, Path = new PropertyPath(nameof(ToggleButton.IsChecked)), Mode = BindingMode.TwoWay, Converter = NullableBooleanConverter.Instance });
+            menuItem.SetBinding(IsEnabledProperty, new Binding { Source = toggleButton, Path = new PropertyPath(nameof(IsEnabled)), Mode = BindingMode.OneWay });
+            CopyToolTip(toggleButton, menuItem);
 
             if (toggleButton.Icon != null)
             {
@@ -219,8 +225,10 @@ public partial class ToolBar : Control
         var totalWidth = ShowUnsupportedAndSum();
         var (overflowed, collapsedIndices, _) = FitSupportedItems(totalWidth);
         CollapseSeparators(collapsedIndices, overflowed);
+        CollapseTrailingSeparators(collapsedIndices, overflowed);
 
-        return overflowed;
+        // The menu lists overflowed items in toolbar order, whatever order priority collapsed them in.
+        return [.. overflowed.Distinct().OrderBy(item => itemInfos.FindIndex(info => ReferenceEquals(info.item, item)))];
 
         double ShowUnsupportedAndSum()
         {
@@ -243,14 +251,16 @@ public partial class ToolBar : Control
             var total = startingTotal;
             var overflowed = new List<object>();
             var collapsedIndices = new HashSet<int>();
+            int? failedPriority = null;
 
-            for (var i = 0; i < itemInfos.Count; i++)
+            // Higher priorities fit first; equal priorities keep toolbar order, so all-default items
+            // overflow from the right exactly as before.
+            var order = Enumerable.Range(0, itemInfos.Count)
+                .Where(i => itemInfos[i].isSupported)
+                .OrderByDescending(GetPriority)
+                .ThenBy(static i => i);
+            foreach (var i in order)
             {
-                if (!itemInfos[i].isSupported)
-                {
-                    continue;
-                }
-
                 // If this is a separator, do not collapse if it is BETWEEN two non-supported controls
                 if (itemInfos[i].item is ToolBarSeparator)
                 {
@@ -263,11 +273,14 @@ public partial class ToolBar : Control
                     }
                 }
 
-                if (total + itemInfos[i].width > availableWidth)
+                // Once an item overflows, nothing of lower priority may stay visible in its place.
+                var priority = GetPriority(i);
+                if (priority < failedPriority || total + itemInfos[i].width > availableWidth)
                 {
                     itemInfos[i].container.Visibility = Visibility.Collapsed;
                     overflowed.Add(itemInfos[i].item);
                     collapsedIndices.Add(i);
+                    failedPriority ??= priority;
                 }
                 else
                 {
@@ -277,6 +290,52 @@ public partial class ToolBar : Control
             }
 
             return (overflowed, collapsedIndices, total);
+        }
+
+        // A separator takes the priority of the group on its left, or of the first group when it leads.
+        int GetPriority(int index)
+        {
+            for (var i = index; i >= 0; i--)
+            {
+                if (itemInfos[i].item is not ToolBarSeparator and DependencyObject item)
+                {
+                    return GetOverflowPriority(item);
+                }
+            }
+
+            for (var i = index + 1; i < itemInfos.Count; i++)
+            {
+                if (itemInfos[i].item is not ToolBarSeparator and DependencyObject item)
+                {
+                    return GetOverflowPriority(item);
+                }
+            }
+
+            return 0;
+        }
+
+        // A separator with no visible command after it would end the visible toolbar.
+        void CollapseTrailingSeparators(HashSet<int> collapsedIndices, List<object> overflowed)
+        {
+            for (var i = itemInfos.Count - 1; i >= 0; i--)
+            {
+                if (itemInfos[i].item is not ToolBarSeparator)
+                {
+                    if (!collapsedIndices.Contains(i) && itemInfos[i].container.Visibility == Visibility.Visible)
+                    {
+                        return;
+                    }
+
+                    continue;
+                }
+
+                if (itemInfos[i].isSupported && itemInfos[i].container.Visibility == Visibility.Visible)
+                {
+                    itemInfos[i].container.Visibility = Visibility.Collapsed;
+                    _ = collapsedIndices.Add(i);
+                    overflowed.Add(itemInfos[i].item);
+                }
+            }
         }
 
         void CollapseSeparators(HashSet<int> collapsedIndices, List<object> overflowed)
@@ -309,6 +368,16 @@ public partial class ToolBar : Control
     }
 
     private static bool IsItemVisible(object item) => item is not UIElement { Visibility: Visibility.Collapsed };
+
+    // A text tooltip (often an unavailable command's reason) stays with the command in the menu.
+    private static void CopyToolTip(DependencyObject command, MenuFlyoutItemBase menuItem)
+    {
+        if (ToolTipService.GetToolTip(command) is string { Length: > 0 } text)
+        {
+            ToolTipService.SetToolTip(menuItem, text);
+            AutomationProperties.SetHelpText(menuItem, text);
+        }
+    }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
         => this.UpdateOverflow();
@@ -665,6 +734,18 @@ public partial class ToolBar : Control
             AddItemsToMenu([.. this.SecondaryItems!]);
         }
 
+        // Separators only divide commands; none may open or close the menu.
+        var menuItems = this.overflowMenuFlyout.Items;
+        while (menuItems.Count > 0 && menuItems[^1] is MenuFlyoutSeparator)
+        {
+            menuItems.RemoveAt(menuItems.Count - 1);
+        }
+
+        while (menuItems.Count > 0 && menuItems[0] is MenuFlyoutSeparator)
+        {
+            menuItems.RemoveAt(0);
+        }
+
         void AddItemsToMenu(List<object> items)
         {
             object? lastAdded = null;
@@ -677,7 +758,7 @@ public partial class ToolBar : Control
 
                 if (item is ToolBarButton or ToolBarToggleButton)
                 {
-                    if (CreateMenuItemForCommand(item, this) is MenuFlyoutItem menuItem)
+                    if (CreateMenuItemForCommand(item, this) is { } menuItem)
                     {
                         this.overflowMenuFlyout!.Items.Add(menuItem);
                         lastAdded = item;
@@ -711,4 +792,14 @@ public partial class ToolBar : Control
         double PrimaryTotal);
 
     private sealed record OverflowState(bool ShowSecondaries, bool ShowOverflow, List<object> ItemsToOverflow);
+
+    /// <summary>Maps a toggle button's three-state value to a menu toggle's checked state.</summary>
+    private sealed partial class NullableBooleanConverter : IValueConverter
+    {
+        public static NullableBooleanConverter Instance { get; } = new();
+
+        public object Convert(object value, Type targetType, object parameter, string language) => value is true;
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language) => value is true;
+    }
 }

@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 
 namespace DroidNet.Controls;
 
@@ -76,6 +77,16 @@ public partial class ToolBar
         new PropertyMetadata(defaultValue: null, OnLoggerFactoryChanged));
 
     /// <summary>
+    /// Identifies the OverflowPriority attached property. When primary items do not fit, items with a
+    /// lower priority move to the overflow menu first; equal priorities overflow from the right.
+    /// </summary>
+    public static readonly DependencyProperty OverflowPriorityProperty = DependencyProperty.RegisterAttached(
+        "OverflowPriority",
+        typeof(int),
+        typeof(ToolBar),
+        new PropertyMetadata(0, OnOverflowPriorityChanged));
+
+    /// <summary>
     /// Gets or sets the collection of primary items displayed in the toolbar.
     /// </summary>
     [SuppressMessage("Design", "CA2227:Collection properties should be read only", Justification = "DependencyProperty requires a public setter for XAML.")]
@@ -131,6 +142,45 @@ public partial class ToolBar
     {
         get => (ILoggerFactory?)this.GetValue(LoggerFactoryProperty);
         set => this.SetValue(LoggerFactoryProperty, value);
+    }
+
+    /// <summary>Gets the overflow priority of a toolbar item.</summary>
+    /// <param name="element">The toolbar item.</param>
+    /// <returns>The item's priority; higher priorities stay visible longer.</returns>
+    public static int GetOverflowPriority(DependencyObject element)
+    {
+        ArgumentNullException.ThrowIfNull(element);
+        return (int)element.GetValue(OverflowPriorityProperty);
+    }
+
+    /// <summary>Sets the overflow priority of a toolbar item.</summary>
+    /// <param name="element">The toolbar item.</param>
+    /// <param name="value">The priority; higher priorities stay visible longer.</param>
+    public static void SetOverflowPriority(DependencyObject element, int value)
+    {
+        ArgumentNullException.ThrowIfNull(element);
+        element.SetValue(OverflowPriorityProperty, value);
+    }
+
+    private static void OnOverflowPriorityChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is UIElement element && FindToolBar(element) is { } toolBar)
+        {
+            toolBar.UpdateOverflow();
+        }
+    }
+
+    private static ToolBar? FindToolBar(DependencyObject element)
+    {
+        for (var current = VisualTreeHelper.GetParent(element); current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is ToolBar toolBar)
+            {
+                return toolBar;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
