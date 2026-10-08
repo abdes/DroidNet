@@ -6,8 +6,6 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
-using DroidNet.Aura.Settings;
-using DroidNet.Config;
 using DroidNet.Controls.Menus;
 using DroidNet.Documents;
 using DroidNet.TimeMachine;
@@ -51,7 +49,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private readonly IContainer container;
     private IDisposable? cookInputRegistration;
     private IMenuSource? quickAddMenu;
-    private SceneViewLayout? previousLayout;
     private Oxygen.Editor.World.Scene? scene;
     private bool sceneReady;
     private bool isClosing;
@@ -169,18 +166,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         GC.SuppressFinalize(this);
     }
 
-    /// <summary>
-    /// Marks the given viewport as focused and clears focus from all other viewports.
-    /// </summary>
-    /// <param name="viewport">The viewport to focus.</param>
-    public void SetFocusedViewport(ViewportViewModel viewport)
-    {
-        ArgumentNullException.ThrowIfNull(viewport);
-
-        this.FocusedViewportId = viewport.ViewportId;
-        this.ApplyFocusedViewportFlags();
-    }
-
     /// <inheritdoc/>
     public async Task SaveAsync()
     {
@@ -198,6 +183,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     public async Task PrepareForCloseAsync()
     {
         await this.inputCommitter.CommitAsync(this.windowId).ConfigureAwait(true);
+        await this.SaveViewportStateForCloseAsync().ConfigureAwait(true);
         await this.PreviewSettings.FlushAsync().ConfigureAwait(true);
         if (this.scene is not null)
         {
@@ -278,7 +264,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
             foreach (var viewport in this.Viewports)
             {
-                viewport.Dispose();
+                this.ReleaseViewport(viewport);
             }
 
             this.Viewports.Clear();
@@ -317,126 +303,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.cookInputRegistration = this.scene is null || this.isDisposed
             ? null : this.cookInputs.Register(this.CreateCommandContext(), this.commandService);
     }
-
-    partial void OnCurrentLayoutChanging(SceneViewLayout value)
-    {
-        // If the scene is not yet synchronized into the engine, defer
-        // creating viewports/layout until `SceneLoadedMessage` arrives.
-        if (!this.sceneReady)
-        {
-            this.LogDeferringLayoutChange(value);
-            return;
-        }
-
-        this.UpdateLayout(value);
-    }
-
-    private void UpdateLayout(SceneViewLayout targetLayout)
-    {
-        var metadata = this.Metadata ?? throw new InvalidOperationException("Scene metadata is not initialized.");
-        metadata.Layout = targetLayout;
-
-        var placements = SceneLayoutHelpers.GetPlacements(targetLayout);
-        var requiredCount = placements.Count;
-
-        // Adjust viewports count
-        while (this.Viewports.Count < requiredCount)
-        {
-            var settings = this.container.Resolve<ISettingsService<IAppearanceSettings>>();
-            var viewport = new ViewportViewModel(
-                metadata.DocumentId,
-                this.engineService,
-                this.operationResults,
-                this.statusReducer,
-                settings,
-                this.loggerFactory);
-            var newIndex = this.Viewports.Count;
-
-            viewport.ToggleMaximizeCommand = new RelayCommand(() => this.ToggleMaximize(viewport));
-            viewport.OnLayoutRequested = requestedLayout => this.ChangeLayoutCommand.Execute(requestedLayout);
-            this.AttachCameraServices(viewport);
-            this.LogCreatingViewport(newIndex, viewport);
-            this.Viewports.Add(viewport);
-        }
-
-        while (this.Viewports.Count > requiredCount)
-        {
-            this.Viewports.RemoveAt(this.Viewports.Count - 1);
-        }
-
-        // Update IsMaximized state and metadata for all viewports
-        for (var i = 0; i < this.Viewports.Count; i++)
-        {
-            var viewport = this.Viewports[i];
-            viewport.IsMaximized = targetLayout == SceneViewLayout.OnePane && this.previousLayout != null;
-
-            // The first viewport is considered the main camera
-            viewport.UpdateLayoutMetadata(i, i == 0);
-            viewport.OnLayoutRequested = requestedLayout => this.ChangeLayoutCommand.Execute(requestedLayout);
-        }
-
-        this.EnsureFocusedViewportIsValid();
-    }
-
-    private void EnsureFocusedViewportIsValid()
-    {
-        if (this.Viewports.Count == 0)
-        {
-            this.FocusedViewportId = Guid.Empty;
-            return;
-        }
-
-        var isValid = this.FocusedViewportId != Guid.Empty && this.Viewports.Any(v => v.ViewportId == this.FocusedViewportId);
-        if (!isValid)
-        {
-            // Default focus to primary viewport (index 0).
-            this.FocusedViewportId = this.Viewports[0].ViewportId;
-        }
-
-        this.ApplyFocusedViewportFlags();
-    }
-
-    private void ApplyFocusedViewportFlags()
-    {
-        var focusedId = this.FocusedViewportId;
-        foreach (var viewport in this.Viewports)
-        {
-            viewport.IsFocused = focusedId != Guid.Empty && viewport.ViewportId == focusedId;
-        }
-    }
-
-    private void ToggleMaximize(ViewportViewModel viewport)
-    {
-        if (this.CurrentLayout == SceneViewLayout.OnePane)
-        {
-            // Restore
-            if (this.previousLayout != null)
-            {
-                this.CurrentLayout = this.previousLayout.Value;
-                this.previousLayout = null;
-            }
-        }
-        else
-        {
-            // Maximize — move the requested viewport into the first position
-            // before we change the layout. This prevents the collapse path in
-            // UpdateLayout from removing the intended viewport when the list
-            // is truncated to a single viewport.
-            var index = this.Viewports.IndexOf(viewport);
-            if (index > 0)
-            {
-                this.Viewports.Move(index, 0);
-            }
-
-            this.previousLayout = this.CurrentLayout;
-            this.CurrentLayout = SceneViewLayout.OnePane;
-        }
-
-        this.EnsureFocusedViewportIsValid();
-    }
-
-    [RelayCommand]
-    private void ChangeLayout(SceneViewLayout layout) => this.CurrentLayout = layout;
 
     [RelayCommand]
     private async Task Save() => await this.SaveAsync().ConfigureAwait(true);
@@ -641,11 +507,11 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         if (this.Metadata != null && msg.Scene.Id == this.Metadata.DocumentId)
         {
             this.scene = msg.Scene;
-            this.sceneReady = true;
+            this.sceneReady = false;
             this.LogSceneLoadedReceived(this.CurrentLayout);
 
-            // Rebuild layout now that scene is ready.
-            this.UpdateLayout(this.CurrentLayout);
+            // Build the panes now that the scene is ready, as the user left them.
+            _ = this.RestoreViewportsAsync();
         }
     }
 

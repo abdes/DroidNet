@@ -287,6 +287,15 @@ public static partial class Program
                 resolver.Resolve<IStatusReducer>(),
                 resolver.Resolve<ILoggerFactory>()),
             Reuse.Singleton);
+
+        // Scene viewport layout and pane cameras: user-local workspace state, serialized writes.
+        container.RegisterDelegate(
+            resolver => new ViewportStateService(
+                resolver.Resolve<IEditorSettingsManager>(),
+                resolver.Resolve<IOperationResultPublisher>(),
+                resolver.Resolve<IStatusReducer>(),
+                resolver.Resolve<ILoggerFactory>()),
+            Reuse.Singleton);
         container.Register<EngineShutdownService>(Reuse.Singleton);
         container.RegisterDelegate<IHostedService>(resolver => resolver.Resolve<EngineShutdownService>(), Reuse.Singleton);
 

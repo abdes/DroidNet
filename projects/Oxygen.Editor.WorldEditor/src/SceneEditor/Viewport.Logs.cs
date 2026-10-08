@@ -223,42 +223,6 @@ public sealed partial class Viewport
 
     [LoggerMessage(
         SkipEnabledCheck = true,
-        Level = LogLevel.Information,
-        Message = "[Viewport] Created engine view for viewport={ViewportId} viewId={ViewId}")]
-    private static partial void LogViewCreated(ILogger logger, Guid viewportId, ulong viewId);
-
-    private void LogViewCreated(Guid viewportId, RuntimeViewId viewId)
-        => LogViewCreated(this.logger, viewportId, viewId.Value);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Information,
-        Message = "[Viewport] Destroyed engine view for viewport={ViewportId}")]
-    private static partial void LogViewDestroyed(ILogger logger, Guid viewportId);
-
-    private void LogViewDestroyed(Guid viewportId)
-        => LogViewDestroyed(this.logger, viewportId);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Warning,
-        Message = "[Viewport] Create view failed for viewport={ViewportId}")]
-    private static partial void LogCreateViewFailed(ILogger logger, Guid viewportId, Exception ex);
-
-    private void LogCreateViewFailed(Guid viewportId, Exception ex)
-        => LogCreateViewFailed(this.logger, viewportId, ex);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Warning,
-        Message = "[Viewport] Destroy view failed for viewport={ViewportId}")]
-    private static partial void LogDestroyViewFailed(ILogger logger, Guid viewportId, Exception ex);
-
-    private void LogDestroyViewFailed(Guid viewportId, Exception ex)
-        => LogDestroyViewFailed(this.logger, viewportId, ex);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "[Viewport] ViewModel changed from {PreviousViewportId} to {CurrentViewportId}.")]
     private static partial void LogViewModelChanged(ILogger logger, string previousViewportId, string currentViewportId);

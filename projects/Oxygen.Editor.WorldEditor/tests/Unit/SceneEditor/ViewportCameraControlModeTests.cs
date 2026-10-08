@@ -353,26 +353,6 @@ public sealed partial class ViewportCameraControlModeTests
             .Select(item => (item.Text, item.IsChecked)).Should().Equal(("Hero", true), ("Map", false));
     }
 
-    [TestMethod]
-    public async Task ApplyCurrentSceneCamera_ShouldResendSelectionToRecreatedView()
-    {
-        var engine = new Mock<IEngineService>(MockBehavior.Strict);
-        _ = engine
-            .Setup(service => service.SetViewSceneCameraAsync(It.IsAny<RuntimeViewId>(), MapCamera.NodeId))
-            .ReturnsAsync(value: true);
-        using var sut = CreateViewportViewModel(engine.Object);
-        sut.SceneCamerasProvider = () => [MapCamera];
-        sut.CameraMenu.Items.Single(item => string.Equals(item.Text, "Map", StringComparison.Ordinal)).Command?.Execute(parameter: null);
-        var recreated = new RuntimeViewId(55);
-        sut.AssignedViewId = recreated;
-
-        await sut.ApplyCurrentSceneCameraAsync().ConfigureAwait(false);
-
-        engine.Verify(
-            service => service.SetViewSceneCameraAsync(It.Is<RuntimeViewId>(id => id.Value == recreated.Value), MapCamera.NodeId),
-            Times.Once);
-    }
-
     private static ViewportViewModel CreateViewportViewModel(
         IEngineService engineService,
         IOperationResultPublisher? operationResults = null)

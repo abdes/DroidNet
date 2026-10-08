@@ -46,7 +46,7 @@ The current editor has:
 - `Viewport.xaml.cs` attaches `SwapChainPanel` instances to runtime surface
   leases.
 - each viewport can create a native editor view after surface attach.
-- per-viewport clear colors are used to diagnose surface/view routing.
+- every viewport clears to one neutral colour.
 - camera preset menu entries call runtime view camera preset APIs.
 - FPS and logging verbosity controls read/write through `IEngineService`.
 - initial layout creation is deferred until `SceneLoadedMessage` to avoid
@@ -141,6 +141,17 @@ panes. ED-M02 validated one pane; ED-M08.V1 qualifies every variant.
   engine's destination viewport and z-order, is excluded from the host view's
   metering, and hides when the camera is deselected or already viewed by
   the pane.
+- The inset is its own engine view that presents nothing alone: it names its
+  host view, takes 30% of the host surface in the bottom-right corner, is
+  composed as a layer over the host's image, receives no input, and does not
+  render while the surface is too small for it.
+- A pane owns its view's lifetime and keeps its camera state while it has no
+  view. Before a view is released (dock move, document switch, maximize) the
+  pane reads the editor camera back; view creation carries the preset,
+  editor camera and viewed scene camera, so the new view is correct on its
+  first presented frame.
+- Maximize is presentation only: the layout and pane indexes are unchanged,
+  and the hidden panes release their views but keep their state.
 
 ### Viewport Identity
 
@@ -151,7 +162,7 @@ Each viewport has:
 - zero-based layout index.
 - primary viewport flag.
 - assigned native view ID, invalid when no view exists.
-- diagnostic clear color.
+- neutral clear colour, shared by every pane.
 
 Viewport IDs are runtime/session state and are not persisted as authoring data.
 
@@ -255,8 +266,7 @@ Not persisted:
 - viewport IDs.
 - assigned engine view IDs.
 - active surface leases.
-- per-session diagnostic clear colors unless a later UI design chooses to make
-  them a setting.
+- the maximized pane and the camera preview inset.
 
 Restart behavior:
 

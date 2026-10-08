@@ -169,19 +169,6 @@ public sealed class ViewportScenePilotTests
         engine.Verify(service => service.SetViewScenePilotAsync(It.IsAny<RuntimeViewId>(), It.IsAny<bool>()), Times.Never);
     }
 
-    [TestMethod]
-    public async Task ApplyCurrentSceneCamera_ShouldRestoreThePilotOnARecreatedView()
-    {
-        var engine = CreateEngine();
-        using var sut = CreateViewport(engine.Object);
-        await sut.PilotCameraAsync(MainCamera).ConfigureAwait(false);
-
-        await sut.ApplyCurrentSceneCameraAsync().ConfigureAwait(false);
-
-        engine.Verify(service => service.SetViewSceneCameraAsync(It.IsAny<RuntimeViewId>(), MainCamera.NodeId), Times.Exactly(2));
-        engine.Verify(service => service.SetViewScenePilotAsync(It.IsAny<RuntimeViewId>(), true), Times.Exactly(2));
-    }
-
     private static Mock<IEngineService> CreateEngine()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);

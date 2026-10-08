@@ -59,6 +59,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     private readonly ViewportCameraNumberBoxItemModel farViewPlaneItem;
     private IMenuSource? cameraMenu;
     private CancellationTokenSource? pilotCommitDelay;
+    private CancellationTokenSource? navigationSettleDelay;
     private bool pilotPoseDirty;
     private IMenuSource? shadingMenu;
     private IMenuSource? layoutMenu;
@@ -130,6 +131,12 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         this.ToggleMaximizeCommand = new RelayCommand(() => this.IsMaximized = !this.IsMaximized);
         this.LogInitialized();
     }
+
+    /// <summary>
+    /// Raised when state the pane keeps across sessions changed: its preset, control mode or viewed
+    /// camera, or its editor camera once navigation has paused.
+    /// </summary>
+    public event EventHandler? StateChanged;
 
     // Overlay view toggles
     [ObservableProperty]
@@ -254,9 +261,20 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     public Func<Guid, RuntimeViewCameraPose, Task<bool>>? CameraPoseCommitter { get; set; }
 
     /// <summary>
+    /// Gets or sets the hook that runs before this pane starts piloting a camera, so the panes
+    /// piloting the same camera stop first.
+    /// </summary>
+    public Func<ViewportViewModel, Guid, Task>? PilotStarting { get; set; }
+
+    /// <summary>
     /// Gets or sets how long navigation must pause before a pilot gesture is committed.
     /// </summary>
     internal TimeSpan PilotCommitDelay { get; set; } = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>
+    /// Gets or sets how long navigation must pause before the editor camera counts as moved.
+    /// </summary>
+    internal TimeSpan NavigationSettleDelay { get; set; } = TimeSpan.FromMilliseconds(500);
 
     /// <summary>
     /// Gets the display label for the editor camera control mode.
@@ -479,24 +497,6 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         this.RebuildCameraMenu();
     }
 
-    /// <summary>
-    /// Re-sends the selected scene camera and pilot state, for example after the runtime view was recreated.
-    /// </summary>
-    /// <returns>A task that completes when the request was handled.</returns>
-    internal async Task ApplyCurrentSceneCameraAsync()
-    {
-        if (this.SceneCamera is not { } camera || !this.AssignedViewId.IsValid)
-        {
-            return;
-        }
-
-        _ = await this.SendSceneCameraAsync(camera).ConfigureAwait(true);
-        if (this.IsPilotingSceneCamera)
-        {
-            _ = await this.SendScenePilotAsync(pilot: true).ConfigureAwait(true);
-        }
-    }
-
     /// <summary>Renders this viewport through a scene camera.</summary>
     /// <param name="camera">The camera to look through.</param>
     /// <returns>A task that completes when the request was handled.</returns>
@@ -556,6 +556,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// <param name="inputHeld">Whether a mouse button or key is still held.</param>
     internal void NotifyNavigationInput(bool inputHeld)
     {
+        this.ScheduleNavigationSettled(inputHeld);
         if (!this.IsPilotingSceneCamera)
         {
             return;
@@ -597,6 +598,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
             {
                 this.appearanceSettings.PropertyChanged -= this.AppearanceSettings_PropertyChanged;
                 this.CancelPilotCommit();
+                this.CancelNavigationSettled();
             }
 
             this.isDisposed = true;
@@ -641,6 +643,12 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         // keep MaximizeGlyph synched with IsMaximized
         this.OnPropertyChanged(nameof(this.MaximizeGlyph));
     }
+
+    partial void OnCameraTypeChanged(CameraType value) => this.RaiseStateChanged();
+
+    partial void OnCameraControlModeChanged(CameraControlMode value) => this.RaiseStateChanged();
+
+    partial void OnSceneCameraChanged(SceneCameraChoice? value) => this.RaiseStateChanged();
 
     private void SetEffectiveTheme(ElementTheme theme)
     {
@@ -898,6 +906,9 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         {
             _ = await this.SendSceneCameraAsync(camera).ConfigureAwait(true);
         }
+
+        // The inset hides while the pane itself looks through the previewed camera.
+        await this.RunViewWorkAsync(this.ReconcileInsetCoreAsync).ConfigureAwait(true);
     }
 
     private async Task<bool> SendSceneCameraAsync(SceneCameraChoice? camera)
@@ -932,8 +943,8 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
 
     private async Task SetPilotAsync(bool pilot)
     {
-        if (pilot == this.IsPilotingSceneCamera
-            || (pilot && (this.SceneCamera is not { } camera || this.IsLocked(camera.NodeId))))
+        var camera = this.SceneCamera;
+        if (pilot == this.IsPilotingSceneCamera || (pilot && (camera is null || this.IsLocked(camera.NodeId))))
         {
             return;
         }
@@ -942,10 +953,19 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         {
             await this.FlushPilotPoseAsync().ConfigureAwait(true);
         }
-        else if (this.CameraType != CameraType.Perspective)
+        else
         {
-            // The runtime pilots through the perspective editor camera.
-            this.CameraType = CameraType.Perspective;
+            // One pane at a time pilots a camera: the others stop, committing their last gesture.
+            if (this.PilotStarting is { } starting)
+            {
+                await starting(this, camera!.NodeId).ConfigureAwait(true);
+            }
+
+            if (this.CameraType != CameraType.Perspective)
+            {
+                // The runtime pilots through the perspective editor camera.
+                this.CameraType = CameraType.Perspective;
+            }
         }
 
         this.IsPilotingSceneCamera = pilot;
@@ -1006,6 +1026,41 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         this.pilotCommitDelay?.Dispose();
         this.pilotCommitDelay = null;
     }
+
+    private void ScheduleNavigationSettled(bool inputHeld)
+    {
+        this.CancelNavigationSettled();
+        if (inputHeld)
+        {
+            return;
+        }
+
+        this.navigationSettleDelay = new CancellationTokenSource();
+        _ = this.RaiseStateChangedAfterPauseAsync(this.navigationSettleDelay.Token);
+    }
+
+    private async Task RaiseStateChangedAfterPauseAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(this.NavigationSettleDelay, cancellationToken).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        this.RaiseStateChanged();
+    }
+
+    private void CancelNavigationSettled()
+    {
+        this.navigationSettleDelay?.Cancel();
+        this.navigationSettleDelay?.Dispose();
+        this.navigationSettleDelay = null;
+    }
+
+    private void RaiseStateChanged() => this.StateChanged?.Invoke(this, EventArgs.Empty);
 
     private async Task FlushPilotPoseAsync()
     {

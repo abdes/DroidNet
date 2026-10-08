@@ -85,7 +85,8 @@ public sealed partial class SceneEditorView : UserControl
 
     private async void OnSceneEditorViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (!string.Equals(e.PropertyName, nameof(SceneEditorViewModel.CurrentLayout), System.StringComparison.Ordinal))
+        if (!string.Equals(e.PropertyName, nameof(SceneEditorViewModel.CurrentLayout), System.StringComparison.Ordinal)
+            && !string.Equals(e.PropertyName, nameof(SceneEditorViewModel.MaximizedViewport), System.StringComparison.Ordinal))
         {
             return;
         }
@@ -168,17 +169,24 @@ public sealed partial class SceneEditorView : UserControl
             return;
         }
 
-        this.ConfigureGrid(viewModel);
+        // A maximized pane is shown alone; the other panes release their views but keep their state.
+        if (viewModel.MaximizedViewport is { } maximized)
+        {
+            this.ConfigureGrid(1, 1);
+            await this.SyncViewportControlsCoreAsync([maximized], [(0, 0, 1, 1)]).ConfigureAwait(true);
+            return;
+        }
+
+        var (rows, cols) = SceneLayoutHelpers.GetGridDimensions(viewModel.CurrentLayout);
+        this.ConfigureGrid(rows, cols);
         var placements = SceneLayoutHelpers.GetPlacements(viewModel.CurrentLayout);
-        await this.SyncViewportControlsCoreAsync(viewModel, placements).ConfigureAwait(true);
+        await this.SyncViewportControlsCoreAsync(viewModel.Viewports, placements).ConfigureAwait(true);
     }
 
-    private void ConfigureGrid(SceneEditorViewModel viewModel)
+    private void ConfigureGrid(int rows, int cols)
     {
         this.ViewportGrid.RowDefinitions.Clear();
         this.ViewportGrid.ColumnDefinitions.Clear();
-
-        var (rows, cols) = SceneLayoutHelpers.GetGridDimensions(viewModel.CurrentLayout);
 
         for (var i = 0; i < rows; i++)
         {
@@ -191,9 +199,8 @@ public sealed partial class SceneEditorView : UserControl
         }
     }
 
-    private async Task SyncViewportControlsCoreAsync(SceneEditorViewModel viewModel, IReadOnlyList<(int row, int column, int rowspan, int colspan)> placements)
+    private async Task SyncViewportControlsCoreAsync(IReadOnlyList<ViewportViewModel> viewports, IReadOnlyList<(int row, int column, int rowspan, int colspan)> placements)
     {
-        var viewports = viewModel.Viewports;
         var used = new HashSet<ViewportViewModel>();
         var count = Math.Min(placements.Count, viewports.Count);
 
@@ -267,6 +274,14 @@ public sealed partial class SceneEditorView : UserControl
         {
             this.viewportControlsGate.Release();
         }
+    }
+
+    private void OnAlignCameraToViewInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        _ = sender;
+        args.Handled = true;
+        var viewModel = this.currentViewModel ?? this.ViewModel as SceneEditorViewModel;
+        viewModel?.AlignSelectedCameraToViewCommand.Execute(parameter: null);
     }
 
     private void OnViewportPointerPressed(object sender, PointerRoutedEventArgs e)

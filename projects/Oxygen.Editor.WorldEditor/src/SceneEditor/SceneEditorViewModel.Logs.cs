@@ -122,4 +122,13 @@ public partial class SceneEditorViewModel
 
     private void LogSceneLoadedReceived(SceneViewLayout layout)
         => LogSceneLoadedReceived(this.logger, this.Metadata?.DocumentId, layout);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Viewport pane {Pane} of document {DocumentId} looked through camera {CameraId}, which no longer exists; it uses its editor camera")]
+    private static partial void LogRestoredCameraMissing(ILogger logger, int pane, Guid? documentId, Guid cameraId);
+
+    private void LogRestoredCameraMissing(int pane, Guid cameraId)
+        => LogRestoredCameraMissing(this.logger, pane, this.Metadata?.DocumentId, cameraId);
 }

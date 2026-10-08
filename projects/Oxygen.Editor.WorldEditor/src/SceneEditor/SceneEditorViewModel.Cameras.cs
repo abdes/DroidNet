@@ -56,6 +56,23 @@ public partial class SceneEditorViewModel
                 message.Reply(this.ExecuteCameraCommandAsync(message.NodeId, message.Command));
             }
         });
+
+        // Selecting one camera node previews it in the focused pane.
+        this.messenger.Register<SceneNodeSelectionChangedMessage>(this, (_, message) =>
+        {
+            var foreign = message.DocumentId is { } documentId
+                ? documentId != this.Metadata.DocumentId
+                : !this.IsActiveDocument();
+            if (this.isDisposed || foreign)
+            {
+                return;
+            }
+
+            this.selectedCamera = message.SelectedEntities is [{ } node] && node.Components.OfType<CameraComponent>().Any()
+                ? new SceneCameraChoice(node.Id, node.Name)
+                : null;
+            this.UpdateInsets();
+        });
     }
 
     private bool IsActiveDocument()

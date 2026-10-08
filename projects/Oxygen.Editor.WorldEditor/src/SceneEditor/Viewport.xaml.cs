@@ -45,6 +45,10 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             StringComparison.Ordinal);
 
     private IViewportSurfaceLease? surfaceLease;
+
+    // The view model whose view presents through the lease; the control's view model may already
+    // have been replaced when the lease is released.
+    private ViewportViewModel? leaseViewModel;
     private bool swapChainSizeHooked;
 
     /* NOTE: composition-scale handling was intentionally removed in favor of
@@ -283,16 +287,6 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
     }
 
     private void OnCameraMenuOpening(object? sender, EventArgs e) => this.ViewModel?.RefreshCameraMenu();
-
-    private void OnAlignCameraToViewInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
-    {
-        _ = sender;
-        args.Handled = true;
-        if (this.ViewModel is { } viewModel)
-        {
-            _ = viewModel.AlignSelectedCameraToViewAsync();
-        }
-    }
 
     private void OnCameraNumberBoxValidate(object? sender, ValidationEventArgs<float> e)
     {
@@ -840,6 +834,8 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             return;
         }
 
+        // Wheel navigation makes its pane the focused one, like any other pointer navigation.
+        _ = this.Focus(FocusState.Pointer);
         this.SyncAltKeyStateIfNeeded(viewModel, viewId);
 
         var point = e.GetCurrentPoint(this.SwapChainPanel);
@@ -930,10 +926,14 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         try
         {
-            await this.DestroyAssignedViewAsync().ConfigureAwait(true);
+            // The pane keeps its camera state for the view it creates on its next attach.
+            if (this.leaseViewModel is { } viewModel)
+            {
+                await viewModel.ReleaseViewAsync().ConfigureAwait(true);
+            }
 
             await this.surfaceLease.DisposeAsync().ConfigureAwait(true);
-            this.LogLeaseDisposed(GetViewportId(this.ViewModel));
+            this.LogLeaseDisposed(GetViewportId(this.leaseViewModel));
         }
         catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
         {
@@ -942,6 +942,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         finally
         {
             this.surfaceLease = null;
+            this.leaseViewModel = null;
         }
     }
 
@@ -1077,62 +1078,6 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         }
     }
 
-    private async Task CreateAssignedViewAsync(ViewportViewModel viewModel, IViewportSurfaceLease lease, string requestTag)
-    {
-        // Create an engine view for this viewport and associate it with the
-        // UI-managed view model. The UI owns view lifecycle: create -> destroy.
-        try
-        {
-            // Only create if we don't already have an assigned view id
-            if (!viewModel.AssignedViewId.IsValid)
-            {
-                // Compute a reasonable initial pixel size for the view
-                _ = this.TryGetSwapChainPixelSize(out var pixelW, out var pixelH);
-
-                var cfg = new RuntimeViewConfig
-                {
-                    Name = requestTag,
-                    Purpose = "Viewport",
-                    CompositingTarget = lease.Key.ViewportId,
-                    Width = pixelW,
-                    Height = pixelH,
-                    ClearColor = viewModel.ClearColor,
-                };
-
-                var created = await viewModel.EngineService.CreateViewAsync(cfg).ConfigureAwait(true);
-                if (created.IsValid)
-                {
-                    viewModel.AssignedViewId = created;
-                    viewModel.AssignedInputTarget = viewModel.EngineService.InputCommands.GetViewTarget(created.Value);
-                    this.LogViewCreated(viewModel.ViewportId, created);
-                    await viewModel.ApplyCurrentCameraControlModeAsync().ConfigureAwait(true);
-                    await viewModel.ApplyCurrentCameraSettingsAsync().ConfigureAwait(true);
-                    await viewModel.ApplyCurrentSceneCameraAsync().ConfigureAwait(true);
-                }
-                else
-                {
-                    viewModel.PublishRuntimeFailure(
-                        RuntimeOperationKinds.ViewCreate,
-                        FailureDomain.RuntimeView,
-                        DiagnosticCodes.ViewPrefix + "CREATE_REJECTED",
-                        "Viewport view was not created",
-                        "The runtime rejected the engine view creation request for this viewport.");
-                }
-            }
-        }
-        catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
-        {
-            this.LogCreateViewFailed(viewModel.ViewportId, ex);
-            viewModel.PublishRuntimeFailure(
-                RuntimeOperationKinds.ViewCreate,
-                FailureDomain.RuntimeView,
-                DiagnosticCodes.ViewPrefix + "CREATE_FAILED",
-                "Viewport view creation failed",
-                "The runtime could not create an engine view for this viewport.",
-                ex);
-        }
-    }
-
     private async Task<bool> KeepAttachedLeaseAsync(ViewportViewModel requestedViewModel, long requestId, IViewportSurfaceLease lease)
     {
         var shouldKeepLease = this.IsLoaded && !this.isDisposed && ReferenceEquals(requestedViewModel, this.ViewModel) && requestId == this.attachRequestId;
@@ -1151,49 +1096,6 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         return true;
     }
 
-    private async Task DestroyAssignedViewAsync()
-    {
-        // If the UI created an engine view for this viewport, destroy it
-        // before we dispose the surface lease. The UI owns view lifecycle.
-        var vm = this.ViewModel;
-        if (vm?.AssignedViewId.IsValid == true && vm.EngineService != null)
-        {
-            try
-            {
-                var destroyed = await vm.EngineService.DestroyViewAsync(vm.AssignedViewId).ConfigureAwait(true);
-                if (!destroyed)
-                {
-                    vm.PublishRuntimeWarning(
-                        RuntimeOperationKinds.ViewDestroy,
-                        FailureDomain.RuntimeView,
-                        DiagnosticCodes.ViewPrefix + "DESTROY_REJECTED",
-                        "Viewport view teardown was rejected",
-                        "The runtime rejected the engine view teardown request for this viewport.");
-                }
-
-                vm.AssignedViewId = RuntimeViewId.Invalid;
-                vm.AssignedInputTarget = null;
-                this.LogViewDestroyed(vm.ViewportId);
-            }
-            catch (Exception ex) when (Oxygen.Editor.World.Services.EngineInteropExceptionPolicy.IsRecoverable(ex))
-            {
-                this.LogDestroyViewFailed(vm.ViewportId, ex);
-                vm.PublishRuntimeWarning(
-                    RuntimeOperationKinds.ViewDestroy,
-                    FailureDomain.RuntimeView,
-                    DiagnosticCodes.ViewPrefix + "DESTROY_FAILED",
-                    "Viewport view teardown failed",
-                    "The runtime could not destroy the engine view for this viewport.",
-                    ex);
-            }
-            finally
-            {
-                vm.AssignedViewId = RuntimeViewId.Invalid;
-                vm.AssignedInputTarget = null;
-            }
-        }
-    }
-
     private async Task AttachMeasuredSurfaceAsync(ViewportViewModel viewModel, long requestId, CancellationToken cancellationToken)
     {
         // Use a non-empty tag for surface requests — control `Name` is often
@@ -1209,9 +1111,12 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         }
 
         this.surfaceLease = lease;
+        this.leaseViewModel = viewModel;
         this.LogSurfaceAttached(viewModel.ViewportId);
 
-        await this.CreateAssignedViewAsync(viewModel, lease, requestTag).ConfigureAwait(true);
+        // The view model owns the view: it creates it from the pane's kept camera state.
+        _ = this.TryGetSwapChainPixelSize(out var pixelWidth, out var pixelHeight);
+        await viewModel.CreateViewAsync(lease.Key.ViewportId, requestTag, pixelWidth, pixelHeight).ConfigureAwait(true);
 
         // Perform the initial resize unconditionally (do not cancel via the
         // attach token) so the swapchain receives its first backbuffer size.
