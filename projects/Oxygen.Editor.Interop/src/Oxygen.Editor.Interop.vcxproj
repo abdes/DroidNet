@@ -46,6 +46,12 @@
     <ClCompile Include="Commands\SetViewRenderOptionsCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
+    <ClCompile Include="Commands\FrameViewCommand.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="EditorModule\ViewFraming.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
     <ClCompile Include="Commands\SetViewCameraPresetCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
@@ -180,6 +186,9 @@
     <ClInclude Include="Commands\SetViewCameraControlModeCommand.h" />
     <ClInclude Include="Commands\SetViewCameraMovementSpeedCommand.h" />
     <ClInclude Include="Commands\SetViewRenderOptionsCommand.h" />
+    <ClInclude Include="Commands\FrameViewCommand.h" />
+    <ClInclude Include="EditorModule\ViewFraming.h" />
+    <ClInclude Include="Views\ViewPickManaged.h" />
     <ClInclude Include="Commands\SetViewCameraPresetCommand.h" />
     <ClInclude Include="Commands\SetViewCameraSettingsCommand.h" />
     <ClInclude Include="Commands\SetViewSceneCameraCommand.h" />

@@ -24,6 +24,23 @@ internal static class NativeSessionConversions
     public static RuntimeEditorCamera? FromNative(EditorCameraStateManaged? state)
         => state is null ? null : new(state.Position, state.Rotation, state.FocusPoint, state.OrthographicSize);
 
+    /// <summary>Converts a native pick result.</summary>
+    /// <param name="result">The native result, or <see langword="null"/>.</param>
+    /// <returns>The managed result, or <see langword="null"/>.</returns>
+    public static RuntimePickResult? FromNative(ViewPickResultManaged? result)
+        => result is null
+            ? null
+            : new(
+                [.. result.Hits.Select(hit => new RuntimePickHit(hit.NodeId, hit.Depth, hit.GeometrySlot, hit.CenterDistance))],
+                result.WorldPosition);
+
+    /// <summary>Converts a native framing outcome by its named meaning.</summary>
+    /// <param name="outcome">The native outcome.</param>
+    /// <returns>The managed outcome.</returns>
+    public static RuntimeFramingOutcome FromNative(ViewFramingOutcomeManaged outcome)
+        => Enum.TryParse<RuntimeFramingOutcome>(outcome.ToString(), ignoreCase: false, out var managed) && Enum.IsDefined(managed)
+            ? managed : RuntimeFramingOutcome.InvalidBounds;
+
     /// <summary>Creates the native view config while preserving omitted native defaults.</summary>
     /// <param name="config">The editor's managed view request.</param>
     /// <returns>The native configuration.</returns>
@@ -39,6 +56,7 @@ internal static class NativeSessionConversions
             InsetHost = config.InsetHost is { } host ? new ViewIdManaged(host.Value) : null,
             ViewMode = ToNative<ViewModeManaged>(config.ViewMode),
             ShowGrid = config.ShowGrid,
+            ShowSelectionOutline = config.ShowSelectionOutline,
         };
         if (config.EditorCamera is { } camera)
         {

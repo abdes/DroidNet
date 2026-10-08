@@ -382,17 +382,30 @@ document change, publication pause, cancellation and viewport destruction.
 Navigation never mutates authored camera components or adds scene undo entries,
 except in the explicit pilot mode described in Camera State.
 
-Frame Selected (`F`) frames the combined world bounds of selected nodes. With
-no selection, disable it with a reason. Frame All (`Shift+F`) frames all visible
-scene content. Use a 10% margin with the current aspect/FOV; finite point/icon
-bounds handle camera/light-only scenes. Empty scenes use the normal default
-view. Invalid/missing bounds produce a diagnostic and leave the view unchanged.
-Preserve near/far correctness and do not silently move authored nodes.
+Frame Selected (`F`) frames the combined world bounds of the selected nodes
+and their descendants. With no selection, the pane shows a brief notice and the
+view is unchanged. Frame All (`Shift+F`) frames all visible scene content.
+Framing keeps the view direction, uses a 10% margin with the current
+aspect/FOV and moves the editor camera with a short eased transition that
+navigation input interrupts; orthographic views resize instead of moving
+closer. Nodes without geometry use a default point extent, and an empty scene
+frames the origin. Invalid bounds leave the view unchanged with a notice.
+Framing moves only the editor camera: while a pane looks through or pilots a
+scene camera it is refused with a notice, so it never adds an authored change.
+Double-clicking a Scene Explorer node row frames that node in the focused pane;
+the scene row frames everything. Rename stays on F2.
 
 ### Picking And Selection
 
 Unmodified left click selects the nearest visible pickable geometry or camera/
-light icon; Ctrl+click toggles membership. Empty-space click clears selection.
+light icon; Ctrl+click toggles membership and Shift+click adds. Empty-space
+click clears selection; a modified empty click changes nothing. A left drag
+beyond a small threshold draws a marquee that selects every node with visible
+pixels inside it, with the same modifiers; the node nearest its centre becomes
+active. Escape cancels the marquee. Workspace-hidden nodes are not pickable;
+locked nodes are selectable but not manipulable. Picking has no category
+filter. A viewport pick scrolls the active Explorer row into view without
+taking keyboard focus.
 SceneExplorer and Inspector consume the same document-scoped selection service.
 A gizmo hit takes precedence over object picking; Alt/RMB navigation never
 selects objects. Picking results include scene/document/view lifetime and are
@@ -400,7 +413,11 @@ ignored if stale. Engine-owned picking/render identity is mapped to authored
 node IDs through runtime services; UI does not maintain a second scene database.
 
 Selection highlight follows the same IDs and updates after undo, deletion,
-reparent, scene activation and missing-geometry resolution. Camera/light icons
+reparent, scene activation and missing-geometry resolution. It is a crisp
+screen-space outline of the selected nodes and their descendants, drawn after
+post-processing in every editing pane and view mode: accent colour, brighter
+for the active node and dimmed where occluded. Each pane's Show menu has a
+"Selection outline" toggle, on by default and kept with the pane's state. Camera/light icons
 are editor overlays, never authored/cooked geometry. An icon click uses the
 same selection operation as a geometry click.
 

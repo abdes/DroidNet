@@ -67,15 +67,14 @@ WorldEditor owns the typed `WorldEditor/SceneInteraction` setting through
 `WorkspaceInteractionService` and the
 existing `IEditorSettingsManager`. Use `SettingContext.Project` with the
 canonical project root. The versioned payload contains the project ID and a map
-of scene IDs to explicit hidden-node IDs, locked-node IDs and picking-category
-preferences. Identity is the stable authored node ID, not its name or row.
+of scene IDs to explicit hidden-node IDs and locked-node IDs. Identity is the stable authored node ID, not its name or row.
 One coordinated service serializes writes and suppresses stale project/scene
 restoration. The data store is user-local; no interaction state is written to scene documents, authoring
 mounts, cooked output or validation requests.
 
 Lock is editor editability state, independent of Hide and authored visibility;
-it is not undoable. Picking categories are inputs to viewport picking, not tree
-filters. Explorer status indicators use two fixed-width slots, Eye then Lock.
+it is not undoable. Viewport picking has no category filter; the Explorer's
+Mesh, Light and Camera buttons filter the tree only. Explorer status indicators use two fixed-width slots, Eye then Lock.
 The chevron/icon/label area fills the remaining width. There is no configurable
 column ordering, resizing or placement state.
 

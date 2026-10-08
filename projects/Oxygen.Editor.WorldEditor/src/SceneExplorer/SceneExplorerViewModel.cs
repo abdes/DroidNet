@@ -35,6 +35,9 @@ namespace Oxygen.Editor.World.SceneExplorer;
 /// </summary>
 public partial class SceneExplorerViewModel : DynamicTreeViewModel
 {
+    // The selection source of viewport picks; their rows scroll into view.
+    private const string ViewportSelectionSource = "Viewport";
+
     private readonly ILogger<SceneExplorerViewModel> logger;
     private readonly IMessenger messenger;
     private readonly IRouter router;
@@ -167,6 +170,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.selectionService = selectionService;
         this.selectionService.SelectionChanged += this.OnSelectionServiceChanged;
         this.SelectionSettled += this.OnTreeSelectionSettled;
+        this.ItemInvoked += this.OnTreeItemInvoked;
         this.commandService = commandService;
         this.PropertyChanged += this.OnContextOwnerPropertyChanged;
         this.ClipboardContentChanged += (_, _) => this.RefreshContextActions();
@@ -1618,6 +1622,27 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.UpdateSelectionDependentState();
     }
 
+    /// <summary>Frames a double-clicked node, or the whole scene for the scene row, in the focused viewport.</summary>
+    private void OnTreeItemInvoked(object? sender, DynamicTreeEventArgs args)
+    {
+        _ = sender;
+        if (this.Scene is not { } sceneAdapter)
+        {
+            return;
+        }
+
+        IReadOnlyList<Guid>? nodeIds = args.TreeItem switch
+        {
+            SceneNodeAdapter node => [node.AttachedObject.Id],
+            SceneAdapter => [],
+            _ => null,
+        };
+        if (nodeIds is not null)
+        {
+            _ = this.messenger.Send(new FrameSceneNodesRequestMessage(sceneAdapter.AttachedObject.Id, nodeIds));
+        }
+    }
+
     private void OnTreeSelectionSettled(object? sender, EventArgs args)
     {
         _ = sender;
@@ -1700,6 +1725,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         try
         {
             _ = await this.ApplySelectionContextAsync(args.Context).ConfigureAwait(true);
+
+            // A viewport pick scrolls its row into view, leaving keyboard focus in the viewport.
+            if (string.Equals(args.Source, ViewportSelectionSource, StringComparison.Ordinal)
+                && this.ActiveItem is { } primary)
+            {
+                _ = this.BringItemIntoView(primary);
+            }
         }
         catch (Exception exception)
         {

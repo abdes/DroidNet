@@ -21,6 +21,7 @@
 #include <Views/EditorCameraStateManaged.h>
 #include <Views/ViewCameraPoseManaged.h>
 #include <Views/ViewIdManaged.h>
+#include <Views/ViewPickManaged.h>
 
 namespace oxygen::graphics {
 
@@ -302,15 +303,45 @@ namespace Oxygen::Interop {
       -> System::Threading::Tasks::Task<bool>^;
 
     /// <summary>
-    /// Set how an existing view presents the scene: its view mode and ground
-    /// grid. The request is enqueued and applied on the engine thread.
+    /// Set how an existing view presents the scene: its view mode, ground
+    /// grid and selection outline. The request is enqueued and applied on the
+    /// engine thread.
     /// </summary>
     auto TrySetViewRenderOptionsAsync(
       EngineContext^ ctx,
       ViewIdManaged viewId,
       ViewModeManaged viewMode,
-      bool showGrid)
+      bool showGrid,
+      bool showSelectionOutline)
       -> System::Threading::Tasks::Task<bool>^;
+
+    /// <summary>
+    /// Picks the scene nodes with visible geometry inside a rectangle of a
+    /// view, in pixels of its surface. Completes a few frames later with the
+    /// hits, or with null when the view is not rendering or the scene was
+    /// replaced meanwhile.
+    /// </summary>
+    auto TryPickViewAsync(EngineContext^ ctx, ViewIdManaged viewId,
+      System::UInt32 x, System::UInt32 y, System::UInt32 width,
+      System::UInt32 height)
+      -> System::Threading::Tasks::Task<ViewPickResultManaged^>^;
+
+    /// <summary>
+    /// Frames scene nodes, or the whole scene when <paramref name="nodeIds"/>
+    /// is empty, in one view with a short eased camera move.
+    /// </summary>
+    auto TryFrameViewAsync(EngineContext^ ctx, ViewIdManaged viewId,
+      array<System::Guid>^ nodeIds)
+      -> System::Threading::Tasks::Task<ViewFramingOutcomeManaged>^;
+
+    /// <summary>
+    /// Outlines the selected scene nodes and their descendants in every
+    /// editing view that shows the selection outline; the active node is
+    /// drawn brighter.
+    /// </summary>
+    auto TrySetSelectionOutline(EngineContext^ ctx,
+      array<System::Guid>^ nodeIds, System::Nullable<System::Guid> activeNodeId)
+      -> bool;
 
     /// <summary>
     /// Gets the rate and duration of the last completed engine frame.

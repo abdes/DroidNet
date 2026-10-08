@@ -138,10 +138,27 @@ internal abstract class EngineSession
 
     /// <summary>Sets how a view presents the scene.</summary>
     /// <param name="viewId">The view to update.</param>
-    /// <param name="viewMode">What the view renders.</param>
-    /// <param name="showGrid">Whether the view shows the ground grid.</param>
+    /// <param name="options">How the view presents the scene.</param>
     /// <returns>The runtime operation result.</returns>
-    public abstract Task<bool> SetViewRenderOptionsAsync(RuntimeViewId viewId, ViewportViewMode viewMode, bool showGrid);
+    public abstract Task<bool> SetViewRenderOptionsAsync(RuntimeViewId viewId, ViewportRenderOptions options);
+
+    /// <summary>Picks the scene nodes with visible geometry inside a rectangle of a view.</summary>
+    /// <param name="viewId">The view to pick.</param>
+    /// <param name="rect">The rectangle, in physical pixels of the view's surface.</param>
+    /// <returns>The hits, or <see langword="null"/> when no current result exists.</returns>
+    public abstract Task<RuntimePickResult?> PickViewAsync(RuntimeViewId viewId, RuntimePickRect rect);
+
+    /// <summary>Frames scene nodes, or the whole scene, in a view.</summary>
+    /// <param name="viewId">The view whose editor camera moves.</param>
+    /// <param name="nodeIds">The nodes to frame; empty frames the whole scene.</param>
+    /// <returns>What the request did.</returns>
+    public abstract Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<Guid> nodeIds);
+
+    /// <summary>Outlines the selected nodes in every editing view.</summary>
+    /// <param name="nodeIds">The selected nodes; empty clears the outline.</param>
+    /// <param name="activeNodeId">The active node, if any.</param>
+    /// <returns>The runtime operation result.</returns>
+    public abstract bool SetSelectionOutline(IReadOnlyList<Guid> nodeIds, Guid? activeNodeId);
 
     /// <summary>Gets the rate and duration of the last completed engine frame.</summary>
     /// <returns>The frame statistics.</returns>

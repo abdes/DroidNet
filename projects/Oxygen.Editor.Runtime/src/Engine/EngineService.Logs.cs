@@ -179,11 +179,11 @@ public sealed partial class EngineService
 
     [LoggerMessage(
         Level = LogLevel.Debug,
-        Message = "Requesting view with id '{ViewId}' to render '{ViewMode}' with grid '{ShowGrid}'.")]
-    private static partial void LogSetViewRenderOptions(ILogger logger, ulong viewId, ViewportViewMode viewMode, bool showGrid);
+        Message = "Requesting view with id '{ViewId}' to render with {Options}.")]
+    private static partial void LogSetViewRenderOptions(ILogger logger, ulong viewId, ViewportRenderOptions options);
 
-    private void LogSetViewRenderOptions(RuntimeViewId viewId, ViewportViewMode viewMode, bool showGrid)
-        => LogSetViewRenderOptions(this.logger, viewId.Value, viewMode, showGrid);
+    private void LogSetViewRenderOptions(RuntimeViewId viewId, ViewportRenderOptions options)
+        => LogSetViewRenderOptions(this.logger, viewId.Value, options);
 
     [LoggerMessage(
         Level = LogLevel.Debug,

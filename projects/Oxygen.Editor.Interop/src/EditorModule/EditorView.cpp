@@ -777,6 +777,104 @@ void EditorView::SetCameraViewSettings(
   }
 }
 
+auto EditorView::BeginFraming(const glm::vec3& center, const float radius)
+  -> EditorFramingOutcome {
+  constexpr float kMargin = 1.1F;
+  constexpr float kMinRadius = 0.01F;
+  if (!camera_node_.IsAlive()) {
+    return EditorFramingOutcome::kNoView;
+  }
+  if (IsViewingSceneCamera()) {
+    return EditorFramingOutcome::kViewingSceneCamera;
+  }
+  if (!IsFinite(center) || !std::isfinite(radius)) {
+    return EditorFramingOutcome::kInvalidBounds;
+  }
+
+  auto transform = camera_node_.GetTransform();
+  const glm::vec3 position
+    = transform.GetLocalPosition().value_or(glm::vec3 { 0.0F });
+  const glm::quat rotation = transform.GetLocalRotation().value_or(
+    glm::quat { 1.0F, 0.0F, 0.0F, 0.0F });
+  const glm::vec3 forward = NormalizeSafe(
+    rotation * oxygen::space::look::Forward, oxygen::space::look::Forward);
+  const float aspect
+    = (width_ > 0.0F && height_ > 0.0F) ? (width_ / height_) : 1.0F;
+  const float fitted = std::max(radius, kMinRadius) * kMargin;
+
+  FramingMove move {
+    .start_position = position,
+    .start_focus = focus_point_,
+    .start_ortho_half_height = ortho_half_height_,
+    .target_position = position,
+    .target_focus = center,
+    .target_ortho_half_height = ortho_half_height_,
+    .written_position = position,
+    .elapsed = 0.0F,
+  };
+  if (auto perspective = camera_node_.GetCameraAs<scene::PerspectiveCamera>();
+    perspective) {
+    // The narrower of the vertical and horizontal fields of view decides.
+    const float fov_y = perspective->get().GetFieldOfView();
+    const float fov_x = 2.0F * std::atan(std::tan(fov_y * 0.5F) * aspect);
+    const float half_fov = 0.5F * std::min(fov_y, fov_x);
+    const float distance = std::max(fitted / std::sin(half_fov),
+      camera_near_plane_ + fitted);
+    move.target_position = center - forward * distance;
+  } else {
+    move.target_ortho_half_height = fitted * std::max(1.0F, 1.0F / aspect);
+    const glm::vec3 offset = position - focus_point_;
+    const float distance = std::max(
+      std::sqrt(glm::dot(offset, offset)), 2.0F * fitted + 1.0F);
+    move.target_position = center - forward * distance;
+  }
+  if (!IsFinite(move.target_position)
+    || !std::isfinite(move.target_ortho_half_height)) {
+    return EditorFramingOutcome::kInvalidBounds;
+  }
+
+  framing_ = move;
+  // An explicit frame replaces the automatic first-frame framing.
+  initial_scene_frame_applied_ = true;
+  initial_orientation_set_ = true;
+  return EditorFramingOutcome::kFramed;
+}
+
+void EditorView::AdvanceFraming(const float dt_seconds) {
+  constexpr float kDurationSeconds = 0.25F;
+  constexpr float kTakeOverDistance = 1.0e-4F;
+  if (!framing_.has_value() || !camera_node_.IsAlive()) {
+    framing_.reset();
+    return;
+  }
+  auto transform = camera_node_.GetTransform();
+  const glm::vec3 position
+    = transform.GetLocalPosition().value_or(framing_->written_position);
+  const glm::vec3 moved = position - framing_->written_position;
+  if (glm::dot(moved, moved) > kTakeOverDistance * kTakeOverDistance
+    || IsViewingSceneCamera()) {
+    framing_.reset();
+    return;
+  }
+
+  framing_->elapsed += std::max(0.0F, dt_seconds);
+  const float t = std::clamp(framing_->elapsed / kDurationSeconds, 0.0F, 1.0F);
+  // Ease out (cubic): fast start, gentle arrival.
+  const float inverse = 1.0F - t;
+  const float eased = 1.0F - inverse * inverse * inverse;
+  const glm::vec3 next = glm::mix(
+    framing_->start_position, framing_->target_position, eased);
+  (void)transform.SetLocalPosition(next);
+  focus_point_
+    = glm::mix(framing_->start_focus, framing_->target_focus, eased);
+  SetOrthoHalfHeight(glm::mix(framing_->start_ortho_half_height,
+    framing_->target_ortho_half_height, eased));
+  framing_->written_position = next;
+  if (t >= 1.0F) {
+    framing_.reset();
+  }
+}
+
 auto EditorView::GetViewId() const -> ViewId { return view_id_; }
 
 auto EditorView::GetState() const -> ViewState { return state_; }

@@ -5,6 +5,7 @@
 using System.Collections.Specialized;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
+using DroidNet.Controls;
 using DroidNet.Documents;
 using DroidNet.Routing;
 using Microsoft.UI;
@@ -110,6 +111,41 @@ public sealed class SceneExplorerSelectionTests
         var context = harness.SelectionService.GetContext(scene.Id);
         _ = context.Kind.Should().Be(SceneSelectionKind.Node);
         _ = context.PrimaryNodeId.Should().Be(node.Id);
+    }
+
+    [TestMethod]
+    public async Task ViewportSelection_ScrollsTheActiveRowIntoView()
+    {
+        var harness = new SelectionHarness(out var scene, out var node, out _);
+        using var explorer = harness.Build();
+        await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
+        var revealed = new List<ITreeItem>();
+        explorer.BringIntoViewRequested += (_, args) => revealed.Add(args.TreeItem);
+
+        harness.SelectionService.Publish(
+            scene.Id,
+            new SceneSelectionContext(SceneSelectionKind.Node, [node.Id], [], node.Id, null),
+            "Viewport");
+
+        var nodeAdapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
+        _ = revealed.Should().Equal(nodeAdapter!);
+    }
+
+    [TestMethod]
+    public async Task InvokingANodeRow_AsksToFrameTheNode()
+    {
+        var harness = new SelectionHarness(out var scene, out var node, out _);
+        using var explorer = harness.Build();
+        await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
+        var requests = new List<FrameSceneNodesRequestMessage>();
+        harness.Messenger.Register<FrameSceneNodesRequestMessage>(requests, (recipient, message) => ((List<FrameSceneNodesRequestMessage>)recipient).Add(message));
+        var nodeAdapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
+
+        explorer.InvokeItem(nodeAdapter!);
+
+        _ = requests.Should().ContainSingle();
+        _ = requests[0].DocumentId.Should().Be(scene.Id);
+        _ = requests[0].NodeIds.Should().Equal(node.Id);
     }
 
     [TestMethod]

@@ -51,7 +51,7 @@ public sealed class ViewportHudTests
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         _ = engine
-            .Setup(service => service.SetViewRenderOptionsAsync(It.Is<RuntimeViewId>(id => id.Value == ViewId.Value), ViewportViewMode.Roughness, true))
+            .Setup(service => service.SetViewRenderOptionsAsync(It.Is<RuntimeViewId>(id => id.Value == ViewId.Value), new ViewportRenderOptions(ViewportViewMode.Roughness, true, true)))
             .ReturnsAsync(value: true);
         using var sut = CreateViewport(engine.Object);
         sut.AssignedViewId = ViewId;
@@ -73,7 +73,7 @@ public sealed class ViewportHudTests
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         _ = engine
-            .Setup(service => service.SetViewRenderOptionsAsync(It.Is<RuntimeViewId>(id => id.Value == ViewId.Value), ViewportViewMode.Lit, false))
+            .Setup(service => service.SetViewRenderOptionsAsync(It.Is<RuntimeViewId>(id => id.Value == ViewId.Value), new ViewportRenderOptions(ViewportViewMode.Lit, false, true)))
             .ReturnsAsync(value: true);
         using var sut = CreateViewport(engine.Object);
         sut.AssignedViewId = ViewId;
@@ -84,11 +84,32 @@ public sealed class ViewportHudTests
     }
 
     [TestMethod]
+    public void ShowSelectionOutline_ShouldSendTheOutlineWithTheOtherOptionsAndPersist()
+    {
+        var engine = new Mock<IEngineService>(MockBehavior.Strict);
+        _ = engine
+            .Setup(service => service.SetViewRenderOptionsAsync(
+                It.Is<RuntimeViewId>(id => id.Value == ViewId.Value),
+                new ViewportRenderOptions(ViewportViewMode.Lit, true, false)))
+            .ReturnsAsync(value: true);
+        using var sut = CreateViewport(engine.Object);
+        sut.AssignedViewId = ViewId;
+        var stateChanges = 0;
+        sut.StateChanged += (_, _) => stateChanges++;
+
+        _ = sut.ShowSelectionOutline.Should().BeTrue();
+        sut.ShowSelectionOutline = false;
+
+        engine.VerifyAll();
+        _ = stateChanges.Should().Be(1);
+    }
+
+    [TestMethod]
     public void ViewMode_WhenRuntimeRejectsIt_ShouldPublishWarning()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         _ = engine
-            .Setup(service => service.SetViewRenderOptionsAsync(It.IsAny<RuntimeViewId>(), ViewportViewMode.Wireframe, true))
+            .Setup(service => service.SetViewRenderOptionsAsync(It.IsAny<RuntimeViewId>(), new ViewportRenderOptions(ViewportViewMode.Wireframe, true, true)))
             .ReturnsAsync(value: false);
         var results = new Mock<IOperationResultPublisher>();
         using var sut = CreateViewport(engine.Object, results.Object);
@@ -175,6 +196,7 @@ public sealed class ViewportHudTests
         source.ShowGrid = false;
         source.ShowCameraPreview = false;
         source.ShowStatistics = true;
+        source.ShowSelectionOutline = false;
         source.CameraType = CameraType.Front;
 
         var state = source.CaptureState();
@@ -190,7 +212,8 @@ public sealed class ViewportHudTests
             ViewportViewMode.LitWireframe,
             ShowGrid: false,
             ShowCameraPreview: false,
-            ShowStatistics: true));
+            ShowStatistics: true,
+            ShowSelectionOutline: false));
     }
 
     private static ViewportViewModel CreateViewport(IEngineService engine, IOperationResultPublisher? results = null)

@@ -23,6 +23,10 @@
         <SolidColorBrush x:Key="HudForegroundBrush" Color="#FFEDF4F7" />
         <SolidColorBrush x:Key="HudMutedForegroundBrush" Color="#FFB2C4CF" />
         <SolidColorBrush x:Key="FocusedViewportBorderBrush" Color="{ThemeResource SystemAccentColor}" />
+        <SolidColorBrush
+            x:Key="MarqueeFillBrush"
+            Opacity="0.15"
+            Color="{ThemeResource SystemAccentColor}" />
 
         <!--
             DropDownButton's default style lives only in its theme dictionary; this keyed
@@ -193,6 +197,16 @@
 
     <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <SwapChainPanel x:Name="SwapChainPanel" Canvas.ZIndex="0" />
+
+        <!--  Marquee selection, drawn while a left-drag selects.  -->
+        <Canvas Canvas.ZIndex="50" IsHitTestVisible="False">
+            <Rectangle
+                x:Name="MarqueeRectangle"
+                Fill="{StaticResource MarqueeFillBrush}"
+                Stroke="{StaticResource FocusedViewportBorderBrush}"
+                StrokeThickness="1"
+                Visibility="Collapsed" />
+        </Canvas>
 
         <!--  HUD row  -->
         <Grid
@@ -455,6 +469,7 @@
                     <Flyout FlyoutPresenterStyle="{StaticResource FlyoutPresenterStyle}" Placement="BottomEdgeAlignedLeft">
                         <StackPanel Width="200" Padding="8,8,8,0">
                             <CheckBox Content="Grid" IsChecked="{x:Bind ViewModel.ShowGrid, Mode=TwoWay}" />
+                            <CheckBox Content="Selection outline" IsChecked="{x:Bind ViewModel.ShowSelectionOutline, Mode=TwoWay}" />
                             <CheckBox Content="Camera preview" IsChecked="{x:Bind ViewModel.ShowCameraPreview, Mode=TwoWay}" />
                             <CheckBox Content="Statistics" IsChecked="{x:Bind ViewModel.ShowStatistics, Mode=TwoWay}" />
                         </StackPanel>
@@ -530,6 +545,26 @@
                 <Run Text="  " />
                 <Run Text="{x:Bind ViewModel.GestureHint, Mode=OneWay}" />
             </TextBlock>
+        </Border>
+
+        <!--  Notice about the last framing request, shown briefly.  -->
+        <Border
+            Margin="8,8,8,40"
+            Padding="10,5"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Bottom"
+            Background="{StaticResource HudChipBrush}"
+            BorderBrush="{StaticResource HudChipBorderBrush}"
+            BorderThickness="1"
+            Canvas.ZIndex="100"
+            CornerRadius="4"
+            IsHitTestVisible="False"
+            Visibility="{x:Bind ViewModel.IsNoticeVisible, Mode=OneWay}">
+            <TextBlock
+                FontSize="11"
+                Foreground="{StaticResource HudForegroundBrush}"
+                Text="{x:Bind ViewModel.Notice, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis" />
         </Border>
 
         <!--  Frame statistics  -->

@@ -114,6 +114,21 @@ namespace oxygen::interop::module {
   struct EditorViewRenderOptions {
     EditorViewMode view_mode { EditorViewMode::kLit };
     bool show_grid { true };
+    bool show_selection_outline { true };
+  };
+
+  //! What a frame request did to a view's editor camera.
+  enum class EditorFramingOutcome : std::uint8_t {
+    //! The editor camera is moving to frame the bounds.
+    kFramed = 0,
+    //! None of the requested nodes exist in the scene.
+    kNothingToFrame,
+    //! The view looks through a scene camera, which framing never moves.
+    kViewingSceneCamera,
+    //! The view does not exist.
+    kNoView,
+    //! The bounds are not finite; the view is unchanged.
+    kInvalidBounds,
   };
 
   struct EditorViewContext {
@@ -263,6 +278,19 @@ namespace oxygen::interop::module {
       focus_point_ = focus_point;
     }
 
+    //! Starts a short eased move of the editor camera that frames a world
+    //! sphere with a 10% margin, keeping the view direction. Orthographic
+    //! views resize to fit instead of moving closer.
+    /*!
+     Navigation input during the move takes over and ends it. A view looking
+     through a scene camera does not move: framing never edits authored data.
+    */
+    [[nodiscard]] auto BeginFraming(const glm::vec3& center, float radius)
+      -> EditorFramingOutcome;
+
+    //! Advances a framing move by `dt_seconds`; call before navigation.
+    void AdvanceFraming(float dt_seconds);
+
     //! Sets the camera to a predefined view preset.
     /*!
      Perspective keeps the current transform but ensures the camera component is
@@ -350,6 +378,21 @@ namespace oxygen::interop::module {
     //! updates from authoring edits (undo, redo, Inspector).
     viewport::CameraPlacement pilot_written_ {};
     ViewId view_id_{ kInvalidViewId };
+
+    //! An eased framing move of the editor camera.
+    struct FramingMove {
+      glm::vec3 start_position { 0.0F };
+      glm::vec3 start_focus { 0.0F };
+      float start_ortho_half_height { 0.0F };
+      glm::vec3 target_position { 0.0F };
+      glm::vec3 target_focus { 0.0F };
+      float target_ortho_half_height { 0.0F };
+      //! Position last written by the move: anything else means navigation
+      //! moved the camera.
+      glm::vec3 written_position { 0.0F };
+      float elapsed { 0.0F };
+    };
+    std::optional<FramingMove> framing_;
 
     // Resources
     std::shared_ptr<graphics::Texture> color_texture_;

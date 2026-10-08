@@ -99,7 +99,8 @@ M08.V0 viewport robustness, M08.V1 multi-viewport layouts and M08.V2
 viewport state persistence are validated and closed on 2026-10-08. The
 2026-10-08 rescope retires the development-only parity harness and adds the
 viewport editing tools (absorbing ED-M09) and the Content Browser redesign,
-including reference-aware rename/move; M08.3 is next.
+including reference-aware rename/move. M08.3 viewport HUD and M08.4 picking,
+selection outline and framing are validated on 2026-10-08; M08.5 is next.
 
 ## 4. Milestone Roadmap
 

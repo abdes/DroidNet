@@ -49,4 +49,7 @@ public sealed record RuntimeViewConfig
 
     /// <summary>Gets a value indicating whether the view shows the ground grid from its first frame.</summary>
     public bool ShowGrid { get; init; } = true;
+
+    /// <summary>Gets a value indicating whether the view outlines the selected nodes from its first frame.</summary>
+    public bool ShowSelectionOutline { get; init; } = true;
 }

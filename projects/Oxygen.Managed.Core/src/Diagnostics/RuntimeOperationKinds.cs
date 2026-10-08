@@ -75,9 +75,24 @@ public static class RuntimeOperationKinds
     public const string ViewSetCameraMovementSpeed = "Runtime.View.SetCameraMovementSpeed";
 
     /// <summary>
-    /// Viewport view mode and ground grid update.
+    /// Viewport view mode, ground grid and selection outline update.
     /// </summary>
     public const string ViewSetRenderOptions = "Runtime.View.SetRenderOptions";
+
+    /// <summary>
+    /// Viewport pick of the scene nodes under a click or marquee.
+    /// </summary>
+    public const string ViewPick = "Runtime.View.Pick";
+
+    /// <summary>
+    /// Viewport framing of the selection or the whole scene.
+    /// </summary>
+    public const string ViewFrame = "Runtime.View.Frame";
+
+    /// <summary>
+    /// Selection outline update for the editing views.
+    /// </summary>
+    public const string SelectionOutline = "Runtime.View.SetSelectionOutline";
 
     /// <summary>
     /// Runtime engine view camera lens and clipping settings change.

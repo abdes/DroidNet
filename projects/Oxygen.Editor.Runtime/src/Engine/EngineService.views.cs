@@ -219,14 +219,65 @@ public sealed partial class EngineService
     }
 
     /// <inheritdoc/>
-    public async Task<bool> SetViewRenderOptionsAsync(RuntimeViewId viewId, ViewportViewMode viewMode, bool showGrid)
+    public async Task<bool> SetViewRenderOptionsAsync(RuntimeViewId viewId, ViewportRenderOptions options)
     {
         await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
             var runner = this.EnsureIsRunning();
-            this.LogSetViewRenderOptions(viewId, viewMode, showGrid);
-            return await this.AwaitRuntimeOperationAsync(runner.SetViewRenderOptionsAsync(viewId, viewMode, showGrid)).ConfigureAwait(true);
+            this.LogSetViewRenderOptions(viewId, options);
+            return await this.AwaitRuntimeOperationAsync(runner.SetViewRenderOptionsAsync(viewId, options)).ConfigureAwait(true);
+        }
+        finally
+        {
+            _ = this.lifecycleGate.Release();
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<RuntimePickResult?> PickViewAsync(RuntimeViewId viewId, RuntimePickRect rect)
+    {
+        Task<RuntimePickResult?> pick;
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
+        try
+        {
+            var runner = this.EnsureIsRunning();
+            pick = runner.PickViewAsync(viewId, rect);
+        }
+        finally
+        {
+            // The result lands frames later: other view requests need not wait for it.
+            _ = this.lifecycleGate.Release();
+        }
+
+        return await this.AwaitRuntimeOperationAsync(pick).ConfigureAwait(true);
+    }
+
+    /// <inheritdoc/>
+    public async Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<Guid> nodeIds)
+    {
+        ArgumentNullException.ThrowIfNull(nodeIds);
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
+        try
+        {
+            var runner = this.EnsureIsRunning();
+            return await this.AwaitRuntimeOperationAsync(runner.FrameViewAsync(viewId, nodeIds)).ConfigureAwait(true);
+        }
+        finally
+        {
+            _ = this.lifecycleGate.Release();
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> SetSelectionOutlineAsync(IReadOnlyList<Guid> nodeIds, Guid? activeNodeId)
+    {
+        ArgumentNullException.ThrowIfNull(nodeIds);
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
+        try
+        {
+            return this.State == EngineServiceState.Running && this.session is { } running
+                && running.SetSelectionOutline(nodeIds, activeNodeId);
         }
         finally
         {

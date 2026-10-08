@@ -16,6 +16,7 @@
 #include <Commands/CreateViewCommand.h>
 #include <Commands/DestroySceneCommand.h>
 #include <Commands/DestroyViewCommand.h>
+#include <Commands/FrameViewCommand.h>
 #include <Commands/HideViewCommand.h>
 #include <Commands/SetViewCameraControlModeCommand.h>
 #include <Commands/SetViewCameraMovementSpeedCommand.h>
@@ -244,6 +245,7 @@ namespace oxygen::interop::module {
   }
 
   EditorModule::~EditorModule() {
+    CancelPendingPicks();
     asset_requests_.reset();
     LOG_F(INFO, "EditorModule destroying; releasing registered surfaces.");
 
@@ -693,6 +695,8 @@ namespace oxygen::interop::module {
 
         view->SetRenderingContext(view_ctx);
         view->OnSceneMutation();
+        // A framing move runs before navigation, which can take it over.
+        view->AdvanceFraming(dt_seconds);
 
         // A view looking through a scene camera navigates only while piloting
         // it. The editor camera is then the navigation proxy, and the scene
@@ -781,16 +785,20 @@ namespace oxygen::interop::module {
     -> co::Co<> {
     if (preview_paused_ || context == nullptr || engine_ == nullptr
       || !view_manager_) {
+      CancelPendingPicks();
       co_return;
     }
 
     auto renderer_opt = engine_->GetModule<oxygen::vortex::Renderer>();
     const auto gfx = graphics_.lock();
     if (!renderer_opt.has_value() || !gfx) {
+      CancelPendingPicks();
       co_return;
     }
 
     auto& renderer = renderer_opt->get();
+    const auto outline = BuildSelectionOutline();
+    std::unordered_set<ViewId> published_views;
 
     // A publication lasts until it is removed, but its resolved camera only
     // lasts one frame. A view not republished this frame is withdrawn, or the
@@ -862,6 +870,10 @@ namespace oxygen::interop::module {
       composition_view.with_local_fog = false;
       composition_view.shading_mode = vortex::ShadingMode::kDeferred;
       ApplyRenderOptions(composition_view, *view);
+      // A camera preview shows what the camera sees, without editor aids.
+      if (!view->IsInset() && config.render_options.show_selection_outline) {
+        composition_view.outline = outline;
+      }
 
       const auto published_view_id = renderer.PublishRuntimeCompositionView(
         *context,
@@ -875,12 +887,153 @@ namespace oxygen::interop::module {
         withdraw(*view, "publication rejected");
         continue;
       }
+      published_views.insert(view->GetViewId());
       DLOG_F(2, "OnPublishViews: view '{}' intent={} published={} extent={}x{}",
         view->GetName(), view->GetViewId().get(), published_view_id.get(),
         width, height);
     }
 
+    SubmitPendingPicks(renderer, published_views);
     co_return;
+  }
+
+  auto EditorModule::BuildSelectionOutline()
+    -> std::shared_ptr<const vortex::ViewOutline> {
+    std::vector<UuidKey> nodes;
+    std::optional<UuidKey> active;
+    {
+      std::lock_guard lock(outline_mutex_);
+      nodes = outline_nodes_;
+      active = outline_active_;
+    }
+    if (!scene_ || (nodes.empty() && !active.has_value())) {
+      return nullptr;
+    }
+
+    // Selecting a node outlines its whole subtree: a group shows what it
+    // holds.
+    const auto add_subtree = [this](const UuidKey& id,
+                               std::vector<scene::NodeHandle>& out) {
+      const auto handle = NodeRegistry::Lookup(id);
+      if (!handle.has_value()) {
+        return;
+      }
+      auto root = scene_->GetNode(*handle);
+      if (!root.has_value() || !root->IsAlive()) {
+        return;
+      }
+      std::vector<scene::SceneNode> pending { *root };
+      while (!pending.empty()) {
+        auto node = pending.back();
+        pending.pop_back();
+        out.push_back(node.GetHandle());
+        for (auto child = node.GetFirstChild(); child.has_value();
+          child = child->GetNextSibling()) {
+          pending.push_back(*child);
+        }
+      }
+    };
+
+    auto outline = std::make_shared<vortex::ViewOutline>();
+    for (const auto& id : nodes) {
+      add_subtree(id, outline->nodes);
+    }
+    if (active.has_value()) {
+      add_subtree(*active, outline->active_nodes);
+    }
+    if (outline->IsEmpty()) {
+      return nullptr;
+    }
+    return outline;
+  }
+
+  void EditorModule::SubmitPendingPicks(vortex::Renderer& renderer,
+    const std::unordered_set<ViewId>& published_views) {
+    std::vector<PendingPick> picks;
+    {
+      std::lock_guard lock(picks_mutex_);
+      picks.swap(pending_picks_);
+    }
+    for (auto& pick : picks) {
+      if (!published_views.contains(pick.view_id)) {
+        pick.callback(std::nullopt);
+        continue;
+      }
+      const auto generation = scene_generation_->load();
+      auto completion = [scene_generation = scene_generation_, generation,
+                          callback = std::move(pick.callback)](
+                          vortex::ViewPickResult result) {
+        if (result.status != vortex::ViewPickResult::Status::kCompleted
+          || scene_generation->load() != generation) {
+          callback(std::nullopt);
+          return;
+        }
+        EditorPickResult picked;
+        picked.world_position = result.world_position;
+        picked.hits.reserve(result.hits.size());
+        for (const auto& hit : result.hits) {
+          // Nodes the editor did not create (none today) are not pickable.
+          if (const auto id = NodeRegistry::ReverseLookup(hit.node)) {
+            picked.hits.push_back(EditorPickHit {
+              .node = *id,
+              .depth = hit.depth,
+              .geometry_slot = hit.submesh_index,
+              .center_distance = hit.center_distance,
+            });
+          }
+        }
+        callback(std::move(picked));
+      };
+      renderer.RequestPublishedRuntimeViewPick(pick.view_id,
+        std::make_shared<vortex::ViewPickRequest>(
+          pick.rect, std::move(completion)));
+    }
+  }
+
+  void EditorModule::CancelPendingPicks() noexcept {
+    std::vector<PendingPick> picks;
+    {
+      std::lock_guard lock(picks_mutex_);
+      picks.swap(pending_picks_);
+    }
+    for (auto& pick : picks) {
+      try {
+        pick.callback(std::nullopt);
+      } catch (...) {
+        LOG_F(ERROR, "EditorModule: pick callback failed");
+      }
+    }
+  }
+
+  void EditorModule::PickView(ViewId view_id, vortex::ViewPickRect rect,
+    std::function<void(std::optional<EditorPickResult>)> callback) {
+    if (view_id == kInvalidViewId || !view_manager_) {
+      callback(std::nullopt);
+      return;
+    }
+    std::lock_guard lock(picks_mutex_);
+    pending_picks_.push_back(PendingPick {
+      .view_id = view_id,
+      .rect = rect,
+      .callback = std::move(callback),
+    });
+  }
+
+  void EditorModule::FrameView(ViewId view_id, std::vector<UuidKey> nodes,
+    std::function<void(EditorFramingOutcome)> callback) {
+    if (view_id == kInvalidViewId || !view_manager_) {
+      callback(EditorFramingOutcome::kNoView);
+      return;
+    }
+    command_queue_.Enqueue(std::make_unique<FrameViewCommand>(
+      view_manager_.get(), view_id, std::move(nodes), std::move(callback)));
+  }
+
+  void EditorModule::SetSelectionOutline(
+    std::vector<UuidKey> nodes, std::optional<UuidKey> active) {
+    std::lock_guard lock(outline_mutex_);
+    outline_nodes_ = std::move(nodes);
+    outline_active_ = active;
   }
 
   auto EditorModule::OnPreRender(observer_ptr<engine::FrameContext> context) -> co::Co<> {
@@ -1045,6 +1198,7 @@ namespace oxygen::interop::module {
       }
     }
     asset_requests_.reset();
+    scene_generation_->fetch_add(1U);
     scene_ = std::make_shared<oxygen::scene::Scene>(std::string(name), 1024U);
 
     asset_requests_ = std::make_unique<SceneAssetRequests>(
@@ -1419,6 +1573,7 @@ namespace oxygen::interop::module {
 
     // Reset scene after views have been released to avoid traversals seeing
     // an invalid scene during frame phases.
+    scene_generation_->fetch_add(1U);
     scene_.reset();
   }
 

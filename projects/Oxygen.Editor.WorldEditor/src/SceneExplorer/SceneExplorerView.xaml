@@ -242,6 +242,7 @@
             x:Name="ExplorerTree"
             Grid.Row="2"
             IsFilteringEnabled="True"
+            RenameOnDoubleTap="False"
             ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
             TrailingContentTemplate="{StaticResource RowActionsTemplate}"
             TrailingContentWidth="88"

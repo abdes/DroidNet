@@ -164,6 +164,7 @@ public partial class SceneEditorViewModel
         viewport.PilotStarting = this.StopOtherPilotsAsync;
         viewport.NodeCountProvider = () => this.scene?.AllNodes.Count() ?? 0;
         this.AttachCameraServices(viewport);
+        this.AttachSelectionServices(viewport);
         return viewport;
     }
 

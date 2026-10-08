@@ -35,6 +35,12 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
     private const double CompactWidth = 600;
     private const double NarrowWidth = 400;
 
+    // A left press selects; dragging it further than this, in DIPs, draws a marquee instead.
+    private const double MarqueeThreshold = 4;
+
+    // The square, in physical pixels, a click picks around the pointer.
+    private const uint ClickPickExtent = 7;
+
     private static readonly TimeSpan StatisticsInterval = TimeSpan.FromMilliseconds(500);
 
     private static readonly bool EnableInputDebugLogs =
@@ -80,6 +86,10 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
     private bool lastAltKeyDown;
     private DispatcherQueueTimer? statisticsTimer;
+
+    private Windows.Foundation.Point? selectionStart;
+    private ViewportSelectionMode selectionMode;
+    private bool isMarquee;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Viewport"/> class.
@@ -313,6 +323,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         menu.Items.Clear();
         menu.Items.Add(CreateToggle("Grid", viewModel.ShowGrid, value => viewModel.ShowGrid = value));
+        menu.Items.Add(CreateToggle("Selection outline", viewModel.ShowSelectionOutline, value => viewModel.ShowSelectionOutline = value));
         menu.Items.Add(CreateToggle("Camera preview", viewModel.ShowCameraPreview, value => viewModel.ShowCameraPreview = value));
         menu.Items.Add(CreateToggle("Statistics", viewModel.ShowStatistics, value => viewModel.ShowStatistics = value));
 
@@ -677,7 +688,122 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
     {
         _ = sender;
         _ = e;
+        this.CancelSelectionGesture();
         this.PushFocusLostIfNeeded();
+    }
+
+    /// <summary>
+    /// Starts a selection gesture on a left press without Alt: Alt+drag stays navigation. Ctrl
+    /// toggles the picked nodes, Shift adds them.
+    /// </summary>
+    private void BeginSelectionGesture(PointerPoint point, VirtualKeyModifiers modifiers)
+    {
+        this.CancelSelectionGesture();
+        if (point.Properties.PointerUpdateKind != PointerUpdateKind.LeftButtonPressed
+            || modifiers.HasFlag(VirtualKeyModifiers.Menu) || this.lastAltKeyDown)
+        {
+            return;
+        }
+
+        this.selectionStart = point.Position;
+        this.selectionMode = modifiers.HasFlag(VirtualKeyModifiers.Control)
+            ? ViewportSelectionMode.Toggle
+            : modifiers.HasFlag(VirtualKeyModifiers.Shift) ? ViewportSelectionMode.Add : ViewportSelectionMode.Replace;
+    }
+
+    private void UpdateSelectionGesture(PointerPoint point)
+    {
+        if (this.selectionStart is not { } start)
+        {
+            return;
+        }
+
+        var position = point.Position;
+        if (!this.isMarquee)
+        {
+            var dx = position.X - start.X;
+            var dy = position.Y - start.Y;
+            if ((dx * dx) + (dy * dy) <= MarqueeThreshold * MarqueeThreshold)
+            {
+                return;
+            }
+
+            this.isMarquee = true;
+            this.MarqueeRectangle.Visibility = Visibility.Visible;
+        }
+
+        // The overlay canvas shares the SwapChainPanel's DIPs.
+        Canvas.SetLeft(this.MarqueeRectangle, Math.Min(start.X, position.X));
+        Canvas.SetTop(this.MarqueeRectangle, Math.Min(start.Y, position.Y));
+        this.MarqueeRectangle.Width = Math.Abs(position.X - start.X);
+        this.MarqueeRectangle.Height = Math.Abs(position.Y - start.Y);
+    }
+
+    private void CompleteSelectionGesture(ViewportViewModel viewModel, PointerPoint point)
+    {
+        if (this.selectionStart is not { } start || point.Properties.PointerUpdateKind != PointerUpdateKind.LeftButtonReleased)
+        {
+            return;
+        }
+
+        var isMarquee = this.isMarquee;
+        var mode = this.selectionMode;
+        this.CancelSelectionGesture();
+
+        // Picks address the surface in physical pixels.
+        var scale = this.XamlRoot?.RasterizationScale ?? 1.0;
+        RuntimePickRect rect;
+        if (isMarquee)
+        {
+            var left = Math.Max(0.0, Math.Min(start.X, point.Position.X) * scale);
+            var top = Math.Max(0.0, Math.Min(start.Y, point.Position.Y) * scale);
+            var right = Math.Max(start.X, point.Position.X) * scale;
+            var bottom = Math.Max(start.Y, point.Position.Y) * scale;
+            rect = new RuntimePickRect(
+                (uint)left,
+                (uint)top,
+                (uint)Math.Max(1.0, Math.Ceiling(right - left)),
+                (uint)Math.Max(1.0, Math.Ceiling(bottom - top)));
+        }
+        else
+        {
+            const int halfExtent = (int)(ClickPickExtent / 2);
+            var x = (int)(point.Position.X * scale) - halfExtent;
+            var y = (int)(point.Position.Y * scale) - halfExtent;
+            rect = new RuntimePickRect((uint)Math.Max(0, x), (uint)Math.Max(0, y), ClickPickExtent, ClickPickExtent);
+        }
+
+        _ = viewModel.PickAsync(rect, mode, isMarquee);
+    }
+
+    private void CancelSelectionGesture()
+    {
+        this.selectionStart = null;
+        this.isMarquee = false;
+        this.MarqueeRectangle.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Handles the pane's own keys: F frames the selection, Shift+F the whole scene, Escape cancels a marquee.</summary>
+    /// <returns><see langword="true"/> when the key was handled and must not reach the engine.</returns>
+    private bool TryHandleSelectionKey(ViewportViewModel viewModel, KeyRoutedEventArgs e)
+    {
+        if (e.Key == VirtualKey.Escape && this.selectionStart is not null)
+        {
+            this.CancelSelectionGesture();
+            return true;
+        }
+
+        if (e.Key != VirtualKey.F || e.KeyStatus.RepeatCount > 1
+            || IsKeyDown(VirtualKey.Control) || IsKeyDown(VirtualKey.Menu))
+        {
+            return false;
+        }
+
+        _ = IsKeyDown(VirtualKey.Shift) ? viewModel.FrameAllAsync() : viewModel.FrameSelectionAsync();
+        return true;
+
+        static bool IsKeyDown(VirtualKey key)
+            => InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
     }
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
@@ -702,6 +828,12 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         if (e.Key == VirtualKey.Menu)
         {
             e.Handled = true;
+        }
+
+        if (this.TryHandleSelectionKey(viewModel, e))
+        {
+            e.Handled = true;
+            return;
         }
 
         var translated = InputTranslation.TranslateKey((VirtualKey)e.Key);
@@ -793,6 +925,8 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.lastPointerPosition = pos;
         this.hasPointerPosition = true;
 
+        this.BeginSelectionGesture(point, e.KeyModifiers);
+
         var kind = point.Properties.PointerUpdateKind;
         if (!TryTranslateMouseButton(kind, out var button, out var pressed) || !pressed)
         {
@@ -843,6 +977,8 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.lastPointerPosition = pos;
         this.hasPointerPosition = true;
 
+        this.CompleteSelectionGesture(viewModel, point);
+
         var kind = point.Properties.PointerUpdateKind;
         if (!TryTranslateMouseButton(kind, out var button, out var pressed))
         {
@@ -877,8 +1013,9 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.SyncAltKeyStateIfNeeded(viewModel, viewId);
 
         var point = e.GetCurrentPoint(this.SwapChainPanel);
+        this.UpdateSelectionGesture(point);
         var pos = new Vector2((float)point.Position.X, (float)point.Position.Y) * (float)(this.XamlRoot?.RasterizationScale ?? 1.0);
-        var delta = this.hasPointerPosition ? (pos - this.lastPointerPosition) : Vector2.Zero;
+        var delta =this.hasPointerPosition ? (pos - this.lastPointerPosition) : Vector2.Zero;
 
         this.lastPointerPosition = pos;
         this.hasPointerPosition = true;

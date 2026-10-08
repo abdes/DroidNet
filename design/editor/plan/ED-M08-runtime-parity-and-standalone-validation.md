@@ -1,9 +1,9 @@
 # ED-M08 — Runtime parity and editor authoring workspace
 
-Status: **in progress — M08.1, M08.F1, M08.2, M08.V0, M08.V1 and M08.V2
-validated; rescoped on 2026-10-08; M08.3 is next**
+Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2, M08.3 and M08.4
+validated; rescoped on 2026-10-08; M08.5 is next**
 
-Current: **M08.3 viewport HUD, view modes and scene toolbar**. The
+Current: **M08.5 transform gizmos and snapping**. The
 [rescope](#retired-by-the-rescope) retires the development-only parity harness
 (former M08.3 and M08.5–M08.8) and the former M08.4 audit, and replaces them
 with what the editor still lacks as an authoring tool: viewport picking,
@@ -803,8 +803,8 @@ the primary place to select.
    selects every node with visible pixels inside it, with the same modifiers.
    Alt-navigation is unchanged, and gizmo hits (M08.5) take precedence.
    Workspace-hidden nodes are not pickable; locked nodes are selectable but not
-   manipulable. A Viewport picking row (Mesh, Light, Camera) in the Scene
-   Explorer header limits which categories the viewport can hit.
+   manipulable. Picking has no category filter: the Scene Explorer's Mesh,
+   Light and Camera buttons filter the tree only.
 3. **Selection outline.** Selected nodes get a crisp screen-space outline in
    the editor overlay stage, in every editing pane and view mode: accent
    colour, brighter for the active node, dimmed where occluded.
@@ -1047,8 +1047,8 @@ UI tests never drive the system mouse or need window focus.
 - [x] Authoring surface and rendering behavior (M08.2).
 - [x] Every scene layout and the camera preview inset pass M08.V1, and
       viewport state survives reopening per M08.V2.
-- [ ] HUD, view modes and scene toolbar (M08.3).
-- [ ] Picking, outline and framing (M08.4).
+- [x] HUD, view modes and scene toolbar (M08.3).
+- [x] Picking, outline and framing (M08.4).
 - [ ] Gizmos, snapping and viewport editing shortcuts (M08.5).
 - [ ] Scene helpers, editable light handles and orientation triad (M08.6).
 - [ ] Content Browser layout, views and working commands (M08.7).

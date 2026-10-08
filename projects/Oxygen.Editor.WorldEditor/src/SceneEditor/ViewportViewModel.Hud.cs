@@ -48,6 +48,10 @@ public partial class ViewportViewModel
     [ObservableProperty]
     public partial bool ShowGrid { get; set; } = true;
 
+    /// <summary>Gets or sets a value indicating whether the pane outlines the selected nodes.</summary>
+    [ObservableProperty]
+    public partial bool ShowSelectionOutline { get; set; } = true;
+
     /// <summary>Gets or sets a value indicating whether the focused pane previews the selected camera in an inset.</summary>
     [ObservableProperty]
     public partial bool ShowCameraPreview { get; set; } = true;
@@ -93,6 +97,8 @@ public partial class ViewportViewModel
     /// <summary>Gets or sets the source of the scene's node count shown by the statistics readout.</summary>
     public Func<int>? NodeCountProvider { get; set; }
 
+    private ViewportRenderOptions CurrentRenderOptions => new(this.ViewMode, this.ShowGrid, this.ShowSelectionOutline);
+
     /// <summary>Re-reads the engine frame statistics into <see cref="StatisticsText"/>.</summary>
     internal void RefreshStatistics()
     {
@@ -111,7 +117,7 @@ public partial class ViewportViewModel
         this.StatisticsText = parts.Count == 0 ? "No frame statistics" : string.Join(" · ", parts);
     }
 
-    /// <summary>Applies the pane's view mode and grid to the native view, when it has one.</summary>
+    /// <summary>Applies the pane's view mode, grid and selection outline to the native view, when it has one.</summary>
     /// <returns>A task that completes when the options have been submitted.</returns>
     internal async Task ApplyCurrentRenderOptionsAsync()
     {
@@ -122,7 +128,7 @@ public partial class ViewportViewModel
 
         try
         {
-            var accepted = await this.EngineService.SetViewRenderOptionsAsync(this.AssignedViewId, this.ViewMode, this.ShowGrid).ConfigureAwait(true);
+            var accepted = await this.EngineService.SetViewRenderOptionsAsync(this.AssignedViewId, this.CurrentRenderOptions).ConfigureAwait(true);
             if (!accepted)
             {
                 this.PublishRuntimeWarning(
@@ -251,6 +257,12 @@ public partial class ViewportViewModel
     }
 
     partial void OnShowGridChanged(bool value)
+    {
+        _ = this.ApplyCurrentRenderOptionsAsync();
+        this.RaiseStateChanged();
+    }
+
+    partial void OnShowSelectionOutlineChanged(bool value)
     {
         _ = this.ApplyCurrentRenderOptionsAsync();
         this.RaiseStateChanged();

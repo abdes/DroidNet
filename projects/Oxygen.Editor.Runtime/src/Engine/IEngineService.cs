@@ -377,17 +377,51 @@ public interface IEngineService : IAsyncDisposable
     public Task<bool> SetViewCameraSettingsAsync(RuntimeViewId viewId, float fieldOfViewDegrees, float nearPlane, float farPlane);
 
     /// <summary>
-    /// Set how an existing view presents the scene: its view mode and ground grid. This is viewport
-    /// state; it never changes the authored scene.
+    /// Set how an existing view presents the scene: its view mode, ground grid and selection
+    /// outline. This is viewport state; it never changes the authored scene.
     /// </summary>
     /// <param name="viewId">The id of the view to update.</param>
-    /// <param name="viewMode">What the view renders.</param>
-    /// <param name="showGrid">Whether the view shows the ground grid.</param>
+    /// <param name="options">How the view presents the scene.</param>
     /// <returns>
     ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
     ///     <see langword="false"/> on failure.
     /// </returns>
-    public Task<bool> SetViewRenderOptionsAsync(RuntimeViewId viewId, ViewportViewMode viewMode, bool showGrid);
+    public Task<bool> SetViewRenderOptionsAsync(RuntimeViewId viewId, ViewportRenderOptions options);
+
+    /// <summary>
+    /// Pick the scene nodes with visible geometry inside a rectangle of a view. The engine renders
+    /// the rectangle on the view's next frame and reads it back a few frames later; an idle view
+    /// pays nothing.
+    /// </summary>
+    /// <param name="viewId">The view to pick.</param>
+    /// <param name="rect">The rectangle, in physical pixels of the view's surface.</param>
+    /// <returns>
+    ///     The hits, or <see langword="null"/> when the view is not rendering or the scene was
+    ///     replaced before the result arrived; a stale result never reaches the caller.
+    /// </returns>
+    public Task<RuntimePickResult?> PickViewAsync(RuntimeViewId viewId, RuntimePickRect rect);
+
+    /// <summary>
+    /// Frame scene nodes in a view with a short eased move of its editor camera, keeping the view
+    /// direction and a 10% margin. Orthographic views resize instead of moving closer. Never
+    /// changes the authored scene.
+    /// </summary>
+    /// <param name="viewId">The view whose editor camera moves.</param>
+    /// <param name="nodeIds">The nodes to frame, with their descendants; empty frames the whole scene.</param>
+    /// <returns>What the request did.</returns>
+    public Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<Guid> nodeIds);
+
+    /// <summary>
+    /// Outline the selected nodes, and their descendants, in every editing view that shows the
+    /// selection outline. The active node is drawn brighter.
+    /// </summary>
+    /// <param name="nodeIds">The selected nodes; empty clears the outline.</param>
+    /// <param name="activeNodeId">The active (last selected) node, if any.</param>
+    /// <returns>
+    ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
+    ///     <see langword="false"/> on failure.
+    /// </returns>
+    public Task<bool> SetSelectionOutlineAsync(IReadOnlyList<Guid> nodeIds, Guid? activeNodeId);
 
     /// <summary>
     /// Gets the rate and duration of the last completed engine frame. Cheap enough to poll from the

@@ -62,8 +62,27 @@ internal sealed partial class NativeEngineSession
         => this.Runner.TrySetViewCameraSettingsAsync(this.context, new(viewId.Value), fieldOfViewDegrees, nearPlane, farPlane);
 
     /// <inheritdoc />
-    public override Task<bool> SetViewRenderOptionsAsync(RuntimeViewId viewId, ViewportViewMode viewMode, bool showGrid)
-        => this.Runner.TrySetViewRenderOptionsAsync(this.context, new(viewId.Value), NativeSessionConversions.ToNative<ViewModeManaged>(viewMode), showGrid);
+    public override Task<bool> SetViewRenderOptionsAsync(RuntimeViewId viewId, ViewportRenderOptions options)
+        => this.Runner.TrySetViewRenderOptionsAsync(
+            this.context,
+            new(viewId.Value),
+            NativeSessionConversions.ToNative<ViewModeManaged>(options.ViewMode),
+            options.ShowGrid,
+            options.ShowSelectionOutline);
+
+    /// <inheritdoc />
+    public override async Task<RuntimePickResult?> PickViewAsync(RuntimeViewId viewId, RuntimePickRect rect)
+        => NativeSessionConversions.FromNative(
+            await this.Runner.TryPickViewAsync(this.context, new(viewId.Value), rect.X, rect.Y, rect.Width, rect.Height).ConfigureAwait(false));
+
+    /// <inheritdoc />
+    public override async Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<Guid> nodeIds)
+        => NativeSessionConversions.FromNative(
+            await this.Runner.TryFrameViewAsync(this.context, new(viewId.Value), [.. nodeIds]).ConfigureAwait(false));
+
+    /// <inheritdoc />
+    public override bool SetSelectionOutline(IReadOnlyList<Guid> nodeIds, Guid? activeNodeId)
+        => this.Runner.TrySetSelectionOutline(this.context, [.. nodeIds], activeNodeId);
 
     /// <inheritdoc />
     public override RuntimeFrameStatistics GetFrameStatistics()

@@ -110,7 +110,13 @@ internal sealed class FakeEngineSession : EngineSession
 
     public override Task<bool> SetViewCameraSettingsAsync(RuntimeViewId viewId, float fieldOfViewDegrees, float nearPlane, float farPlane) => Task.FromResult(true);
 
-    public override Task<bool> SetViewRenderOptionsAsync(RuntimeViewId viewId, ViewportViewMode viewMode, bool showGrid) => Task.FromResult(true);
+    public override Task<bool> SetViewRenderOptionsAsync(RuntimeViewId viewId, ViewportRenderOptions options) => Task.FromResult(true);
+
+    public override Task<RuntimePickResult?> PickViewAsync(RuntimeViewId viewId, RuntimePickRect rect) => Task.FromResult<RuntimePickResult?>(null);
+
+    public override Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<Guid> nodeIds) => Task.FromResult(RuntimeFramingOutcome.Framed);
+
+    public override bool SetSelectionOutline(IReadOnlyList<Guid> nodeIds, Guid? activeNodeId) => true;
 
     public override RuntimeFrameStatistics GetFrameStatistics() => default;
 

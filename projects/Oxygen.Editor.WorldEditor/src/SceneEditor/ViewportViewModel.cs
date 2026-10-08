@@ -616,6 +616,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
             {
                 this.CancelPilotCommit();
                 this.CancelNavigationSettled();
+                this.CancelNotice();
             }
 
             this.isDisposed = true;

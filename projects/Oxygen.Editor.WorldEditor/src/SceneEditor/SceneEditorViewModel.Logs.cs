@@ -122,4 +122,13 @@ public partial class SceneEditorViewModel
 
     private void LogRestoredCameraMissing(int pane, Guid cameraId)
         => LogRestoredCameraMissing(this.logger, pane, this.Metadata?.DocumentId, cameraId);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "The runtime rejected the selection outline of document {DocumentId}; no engine session is running")]
+    private static partial void LogSelectionOutlineRejected(ILogger logger, Guid? documentId);
+
+    private void LogSelectionOutlineRejected()
+        => LogSelectionOutlineRejected(this.logger, this.Metadata?.DocumentId);
 }

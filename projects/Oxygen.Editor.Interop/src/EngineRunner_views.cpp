@@ -76,6 +76,46 @@ namespace {
     }
   }
 
+  // Resolves a pinned TaskCompletionSource with a pick result, or null.
+  static void ResolveViewPickCallback(void* handlePtr,
+    std::optional<::oxygen::interop::module::EditorPickResult> result) {
+    using namespace Oxygen::Interop;
+    try {
+      System::IntPtr stored(handlePtr);
+      auto gh = System::Runtime::InteropServices::GCHandle::FromIntPtr(stored);
+      auto tcsObj
+        = safe_cast<TaskCompletionSource<ViewPickResultManaged^>^>(gh.Target);
+      if (tcsObj != nullptr) {
+        tcsObj->TrySetResult(result.has_value()
+            ? ViewPickResultManaged::FromNative(*result)
+            : nullptr);
+      }
+      if (gh.IsAllocated) gh.Free();
+    }
+    catch (...) {
+      // Swallow: the native caller must not observe managed exceptions.
+    }
+  }
+
+  // Resolves a pinned TaskCompletionSource with a framing outcome.
+  static void ResolveFrameViewCallback(void* handlePtr,
+    ::oxygen::interop::module::EditorFramingOutcome outcome) {
+    using namespace Oxygen::Interop;
+    try {
+      System::IntPtr stored(handlePtr);
+      auto gh = System::Runtime::InteropServices::GCHandle::FromIntPtr(stored);
+      auto tcsObj
+        = safe_cast<TaskCompletionSource<ViewFramingOutcomeManaged>^>(gh.Target);
+      if (tcsObj != nullptr) {
+        tcsObj->TrySetResult(static_cast<ViewFramingOutcomeManaged>(outcome));
+      }
+      if (gh.IsAllocated) gh.Free();
+    }
+    catch (...) {
+      // Swallow: the native caller must not observe managed exceptions.
+    }
+  }
+
   // Resolves a pinned TaskCompletionSource with an editor camera state, or null.
   static void ResolveViewEditorCameraCallback(void* handlePtr,
     std::optional<::oxygen::interop::module::EditorCameraState> state) {
@@ -627,7 +667,8 @@ namespace Oxygen::Interop {
     EngineContext^ ctx,
     ViewIdManaged viewId,
     ViewModeManaged viewMode,
-    bool showGrid)
+    bool showGrid,
+    bool showSelectionOutline)
     -> System::Threading::Tasks::Task<bool>^
   {
     if (ctx == nullptr) {
@@ -657,11 +698,160 @@ namespace Oxygen::Interop {
       oxygen::interop::module::EditorViewRenderOptions options;
       options.view_mode = ToNativeViewMode(viewMode);
       options.show_grid = showGrid;
+      options.show_selection_outline = showSelectionOutline;
       editor_module_opt->get().SetViewRenderOptions(viewId.ToNative(), options);
       return System::Threading::Tasks::Task<bool>::FromResult(true);
     }
     catch (...) {
       return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+  }
+
+  auto EngineRunner::TryPickViewAsync(EngineContext^ ctx, ViewIdManaged viewId,
+    System::UInt32 x, System::UInt32 y, System::UInt32 width,
+    System::UInt32 height)
+    -> System::Threading::Tasks::Task<ViewPickResultManaged^>^
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (disposed_) {
+      throw gcnew ObjectDisposedException("EngineRunner");
+    }
+
+    ui_dispatcher_->VerifyAccess(
+      gcnew String(L"PickViewAsync requires the UI thread. Call CreateEngine() on the UI thread first."));
+
+    auto native_ctx = ctx->NativePtr();
+    if (!native_ctx || !native_ctx->engine || width == 0U || height == 0U) {
+      return System::Threading::Tasks::Task::FromResult<ViewPickResultManaged^>(nullptr);
+    }
+
+    auto editor_module_opt =
+      native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (!editor_module_opt) {
+      return System::Threading::Tasks::Task::FromResult<ViewPickResultManaged^>(nullptr);
+    }
+
+    auto tcs = gcnew TaskCompletionSource<ViewPickResultManaged^>(
+      TaskCreationOptions::RunContinuationsAsynchronously);
+    auto gh = System::Runtime::InteropServices::GCHandle::Alloc(
+      tcs, System::Runtime::InteropServices::GCHandleType::Normal);
+    void* handlePtr = System::Runtime::InteropServices::GCHandle::ToIntPtr(gh).ToPointer();
+
+    try {
+      // Member assignment, not designated initializers: those crash the
+      // C++/CLI compiler in managed functions.
+      oxygen::vortex::ViewPickRect rect;
+      rect.x = x;
+      rect.y = y;
+      rect.width = width;
+      rect.height = height;
+      // The module answers exactly once, which frees the handle.
+      editor_module_opt->get().PickView(viewId.ToNative(), rect,
+        std::bind(&ResolveViewPickCallback, handlePtr, std::placeholders::_1));
+    }
+    catch (...) {
+      ResolveViewPickCallback(handlePtr, std::nullopt);
+    }
+    return tcs->Task;
+  }
+
+  auto EngineRunner::TryFrameViewAsync(EngineContext^ ctx, ViewIdManaged viewId,
+    array<System::Guid>^ nodeIds)
+    -> System::Threading::Tasks::Task<ViewFramingOutcomeManaged>^
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (disposed_) {
+      throw gcnew ObjectDisposedException("EngineRunner");
+    }
+
+    ui_dispatcher_->VerifyAccess(
+      gcnew String(L"FrameViewAsync requires the UI thread. Call CreateEngine() on the UI thread first."));
+
+    auto native_ctx = ctx->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      return System::Threading::Tasks::Task::FromResult(
+        ViewFramingOutcomeManaged::NoView);
+    }
+
+    auto editor_module_opt =
+      native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (!editor_module_opt) {
+      return System::Threading::Tasks::Task::FromResult(
+        ViewFramingOutcomeManaged::NoView);
+    }
+
+    std::vector<oxygen::interop::module::UuidKey> nodes;
+    if (nodeIds != nullptr) {
+      nodes.reserve(static_cast<std::size_t>(nodeIds->Length));
+      for each (System::Guid id in nodeIds) {
+        nodes.push_back(
+          detail::ToNativeKey<oxygen::interop::module::UuidKey>(id));
+      }
+    }
+
+    auto tcs = gcnew TaskCompletionSource<ViewFramingOutcomeManaged>(
+      TaskCreationOptions::RunContinuationsAsynchronously);
+    auto gh = System::Runtime::InteropServices::GCHandle::Alloc(
+      tcs, System::Runtime::InteropServices::GCHandleType::Normal);
+    void* handlePtr = System::Runtime::InteropServices::GCHandle::ToIntPtr(gh).ToPointer();
+
+    try {
+      // The command answers exactly once, also when it is dropped unexecuted,
+      // which frees the handle.
+      editor_module_opt->get().FrameView(viewId.ToNative(), std::move(nodes),
+        std::bind(&ResolveFrameViewCallback, handlePtr, std::placeholders::_1));
+    }
+    catch (...) {
+      ResolveFrameViewCallback(
+        handlePtr, oxygen::interop::module::EditorFramingOutcome::kNoView);
+    }
+    return tcs->Task;
+  }
+
+  auto EngineRunner::TrySetSelectionOutline(EngineContext^ ctx,
+    array<System::Guid>^ nodeIds, System::Nullable<System::Guid> activeNodeId)
+    -> bool
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (disposed_) {
+      return false;
+    }
+
+    auto native_ctx = ctx->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      return false;
+    }
+    auto editor_module_opt =
+      native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (!editor_module_opt) {
+      return false;
+    }
+
+    std::vector<oxygen::interop::module::UuidKey> nodes;
+    if (nodeIds != nullptr) {
+      nodes.reserve(static_cast<std::size_t>(nodeIds->Length));
+      for each (System::Guid id in nodeIds) {
+        nodes.push_back(
+          detail::ToNativeKey<oxygen::interop::module::UuidKey>(id));
+      }
+    }
+    std::optional<oxygen::interop::module::UuidKey> active;
+    if (activeNodeId.HasValue) {
+      active = detail::ToNativeKey<oxygen::interop::module::UuidKey>(
+        activeNodeId.Value);
+    }
+    try {
+      editor_module_opt->get().SetSelectionOutline(std::move(nodes), active);
+      return true;
+    }
+    catch (...) {
+      return false;
     }
   }
 

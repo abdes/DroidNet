@@ -88,6 +88,7 @@ public partial class ViewportViewModel
         this.IsPilotingSceneCamera = false;
         this.ViewMode = state.ViewMode;
         this.ShowGrid = state.ShowGrid;
+        this.ShowSelectionOutline = state.ShowSelectionOutline;
         this.ShowCameraPreview = state.ShowCameraPreview;
         this.ShowStatistics = state.ShowStatistics;
     }
@@ -103,7 +104,8 @@ public partial class ViewportViewModel
             this.ViewMode,
             this.ShowGrid,
             this.ShowCameraPreview,
-            this.ShowStatistics);
+            this.ShowStatistics,
+            this.ShowSelectionOutline);
 
     private static CameraViewPreset ToPreset(CameraType type) => type switch
     {
@@ -152,6 +154,7 @@ public partial class ViewportViewModel
                 SceneCameraNodeId = this.SceneCamera?.NodeId,
                 ViewMode = this.ViewMode,
                 ShowGrid = this.ShowGrid,
+                ShowSelectionOutline = this.ShowSelectionOutline,
             }).ConfigureAwait(true);
             if (!created.IsValid)
             {

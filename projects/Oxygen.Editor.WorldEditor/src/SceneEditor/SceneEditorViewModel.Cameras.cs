@@ -69,6 +69,7 @@ public partial class SceneEditorViewModel
             }
 
             this.UpdateSelectedNodes(message.SelectedEntities);
+            this.UpdateSelectionOutline(message.SelectionContext);
             this.selectedCamera = message.SelectedEntities is [{ } node] && node.Components.OfType<CameraComponent>().Any()
                 ? new SceneCameraChoice(node.Id, node.Name)
                 : null;

@@ -283,6 +283,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         });
         this.messenger.Register<SceneLoadedMessage>(this, (r, m) => ((SceneEditorViewModel)r).OnSceneLoadedMessage(r, m));
         this.RegisterCameraMessages();
+        this.RegisterSelectionMessages();
     }
 
     private void RefreshCookInputRegistration()
@@ -436,6 +437,10 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
             // Build the panes now that the scene is ready, as the user left them.
             _ = this.RestoreViewportsAsync();
+            if (this.SelectionService is { } selection)
+            {
+                this.UpdateSelectionOutline(selection.GetContext(this.Metadata.DocumentId));
+            }
         }
     }
 

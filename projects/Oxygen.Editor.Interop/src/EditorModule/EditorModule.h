@@ -17,10 +17,15 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
+
+#include <glm/vec3.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Vortex/Types/ViewOutline.h>
+#include <Oxygen/Vortex/Types/ViewPick.h>
 
 // Forward declarations to avoid heavy includes in header when possible
 namespace oxygen {
@@ -69,6 +74,24 @@ namespace oxygen::interop::module {
   };
 
   using CookedRootSet = std::shared_ptr<const std::vector<CookedRootBinding>>;
+
+  //! A scene node with visible pixels in a picked rectangle.
+  struct EditorPickHit {
+    UuidKey node {};
+    //! Device depth of the node's nearest pixel.
+    float depth { 0.0F };
+    //! Geometry slot (submesh) under the pixel closest to the centre.
+    std::uint32_t geometry_slot { 0U };
+    //! Pixels from the rectangle centre to the node's closest pixel.
+    float center_distance { 0.0F };
+  };
+
+  //! Nodes found by a viewport pick, closest to the rectangle centre first.
+  struct EditorPickResult {
+    std::vector<EditorPickHit> hits;
+    //! World position under the first hit's chosen pixel.
+    std::optional<glm::vec3> world_position;
+  };
 
   //! The rate and duration of the last completed engine frame.
   struct EditorFrameStatistics {
@@ -206,6 +229,27 @@ namespace oxygen::interop::module {
     void SetViewRenderOptions(
       ViewId view_id, const EditorViewRenderOptions& options);
 
+    //! Picks the scene nodes with visible geometry inside a rectangle of a
+    //! view, in pixels of the view's surface.
+    /*!
+     The callback runs exactly once, on the engine thread a few frames later:
+     with the hits, or with no value when the view is not rendering, or when
+     the scene was replaced before the result arrived.
+    */
+    void PickView(ViewId view_id, vortex::ViewPickRect rect,
+      std::function<void(std::optional<EditorPickResult>)> callback);
+
+    //! Frames scene nodes, or the whole scene when `nodes` is empty, in one
+    //! view. The callback runs exactly once, on the engine thread.
+    void FrameView(ViewId view_id, std::vector<UuidKey> nodes,
+      std::function<void(EditorFramingOutcome)> callback);
+
+    //! Outlines the selected scene nodes, and their descendants, in every
+    //! editing view that shows the selection outline; `active` is drawn
+    //! brighter. Callable from any thread.
+    void SetSelectionOutline(
+      std::vector<UuidKey> nodes, std::optional<UuidKey> active);
+
     //! The last completed frame's rate and duration, readable from any thread.
     [[nodiscard]] auto GetFrameStatistics() const noexcept
       -> EditorFrameStatistics;
@@ -247,6 +291,21 @@ namespace oxygen::interop::module {
     auto InitInputBindings(oxygen::engine::InputSystem& input_system) noexcept
       -> bool;
 
+    struct PendingPick {
+      ViewId view_id { kInvalidViewId };
+      vortex::ViewPickRect rect {};
+      std::function<void(std::optional<EditorPickResult>)> callback;
+    };
+
+    //! The selection outline for this frame's views, or null.
+    auto BuildSelectionOutline() -> std::shared_ptr<const vortex::ViewOutline>;
+    //! Hands queued picks to the renderer for the views published this frame;
+    //! picks of other views complete with no value.
+    void SubmitPendingPicks(vortex::Renderer& renderer,
+      const std::unordered_set<ViewId>& published_views);
+    //! Completes every queued pick with no value.
+    void CancelPendingPicks() noexcept;
+
     std::shared_ptr<SurfaceRegistry> registry_;
     std::weak_ptr<oxygen::Graphics> graphics_;
     oxygen::observer_ptr<oxygen::IAsyncEngine> engine_{};
@@ -272,6 +331,20 @@ namespace oxygen::interop::module {
     std::chrono::steady_clock::time_point last_frame_time_{};
     //! The last completed frame's statistics, both floats packed in one word.
     std::atomic<std::uint64_t> frame_statistics_{ 0 };
+
+    //! Changes whenever the authored scene is created or destroyed; a pick
+    //! result for an earlier generation is stale. Shared with completions that
+    //! may outlive the module.
+    std::shared_ptr<std::atomic<std::uint64_t>> scene_generation_ {
+      std::make_shared<std::atomic<std::uint64_t>>(0U)
+    };
+
+    std::mutex outline_mutex_;
+    std::vector<UuidKey> outline_nodes_;
+    std::optional<UuidKey> outline_active_;
+
+    std::mutex picks_mutex_;
+    std::vector<PendingPick> pending_picks_;
 
     // Command queue for scene mutations
     ThreadSafeQueue<std::unique_ptr<EditorCommand>> command_queue_;

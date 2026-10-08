@@ -40,6 +40,10 @@ namespace oxygen::interop::module {
     static std::optional<oxygen::scene::NodeHandle>
       Lookup(const UuidKey& id) noexcept;
 
+    //! The editor node id a native node was registered with.
+    static std::optional<UuidKey>
+      ReverseLookup(const oxygen::scene::NodeHandle& handle) noexcept;
+
     static void ClearAll() noexcept;
 
   private:

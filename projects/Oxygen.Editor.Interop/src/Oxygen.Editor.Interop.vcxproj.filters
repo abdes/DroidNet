@@ -114,6 +114,12 @@
     <ClCompile Include="Commands\SetViewRenderOptionsCommand.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
+    <ClCompile Include="Commands\FrameViewCommand.cpp">
+      <Filter>Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="EditorModule\ViewFraming.cpp">
+      <Filter>EditorModule</Filter>
+    </ClCompile>
     <ClCompile Include="Commands\SetViewCameraSettingsCommand.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
@@ -312,6 +318,15 @@
     </ClInclude>
     <ClInclude Include="Commands\SetViewRenderOptionsCommand.h">
       <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\FrameViewCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\ViewFraming.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClInclude Include="Views\ViewPickManaged.h">
+      <Filter>Views</Filter>
     </ClInclude>
     <ClInclude Include="Commands\SetViewCameraSettingsCommand.h">
       <Filter>Commands</Filter>

@@ -439,7 +439,7 @@ when asking for confirmation, including descendants hidden by search/collapse.
   parent-state explanation; showing/unlocking a parent preserves child local
   choices.
 - **Show all** clears current-scene local hide entries, not locks, search or
-  picking categories. It is a single recovery action and never changes scene
+  category filters. It is a single recovery action and never changes scene
   history/dirty state. Root/folders have no fake geometry-hide action.
 - Enforce effective lock in rename/delete/reparent/component/property
   manipulation and tools, not just the row buttons. A batch containing
@@ -1821,10 +1821,9 @@ owns native scope and authorization.
 
 **Remaining live-engine item — tracked separately under ED-M09:** implement
 viewport picking and selection policy independently of the Explorer-only
-category filters, and enforce lock exclusion in viewport picking, box-select,
-Select All/select-similar, transform/gizmo manipulation and other viewport
-selection gestures. No viewport-picking owner exists in this implementation;
-do not claim those behaviors work. Preserve the existing workspace service and
+category filters, and enforce lock exclusion in transform/gizmo manipulation.
+Locked nodes stay selectable by viewport picking and marquee. ED-M08.4 owns
+picking and selection; ED-M08.5 owns manipulation. Preserve the existing workspace service and
 generic DynamicTree contracts.
 
 **Editor acceptance:** search has the specified presentation and density
