@@ -23,6 +23,16 @@
         <PreferredToolArchitecture Condition="'$(PreferredToolArchitecture)' == ''">x64</PreferredToolArchitecture>
     </PropertyGroup>
 
+    <!--
+        NuGet package targets add wildcard project items (for example, the MSTest
+        adapter's None Include="@(TestAdapterContent)"). VC projects do not support
+        wildcards in project items, so Visual Studio warns that those items will be
+        missing from Solution Explorer. Tell it to expand them instead.
+    -->
+    <PropertyGroup Condition="'$(MSBuildProjectExtension)' == '.vcxproj'">
+        <ReplaceWildcardsInProjectItems>true</ReplaceWildcardsInProjectItems>
+    </PropertyGroup>
+
   <PropertyGroup>
         <Authors>Abdessattar Sassi</Authors>
         <Company>DroidNet</Company>
