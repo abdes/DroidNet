@@ -46,8 +46,13 @@ namespace oxygen::interop::module {
       const graphics::Surface& surface)
       -> std::shared_ptr<graphics::Framebuffer>;
 
-    //! Drops the cached framebuffers of a resized or released surface.
-    void Invalidate(const SurfaceRegistry::GuidKey& key);
+    //! Drops a resizing surface's framebuffers at once: the swap chain cannot
+    //! resize while they reference its backbuffers. The caller has flushed the
+    //! GPU queues.
+    void ReleaseForResize(const SurfaceRegistry::GuidKey& key);
+
+    //! Drops a released surface's framebuffers once in-flight frames retire.
+    void ReleaseDeferred(const SurfaceRegistry::GuidKey& key);
 
   private:
     std::weak_ptr<Graphics> graphics_;

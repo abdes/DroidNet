@@ -453,7 +453,7 @@ namespace oxygen::interop::module {
 
       CHECK_NOTNULL_F(surface);
       if (framebuffers_) {
-        framebuffers_->Invalidate(key);
+        framebuffers_->ReleaseDeferred(key);
       }
       try {
         gfx->RegisterDeferredRelease(std::move(surface));
@@ -506,7 +506,7 @@ namespace oxygen::interop::module {
     for (const auto& [key, surface] : resizing) {
       DLOG_F(INFO, "Applying resize for surface '{}'.", surface->GetName());
       if (framebuffers_) {
-        framebuffers_->Invalidate(key);
+        framebuffers_->ReleaseForResize(key);
       }
 
       surface->Resize();

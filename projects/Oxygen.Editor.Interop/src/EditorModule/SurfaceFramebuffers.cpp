@@ -51,7 +51,12 @@ namespace oxygen::interop::module {
     return cached[index];
   }
 
-  void SurfaceFramebuffers::Invalidate(const SurfaceRegistry::GuidKey& key) {
+  void SurfaceFramebuffers::ReleaseForResize(
+    const SurfaceRegistry::GuidKey& key) {
+    framebuffers_.erase(key);
+  }
+
+  void SurfaceFramebuffers::ReleaseDeferred(const SurfaceRegistry::GuidKey& key) {
     const auto iter = framebuffers_.find(key);
     if (iter == framebuffers_.end()) {
       return;
