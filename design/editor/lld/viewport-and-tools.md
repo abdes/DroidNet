@@ -402,13 +402,14 @@ light icon; Ctrl+click toggles membership and Shift+click adds. Empty-space
 click clears selection; a modified empty click changes nothing. A left drag
 beyond a small threshold draws a marquee that selects every node with visible
 pixels inside it, with the same modifiers; the node nearest its centre becomes
-active. Escape ends what is in progress first (a gizmo drag, then a
-marquee); with nothing in progress it clears the selection, with no undo
-entry. Workspace-hidden nodes are not pickable; locked nodes are selectable
+active. Escape ends what is in progress first (a gizmo or helper handle drag,
+then a marquee); with nothing in progress it clears the selection, with no
+undo entry. Workspace-hidden nodes are not pickable; locked nodes are selectable
 but not manipulable. Picking has no category filter. A viewport pick scrolls
 the active Explorer row into view without taking keyboard focus.
 SceneExplorer and Inspector consume the same document-scoped selection service.
-A gizmo hit takes precedence over object picking; Alt/RMB navigation never
+Gizmo, helper handle and orientation triad hits take precedence over object
+picking; Alt/RMB navigation never
 selects objects. Picking results include scene/document/view lifetime and are
 ignored if stale. Engine-owned picking/render identity is mapped to authored
 node IDs through runtime services; UI does not maintain a second scene database.
@@ -418,9 +419,41 @@ reparent, scene activation and missing-geometry resolution. It is a crisp
 screen-space outline of the selected nodes and their descendants, drawn after
 post-processing in every editing pane and view mode: accent colour, brighter
 for the active node and dimmed where occluded. Each pane's Show menu has a
-"Selection outline" toggle, on by default and kept with the pane's state. Camera/light icons
-are editor overlays, never authored/cooked geometry. An icon click uses the
-same selection operation as a geometry click.
+"Selection outline" toggle, on by default and kept with the pane's state.
+
+### Scene Helpers And Orientation
+
+Every visible light and camera node shows an icon of constant screen size,
+tinted by the light's colour (cameras use a neutral tint). An icon click uses
+the same selection operation, modifiers and marquee as a geometry click; when
+an icon and geometry overlap, the hit nearer the cursor wins. Each pane's Show
+menu has an "Icons" toggle, on by default and kept with the pane's state.
+Workspace-hidden nodes, and their descendants, show no icon and no helper.
+
+Each selected light or camera shows its helper: a camera its view frustum and,
+with Fixed aspect, its frame; a directional light its direction arrow; a point
+light its range sphere; a spot light its range and its inner and outer cones.
+A pane never draws the helper or icon of the camera it looks through, and the
+camera preview inset draws no icons, helpers or triad.
+
+Point and spot lights expose handles for range and, on spot lights, the inner
+and outer cone angles. Handle drags run natively like gizmo drags and go
+through the same command/property session: previews without history, one undo
+entry on release, and Escape, right-click, focus loss or a selection change
+restore the starting value exactly. Each update is computed from the value at
+drag start. Range stays at least 0.01 m; the outer cone stays between half a
+degree and just under 90 degrees and never below the inner cone, which stays
+between zero and the outer cone. Angles closer than the engine can represent
+snap equal. Locked nodes show their helper without handles. The drag chip shows
+the current value.
+
+The orientation triad sits in each editing pane's bottom-left corner: X, Y and
+Z letters in the axis colours, following the view's rotation. Clicking a letter
+switches the pane to that axis's orthographic view (X Right, Y Front, Z Top);
+clicking it again while in that view switches to the opposite one (Left, Back,
+Bottom). The view switch is editor camera state only. The triad is drawn by the
+engine and has no keyboard focus; the pane's camera menu reaches the same
+views from the keyboard.
 
 ### Transform Tools
 
@@ -471,8 +504,10 @@ or unsnapped drag still produces one undo entry.
 ### Overlays And Diagnostics
 
 Required overlays are selection highlight, transform gizmo, camera/light icons,
-and the existing grid/origin affordance, each with visibility control. Their state
-is view/session metadata; disabling them for parity does not dirty the scene.
+selected-node helpers, the orientation triad and the existing grid/origin
+affordance. Highlight, icons and grid have a Show menu toggle; the gizmo
+follows the active tool, and helpers follow the selection. Their state is
+view/session metadata; disabling them for parity does not dirty the scene.
 Field/tool errors use ED-M07A.3's current revision-scoped diagnostics and existing
 operation/output surfaces. Tool rejection leaves before-values intact. No new
 validation dashboard or independently scheduled full-scene validation is added.
@@ -489,7 +524,11 @@ validation dashboard or independently scheduled full-scene validation is added.
 - [ ] Translate/rotate/scale, World/Local, multi-selection, snapping, commit/cancel
       and invalid parent transforms pass through the same command/session path.
       Each gesture has one undo entry and exact before-value restoration.
-- [ ] Highlight/icons/gizmo/grid visibility survives expected view operations and
+- [ ] Icons and helpers draw in every projection and view mode; an icon click
+      selects its node; range and cone handle drags each leave one undo entry
+      and cancel to the exact starting value; triad clicks switch to the
+      matching orthographic view and flip on a second click.
+- [ ] Highlight/icons/helpers/gizmo/grid visibility survives expected view operations and
       never changes saved/cooked scene content. Overlay-off captures match M08 state.
 - [ ] The PRD's 100-node viewport remains responsive; actual user validation
       records interaction outcomes, not screenshots alone or engine API acceptance.
