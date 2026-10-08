@@ -225,6 +225,12 @@ public partial class DynamicTreeItem
     {
         _ = sender; // unused
 
+        // The row invokes the item instead; the event bubbles to the tree.
+        if (this.treeControl is { RenameOnDoubleTap: false })
+        {
+            return;
+        }
+
         e.Handled = true;
         _ = this.BeginRename();
     }

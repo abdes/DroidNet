@@ -762,6 +762,7 @@ public partial class DynamicTree : Control
 
         // Remove subscriptions to the ViewModel
         this.ViewModel?.PropertyChanged -= this.ViewModel_OnPropertyChanged;
+        this.ViewModel?.BringIntoViewRequested -= this.ViewModel_OnBringIntoViewRequested;
         if (this.ViewModel is { } viewModel)
         {
             viewModel.DisplayedInteractionItems = null;
@@ -1219,6 +1220,7 @@ public partial class DynamicTree : Control
     {
         // Detach any handlers from the previous ViewModel
         args.OldValue?.PropertyChanged -= this.ViewModel_OnPropertyChanged;
+        args.OldValue?.BringIntoViewRequested -= this.ViewModel_OnBringIntoViewRequested;
         if (args.OldValue is { } oldViewModel)
         {
             oldViewModel.DisplayedInteractionItems = null;
@@ -1230,6 +1232,7 @@ public partial class DynamicTree : Control
             this.logger = this.ViewModel.LoggerFactory?.CreateLogger<DynamicTree>();
 
             this.ViewModel.PropertyChanged += this.ViewModel_OnPropertyChanged;
+            this.ViewModel.BringIntoViewRequested += this.ViewModel_OnBringIntoViewRequested;
         }
 
         this.UpdateDisplayedItems();
@@ -1410,9 +1413,27 @@ public partial class DynamicTree : Control
         }
 
         args.Handled = true;
-
-        // TODO: decide what to do when tree item is double tapped
         this.LogDoubleTapped(args.OriginalSource);
+        if (sender is FrameworkElement { DataContext: ITreeItem item })
+        {
+            this.ViewModel?.InvokeItem(item);
+        }
+    }
+
+    private void ViewModel_OnBringIntoViewRequested(object? sender, DynamicTreeEventArgs args)
+    {
+        // A row revealed by expanding its ancestors is realized on the next layout pass.
+        _ = this.DispatcherQueue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () =>
+            {
+                if (this.itemsRepeater?.ItemsSourceView?.IndexOf(args.TreeItem) is not ({ } index and >= 0))
+                {
+                    return;
+                }
+
+                (this.itemsRepeater.TryGetElement(index) ?? this.itemsRepeater.GetOrCreateElement(index))?.StartBringIntoView();
+            });
     }
 
     private void TreeItem_DragStarting(object sender, DragStartingEventArgs args)

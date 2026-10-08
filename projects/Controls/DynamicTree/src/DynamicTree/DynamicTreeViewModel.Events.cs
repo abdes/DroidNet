@@ -54,6 +54,17 @@ public abstract partial class DynamicTreeViewModel
     public event EventHandler<TreeItemAddedEventArgs>? ItemAdded;
 
     /// <summary>
+    ///     Fires when the user invokes an item: a double-tap on its row, outside its label when the
+    ///     label renames on double-tap.
+    /// </summary>
+    public event EventHandler<DynamicTreeEventArgs>? ItemInvoked;
+
+    /// <summary>
+    ///     Fires when a shown item asks to be scrolled into view without taking focus.
+    /// </summary>
+    public event EventHandler<DynamicTreeEventArgs>? BringIntoViewRequested;
+
+    /// <summary>
     ///     Fires before an item is moved within the dynamic tree.
     /// </summary>
     /// <remarks>

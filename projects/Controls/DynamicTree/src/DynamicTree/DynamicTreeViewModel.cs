@@ -466,6 +466,34 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     public void ClearFocus() => this.FocusedItem = null;
 
     /// <summary>
+    ///     Scrolls a shown item into view without moving keyboard focus, for example to follow a
+    ///     selection made in another panel.
+    /// </summary>
+    /// <param name="item">The item to show.</param>
+    /// <returns><see langword="true" /> when the item is shown and the request was raised.</returns>
+    public bool BringItemIntoView(ITreeItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        if (!this.shownItems.Contains(item))
+        {
+            return false;
+        }
+
+        this.BringIntoViewRequested?.Invoke(this, new DynamicTreeEventArgs { TreeItem = item });
+        return true;
+    }
+
+    /// <summary>
+    ///     Invokes an item, raising <see cref="ItemInvoked"/>.
+    /// </summary>
+    /// <param name="item">The invoked item.</param>
+    public void InvokeItem(ITreeItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        this.ItemInvoked?.Invoke(this, new DynamicTreeEventArgs { TreeItem = item });
+    }
+
+    /// <summary>
     ///     Sets focus to the specified item if it is visible.
     /// </summary>
     /// <param name="item">The item to focus. This parameter must not be <see langword="null" />.</param>

@@ -47,6 +47,10 @@ public partial class DynamicTree
         nameof(SelectionScope), typeof(TreeSelectionScope), typeof(DynamicTree), new PropertyMetadata(
             TreeSelectionScope.ShownItems, (d, _) => ((DynamicTree)d).UpdateDisplayedItems()));
 
+    /// <summary>Identifies whether double-tapping an item's label starts renaming it.</summary>
+    public static readonly DependencyProperty RenameOnDoubleTapProperty = DependencyProperty.Register(
+        nameof(RenameOnDoubleTap), typeof(bool), typeof(DynamicTree), new PropertyMetadata(defaultValue: true));
+
     /// <summary>Identifies the minimum height of each rendered item row.</summary>
     public static readonly DependencyProperty ItemRowHeightProperty = DependencyProperty.Register(
         nameof(ItemRowHeight), typeof(double), typeof(DynamicTree), new PropertyMetadata(32d, (d, _) => ((DynamicTree)d).UpdateItemLayoutForRealizedItems()));
@@ -165,6 +169,16 @@ public partial class DynamicTree
     {
         get => (TreeSelectionScope)this.GetValue(SelectionScopeProperty);
         set => this.SetValue(SelectionScopeProperty, value);
+    }
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether double-tapping an item's label starts renaming it.
+    ///     When <see langword="false" />, a double-tap anywhere on the row invokes the item.
+    /// </summary>
+    public bool RenameOnDoubleTap
+    {
+        get => (bool)this.GetValue(RenameOnDoubleTapProperty);
+        set => this.SetValue(RenameOnDoubleTapProperty, value);
     }
 
     /// <summary>Gets or sets the minimum row height, in DIPs, used for tree items.</summary>
