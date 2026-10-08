@@ -186,6 +186,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                 message.Reply(this.InspectNodeAsync(message.NodeId));
             }
         });
+        messenger.Register<SceneEditRequestMessage>(this, (_, message) =>
+        {
+            if (!this.isDisposed && this.Scene?.AttachedObject.Id == message.DocumentId)
+            {
+                _ = this.RunEditRequestAsync(message.Request);
+            }
+        });
         messenger.Register<SceneNodeAddedMessage>(this, this.OnSceneNodeAdded);
         messenger.Register<SceneNodeRemovedMessage>(this, this.OnSceneNodeRemoved);
         messenger.Register<ComponentAddedMessage>(this, this.OnComponentAdded);
@@ -603,6 +610,25 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         => this.GetContextDisabledReason(
             SceneExplorerCommandKind.Rename,
             this.CaptureExplorerContext(anchor: null, background: false)) is null;
+
+    /// <summary>Runs the viewport's Ctrl+Z, Ctrl+Y and Delete through the Explorer's own commands.</summary>
+    private async Task RunEditRequestAsync(SceneEditRequest request)
+    {
+        switch (request)
+        {
+            case SceneEditRequest.Undo:
+                await this.UndoCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
+                break;
+            case SceneEditRequest.Redo:
+                await this.RedoCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
+                break;
+            case SceneEditRequest.Delete when this.DeleteAction is IAsyncRelayCommand delete && delete.CanExecute(parameter: null):
+                await delete.ExecuteAsync(parameter: null).ConfigureAwait(true);
+                break;
+            default:
+                break;
+        }
+    }
 
     [RelayCommand]
     private async Task Undo()

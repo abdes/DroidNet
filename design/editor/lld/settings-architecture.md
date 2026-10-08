@@ -57,6 +57,7 @@ storing a setting outside its row.
 | Workspace docking, recent docs                                | Workspace                       | existing editor data services                     | user-local                                       | workspace services                       | no               | n/a                                                              |
 | Viewport layout and per-pane camera state                     | Workspace per project and scene | WorldEditor viewport-state service                | `IEditorSettingsManager`, project-scoped setting | viewport UI, not authoring command       | no               | restored when the scene's panes are created                      |
 | Editor Hide / Show All                                        | Workspace per project and scene | WorldEditor workspace-visibility service          | `IEditorSettingsManager`, project-scoped setting | workspace command, not authoring command | no               | all editing viewports of the active scene; drops draw and shadow |
+| Transform tool space and snapping                             | Editor preference               | WorldEditor `TransformToolSettingsService`        | `IEditorSettingsManager`, application setting    | viewport tools, not authoring command    | no               | next gizmo update in every open scene                            |
 | Project content roots, cook scope                             | Project                         | `Oxygen.Editor.Projects`                          | project metadata                                 | project/content commands                 | no scene changes | ordered mount/publication workflow                               |
 
 The owning service enforces each mutation boundary.
@@ -119,6 +120,17 @@ It writes shortly after navigation stops, on layout, preset, mode or camera
 assignment changes, and on document close. An unreadable or unsupported
 payload is discarded with a warning. Nothing is written to scene documents,
 history, authoring mounts, cooked output or validation requests.
+
+### 5.3 Transform tool preferences
+
+WorldEditor owns the typed `WorldEditor/TransformTools` setting through
+`TransformToolSettingsService` and `IEditorSettingsManager`, with
+`SettingScope.Application`, so the choice follows the user across projects.
+The versioned payload holds the snap toggle, the translation, rotation and
+scale increments and the World/Local space. Invalid increments are ignored;
+an unknown version is discarded and the defaults apply. The active tool is
+per scene and not persisted. Nothing is written to scene documents, history
+or cooked output.
 
 ## 6. Mutation Path Rules
 
@@ -217,6 +229,7 @@ V0.1 does not introduce a generic Settings panel.
 | Workspace layout                      | yes        | by existing editor data services                 |
 | Workspace Hide                        | yes        | through the project-scoped typed setting in §5.1 |
 | Viewport layout and camera state      | yes        | through the project-scoped typed setting in §5.2 |
+| Transform tool space and snapping     | yes        | through the application-scoped setting in §5.3   |
 
 Scene round trips preserve typed values, identities and source modes through
 `SceneJsonContext`. Text formatting need not match input bytes. The property

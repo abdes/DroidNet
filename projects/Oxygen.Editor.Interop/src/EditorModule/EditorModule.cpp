@@ -364,12 +364,14 @@ namespace oxygen::interop::module {
     SyncSurfacesWithFrameContext(*context, surfaces);
 
     // Drain and dispatch input from the accumulator to the engine's input
-    // system.
+    // system. The transform gizmo takes its drags out first.
+    transform_gizmo_.BeginFrame(scene_.get(), scene_generation_->load());
     for (auto* view : view_manager_->GetAllViews()) {
       const auto view_id = view->GetViewId();
       auto batch = input_accumulator_->Drain(view_id);
 
       UpdateViewRoutingFromInputBatch(view_id, batch);
+      transform_gizmo_.ProcessInput(*view, batch);
 
       const bool has_mouse = (batch.mouse_delta.dx != 0.0F) || (batch.mouse_delta.dy != 0.0F);
       const bool has_wheel = (batch.scroll_delta.dx != 0.0F) || (batch.scroll_delta.dy != 0.0F);
@@ -874,6 +876,7 @@ namespace oxygen::interop::module {
       if (!view->IsInset() && config.render_options.show_selection_outline) {
         composition_view.outline = outline;
       }
+      composition_view.overlay = transform_gizmo_.BuildOverlay(*view);
 
       const auto published_view_id = renderer.PublishRuntimeCompositionView(
         *context,

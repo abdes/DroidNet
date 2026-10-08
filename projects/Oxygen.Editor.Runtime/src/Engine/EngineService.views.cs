@@ -286,6 +286,52 @@ public sealed partial class EngineService
     }
 
     /// <inheritdoc/>
+    public async Task<bool> SetTransformGizmoAsync(RuntimeTransformGizmo gizmo)
+    {
+        ArgumentNullException.ThrowIfNull(gizmo);
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
+        try
+        {
+            if (this.State != EngineServiceState.Running || this.session is not { } running)
+            {
+                return false;
+            }
+
+            // Each session's module needs the listener once.
+            if (!ReferenceEquals(this.gizmoListenerSession, running))
+            {
+                if (!running.SetTransformGizmoListener(this.OnGizmoEvent))
+                {
+                    return false;
+                }
+
+                this.gizmoListenerSession = running;
+            }
+
+            return running.SetTransformGizmo(gizmo);
+        }
+        finally
+        {
+            _ = this.lifecycleGate.Release();
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> CancelTransformGizmoDragAsync()
+    {
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
+        try
+        {
+            return this.State == EngineServiceState.Running && this.session is { } running
+                && running.CancelTransformGizmoDrag();
+        }
+        finally
+        {
+            _ = this.lifecycleGate.Release();
+        }
+    }
+
+    /// <inheritdoc/>
     public RuntimeFrameStatistics? GetFrameStatistics()
         => this.State == EngineServiceState.Running && this.session is { } running ? running.GetFrameStatistics() : null;
 }

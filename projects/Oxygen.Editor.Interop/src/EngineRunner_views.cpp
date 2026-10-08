@@ -19,6 +19,7 @@
 
 #include <msclr/marshal.h>
 #include <msclr/marshal_cppstd.h>
+#include <vcclr.h>
 
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/EditorInterface/EngineContext.h>
@@ -75,6 +76,30 @@ namespace {
       // Swallow: the native caller must not observe managed exceptions.
     }
   }
+
+  // Forwards the transform gizmo's events to a managed delegate.
+  class TransformGizmoListener {
+  public:
+    explicit TransformGizmoListener(
+      System::Action<Oxygen::Interop::TransformGizmoEventManaged^>^ target)
+      : target_(target) {
+    }
+
+    void operator()(
+      const ::oxygen::interop::module::TransformGizmoEvent& event) const {
+      try {
+        target_->Invoke(
+          Oxygen::Interop::TransformGizmoEventManaged::FromNative(event));
+      }
+      catch (...) {
+        // Swallow: the native caller must not observe managed exceptions.
+      }
+    }
+
+  private:
+    gcroot<System::Action<Oxygen::Interop::TransformGizmoEventManaged^>^>
+      target_;
+  };
 
   // Resolves a pinned TaskCompletionSource with a pick result, or null.
   static void ResolveViewPickCallback(void* handlePtr,
@@ -853,6 +878,110 @@ namespace Oxygen::Interop {
     catch (...) {
       return false;
     }
+  }
+
+  auto EngineRunner::TrySetTransformGizmo(EngineContext^ ctx,
+    TransformToolManaged tool, TransformSpaceManaged space, bool snapEnabled,
+    float translationStep, float rotationStepDegrees, float scaleStep,
+    array<System::Guid>^ targets, System::Nullable<System::Guid> activeNodeId,
+    float displayScale) -> bool
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (disposed_) {
+      return false;
+    }
+
+    auto native_ctx = ctx->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      return false;
+    }
+    auto editor_module_opt =
+      native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (!editor_module_opt) {
+      return false;
+    }
+
+    // Member assignment, not designated initializers: those crash the C++/CLI
+    // compiler in managed functions.
+    oxygen::interop::module::TransformGizmoSettings settings;
+    settings.tool = static_cast<oxygen::interop::module::TransformTool>(tool);
+    settings.space = static_cast<oxygen::interop::module::TransformSpace>(space);
+    settings.snap.enabled = snapEnabled;
+    settings.snap.translation = translationStep;
+    settings.snap.rotation_degrees = rotationStepDegrees;
+    settings.snap.scale = scaleStep;
+    settings.display_scale = displayScale > 0.0F ? displayScale : 1.0F;
+    if (targets != nullptr) {
+      settings.targets.reserve(static_cast<std::size_t>(targets->Length));
+      for each (System::Guid id in targets) {
+        settings.targets.push_back(
+          detail::ToNativeKey<oxygen::interop::module::UuidKey>(id));
+      }
+    }
+    if (activeNodeId.HasValue) {
+      settings.active = detail::ToNativeKey<oxygen::interop::module::UuidKey>(
+        activeNodeId.Value);
+    }
+    try {
+      editor_module_opt->get().GetTransformGizmo().SetSettings(
+        std::move(settings));
+      return true;
+    }
+    catch (...) {
+      return false;
+    }
+  }
+
+  auto EngineRunner::TryCancelTransformGizmoDrag(EngineContext^ ctx) -> bool
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (disposed_) {
+      return false;
+    }
+
+    auto native_ctx = ctx->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      return false;
+    }
+    auto editor_module_opt =
+      native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (!editor_module_opt) {
+      return false;
+    }
+    editor_module_opt->get().GetTransformGizmo().RequestCancel();
+    return true;
+  }
+
+  auto EngineRunner::TrySetTransformGizmoListener(EngineContext^ ctx,
+    System::Action<TransformGizmoEventManaged^>^ listener) -> bool
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+
+    auto native_ctx = ctx->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      return false;
+    }
+    auto editor_module_opt =
+      native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (!editor_module_opt) {
+      return false;
+    }
+
+    auto& gizmo = editor_module_opt->get().GetTransformGizmo();
+    if (listener == nullptr) {
+      gizmo.SetListener({});
+      return true;
+    }
+    // The native listener owns a handle to the delegate; replacing it frees
+    // the handle only after any running call returns.
+    gizmo.SetListener(TransformGizmoListener(listener));
+    return true;
   }
 
   auto EngineRunner::GetFrameStatistics(EngineContext^ ctx)

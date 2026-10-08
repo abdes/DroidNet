@@ -296,6 +296,12 @@ public static partial class Program
                 resolver.Resolve<IStatusReducer>(),
                 resolver.Resolve<ILoggerFactory>()),
             Reuse.Singleton);
+        // Transform gizmo snapping and space: per-user preferences kept across projects, serialized writes.
+        container.RegisterDelegate(
+            resolver => new TransformToolSettingsService(
+                resolver.Resolve<IEditorSettingsManager>(),
+                resolver.Resolve<ILoggerFactory>()),
+            Reuse.Singleton);
         container.Register<EngineShutdownService>(Reuse.Singleton);
         container.RegisterDelegate<IHostedService>(resolver => resolver.Resolve<EngineShutdownService>(), Reuse.Singleton);
 

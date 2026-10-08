@@ -160,6 +160,20 @@ internal abstract class EngineSession
     /// <returns>The runtime operation result.</returns>
     public abstract bool SetSelectionOutline(IReadOnlyList<Guid> nodeIds, Guid? activeNodeId);
 
+    /// <summary>Shows the transform gizmo for the given targets in every editing view.</summary>
+    /// <param name="gizmo">The tool, space, snapping and targets.</param>
+    /// <returns>The runtime operation result.</returns>
+    public abstract bool SetTransformGizmo(RuntimeTransformGizmo gizmo);
+
+    /// <summary>Cancels a running gizmo drag at the next frame.</summary>
+    /// <returns>The runtime operation result.</returns>
+    public abstract bool CancelTransformGizmoDrag();
+
+    /// <summary>Receives the gizmo's interactions on the engine thread.</summary>
+    /// <param name="listener">The receiver, or <see langword="null"/> to stop.</param>
+    /// <returns>The runtime operation result.</returns>
+    public abstract bool SetTransformGizmoListener(Action<RuntimeGizmoEvent>? listener);
+
     /// <summary>Gets the rate and duration of the last completed engine frame.</summary>
     /// <returns>The frame statistics.</returns>
     public abstract RuntimeFrameStatistics GetFrameStatistics();

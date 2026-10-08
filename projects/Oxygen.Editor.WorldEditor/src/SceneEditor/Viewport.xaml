@@ -23,6 +23,7 @@
         <SolidColorBrush x:Key="HudForegroundBrush" Color="#FFEDF4F7" />
         <SolidColorBrush x:Key="HudMutedForegroundBrush" Color="#FFB2C4CF" />
         <SolidColorBrush x:Key="FocusedViewportBorderBrush" Color="{ThemeResource SystemAccentColor}" />
+        <SolidColorBrush x:Key="HudRejectedBorderBrush" Color="#FFE5484D" />
         <SolidColorBrush
             x:Key="MarqueeFillBrush"
             Opacity="0.15"
@@ -206,7 +207,111 @@
                 Stroke="{StaticResource FocusedViewportBorderBrush}"
                 StrokeThickness="1"
                 Visibility="Collapsed" />
+
+            <!--  Gizmo drag feedback: a dashed tether from the pivot to the pointer and the applied value.  -->
+            <Line
+                x:Name="GizmoTether"
+                Stroke="{StaticResource HudForegroundBrush}"
+                StrokeDashArray="3,3"
+                StrokeThickness="1"
+                Visibility="Collapsed" />
+            <Border
+                x:Name="GizmoChip"
+                Padding="8,4"
+                Background="{StaticResource HudChipBrush}"
+                BorderBrush="{StaticResource HudChipBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Visibility="Collapsed">
+                <TextBlock FontSize="11" Foreground="{StaticResource HudForegroundBrush}">
+                    <Run x:Name="GizmoChipText" FontFamily="Consolas" />
+                    <Run Text="  " />
+                    <Run Foreground="{StaticResource HudMutedForegroundBrush}" Text="Esc cancel" />
+                </TextBlock>
+            </Border>
         </Canvas>
+
+        <!--  Tool rail: the focused pane's transform tools.  -->
+        <StackPanel
+            x:Name="ToolRail"
+            Margin="8,52,8,8"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top"
+            Canvas.ZIndex="100"
+            Spacing="4"
+            Visibility="{x:Bind ViewModel.IsFocused, Mode=OneWay}">
+            <Grid>
+                <Button
+                    AutomationProperties.Name="Select tool"
+                    Command="{x:Bind ViewModel.TransformTools.UseSelectToolCommand, Mode=OneWay}"
+                    Style="{StaticResource HudIconButtonStyle}"
+                    ToolTipService.ToolTip="Select (Q)">
+                    <FontIcon Glyph="&#xE7C9;" Style="{StaticResource HudGlyphStyle}" />
+                </Button>
+                <Border
+                    BorderBrush="{StaticResource FocusedViewportBorderBrush}"
+                    BorderThickness="2"
+                    CornerRadius="4"
+                    IsHitTestVisible="False"
+                    Visibility="{x:Bind ViewModel.TransformTools.IsSelectTool, Mode=OneWay, FallbackValue=Collapsed}" />
+            </Grid>
+            <Grid>
+                <Button
+                    AutomationProperties.Name="Move tool"
+                    Command="{x:Bind ViewModel.TransformTools.UseMoveToolCommand, Mode=OneWay}"
+                    Style="{StaticResource HudIconButtonStyle}"
+                    ToolTipService.ToolTip="Move (W)">
+                    <FontIcon Glyph="&#xE7C2;" Style="{StaticResource HudGlyphStyle}" />
+                </Button>
+                <Border
+                    BorderBrush="{StaticResource FocusedViewportBorderBrush}"
+                    BorderThickness="2"
+                    CornerRadius="4"
+                    IsHitTestVisible="False"
+                    Visibility="{x:Bind ViewModel.TransformTools.IsMoveTool, Mode=OneWay, FallbackValue=Collapsed}" />
+            </Grid>
+            <Grid>
+                <Button
+                    AutomationProperties.Name="Rotate tool"
+                    Command="{x:Bind ViewModel.TransformTools.UseRotateToolCommand, Mode=OneWay}"
+                    Style="{StaticResource HudIconButtonStyle}"
+                    ToolTipService.ToolTip="Rotate (E)">
+                    <FontIcon Glyph="&#xE7AD;" Style="{StaticResource HudGlyphStyle}" />
+                </Button>
+                <Border
+                    BorderBrush="{StaticResource FocusedViewportBorderBrush}"
+                    BorderThickness="2"
+                    CornerRadius="4"
+                    IsHitTestVisible="False"
+                    Visibility="{x:Bind ViewModel.TransformTools.IsRotateTool, Mode=OneWay, FallbackValue=Collapsed}" />
+            </Grid>
+            <Grid>
+                <Button
+                    AutomationProperties.Name="Scale tool"
+                    Command="{x:Bind ViewModel.TransformTools.UseScaleToolCommand, Mode=OneWay}"
+                    Style="{StaticResource HudIconButtonStyle}"
+                    ToolTipService.ToolTip="Scale (R)">
+                    <FontIcon Glyph="&#xE740;" Style="{StaticResource HudGlyphStyle}" />
+                </Button>
+                <Border
+                    BorderBrush="{StaticResource FocusedViewportBorderBrush}"
+                    BorderThickness="2"
+                    CornerRadius="4"
+                    IsHitTestVisible="False"
+                    Visibility="{x:Bind ViewModel.TransformTools.IsScaleTool, Mode=OneWay, FallbackValue=Collapsed}" />
+            </Grid>
+            <Border
+                Height="1"
+                Margin="4,2"
+                Background="{StaticResource HudChipBorderBrush}" />
+            <Button
+                AutomationProperties.Name="Frame selection"
+                Click="OnFrameSelectionClick"
+                Style="{StaticResource HudIconButtonStyle}"
+                ToolTipService.ToolTip="Frame selection (F) · Shift+F frames all">
+                <FontIcon Glyph="&#xE71E;" Style="{StaticResource HudGlyphStyle}" />
+            </Button>
+        </StackPanel>
 
         <!--  HUD row  -->
         <Grid
@@ -477,6 +582,186 @@
                 </DropDownButton.Flyout>
             </DropDownButton>
 
+            <!--  Transform group: space, snapping and increments, in the focused pane.  -->
+            <StackPanel
+                x:Name="TransformGroup"
+                Grid.Column="3"
+                HorizontalAlignment="Right"
+                Orientation="Horizontal"
+                Spacing="4"
+                Visibility="{x:Bind ViewModel.IsFocused, Mode=OneWay}">
+                <Button
+                    AutomationProperties.Name="Transform space"
+                    Command="{x:Bind ViewModel.TransformTools.ToggleSpaceCommand, Mode=OneWay}"
+                    Style="{StaticResource HudIconButtonStyle}"
+                    ToolTipService.ToolTip="{x:Bind ViewModel.TransformTools.SpaceToolTip, Mode=OneWay}">
+                    <FontIcon Glyph="{x:Bind ViewModel.TransformTools.SpaceGlyph, Mode=OneWay}" Style="{StaticResource HudGlyphStyle}" />
+                </Button>
+                <Grid>
+                    <Button
+                        AutomationProperties.Name="Snapping"
+                        Command="{x:Bind ViewModel.TransformTools.ToggleSnapCommand, Mode=OneWay}"
+                        Style="{StaticResource HudIconButtonStyle}"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.TransformTools.SnapToolTip, Mode=OneWay}">
+                        <FontIcon Glyph="&#xE80A;" Style="{StaticResource HudGlyphStyle}" />
+                    </Button>
+                    <Border
+                        BorderBrush="{StaticResource FocusedViewportBorderBrush}"
+                        BorderThickness="2"
+                        CornerRadius="4"
+                        IsHitTestVisible="False"
+                        Visibility="{x:Bind ViewModel.TransformTools.SnapEnabled, Mode=OneWay, FallbackValue=Collapsed}" />
+                </Grid>
+                <DropDownButton
+                    x:Name="TranslationSnapButton"
+                    AutomationProperties.Name="Move snap increment"
+                    Content="{x:Bind ViewModel.TransformTools.TranslationLabel, Mode=OneWay}"
+                    Style="{StaticResource HudDropDownStyle}"
+                    ToolTipService.ToolTip="Move snap increment">
+                    <DropDownButton.Flyout>
+                        <Flyout
+                            x:Name="TranslationSnapFlyout"
+                            FlyoutPresenterStyle="{StaticResource FlyoutPresenterStyle}"
+                            Placement="BottomEdgeAlignedRight">
+                            <StackPanel Width="232">
+                                <TextBlock Style="{StaticResource FlyoutSectionHeaderStyle}" Text="Move snap" />
+                                <ItemsRepeater
+                                    Margin="8,0"
+                                    ItemTemplate="{StaticResource TileOptionTemplate}"
+                                    ItemsSource="{x:Bind ViewModel.TransformTools.TranslationOptions, Mode=OneWay}">
+                                    <ItemsRepeater.Layout>
+                                        <UniformGridLayout
+                                            ItemsStretch="Fill"
+                                            MaximumRowsOrColumns="3"
+                                            MinColumnSpacing="4"
+                                            MinItemWidth="64"
+                                            MinRowSpacing="4" />
+                                    </ItemsRepeater.Layout>
+                                </ItemsRepeater>
+                                <Grid Margin="8,8,8,0" ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="72" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource FlyoutFieldLabelStyle}" Text="Custom" />
+                                    <dnc:NumberBox
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalValueAlignment="Right"
+                                        Mask="{x:Bind ViewModel.TransformTools.TranslationField.Mask, Mode=OneWay}"
+                                        NumberValue="{x:Bind ViewModel.TransformTools.TranslationField.NumberValue, Mode=TwoWay}"
+                                        Tag="{x:Bind ViewModel.TransformTools.TranslationField, Mode=OneWay}"
+                                        Validate="OnCameraNumberBoxValidate"
+                                        WithPadding="False" />
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Style="{StaticResource FlyoutFieldLabelStyle}"
+                                        Text="m" />
+                                </Grid>
+                            </StackPanel>
+                        </Flyout>
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+                <DropDownButton
+                    x:Name="RotationSnapButton"
+                    AutomationProperties.Name="Rotate snap increment"
+                    Content="{x:Bind ViewModel.TransformTools.RotationLabel, Mode=OneWay}"
+                    Style="{StaticResource HudDropDownStyle}"
+                    ToolTipService.ToolTip="Rotate snap increment">
+                    <DropDownButton.Flyout>
+                        <Flyout
+                            x:Name="RotationSnapFlyout"
+                            FlyoutPresenterStyle="{StaticResource FlyoutPresenterStyle}"
+                            Placement="BottomEdgeAlignedRight">
+                            <StackPanel Width="232">
+                                <TextBlock Style="{StaticResource FlyoutSectionHeaderStyle}" Text="Rotate snap" />
+                                <ItemsRepeater
+                                    Margin="8,0"
+                                    ItemTemplate="{StaticResource TileOptionTemplate}"
+                                    ItemsSource="{x:Bind ViewModel.TransformTools.RotationOptions, Mode=OneWay}">
+                                    <ItemsRepeater.Layout>
+                                        <UniformGridLayout
+                                            ItemsStretch="Fill"
+                                            MaximumRowsOrColumns="4"
+                                            MinColumnSpacing="4"
+                                            MinItemWidth="48"
+                                            MinRowSpacing="4" />
+                                    </ItemsRepeater.Layout>
+                                </ItemsRepeater>
+                                <Grid Margin="8,8,8,0" ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="72" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource FlyoutFieldLabelStyle}" Text="Custom" />
+                                    <dnc:NumberBox
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalValueAlignment="Right"
+                                        Mask="{x:Bind ViewModel.TransformTools.RotationField.Mask, Mode=OneWay}"
+                                        NumberValue="{x:Bind ViewModel.TransformTools.RotationField.NumberValue, Mode=TwoWay}"
+                                        Tag="{x:Bind ViewModel.TransformTools.RotationField, Mode=OneWay}"
+                                        Validate="OnCameraNumberBoxValidate"
+                                        WithPadding="False" />
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Style="{StaticResource FlyoutFieldLabelStyle}"
+                                        Text="°" />
+                                </Grid>
+                            </StackPanel>
+                        </Flyout>
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+                <DropDownButton
+                    x:Name="ScaleSnapButton"
+                    AutomationProperties.Name="Scale snap increment"
+                    Content="{x:Bind ViewModel.TransformTools.ScaleLabel, Mode=OneWay}"
+                    Style="{StaticResource HudDropDownStyle}"
+                    ToolTipService.ToolTip="Scale snap increment">
+                    <DropDownButton.Flyout>
+                        <Flyout
+                            x:Name="ScaleSnapFlyout"
+                            FlyoutPresenterStyle="{StaticResource FlyoutPresenterStyle}"
+                            Placement="BottomEdgeAlignedRight">
+                            <StackPanel Width="232">
+                                <TextBlock Style="{StaticResource FlyoutSectionHeaderStyle}" Text="Scale snap" />
+                                <ItemsRepeater
+                                    Margin="8,0"
+                                    ItemTemplate="{StaticResource TileOptionTemplate}"
+                                    ItemsSource="{x:Bind ViewModel.TransformTools.ScaleOptions, Mode=OneWay}">
+                                    <ItemsRepeater.Layout>
+                                        <UniformGridLayout
+                                            ItemsStretch="Fill"
+                                            MaximumRowsOrColumns="3"
+                                            MinColumnSpacing="4"
+                                            MinItemWidth="64"
+                                            MinRowSpacing="4" />
+                                    </ItemsRepeater.Layout>
+                                </ItemsRepeater>
+                                <Grid Margin="8,8,8,0" ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="72" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource FlyoutFieldLabelStyle}" Text="Custom" />
+                                    <dnc:NumberBox
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalValueAlignment="Right"
+                                        Mask="{x:Bind ViewModel.TransformTools.ScaleField.Mask, Mode=OneWay}"
+                                        NumberValue="{x:Bind ViewModel.TransformTools.ScaleField.NumberValue, Mode=TwoWay}"
+                                        Tag="{x:Bind ViewModel.TransformTools.ScaleField, Mode=OneWay}"
+                                        Validate="OnCameraNumberBoxValidate"
+                                        WithPadding="False" />
+                                </Grid>
+                            </StackPanel>
+                        </Flyout>
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+            </StackPanel>
+
             <!--  Layout  -->
             <Button
                 x:Name="LayoutButton"
@@ -603,6 +888,9 @@
                         <Setter Target="CameraLabel.Visibility" Value="Collapsed" />
                         <Setter Target="ViewModeText.Visibility" Value="Collapsed" />
                         <Setter Target="ShowLabel.Visibility" Value="Collapsed" />
+                        <Setter Target="RotationSnapButton.Visibility" Value="Collapsed" />
+                        <Setter Target="ScaleSnapButton.Visibility" Value="Collapsed" />
+                        <Setter Target="SettingsButton.Visibility" Value="Visible" />
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="Narrow">
@@ -613,6 +901,7 @@
                         <Setter Target="LayoutButton.Visibility" Value="Collapsed" />
                         <Setter Target="SettingsButton.Visibility" Value="Visible" />
                         <Setter Target="GestureHint.Visibility" Value="Collapsed" />
+                        <Setter Target="TransformGroup.Visibility" Value="Collapsed" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>

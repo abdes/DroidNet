@@ -118,6 +118,12 @@ internal sealed class FakeEngineSession : EngineSession
 
     public override bool SetSelectionOutline(IReadOnlyList<Guid> nodeIds, Guid? activeNodeId) => true;
 
+    public override bool SetTransformGizmo(RuntimeTransformGizmo gizmo) => true;
+
+    public override bool CancelTransformGizmoDrag() => true;
+
+    public override bool SetTransformGizmoListener(Action<RuntimeGizmoEvent>? listener) => true;
+
     public override RuntimeFrameStatistics GetFrameStatistics() => default;
 
     public override void DestroyContext()

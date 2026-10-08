@@ -85,6 +85,30 @@ internal sealed partial class NativeEngineSession
         => this.Runner.TrySetSelectionOutline(this.context, [.. nodeIds], activeNodeId);
 
     /// <inheritdoc />
+    public override bool SetTransformGizmo(RuntimeTransformGizmo gizmo)
+        => this.Runner.TrySetTransformGizmo(
+            this.context,
+            NativeSessionConversions.ToNative<TransformToolManaged>(gizmo.Tool),
+            NativeSessionConversions.ToNative<TransformSpaceManaged>(gizmo.Space),
+            gizmo.Snap.Enabled,
+            gizmo.Snap.Translation,
+            gizmo.Snap.RotationDegrees,
+            gizmo.Snap.Scale,
+            [.. gizmo.Targets],
+            gizmo.ActiveNodeId,
+            gizmo.DisplayScale);
+
+    /// <inheritdoc />
+    public override bool CancelTransformGizmoDrag()
+        => this.Runner.TryCancelTransformGizmoDrag(this.context);
+
+    /// <inheritdoc />
+    public override bool SetTransformGizmoListener(Action<RuntimeGizmoEvent>? listener)
+        => this.Runner.TrySetTransformGizmoListener(
+            this.context,
+            listener is null ? null : native => listener(NativeSessionConversions.FromNative(native)));
+
+    /// <inheritdoc />
     public override RuntimeFrameStatistics GetFrameStatistics()
     {
         var statistics = this.Runner.GetFrameStatistics(this.context);

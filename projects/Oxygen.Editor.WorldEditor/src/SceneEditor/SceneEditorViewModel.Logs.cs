@@ -131,4 +131,13 @@ public partial class SceneEditorViewModel
 
     private void LogSelectionOutlineRejected()
         => LogSelectionOutlineRejected(this.logger, this.Metadata?.DocumentId);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "The runtime rejected the transform gizmo of document {DocumentId}; no engine session is running")]
+    private static partial void LogTransformGizmoRejected(ILogger logger, Guid? documentId);
+
+    private void LogTransformGizmoRejected()
+        => LogTransformGizmoRejected(this.logger, this.Metadata?.DocumentId);
 }

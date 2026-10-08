@@ -471,4 +471,17 @@ public interface ISceneDocumentCommandService
         Guid? newParentNodeId,
         Guid? newParentFolderId,
         Guid? insertAfterNodeId = null);
+
+    /// <summary>
+    /// Deep-copies node hierarchies beside their sources, in the same scene parent and Explorer
+    /// folder, as one undo step.
+    /// </summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="nodeIds">The nodes to copy; a node whose ancestor is listed is copied with it.</param>
+    /// <param name="transforms">Local transforms the copies take instead of their sources', by source id.</param>
+    /// <returns>The command result with the created node roots, in source order.</returns>
+    public Task<SceneValueCommandResult<IReadOnlyList<SceneNode>>> DuplicateNodesInPlaceAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<Guid> nodeIds,
+        IReadOnlyDictionary<Guid, TransformData>? transforms = null);
 }

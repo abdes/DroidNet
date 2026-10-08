@@ -95,6 +95,11 @@ public static class RuntimeOperationKinds
     public const string SelectionOutline = "Runtime.View.SetSelectionOutline";
 
     /// <summary>
+    /// Transform gizmo update for the editing views.
+    /// </summary>
+    public const string TransformGizmo = "Runtime.View.SetTransformGizmo";
+
+    /// <summary>
     /// Runtime engine view camera lens and clipping settings change.
     /// </summary>
     public const string ViewSetCameraSettings = "Runtime.View.SetCameraSettings";

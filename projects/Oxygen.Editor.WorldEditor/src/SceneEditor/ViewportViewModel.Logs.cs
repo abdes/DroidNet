@@ -76,4 +76,13 @@ public partial class ViewportViewModel
 
     private void LogInsetFailed(Exception ex)
         => LogInsetFailed(this.logger, this.ViewportId, ex);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Cancelling the gizmo drag of viewport {ViewportId} failed")]
+    private static partial void LogGizmoCancelFailed(ILogger logger, Guid viewportId, Exception ex);
+
+    private void LogGizmoCancelFailed(Exception ex)
+        => LogGizmoCancelFailed(this.logger, this.ViewportId, ex);
 }

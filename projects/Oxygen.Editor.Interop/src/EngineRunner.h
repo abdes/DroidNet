@@ -22,6 +22,7 @@
 #include <Views/ViewCameraPoseManaged.h>
 #include <Views/ViewIdManaged.h>
 #include <Views/ViewPickManaged.h>
+#include <Views/TransformGizmoManaged.h>
 
 namespace oxygen::graphics {
 
@@ -342,6 +343,29 @@ namespace Oxygen::Interop {
     auto TrySetSelectionOutline(EngineContext^ ctx,
       array<System::Guid>^ nodeIds, System::Nullable<System::Guid> activeNodeId)
       -> bool;
+
+    /// <summary>
+    /// Shows the transform gizmo of <paramref name="targets"/> in every editing
+    /// view, or hides it for the Select tool or no targets. A running drag of
+    /// other targets or with another tool is cancelled.
+    /// </summary>
+    auto TrySetTransformGizmo(EngineContext^ ctx, TransformToolManaged tool,
+      TransformSpaceManaged space, bool snapEnabled, float translationStep,
+      float rotationStepDegrees, float scaleStep,
+      array<System::Guid>^ targets, System::Nullable<System::Guid> activeNodeId,
+      float displayScale) -> bool;
+
+    /// <summary>
+    /// Cancels a running gizmo drag at the next frame.
+    /// </summary>
+    auto TryCancelTransformGizmoDrag(EngineContext^ ctx) -> bool;
+
+    /// <summary>
+    /// Receives the gizmo's hover and drag events on the engine thread; null
+    /// stops them. Once this returns, the previous listener is not called.
+    /// </summary>
+    auto TrySetTransformGizmoListener(EngineContext^ ctx,
+      System::Action<TransformGizmoEventManaged^>^ listener) -> bool;
 
     /// <summary>
     /// Gets the rate and duration of the last completed engine frame.

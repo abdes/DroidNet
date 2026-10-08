@@ -41,6 +41,24 @@ internal static class NativeSessionConversions
         => Enum.TryParse<RuntimeFramingOutcome>(outcome.ToString(), ignoreCase: false, out var managed) && Enum.IsDefined(managed)
             ? managed : RuntimeFramingOutcome.InvalidBounds;
 
+    /// <summary>Converts a native gizmo interaction.</summary>
+    /// <param name="gizmoEvent">The native interaction.</param>
+    /// <returns>The managed interaction.</returns>
+    public static RuntimeGizmoEvent FromNative(TransformGizmoEventManaged gizmoEvent)
+        => new(
+            (RuntimeGizmoEventKind)(int)gizmoEvent.Kind,
+            new RuntimeViewId(gizmoEvent.ViewId.Value),
+            (RuntimeTransformTool)(int)gizmoEvent.Tool,
+            (RuntimeGizmoHandle)(int)gizmoEvent.Handle,
+            gizmoEvent.Duplicate,
+            gizmoEvent.Hovering,
+            gizmoEvent.Representable,
+            [.. gizmoEvent.Targets.Select(target => new RuntimeGizmoTarget(target.NodeId, target.Position, target.Rotation, target.Scale))],
+            gizmoEvent.ReadoutAxes,
+            gizmoEvent.ReadoutValues,
+            gizmoEvent.PivotPixel,
+            gizmoEvent.PointerPixel);
+
     /// <summary>Creates the native view config while preserving omitted native defaults.</summary>
     /// <param name="config">The editor's managed view request.</param>
     /// <returns>The native configuration.</returns>

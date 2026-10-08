@@ -423,27 +423,49 @@ same selection operation as a geometry click.
 
 ### Transform Tools
 
-W/E/R select translate/rotate/scale when viewport navigation is not capturing
-those keys. Toolbar actions expose the same operations. Provide World/Local
-space; default World. The pivot is the active (last-selected) node's origin and
-orientation for Local, and its world position with world axes for World.
-Multi-selection applies one common world-space delta around that pivot while
-preserving each target's original transform. Display the chosen space/pivot.
+The focused pane's left tool rail holds Select (Q), Move (W), Rotate (E) and
+Scale (R), then Frame (F); Space cycles the four tools. The keys apply unless
+RMB navigation holds them. Move is the default tool, so a selection shows its
+gizmo at once. With viewport focus, Delete, Ctrl+D (duplicate in place),
+Ctrl+Z and Ctrl+Y (or Ctrl+Shift+Z) run the Scene Explorer's commands for the
+document. Locked nodes, and the descendants of selected nodes, get no gizmo.
 
-Use the existing command/property session owner: begin snapshots targets,
-previews update authoring without history, release commits one entry, Escape
-restores all before-values. Focus/selection/scene loss cancels an unfinished
-drag before changing its context. Reject non-finite/zero-scale or nonrepresentable
-parent-transform results without partial model changes; do not invent shear or
-silently approximate a transform the authored model cannot represent.
+Provide World/Local space; default World. The pivot is the active
+(last-selected) node's origin and orientation for Local, and its world
+position with world axes for World. Multi-selection applies one common
+world-space delta around that pivot while preserving each target's original
+transform. Scale always acts along each target's own axes, whatever the
+space: scaling a rotated node along world axes would need shear. A
+multi-selection scales each target about its own origin and spreads the
+positions from the pivot. The space toggle's tooltip states this.
 
-Snapping is a toolbar toggle, off by default: translation 0.25 metre, rotation
-15 degrees, scale increment 0.1. Each increment offers presets (0.01–10 m,
-1–90 degrees, 0.01–1) and a custom value. In World space translation snaps the
-pivot to the world grid; in Local space it snaps the applied offset. Rotation
-and scale snap the applied delta, and Ctrl inverts snapping for one drag. The
-toggle and increments are per-user editor settings that persist across sessions
-and projects, never scene render intent. One snapped or unsnapped drag still produces one undo entry.
+Gizmo interaction runs natively in the editor module: it hit tests and drags
+the handles on the engine's frame, draws them through the per-view overlay,
+and reports begin, update, commit and cancel with each target's new local
+transform. WorldEditor stays the only writer of the authored scene and
+applies those results through the existing command/property session owner:
+the first update begins the session and snapshots targets, previews update
+authoring without history, release commits one entry, Escape or right-click
+restores all before-values. A pane that keeps focus away, or a selection or
+scene change, cancels an unfinished drag. Reject non-finite/zero-scale or
+nonrepresentable parent-transform results without partial model changes; do
+not invent shear or silently approximate a transform the authored model
+cannot represent. The drag chip names the rejection.
+
+Alt held when a drag begins duplicates. The drag previews on the originals;
+release restores them and creates the copies at the dragged transforms, after
+their sources and in their Explorer folders, as one undo entry, and selects
+the copies. A cancelled Alt-drag leaves no copy and no history.
+
+Snapping is a toggle in the HUD transform group, off by default: translation
+0.25 metre, rotation 15 degrees, scale increment 0.1. Each increment offers
+presets (0.01–10 m, 1–90 degrees, 0.01–1) and a custom value. In World space
+translation snaps the pivot to the world grid; in Local space it snaps the
+applied offset. Rotation and scale snap the applied delta, and Ctrl inverts
+snapping for one drag. The toggle, the increments and the space are per-user
+editor settings that persist across sessions and projects, never scene render
+intent. A narrow pane folds the group into its settings flyout. One snapped
+or unsnapped drag still produces one undo entry.
 
 ### Overlays And Diagnostics
 

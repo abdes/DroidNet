@@ -109,6 +109,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.container = container;
         this.messenger = messenger ?? throw new ArgumentNullException(nameof(messenger));
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger(nameof(SceneEditorViewModel));
+        this.InitializeTransformTools();
 
         // Try to restore layout from metadata if present
         this.CurrentLayout = SceneViewLayout.OnePane;
@@ -249,6 +250,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             this.LogUnregisteringFromMessages(this.Metadata.DocumentId);
 
             this.messenger.UnregisterAll(this);
+            this.DisposeTransformTools();
 
             foreach (var viewport in this.Viewports)
             {
@@ -441,6 +443,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             {
                 this.UpdateSelectionOutline(selection.GetContext(this.Metadata.DocumentId));
             }
+
+            this.UpdateTransformGizmo();
         }
     }
 

@@ -24,6 +24,13 @@ public interface IEngineService : IAsyncDisposable
     public event EventHandler<RuntimeContentChangedEventArgs>? ContentStatusChanged;
 
     /// <summary>
+    /// Reports the transform gizmo's hover and drag interactions in order, asynchronously; UI
+    /// consumers must dispatch to their UI thread. The gizmo never changes the scene: the editor
+    /// applies a drag's results through its authoring commands.
+    /// </summary>
+    public event EventHandler<RuntimeGizmoEventArgs>? GizmoEvent;
+
+    /// <summary>
     ///     Gets the current lifecycle state of the service.
     /// </summary>
     public EngineServiceState State { get; }
@@ -422,6 +429,29 @@ public interface IEngineService : IAsyncDisposable
     ///     <see langword="false"/> on failure.
     /// </returns>
     public Task<bool> SetSelectionOutlineAsync(IReadOnlyList<Guid> nodeIds, Guid? activeNodeId);
+
+    /// <summary>
+    /// Show the transform gizmo of the given targets in every editing view, or hide it for the
+    /// Select tool or no targets. A running drag of other targets or with another tool is
+    /// cancelled. A press on a gizmo handle is taken from the view's input, so it neither
+    /// navigates nor picks.
+    /// </summary>
+    /// <param name="gizmo">The tool, space, snapping and targets.</param>
+    /// <returns>
+    ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
+    ///     <see langword="false"/> on failure.
+    /// </returns>
+    public Task<bool> SetTransformGizmoAsync(RuntimeTransformGizmo gizmo);
+
+    /// <summary>
+    /// Cancel a running gizmo drag at the next frame; <see cref="GizmoEvent"/> reports the
+    /// cancellation.
+    /// </summary>
+    /// <returns>
+    ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
+    ///     <see langword="false"/> on failure.
+    /// </returns>
+    public Task<bool> CancelTransformGizmoDragAsync();
 
     /// <summary>
     /// Gets the rate and duration of the last completed engine frame. Cheap enough to poll from the

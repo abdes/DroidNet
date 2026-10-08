@@ -165,6 +165,7 @@ public partial class SceneEditorViewModel
         viewport.NodeCountProvider = () => this.scene?.AllNodes.Count() ?? 0;
         this.AttachCameraServices(viewport);
         this.AttachSelectionServices(viewport);
+        this.AttachGizmoServices(viewport);
         return viewport;
     }
 

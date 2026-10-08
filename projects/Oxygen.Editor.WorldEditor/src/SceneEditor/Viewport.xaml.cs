@@ -90,6 +90,9 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
     private Windows.Foundation.Point? selectionStart;
     private ViewportSelectionMode selectionMode;
     private bool isMarquee;
+    private int selectionGizmoDragCount;
+    private bool isRightButtonDown;
+    private string densityState = "Wide";
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Viewport"/> class.
@@ -285,11 +288,69 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         this.RefreshLogger(current);
         this.LogViewModelChanged(GetViewportId(previous), GetViewportId(current));
+        if (previous is not null)
+        {
+            previous.PropertyChanged -= this.OnViewModelPropertyChanged;
+        }
+
+        if (current is not null)
+        {
+            current.PropertyChanged += this.OnViewModelPropertyChanged;
+            this.UpdateDisplayScale();
+        }
+
+        this.UpdateGizmoFeedback();
 
         _ = this.HandleViewModelChangeAsync(previous, current);
     }
 
     private void OnCameraFlyoutOpening(object? sender, object e) => this.ViewModel?.RefreshSceneCameras();
+
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (string.Equals(e.PropertyName, nameof(ViewportViewModel.GizmoFeedback), StringComparison.Ordinal))
+        {
+            this.UpdateGizmoFeedback();
+        }
+        else if (string.Equals(e.PropertyName, nameof(ViewportViewModel.IsGizmoDragging), StringComparison.Ordinal)
+            && this.ViewModel?.IsGizmoDragging == true)
+        {
+            // The gizmo took the press: it is not a click or a marquee.
+            this.CancelSelectionGesture();
+        }
+    }
+
+    /// <summary>Places the drag readout next to the pointer and the tether from the pivot.</summary>
+    private void UpdateGizmoFeedback()
+    {
+        if (this.ViewModel?.GizmoFeedback is not { } feedback)
+        {
+            this.GizmoChip.Visibility = Visibility.Collapsed;
+            this.GizmoTether.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        // The engine reports physical pixels; the overlay canvas uses DIPs.
+        var scale = this.XamlRoot?.RasterizationScale ?? 1.0;
+        var pointer = new Windows.Foundation.Point(feedback.PointerPixel.X / scale, feedback.PointerPixel.Y / scale);
+        this.GizmoChipText.Text = feedback.Text;
+        this.GizmoChip.BorderBrush = (Microsoft.UI.Xaml.Media.Brush)this.Resources[feedback.IsRejected ? "HudRejectedBorderBrush" : "HudChipBorderBrush"];
+        Canvas.SetLeft(this.GizmoChip, pointer.X + 16);
+        Canvas.SetTop(this.GizmoChip, pointer.Y + 16);
+        this.GizmoChip.Visibility = Visibility.Visible;
+        if (feedback.PivotPixel is { } pivot)
+        {
+            this.GizmoTether.X1 = pivot.X / scale;
+            this.GizmoTether.Y1 = pivot.Y / scale;
+            this.GizmoTether.X2 = pointer.X;
+            this.GizmoTether.Y2 = pointer.Y;
+            this.GizmoTether.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            this.GizmoTether.Visibility = Visibility.Collapsed;
+        }
+    }
 
     private void OnFlyoutChoiceClick(object sender, RoutedEventArgs e)
     {
@@ -297,6 +358,17 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.CameraFlyout.Hide();
         this.ViewModeFlyout.Hide();
         this.LayoutFlyout.Hide();
+        this.TranslationSnapFlyout.Hide();
+        this.RotationSnapFlyout.Hide();
+        this.ScaleSnapFlyout.Hide();
+    }
+
+    private void OnFrameSelectionClick(object sender, RoutedEventArgs e)
+    {
+        if (this.ViewModel is { } viewModel)
+        {
+            _ = viewModel.FrameSelectionAsync();
+        }
     }
 
     private void OnCameraNumberBoxValidate(object? sender, ValidationEventArgs<float> e)
@@ -311,7 +383,17 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
     {
         // Labels go first; a narrow pane then folds Show and Layout into Viewport settings.
         var state = e.NewSize.Width < NarrowWidth ? "Narrow" : e.NewSize.Width < CompactWidth ? "Compact" : "Wide";
+        this.densityState = state;
         _ = VisualStateManager.GoToState(this, state, useTransitions: false);
+        this.UpdateDisplayScale();
+    }
+
+    private void UpdateDisplayScale()
+    {
+        if (this.ViewModel is { } viewModel && this.XamlRoot is { } root)
+        {
+            viewModel.DisplayScale = root.RasterizationScale;
+        }
     }
 
     private void OnSettingsFlyoutOpening(object? sender, object e)
@@ -322,6 +404,21 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         }
 
         menu.Items.Clear();
+        if (viewModel.TransformTools is { } tools && viewModel.IsFocused)
+        {
+            var narrow = string.Equals(this.densityState, "Narrow", StringComparison.Ordinal);
+            if (narrow)
+            {
+                menu.Items.Add(CreateToggle("Local space", tools.IsLocalSpace, value => tools.IsLocalSpace = value));
+                menu.Items.Add(CreateToggle("Snapping", tools.SnapEnabled, value => tools.SnapEnabled = value));
+                menu.Items.Add(CreateIncrements("Move snap", tools.TranslationOptions));
+            }
+
+            menu.Items.Add(CreateIncrements("Rotate snap", tools.RotationOptions));
+            menu.Items.Add(CreateIncrements("Scale snap", tools.ScaleOptions));
+            menu.Items.Add(new MenuFlyoutSeparator());
+        }
+
         menu.Items.Add(CreateToggle("Grid", viewModel.ShowGrid, value => viewModel.ShowGrid = value));
         menu.Items.Add(CreateToggle("Selection outline", viewModel.ShowSelectionOutline, value => viewModel.ShowSelectionOutline = value));
         menu.Items.Add(CreateToggle("Camera preview", viewModel.ShowCameraPreview, value => viewModel.ShowCameraPreview = value));
@@ -349,6 +446,23 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(layouts);
+
+        static MenuFlyoutSubItem CreateIncrements(string text, IReadOnlyList<ViewportOption> options)
+        {
+            var item = new MenuFlyoutSubItem { Text = text };
+            foreach (var option in options)
+            {
+                item.Items.Add(new RadioMenuFlyoutItem
+                {
+                    Text = option.Label,
+                    GroupName = text,
+                    IsChecked = option.IsSelected,
+                    Command = option.ChooseCommand,
+                });
+            }
+
+            return item;
+        }
 
         static ToggleMenuFlyoutItem CreateToggle(string text, bool isChecked, Action<bool> apply)
         {
@@ -689,7 +803,44 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         _ = sender;
         _ = e;
         this.CancelSelectionGesture();
+        this.isRightButtonDown = false;
+        if (this.ViewModel is { IsGizmoDragging: true })
+        {
+            // Releasing the pointer capture at the end of a drag drops focus until the release
+            // handler restores it; cancelling then would turn the release into a cancel. Only a
+            // focus that stays away cancels the drag.
+            _ = this.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, this.CancelGizmoDragIfUnfocused);
+        }
+
         this.PushFocusLostIfNeeded();
+    }
+
+    private void CancelGizmoDragIfUnfocused()
+    {
+        if (this.isDisposed || this.ViewModel is not { IsGizmoDragging: true } viewModel || this.HasFocusWithin())
+        {
+            return;
+        }
+
+        _ = viewModel.CancelGizmoDragAsync();
+    }
+
+    private bool HasFocusWithin()
+    {
+        if (this.XamlRoot is not { } root)
+        {
+            return false;
+        }
+
+        for (var element = FocusManager.GetFocusedElement(root) as DependencyObject; element is not null; element = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(element))
+        {
+            if (ReferenceEquals(element, this))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -700,11 +851,14 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
     {
         this.CancelSelectionGesture();
         if (point.Properties.PointerUpdateKind != PointerUpdateKind.LeftButtonPressed
-            || modifiers.HasFlag(VirtualKeyModifiers.Menu) || this.lastAltKeyDown)
+            || modifiers.HasFlag(VirtualKeyModifiers.Menu) || this.lastAltKeyDown
+            || this.ViewModel is not { IsGizmoHovered: false, IsGizmoDragging: false } viewModel)
         {
+            // Alt+drag navigates; a press on a gizmo handle drags the gizmo.
             return;
         }
 
+        this.selectionGizmoDragCount = viewModel.GizmoDragCount;
         this.selectionStart = point.Position;
         this.selectionMode = modifiers.HasFlag(VirtualKeyModifiers.Control)
             ? ViewportSelectionMode.Toggle
@@ -715,6 +869,12 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
     {
         if (this.selectionStart is not { } start)
         {
+            return;
+        }
+
+        if (this.GizmoTookGesture())
+        {
+            this.CancelSelectionGesture();
             return;
         }
 
@@ -748,7 +908,12 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         var isMarquee = this.isMarquee;
         var mode = this.selectionMode;
+        var gizmoTookGesture = this.GizmoTookGesture();
         this.CancelSelectionGesture();
+        if (gizmoTookGesture)
+        {
+            return;
+        }
 
         // Picks address the surface in physical pixels.
         var scale = this.XamlRoot?.RasterizationScale ?? 1.0;
@@ -775,6 +940,11 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         _ = viewModel.PickAsync(rect, mode, isMarquee);
     }
+
+    /// <summary>Whether a gizmo drag started after the selection gesture did.</summary>
+    private bool GizmoTookGesture()
+        => this.ViewModel is { } viewModel
+            && (viewModel.IsGizmoDragging || viewModel.GizmoDragCount != this.selectionGizmoDragCount);
 
     private void CancelSelectionGesture()
     {
@@ -806,6 +976,74 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             => InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
     }
 
+    /// <summary>
+    /// Handles the pane's editing keys: Q, W, E and R pick a tool and Space cycles them, unless the
+    /// right button flies the camera with WASD/QE; Delete, Ctrl+D, Ctrl+Z and Ctrl+Y edit the scene.
+    /// </summary>
+    /// <returns><see langword="true"/> when the key was handled and must not reach the engine.</returns>
+    private bool TryHandleToolKey(ViewportViewModel viewModel, KeyRoutedEventArgs e)
+    {
+        if (e.KeyStatus.RepeatCount > 1 || viewModel.IsGizmoDragging || IsKeyDown(VirtualKey.Menu))
+        {
+            return false;
+        }
+
+        var control = IsKeyDown(VirtualKey.Control);
+        var shift = IsKeyDown(VirtualKey.Shift);
+        if (control)
+        {
+            var command = e.Key switch
+            {
+                VirtualKey.D when !shift => ViewportEditCommand.Duplicate,
+                VirtualKey.Z => shift ? ViewportEditCommand.Redo : ViewportEditCommand.Undo,
+                VirtualKey.Y when !shift => ViewportEditCommand.Redo,
+                _ => (ViewportEditCommand?)null,
+            };
+            if (command is { } edit)
+            {
+                _ = viewModel.RequestEditAsync(edit);
+                return true;
+            }
+
+            return false;
+        }
+
+        if (e.Key == VirtualKey.Delete)
+        {
+            _ = viewModel.RequestEditAsync(ViewportEditCommand.Delete);
+            return true;
+        }
+
+        if (shift || this.isRightButtonDown || viewModel.TransformTools is not { } tools)
+        {
+            return false;
+        }
+
+        switch (e.Key)
+        {
+            case VirtualKey.Q:
+                tools.UseSelectToolCommand.Execute(parameter: null);
+                return true;
+            case VirtualKey.W:
+                tools.UseMoveToolCommand.Execute(parameter: null);
+                return true;
+            case VirtualKey.E:
+                tools.UseRotateToolCommand.Execute(parameter: null);
+                return true;
+            case VirtualKey.R:
+                tools.UseScaleToolCommand.Execute(parameter: null);
+                return true;
+            case VirtualKey.Space:
+                tools.CycleToolCommand.Execute(parameter: null);
+                return true;
+            default:
+                return false;
+        }
+
+        static bool IsKeyDown(VirtualKey key)
+            => InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
+    }
+
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
         _ = sender;
@@ -830,7 +1068,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             e.Handled = true;
         }
 
-        if (this.TryHandleSelectionKey(viewModel, e))
+        if (this.TryHandleSelectionKey(viewModel, e) || this.TryHandleToolKey(viewModel, e))
         {
             e.Handled = true;
             return;
@@ -926,6 +1164,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.hasPointerPosition = true;
 
         this.BeginSelectionGesture(point, e.KeyModifiers);
+        this.isRightButtonDown = this.isRightButtonDown || point.Properties.PointerUpdateKind == PointerUpdateKind.RightButtonPressed;
 
         var kind = point.Properties.PointerUpdateKind;
         if (!TryTranslateMouseButton(kind, out var button, out var pressed) || !pressed)
@@ -978,6 +1217,10 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.hasPointerPosition = true;
 
         this.CompleteSelectionGesture(viewModel, point);
+        if (point.Properties.PointerUpdateKind == PointerUpdateKind.RightButtonReleased)
+        {
+            this.isRightButtonDown = false;
+        }
 
         var kind = point.Properties.PointerUpdateKind;
         if (!TryTranslateMouseButton(kind, out var button, out var pressed))

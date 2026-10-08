@@ -61,6 +61,7 @@ namespace oxygen::interop::module {
 
 #include "EditorModule/InputAccumulator.h"
 #include "EditorModule/ThreadSafeQueue.h"
+#include "EditorModule/TransformGizmoController.h"
 #include "EditorModule/ViewManager.h"
 
 namespace oxygen::interop::module {
@@ -250,6 +251,13 @@ namespace oxygen::interop::module {
     void SetSelectionOutline(
       std::vector<UuidKey> nodes, std::optional<UuidKey> active);
 
+    //! The selection's transform gizmo: its settings and event listener are
+    //! callable from any thread.
+    [[nodiscard]] auto GetTransformGizmo() noexcept -> TransformGizmoController&
+    {
+      return transform_gizmo_;
+    }
+
     //! The last completed frame's rate and duration, readable from any thread.
     [[nodiscard]] auto GetFrameStatistics() const noexcept
       -> EditorFrameStatistics;
@@ -345,6 +353,8 @@ namespace oxygen::interop::module {
 
     std::mutex picks_mutex_;
     std::vector<PendingPick> pending_picks_;
+
+    TransformGizmoController transform_gizmo_;
 
     // Command queue for scene mutations
     ThreadSafeQueue<std::unique_ptr<EditorCommand>> command_queue_;

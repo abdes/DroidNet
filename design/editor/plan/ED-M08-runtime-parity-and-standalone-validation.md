@@ -839,21 +839,25 @@ authored change.
    "Y 1.200×") and "Esc cancel".
 3. **Space and pivot.** World/Local toggle; the pivot is the active node's
    origin; a multi-selection receives one common world delta around that
-   pivot. Targets under transformed parents convert through their parents; a
+   pivot. Scale always acts along each node's own axes, spreading positions
+   from the pivot, because world-axis scale of a rotated node needs shear.
+   Targets under transformed parents convert through their parents; a
    result the authored model cannot represent (shear) is rejected without a
    partial edit.
 4. **Tools and keys.** A left tool rail in the focused pane (Select Q, Move W,
-   Rotate E, Scale R, then Frame F); Space cycles tools. With viewport focus:
-   Delete, Ctrl+D duplicate, Ctrl+Z/Ctrl+Y, and Alt-drag on a gizmo duplicates
-   the selection and drags the copy. Locked nodes show no gizmo.
+   Rotate E, Scale R, then Frame F); Space cycles tools and Move is the
+   default. With viewport focus: Delete, Ctrl+D duplicate, Ctrl+Z/Ctrl+Y.
+   Alt-drag on a gizmo previews on the originals and, on release, duplicates
+   the selection at the dragged transforms as one undo entry; a cancelled
+   Alt-drag leaves nothing. Locked nodes show no gizmo.
 5. **Snapping.** The HUD transform group holds World/Local, the snap toggle
    and the translation, rotation and scale increments, collapsing into the
    settings flyout when narrow. Each increment offers presets plus a custom
    value. Translation snaps the pivot to the world grid in World space and
    the applied offset in Local space; rotation and scale snap the applied
-   delta. Ctrl inverts snapping for the current drag. Toggle state and
-   increments are per-user editor settings that persist across sessions and
-   projects. The defaults are in [section 5](#5-interaction-defaults).
+   delta. Ctrl inverts snapping for the current drag. Toggle state,
+   increments and space are per-user editor settings that persist across
+   sessions and projects. The defaults are in [section 5](#5-interaction-defaults).
 6. **Transactions.** A drag previews live through the property edit session,
    with Inspector values updating; release commits one undo entry for every
    target; Escape or right-click restores the starting transforms exactly.
@@ -1022,7 +1026,7 @@ walkthrough completes without manual file repair.
 | Setting                      | Default                                                                                                |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------ |
 | Snapping                     | Off; 0.25 m and 15° (Unity), 0.1 scale (Godot); presets 0.01–10 m, 1–90°, 0.01–1; per-user, persistent |
-| Transform space              | World                                                                                                  |
+| Transform space              | World; per-user, persistent                                                                            |
 | Axis colours                 | X red, Y green, Z blue in gizmos, guides, triad and vector fields                                      |
 | Selection outline            | Accent colour; active node brighter; occluded parts dimmed                                             |
 | Frame margin                 | 10% of the framed bounds                                                                               |
