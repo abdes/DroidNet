@@ -2463,6 +2463,7 @@ auto Renderer::PublishRuntimeCompositionView(
     state.framing_target = target_viewport;
     state.framing_content = content_viewport;
     state.outline = composition_view.outline;
+    state.overlay = composition_view.overlay;
   }
   if (camera_changed
     && composition_view.view_state_handle
@@ -2620,6 +2621,7 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
         .framing_target = {},
         .framing_content = {},
         .outline = nullptr,
+        .overlay = nullptr,
         .pending_pick = nullptr,
       };
   return published_view_id;
@@ -2701,6 +2703,18 @@ auto Renderer::FindPublishedRuntimeViewOutline(
   for (const auto& [_, state] : published_runtime_views_by_intent_) {
     if (state.published_view_id == published_view_id) {
       return state.outline;
+    }
+  }
+  return nullptr;
+}
+
+auto Renderer::FindPublishedRuntimeViewOverlay(
+  const ViewId published_view_id) const -> std::shared_ptr<const ViewOverlay>
+{
+  std::shared_lock state_lock(view_state_mutex_);
+  for (const auto& [_, state] : published_runtime_views_by_intent_) {
+    if (state.published_view_id == published_view_id) {
+      return state.overlay;
     }
   }
   return nullptr;

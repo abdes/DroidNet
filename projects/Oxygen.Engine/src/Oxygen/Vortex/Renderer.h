@@ -46,6 +46,7 @@
 #include <Oxygen/Vortex/Types/ViewConstants.h>
 #include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewOutline.h>
+#include <Oxygen/Vortex/Types/ViewOverlay.h>
 #include <Oxygen/Vortex/Types/ViewPick.h>
 #include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 #include <Oxygen/Vortex/ViewExtension.h>
@@ -648,6 +649,9 @@ public:
   //! The outline a published view requested this frame, or null.
   [[nodiscard]] OXGN_VRTX_API auto FindPublishedRuntimeViewOutline(
     ViewId published_view_id) const -> std::shared_ptr<const ViewOutline>;
+  //! The editor overlay a published view requested this frame, or null.
+  [[nodiscard]] OXGN_VRTX_API auto FindPublishedRuntimeViewOverlay(
+    ViewId published_view_id) const -> std::shared_ptr<const ViewOverlay>;
   //! Takes the pick request waiting for a published view's render, if any.
   [[nodiscard]] OXGN_VRTX_API auto TakePublishedRuntimeViewPick(
     ViewId published_view_id) -> std::shared_ptr<ViewPickRequest>;
@@ -889,6 +893,7 @@ private:
     ViewPort framing_target {};
     ViewPort framing_content {};
     std::shared_ptr<const ViewOutline> outline;
+    std::shared_ptr<const ViewOverlay> overlay;
     //! Rectangle already in rendered-image pixels.
     std::shared_ptr<ViewPickRequest> pending_pick;
   };

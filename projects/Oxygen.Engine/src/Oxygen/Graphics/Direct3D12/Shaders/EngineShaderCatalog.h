@@ -529,6 +529,13 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
       EntryPoint { .type=kVertex, .name="VortexSelectionOutlineCompositeVS" } }
   },
   ShaderFileSpec {
+    .path="Vortex/Services/Editor/ViewOverlay.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kPixel, .name="VortexViewOverlayPS" },
+      EntryPoint { .type=kVertex, .name="VortexViewOverlayTriangleVS" },
+      EntryPoint { .type=kVertex, .name="VortexViewOverlayLineVS" } }
+  },
+  ShaderFileSpec {
     .path="Vortex/Services/Editor/ViewPick.hlsl",
     .entries=std::array {
       EntryPoint { .type=kPixel, .name="VortexViewPickPS" } },
@@ -601,12 +608,13 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - VortexPostProcessGroundGrid: 4 entries
 // - VortexSelectionOutline: 4 (mask PS x ALPHA_TEST, composite VS + PS)
 // - VortexViewPick: 2 (PS x ALPHA_TEST)
+// - VortexViewOverlay: 3 (PS, triangle VS, line VS)
 // - VortexPostProcessBloomDownsample: 1 entry
 // - VortexPostProcessBloomUpsample: 1 entry
 // - VortexPostProcessExposure: 3 entries
 // - LightCulling: 1
 // - ImGui: 2 entries
 // - Compositing: 2 entries
-// Total: 115
+// Total: 118
 
 } // namespace oxygen::graphics::d3d12

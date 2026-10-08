@@ -28,6 +28,7 @@
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Types/ViewOutline.h>
+#include <Oxygen/Vortex/Types/ViewOverlay.h>
 
 namespace oxygen::graphics {
 class CommandRecorder;
@@ -295,6 +296,9 @@ struct CompositionView {
 
   //! Scene nodes outlined in this view this frame; null outlines nothing.
   std::shared_ptr<const ViewOutline> outline;
+
+  //! Editor overlay geometry drawn in this view this frame; null draws none.
+  std::shared_ptr<const ViewOverlay> overlay;
 
   [[nodiscard]] auto GetShadingMode() const noexcept
     -> const std::optional<ShadingMode>&

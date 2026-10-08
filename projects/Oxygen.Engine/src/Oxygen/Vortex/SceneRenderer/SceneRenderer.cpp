@@ -99,6 +99,7 @@
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Passes/GroundGridPass.h>
 #include <Oxygen/Vortex/Passes/SelectionOutlinePass.h>
+#include <Oxygen/Vortex/Passes/ViewOverlayPass.h>
 #include <Oxygen/Vortex/Passes/ViewPickPass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
@@ -1398,6 +1399,7 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   if (renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
     ground_grid_pass_ = std::make_unique<GroundGridPass>(renderer_);
     selection_outline_pass_ = std::make_unique<SelectionOutlinePass>(renderer_);
+    view_overlay_pass_ = std::make_unique<ViewOverlayPass>(renderer_);
     view_pick_pass_ = std::make_unique<ViewPickPass>(renderer_);
   }
 }
@@ -2977,7 +2979,8 @@ auto SceneRenderer::RenderCurrentView(
   }
 
   // Stage 20: Editor aids, display-referred over the post-processed output in
-  // every view mode: the selection outline, then any pending pick.
+  // every view mode: the selection outline, the editor overlay, then any
+  // pending pick.
   if (selection_outline_pass_ != nullptr && wants_scene_lighting) {
     if (const auto outline
       = renderer_.FindPublishedRuntimeViewOutline(ctx.current_view.view_id);
@@ -3005,6 +3008,38 @@ auto SceneRenderer::RenderCurrentView(
           .kind = DiagnosticsPassKind::kGraphics,
           .executed = outlined_draws > 0U,
           .inputs = { "Vortex.PreparedSceneFrame", "Vortex.SceneDepth" },
+          .outputs = { "Vortex.ViewOutput" },
+          .missing_inputs = {},
+          .gpu_duration_ms = {},
+        });
+    }
+  }
+  if (view_overlay_pass_ != nullptr && wants_scene_lighting) {
+    if (const auto overlay
+      = renderer_.FindPublishedRuntimeViewOverlay(ctx.current_view.view_id);
+      overlay != nullptr && !overlay->IsEmpty()) {
+      auto inputs = ViewOverlayPass::Inputs {
+        .target = ResolveViewOutputTarget(ctx),
+        .scene_depth = {},
+        .scene_depth_srv = kInvalidShaderVisibleIndex,
+      };
+      // Wireframe views have no complete depth: nothing counts as hidden.
+      if (!wireframe_only) {
+        auto* depth = scene_textures.GetSceneDepthResource().get();
+        inputs.scene_depth = observer_ptr<const graphics::Texture> { depth };
+        inputs.scene_depth_srv
+          = ShaderVisibleIndex { RegisterSceneTextureView(*depth,
+            MakeSrvDesc(
+              *depth, ResolveDepthSrvFormat(depth->GetDescriptor().format))) };
+      }
+      const auto overlay_draws
+        = view_overlay_pass_->Record(ctx, recorder, *overlay, inputs);
+      RecordDiagnosticsPass(renderer_,
+        DiagnosticsPassRecord {
+          .name = "Vortex.Stage20.ViewOverlay",
+          .kind = DiagnosticsPassKind::kGraphics,
+          .executed = overlay_draws > 0U,
+          .inputs = { "Vortex.SceneDepth" },
           .outputs = { "Vortex.ViewOutput" },
           .missing_inputs = {},
           .gpu_duration_ms = {},
