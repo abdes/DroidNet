@@ -707,17 +707,33 @@ namespace oxygen::interop::module {
     }
 
     auto& renderer = renderer_opt->get();
-    for (auto* view : view_manager_->GetAllRegisteredViews()) {
-      if (view == nullptr || !view->IsVisible()
-        || view->GetViewId() == kInvalidViewId) {
+
+    // A publication lasts until it is removed, but its resolved camera only
+    // lasts one frame. A view not republished this frame is withdrawn, or the
+    // renderer would prepare it without a camera and fail the frame's views.
+    const auto withdraw = [&](const EditorView& view, std::string_view reason) {
+      if (renderer.ResolvePublishedRuntimeViewId(view.GetViewId())
+        == kInvalidViewId) {
+        return;
+      }
+      LOG_F(INFO, "OnPublishViews: view '{}' withdrawn: {}", view.GetName(),
+        reason);
+      RemovePublishedRuntimeViewForIntent(view.GetViewId(), context.get());
+    };
+
+    for (auto* view : view_manager_->GetAllViews()) {
+      if (view == nullptr || view->GetViewId() == kInvalidViewId) {
+        continue;
+      }
+      if (!view->IsVisible()) {
+        withdraw(*view, "hidden");
         continue;
       }
 
       const auto& config = view->GetConfig();
       if (!config.compositing_target.has_value()
         || !registry_->FindSurface(*config.compositing_target)) {
-        DLOG_F(2, "OnPublishViews: view '{}' has no registered surface",
-          view->GetName());
+        withdraw(*view, "no registered surface");
         continue;
       }
 
@@ -725,6 +741,7 @@ namespace oxygen::interop::module {
       const auto width = view->GetWidth();
       const auto height = view->GetHeight();
       if (width <= 0.0F || height <= 0.0F) {
+        withdraw(*view, "no extent");
         continue;
       }
 
@@ -732,11 +749,7 @@ namespace oxygen::interop::module {
       const auto scene_fb = view->GetFramebuffer();
       const auto camera_node = view->GetRenderCameraNode();
       if (!scene_fb || !camera_node.IsAlive()) {
-        DLOG_F(2,
-          "OnPublishViews: view '{}' is not ready (framebuffer={}, extent={}x{}, "
-          "camera={})",
-          view->GetName(), scene_fb != nullptr, width, height,
-          camera_node.IsAlive());
+        withdraw(*view, scene_fb ? "no camera" : "no render target");
         continue;
       }
 
@@ -773,6 +786,10 @@ namespace oxygen::interop::module {
           .composite_source = observer_ptr { scene_fb.get() },
         },
         vortex::ShadingMode::kDeferred);
+      if (published_view_id == kInvalidViewId) {
+        withdraw(*view, "publication rejected");
+        continue;
+      }
       DLOG_F(2, "OnPublishViews: view '{}' intent={} published={} extent={}x{}",
         view->GetName(), view->GetViewId().get(), published_view_id.get(),
         width, height);
