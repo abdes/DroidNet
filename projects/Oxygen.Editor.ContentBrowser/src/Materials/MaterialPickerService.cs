@@ -4,11 +4,9 @@
 
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
-using System.Security.Cryptography;
 using CommunityToolkit.Mvvm.Messaging;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Messages;
-using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 
@@ -175,31 +173,6 @@ public sealed partial class MaterialPickerService : IMaterialPickerService, IDis
     private static bool UriValuesEqual(Uri left, Uri right)
         => string.Equals(left.ToString(), right.ToString(), StringComparison.OrdinalIgnoreCase);
 
-    private static MaterialPreviewColor? TryReadBaseColorPreview(string? descriptorPath, string? expectedHash = null)
-    {
-        if (descriptorPath is null || !File.Exists(descriptorPath))
-        {
-            return null;
-        }
-
-        try
-        {
-            var bytes = File.ReadAllBytes(descriptorPath);
-            if (expectedHash is not null && !string.Equals(Convert.ToHexString(SHA256.HashData(bytes)), expectedHash, StringComparison.Ordinal))
-            {
-                return null;
-            }
-
-            var source = MaterialSourceReader.Read(bytes);
-            var pbr = source.PbrMetallicRoughness;
-            return new MaterialPreviewColor(pbr.BaseColorR, pbr.BaseColorG, pbr.BaseColorB, pbr.BaseColorA);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or FormatException or System.Text.Json.JsonException)
-        {
-            return null;
-        }
-    }
-
     private MaterialPickerResult? CreateResult(ContentBrowserAssetItem item)
         => item.Kind != AssetKind.Material ? null : new MaterialPickerResult(
             item.IdentityUri,
@@ -221,7 +194,7 @@ public sealed partial class MaterialPickerService : IMaterialPickerService, IDis
 
         if (item.DescriptorPath is not { } path || item.CookStatus?.SavedSourceHash is not { } hash)
         {
-            return TryReadBaseColorPreview(item.DescriptorPath);
+            return MaterialPreviewReader.TryRead(item.DescriptorPath);
         }
 
         lock (this.previewSync)
@@ -231,7 +204,7 @@ public sealed partial class MaterialPickerService : IMaterialPickerService, IDis
                 return cached.Color;
             }
 
-            var preview = TryReadBaseColorPreview(path, hash);
+            var preview = MaterialPreviewReader.TryRead(path, hash);
             this.previews[path] = new(hash, preview);
             return preview;
         }

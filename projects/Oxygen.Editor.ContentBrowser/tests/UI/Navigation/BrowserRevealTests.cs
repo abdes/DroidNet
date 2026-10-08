@@ -7,6 +7,7 @@ using CommunityToolkit.WinUI;
 using DroidNet.Aura.Dialogs;
 using DroidNet.Controls;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
@@ -50,10 +51,18 @@ public sealed partial class BrowserRevealTests : DroidNet.Tests.VisualUserInterf
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public Task CookedMountMenuImmediatelyShowsAndSelectsTheFolder(bool persisted) => EnqueueAsync(async () =>
+    public Task CookedMountDialogImmediatelyShowsAndSelectsTheFolder(bool persisted) => EnqueueAsync(async () =>
     {
         using var fixture = new BrowserRevealFixture(persisted);
         await fixture.OpenAsync().ConfigureAwait(true);
+        _ = fixture.Dialogs.Setup(value => value.ShowAsync(It.IsAny<DialogSpec>(), It.IsAny<CancellationToken>()))
+            .Returns((DialogSpec spec, CancellationToken _) =>
+            {
+                var mounts = ((ContentMountsView)spec.Content!).ViewModel!;
+                mounts.SelectedKind = "Cooked";
+                mounts.AddMountCommand.Execute(parameter: null);
+                return Task.FromResult(DialogButton.Primary);
+            });
         _ = fixture.Browser.LeftPaneViewModel.Should().BeOfType<ProjectLayoutViewModel>();
         var view = new ProjectLayoutView
         {
@@ -69,24 +78,21 @@ public sealed partial class BrowserRevealTests : DroidNet.Tests.VisualUserInterf
         root.Children.Add(view);
         await LoadTestContentAsync(root).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
-        var toolbar = view.FindDescendant<ToolBar>()!;
-        _ = toolbar.Should().NotBeNull("the view must realize its toolbar");
-        var mount = toolbar.SecondaryItems.OfType<ToolBarButton>().Single(button => string.Equals(button.Label, "Mount", StringComparison.Ordinal));
-        var menu = (MenuFlyout)mount.Flyout;
-        menu.ShowAt(view);
+        var mountsButton = view.FindDescendant<Button>(button => string.Equals(AutomationProperties.GetName(button), "Mounts", StringComparison.Ordinal))!;
+        _ = mountsButton.Should().NotBeNull("the sources footer must offer Mounts");
+        _ = view.FindDescendant<Button>(button => string.Equals(AutomationProperties.GetName(button), "Content priority", StringComparison.Ordinal)).Should().NotBeNull();
+        ((IInvokeProvider)new ButtonAutomationPeer(mountsButton).GetPattern(PatternInterface.Invoke)).Invoke();
         await WaitForRenderAsync().ConfigureAwait(true);
-        var cooked = menu.Items.OfType<MenuFlyoutItem>().Single(item => string.Equals(item.Text, "Cooked", StringComparison.Ordinal));
-        _ = cooked.Command.Should().NotBeNull("the Cooked menu must bind its command");
-        _ = cooked.CommandParameter.Should().Be(KnownVirtualFolderMount.Cooked);
-        var peer = new MenuFlyoutItemAutomationPeer(cooked);
-        ((IInvokeProvider)peer.GetPattern(PatternInterface.Invoke)).Invoke();
-        await WaitForRenderAsync().ConfigureAwait(true);
-        _ = fixture.Explorer.MountKnownLocationCommand.ExecutionTask.Should().NotBeNull("invoking Cooked must execute its command");
-        await fixture.Explorer.MountKnownLocationCommand.ExecutionTask!.ConfigureAwait(true);
+        _ = fixture.Explorer.ManageMountsCommand.ExecutionTask.Should().NotBeNull("Mounts must open the Content mounts dialog");
+        await fixture.Explorer.ManageMountsCommand.ExecutionTask!.ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = fixture.Explorer.ShownItems.Should().Contain(item => item is VirtualFolderMountTreeItemAdapter && item.Label == "Cooked");
-        _ = fixture.Explorer.SelectedItem.Should().NotBeNull("the mounted folder must become the tree selection");
-        _ = fixture.Explorer.SelectedItem!.Label.Should().Be("Cooked");
+        if (!persisted)
+        {
+            // A newly added mount becomes the location.
+            _ = fixture.Explorer.SelectedItem.Should().NotBeNull("the mounted folder must become the tree selection");
+            _ = fixture.Explorer.SelectedItem!.Label.Should().Be("Cooked");
+        }
         _ = fixture.Projects.ActiveProject!.AuthoringMounts.Should().ContainSingle(mount => mount.RelativePath == ".cooked");
         _ = fixture.MountChanges.Should().Be(persisted ? 0 : 1);
     });

@@ -227,6 +227,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         this.messenger = childContainer.Resolve<IMessenger>();
         this.messenger.Register<ShowAssetRequestMessage>(this, (_, message) => message.Reply(this.ShowInspectionAssetAsync(message)));
         this.messenger.Register<ChangeContentMountsRequestMessage>(this, (_, message) => message.Reply(this.ChangeContentMountsAsync(message)));
+        this.messenger.Register<ShowCookingJobsRequestMessage>(this, (_, _) => this.OnCookingRevealRequested(this, EventArgs.Empty));
 
         // DocumentHostViewModel must be registered and resolved first to ensure it subscribes to
         // IDocumentService events before DocumentManager starts handling open requests.

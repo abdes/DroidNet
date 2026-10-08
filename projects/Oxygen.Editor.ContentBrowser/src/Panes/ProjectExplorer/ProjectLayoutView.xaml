@@ -12,29 +12,28 @@
 
     <UserControl.Resources>
         <ResourceDictionary>
-            <!--  Theme-aware brush for folder assets/icons  -->
+            <!--  Folders are a muted gold; mounted sources use the accent colour and a link badge.  -->
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Default">
-                    <SolidColorBrush x:Key="FolderAssetBrush" Color="#FFE6B800" />
+                    <SolidColorBrush x:Key="FolderAssetBrush" Color="#FFC7B881" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="FolderAssetBrush" Color="#FFE6B800" />
+                    <SolidColorBrush x:Key="FolderAssetBrush" Color="#FF8C7633" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="FolderAssetBrush" Color="#FFE6B800" />
+                    <SolidColorBrush x:Key="FolderAssetBrush" Color="#FFC7B881" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
-                    <SolidColorBrush x:Key="FolderAssetBrush" Color="{ThemeResource SystemAccentColor}" />
+                    <SolidColorBrush x:Key="FolderAssetBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
-            <!--  Templates and template selector for Folder  -->
             <DataTemplate x:Key="FolderThumbnailTemplate">
                 <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="{Binding IconGlyph, Mode=OneWay}" />
             </DataTemplate>
 
             <DataTemplate x:Key="ProjectRootThumbnailTemplate">
-                <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="{Binding IconGlyph, Mode=OneWay}" />
+                <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="&#xE838;" />
             </DataTemplate>
 
             <DataTemplate x:Key="AuthoringMountThumbnailTemplate">
@@ -42,7 +41,21 @@
             </DataTemplate>
 
             <DataTemplate x:Key="VirtualFolderMountThumbnailTemplate">
-                <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="{Binding IconGlyph, Mode=OneWay}" />
+                <Grid>
+                    <FontIcon Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Glyph="{Binding IconGlyph, Mode=OneWay}" />
+                    <Border
+                        Margin="0,0,-4,-3"
+                        Padding="1"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                        CornerRadius="2">
+                        <FontIcon
+                            FontSize="8"
+                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                            Glyph="&#xE71B;" />
+                    </Border>
+                </Grid>
             </DataTemplate>
 
             <local:ThumbnailTemplateSelector
@@ -52,6 +65,17 @@
                 FolderTemplate="{StaticResource FolderThumbnailTemplate}"
                 ProjectRootTemplate="{StaticResource ProjectRootThumbnailTemplate}"
                 VirtualFolderMountTemplate="{StaticResource VirtualFolderMountThumbnailTemplate}" />
+
+            <!--  Mounted sources are read-only; the lock says so on the mount row.  -->
+            <DataTemplate x:Key="ReadOnlyBadgeTemplate">
+                <FontIcon
+                    AutomationProperties.Name="Read-only"
+                    FontSize="10"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Glyph="&#xE72E;"
+                    ToolTipService.ToolTip="Read-only: mounted and derived content cannot be edited here." />
+            </DataTemplate>
+            <local:ReadOnlyBadgeTemplateSelector x:Key="ReadOnlyBadgeTemplateSelector" ReadOnlyTemplate="{StaticResource ReadOnlyBadgeTemplate}" />
             <!--  ~+~  -->
 
         </ResourceDictionary>
@@ -69,90 +93,57 @@
                 Grid.Row="0"
                 IsEnabled="{x:Bind ViewModel.CanChangeMounts, Mode=OneWay}"
                 ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
+                TrailingContentTemplateSelector="{StaticResource ReadOnlyBadgeTemplateSelector}"
+                TrailingContentWidth="40"
                 ViewModel="{x:Bind ViewModel}" />
 
-            <dnc:ToolBar
+            <!--  Mount management opens the Content mounts dialog; priority orders cooked sources.  -->
+            <Grid
                 Grid.Row="1"
-                DefaultLabelPosition="Right"
-                IsCompact="True"
-                IsEnabled="{x:Bind ViewModel.CanChangeMounts, Mode=OneWay}"
-                OverflowButtonVisibility="Collapsed">
-                <dnc:ToolBar.PrimaryItems>
-                    <dnc:ToolBarElementHost>
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <ProgressRing
-                                Width="16"
-                                Height="16"
-                                IsActive="{x:Bind ViewModel.IsApplyingMounts, Mode=OneWay}"
-                                Visibility="{x:Bind ViewModel.MountProgressVisibility, Mode=OneWay}" />
-                            <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.MountStatusText, Mode=OneWay}" />
-                        </StackPanel>
-                    </dnc:ToolBarElementHost>
-                </dnc:ToolBar.PrimaryItems>
-
-                <dnc:ToolBar.SecondaryItems>
-                    <dnc:ToolBarButton
-                        Label="Mount"
-                        ToolBarLabelPosition="Collapsed"
-                        ToolTipService.ToolTip="Add content folder">
-                        <dnc:ToolBarButton.Icon>
-                            <FontIconSource FontFamily="Segoe MDL2 Assets" Glyph="&#xE8CE;" />
-                        </dnc:ToolBarButton.Icon>
-                        <dnc:ToolBarButton.Flyout>
-                            <MenuFlyout>
-                                <MenuFlyoutItem
-                                    Command="{x:Bind ViewModel.MountKnownLocationCommand}"
-                                    CommandParameter="{x:Bind local:KnownVirtualFolderMount.Cooked}"
-                                    Text="Cooked" />
-                                <MenuFlyoutItem
-                                    Command="{x:Bind ViewModel.MountKnownLocationCommand}"
-                                    CommandParameter="{x:Bind local:KnownVirtualFolderMount.Imported}"
-                                    Text="Imported" />
-                                <MenuFlyoutItem
-                                    Command="{x:Bind ViewModel.MountKnownLocationCommand}"
-                                    CommandParameter="{x:Bind local:KnownVirtualFolderMount.Build}"
-                                    Text="Build" />
-                                <MenuFlyoutSeparator />
-                                <MenuFlyoutItem Command="{x:Bind ViewModel.MountLocalFolderCommand}" Text="Local Folder" />
-                            </MenuFlyout>
-                        </dnc:ToolBarButton.Flyout>
-                    </dnc:ToolBarButton>
-
-                    <dnc:ToolBarButton
-                        Command="{x:Bind ViewModel.UnmountSelectedItemCommand}"
-                        IsEnabled="{x:Bind ViewModel.CanUnmountSelectedItem, Mode=OneWay}"
-                        Label="Unmount"
-                        ToolBarLabelPosition="Collapsed">
-                        <dnc:ToolBarButton.Icon>
-                            <FontIconSource FontFamily="Segoe MDL2 Assets" Glyph="&#xE8CD;" />
-                        </dnc:ToolBarButton.Icon>
-                    </dnc:ToolBarButton>
-
-                    <dnc:ToolBarSeparator />
-
-                    <dnc:ToolBarButton
-                        Command="{x:Bind ViewModel.RenameSelectedItemCommand}"
-                        IsEnabled="{x:Bind ViewModel.CanRenameSelectedItem, Mode=OneWay}"
-                        Label="Rename"
-                        ToolBarLabelPosition="Collapsed">
-                        <dnc:ToolBarButton.Icon>
-                            <FontIconSource FontFamily="Segoe MDL2 Assets" Glyph="&#xE8AC;" />
-                        </dnc:ToolBarButton.Icon>
-                    </dnc:ToolBarButton>
-
-                    <dnc:ToolBarSeparator />
-
-                    <dnc:ToolBarButton
-                        Command="{x:Bind ViewModel.ContentPriorityCommand}"
-                        Label="Content priority"
-                        ToolBarLabelPosition="Collapsed"
-                        ToolTipService.ToolTip="Content priority">
-                        <dnc:ToolBarButton.Icon>
-                            <FontIconSource FontFamily="Segoe MDL2 Assets" Glyph="&#xE8CB;" />
-                        </dnc:ToolBarButton.Icon>
-                    </dnc:ToolBarButton>
-                </dnc:ToolBar.SecondaryItems>
-            </dnc:ToolBar>
+                Padding="6,4"
+                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                BorderThickness="0,1,0,0"
+                ColumnSpacing="3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Button
+                    Padding="8,4"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Left"
+                    AutomationProperties.Name="Mounts"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Command="{x:Bind ViewModel.ManageMountsCommand}"
+                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                    ToolTipService.ToolTip="Add, rename or unmount content sources">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="15" Glyph="&#xE8F4;" />
+                        <TextBlock Text="Mounts" />
+                    </StackPanel>
+                </Button>
+                <ProgressRing
+                    Grid.Column="1"
+                    Width="16"
+                    Height="16"
+                    IsActive="{x:Bind ViewModel.IsApplyingMounts, Mode=OneWay}"
+                    ToolTipService.ToolTip="Updating content mounts"
+                    Visibility="{x:Bind ViewModel.MountProgressVisibility, Mode=OneWay}" />
+                <Button
+                    Grid.Column="2"
+                    Width="30"
+                    Height="30"
+                    Padding="0"
+                    AutomationProperties.Name="Content priority"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Command="{x:Bind ViewModel.ContentPriorityCommand}"
+                    ToolTipService.ToolTip="Content priority">
+                    <FontIcon FontSize="15" Glyph="&#xE9E9;" />
+                </Button>
+            </Grid>
         </Grid>
     </Border>
 </UserControl>

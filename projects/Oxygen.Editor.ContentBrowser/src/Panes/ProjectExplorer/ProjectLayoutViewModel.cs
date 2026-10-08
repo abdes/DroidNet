@@ -58,8 +58,6 @@ public partial class ProjectLayoutViewModel(
     private bool isSubscribed;
 
     private ITreeItem? selectedItem;
-    private bool canUnmountSelectedItem;
-    private bool canRenameSelectedItem;
     private bool hasUnsavedChanges;
 
     /// <summary>
@@ -92,36 +90,6 @@ public partial class ProjectLayoutViewModel(
         }
     }
 
-    /// <summary>
-    ///     Gets a value indicating whether the current selection can be unmounted.
-    /// </summary>
-    public bool CanUnmountSelectedItem
-    {
-        get => !this.IsApplyingMounts && this.canUnmountSelectedItem;
-        private set
-        {
-            if (this.SetProperty(ref this.canUnmountSelectedItem, value))
-            {
-                this.UnmountSelectedItemCommand.NotifyCanExecuteChanged();
-            }
-        }
-    }
-
-    /// <summary>
-    ///     Gets a value indicating whether the current selection can be renamed.
-    /// </summary>
-    public bool CanRenameSelectedItem
-    {
-        get => !this.IsApplyingMounts && this.canRenameSelectedItem;
-        private set
-        {
-            if (this.SetProperty(ref this.canRenameSelectedItem, value))
-            {
-                this.RenameSelectedItemCommand.NotifyCanExecuteChanged();
-            }
-        }
-    }
-
     /// <inheritdoc />
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI operation boundary reports failures while keeping the browser and other mounted content usable.")]
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
@@ -139,6 +107,7 @@ public partial class ProjectLayoutViewModel(
             // Subscribe to navigation requests
             this.messenger.Register<NavigateToFolderRequestMessage>(this, (_, message) => _ = HandleNavigateRequestAsync(message));
             this.messenger.Register<AssetsChangedMessage>(this, (_, _) => _ = this.RefreshPublishedFoldersAsync());
+            this.messenger.Register<CreateFolderRequestMessage>(this, (_, message) => _ = this.CreateFolderAsync(message));
 
             this.isSubscribed = true;
         }
@@ -363,44 +332,6 @@ public partial class ProjectLayoutViewModel(
         await this.ApplyMountCandidateAsync(expected, candidate).ConfigureAwait(true);
     }
 
-    [RelayCommand(CanExecute = nameof(CanUnmountSelectedItem))]
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI operation boundary reports failures while keeping the browser and other mounted content usable.")]
-    private async Task UnmountSelectedItemAsync()
-    {
-        if (projectContextService.ActiveProject is not { } expected || this.GetActiveProjectInfo() is not { } candidate)
-        {
-            return;
-        }
-
-        var name = this.SelectedItem switch
-        {
-            VirtualFolderMountTreeItemAdapter mount => mount.MountPointName,
-            AuthoringMountPointTreeItemAdapter mount => mount.MountPoint.Name,
-            _ => null,
-        };
-        if (name is null)
-        {
-            return;
-        }
-
-        candidate.AuthoringMounts = candidate.AuthoringMounts.Where(mount => !string.Equals(mount.Name, name, StringComparison.Ordinal)).ToList();
-        candidate.LocalFolderMounts = candidate.LocalFolderMounts.Where(mount => !string.Equals(mount.Name, name, StringComparison.Ordinal)).ToList();
-        candidate.CookedContentOrder = candidate.CookedContentOrder.Where(source => source.Kind != CookedContentSourceKind.LocalFolder || !string.Equals(source.Name, name, StringComparison.Ordinal)).ToList();
-        await this.ApplyMountCandidateAsync(expected, candidate).ConfigureAwait(true);
-    }
-
-    [RelayCommand(CanExecute = nameof(CanRenameSelectedItem))]
-    private void RenameSelectedItem()
-    {
-        if (this.SelectedItem is null)
-        {
-            return;
-        }
-
-        // Rename is performed via the DynamicTree in-place rename UI.
-        this.RenameRequested?.Invoke(this, new(this.SelectedItem));
-    }
-
     private void RestoreState()
     {
         Debug.Assert(this.activeRoute is not null, "should have an active route");
@@ -577,21 +508,12 @@ public partial class ProjectLayoutViewModel(
         if (this.SelectionModel is not MultipleSelectionModel<ITreeItem> multipleSelection)
         {
             this.SelectedItem = null;
-            this.CanUnmountSelectedItem = false;
-            this.CanRenameSelectedItem = false;
             return;
         }
 
         this.SelectedItem = multipleSelection.SelectedIndices.Count == 1
             ? this.GetShownItemAt(multipleSelection.SelectedIndices[0])
             : null;
-
-        this.CanUnmountSelectedItem = this.SelectedItem is VirtualFolderMountTreeItemAdapter or AuthoringMountPointTreeItemAdapter;
-
-        this.CanRenameSelectedItem = this.SelectedItem is FolderTreeItemAdapter
-            or ProjectRootTreeItemAdapter
-            or AuthoringMountPointTreeItemAdapter
-            or VirtualFolderMountTreeItemAdapter;
     }
 
     private async Task<ITreeItem?> FindAdapterByVirtualPathAsync(string virtualPath)

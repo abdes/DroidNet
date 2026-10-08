@@ -1,9 +1,9 @@
 # ED-M08 — Runtime parity and editor authoring workspace
 
-Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2 and M08.3–M08.6
-validated; rescoped on 2026-10-08; M08.7 is next**
+Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2 and M08.3–M08.7
+validated; rescoped on 2026-10-08; M08.8 is next**
 
-Current: **M08.7 Content Browser redesign and working commands**. The
+Current: **M08.8 Asset relocation and references**. The
 [rescope](#retired-by-the-rescope) retires the development-only parity harness
 (former M08.3 and M08.5–M08.8) and the former M08.4 audit, and replaces them
 with what the editor still lacks as an authoring tool: viewport picking,
@@ -887,10 +887,9 @@ triad clicks select the correct view; no helper reaches Save or Cook.
 
 ### M08.7 — Content Browser redesign and working commands
 
-Today tiles show a type glyph and allow only single selection; details are a
-hover tooltip; New Folder, Cut, Copy, Paste, Rename and Delete are buttons
-without behavior; there is no sort. M08.7 rebuilds the presentation around
-the existing query, navigation and mount semantics.
+M08.7 rebuilds the presentation around the existing query, navigation and
+mount semantics. The docked browser keeps its place; an expanded mode for
+library work waits for dock improvements.
 
 1. **Layout.** A navigation row (Back, Forward, Up, Refresh, breadcrumb,
    search, Filter ▾ with an active-count badge, Tiles/List/Details switch,
@@ -899,25 +898,34 @@ the existing query, navigation and mount semantics.
    (Cooked, Imported, local folders) as expandable subtrees carrying
    read-only badges, and Mounts and Content priority at the bottom. Centre:
    results. Right (optional): a docked details pane replacing the tooltip,
-   with preview, name, type, status, location, source file, size, modified
-   time, identity, Locate source and Copy path; multi-selection shows type and
-   status counts and the selected list. Footer: "N of M assets · K selected".
+   with preview, name, type, status, logical path, file, size, modified time,
+   identity, Locate and Copy path; multi-selection shows type and status
+   counts and the selected list. Footer: "N of M assets · K selected" and
+   whether the location is an authoring or a read-only source.
 2. **Views and selection.** Tiles (preview, name, type, status dot and
    label), List and Details (sortable name/type/status/location/size/modified
-   columns); thumbnail-size slider; Sort by name, type, status or modified
-   time. Ctrl/Shift multi-selection in every view, kept across view switches.
-   Enter opens; Delete deletes.
+   columns); tile-size slider in Tiles; Sort by any of those fields, ascending
+   or descending. Ctrl/Shift multi-selection in every view, kept across view
+   switches and re-sorts. Enter and double-click open. Previews are the
+   material base colour or the type glyph; rendered previews are M08.9.
 3. **Commands.** New ▾ (Folder, Scene, Material); Import ▾ (Source model,
-   Texture or image, Reimport, Show import source); Cook ▾ grouped as Build
-   scope (Cook selected, current folder, project), Published output (Inspect,
-   Validate) and Cooking service (Pause automatic cooking, Show cooking jobs);
-   and an asset-actions ⋯ menu (Open, Rename, Duplicate, Cut, Copy, Paste,
-   Delete, Copy path, Show in File Explorer). Item context menus mirror
-   these. Disabled entries give their reason.
-4. **Commands that need no references.** New Folder with in-place naming,
-   Copy path and Show in File Explorer work in this slice. Rename, Cut, Copy,
-   Paste, Duplicate and Delete are present and disabled with "Available in
-   M08.8" until their transaction lands; no button is ever inert.
+   Texture or image, Reimport, Show import source); Cook ▾ grouped as build
+   scope (Cook selected, current folder, project), published output (Inspect,
+   Validate) and the cooking service (Pause automatic cooking, Show cooking
+   jobs). The asset commands are toolbar icons rather than a hand-made ⋯
+   menu: Rename, Cut, Copy, Paste, Duplicate and Delete in Scene Explorer's
+   order, then Copy path and Show in File Explorer. The DroidNet toolbar's
+   overflow priorities decide what folds into its own ⋯ when the pane is
+   narrow: path commands first, then asset commands, then Cook; New and
+   Import stay longest. Open stays on Enter, double-click and the item
+   context menu, which mirrors the toolbar. Unavailable entries stay visible,
+   disabled, and explain why.
+4. **Commands that need no references.** New Folder (named in place in the
+   sources tree), Copy path and Show in File Explorer work in this slice; a
+   folder can be renamed only while it holds no files. Rename, Cut, Copy,
+   Paste, Duplicate and Delete are present and disabled, explaining that the
+   scenes and materials that use an asset must be updated with it, until the
+   M08.8 transaction lands; no button is ever inert.
 5. **Empty states.** An empty folder and a no-match result each give one next
    action (Clear search and filters).
 

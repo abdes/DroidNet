@@ -51,10 +51,16 @@ public static class AssetStatusPresentation
     /// <param name="runtimeAvailability">Acknowledged native availability for this identity.</param>
     /// <returns>The neutral, caution, critical or success visual state.</returns>
     public static string GetTone(AssetCookStatus? status, AssetCookActivity? activity, bool hasUnsavedChanges = false, AssetRuntimeAvailability runtimeAvailability = AssetRuntimeAvailability.Unknown)
-        => GetText(status, activity, hasUnsavedChanges, runtimeAvailability) switch
+        => GetToneForText(GetText(status, activity, hasUnsavedChanges, runtimeAvailability));
+
+    /// <summary>Gets the semantic visual state for any displayed status, including browser badges.</summary>
+    /// <param name="text">The displayed status.</param>
+    /// <returns>The neutral, caution, critical or success visual state.</returns>
+    public static string GetToneForText(string? text)
+        => text switch
         {
-            "Unsaved changes" or "Needs save" or "Out of date" or "Status unavailable" => "Caution",
-            "Cook failed" or "Source missing" or "Invalid source" or "Preview issue" => "Critical",
+            "Unsaved changes" or "Needs save" or "Out of date" or "Status unavailable" or "Overridden" or "Preview unavailable" or "STALE" => "Caution",
+            "Cook failed" or "Source missing" or "Invalid source" or "Preview issue" or "ERR" or "MISS" => "Critical",
             "Cooked" or "Ready" => "Success",
             _ => "Neutral",
         };

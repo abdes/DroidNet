@@ -4,6 +4,7 @@
 
 using System.ComponentModel;
 using DroidNet.Storage;
+using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.Projects;
 
@@ -30,13 +31,28 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
     /// <summary>Gets the search and filter state shared by this browser's layouts.</summary>
     public AssetBrowserQuery Query { get; init; } = new();
 
+    /// <summary>Gets the result order, tile size, view and details-pane state shared by this browser's layouts.</summary>
+    public AssetBrowserPresentation Presentation { get; init; } = new();
+
     /// <summary>
     /// Gets the project root path.
     /// </summary>
     public string ProjectRootPath => projectContextService.ActiveProject?.ProjectRoot ?? string.Empty;
 
-    /// <summary>Gets or sets the selected identity retained when switching asset layouts.</summary>
+    /// <summary>Gets the selected assets of the active layout, in selection order; the last is the active asset.</summary>
+    public IReadOnlyList<ContentBrowserAssetItem> SelectedAssets { get; private set; } = [];
+
+    /// <summary>Gets the number of results the active layout shows after search and filters.</summary>
+    public int ResultCount { get; private set; }
+
+    /// <summary>Gets the number of assets in the current folders before search and filters.</summary>
+    public int ScopeCount { get; private set; }
+
+    /// <summary>Gets or sets the active identity retained when switching asset layouts.</summary>
     internal Uri? SelectedAssetUri { get; set; }
+
+    /// <summary>Gets or sets every selected identity retained when switching asset layouts.</summary>
+    internal IReadOnlyList<Uri> SelectedAssetUris { get; set; } = [];
 
     /// <summary>Gets or sets the layout allowed to change the shared asset selection.</summary>
     internal AssetsLayoutViewModel? ActiveAssetLayout { get; set; }
@@ -123,6 +139,34 @@ public sealed partial class ContentBrowserState(IProjectContextService projectCo
     {
         var pathRelativeToProjectRoot = folder.GetPathRelativeTo(this.ProjectRootPath);
         return this.SelectedFolders.Contains(pathRelativeToProjectRoot);
+    }
+
+    /// <summary>Publishes the active layout's selection to the details pane and commands.</summary>
+    /// <param name="assets">The selected assets; the last is the active asset.</param>
+    internal void PublishSelection(IReadOnlyList<ContentBrowserAssetItem> assets)
+    {
+        if (this.SelectedAssets.SequenceEqual(assets))
+        {
+            return;
+        }
+
+        this.SelectedAssets = assets;
+        this.OnPropertyChanged(nameof(this.SelectedAssets));
+    }
+
+    /// <summary>Publishes the active layout's result counts to the footer.</summary>
+    /// <param name="resultCount">The results shown after search and filters.</param>
+    /// <param name="scopeCount">The assets in the current folders.</param>
+    internal void PublishCounts(int resultCount, int scopeCount)
+    {
+        if (this.ResultCount == resultCount && this.ScopeCount == scopeCount)
+        {
+            return;
+        }
+
+        this.ResultCount = resultCount;
+        this.ScopeCount = scopeCount;
+        this.OnPropertyChanged(nameof(this.ResultCount));
     }
 
     private void OnPropertyChanged(string propertyName)

@@ -1,0 +1,260 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts.DetailsLayoutView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:browser="using:Oxygen.Editor.ContentBrowser"
+    xmlns:identity="using:Oxygen.Editor.ContentBrowser.AssetIdentity"
+    xmlns:layouts="using:Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts"
+    xmlns:localcvt="using:Oxygen.Editor.ContentBrowser.Panes.Assets.Converters">
+
+    <UserControl.Resources>
+        <localcvt:AssetTypeToIconConverter x:Key="AssetTypeToIconConverter" />
+        <localcvt:AssetTypeToBrushConverter x:Key="AssetTypeToBrushConverter" />
+        <localcvt:StatusToneToBrushConverter x:Key="StatusToneToBrushConverter" />
+        <localcvt:MaterialPreviewColorToBrushConverter x:Key="MaterialPreviewColorToBrushConverter" />
+
+        <!--  Column widths shared by the header and every row.  -->
+        <GridLength x:Key="TypeColumnWidth">120</GridLength>
+        <GridLength x:Key="StatusColumnWidth">140</GridLength>
+        <GridLength x:Key="LocationColumnWidth">200</GridLength>
+        <GridLength x:Key="SizeColumnWidth">80</GridLength>
+        <GridLength x:Key="ModifiedColumnWidth">140</GridLength>
+
+        <Style x:Key="ColumnHeaderButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="4,4" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <InfoBar
+            IsClosable="False"
+            IsOpen="{x:Bind ViewModel.HasBuiltinCatalogNotice, Mode=OneWay}"
+            Message="{x:Bind ViewModel.BuiltinCatalogNotice, Mode=OneWay}"
+            Severity="Warning">
+            <InfoBar.ActionButton>
+                <Button Command="{x:Bind ViewModel.RetryBuiltinCatalogCommand}" Content="Retry" />
+            </InfoBar.ActionButton>
+        </InfoBar>
+
+        <!--  Column headers sort by their field; a second click reverses the order.  -->
+        <Grid
+            Grid.Row="1"
+            Padding="16,0,16,0"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1"
+            ColumnSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="160" />
+                <ColumnDefinition Width="{StaticResource TypeColumnWidth}" />
+                <ColumnDefinition Width="{StaticResource StatusColumnWidth}" />
+                <ColumnDefinition Width="{StaticResource LocationColumnWidth}" />
+                <ColumnDefinition Width="{StaticResource SizeColumnWidth}" />
+                <ColumnDefinition Width="{StaticResource ModifiedColumnWidth}" />
+            </Grid.ColumnDefinitions>
+            <Button
+                AutomationProperties.Name="Sort by name"
+                Command="{x:Bind ViewModel.Presentation.SortByCommand}"
+                CommandParameter="{x:Bind browser:AssetSortField.Name}"
+                Style="{StaticResource ColumnHeaderButtonStyle}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="Name" />
+                    <FontIcon FontSize="10" Glyph="{x:Bind layouts:DetailsLayoutView.SortGlyph(ViewModel.Presentation.SortField, ViewModel.Presentation.SortDescending, 'Name'), Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+            <Button
+                Grid.Column="1"
+                AutomationProperties.Name="Sort by type"
+                Command="{x:Bind ViewModel.Presentation.SortByCommand}"
+                CommandParameter="{x:Bind browser:AssetSortField.Type}"
+                Style="{StaticResource ColumnHeaderButtonStyle}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="Type" />
+                    <FontIcon FontSize="10" Glyph="{x:Bind layouts:DetailsLayoutView.SortGlyph(ViewModel.Presentation.SortField, ViewModel.Presentation.SortDescending, 'Type'), Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+            <Button
+                Grid.Column="2"
+                AutomationProperties.Name="Sort by status"
+                Command="{x:Bind ViewModel.Presentation.SortByCommand}"
+                CommandParameter="{x:Bind browser:AssetSortField.Status}"
+                Style="{StaticResource ColumnHeaderButtonStyle}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="Status" />
+                    <FontIcon FontSize="10" Glyph="{x:Bind layouts:DetailsLayoutView.SortGlyph(ViewModel.Presentation.SortField, ViewModel.Presentation.SortDescending, 'Status'), Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+            <Button
+                Grid.Column="3"
+                AutomationProperties.Name="Sort by location"
+                Command="{x:Bind ViewModel.Presentation.SortByCommand}"
+                CommandParameter="{x:Bind browser:AssetSortField.Location}"
+                Style="{StaticResource ColumnHeaderButtonStyle}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="Location" />
+                    <FontIcon FontSize="10" Glyph="{x:Bind layouts:DetailsLayoutView.SortGlyph(ViewModel.Presentation.SortField, ViewModel.Presentation.SortDescending, 'Location'), Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+            <Button
+                Grid.Column="4"
+                AutomationProperties.Name="Sort by size"
+                Command="{x:Bind ViewModel.Presentation.SortByCommand}"
+                CommandParameter="{x:Bind browser:AssetSortField.Size}"
+                Style="{StaticResource ColumnHeaderButtonStyle}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="Size" />
+                    <FontIcon FontSize="10" Glyph="{x:Bind layouts:DetailsLayoutView.SortGlyph(ViewModel.Presentation.SortField, ViewModel.Presentation.SortDescending, 'Size'), Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+            <Button
+                Grid.Column="5"
+                AutomationProperties.Name="Sort by modified time"
+                Command="{x:Bind ViewModel.Presentation.SortByCommand}"
+                CommandParameter="{x:Bind browser:AssetSortField.Modified}"
+                Style="{StaticResource ColumnHeaderButtonStyle}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="Modified" />
+                    <FontIcon FontSize="10" Glyph="{x:Bind layouts:DetailsLayoutView.SortGlyph(ViewModel.Presentation.SortField, ViewModel.Presentation.SortDescending, 'Modified'), Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+        </Grid>
+
+        <ListView
+            x:Name="AssetTable"
+            Grid.Row="2"
+            AutomationProperties.Name="Assets"
+            ItemsSource="{x:Bind ViewModel.Assets}"
+            SelectionMode="Extended">
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="identity:AssetBrowserRow">
+                    <Grid
+                        MinHeight="30"
+                        AutomationProperties.Name="{x:Bind Item.DisplayName, Mode=OneWay}"
+                        ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="160" />
+                            <ColumnDefinition Width="{StaticResource TypeColumnWidth}" />
+                            <ColumnDefinition Width="{StaticResource StatusColumnWidth}" />
+                            <ColumnDefinition Width="{StaticResource LocationColumnWidth}" />
+                            <ColumnDefinition Width="{StaticResource SizeColumnWidth}" />
+                            <ColumnDefinition Width="{StaticResource ModifiedColumnWidth}" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Border
+                                Width="14"
+                                Height="14"
+                                VerticalAlignment="Center"
+                                Background="{x:Bind BaseColor, Mode=OneWay, Converter={StaticResource MaterialPreviewColorToBrushConverter}}"
+                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="3"
+                                Visibility="{x:Bind HasSwatch, Mode=OneWay}" />
+                            <FontIcon
+                                VerticalAlignment="Center"
+                                FontSize="14"
+                                Foreground="{x:Bind Kind, Mode=OneWay, Converter={StaticResource AssetTypeToBrushConverter}}"
+                                Glyph="{x:Bind Kind, Mode=OneWay, Converter={StaticResource AssetTypeToIconConverter}}"
+                                Visibility="{x:Bind HasGlyph, Mode=OneWay}" />
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                MaxLines="1"
+                                Text="{x:Bind Item.DisplayName, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <TextBlock
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            MaxLines="1"
+                            Text="{x:Bind Item.TypeDisplayName, Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis" />
+                        <StackPanel
+                            Grid.Column="2"
+                            Orientation="Horizontal"
+                            Spacing="6">
+                            <Ellipse
+                                Width="7"
+                                Height="7"
+                                VerticalAlignment="Center"
+                                Fill="{x:Bind StatusTone, Mode=OneWay, Converter={StaticResource StatusToneToBrushConverter}}" />
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                MaxLines="1"
+                                Text="{x:Bind StatusText, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis"
+                                ToolTipService.ToolTip="{x:Bind Item.PrimaryBadgeTooltip, Mode=OneWay}" />
+                        </StackPanel>
+                        <TextBlock
+                            Grid.Column="3"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            MaxLines="1"
+                            Text="{x:Bind Location, Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis"
+                            ToolTipService.ToolTip="{x:Bind Location, Mode=OneWay}" />
+                        <TextBlock
+                            Grid.Column="4"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            MaxLines="1"
+                            Text="{x:Bind SizeText, Mode=OneWay}"
+                            TextAlignment="Right" />
+                        <TextBlock
+                            Grid.Column="5"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            MaxLines="1"
+                            Text="{x:Bind ModifiedText, Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis" />
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+        <TextBlock
+            Grid.Row="2"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Text="Loading assets…"
+            Visibility="{x:Bind ViewModel.LoadingVisibility, Mode=OneWay}" />
+        <StackPanel
+            Grid.Row="2"
+            MaxWidth="380"
+            Margin="24"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Spacing="8"
+            Visibility="{x:Bind ViewModel.EmptyVisibility, Mode=OneWay}">
+            <TextBlock
+                Style="{ThemeResource BodyStrongTextBlockStyle}"
+                Text="{x:Bind ViewModel.EmptyTitle, Mode=OneWay}"
+                TextAlignment="Center" />
+            <TextBlock
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="{x:Bind ViewModel.EmptyMessage, Mode=OneWay}"
+                TextAlignment="Center"
+                TextWrapping="Wrap" />
+            <Button
+                HorizontalAlignment="Center"
+                Command="{x:Bind ViewModel.Query.ClearAllCommand}"
+                Content="{x:Bind ViewModel.Query.ClearQueryLabel, Mode=OneWay}"
+                Visibility="{x:Bind ViewModel.ClearQueryVisibility, Mode=OneWay}" />
+            <Button
+                HorizontalAlignment="Center"
+                Command="{x:Bind ViewModel.BrowseSourceCommand}"
+                Content="Browse source content"
+                Visibility="{x:Bind ViewModel.BrowseSourceVisibility, Mode=OneWay}" />
+        </StackPanel>
+    </Grid>
+</UserControl>

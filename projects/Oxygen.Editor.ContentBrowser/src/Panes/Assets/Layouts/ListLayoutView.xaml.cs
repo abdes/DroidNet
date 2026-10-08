@@ -2,14 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Generators;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 
@@ -19,43 +13,44 @@ namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 [ViewModel(typeof(ListLayoutViewModel))]
 public sealed partial class ListLayoutView
 {
+    private readonly AssetSelectionSync selection;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ListLayoutView"/> class.
     /// </summary>
     public ListLayoutView()
     {
         this.InitializeComponent();
+        this.selection = new AssetSelectionSync(this.AssetList);
         this.Loaded += (_, _) =>
         {
             this.ViewModelChanged += this.OnViewModelChanged;
-            if (this.ViewModel is { } model)
-            {
-                model.SelectionRevealRequested += this.OnSelectionRevealRequested;
-                AssetSelectionReveal.Apply(this.AssetList, model);
-            }
+            this.Attach(this.ViewModel);
         };
         this.Unloaded += (_, _) =>
         {
             this.ViewModelChanged -= this.OnViewModelChanged;
-            if (this.ViewModel is { } model)
-            {
-                model.SelectionRevealRequested -= this.OnSelectionRevealRequested;
-            }
+            this.ViewModel?.SelectionRevealRequested -= this.OnSelectionRevealRequested;
+            this.selection.Model = null;
         };
     }
 
     private void OnViewModelChanged(object? sender, ViewModelChangedEventArgs<ListLayoutViewModel> args)
     {
-        if (args.OldValue is { } previous)
+        args.OldValue?.SelectionRevealRequested -= this.OnSelectionRevealRequested;
+        this.Attach(this.ViewModel);
+    }
+
+    private void Attach(ListLayoutViewModel? model)
+    {
+        if (model is null)
         {
-            previous.SelectionRevealRequested -= this.OnSelectionRevealRequested;
+            return;
         }
 
-        if (this.ViewModel is { } current)
-        {
-            current.SelectionRevealRequested += this.OnSelectionRevealRequested;
-            AssetSelectionReveal.Apply(this.AssetList, current);
-        }
+        model.SelectionRevealRequested += this.OnSelectionRevealRequested;
+        this.selection.Model = model;
+        AssetSelectionReveal.Apply(this.AssetList, model);
     }
 
     private void OnSelectionRevealRequested(object? sender, EventArgs args)
@@ -64,60 +59,5 @@ public sealed partial class ListLayoutView
         {
             AssetSelectionReveal.Apply(this.AssetList, model);
         }
-    }
-
-    /// <summary>
-    /// Handles the double-tap event on the ListView.
-    /// </summary>
-    /// <param name="sender">The source of the event.</param>
-    /// <param name="args">The event data.</param>
-    private void ListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
-    {
-        if (sender is not ListView { SelectedItem: AssetBrowserRow selectedItem })
-        {
-            return;
-        }
-
-        Debug.Assert(this.ViewModel is not null, "view must have a ViewModel");
-        this.ViewModel.InvokeItemCommand.Execute(selectedItem.Item);
-        args.Handled = true;
-    }
-
-    private void ListView_SelectionChanged(object sender, SelectionChangedEventArgs args)
-    {
-        _ = args;
-        if (this.ViewModel is null || sender is not ListView listView)
-        {
-            return;
-        }
-
-        this.ViewModel.SelectedAsset = (listView.SelectedItem as AssetBrowserRow)?.Item;
-    }
-
-    /// <summary>
-    /// Handles the pointer pressed event on the ListView.
-    /// </summary>
-    /// <param name="sender">The source of the event.</param>
-    /// <param name="args">The event data.</param>
-    private void ListView_PointerPressed(object sender, PointerRoutedEventArgs args)
-    {
-        if (sender is not ListView listView)
-        {
-            return;
-        }
-
-        var originalSource = args.OriginalSource as DependencyObject;
-        while (originalSource != null && originalSource != listView)
-        {
-            if (originalSource is ListViewItem)
-            {
-                return;
-            }
-
-            originalSource = VisualTreeHelper.GetParent(originalSource);
-        }
-
-        // Clicked outside of any item, clear selection
-        listView.SelectedItems.Clear();
     }
 }

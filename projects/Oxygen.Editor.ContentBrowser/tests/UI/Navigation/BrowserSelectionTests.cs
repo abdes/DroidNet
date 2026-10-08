@@ -38,8 +38,8 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         var state = new ContentBrowserState(projects);
         var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
         using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins) : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
+        // Navigation completes after the first snapshot; with no view loaded yet there is no frame to wait for.
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
-        await WaitForRenderAsync().ConfigureAwait(true);
         model.SelectedAsset = items[^1];
         model.RevealSelection();
         UserControl view = tiles ? new TilesLayoutView
@@ -131,6 +131,52 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         _ = listSelector.SelectedItem.Should().BeSameAs(selectedRow);
         _ = list.SelectedAsset.Should().Be(published);
         _ = FocusManager.GetFocusedElement(listView.XamlRoot).Should().BeSameAs(focused);
+        provider.Verify(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()), Times.Once);
+    });
+
+    /// <summary>A multi-selection keeps its members and active asset through a re-sort and a switch to the Details table.</summary>
+    /// <returns>The asynchronous rendered multi-selection journey.</returns>
+    [TestMethod]
+    public Task MultiSelectionSurvivesSortAndViewSwitch() => EnqueueAsync(async () =>
+    {
+        var blue = CreateNavigationAsset("/Content/Materials/Blue.omat.json", AssetKind.Material);
+        var cube = CreateNavigationAsset("/Content/Geometry/Cube.ogeo.json", AssetKind.Geometry);
+        var red = CreateNavigationAsset("/Content/Materials/Red.omat.json", AssetKind.Material);
+        using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([blue, cube, red]);
+        var provider = CreateQueryProvider(updates);
+        var projects = CreateQueryProject();
+        var state = new ContentBrowserState(projects);
+        var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
+        using var tiles = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
+        using var table = new DetailsLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
+        await tiles.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        var tileView = new TilesLayoutView { ViewModel = tiles };
+        await LoadTestContentAsync(tileView).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var tileSelector = tileView.FindDescendant<ListViewBase>()!;
+        _ = tileSelector.SelectionMode.Should().Be(ListViewSelectionMode.Extended);
+
+        // Ctrl+click Blue, then Red: Red is the active asset.
+        tileSelector.SelectedItems.Add(tiles.Assets.Single(row => row.Item == blue));
+        tileSelector.SelectedItems.Add(tiles.Assets.Single(row => row.Item == red));
+        _ = tiles.SelectedAssets.Should().Equal(blue, red);
+        _ = tiles.SelectedAsset.Should().Be(red);
+        _ = state.SelectedAssets.Should().Equal(blue, red);
+
+        state.Presentation.SortByCommand.Execute(AssetSortField.Type);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = tiles.Assets[0].Item.Should().Be(cube);
+        _ = tiles.SelectedAssets.Should().Equal(blue, red);
+        _ = tileSelector.SelectedItems.Should().HaveCount(2);
+
+        await table.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        var tableView = new DetailsLayoutView { ViewModel = table };
+        await LoadTestContentAsync(tableView).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var tableSelector = tableView.FindDescendant<ListViewBase>()!;
+        _ = tableSelector.SelectedItems.OfType<AssetBrowserRow>().Select(static row => row.Item).Should().BeEquivalentTo([blue, red]);
+        _ = table.SelectedAsset.Should().Be(red);
+        _ = tableView.FindDescendants().OfType<TextBlock>().Should().Contain(text => text.Text == "Location");
         provider.Verify(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()), Times.Once);
     });
 

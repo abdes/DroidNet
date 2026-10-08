@@ -75,6 +75,12 @@ public sealed partial class AssetBrowserQuery : ObservableObject
     /// <summary>Gets the number of selected type/status filters.</summary>
     public int FilterCount => this.TypeOptions.Count(static option => option.IsSelected) + this.StatusOptions.Count(static option => option.IsSelected);
 
+    /// <summary>Gets the selected filters, types first, for the removable chips.</summary>
+    public IReadOnlyList<AssetFilterOption> ActiveFilters => [.. this.TypeOptions.Concat(this.StatusOptions).Where(static option => option.IsSelected)];
+
+    /// <summary>Gets a value indicating whether any type or status filter is selected.</summary>
+    public bool HasActiveFilters => this.FilterCount != 0;
+
     /// <summary>Gets a value indicating whether search or filters restrict the scope.</summary>
     public bool IsActive => this.FilterCount != 0 || !string.IsNullOrWhiteSpace(this.SearchText);
 
@@ -142,6 +148,8 @@ public sealed partial class AssetBrowserQuery : ObservableObject
         if (!this.clearing)
         {
             this.OnPropertyChanged(nameof(this.FilterCount));
+            this.OnPropertyChanged(nameof(this.ActiveFilters));
+            this.OnPropertyChanged(nameof(this.HasActiveFilters));
             this.OnPropertyChanged(nameof(this.IsActive));
             this.OnPropertyChanged(nameof(this.FilterLabel));
             this.OnPropertyChanged(nameof(this.ClearQueryLabel));

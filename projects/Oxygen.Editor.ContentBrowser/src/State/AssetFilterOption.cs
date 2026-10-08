@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 
 namespace Oxygen.Editor.ContentBrowser;
@@ -23,4 +24,8 @@ public sealed partial class AssetFilterOption(string label, Func<ContentBrowserA
     /// <param name="asset">The asset to examine.</param>
     /// <returns>Whether this option includes the asset.</returns>
     internal bool Matches(ContentBrowserAssetItem asset) => matches(asset);
+
+    /// <summary>Removes this filter from the query, as its chip's close button does.</summary>
+    [RelayCommand]
+    private void Remove() => this.IsSelected = false;
 }

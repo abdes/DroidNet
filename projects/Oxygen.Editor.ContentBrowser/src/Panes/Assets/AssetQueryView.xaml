@@ -15,7 +15,7 @@
             Height="32"
             VerticalAlignment="Center"
             AutomationProperties.Name="Search assets"
-            PlaceholderText="Search assets"
+            PlaceholderText="Search name or path…"
             Text="{x:Bind ViewModel.SearchText, Mode=TwoWay}">
             <AutoSuggestBox.QueryIcon>
                 <SymbolIcon Symbol="Find" />

@@ -2,14 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
+using System.ComponentModel;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Generators;
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 
@@ -19,43 +15,60 @@ namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 [ViewModel(typeof(TilesLayoutViewModel))]
 public sealed partial class TilesLayoutView
 {
+    // The name, type and status lines under the preview.
+    private const double CaptionHeight = 66;
+
+    private readonly AssetSelectionSync selection;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="TilesLayoutView"/> class.
     /// </summary>
     public TilesLayoutView()
     {
         this.InitializeComponent();
+        this.selection = new AssetSelectionSync(this.BasicGridView);
         this.Loaded += (_, _) =>
         {
             this.ViewModelChanged += this.OnViewModelChanged;
-            if (this.ViewModel is { } model)
-            {
-                model.SelectionRevealRequested += this.OnSelectionRevealRequested;
-                AssetSelectionReveal.Apply(this.BasicGridView, model);
-            }
+            this.Attach(this.ViewModel);
         };
         this.Unloaded += (_, _) =>
         {
             this.ViewModelChanged -= this.OnViewModelChanged;
-            if (this.ViewModel is { } model)
-            {
-                model.SelectionRevealRequested -= this.OnSelectionRevealRequested;
-            }
+            this.Detach(this.ViewModel);
+            this.selection.Model = null;
         };
     }
 
     private void OnViewModelChanged(object? sender, ViewModelChangedEventArgs<TilesLayoutViewModel> args)
     {
-        if (args.OldValue is { } previous)
+        this.Detach(args.OldValue);
+        this.Attach(this.ViewModel);
+    }
+
+    private void Attach(TilesLayoutViewModel? model)
+    {
+        if (model is null)
         {
-            previous.SelectionRevealRequested -= this.OnSelectionRevealRequested;
+            return;
         }
 
-        if (this.ViewModel is { } current)
+        model.SelectionRevealRequested += this.OnSelectionRevealRequested;
+        model.Presentation.PropertyChanged += this.OnPresentationChanged;
+        this.selection.Model = model;
+        this.ApplyTileSize();
+        AssetSelectionReveal.Apply(this.BasicGridView, model);
+    }
+
+    private void Detach(TilesLayoutViewModel? model)
+    {
+        if (model is null)
         {
-            current.SelectionRevealRequested += this.OnSelectionRevealRequested;
-            AssetSelectionReveal.Apply(this.BasicGridView, current);
+            return;
         }
+
+        model.SelectionRevealRequested -= this.OnSelectionRevealRequested;
+        model.Presentation.PropertyChanged -= this.OnPresentationChanged;
     }
 
     private void OnSelectionRevealRequested(object? sender, EventArgs args)
@@ -66,65 +79,41 @@ public sealed partial class TilesLayoutView
         }
     }
 
-    /// <summary>
-    /// Handles the double-tap event on the GridView.
-    /// </summary>
-    /// <param name="sender">The source of the event.</param>
-    /// <param name="args">The event data.</param>
-    private void GridView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
+    private void OnPresentationChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (sender is not GridView { SelectedItem: AssetBrowserRow selectedItem })
+        if (string.Equals(args.PropertyName, nameof(AssetBrowserPresentation.TileSize), StringComparison.Ordinal))
         {
-            return;
+            this.ApplyTileSize();
         }
-
-        Debug.Assert(this.ViewModel is not null, "view must have a ViewModel");
-        this.ViewModel.InvokeItemCommand.Execute(selectedItem.Item);
-        args.Handled = true;
     }
 
-    private void GridView_SelectionChanged(object sender, SelectionChangedEventArgs args)
+    // The preview keeps a 4:3 frame at every size; the caption keeps its height.
+    private void ApplyTileSize()
     {
-        _ = args;
-        if (this.ViewModel is null || sender is not GridView gridView)
+        if (this.ViewModel is not { } model)
         {
             return;
         }
 
-        this.ViewModel.SelectedAsset = (gridView.SelectedItem as AssetBrowserRow)?.Item;
+        if (this.BasicGridView.ItemsPanelRoot is not ItemsWrapGrid panel)
+        {
+            // The panel is created on the first layout pass after the view loads.
+            this.BasicGridView.LayoutUpdated -= this.OnFirstLayout;
+            this.BasicGridView.LayoutUpdated += this.OnFirstLayout;
+            return;
+        }
+
+        var size = model.Presentation.TileSize;
+        panel.ItemWidth = size;
+        panel.ItemHeight = Math.Round(size * 0.75) + CaptionHeight;
     }
 
-    /// <summary>
-    /// Handles the pointer pressed event on the GridView.
-    /// </summary>
-    /// <param name="sender">The source of the event.</param>
-    /// <param name="args">The event data.</param>
-    private void GridView_PointerPressed(object sender, PointerRoutedEventArgs args)
+    private void OnFirstLayout(object? sender, object args)
     {
-        if (sender is not GridView gridView)
+        if (this.BasicGridView.ItemsPanelRoot is ItemsWrapGrid)
         {
-            return;
-        }
-
-        var originalSource = args.OriginalSource as DependencyObject;
-        while (originalSource != null && originalSource != gridView)
-        {
-            if (originalSource is GridViewItem)
-            {
-                return;
-            }
-
-            originalSource = VisualTreeHelper.GetParent(originalSource);
-        }
-
-        // Clicked outside of any item, clear selection
-        if (gridView.SelectionMode == ListViewSelectionMode.Single)
-        {
-            gridView.SelectedItem = null;
-        }
-        else
-        {
-            gridView.SelectedItems.Clear();
+            this.BasicGridView.LayoutUpdated -= this.OnFirstLayout;
+            this.ApplyTileSize();
         }
     }
 }

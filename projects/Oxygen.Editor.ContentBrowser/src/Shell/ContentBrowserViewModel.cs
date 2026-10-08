@@ -17,6 +17,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.ProjectExplorer;
 using Oxygen.Editor.Data.Services;
@@ -70,6 +71,10 @@ public sealed partial class ContentBrowserViewModel(
                         {
                             Path = "assets/list", Outlet = "right", ViewModelType = typeof(ListLayoutViewModel),
                         },
+                        new Route
+                        {
+                            Path = "assets/details", Outlet = "right", ViewModelType = typeof(DetailsLayoutViewModel),
+                        },
                     ]),
                 },
             ]),
@@ -77,6 +82,8 @@ public sealed partial class ContentBrowserViewModel(
     ]);
 
     private static readonly char[] AnyPathSeparator = ['\\', '/'];
+
+    private static readonly string[] AssetsViewPaths = ["assets/tiles", "assets/list", "assets/details"];
 
     private readonly ILogger logger = loggerFactory?.CreateLogger<ContentBrowserViewModel>() ??
                                       NullLoggerFactory.Instance.CreateLogger<ContentBrowserViewModel>();
@@ -105,8 +112,23 @@ public sealed partial class ContentBrowserViewModel(
     [ObservableProperty]
     public partial bool IsRefreshing { get; set; }
 
-    /// <summary>Gets the session search and filters shared with both asset layouts.</summary>
+    /// <summary>Gets the session search and filters shared with every asset layout.</summary>
     public AssetBrowserQuery Query { get; } = new();
+
+    /// <summary>Gets the session result order, view, tile size and details-pane state.</summary>
+    public AssetBrowserPresentation Presentation { get; } = new();
+
+    /// <summary>Gets the details pane for the selected assets; available once the browser is initialized.</summary>
+    [ObservableProperty]
+    public partial AssetDetailsViewModel? Details { get; private set; }
+
+    /// <summary>Gets the footer summary, for example "2 of 6 assets · 1 selected".</summary>
+    [ObservableProperty]
+    public partial string ResultSummary { get; private set; } = string.Empty;
+
+    /// <summary>Gets whether the current location holds authored or read-only content.</summary>
+    [ObservableProperty]
+    public partial string SourceDescription { get; private set; } = string.Empty;
 
     // Breadcrumbs
     [ObservableProperty]
@@ -174,6 +196,7 @@ public sealed partial class ContentBrowserViewModel(
             var contentBrowserState = this.childContainer.Resolve<ContentBrowserState>();
             this.browserState = contentBrowserState;
             contentBrowserState.PropertyChanged += this.OnContentBrowserStateChanged;
+            this.Details = this.childContainer.Resolve<AssetDetailsViewModel>();
 
             var initialUrl = await this.GetInitialContentBrowserUrlAsync().ConfigureAwait(true);
             await this.localRouter.NavigateAsync(initialUrl).ConfigureAwait(true);
@@ -197,7 +220,9 @@ public sealed partial class ContentBrowserViewModel(
                     });
 
             this.childContainer.RegisterDelegate<ContentBrowserState>(
-                _ => new(projectContextService) { Query = this.Query }, Reuse.Singleton);
+                _ => new(projectContextService) { Query = this.Query, Presentation = this.Presentation }, Reuse.Singleton);
+            this.childContainer.Register<IAssetShell, WindowsAssetShell>(Reuse.Singleton);
+            this.childContainer.Register<AssetDetailsViewModel>(Reuse.Singleton);
 
             this.childContainer.Register<ProjectLayoutViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
             this.childContainer.Register<ProjectLayoutView>(Reuse.Transient);
@@ -248,6 +273,42 @@ public sealed partial class ContentBrowserViewModel(
         scope.Register<ListLayoutView>(Reuse.Transient);
         scope.Register<TilesLayoutViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
         scope.Register<TilesLayoutView>(Reuse.Transient);
+        scope.Register<DetailsLayoutViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
+        scope.Register<DetailsLayoutView>(Reuse.Transient);
+    }
+
+    /// <summary>Describes whether a location holds authored content or read-only derived and mounted content.</summary>
+    /// <param name="project">The active project.</param>
+    /// <param name="folder">The current folder, virtual or project-relative.</param>
+    /// <returns>The footer description.</returns>
+    internal static string DescribeSource(ProjectContext? project, string? folder)
+    {
+        var normalized = folder?.Replace('\\', '/').Trim().Trim('/') ?? string.Empty;
+        if (normalized.Length == 0 || string.Equals(normalized, ".", StringComparison.Ordinal))
+        {
+            return "All project sources";
+        }
+
+        var root = normalized.Split('/')[0];
+        var authoring = project?.AuthoringMounts.FirstOrDefault(mount =>
+            string.Equals(mount.Name, root, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(mount.RelativePath.Replace('\\', '/').Trim('/'), root, StringComparison.OrdinalIgnoreCase));
+        return authoring is not null && !ProjectLayoutViewModel.IsPersistedProjectRelativeVirtualMount(authoring)
+            ? "Authoring source" : "Read-only source";
+    }
+
+    /// <summary>Builds the footer summary from the active layout's counts and selection.</summary>
+    /// <param name="resultCount">The results shown after search and filters.</param>
+    /// <param name="scopeCount">The assets in the current folders.</param>
+    /// <param name="selectedCount">The selected assets.</param>
+    /// <returns>The summary, for example "2 of 6 assets · 1 selected".</returns>
+    internal static string BuildResultSummary(int resultCount, int scopeCount, int selectedCount)
+    {
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        var results = resultCount == scopeCount
+            ? string.Create(culture, $"{scopeCount} {(scopeCount == 1 ? "asset" : "assets")}")
+            : string.Create(culture, $"{resultCount} of {scopeCount} assets");
+        return selectedCount == 0 ? results : string.Create(culture, $"{results} · {selectedCount} selected");
     }
 
     /// <inheritdoc />
@@ -264,6 +325,7 @@ public sealed partial class ContentBrowserViewModel(
             this.routerEventsSubscription?.Dispose();
 
             this.browserState?.PropertyChanged -= this.OnContentBrowserStateChanged;
+            this.Details?.Dispose();
 
             this.childContainer?.Dispose();
         }
@@ -303,11 +365,7 @@ public sealed partial class ContentBrowserViewModel(
     {
         url = null;
         var trimmed = persisted.Trim();
-        var assetsViewPath = trimmed.Contains("assets/list", StringComparison.Ordinal)
-            ? "assets/list"
-            : trimmed.Contains("assets/tiles", StringComparison.Ordinal)
-                ? "assets/tiles"
-                : null;
+        var assetsViewPath = AssetsViewPaths.FirstOrDefault(path => trimmed.Contains(path, StringComparison.Ordinal));
 
         if (assetsViewPath is null)
         {
@@ -365,8 +423,21 @@ public sealed partial class ContentBrowserViewModel(
         }
     }
 
+    private static AssetBrowserView GetView(string assetsViewPath) => assetsViewPath switch
+    {
+        "assets/list" => AssetBrowserView.List,
+        "assets/details" => AssetBrowserView.Details,
+        _ => AssetBrowserView.Tiles,
+    };
+
     private void OnContentBrowserStateChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is nameof(ContentBrowserState.ResultCount) or nameof(ContentBrowserState.SelectedAssets)
+            && this.browserState is { } counted)
+        {
+            this.ResultSummary = BuildResultSummary(counted.ResultCount, counted.ScopeCount, counted.SelectedAssets.Count);
+        }
+
         if (string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal)
             && !this.isNavigatingFromHistory && !this.isApplyingRouteState)
         {
@@ -530,16 +601,14 @@ public sealed partial class ContentBrowserViewModel(
     {
         this.LogNavigationEnd(navigationEnd.Url ?? string.Empty, this.isNavigatingFromHistory);
 
-        // Track current assets view path from the URL (assets/list or assets/tiles)
+        // Track the current results view from the URL.
         var url = navigationEnd.Url ?? string.Empty;
-        if (url.Contains("assets/tiles", StringComparison.Ordinal))
+        if (AssetsViewPaths.FirstOrDefault(path => url.Contains(path, StringComparison.Ordinal)) is { } viewPath)
         {
-            this.currentAssetsViewPath = "assets/tiles";
+            this.currentAssetsViewPath = viewPath;
         }
-        else if (url.Contains("assets/list", StringComparison.Ordinal))
-        {
-            this.currentAssetsViewPath = "assets/list";
-        }
+
+        this.Presentation.View = GetView(this.currentAssetsViewPath);
 
         this.isApplyingRouteState = true;
         try
@@ -767,6 +836,7 @@ public sealed partial class ContentBrowserViewModel(
 
             // Always include root breadcrumb
             entries.Add(new BreadcrumbEntry(rootLabel, "."));
+            this.SourceDescription = DescribeSource(projectContextService.ActiveProject, primary);
 
             if (!string.IsNullOrEmpty(primary) && !string.Equals(primary, ".", StringComparison.Ordinal))
             {
@@ -803,36 +873,28 @@ public sealed partial class ContentBrowserViewModel(
         }
     }
 
-    /// <summary>
-    ///     Switch the assets area to list view (details).
-    /// </summary>
+    /// <summary>Shows results as preview tiles.</summary>
     [RelayCommand]
-    private async Task SwitchToListViewAsync()
+    private Task SwitchToTilesViewAsync() => this.SwitchViewAsync("assets/tiles");
+
+    /// <summary>Shows results as a compact list.</summary>
+    [RelayCommand]
+    private Task SwitchToListViewAsync() => this.SwitchViewAsync("assets/list");
+
+    /// <summary>Shows results as a table with sortable columns.</summary>
+    [RelayCommand]
+    private Task SwitchToDetailsViewAsync() => this.SwitchViewAsync("assets/details");
+
+    private async Task SwitchViewAsync(string assetsViewPath)
     {
         if (this.localRouter is null)
         {
             return;
         }
 
-        this.currentAssetsViewPath = "assets/list";
-        var url = this.BuildCurrentUrl();
-        await this.localRouter.NavigateAsync(url).ConfigureAwait(true);
-    }
-
-    /// <summary>
-    ///     Switch the assets area to detail view (tiles grid).
-    /// </summary>
-    [RelayCommand]
-    private async Task SwitchToDetailViewAsync()
-    {
-        if (this.localRouter is null)
-        {
-            return;
-        }
-
-        this.currentAssetsViewPath = "assets/tiles";
-        var url = this.BuildCurrentUrl();
-        await this.localRouter.NavigateAsync(url).ConfigureAwait(true);
+        this.currentAssetsViewPath = assetsViewPath;
+        this.Presentation.View = GetView(assetsViewPath);
+        await this.localRouter.NavigateAsync(this.BuildCurrentUrl()).ConfigureAwait(true);
     }
 
     /// <summary>

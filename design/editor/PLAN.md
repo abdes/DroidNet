@@ -101,7 +101,8 @@ viewport state persistence are validated and closed on 2026-10-08. The
 viewport editing tools (absorbing ED-M09) and the Content Browser redesign,
 including reference-aware rename/move. M08.3 viewport HUD, M08.4 picking,
 selection outline and framing, M08.5 transform gizmos and snapping, and M08.6
-scene helpers and orientation are validated on 2026-10-08; M08.7 is next.
+scene helpers and orientation, and the M08.7 Content Browser redesign are
+validated on 2026-10-08; M08.8 is next.
 
 ## 4. Milestone Roadmap
 

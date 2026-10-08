@@ -76,7 +76,8 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
             Mock.Of<DroidNet.Storage.IStorageProvider>(),
             new StrongReferenceMessenger(),
             dialogs.Object,
-            windows.Object)
+            windows.Object,
+            Mock.Of<IAssetShell>())
         {
             IsOperationResultVisible = true,
         };

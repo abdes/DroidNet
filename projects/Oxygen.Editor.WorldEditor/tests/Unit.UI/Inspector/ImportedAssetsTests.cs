@@ -33,14 +33,14 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
 {
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>Source tooltips update in place with named output types after import.</summary>
+    /// <summary>A source model's details update in place with named output types after import.</summary>
     /// <param name="tiles">Whether to use tiles or list rows.</param>
     /// <param name="light">Whether to capture light theme.</param>
-    /// <returns>The asynchronous tooltip regression.</returns>
+    /// <returns>The asynchronous details-pane regression.</returns>
     [TestMethod]
     [DataRow(true, false)]
     [DataRow(false, true)]
-    public Task ImportedModelTooltipShowsNamedOutputs(bool tiles, bool light) => EnqueueAsync(async () =>
+    public Task ImportedModelDetailsShowNamedOutputs(bool tiles, bool light) => EnqueueAsync(async () =>
     {
         var source = CreateImportedSourceRow(configured: false);
         using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([source]);
@@ -49,6 +49,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         var state = new ContentBrowserState(projects);
         var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
         using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins) : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
+        using var details = new AssetDetailsViewModel(state, Mock.Of<IAssetShell>());
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         UserControl view = tiles ? new TilesLayoutView
         {
@@ -59,31 +60,27 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         {
             ViewModel = (ListLayoutViewModel)model,
         };
-        view.RequestedTheme = light ? ElementTheme.Light : ElementTheme.Dark;
-        await LoadTestContentAsync(view).ConfigureAwait(true);
+        var pane = new AssetDetailsView { ViewModel = details, Width = 300 };
+        var root = new Grid { RequestedTheme = light ? ElementTheme.Light : ElementTheme.Dark };
+        root.ColumnDefinitions.Add(new ColumnDefinition());
+        root.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        root.Children.Add(view);
+        Grid.SetColumn(pane, 1);
+        root.Children.Add(pane);
+        await LoadTestContentAsync(root).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         var selector = view.FindDescendant<ListViewBase>()!;
         selector.SelectedIndex = 0;
+        await WaitForRenderAsync().ConfigureAwait(true);
         var selected = selector.SelectedItem;
-        var tip = view.FindDescendants().OfType<FrameworkElement>().Select(ToolTipService.GetToolTip).OfType<ToolTip>().Single(value => value.Content is AssetInformationView);
-        tip.IsOpen = true;
-        try
-        {
-            await WaitForRenderAsync().ConfigureAwait(true);
-            var information = (AssetInformationView)tip.Content;
-            _ = information.ViewModel!.Description.Should().Contain("Import this model");
-            updates.OnNext([CreateImportedSourceRow(configured: true)]);
-            await WaitForRenderAsync().ConfigureAwait(true);
-            var names = information.ViewModel!.Facts.Single(static fact => string.Equals(fact.Label, "Outputs", StringComparison.Ordinal)).Value;
-            _ = names.Should().Contain("Main (Geometry)").And.Contain("Paint (Material)").And.Contain("Crate (Scene)");
-            _ = selector.SelectedItem.Should().BeSameAs(selected);
-            _ = information.FindDescendants().OfType<TextBlock>().Should().Contain(text => text.Text == names);
-            provider.Verify(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()), Times.Once);
-        }
-        finally
-        {
-            tip.IsOpen = false;
-        }
+        _ = details.Description.Should().Contain("Import this model");
+        updates.OnNext([CreateImportedSourceRow(configured: true)]);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var names = details.Facts.Single(static fact => string.Equals(fact.Label, "Outputs", StringComparison.Ordinal)).Value;
+        _ = names.Should().Contain("Main (Geometry)").And.Contain("Paint (Material)").And.Contain("Crate (Scene)");
+        _ = selector.SelectedItem.Should().BeSameAs(selected);
+        _ = pane.FindDescendants().OfType<TextBlock>().Should().Contain(text => text.Text == names);
+        provider.Verify(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>()), Times.Once);
     });
 
     /// <summary>Picker content begins empty for source models, then shows only actual geometry and material outputs.</summary>
@@ -156,9 +153,9 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         await LoadTestContentAsync(view).ConfigureAwait(true);
         layout.SelectedAsset = output;
         await WaitForRenderAsync().ConfigureAwait(true);
-        await InvokeImportMenuActionAsync(view, "Show source", () => browser.ShowImportSourceCommand.ExecutionTask).ConfigureAwait(true);
+        await InvokeImportMenuActionAsync(view, "Show import source", () => browser.ShowImportSourceCommand.ExecutionTask).ConfigureAwait(true);
         _ = revealed.Should().Be(source.IdentityUri);
-        await InvokeImportMenuActionAsync(view, "Reimport source", () => browser.ReimportSelectedSourceCommand.ExecutionTask).ConfigureAwait(true);
+        await InvokeImportMenuActionAsync(view, "Reimport", () => browser.ReimportSelectedSourceCommand.ExecutionTask).ConfigureAwait(true);
         pipeline.Verify(value => value.ReimportSourceAsync(source.IdentityUri, projects.ActiveProject!, It.IsAny<CancellationToken>()), Times.Once);
         await browser.InspectCookedOutputCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         _ = inspected.Should().Be(output.IdentityUri);
@@ -166,7 +163,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
 
     private static async Task InvokeImportMenuActionAsync(AssetsView view, string text, Func<Task?> execution)
     {
-        var button = view.FindDescendant<ToolBarButton>(item => string.Equals(item.Label, "Cook", StringComparison.Ordinal))!;
+        var button = view.FindDescendant<ToolBarButton>(item => string.Equals(item.Label, "Import", StringComparison.Ordinal))!;
         var menu = (MenuFlyout)button.Flyout;
         menu.ShowAt(button);
         await WaitForRenderAsync().ConfigureAwait(true);

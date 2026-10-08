@@ -461,7 +461,7 @@ ED-M08.7 redesign (supersedes the ED-M06 sketch):
 | < > ^ ⟳  Project › Content › Materials   [search…] [Filter ²] [▦ ☰ ▤] [ⓘ]  |
 | [Material ×] [Needs cooking ×]                                 Clear all  |
 +----------------+--------------------------------------------+-------------+
-| ▾ Content      | [New ▾] [Import ▾] [Cook ▾] […]  ◫──○ [Name▾] | (preview)  |
+| ▾ Content      | New▾ Import▾ Cook▾ │ ✎ ✂ ⧉ ▤ ⊕ ✕ │ ⎘ ↗ Name▾  | (preview)  |
 |   Materials •  |  +------+ +------+ +------+                | Glazed teal |
 |   Geometry     |  |  ◯   | |  ◯   | |  ◯   |                | Material    |
 |   Scenes       |  |Teal  | |Clay  | |Stone |                | • Cooked    |
@@ -469,16 +469,35 @@ ED-M08.7 redesign (supersedes the ED-M06 sketch):
 | ▸ Studio   🔒  |  +------+ +------+ +------+                | Referrers 3 |
 | [Mounts] [⇅]   |                                            | [Locate]    |
 +----------------+--------------------------------------------+-------------+
-| 6 of 6 assets · 1 selected                                                |
+| 6 of 6 assets · 1 selected                              Authoring source  |
 +---------------------------------------------------------------------------+
 ```
 
 Rules:
 
 - the left tree selects folders; mounts are expandable subtrees with read-only
-  badges, never a detached list.
-- Tiles show a rendered thumbnail (ED-M08.9) or the type glyph, name, type and
-  status; List and Details (sortable columns) show the same identity rows.
+  badges, never a detached list. Project folders use a plain folder icon;
+  mounted sources use an accent folder with a link badge and a lock when
+  read-only. The tree root shows the project's name.
+- the sources footer holds only Mounts and Content priority. Mounts opens the
+  Content mounts dialog: each mount's virtual name, backing path and kind
+  (project source, derived output, local library) with rename and unmount,
+  and a form that adds Cooked, Imported, Build or a local folder. Edits apply
+  together; the project's own content cannot be renamed or unmounted, and
+  project sources keep their names because asset paths start with them.
+- Tiles show a rendered thumbnail (ED-M08.9) or, until then, a material's
+  base colour or the type glyph, with name, type and status; List and Details
+  (sortable columns) show the same identity rows.
+- the command row keeps New, Import and Cook as labelled menus and the asset
+  commands as icons in Scene Explorer's order (Rename, Cut, Copy, Paste,
+  Duplicate, Delete), then Copy path and Show in File Explorer. There is no
+  hand-made overflow menu: toolbar overflow priorities fold path commands
+  first, then asset commands, then Cook; New and Import stay longest. Item
+  context menus mirror the row. Unavailable commands stay visible, disabled,
+  and explain why.
+- New Folder creates "New folder" in the current authoring folder and names it
+  in place in the sources tree. A folder can be renamed only while it holds no
+  files; asset identity follows its path (§9.5).
 - the optional details pane shows identity facts, referrers and copy/locate
   actions; multi-selection shows aggregated counts. No hover tooltip carries
   information that is unavailable elsewhere.

@@ -37,7 +37,9 @@ public abstract partial class AssetsLayoutViewModel(
     private Task? initialization;
     private TaskCompletionSource? initialSnapshotCompletion;
     private IReadOnlyList<ContentBrowserAssetItem> latestItems = [];
+    private IReadOnlyList<ContentBrowserAssetItem> selectedAssets = [];
     private ContentBrowserAssetItem? selectedAsset;
+    private int scopeCount;
     private bool isLoading = true;
     private bool isReplacingRows;
     private bool hasSnapshot;
@@ -86,51 +88,78 @@ public abstract partial class AssetsLayoutViewModel(
     /// <summary>Gets a value indicating whether the current scope needs a catalog notice.</summary>
     public bool HasBuiltinCatalogNotice => !string.IsNullOrEmpty(this.BuiltinCatalogNotice);
 
+    /// <summary>Gets the shared result order, tile size and view.</summary>
+    public AssetBrowserPresentation Presentation => this.contentBrowserState.Presentation;
+
     /// <summary>
-    /// Gets or sets the currently selected asset row, if any.
+    /// Gets or sets the active asset. Setting it selects that asset alone; null clears the selection.
     /// </summary>
     public ContentBrowserAssetItem? SelectedAsset
     {
         get => this.selectedAsset;
-        set
-        {
-            if (this.disposed || this.isReplacingRows)
-            {
-                return;
-            }
-
-            if (value is null)
-            {
-                _ = this.SetProperty(ref this.selectedAsset, newValue: null);
-            }
-            else if (this.Assets.FirstOrDefault(row => AssetIdentityGrouping.Represents(row.Item, value.IdentityUri)) is { } current)
-            {
-                _ = this.SetProperty(ref this.selectedAsset, current.Item);
-            }
-
-            if (ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this))
-            {
-                this.contentBrowserState.SelectedAssetUri = this.selectedAsset?.IdentityUri;
-            }
-
-            if (this.pendingReveal != this.selectedAsset?.IdentityUri)
-            {
-                this.pendingReveal = null;
-            }
-
-            this.OnPropertyChanged(nameof(this.SelectedRow));
-        }
+        set => this.SetSelection(value is null ? [] : [value]);
     }
 
-    /// <summary>Gets the current visual row so programmatic selection is reflected in either layout.</summary>
-    public AssetBrowserRow? SelectedRow => this.selectedAsset is { } selected
-        ? this.Assets.FirstOrDefault(row => AssetIdentityGrouping.Represents(row.Item, selected.IdentityUri)) : null;
+    /// <summary>Gets the selected assets in selection order; the last is <see cref="SelectedAsset"/>.</summary>
+    public IReadOnlyList<ContentBrowserAssetItem> SelectedAssets => this.selectedAssets;
+
+    /// <summary>Gets the current visual row so programmatic selection is reflected in every layout.</summary>
+    public AssetBrowserRow? SelectedRow => this.selectedAsset is { } selected ? this.FindRow(selected.IdentityUri) : null;
+
+    /// <summary>Gets the visual rows of every selected asset.</summary>
+    public IReadOnlyList<AssetBrowserRow> SelectedRows => [.. this.selectedAssets.Select(asset => this.FindRow(asset.IdentityUri)).OfType<AssetBrowserRow>()];
+
+    private bool IsActiveLayout => !this.disposed && ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this);
+
+    /// <summary>Replaces the selection with visible assets; hidden or unknown assets are dropped.</summary>
+    /// <param name="assets">The assets to select in selection order; the last becomes active.</param>
+    public void SetSelection(IEnumerable<ContentBrowserAssetItem> assets)
+    {
+        ArgumentNullException.ThrowIfNull(assets);
+        if (this.disposed || this.isReplacingRows)
+        {
+            return;
+        }
+
+        // A repeated asset keeps its latest position, so the most recent pick stays active.
+        var selection = assets
+            .Select(asset => this.FindRow(asset.IdentityUri)?.Item)
+            .OfType<ContentBrowserAssetItem>()
+            .Reverse()
+            .DistinctBy(static asset => asset.IdentityUri.AbsoluteUri, StringComparer.OrdinalIgnoreCase)
+            .Reverse()
+            .ToArray();
+        var changed = !this.selectedAssets.SequenceEqual(selection);
+        this.selectedAssets = selection;
+        _ = this.SetProperty(ref this.selectedAsset, selection.Length == 0 ? null : selection[^1], nameof(this.SelectedAsset));
+        this.PublishSelection();
+        if (this.pendingReveal != this.selectedAsset?.IdentityUri)
+        {
+            this.pendingReveal = null;
+        }
+
+        if (changed)
+        {
+            this.OnPropertyChanged(nameof(this.SelectedAssets));
+            this.OnPropertyChanged(nameof(this.SelectedRows));
+        }
+
+        this.OnPropertyChanged(nameof(this.SelectedRow));
+    }
 
     /// <summary>Requests one reveal for explicit navigation, including a view that has not loaded yet.</summary>
     public void RevealSelection()
     {
         this.pendingReveal = this.SelectedAsset?.IdentityUri;
         this.SelectionRevealRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Opens an asset the way a double-click does.</summary>
+    /// <param name="item">The asset to open.</param>
+    public void Invoke(ContentBrowserAssetItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        this.OnItemInvoked(item);
     }
 
     /// <summary>
@@ -155,7 +184,7 @@ public abstract partial class AssetsLayoutViewModel(
             this.contentBrowserState.ActiveAssetLayout = this;
             if (this.hasSnapshot)
             {
-                this.RestoreSelection(this.contentBrowserState.SelectedAssetUri);
+                this.ReplaceItems(this.latestItems);
             }
         }
         catch
@@ -280,6 +309,7 @@ public abstract partial class AssetsLayoutViewModel(
                 this.builtinChanges?.Dispose();
                 this.contentBrowserState.PropertyChanged -= this.ContentBrowserState_PropertyChanged;
                 this.Query.Changed -= this.OnQueryChanged;
+                this.Presentation.SortChanged -= this.OnQueryChanged;
                 if (ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this))
                 {
                     this.contentBrowserState.ActiveAssetLayout = null;
@@ -330,6 +360,7 @@ public abstract partial class AssetsLayoutViewModel(
         this.builtinChanges?.Dispose();
         this.contentBrowserState.PropertyChanged -= this.ContentBrowserState_PropertyChanged;
         this.Query.Changed -= this.OnQueryChanged;
+        this.Presentation.SortChanged -= this.OnQueryChanged;
         this.builtinChanges = Observable.FromEventPattern(
                 handler => this.builtins.Changed += handler,
                 handler => this.builtins.Changed -= handler)
@@ -347,6 +378,7 @@ public abstract partial class AssetsLayoutViewModel(
                 () => firstSnapshot.TrySetResult());
         this.contentBrowserState.PropertyChanged += this.ContentBrowserState_PropertyChanged;
         this.Query.Changed += this.OnQueryChanged;
+        this.Presentation.SortChanged += this.OnQueryChanged;
         var refresh = this.contentBrowserState.AssetInitialization ??= this.RefreshAsync();
         try
         {
@@ -386,16 +418,18 @@ public abstract partial class AssetsLayoutViewModel(
 
         this.latestItems = items;
         this.hasSnapshot = true;
-        var selectedUri = ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this)
-            ? this.contentBrowserState.SelectedAssetUri : this.SelectedAsset?.IdentityUri;
+        var selectedUris = this.IsActiveLayout
+            ? this.contentBrowserState.SelectedAssetUris : [.. this.selectedAssets.Select(static asset => asset.IdentityUri)];
         var existing = this.Assets.ToDictionary(static row => row.Item.IdentityUri.AbsoluteUri, StringComparer.OrdinalIgnoreCase);
         var scopedItems = this.projectContextService.ActiveProject is { } project
             ? CookedLibraryProjection.ForFolders(items, project, NormalizeSelectedFolders(this.contentBrowserState.SelectedFolders)) : items;
-        var visible = AssetIdentityGrouping.GroupBuiltins(scopedItems.Where(this.IsInSelectedFolders)).Where(this.Query.Matches).ToArray();
+        var inScope = AssetIdentityGrouping.GroupBuiltins(scopedItems.Where(this.IsInSelectedFolders)).ToArray();
+        this.scopeCount = inScope.Length;
+        var visible = this.Presentation.Sort(inScope.Where(this.Query.Matches));
         this.isReplacingRows = true;
         try
         {
-            for (var index = 0; index < visible.Length; index++)
+            for (var index = 0; index < visible.Count; index++)
             {
                 var item = visible[index];
                 if (existing.TryGetValue(item.IdentityUri.AbsoluteUri, out var row))
@@ -412,7 +446,7 @@ public abstract partial class AssetsLayoutViewModel(
                 }
             }
 
-            while (this.Assets.Count > visible.Length)
+            while (this.Assets.Count > visible.Count)
             {
                 this.Assets.RemoveAt(this.Assets.Count - 1);
             }
@@ -422,12 +456,31 @@ public abstract partial class AssetsLayoutViewModel(
             this.isReplacingRows = false;
         }
 
-        this.RestoreSelection(selectedUri);
+        this.SetSelection(selectedUris.Select(uri => this.FindRow(uri)?.Item).OfType<ContentBrowserAssetItem>());
+        this.PublishCounts();
         this.NotifyEmptyState();
     }
 
-    private void RestoreSelection(Uri? identity)
-        => this.SelectedAsset = identity is null ? null : this.Assets.FirstOrDefault(row => AssetIdentityGrouping.Represents(row.Item, identity))?.Item;
+    private AssetBrowserRow? FindRow(Uri identity)
+        => this.Assets.FirstOrDefault(row => AssetIdentityGrouping.Represents(row.Item, identity));
+
+    private void PublishSelection()
+    {
+        if (this.IsActiveLayout)
+        {
+            this.contentBrowserState.SelectedAssetUri = this.selectedAsset?.IdentityUri;
+            this.contentBrowserState.SelectedAssetUris = [.. this.selectedAssets.Select(static asset => asset.IdentityUri)];
+            this.contentBrowserState.PublishSelection(this.selectedAssets);
+        }
+    }
+
+    private void PublishCounts()
+    {
+        if (this.IsActiveLayout)
+        {
+            this.contentBrowserState.PublishCounts(this.Assets.Count, this.scopeCount);
+        }
+    }
 
     private void OnQueryChanged(object? sender, EventArgs args) => this.ReplaceItems(this.latestItems);
 

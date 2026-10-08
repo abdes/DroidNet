@@ -33,15 +33,11 @@ public partial class ProjectLayoutViewModel
             if (this.SetProperty(ref this.isApplyingMounts, value))
             {
                 this.OnPropertyChanged(nameof(this.CanChangeMounts));
-                this.OnPropertyChanged(nameof(this.CanUnmountSelectedItem));
-                this.OnPropertyChanged(nameof(this.CanRenameSelectedItem));
-                this.OnPropertyChanged(nameof(this.MountStatusText));
                 this.OnPropertyChanged(nameof(this.MountProgressVisibility));
                 this.MountKnownLocationCommand.NotifyCanExecuteChanged();
                 this.MountLocalFolderCommand.NotifyCanExecuteChanged();
+                this.ManageMountsCommand.NotifyCanExecuteChanged();
                 this.ContentPriorityCommand.NotifyCanExecuteChanged();
-                this.UnmountSelectedItemCommand.NotifyCanExecuteChanged();
-                this.RenameSelectedItemCommand.NotifyCanExecuteChanged();
             }
         }
     }
@@ -49,11 +45,40 @@ public partial class ProjectLayoutViewModel
     /// <summary>Gets a value indicating whether mount commands can start.</summary>
     public bool CanChangeMounts => !this.IsApplyingMounts;
 
-    /// <summary>Gets the compact operation feedback shown in the mount toolbar.</summary>
-    public string MountStatusText => this.IsApplyingMounts ? "Updating…" : "Virtual folders";
-
     /// <summary>Gets progress visibility without reserving idle toolbar space.</summary>
     public Visibility MountProgressVisibility => this.IsApplyingMounts ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Rebuilds a project's mount declarations from the Content mounts dialog's staged rows.</summary>
+    /// <param name="expected">The project as it was when the dialog opened.</param>
+    /// <param name="candidate">The editable copy that receives the mounts.</param>
+    /// <param name="rows">The staged mounts in display order.</param>
+    /// <param name="isCookedLibrary">Tells whether a folder holds cooked content rather than authored sources.</param>
+    internal static void ApplyMountRows(ProjectContext expected, ProjectInfo candidate, IReadOnlyList<ContentMountRow> rows, Func<string, bool> isCookedLibrary)
+    {
+        candidate.AuthoringMounts.Clear();
+        candidate.LocalFolderMounts.Clear();
+        foreach (var row in rows)
+        {
+            if (row.Kind != ContentMountKind.LocalLibrary)
+            {
+                candidate.AuthoringMounts.Add(new(row.Name, row.RelativePath!, row.IsExpanded));
+                continue;
+            }
+
+            // A new authored folder inside the project is a project source; anything else is a read-only library.
+            var relative = row.IsNew ? GetRelativeMountPath(expected.ProjectRoot, row.AbsolutePath!) : null;
+            if (relative is not null && !isCookedLibrary(row.AbsolutePath!))
+            {
+                candidate.AuthoringMounts.Add(new(row.Name, relative, row.IsExpanded));
+            }
+            else
+            {
+                candidate.LocalFolderMounts.Add(new(row.Name, row.AbsolutePath!, row.IsExpanded));
+            }
+        }
+
+        RemapPriorityNames(expected, candidate);
+    }
 
     private static void RemapPriorityNames(ProjectContext previous, ProjectInfo candidate)
         => candidate.CookedContentOrder = previous.CookedContentOrder.Select(source =>
@@ -69,6 +94,47 @@ public partial class ProjectLayoutViewModel
                 && !previous.LocalFolderMounts.Any(original => string.Equals(original.Name, mount.Name, StringComparison.Ordinal)));
             return renamed is null ? null : new CookedContentSource(CookedContentSourceKind.LocalFolder, renamed.Name);
         }).OfType<CookedContentSource>().ToList();
+
+    [RelayCommand(CanExecute = nameof(CanChangeMounts))]
+    private async Task ManageMountsAsync()
+    {
+        if (projectContextService.ActiveProject is not { } expected || this.GetActiveProjectInfo() is not { } candidate)
+        {
+            return;
+        }
+
+        var model = new ContentMountsViewModel(expected, dialogService);
+        var spec = new DialogSpec("Content mounts", new ContentMountsView { ViewModel = model })
+        {
+            PrimaryButtonText = "Apply",
+            SecondaryButtonText = "Cancel",
+            CloseButtonText = string.Empty,
+            DefaultButton = DialogButton.Primary,
+            PrimaryAction = () => Task.FromResult(model.Validate()),
+            MaxWidth = 760,
+        };
+        if (await dialogService.ShowAsync(spec).ConfigureAwait(true) != DialogButton.Primary)
+        {
+            return;
+        }
+
+        ApplyMountRows(expected, candidate, model.Mounts, static folder => File.Exists(Path.Combine(folder, "container.index.bin")));
+        if (candidate.AuthoringMounts.SequenceEqual(expected.AuthoringMounts) && candidate.LocalFolderMounts.SequenceEqual(expected.LocalFolderMounts))
+        {
+            return;
+        }
+
+        await this.ApplyMountCandidateAsync(expected, candidate).ConfigureAwait(true);
+
+        // Show what was just mounted.
+        if (model.Mounts.LastOrDefault(static row => row.IsNew) is { } added
+            && projectContextService.ActiveProject is { } applied
+            && (applied.AuthoringMounts.Any(mount => string.Equals(mount.Name, added.Name, StringComparison.Ordinal))
+                || applied.LocalFolderMounts.Any(mount => string.Equals(mount.Name, added.Name, StringComparison.Ordinal))))
+        {
+            contentBrowserState.SetSelectedFolders(["/" + added.Name]);
+        }
+    }
 
     [RelayCommand(CanExecute = nameof(CanChangeMounts))]
     private async Task ContentPriorityAsync()

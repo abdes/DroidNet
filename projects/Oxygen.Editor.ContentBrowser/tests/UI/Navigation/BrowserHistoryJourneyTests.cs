@@ -76,7 +76,7 @@ public sealed partial class BrowserHistoryJourneyTests : DroidNet.Tests.VisualUs
         await AssertHistoryScopeAsync(fixture, view, items, "Geometry", tiles: false).ConfigureAwait(true);
         await fixture.NavigateHistoryFolderAsync("Scenes", this.TestContext.CancellationToken).ConfigureAwait(true);
         await AssertHistoryScopeAsync(fixture, view, items, "Scenes", tiles: false).ConfigureAwait(true);
-        await fixture.Browser.SwitchToDetailViewCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
+        await fixture.Browser.SwitchToTilesViewCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         await AssertHistoryScopeAsync(fixture, view, items, "Scenes", tiles: true).ConfigureAwait(true);
         foreach (var (folder, tiles) in new[]
         {

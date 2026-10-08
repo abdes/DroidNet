@@ -14,7 +14,6 @@ using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
 using DroidNet.Storage;
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Importing;
@@ -44,6 +43,7 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="storage">The storage provider.</param>
 /// <param name="dialogService">The existing dialog and folder-picker service.</param>
 /// <param name="windowManagerService">The window manager service.</param>
+/// <param name="shell">The clipboard and File Explorer actions.</param>
 public partial class AssetsViewModel(
     Oxygen.Editor.ContentPipeline.Cooking.ICookRunService cookRuns,
     ViewModelToView vmToViewConverter,
@@ -58,7 +58,8 @@ public partial class AssetsViewModel(
     IStorageProvider storage,
     IMessenger messenger,
     IDialogService dialogService,
-    IWindowManagerService windowManagerService) : AbstractOutletContainer, IRoutingAware
+    IWindowManagerService windowManagerService,
+    IAssetShell shell) : AbstractOutletContainer, IRoutingAware
 {
     private bool disposed;
 
@@ -88,18 +89,6 @@ public partial class AssetsViewModel(
 
     [ObservableProperty]
     public partial InfoBarSeverity OperationResultSeverity { get; set; } = InfoBarSeverity.Informational;
-
-    /// <summary>Gets the visibility of cooking for the selected authored input.</summary>
-    public Visibility CookSelectedAssetVisibility => this.CanCookSelectedAsset() ? Visibility.Visible : Visibility.Collapsed;
-
-    /// <summary>Gets the visibility of cooking for the selected authored folder.</summary>
-    public Visibility CookSelectedFolderVisibility => this.CanCookSelectedFolder() ? Visibility.Visible : Visibility.Collapsed;
-
-    /// <summary>Gets the visibility of reimport for the selected retained model source.</summary>
-    public Visibility ReimportSelectedSourceVisibility => this.CanReimportSelectedSource() ? Visibility.Visible : Visibility.Collapsed;
-
-    /// <summary>Gets the visibility of navigation from an imported output to its retained source.</summary>
-    public Visibility ShowImportSourceVisibility => this.CanShowImportSource() ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>Maps a browser folder to an authored material destination.</summary>
     /// <param name="selected">The selected folder.</param>
@@ -480,7 +469,7 @@ public partial class AssetsViewModel(
 
     private void OnContentBrowserStatePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (!this.disposed && string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal))
+        if (!this.disposed && e.PropertyName is nameof(ContentBrowserState.SelectedFolders) or nameof(ContentBrowserState.SelectedAssets))
         {
             this.NotifyCookSelection();
         }
@@ -670,10 +659,15 @@ public partial class AssetsViewModel(
         }
     }
 
+    // A batch cooks only when every selected asset has a saved authored recipe.
     private bool CanCookSelectedAsset()
-        => !this.disposed && this.isInitialized && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset.CanCook: true };
+        => !this.disposed && this.isInitialized && this.SelectedAssets.Count > 0 && this.SelectedAssets.All(static asset => asset.CanCook);
 
-    private bool CanCookSelectedFolder()
+    private bool CanCookSelectedFolder() => this.IsSelectedFolderWritable();
+
+    private bool CanCreateFolder() => this.IsSelectedFolderWritable();
+
+    private bool IsSelectedFolderWritable()
     {
         if (this.disposed || !this.isInitialized || projectContextService.ActiveProject is not { } project)
         {
@@ -698,46 +692,56 @@ public partial class AssetsViewModel(
     {
         this.ReimportSelectedSourceCommand.NotifyCanExecuteChanged();
         this.ShowImportSourceCommand.NotifyCanExecuteChanged();
-        this.OnPropertyChanged(nameof(this.ReimportSelectedSourceVisibility));
-        this.OnPropertyChanged(nameof(this.ShowImportSourceVisibility));
         this.CookSelectedAssetCommand.NotifyCanExecuteChanged();
         this.CookSelectedFolderCommand.NotifyCanExecuteChanged();
-        this.OnPropertyChanged(nameof(this.CookSelectedAssetVisibility));
-        this.OnPropertyChanged(nameof(this.CookSelectedFolderVisibility));
+        this.CreateFolderCommand.NotifyCanExecuteChanged();
+        this.NotifyAssetActions();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanCreateFolder))]
+    private void CreateFolder()
+    {
+        if (this.CanCreateFolder())
+        {
+            _ = messenger.Send(new CreateFolderRequestMessage(this.GetSelectedFolderUri().AbsolutePath));
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanCookSelectedAsset))]
     private async Task CookSelectedAssetAsync()
     {
-        if (this.LayoutViewModel is not AssetsLayoutViewModel { SelectedAsset: { } asset }
-            || asset.Kind == AssetKind.Folder)
+        var assets = this.SelectedAssets.Where(static asset => asset.Kind != AssetKind.Folder).ToArray();
+        if (assets.Length == 0)
         {
             this.PublishFailure(
                 ContentPipelineOperationKinds.CookAsset,
                 "No asset selected",
-                "Select one cookable asset before running Cook Asset.",
+                "Select one or more cookable assets before running Cook Selected.",
                 AssetCookDiagnosticCodes.CookFailed,
                 scopeUri: null);
             return;
         }
 
-        if (!asset.CanCook)
+        if (assets.FirstOrDefault(static asset => !asset.CanCook) is { } ineligible)
         {
             this.PublishFailure(
                 ContentPipelineOperationKinds.CookAsset,
                 "Cook Asset",
-                "Select an asset with retained source content.",
+                $"{ineligible.DisplayName} has no retained source content. Select only assets with saved authored sources.",
                 AssetCookDiagnosticCodes.CookFailed,
-                asset.IdentityUri);
+                ineligible.IdentityUri);
             return;
         }
 
-        await this.RunCookAsync(
-                ContentPipelineOperationKinds.CookAsset,
-                "Cook Asset",
-                asset.IdentityUri,
-                () => contentPipelineService.CookAssetAsync(asset.IdentityUri, CancellationToken.None))
-            .ConfigureAwait(true);
+        foreach (var asset in assets)
+        {
+            await this.RunCookAsync(
+                    ContentPipelineOperationKinds.CookAsset,
+                    "Cook Asset",
+                    asset.IdentityUri,
+                    () => contentPipelineService.CookAssetAsync(asset.IdentityUri, CancellationToken.None))
+                .ConfigureAwait(true);
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanCookSelectedFolder))]
@@ -950,7 +954,15 @@ public partial class AssetsViewModel(
     }
 
     [RelayCommand]
-    private async Task ImportAsync()
+    private Task ImportAsync() => this.ImportPickedSourceAsync(models: true, textures: true);
+
+    [RelayCommand]
+    private Task ImportModelAsync() => this.ImportPickedSourceAsync(models: true, textures: false);
+
+    [RelayCommand]
+    private Task ImportTextureAsync() => this.ImportPickedSourceAsync(models: false, textures: true);
+
+    private async Task ImportPickedSourceAsync(bool models, bool textures)
     {
         try
         {
@@ -961,17 +973,28 @@ public partial class AssetsViewModel(
                 return;
             }
 
-            var models = new List<string> { ".gltf", ".glb", ".fbx" };
-            var textures = TextureSourceAssetImporter.SupportedExtensions.ToList();
+            var modelTypes = new List<string> { ".gltf", ".glb", ".fbx" };
+            var textureTypes = TextureSourceAssetImporter.SupportedExtensions.ToList();
+            var filters = new Dictionary<string, IList<string>>(StringComparer.Ordinal);
+            if (models && textures)
+            {
+                filters["Supported assets"] = [.. modelTypes.Concat(textureTypes).Distinct(StringComparer.OrdinalIgnoreCase)];
+            }
+
+            if (models)
+            {
+                filters["3D models"] = modelTypes;
+            }
+
+            if (textures)
+            {
+                filters["Textures"] = textureTypes;
+            }
+
             var picker = new FilePickerSpec(
-                "Import asset",
+                models && textures ? "Import asset" : models ? "Import source model" : "Import texture or image",
                 "Oxygen.ImportAsset",
-                new Dictionary<string, IList<string>>(StringComparer.Ordinal)
-                {
-                    ["Supported assets"] = [.. models.Concat(textures).Distinct(StringComparer.OrdinalIgnoreCase)],
-                    ["3D models"] = models,
-                    ["Textures"] = textures,
-                })
+                filters)
             {
                 SuggestedStartFolder = project.ProjectRoot,
             };
@@ -995,9 +1018,9 @@ public partial class AssetsViewModel(
     }
 
     private bool CanReimportSelectedSource() => !this.disposed && this.isInitialized
-        && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset.CanReimport: true };
+        && this.SelectedAssets.Count <= 1 && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset.CanReimport: true };
 
-    private bool CanShowImportSource() => !this.disposed && this.isInitialized
+    private bool CanShowImportSource() => !this.disposed && this.isInitialized && this.SelectedAssets.Count <= 1
         && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset: { ImportSourceUri: { } source } asset } && source != asset.IdentityUri;
 
     [RelayCommand(CanExecute = nameof(CanShowImportSource))]

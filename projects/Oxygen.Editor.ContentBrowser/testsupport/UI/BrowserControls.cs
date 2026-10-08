@@ -78,6 +78,6 @@ internal sealed class BrowserControls : DroidNet.Tests.VisualUserInterfaceTests
     {
         var locator = new Mock<DroidNet.Mvvm.IViewLocator>();
         _ = locator.Setup(value => value.ResolveView(layout)).Returns(layoutView);
-        return new AssetsViewModel(Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.ICookRunService>(), new DroidNet.Mvvm.Converters.ViewModelToView(locator.Object), state, projects, Mock.Of<IProjectManagerService>(), Mock.Of<IAuthoringTargetResolver>(), pipeline ?? Mock.Of<IContentPipelineService>(), provider, Mock.Of<IOperationResultPublisher>(), Mock.Of<IStatusReducer>(), Mock.Of<DroidNet.Storage.IStorageProvider>(), messenger ?? new StrongReferenceMessenger(), Mock.Of<DroidNet.Aura.Dialogs.IDialogService>(), Mock.Of<DroidNet.Aura.Windowing.IWindowManagerService>());
+        return new AssetsViewModel(Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.ICookRunService>(), new DroidNet.Mvvm.Converters.ViewModelToView(locator.Object), state, projects, Mock.Of<IProjectManagerService>(), Mock.Of<IAuthoringTargetResolver>(), pipeline ?? Mock.Of<IContentPipelineService>(), provider, Mock.Of<IOperationResultPublisher>(), Mock.Of<IStatusReducer>(), Mock.Of<DroidNet.Storage.IStorageProvider>(), messenger ?? new StrongReferenceMessenger(), Mock.Of<DroidNet.Aura.Dialogs.IDialogService>(), Mock.Of<DroidNet.Aura.Windowing.IWindowManagerService>(), Mock.Of<IAssetShell>());
     }
 }

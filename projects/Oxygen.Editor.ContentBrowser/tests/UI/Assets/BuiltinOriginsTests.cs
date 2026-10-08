@@ -119,13 +119,18 @@ public sealed partial class BuiltinOriginsTests : DroidNet.Tests.VisualUserInter
     {
         var menu = (MenuFlyout)view.FindDescendant<ToolBarButton>(button => string.Equals(button.Label, "Cook", StringComparison.Ordinal))!.Flyout;
         var assetAction = menu.Items.OfType<MenuFlyoutItem>().Single(action => ReferenceEquals(action.Command, browser.CookSelectedAssetCommand));
-        _ = assetAction.Visibility.Should().Be(Visibility.Collapsed);
+
+        // Unavailable entries stay in place, disabled, and say why.
+        _ = assetAction.Visibility.Should().Be(Visibility.Visible);
+        _ = assetAction.IsEnabled.Should().BeFalse();
+        _ = ToolTipService.GetToolTip(assetAction).Should().Be(browser.CookSelectedToolTip);
         _ = browser.CookSelectedAssetCommand.CanExecute(parameter: null).Should().BeFalse();
         _ = browser.CookSelectedFolderCommand.CanExecute(parameter: null).Should().BeFalse();
         state.SetSelectedFolders(["/Content/Materials"]);
         layout.SelectedAsset = authored;
         await WaitForRenderAsync().ConfigureAwait(true);
-        _ = assetAction.Visibility.Should().Be(Visibility.Visible);
+        _ = assetAction.IsEnabled.Should().BeTrue();
+        _ = ToolTipService.GetToolTip(assetAction).Should().Be("Cook the selected assets.");
         _ = browser.CookSelectedAssetCommand.CanExecute(parameter: null).Should().BeTrue();
         _ = browser.CookSelectedFolderCommand.CanExecute(parameter: null).Should().BeTrue();
         browser.Dispose();

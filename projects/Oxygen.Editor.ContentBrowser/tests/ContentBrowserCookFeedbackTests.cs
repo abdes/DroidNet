@@ -39,7 +39,8 @@ public sealed partial class ContentBrowserCookFeedbackTests
             Mock.Of<DroidNet.Storage.IStorageProvider>(),
             new StrongReferenceMessenger(),
             Mock.Of<DroidNet.Aura.Dialogs.IDialogService>(),
-            Mock.Of<DroidNet.Aura.Windowing.IWindowManagerService>())
+            Mock.Of<DroidNet.Aura.Windowing.IWindowManagerService>(),
+            Mock.Of<IAssetShell>())
         {
             IsOperationResultVisible = true,
             OperationResultTitle = "Cook Project",

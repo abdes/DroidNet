@@ -78,7 +78,8 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
     }
 
     /// <inheritdoc />
-    public override string DisplayLabel => $"{this.label} (Project Root)";
+    /// <remarks>The tree root shows the project's name, as the breadcrumb does.</remarks>
+    public override string DisplayLabel => this.label;
 
     /// <summary>
     ///     Gets the current project info.
