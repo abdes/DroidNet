@@ -128,8 +128,8 @@ recorded by the owning LLD/milestone plan.
 | `REQ-038` | Scene/material saves preserve the last valid saved file, acknowledge only their captured revision, retain newer edits, serialize writes, and reject external-write conflicts. Crash recovery is limited to the last explicit successful Save.                                                                                                                                            |
 | `REQ-039` | Cook consumes a coherent saved dependency snapshot, validates staged output, and publishes it with a brief preview suspension and rollback protection. Failed/cancelled work cannot corrupt the previously published cook or falsely report it current.                                                                                                                                  |
 | `REQ-040` | The qualified static scene import subset, including supported textured materials, is reproducible from retained sources and configuration on a clean project copy. Unsupported authored/imported content fails visibly before publication; source data is never silently discarded or overwritten.                                                                                       |
-| `REQ-041` | V0.1 qualifies 100 scene nodes and 1,000 logical catalog entries on the Windows x64 platform, verified capability dependencies and performance conditions in section 9. Larger projects are unqualified, not subject to an artificial hard cap.                                                                                                                                          |
-| `REQ-042` | Development-only standalone qualification loads the selected published project output through an exact request, verifies content and controlled visual parity, and emits a machine-readable result tied to the source/cook/build identity. Its workflow and tooling are excluded from normal editor Debug/Release builds.                                                                |
+| `REQ-041` | V0.1 qualifies 100 scene nodes and 1,000 logical catalog entries on the Windows x64 platform, verified capability dependencies in section 9. Editor performance is not benchmarked in V0.1. Larger projects are unqualified, not subject to an artificial hard cap.                                                                                                                      |
+| `REQ-042` | Post-V0.1 (deferred 2026-10-08). Development-only standalone qualification loads the selected published project output through an exact request, verifies content and controlled visual parity, and emits a machine-readable result tied to the source/cook/build identity. Its workflow and tooling are excluded from normal editor Debug/Release builds.                               |
 
 ## 6. Success Metrics
 
@@ -151,7 +151,7 @@ Validation proves that the requirements work; it is not itself the product
 requirement. Each LLD/milestone plan decides the right verification method for its
 scope.
 
-The entire standalone qualification workflow is development-only. Normal editor Debug and Release builds,
+The post-V0.1 standalone qualification workflow is entirely development-only. Normal editor Debug and Release builds,
 packages and the normal SDK must contain no qualification command, request
 protocol, fixture, comparison harness or qualification runner. Opt-in test/tool
 targets own that work and write to isolated development output directories.
@@ -192,7 +192,7 @@ undo/redo, save/reopen, cook/load preservation, and the stated preview behavior.
 | Scene environment and post-processing         | `environment-authoring.md` field tables                                                                            | Atmosphere, captured-sky diffuse/specular lighting, Manual/Auto exposure, tone mapping, bloom, grading and display-only background have complete live/cooked effects. Atmospheric assignments are owned by lights; scene summary is read-only. Physical-camera authoring is excluded.                                                                                                                    |
 | Scalar material                               | `material-editor.md` field table                                                                                   | Scalar PBR, sidedness, opacity and linear emission colour/HDR intensity use canonical engine-schema data and float32 compiled emission. Swatch responds while editing; the scene displays published material until saved content is cooked/published. Save schedules incremental cooking. Emissive GI and texture authoring are excluded.                                                                |
 | Viewport authoring                            | `viewport-and-tools.md` V0.1 interaction contract                                                                  | One to four live viewports and a camera preview inset, navigation, frame selected/all, picking, selection feedback, transform gestures, icons, and bounded overlays; layout and per-viewport camera state survive reopening.                                                                                                                                                                             |
-| Content import and browsing                   | `content-pipeline.md` qualified import policy; `content-browser-asset-identity.md`; `content-cooking-workflows.md` | Identity-based browsing/picking, explicit scoped import/reimport and Cook actions, plus incremental cooking after Save/import and on active-scene/asset demand. Browsing and transient edits do not cook. File rename/move/reference-repair UI is outside V0.1; unsupported actions are hidden or disabled with a reason.                                                                                |
+| Content import and browsing                   | `content-pipeline.md` qualified import policy; `content-browser-asset-identity.md`; `content-cooking-workflows.md` | Identity-based browsing/picking, explicit scoped import/reimport and Cook actions, plus incremental cooking after Save/import and on active-scene/asset demand. Browsing and transient edits do not cook. Rename, move, cut/copy/paste and delete of authoring assets update every authored reference in one transaction; read-only mounts and import-owned outputs disable these actions with a reason. |
 
 Unsupported required capabilities may produce safe diagnostics during
 development; they cannot satisfy release completion. No feature inside the
@@ -261,20 +261,8 @@ environment settings, every exposed built-in shape and small imported meshes, sh
 distinct scalar materials. Pad the catalog with valid scalar descriptors to
 exactly 1,000 entries. Keep visible geometry at or below 250,000 triangles.
 
-Performance validation uses Release, a 1920x1080 live viewport, conventional directional
-shadows, and the controlled settings in the standalone-validation LLD:
-
-| Measurement                                         | Required result on the recorded validation machine                                                                          |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Command/selection/field feedback                    | p95 at most 100 ms across 100 interactions after warm-up.                                                                   |
-| Warm catalog folder/filter update                   | p95 at most 250 ms across 100 queries.                                                                                      |
-| Cold 1,000-entry catalog and 100-node scene opening | Each at most 5 seconds from request to usable UI, excluding explicit user decisions and first native initialization.        |
-| Live rendering after 120 warm-up frames             | p95 frame time at most 33.3 ms over the next 600 frames, with no debug capture or validation layers.                        |
-| Save/cook/validation operation start                | Busy/progress state visible within 100 ms; UI remains responsive.                                                           |
-| Repeated open/close and scene activation            | 30 cycles without crash, orphaned document/runtime ownership, or monotonic growth of outstanding scene/view/surface leases. |
-
-Measure CPU interaction timings separately from GPU frame time. Report all
-failures rather than weakening the workload. Larger projects remain unqualified;
+V0.1 does not benchmark editor performance; no timing budget gates the release.
+Larger projects remain unqualified;
 they may open if resources permit and must fail visibly without corrupting saved
 data. No autosave/recovery of unsaved edits is promised; the last successful
 explicit Save must remain valid after a crash or interrupted later write.

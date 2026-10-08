@@ -73,32 +73,33 @@ flowchart LR
     M07[ED-M07<br/>Content pipeline]
     M07A[ED-M07A<br/>Authoring integrity and runtime convergence]
     M07B[ED-M07B<br/>Safe content publication and compatibility]
-    M08[ED-M08<br/>Runtime parity and validation]
-    M09[ED-M09<br/>Viewport authoring tools]
+    M08[ED-M08<br/>Runtime parity and authoring workspace]
     M10[ED-M10<br/>V0.1 acceptance]
 
     M00 --> M01
     M01 --> M03
     M02 --> M03
-    M03 --> M04 --> M05 --> M06 --> M06A --> M07 --> M07A --> M07B --> M08 --> M09 --> M10
+    M03 --> M04 --> M05 --> M06 --> M06A --> M07 --> M07A --> M07B --> M08 --> M10
 ```
 
 `ED-M02` is validated; its supported-viewport evidence is recorded. The current
-execution sequence is ED-M08 -> ED-M09 -> ED-M10. ED-M07A and ED-M07B are validated.
+execution sequence is ED-M08 -> ED-M10; ED-M09 is absorbed into ED-M08. ED-M07A and ED-M07B are validated.
 Earlier milestones retain their delivery records; source-identified omissions
 are assigned to 07A/07B, with no new M04 closure action. M08 still requires its
 joint review with the recorded ED-M02 evidence.
 
 Within ED-M08, execute M08.1 → [M08.F1 descriptor-local references](plan/ED-M08.F1-descriptor-local-references.md)
-→ M08.2–M08.8. M08.F1 is validated and closed on 2026-10-06: editor workflow checks,
+→ M08.2 → M08.V0–V2 → M08.3–M08.10. M08.F1 is validated and closed on 2026-10-06: editor workflow checks,
 the user's Main/Lantern scene packaged and rendered from its PAK alone, and
 focused native origin/binding/cache evidence pass. Its
 [closure record](plan/ED-M08.F1-descriptor-local-references.md#closure-verification)
 retains the user's non-blocking managed/UI and load-cost decisions.
 M08.2 rendering and view behavior is validated and closed on 2026-10-08.
 M08.V0 viewport robustness, M08.V1 multi-viewport layouts and M08.V2
-viewport state persistence are validated and closed on 2026-10-08; the M08.3
-harness is next.
+viewport state persistence are validated and closed on 2026-10-08. The
+2026-10-08 rescope retires the development-only parity harness and adds the
+viewport editing tools (absorbing ED-M09) and the Content Browser redesign,
+including reference-aware rename/move; M08.3 is next.
 
 ## 4. Milestone Roadmap
 
@@ -115,8 +116,8 @@ harness is next.
 | `ED-M07`  | Content pipeline and cooking                     | Descriptor/manifest generation, cook, inspect, cooked validation, catalog refresh, and mount refresh work as explicit workflows.                                                                                   | `content-pipeline`, `project-services`, `asset-primitives`, `runtime-integration`, `diagnostics-operation-results`                                                                           | required before implementation              |
 | `ED-M07A` | Authoring integrity and runtime convergence      | Identified background, gesture, field-diagnostic, sync-lifetime and save-integrity gaps close with concrete UI/native evidence.                                                                                    | `property-pipeline`, `property-inspector`, `environment-authoring`, `documents-and-commands`, `material-editor`, `settings-architecture`, `live-engine-sync`                                 | detailed plan exists                        |
 | `ED-M07B` | Safe content publication and compatibility       | Intuitive content discovery/use, consistent status, incremental cooking, saved snapshots, safe publication, complete native mappings, matched builds and reproducible import work.                                 | `content-cooking-workflows`, `content-browser-asset-identity`, `material-editor`, `content-pipeline`, `runtime-integration`, `project-services`, `asset-primitives`                          | Validated; complete workflow audit recorded |
-| `ED-M08`  | Runtime parity and standalone validation         | Canonical engine/editor authoring and development-only qualification of the saved/published fixture and field suite.                                                                                               | Detailed plan's implementation document map                                                                                                                                                  | Ready for implementation                    |
-| `ED-M09`  | Viewport authoring tools and overlays            | Camera navigation, frame selected/all, selection highlight, transform gizmos, node icons, and overlays are usable in supported viewport layouts.                                                                   | `viewport-and-tools`, `documents-and-commands`, `scene-explorer`, `runtime-integration`                                                                                                      | required before implementation              |
+| `ED-M08`  | Runtime parity and authoring workspace           | Canonical engine/editor authoring, multi-viewport layouts, viewport picking/gizmos/snapping/helpers, and a Content Browser with previews, reference-aware relocation and drag-and-drop.                            | Detailed plan's implementation document map                                                                                                                                                  | In progress                                 |
+| `ED-M09`  | Viewport authoring tools and overlays (absorbed) | Delivered by ED-M08.4–M08.6.                                                                                                                                                                                       | `viewport-and-tools`                                                                                                                                                                         | Absorbed into ED-M08                        |
 | `ED-M10`  | V0.1 acceptance                                  | The full PRD V0.1 workflow completes end-to-end without manual repair.                                                                                                                                             | all V0.1 LLDs                                                                                                                                                                                | required before validation                  |
 
 ## 5. Milestone Details
@@ -390,60 +391,34 @@ before parity, including Cylinder scene/project cooking and engine sphere aliase
 07B.5g also closes compact single/multi-node inspector layout and component
 filtering, with deselection restoring all applicable property editors.
 
-### ED-M08 - Runtime Parity And Standalone Validation
+### ED-M08 - Runtime Parity And Authoring Workspace
 
-Purpose: prove exact saved/published project content in embedded and standalone
-runtime using the PRD 100-node/1,000-entry qualification fixture and field suite.
-The one-mesh smoke scene is a development aid, not the complete acceptance gate.
+Purpose: one canonical engine/editor authoring contract, and an editor in which
+a content author assembles, arranges and lights a scene directly in the
+viewport using assets found visually in the Content Browser.
 
-ED-M07A/07B are validated. M08 implementation can proceed. ED-M02 is validated,
-so only the joint M08 review with its recorded evidence remains before M08
-closure.
-ED-M09 tool completion is not a prerequisite. Required LLDs are property-pipeline,
-standalone-runtime-validation, live-engine-sync, runtime-integration,
-content-pipeline and environment-authoring. The
-[detailed plan](plan/ED-M08-runtime-parity-and-standalone-validation.md) owns the
-opt-in development runner, observations/captures and comparisons. The entire
-qualification workflow is development-only. Normal editor Debug/Release and normal
-RenderScene builds do not acquire a qualification workflow. Test/tool targets
-run the automatic check and exit, retaining evidence for joint review. No
-production project depends on example schemas or development qualification code.
+ED-M07A/07B are validated. The
+[detailed plan](plan/ED-M08-runtime-parity-and-standalone-validation.md) owns
+the slices: canonical data and rendering (M08.1, M08.F1, M08.2), viewport
+layouts and persistence (M08.V0–V2), the viewport HUD and editing tools
+(M08.3–M08.6, absorbing ED-M09), and the Content Browser redesign, asset
+relocation, thumbnails and drag-and-drop (M08.7–M08.10). The
+[V0.1 authoring contract](review/ED-M08-v01-authoring-scope.md) defines the
+final property surface and exclusions.
 
-The [V0.1 authoring contract](review/ED-M08-v01-authoring-scope.md) defines the
-final property surface and exclusions. Native data/rendering work and outside-
-editor visual validation precede editor integration; the complete developer
-qualification suite closes the milestone. The detailed plan maps every slice
-to its owning design contracts and implementation entry points.
+Runtime parity rests on the shared production renderer, loaders and cooked
+formats plus native tests for every changed capability; the closeout loads an
+editor-cooked project in RenderScene. The development-only qualification
+harness in the standalone LLD is post-V0.1.
 
-Exit gate: exact project/scene loading, every required field's semantic parity,
-controlled static/auto-exposure image cases, precise failure/cancel/timeout
-behavior and output leasing pass the standalone LLD's fixed criteria. No
-unsupported required field or native exit-success shortcut closes this gate.
+Exit gate: the detailed plan's exit checklist, including the user's closeout
+walkthrough in the normal Release editor.
 
 ### ED-M09 - Viewport Authoring Tools And Overlays
 
-Purpose: make viewport interaction usable for scene authoring after the core
-runtime, authoring, and cook paths are stable.
-
-LLD work:
-
-- `viewport-and-tools.md` is reviewed in detail.
-- `documents-and-commands.md` provides selection and transform command
-  behavior.
-- Viewport tools consume ED-M07A.3 scoped field diagnostics and the canonical
-  property sessions; no separate validation model or open invalidation design
-  remains. Viewport-and-tools section 16 fixes the interaction and failure rules.
-- `scene-explorer.md` provides hierarchy/selection coordination.
-- `runtime-integration.md` is re-reviewed for input bridge and frame-phase
-  constraints.
-
-Exit gate:
-
-- Camera navigation and frame selected/all are usable.
-- Selection highlight is implemented.
-- Transform gizmo UX mutates through commands.
-- Non-geometry node icons exist for cameras/lights.
-- Supported viewport layouts remain stable with overlays enabled.
+Absorbed into ED-M08 on 2026-10-08: picking, selection feedback and framing
+(M08.4), transform gizmos and snapping (M08.5), and node icons and helpers
+(M08.6).
 
 ### ED-M10 - V0.1 Acceptance
 
@@ -466,7 +441,7 @@ Exit gate:
 - Cook, inspect, refresh, and mount output.
 - Load cooked scene in standalone runtime.
 - Pass the matched-build, 100-node/1,000-entry workload, save/cook failure,
-  clean-copy reproduction and lifecycle/performance cases in the ED-M10 plan.
+  and clean-copy reproduction cases in the ED-M10 plan.
 - Record final `SUCCESS-XXX` validation evidence in
   `IMPLEMENTATION_STATUS.md`.
 
@@ -488,9 +463,9 @@ Exit gate:
 | `asset-primitives.md`               | `ED-M05`                                                                                   | Needed by material, browser, and pipeline work.                                                                                                            |
 | `content-browser-asset-identity.md` | `ED-M05` material picker slice; full review at `ED-M06`; layout-root re-check at `ED-M06A` | Starts with material picking, completed in content browser milestone, then aligned with project layout/template rules.                                     |
 | `content-pipeline.md`               | `ED-M05` material slice; full review at `ED-M07`                                           | Minimum material descriptor/cook slice first; full pipeline later.                                                                                         |
-| `runtime-integration.md`            | `ED-M02`                                                                                   | Re-reviewed in `ED-M04` for sync completion, `ED-M07` for mount, `ED-M08` for parity, and `ED-M09` for input bridge.                                       |
+| `runtime-integration.md`            | `ED-M02`                                                                                   | Re-reviewed in `ED-M04` for sync completion, `ED-M07` for mount, `ED-M08` for parity, input bridge and picking.                                            |
 | `live-engine-sync.md`               | `ED-M04`                                                                                   | Needed once command-driven mutations are in place.                                                                                                         |
-| `viewport-and-tools.md`             | `ED-M02`                                                                                   | Initial stabilization in `ED-M02`, authoring tools in `ED-M09`.                                                                                            |
+| `viewport-and-tools.md`             | `ED-M02`                                                                                   | Initial stabilization in `ED-M02`, authoring tools in `ED-M08`.                                                                                            |
 | `diagnostics-operation-results.md`  | `ED-M01`                                                                                   | Starts with project failures, is extended in `ED-M02` for runtime/viewport failure domains, and becomes foundational in `ED-M03`.                          |
 | `standalone-runtime-validation.md`  | `ED-M08`                                                                                   | Needed before runtime parity milestone implementation.                                                                                                     |
 

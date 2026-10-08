@@ -420,9 +420,13 @@ drag before changing its context. Reject non-finite/zero-scale or nonrepresentab
 parent-transform results without partial model changes; do not invent shear or
 silently approximate a transform the authored model cannot represent.
 
-Snapping is a toolbar toggle, off by default: translation 1 metre, rotation
-15 degrees, scale increment 0.1. These are session tool settings, not scene
-render intent. One snapped or unsnapped drag still produces one undo entry.
+Snapping is a toolbar toggle, off by default: translation 0.25 metre, rotation
+15 degrees, scale increment 0.1. Each increment offers presets (0.01–10 m,
+1–90 degrees, 0.01–1) and a custom value. In World space translation snaps the
+pivot to the world grid; in Local space it snaps the applied offset. Rotation
+and scale snap the applied delta, and Ctrl inverts snapping for one drag. The
+toggle and increments are per-user editor settings that persist across sessions
+and projects, never scene render intent. One snapped or unsnapped drag still produces one undo entry.
 
 ### Overlays And Diagnostics
 

@@ -1,6 +1,6 @@
 # Standalone Runtime Validation LLD
 
-Status: `final implementation contract; implementation and qualification tracked in ED-M08`
+Status: `post-V0.1 design; retired from ED-M08 on 2026-10-08 (PRD REQ-042 deferred)`
 
 The entire validation workflow is **development-only**. Normal Debug and Release
 editor/RenderScene builds and their SDK/install/package graphs contain no

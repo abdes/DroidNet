@@ -1,41 +1,44 @@
-# ED-M08 — Runtime parity and standalone qualification
+# ED-M08 — Runtime parity and editor authoring workspace
 
 Status: **in progress — M08.1, M08.F1, M08.2, M08.V0, M08.V1 and M08.V2
-validated; M08.3 is next**
+validated; rescoped on 2026-10-08; M08.3 is next**
 
-Current: **M08.3 development harness**. M08.V0 viewport robustness, M08.V1
-multi-viewport layouts and M08.V2 viewport state persistence are validated
-and closed on 2026-10-08. M08.1,
-[M08.F1 descriptor-local references](ED-M08.F1-descriptor-local-references.md)
-and M08.2 are validated. [Closure evidence and approved scope](ED-M08.F1-descriptor-local-references.md#closure-verification)
-for F1 retain failing/unrun checks without claiming passes; final managed/UI
-qualification and load-cost measurement are non-blocking by user decision.
-M08.2 closes the authoring surface: live invalidation on flag/role edits, the
-node "Rendering" section, colour grading, camera framing with orthographic
-cameras and editor viewing through authored cameras, and point/spot light
-editors. The editor representation mask is deferred to M08.4, which is
-re-scoped to the remaining authoring surface: the representation mask and
-polish. M08.3 and M08.5–M08.8 remain unchanged.
-See [owners](#2-implementation-document-map), [remaining increments](#m081-remaining-increments)
-and [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
+Current: **M08.3 viewport HUD, view modes and scene toolbar**. The
+[rescope](#retired-by-the-rescope) retires the development-only parity harness
+(former M08.3 and M08.5–M08.8) and the former M08.4 audit, and replaces them
+with what the editor still lacks as an authoring tool: viewport picking,
+selection feedback, transform gizmos, scene helpers and a refined HUD, and a
+Content Browser with real previews, working commands and drag-and-drop. ED-M09
+is absorbed into M08.4–M08.6. See [remaining slices](#4-execution-sequence) and
+[exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
 its rendering, precision and publication contracts remain unchanged.
 
 ## 1. Outcome
 
-The editor and native engine implement one canonical V0.1 authoring contract.
-Saved and cooked scenes reproduce geometry, material slots, visibility, cameras,
-lighting and environment in native and embedded rendering. Every scene layout
-presents stable, independent viewports whose state survives reopening. An
-opt-in development
-harness proves semantic and image parity for the complete workload and field suite.
+The editor and native engine implement one canonical V0.1 authoring contract
+(M08.1, M08.F1, M08.2). Every scene layout presents stable, independent
+viewports whose state survives reopening (M08.V0–V2).
 
-Production behavior ships in its owning modules. Qualification protocols,
-fixtures, comparisons, instrumentation and runners belong exclusively to
-development targets. Normal Debug and Release applications and SDK packages
-contain no qualification workflow.
+The editor becomes a workspace in which a content author assembles a scene
+without touching the Inspector for placement: click to select, see the
+selection outlined, frame it, move/rotate/scale it with snapping, see and pick
+lights and cameras, and drag assets from a Content Browser that shows what
+they look like. Every visible command works or explains why it is unavailable.
 
-Trace: REQ-018/019/022-030/037/039-042; SUCCESS-001/003-006.
+Runtime parity rests on one production path: the editor and the standalone
+runtime share Vortex, the loaders and the cooked formats, and M08.1/M08.2
+added native tests for every changed capability. The closeout loads an
+editor-authored, editor-cooked project in the maintained RenderScene example.
+No separate qualification harness is built.
+
+The design mockup and brief (`F:/projects/oxygen-editor-design`, chapters
+Viewport & input, Rotation feedback and Content Browser) set the layout,
+density and interaction intent. WinUI 3 and the DroidNet controls are the
+implementation; Oxygen contracts win where the mockup differs.
+
+Trace: REQ-005/006/008/013/018–021/025–035/037/039–041;
+SUCCESS-001/003/005/006/008.
 
 ## 2. Implementation document map
 
@@ -57,10 +60,12 @@ redefined by the schedule.
 | [Live engine sync](../lld/live-engine-sync.md)                                                                           | Full projection, asset completion, native mutation and convergence                                      |
 | [Content pipeline](../lld/content-pipeline.md)                                                                           | Slot identity, migration, saved snapshots, provenance, publication, ordered mounts and native producers |
 | [Runtime integration](../lld/runtime-integration.md)                                                                     | Build compatibility, scene/view lifetimes and production capabilities                                   |
-| [Standalone qualification](../lld/standalone-runtime-validation.md)                                                      | Development topology, protocol, admission, observations, capture, comparison and cleanup                |
+| [Standalone qualification](../lld/standalone-runtime-validation.md)                                                      | Post-V0.1 development harness design; not executed by M08                                               |
 | [Settings architecture](../lld/settings-architecture.md)                                                                 | Authored settings, local workspace state, runtime-session and startup preferences                       |
+| [Viewport and tools](../lld/viewport-and-tools.md)                                                                       | HUD, view modes, picking, outline, framing, gizmos, snapping, helpers and drag-and-drop placement       |
+| [Content Browser asset identity](../lld/content-browser-asset-identity.md)                                               | Browser layout, views, commands, thumbnails and drag sources                                            |
 | [Documents and commands](../lld/documents-and-commands.md)                                                               | Save/close lifecycle, command outcomes and document ownership                                           |
-| [Cooking workflows](../lld/content-cooking-workflows.md)                                                                 | Actual Save/Cook/reimport/recovery actions used by qualification                                        |
+| [Cooking workflows](../lld/content-cooking-workflows.md)                                                                 | Save/Cook/reimport/recovery actions exposed by the scene toolbar and Content Browser                    |
 | [Engine deferred capabilities](../../../projects/Oxygen.Engine/design/vortex/milestones/ED-M08/deferred-capabilities.md) | Post-V0.1 exclusions and source-local TODO IDs                                                          |
 
 ### Native implementation references
@@ -80,7 +85,7 @@ implementation must produce new evidence for captured sky and specular lighting.
 
 ## 3. Scope and ownership
 
-### Production deliverables
+### Delivered canonical authoring (M08.1–M08.V2)
 
 - Ten canonical primitives, including Capsule, using shared native recipes and
   the metric centred defaults: horizontal Plane, upright Quad and 1 m outer Torus.
@@ -90,56 +95,94 @@ implementation must produce new evidence for captured sky and specular lighting.
   conversion and finite HDR bounds.
 - Local/Inherit visibility and geometry shadow flags, independent light
   contribution/shadow controls, and functional GPU receiving/contact shadows.
-- Exact authored perspective-camera selection with Auto/Fixed per-view framing.
+- Exact authored perspective/orthographic camera selection with Auto/Fixed
+  per-view framing; viewports look through, pilot and align authored cameras.
 - Per-light None/Primary/Secondary atmospheric assignment, two complete shadowed
-  contributors and independent ordinary directional fill lights. Existing names
-  remain; there is no competing scene Sun pointer or automatic promotion.
-- Captured-sky diffuse/specular lighting and effective behavior for every retained
-  environment/post-process/light field. Realtime is the V0.1 lighting workflow.
-- Editor-only Hide as a local workspace/main-view mask, retaining illumination
-  and caster eligibility without authored changes or cooking demand.
-- One-time migration followed by canonical readers/writers and explicit repair
-  states for unresolvable references.
+  contributors and independent ordinary directional fill lights.
+- Captured-sky diffuse/specular lighting and effective behavior for every
+  retained environment/post-process/light field, including colour grading.
+- One-time migration to canonical readers/writers (M08.1.4); no compatibility
+  reader survives.
+- One- to four-pane layouts with independent panes, focus routing, a camera
+  preview inset and persisted per-pane state.
 
-### Development topology
+### Remaining deliverables (M08.3–M08.10)
 
-| Target/location                                                      | Responsibility                                                          |
-| -------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `projects/Oxygen.Engine/tools/validation/Schemas`                    | Versioned qualification schemas and rejection corpus                    |
-| `Oxygen.Tools.EditorValidation.Native`                               | Exact native request execution and standalone process                   |
-| `Oxygen.Tools.EditorValidation.Capture`                              | Opt-in observations, checkpoints, exposure telemetry and capture bridge |
-| `tests/EditorValidation/Oxygen.Editor.Validation.csproj`             | Preparation, fixture/expectations, process ownership and comparisons    |
-| Existing WorldEditor UI test host with `OxygenEditorValidation=true` | Real editor workflows and saved-revision capture adapter                |
+| Slice  | User-visible outcome                                                                                   |
+| ------ | ------------------------------------------------------------------------------------------------------ |
+| M08.3  | One icon-led viewport HUD; view modes that change the render; layout picker; scene document toolbar.   |
+| M08.4  | Click/marquee picking, selection outline in every pane, frame selected/all.                            |
+| M08.5  | Native translate/rotate/scale gizmos, World/Local, snapping, tool rail and viewport editing shortcuts. |
+| M08.6  | Light/camera icons, selected-helper visuals with editable range/cone handles, orientation triad.       |
+| M08.7  | Redesigned Content Browser: sources/results/details layout, three views, sort, working commands.       |
+| M08.8  | Rename, move, cut/copy/paste and delete that update every authored reference in one transaction.       |
+| M08.9  | Rendered thumbnails for materials, geometry, textures and scenes in browser, pickers, Material Editor. |
+| M08.10 | Drag-and-drop scene assembly, Browse to asset and the editor-to-runtime closeout walkthrough.          |
 
-Native qualification requires `OXYGEN_BUILD_EDITOR_VALIDATION=ON`; managed
-qualification requires `OxygenEditorValidation=true`. Both default off,
-independently of Debug/Release. Development builds/intermediates/staging use
-`artifacts/ed-m08/<Configuration>/{native-build,managed-build,managed-obj,stage}`.
-Evidence defaults to `artifacts/ed-m08/runs/<operation-id>` through an explicit
-owned root. The standalone LLD defines target references and private native ABI.
+### Retired by the rescope
 
-Production projects reference no qualification assemblies, schemas or runners.
-Qualification-only calls compile out of normal builds and their implementations
-live only in opt-in sources. Loading, projection, rendering and readback remain
-the real production algorithms; the harness does not duplicate them.
+- **Development qualification harness** (former M08.3, the M08.5 preparation
+  adapter, M08.6–M08.8 and the former qualification constants): opt-in
+  native/managed targets, saved-revision capture, a standalone child process
+  and semantic/image comparison. It would compare the production renderer with
+  itself, cost several slices of development-only code and add no authoring
+  capability. The [standalone LLD](../lld/standalone-runtime-validation.md)
+  remains a post-V0.1 design.
+- **Editor document migration and repair workflow** (former M08.5): M08.1.4
+  migrated every maintained project and there are no external projects.
+  Missing/broken reference detection remains as delivered by ED-M06.
+- **Workspace-Hide representation mask** (former M08.4): Hide keeps removing
+  geometry from the editing view; keeping hidden casters and lights
+  contributing is post-V0.1.
+- **Formal inspector audit** (former M08.4): the inspectors were rebuilt and
+  validated by M08.2 and the inspector refactoring plan. Defects found while
+  using them are fixed as bugs in the slice that finds them.
 
-All authored changes use normal commands/history/revisions. Qualification never
-implicitly saves or cooks. Its admission uses the existing project coordinator,
-output readers and structured worker ownership, not another scheduler or lock.
-Migration updates source/reference identities and recooks through native tools;
-it never patches cooked binaries or installs legacy runtime readers.
+### Architecture decisions for M08.3–M08.10
 
-Relevant engine edits carry `TODO(post-v0.1, <ID>)` at the actual deferred boundary,
-linked to the engine scope record. Existing native functionality is distinguished
-from missing editor exposure. Current M08 obligations are not future TODOs.
+1. **WinUI draws chrome; Vortex draws anything anchored in 3D.** The HUD,
+   flyouts, tool rail, readout chips, marquee rectangle and Content Browser are
+   WinUI/DroidNet controls. Grid, selection outline, gizmos, icons, helpers and
+   the orientation triad are rendered per view by an editor overlay stage, so
+   they are depth-correct and never lag native navigation.
+2. **Generic engine primitives, editor policy in Interop.** Vortex gains
+   reusable overlay primitives (lines, screen-sized billboards and handle
+   meshes; depth-tested, always-on-top and occluded-dimmed modes) and an
+   on-demand ID/depth pick pass. Interop `EditorModule` decides what to draw
+   from selection, tool and settings. The standalone runtime never enables the
+   editor overlay stage.
+3. **Overlays and tools are view state.** They never enter the authored scene,
+   history, Save or Cook; they are composed after post-processing and are
+   excluded from exposure metering and grading. Pane-level toggles persist with
+   the M08.V2 pane state; snapping is a per-user editor setting and the
+   active tool is session state.
+4. **One mutation path.** Native code performs hover and drag math without a
+   managed round trip per pointer move. Managed code owns begin/commit/cancel:
+   a drag previews through the existing property edit session (live
+   projection, no history), release commits one undoable command for every
+   target, and Escape restores the starting values exactly.
+5. **Thumbnails are a derived local cache.** The production renderer draws
+   them offscreen; they are keyed by asset identity and content revision,
+   stored in the project's local cache, and never authored, cooked or required
+   for browsing.
+
+Owners: WorldEditor `Viewport`, `ViewportViewModel`, `SceneEditorViewModel`
+and the scene document toolbar; ContentBrowser shell, panes and asset
+provider; Runtime view/input/pick contracts; Interop `EditorModule`,
+`EditorView` and commands; Vortex overlay and pick passes and offscreen views.
+
+Engine edits that leave a deferred boundary carry `TODO(post-v0.1, <ID>)`
+linked to the engine scope record. Current M08 obligations are not future TODOs.
 
 ## 4. Execution sequence
 
 Each slice ends with focused checks and a buildable code/test/doc commit. Native
 contracts and rendered behavior pass before editor implementation relies on them.
-M02's remaining supported-viewport evidence is a closeout gate; M09 tools are not
-an entry dependency. Order: M08.1 → M08.F1 → M08.2 → M08.V0 → M08.V1 → M08.V2 →
-M08.3–M08.8.
+From M08.3 on, every slice closes only after the user has reviewed the running
+editor UI; implementation pauses at that point for feedback. Order: M08.1 →
+M08.F1 → M08.2 → M08.V0 → M08.V1 → M08.V2 → M08.3 → M08.4 → M08.5 → M08.6 →
+M08.7 → M08.8 → M08.9 → M08.10. Viewport slices come first for immediate value;
+M08.7 and M08.8 are managed-only.
 
 ### M08.1 — Native canonical data, producers and primitives
 
@@ -689,224 +732,329 @@ Checks: reopen restores each layout and pane; no scene dirty state or history
 entry from navigation or restore; deleted-camera fallback; project and scene
 isolation; an unreadable or unsupported payload is discarded with a warning.
 
-### M08.3 — Development harness and native visual gate
+### M08.3 — Viewport HUD, view modes and scene toolbar
 
-Implement the named opt-in targets and standalone LLD's version-1 protocol.
-Build the complete fixture, field inventory and independent conversion examples.
-The native driver loads only verified ordered roots and the exact scene path/key,
-selects the explicit camera, and emits real observations/completed-frame images.
-Expected values never populate observations or patch loaded content. Native
-execution outcome is separate from the managed parity verdict.
+Today each pane shows a hamburger, a camera button and a shading button whose
+Wireframe/Shaded/Rendered choice has no effect; Show FPS and Show Stats toggle
+nothing visible. M08.3 replaces that with one quiet, icon-led row and makes
+every control in it real.
 
-Use production GPU readback with opt-in instrumentation at real ownership
-boundaries. Validate input versions/fields/IDs/hashes/counts/paths before use.
-Retain resources through GPU copy and encoding completion. PNG capture has no
-RenderDoc/PIX dependency. Supply reusable documented build/run scripts.
+1. **HUD row.** Left to right: View camera ▾, View mode ▾, Show ▾, spacer, the
+   transform group (filled by M08.5, focused pane only), Layout ▾ and
+   Maximize. Controls are 32 px icon + short label on a translucent strip over
+   the render, with tooltips naming shortcuts. As a pane narrows, labels drop
+   first and then lower-priority controls move into a Viewport settings flyout;
+   a quarter pane at 1280×720 shows no clipped control.
+2. **View camera flyout.** Perspective modes as described rows (Turntable:
+   orbit with a level horizon; Trackball: orbit freely, including roll; Fly:
+   move through the scene), then a 3×2 grid of orthographic directions. Below:
+   fly speed in m/s with a slider and the input hint; vertical FOV
+   (perspective only); a Clipping disclosure summarizing the range, with
+   validated near/far and a lens reset that leaves mode, speed and pose
+   unchanged; and the existing scene-camera look-through, Pilot and Align to
+   View entries. The button label names the mode or orthographic direction.
+3. **View modes.** Lit, Unlit, Wireframe, Lit + wireframe and Detail lighting,
+   plus a Buffer visualization submenu (base colour, world normals, roughness,
+   metalness, linear depth, directional shadow mask). Each maps to the existing
+   per-view Vortex `RenderMode`/`ShaderDebugMode`, applies only to its pane and
+   persists with the pane state. The inert shading enum and its Wireframe
+   default are removed.
+4. **Show flyout.** Grid (the existing ground-grid pass, in every projection),
+   Statistics (a corner readout of frame time, FPS, draw count and node count
+   from engine frame statistics) and the camera preview inset. Icons and
+   Selection outline join in M08.4/M08.6. The former Show FPS, Show Stats,
+   Stat1–3 and Show Toolbar toggles are removed.
+5. **Layout picker.** A flyout of pictograms for the 14 layouts in their
+   groups (One Pane, Four Quadrants; Two, Three and Four Panes with Main
+   Left/Right/Top/Bottom), current layout highlighted. It replaces the
+   hamburger menu. Maximize/restore keeps its M08.V1 semantics.
+6. **Gesture hint.** The focused pane shows a quiet bottom-left chip with its
+   mode and next gestures (for example "Alt+drag orbit · wheel zoom · RMB+WASD
+   fly"); it hides while navigating and after first use per session.
+7. **Scene document toolbar.** Save, Cook scene, Add ▾ (Empty node, the ten
+   primitives, the three light types and both camera types, created in front
+   of the focused pane's camera, selected and undoable), Browse to asset
+   (Ctrl+B, reveals the selected nodes' geometry/material assets in the Content
+   Browser) and Environment (selects the scene root's environment). Existing
+   commands only; no second document lifecycle.
 
-**Native visual gate:** render every changed engine capability outside the
-editor: all primitives and material slots; scalar emission/transparency;
-visibility/caster/receiver controls; both atmospheric sources, ordinary fill and
-point/spot lights; captured diffuse/specular sky; perspective/orthographic camera
-framing; exposure/grading/background.
-Retain images, observations, actual profile/build identities and readiness facts.
-Resolve these failures before the editor-integration slice.
+Native/Interop: per-view render and debug mode commands, a per-view grid flag
+for perspective views, and a frame-statistics query.
 
-Checks also include row pitch/channel order/encoding, GPU-fence completion,
-cancellation/device failure, in-flight resource lifetime and history reset.
-Maintained RenderScene examples provide ordinary-loading regression coverage.
+Checks: each view mode changes only its pane, survives reopen and never dirties
+the scene; HUD layout at one, two and four panes at 100% and 150% scaling;
+flyouts are keyboard reachable and close with Escape; Add, Save and Cook from
+the toolbar match their existing commands; Browse to asset selects the right
+assets across mounts.
 
-### M08.4 — Editor canonical authoring and live delivery
+### M08.4 — Picking, selection outline and framing
 
-The transform, geometry/slot, directional/point/spot-light, camera and environment
-field tables are now complete by M08.2; M08.4 audits the remaining surface and
-adds refinements end-to-end:
+Today selection happens only in the Scene Explorer. M08.4 makes the viewport
+the primary place to select.
 
-- **Workspace Hide representation mask** (pushed from M08.2 for large-scene
-  optimization): the native per-view delivery so hidden geometry keeps casting
-  and lighting without authored changes. Apply the workspace-Hide mask to the
-  editing-main-view depth/colour submissions while retaining caster/light
-  eligibility. Workspace owns persistence and Show All semantics; no authored
-  dirty/history/cook mutation is introduced.
-- **Remaining polish:** copy/duplicate, mixed selection, sessions, diagnostics and
-  current-scene convergence across every retained field. Inspector completeness
-  and usability audit: verify actual packaged controls, field coverage, label/unit
-  clarity and keyboard/focus behavior.
+1. **Pick pass.** On request, Vortex renders node IDs and depth for a pick
+   rectangle of one view (visible, non-hidden geometry; M08.6 adds icons) and
+   reads them back asynchronously. A result carries the hit nodes, nearest
+   depth, world position and geometry slot. Requests carry the view and its
+   generation; results for a recreated view, replaced scene or closed document
+   are dropped. An idle viewport pays nothing.
+2. **Gestures.** Click selects the nearest hit node, Ctrl toggles, Shift adds
+   and an empty click clears. Left-drag from empty space draws a marquee that
+   selects every node with visible pixels inside it, with the same modifiers.
+   Alt-navigation is unchanged, and gizmo hits (M08.5) take precedence.
+   Workspace-hidden nodes are not pickable; locked nodes are selectable but not
+   manipulable. A Viewport picking row (Mesh, Light, Camera) in the Scene
+   Explorer header limits which categories the viewport can hit.
+3. **Selection outline.** Selected nodes get a crisp screen-space outline in
+   the editor overlay stage, in every editing pane and view mode: accent
+   colour, brighter for the active node, dimmed where occluded.
+4. **Framing.** F frames the selection and Shift+F frames all, with a 10%
+   margin and a short eased transition. Orthographic views adjust their size.
+   Nodes without geometry use a default extent; an empty scene frames the
+   origin. Double-clicking a Scene Explorer row frames that node in the
+   focused pane.
+5. **Shared selection.** Viewport, Scene Explorer and Inspector stay in sync
+   through the existing selection service; a viewport pick reveals and scrolls
+   to its Explorer row.
 
-WorldEditor/MaterialEditor own UI/commands; World/Managed.Assets own source data;
-ContentPipeline owns native production; Runtime/Interop adapt engine operations.
-Product UI contains no qualification entry.
+Checks: picking in every projection, view mode and pane of a split layout;
+child meshes select their node; marquee with modifiers; stale results after
+layout, document or scene changes; outline with multiple selection;
+framing a transformed hierarchy, a light, a camera and an empty scene, with no
+authored change.
 
-Checks: actual packaged controls/commands, nonzero slot assignment/clearing and
-repair, published material changes, role conflicts, flag defaults/overrides.
-Re-verify M08.2 deliverables through normal editor workflows: point/spot light edits
-(range, lumens, cone angles) and orthographic camera edits (size, near/far) with
-live effect, Auto resize without dirtying, workspace Hide restoration/lifetime/accessibility
-and hidden-caster retention, and all node Rendering flags with history/Undo/Save/reopen.
+### M08.5 — Transform gizmos and snapping
 
-**Inspector completeness and usability gate:** audit the real scene/environment
-and node/component property editors before implementation, then repeat the review
-on the completed packaged UI.
+1. **Gizmos.** Native translate (axis arrows, XY/XZ/YZ plane handles and a
+   view-plane centre), rotate (axis rings and a view ring) and scale (axis
+   handles, plane handles and a uniform centre). They keep a constant screen
+   size, use X red / Y green / Z blue, highlight on hover, have hit targets
+   larger than their visuals, and dim rather than hide occluded parts.
+   Oxygen's Z-up world makes XY the ground plane.
+2. **Drag feedback.** The active axis draws a guideline through the pivot and
+   other handles hide. Rotation follows the mockup's rotation-feedback
+   contract: only the active ring, start and moving spokes, and a translucent
+   signed, multi-turn swept sector in the ring plane (never the shortest arc).
+   A chip near the pointer shows the applied value ("X 1.250 m", "Z 45.0°",
+   "Y 1.200×") and "Esc cancel".
+3. **Space and pivot.** World/Local toggle; the pivot is the active node's
+   origin; a multi-selection receives one common world delta around that
+   pivot. Targets under transformed parents convert through their parents; a
+   result the authored model cannot represent (shear) is rejected without a
+   partial edit.
+4. **Tools and keys.** A left tool rail in the focused pane (Select Q, Move W,
+   Rotate E, Scale R, then Frame F); Space cycles tools. With viewport focus:
+   Delete, Ctrl+D duplicate, Ctrl+Z/Ctrl+Y, and Alt-drag on a gizmo duplicates
+   the selection and drags the copy. Locked nodes show no gizmo.
+5. **Snapping.** The HUD transform group holds World/Local, the snap toggle
+   and the translation, rotation and scale increments, collapsing into the
+   settings flyout when narrow. Each increment offers presets plus a custom
+   value. Translation snaps the pivot to the world grid in World space and
+   the applied offset in Local space; rotation and scale snap the applied
+   delta. Ctrl inverts snapping for the current drag. Toggle state and
+   increments are per-user editor settings that persist across sessions and
+   projects. The defaults are in [section 5](#5-interaction-defaults).
+6. **Transactions.** A drag previews live through the property edit session,
+   with Inspector values updating; release commits one undo entry for every
+   target; Escape or right-click restores the starting transforms exactly.
 
-- Map every required field in the owning LLD tables to its actual control,
-  applicable selection/mode and non-default workflow. Identify missing, hidden,
-  ineffective or incorrectly bound controls; verify edit, Undo/Redo, Save/reopen
-  and live effects. Include empty/scene selection and mixed selection.
-- Review grouping, discoverability, progressive disclosure, labels/units, control
-  choices, alignment, keyboard/focus behavior and loading/error/repair feedback.
-  Exercise narrow docks and 100%/150%/200% scaling. Remove redundant information
-  and unnecessary interaction steps while preserving the V0.1 field contract.
-- Fix the findings and walk through the resulting UI with the user before closing
-  M08.4. Record one compact coverage/findings table and acceptance outcome in the
-  existing M08 validation summary; keep temporary screenshots out of Git.
+Checks: every tool, space and handle on single and multiple selection,
+including rotated and non-uniformly scaled parents; snapping and Ctrl
+inversion; exact cancel; one undo entry per drag; Save, reopen and cook agree
+with the viewport; gizmos usable in quarter panes and orthographic views.
 
-### M08.5 — Migration and verified saved-input preparation
+### M08.6 — Scene helpers and orientation
 
-Implement editor document migration and repair using M08.1's native producers
-and maintained migration tools. Validate old inputs, write canonical source
-atomically with backups, update references and invoke normal cooking.
-Unrepresentable intent remains repair-required. Qualify existing project migration,
-interrupted recovery and explicit slot repair through the real editor workflow.
+1. **Icons.** Screen-sized billboards for directional, point and spot lights
+   and for cameras, tinted by light colour, pickable through M08.4 and
+   toggled from the Show flyout.
+2. **Selected helpers.** A camera frustum including its Fixed-aspect frame; a
+   directional light's direction arrow; a point light's range sphere; a spot
+   light's inner and outer cones. Range and outer/inner cone handles are
+   draggable and edit the light through the same transaction path as gizmos.
+3. **Orientation triad.** A bottom-left X/Y/Z triad in axis colours, drawn
+   as small letters without filled discs, following the view camera. Clicking
+   an axis selects the matching orthographic view; hover and keyboard focus
+   are visible.
 
-The development preparation adapter enters the existing coordinator and resolves
-the selected saved closure through source and per-product provenance. Capture
-private saved bytes and verify product/receipt/publication identities. Protect
-project/library files in saved mount order; native Inspector supplies opaque
-library metadata. Build GUID/index and URI/key/winning-source maps tied to verified
-descriptors. Release document read gates before authoring resumes; retain output
-and native ownership until actual reads drain.
+Checks: icons and helpers in every projection and view mode; picking a light
+or camera by its icon; handle drags with exact cancel and one undo entry;
+triad clicks select the correct view; no helper reaches Save or Cook.
 
-Recheck lifetime after waits; unwind partial acquisition in reverse order.
-Save/Cook recovery occurs outside the reservation. Automatic-cooking preferences
-remain unchanged. Expected contention waits without exception polling.
+### M08.7 — Content Browser redesign and working commands
 
-Checks: partial/no-op publication, unrelated dirty documents, changed dependencies,
-reordered/conflicting libraries, corrupt/missing files, stale Inspector cache,
-recovery journals, cancellation at each acquisition, competing cook/mount work,
-project close and unchanged source/publication hashes during qualification.
+Today tiles show a type glyph and allow only single selection; details are a
+hover tooltip; New Folder, Cut, Copy, Paste, Rename and Delete are buttons
+without behavior; there is no sort. M08.7 rebuilds the presentation around
+the existing query, navigation and mount semantics.
 
-### M08.6 — Embedded saved-revision capture
+1. **Layout.** A navigation row (Back, Forward, Up, Refresh, breadcrumb,
+   search, Filter ▾ with an active-count badge, Tiles/List/Details switch,
+   details-pane toggle) and, when filtered, a row of removable filter chips
+   with Clear all. Left: sources, with the Content subtree and each mount
+   (Cooked, Imported, local folders) as expandable subtrees carrying
+   read-only badges, and Mounts and Content priority at the bottom. Centre:
+   results. Right (optional): a docked details pane replacing the tooltip,
+   with preview, name, type, status, location, source file, size, modified
+   time, identity, Locate source and Copy path; multi-selection shows type and
+   status counts and the selected list. Footer: "N of M assets · K selected".
+2. **Views and selection.** Tiles (preview, name, type, status dot and
+   label), List and Details (sortable name/type/status/location/size/modified
+   columns); thumbnail-size slider; Sort by name, type, status or modified
+   time. Ctrl/Shift multi-selection in every view, kept across view switches.
+   Enter opens; Delete deletes.
+3. **Commands.** New ▾ (Folder, Scene, Material); Import ▾ (Source model,
+   Texture or image, Reimport, Show import source); Cook ▾ grouped as Build
+   scope (Cook selected, current folder, project), Published output (Inspect,
+   Validate) and Cooking service (Pause automatic cooking, Show cooking jobs);
+   and an asset-actions ⋯ menu (Open, Rename, Duplicate, Cut, Copy, Paste,
+   Delete, Copy path, Show in File Explorer). Item context menus mirror
+   these. Disabled entries give their reason.
+4. **Commands that need no references.** New Folder with in-place naming,
+   Copy path and Show in File Explorer work in this slice. Rename, Cut, Copy,
+   Paste, Duplicate and Delete are present and disabled with "Available in
+   M08.8" until their transaction lands; no button is ever inert.
+5. **Empty states.** An empty folder and a no-match result each give one next
+   action (Clear search and filters).
 
-The opt-in host owns one session by project/document/activation/run/view generation.
-Finish active gestures, drain earlier projection/publication, apply the verified
-saved projection and pin camera/profile/target. Hold later properties, hierarchy,
-components, asset completions and publication delivery while authoring/rendering
-continue. Suppress navigation for the captured target and ignore workspace Hide
-without destroying its current state.
+Checks: view-model tests for query, sort, multi-selection and each command's
+availability; New Folder through the real workflow; mount browsing remains
+read-only.
 
-After observations and GPU/image completion, release and converge once to the
-latest valid authoring snapshot/view intent. Do not replay stale mutations or
-restore a closed scene. Panel resize does not alter a pinned target; separate
-Auto-resize cases use distinct controlled profiles.
+### M08.8 — Asset relocation and references
 
-Checks: edits/Undo/Redo/create/delete/reparent/slots/environment/saves during
-warm-up; navigation/resize/document switch; cancel/fault/close/restart and late
-callbacks. Verify saved captured state and newer preview after release. A drain
-owner retains native resources if bounded teardown expires.
+Assets are identified by their virtual path (`asset:///<Mount>/<Path>`), and
+native asset keys derive from that path. This is kept: it is the deliberate
+engine identity that M08.F1 just finalized, and it is the Unreal model, where
+renames rewrite referrers. Moving to GUID identity would be another format
+milestone across Data, Cooker, Content and every editor serializer, and it
+would still need a reverse index for delete warnings and Find references.
+Relocation is therefore a reference-aware project transaction; the contract
+is [Content Browser LLD §9.5](../lld/content-browser-asset-identity.md#95-asset-relocation).
 
-### M08.7 — Owned execution, comparison and results
+1. **Reference index.** A managed index of every authored outgoing reference
+   (scene geometry and material-slot URIs, environment texture references,
+   material and geometry descriptor references, texture descriptor sources,
+   import sidecar source paths), read with the owning serializers rather than
+   text search. It is built when a project opens and updated from catalog
+   change events. Open documents contribute their in-memory references, so
+   unsaved edits are included. The details pane and a Find references command
+   show an asset's referrers.
+2. **Relocation plan.** Rename, move by drag in the source tree, Cut/Paste
+   and folder rename/move produce one plan: source moves (each asset with its
+   companion files such as `.import.json`), a folder prefix mapping, and the
+   rewritten references for every referrer. The plan rejects name collisions,
+   invalid names, read-only or derived targets, moves out of the authoring
+   mounts, and import-owned outputs (they move by changing the import
+   destination). A confirmation lists affected referrers whenever there are
+   any.
+3. **Transaction.** The plan runs under the existing project coordinator
+   admission, like cooking: rewritten referrers are staged, then files move
+   and referrers are replaced atomically through the journaled file store, and
+   any failure rolls back completely. Open clean documents are updated in
+   memory; a referencing document with unsaved changes must be saved or the
+   operation is cancelled. The live scene re-resolves the new URIs, and
+   incremental cooking republishes the moved assets and their referrers while
+   publication retires the old keys. The operation result offers Undo, which
+   runs the reverse relocation; it does not enter scene history.
+4. **Copy, Duplicate and Delete.** Copy/Paste and Duplicate create new paths
+   with a unique name and rewrite no referrers. Delete shows the referrers,
+   requires confirmation when any exist, moves files to the Recycle Bin, and
+   leaves referrers with the existing missing-reference diagnostics.
 
-Compose preparation → embedded capture/release → native child execution/drain →
-semantic/image comparison → atomic result. Reuse structured process arguments,
-owned Windows jobs and I/O drain. Terminate only owned work; leases survive until
-descendant/process/native/GPU readers finish.
+Checks: rename and move of a material, geometry descriptor, scene, source
+model with its sidecar and a populated folder, each with referrers in saved
+and open documents; collisions and read-only targets rejected; an injected
+failure leaves sources and publication unchanged; Undo restores paths and
+references; cooked output and the live viewport show the moved assets with no
+stale key; delete with and without referrers.
 
-Compare expectations independently with embedded and standalone observations,
-then compare images. Reject missing fields/checkpoints, non-finite data, wrong
-operation/root/build/profile/view/frame identity and altered/truncated artifacts.
-Label source-less library baselines and intentional overrides explicitly.
-Native exit zero is not a parity verdict.
+### M08.9 — Asset thumbnails and previews
 
-Retain original PNGs, differences, metrics, field mismatches and partial evidence.
-Freshness is separate from verdict; later edits make the captured revision
-historical without changing its outcome.
+1. **Native preview renderer.** Interop renders through Vortex into an
+   offscreen target with a private preview scene: neutral studio lighting and
+   sky, a material on a sphere, a geometry asset auto-framed at a three-quarter
+   view, at 256² scaled for DPI. Production readback returns BGRA8 pixels. At
+   most one preview renders per frame alongside the viewports, cancellable,
+   and nothing runs while idle.
+2. **Other kinds.** Textures render on a quad from cooked data; unimported
+   images decode from source. Scene thumbnails are a downscaled capture of the
+   focused pane when the scene is saved, with no extra render.
+3. **Thumbnail service.** Asynchronous and prioritized by visible items; keyed
+   by asset identity and content revision; stored in the project's local cache
+   folder, ignored by cooking and version control; invalidated by save,
+   reimport and cook. Pending or failed items show the type glyph and never
+   block browsing.
+4. **Consumers.** Content Browser tiles, rows and details pane; the
+   Inspector's geometry and material pickers, replacing flat colour swatches;
+   and the Material Editor preview, re-rendered after edits, replacing the CPU
+   swatch ball.
 
-Checks: numeric boundaries, quaternion sign, enum/ID mismatch, empty-image false
-positives, wrong frame/dimensions/encoding, hidden overrides, tampering, source
-changes, crash/timeout/cancel, descendants retaining I/O, project replacement and
-queued cooking/mount work resuming.
+Checks: thumbnails for each kind appear and update after an edit, reimport or
+cook; the cache survives restart and regenerates when deleted; viewports stay
+interactive while previews render; device loss and project close cancel
+pending work cleanly.
 
-### M08.8 — Integrated qualification and closeout
+### M08.10 — Drag-and-drop scene assembly and closeout
 
-Run the full fixture and every field case through native/embedded rendering and
-real editor authoring/Save/Cook/migration/recovery. Qualify matched Release images
-on the same adapter/driver; Debug covers protocol and ownership faults.
+1. **Geometry into the scene.** Dragging a geometry asset over the viewport
+   shows a placement preview at the surface under the cursor (pick depth,
+   falling back to the ground plane, with snapping) and drops a new node in
+   one undo entry; Escape cancels. Dropping on a Scene Explorer row creates
+   the node under, before or after that row.
+2. **Materials onto objects.** Dragging a material highlights the object and
+   slot under the cursor and assigns that slot on drop, in one undo entry.
+   Dropping on an Inspector material slot assigns that slot.
+3. **Locate.** Inspector asset slots gain Locate, which reveals the asset in
+   the Content Browser.
+4. **Closeout walkthrough.** With the user, in the normal Release editor:
+   create a project, import a model, author materials, assemble a scene by
+   drag-and-drop, arrange it with gizmos and snapping, light it, save, cook
+   and reopen; then load the cooked project in RenderScene and compare it with
+   the editor viewport.
 
-Include Primary-only, Secondary-only and both with distinct directions/colours
-and requested shadows; None-role fill; point/spot lights; capture invalidation;
-visibility/Hide and receiver cases; every primitive/slot/emission case; Auto/Fixed
-perspective and orthographic cameras; Manual/Auto exposure; every retained tone
-mapper/grade/background interaction.
+Checks: drop placement on geometry, on empty space and in orthographic views;
+slot-accurate material drops on multi-slot meshes; undo and cancel; the
+walkthrough completes without manual file repair.
 
-M02's one-viewport resize and consolidated discovery evidence is recorded under
-[its plan](ED-M02-live-viewport-stabilization.md); the joint M08 review remains.
-Run normal editor and RenderScene
-without development tools installed. Inspect normal Debug/Release references,
-resources, initializers, exports, packages and SDK inventories for zero
-qualification payloads.
+## 5. Interaction defaults
 
-Jointly review real changes, reruns, cancellation, original images and results.
-Finish affected-code analyzer/IDE checks at commit preparation. Record one M08
-result in IMPLEMENTATION_STATUS with exact build/fixture/publication/profile
-and evidence identities.
+| Setting                      | Default                                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Snapping                     | Off; 0.25 m and 15° (Unity), 0.1 scale (Godot); presets 0.01–10 m, 1–90°, 0.01–1; per-user, persistent |
+| Transform space              | World                                                                                                  |
+| Axis colours                 | X red, Y green, Z blue in gizmos, guides, triad and vector fields                                      |
+| Selection outline            | Accent colour; active node brighter; occluded parts dimmed                                             |
+| Frame margin                 | 10% of the framed bounds                                                                               |
+| Overlays on a new pane       | Grid, icons and outline on; statistics off                                                             |
+| Thumbnail render size        | 256² at 100% scaling                                                                                   |
+| Content Browser default view | Tiles, sorted by name, details pane closed                                                             |
 
-## 5. Qualification constants
+## 6. Build and verification
 
-The standalone LLD owns measurement algorithms. These constants are fixed:
-
-| Gate                                     | Required value                                                                                                                                                        |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Full workload                            | Exactly 100 nodes: 98 geometry, one camera, one Primary light; exactly 1,000 logical catalog entries; ≤250,000 visible triangles                                      |
-| Field cases                              | Separate bounded scenes cover multiple lights and non-default fields without changing full-workload counts                                                            |
-| Base image profile                       | 1920×1080; Fixed 16:9; Manual EV9.7; ACES fitted; conventional shadows; no overlays                                                                                   |
-| Time/history                             | Fixed 1/60-second scene step; seed 0; reset histories; frame 0 starts after content/uploads/camera/profile readiness                                                  |
-| Checkpoints                              | Completed frame 120; Auto also at 240 and 600                                                                                                                         |
-| IDs/enums/booleans/membership/rectangles | Exact through the declared identity map                                                                                                                               |
-| Finite scalars/vectors                   | `abs(a-b) <= max(1e-4, 1e-4 * max(abs(a), abs(b)))`                                                                                                                   |
-| Quaternion orientation                   | ≤0.01 degree; opposite signs equivalent; invalid quaternions rejected                                                                                                 |
-| Images                                   | Display-encoded sRGB RGB; RMSE ≤0.01; nearest-rank P99 absolute channel error ≤0.03; only outer one-pixel border excluded                                             |
-| Auto exposure                            | GPU-observed difference ≤0.05 EV at each checkpoint, with the same image thresholds                                                                                   |
-| Framing                                  | Fixed 4:3 in 1920×1080: `(240,0,1440,1080)`; Fixed 16:9 in 1440×1080: `(0,135,1440,810)`; bars stay in images and outside metering                                    |
-| Deadlines                                | Cancellable 120-second active preparation/capture bound and 120-second child deadline per run; cancellable admission wait; separately bounded cleanup/drain ownership |
-| Feedback                                 | Development progress/cancel state within 100 ms; responsive production authoring                                                                                      |
-
-No image resizing/alignment/content masking, automatic rebaselining or tolerance
-adjustment is part of comparison. Required geometry and visible-effect checks
-prevent two empty or identically incorrect images from satisfying the gate.
-
-## 6. Build and evidence
-
-Production native work uses the existing `projects/Oxygen.Engine/out/build-ninja`
-tree with CMake and normal Ninja build parallelism (`cmake --build <tree>
---parallel`). Coordinate build invocations that share an output tree; this does
-not limit compilation within a build to one job. Use CTest for native tests and
-MSBuild.exe/VSTest for editor work; rebuild Interop after changed SDK inputs are
-installed. Serialize only tests that share exclusive GPU, fixture or publication
-resources; independent tests can run in parallel.
-
-M08.3 supplies reusable build/run scripts for the named development targets.
-Options select configuration, request/evidence paths and filters; development
-output never replaces normal SDK/editor artifacts. Record commands and hashes
-of tools/runtime/schemas/shaders, hardware/driver/OS, profiles and results beside
-each run. Native example use/content refresh follows the maintained
-[RenderScene guide](../../../projects/Oxygen.Engine/Examples/RenderScene/README.md).
+Native work uses the existing `projects/Oxygen.Engine/out/build-ninja` tree
+with normal Ninja parallelism and CTest; install the SDK, then rebuild Interop
+and the editor with 64-bit MSBuild. Batch engine and editor rebuilds per
+review pass rather than per edit. Run only the tests for the code being
+changed, one GPU test process at a time. Viewport behavior that depends on
+real input is reviewed by the user in the running editor at each slice pause;
+UI tests never drive the system mouse or need window focus.
 
 ## 7. Exit checklist
 
-- [ ] Canonical formats/migration and every required producer/loader mapping pass.
-      M08.1 and M08.F1 are validated; remaining M08 producer/loader mappings
-      retain their later slice owners.
-- [ ] Engine fixes have native tests and rendered evidence outside the editor.
+- [x] Canonical formats, migration and native producer/loader mappings
+      (M08.1, M08.F1).
+- [x] Authoring surface and rendering behavior (M08.2).
 - [x] Every scene layout and the camera preview inset pass M08.V1, and
       viewport state survives reopening per M08.V2.
-- [ ] Editor authoring/history/Save/cook/live delivery and workspace Hide pass.
-- [ ] M08.4 inspector field coverage and usability audit pass, with user walkthrough acceptance.
-- [ ] Saved-input proof/ownership survive partial/no-op publication and contention.
-- [ ] Saved-revision capture isolates edits and converges correctly after release.
-- [ ] Full semantic/image/GPU-exposure comparisons pass the fixed thresholds.
-- [ ] Cancel/fault/close/restart/resize preserve source, publication and ownership.
-- [ ] Normal Debug/Release build/install/package contain no qualification payloads.
-- [ ] M02 single-viewport evidence and joint M08 review are recorded.
-      The M02 evidence is recorded (ED-M02 is validated); the joint M08 review
-      remains.
-- [ ] Source/API prose and post-V0.1 annotations match implemented contracts.
-- [ ] Affected-code diagnostics are clean and the exact evidence set is recorded.
+- [ ] HUD, view modes and scene toolbar (M08.3).
+- [ ] Picking, outline and framing (M08.4).
+- [ ] Gizmos, snapping and viewport editing shortcuts (M08.5).
+- [ ] Scene helpers, editable light handles and orientation triad (M08.6).
+- [ ] Content Browser layout, views and working commands (M08.7).
+- [ ] Rename, move, cut/copy/paste and delete with reference updates (M08.8).
+- [ ] Rendered thumbnails in browser, pickers and Material Editor (M08.9).
+- [ ] Drag-and-drop assembly and the closeout walkthrough, including the
+      RenderScene load of the editor-cooked project (M08.10).
+- [ ] Owning LLDs and API prose match the implemented contracts; post-V0.1
+      annotations mark every deferred boundary.

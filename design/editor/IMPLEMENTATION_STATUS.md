@@ -65,8 +65,8 @@ Current execution:
    is validated: 148 engine and 33 editor request tests pass, native demo and
    editor rendering are verified, and material recovery survives cooking in the
    same scene session plus Undo/Redo and Save/reopen.
-2. Continue through the exact ED-M08 parity, ED-M09 interaction and ED-M10 release
-   qualification plans. No later milestone is an entry dependency of an earlier one.
+2. Continue through the ED-M08 authoring-workspace slices (ED-M09 is absorbed)
+   and the ED-M10 release qualification plan. No later milestone is an entry dependency of an earlier one.
 
 [ED-M07A](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md) is validated
 as of 2026-09-11: packaged control/native tests pass 137/137, and the user confirmed
@@ -948,16 +948,17 @@ Current validation is summarized in the milestone ledger below and the
 SDK configurations are current. GitHub #8 and #11 retain their closing commit
 references; remote issue closure awaits integration.
 
-### ED-M08 - Runtime Parity And Standalone Validation
+### ED-M08 - Runtime Parity And Authoring Workspace
 
-Status: `in_progress; M08.1, M08.F1 and M08.2 validated; M08.V1 next`
+Status: `in_progress; M08.1, M08.F1, M08.2 and M08.V0–V2 validated; rescoped
+2026-10-08; M08.3 next`
 
-Outcome: one canonical V0.1 authoring contract across engine and editor, with
-semantic/image qualification through development-only native and embedded paths.
+Outcome: one canonical V0.1 authoring contract across engine and editor, and an
+editor workspace with viewport editing tools and a redesigned Content Browser.
 
 The [final plan](plan/ED-M08-runtime-parity-and-standalone-validation.md) contains
-the implementation document map, source owners, eight ordered slices and exact
-acceptance gates. The [authoring contract](review/ED-M08-v01-authoring-scope.md),
+the implementation document map, source owners, ordered slices and exit
+checklist. The [authoring contract](review/ED-M08-v01-authoring-scope.md),
 [visibility contract](review/ED-M08-node-light-visibility-review.md) and
 [celestial contract](review/ED-M08-celestial-light-authoring.md) define the final
 scope and eliminated alternatives. Qualification code is excluded from normal
@@ -1135,47 +1136,29 @@ readers. Primary/Secondary names remain unchanged.
 - [x] M08.2 native rendering and view behavior. Validated on 2026-10-08:
       editor workflow checks for every item, with focused native coverage of
       flag/role invalidation and pilot camera placement.
-- [ ] M08.V1 multi-viewport layouts and camera preview inset.
-- [ ] M08.V2 viewport state persistence.
-- [ ] M08.3 development harness and native visual gate outside the editor.
-- [ ] M08.4 editor canonical authoring and live delivery.
-- [ ] M08.5 migration and verified saved-input preparation.
-- [ ] M08.6 embedded saved-revision capture.
-- [ ] M08.7 owned execution, comparisons and terminal results.
-- [ ] M08.8 full field/rendered qualification, normal-build exclusion and closeout.
+- [x] M08.V0 viewport robustness, M08.V1 multi-viewport layouts and camera
+      preview inset, and M08.V2 viewport state persistence. Validated on
+      2026-10-08.
+- [ ] M08.3 viewport HUD, view modes and scene toolbar.
+- [ ] M08.4 picking, selection outline and framing.
+- [ ] M08.5 transform gizmos and snapping.
+- [ ] M08.6 scene helpers and orientation.
+- [ ] M08.7 Content Browser redesign and working commands.
+- [ ] M08.8 asset relocation and references.
+- [ ] M08.9 asset thumbnails and previews.
+- [ ] M08.10 drag-and-drop scene assembly and closeout walkthrough.
 - [x] M02 supported single-viewport resize/discovery evidence is recorded; the
       joint M08 review remains open.
 
 Implementation and rendered evidence belong to these gates; documentation
 readiness does not close them. Earlier M07 and native-example evidence retains
-its original scope. One M08 validation ledger row records the final matched
-build, publication, fixture, profile and evidence set.
+its original scope. The development-only qualification harness is post-V0.1.
 
 ### ED-M09 - Viewport Authoring Tools And Overlays
 
-Status: `planned`
+Status: `absorbed into ED-M08 on 2026-10-08`
 
-Trace: `GOAL-003`; `REQ-027`, `REQ-028`, `REQ-029`, `REQ-030`,
-`REQ-031`, `REQ-032`, `REQ-033`, `REQ-034`, `REQ-035`; `SUCCESS-003`,
-`SUCCESS-005`, `SUCCESS-008`
-
-Outcome: camera navigation, frame selected/all, selection highlight, transform
-gizmos, node icons, and overlays are usable in supported viewport layouts.
-
-- [ ] Required LLDs are reviewed:
-      `viewport-and-tools`, `documents-and-commands`, `scene-explorer`,
-      `runtime-integration`.
-- [x] Detailed `ED-M09` implementation plan exists; product validation remains pending.
-- [ ] Camera navigation and frame selected/all are usable.
-- [ ] Selection highlight is implemented.
-- [ ] Transform gizmo UX mutates through commands.
-- [ ] Non-geometry node icons exist for cameras/lights.
-- [ ] Supported viewport layouts remain stable with overlays enabled.
-
-Exit evidence required:
-
-- [ ] One `ED-M09` validation ledger row records viewport UX coverage across
-      supported viewport layouts.
+Its scope is delivered and validated by ED-M08 slices M08.4–M08.6.
 
 ### ED-M10 - V0.1 Acceptance
 
@@ -1226,9 +1209,9 @@ recorded in section 5.
 | [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md)                                           | `ED-M07`      | `validated`   | Recorded validation is retained. Section 11 closes UI scope decisions; new publication/mapping guarantees execute in ED-M07B.                                                                                                                                                   |
 | [ED-M07A-authoring-integrity-and-runtime-convergence.md](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md)           | `ED-M07A`     | `validated`   | All automated and user-confirmed viewport gates pass.                                                                                                                                                                                                                           |
 | [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md)             | `ED-M07B`     | `validated`   | Complete workflow audit, native publication/import, browser/picker/status, recovery and compact inspector evidence recorded.                                                                                                                                                    |
-| [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md)                   | `ED-M08`      | `in_progress` | M08.1, M08.F1 and M08.2 validated. Execute M08.V1 multi-viewport layouts, then M08.V2 viewport persistence; editor/standalone parity retains its later M08 gates.                                                                                                               |
+| [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md)                   | `ED-M08`      | `in_progress` | M08.1, M08.F1, M08.2 and M08.V0–V2 validated. Rescoped 2026-10-08; execute M08.3–M08.10 (viewport tools, then Content Browser).                                                                                                                                                 |
 | [ED-M08.F1-descriptor-local-references.md](plan/ED-M08.F1-descriptor-local-references.md)                                       | `ED-M08.F1`   | `validated`   | Closed on 2026-10-06. User editor/reference/mount checks and Main PAK rendering pass; existing focused native origin/binding/cache tests pass 5/5. Final managed/UI qualification and load-cost measurement are non-blocking by approved user decision. No remaining F1 action. |
-| [ED-M09-viewport-authoring-tools.md](plan/ED-M09-viewport-authoring-tools.md)                                                   | `ED-M09`      | `planned`     | Execute the decided navigation/picking/tool contract after M08.                                                                                                                                                                                                                 |
+| [ED-M09-viewport-authoring-tools.md](plan/ED-M09-viewport-authoring-tools.md)                                                   | `ED-M09`      | `absorbed`    | Delivered by ED-M08.4–M08.6.                                                                                                                                                                                                                                                    |
 | [ED-M10-v01-release-qualification.md](plan/ED-M10-v01-release-qualification.md)                                                 | `ED-M10`      | `planned`     | Qualify the matched build and selected small-project workload.                                                                                                                                                                                                                  |
 | DynamicTree rename commit hook                                                                                                  | `post-ED-M03` | `deferred`    | Replace ED-M03's loaded-adapter label-change bridge with a first-class DynamicTree rename commit hook/override; this must not block ED-M03 closure.                                                                                                                             |
 

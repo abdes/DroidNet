@@ -454,33 +454,36 @@ repeat asset browsing, not a gallery page.
 
 ### 9.1 Workspace Layout
 
+ED-M08.7 redesign (supersedes the ED-M06 sketch):
+
 ```text
-+-------------------------------------------------------------------+
-| <  >  ^   Project / Content / Materials             [search....]  |
-| [Tiles] [List] [Refresh]     Kind: [All v]  State: [All v]        |
-+---------------------------+---------------------------------------+
-| Project                   |  [swatch] Red.omat.json     MAT COOK  |
-|  Content                  |           Content/Materials/Red        |
-|   Materials               |           asset:///Content/...         |
-|  Scenes                   |                                       |
-|  Local Mounts             |  [warn ] MissingGlass       MAT MIS   |
-|  Cooked (derived)         |           asset:///Content/...         |
-+---------------------------+---------------------------------------+
-| Details: URI [copy]  Source [open]  Cooked [open]  Diagnostics    |
-+-------------------------------------------------------------------+
++---------------------------------------------------------------------------+
+| < > ^ ⟳  Project › Content › Materials   [search…] [Filter ²] [▦ ☰ ▤] [ⓘ]  |
+| [Material ×] [Needs cooking ×]                                 Clear all  |
++----------------+--------------------------------------------+-------------+
+| ▾ Content      | [New ▾] [Import ▾] [Cook ▾] […]  ◫──○ [Name▾] | (preview)  |
+|   Materials •  |  +------+ +------+ +------+                | Glazed teal |
+|   Geometry     |  |  ◯   | |  ◯   | |  ◯   |                | Material    |
+|   Scenes       |  |Teal  | |Clay  | |Stone |                | • Cooked    |
+| ▸ Cooked   🔒  |  |Mat • | |Mat • | |Mat • |                | Location …  |
+| ▸ Studio   🔒  |  +------+ +------+ +------+                | Referrers 3 |
+| [Mounts] [⇅]   |                                            | [Locate]    |
++----------------+--------------------------------------------+-------------+
+| 6 of 6 assets · 1 selected                                                |
++---------------------------------------------------------------------------+
 ```
 
 Rules:
 
-- left tree selects folders/mounts; right pane shows asset identity rows.
-- `.cooked` is shown as derived output, not as a valid material-create target.
-- rows show icon/swatch, display name, display path, state badge, and any
-  warning/error badge.
-- selecting a row exposes a compact details strip or side details area with
-  copy actions for URI, source path, and cooked path where known.
-- copy URI is always available for asset rows.
-- raw cooked paths appear only in details or diagnostics, never as the primary
-  row identity.
+- the left tree selects folders; mounts are expandable subtrees with read-only
+  badges, never a detached list.
+- Tiles show a rendered thumbnail (ED-M08.9) or the type glyph, name, type and
+  status; List and Details (sortable columns) show the same identity rows.
+- the optional details pane shows identity facts, referrers and copy/locate
+  actions; multi-selection shows aggregated counts. No hover tooltip carries
+  information that is unavailable elsewhere.
+- `.cooked` and other derived mounts are browsable and read-only; raw cooked
+  paths appear only in details or diagnostics, never as the primary identity.
 
 ### 9.2 State Badges
 
@@ -526,6 +529,33 @@ the top even when Missing/Broken filters are off.
   folders inside an authored mount are reused.
 - Opening a material uses `IdentityUri`; the Material Editor resolves source
   descriptor path from project content roots.
+
+### 9.5 Asset Relocation
+
+Asset identity is the virtual path, and native asset keys derive from it.
+Rename, move (tree drag, Cut/Paste) and folder rename/move therefore change
+identity and must update every authored referrer in one transaction.
+
+- **Reference index.** Built at project open from authored sources through
+  their owning serializers and kept current from `AssetChange` events. It covers
+  scene geometry/material-slot URIs, environment texture references, material,
+  geometry and texture descriptor references, and import sidecar source paths.
+  Open documents contribute their in-memory references.
+- **Plan.** Source moves with their companion files, a folder prefix mapping
+  and the rewritten references of every referrer. Rejected: collisions, invalid
+  names, read-only or derived targets, moves out of authoring mounts and
+  import-owned outputs, which move by changing the import destination.
+- **Transaction.** Runs under the project coordinator admission. Referrers are
+  staged, files move and referrers are replaced through the journaled file
+  store; any failure restores every file. A referencing document with unsaved
+  changes must be saved first or the operation is cancelled; clean open
+  documents are updated in memory. Live scenes re-resolve the new URIs and
+  incremental cooking republishes the moved assets and their referrers.
+- **Undo.** The operation result offers Undo, which runs the reverse
+  relocation. It is not part of scene history.
+- Copy/Paste and Duplicate create unique new paths and rewrite nothing. Delete
+  lists referrers, confirms when any exist and uses the Recycle Bin; remaining
+  referrers report the existing missing-reference diagnostics.
 
 ## 10. Persistence And Round Trip
 
@@ -648,8 +678,8 @@ deleting/breaking a descriptor, and confirming visible diagnostics.
 
 ## 15. Open Issues
 
-- Exact thumbnail generation source. ED-M06 may keep deterministic swatches and
-  file/type icons.
+- Thumbnails are rendered by the production renderer offscreen and cached
+  locally by identity and content revision (ED-M08.9).
 - ED-M06 does not claim authoritative runtime `Mounted`. It shows
   `Unknown`/`NotMounted` unless a later ED-M07 mount-refresh workflow supplies
   authoritative availability.
