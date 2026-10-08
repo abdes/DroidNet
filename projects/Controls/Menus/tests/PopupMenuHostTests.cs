@@ -235,6 +235,35 @@ public sealed partial class PopupMenuHostTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
+    public Task DisposeWhileClosingCompletesTheDismissal_Async() => EnqueueAsync(async () =>
+    {
+        var context = await PopupMenuHostTestContext.CreateAsync(1).ConfigureAwait(true);
+
+        try
+        {
+            var openedTcs = CreateSignal();
+            var closedCount = 0;
+            context.Host.Opened += (_, _) => openedTcs.TrySetResult(true);
+            context.Host.Closed += (_, _) => closedCount++;
+
+            _ = context.Host.ShowAt(context.Anchors[0], MenuNavigationMode.PointerInput);
+            await WaitForEventAsync(openedTcs.Task, "Popup should open before it is disposed").ConfigureAwait(true);
+
+            // An owner may drop the host between the close request and the popup's asynchronous Closed event.
+            context.Host.Dismiss(MenuDismissKind.Programmatic);
+            context.Host.Dispose();
+
+            _ = closedCount.Should().Be(1, "disposal must complete the dismissal the popup can no longer report");
+            _ = context.Host.MenuSource.Should().BeNull("the dismissal resets the surface and notifies the controller");
+            _ = context.Host.IsOpen.Should().BeFalse();
+        }
+        finally
+        {
+            context.Dispose();
+        }
+    });
+
+    [TestMethod]
     public Task RapidHoverCyclesKeepPopupResponsive_Async() => EnqueueAsync(async () =>
     {
         const int hoverCount = 20;

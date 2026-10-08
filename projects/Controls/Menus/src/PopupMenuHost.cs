@@ -197,6 +197,15 @@ internal sealed partial class PopupMenuHost : ICascadedMenuHost
         this.popup.Opened -= this.OnPopupOpened;
         this.popup.Closed -= this.OnPopupClosed;
 
+        // The popup's asynchronous Closed event is no longer observed, so a shown or closing menu
+        // completes its dismissal now: the interaction controller must still restore focus and
+        // release the state it captured for this menu.
+        if (this.state is PopupLifecycleState.Opening or PopupLifecycleState.Open or PopupLifecycleState.Closing)
+        {
+            this.popup.IsOpen = false;
+            this.CompleteClose(this.pendingDismissKind, resetSurface: true, hasPendingRequest: false);
+        }
+
         if (this.openTimer is not null)
         {
             this.openTimer.Stop();
