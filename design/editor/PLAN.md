@@ -96,8 +96,9 @@ focused native origin/binding/cache evidence pass. Its
 [closure record](plan/ED-M08.F1-descriptor-local-references.md#closure-verification)
 retains the user's non-blocking managed/UI and load-cost decisions.
 M08.2 rendering and view behavior is validated and closed on 2026-10-08.
-M08.V1 multi-viewport layouts and M08.V2 viewport state persistence are
-next, before the M08.3 harness.
+M08.V0 viewport robustness, M08.V1 multi-viewport layouts and M08.V2
+viewport state persistence are validated and closed on 2026-10-08; the M08.3
+harness is next.
 
 ## 4. Milestone Roadmap
 

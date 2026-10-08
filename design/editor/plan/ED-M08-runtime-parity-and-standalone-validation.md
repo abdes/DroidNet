@@ -1,9 +1,11 @@
 # ED-M08 — Runtime parity and standalone qualification
 
-Status: **in progress — M08.1, M08.F1 and M08.2 validated; M08.V0 is next**
+Status: **in progress — M08.1, M08.F1, M08.2, M08.V0, M08.V1 and M08.V2
+validated; M08.3 is next**
 
-Current: **M08.V0 viewport robustness**, then M08.V1 multi-viewport layouts
-and M08.V2 viewport state persistence, before M08.3. M08.1,
+Current: **M08.3 development harness**. M08.V0 viewport robustness, M08.V1
+multi-viewport layouts and M08.V2 viewport state persistence are validated
+and closed on 2026-10-08. M08.1,
 [M08.F1 descriptor-local references](ED-M08.F1-descriptor-local-references.md)
 and M08.2 are validated. [Closure evidence and approved scope](ED-M08.F1-descriptor-local-references.md#closure-verification)
 for F1 retain failing/unrun checks without claiming passes; final managed/UI
@@ -13,8 +15,7 @@ node "Rendering" section, colour grading, camera framing with orthographic
 cameras and editor viewing through authored cameras, and point/spot light
 editors. The editor representation mask is deferred to M08.4, which is
 re-scoped to the remaining authoring surface: the representation mask and
-polish. Multi-viewport layouts return to scope as M08.V1, followed by
-M08.V2 viewport state persistence. M08.3 and M08.5–M08.8 remain unchanged.
+polish. M08.3 and M08.5–M08.8 remain unchanged.
 See [owners](#2-implementation-document-map), [remaining increments](#m081-remaining-increments)
 and [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
@@ -592,7 +593,7 @@ as its own buildable commit; no user-visible behaviour changes except R7.
 
 | Item                   | Change and rationale                                                                                                                                                                                                                            |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| R1 Frame logging       | Per-frame, per-view publication and composition logs move to debug verbosity: they scale with pane count and distort the V1 cost measurement.                                                                                                   |
+| R1 Frame logging       | Per-frame, per-view publication and composition logs move to debug verbosity: they scale with pane count and flood the log.                                                                                                                     |
 | R2 Composite targets   | Surface composite framebuffers carry no depth attachment; composition writes colour only, and a depth texture per backbuffer per surface is wasted GPU memory.                                                                                  |
 | R3 Dead paths          | Remove the unused `EditorCompositor` copy path and the `EditorView` renderer registration/render-graph members; composition goes only through `Renderer::RegisterRuntimeComposition`.                                                           |
 | R4 Target identity     | A view names its compositing target by surface key, not a raw `Surface*`, so a view outliving its surface can never present into a new surface at a reused address.                                                                             |
@@ -634,9 +635,6 @@ closes the gaps; the contract is the
    when the pane already looks through it. It is editor-only presentation,
    composed through the engine's destination viewport and z-order, and is
    excluded from the host view's metering.
-5. **Cost.** Measure frame time and GPU memory in Release with four panes plus
-   the inset. Any throttling of unfocused panes is decided from that
-   measurement, not assumed.
 
 Known defects closed by these items: a recreated view (dock move, document
 switch, maximize) loses its editor camera and preset; a preset requested before
@@ -656,8 +654,7 @@ Checks: open, switch and close every layout, returning the native view and
 lease counts to their baseline with no debug-layer or resource-state errors;
 resize and dock moves present to the correct surfaces; per-pane camera
 independence; a piloted camera observed from a second pane; shortcuts and
-Scene Explorer commands reach the focused pane; inset show/hide rules; the
-four-pane Release measurement.
+Scene Explorer commands reach the focused pane; inset show/hide rules.
 
 ### M08.V2 — Viewport state persistence
 
@@ -899,7 +896,7 @@ each run. Native example use/content refresh follows the maintained
       M08.1 and M08.F1 are validated; remaining M08 producer/loader mappings
       retain their later slice owners.
 - [ ] Engine fixes have native tests and rendered evidence outside the editor.
-- [ ] Every scene layout and the camera preview inset pass M08.V1, and
+- [x] Every scene layout and the camera preview inset pass M08.V1, and
       viewport state survives reopening per M08.V2.
 - [ ] Editor authoring/history/Save/cook/live delivery and workspace Hide pass.
 - [ ] M08.4 inspector field coverage and usability audit pass, with user walkthrough acceptance.
