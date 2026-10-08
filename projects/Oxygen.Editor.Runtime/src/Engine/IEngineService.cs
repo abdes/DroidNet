@@ -345,6 +345,14 @@ public interface IEngineService : IAsyncDisposable
     public Task<RuntimeViewCameraPose?> GetViewCameraPoseAsync(RuntimeViewId viewId, Guid nodeId);
 
     /// <summary>
+    /// Read a view's editor camera state, so a pane can keep it when its view is released and
+    /// recreate the view with it.
+    /// </summary>
+    /// <param name="viewId">The view whose editor camera is read.</param>
+    /// <returns>The state, or <see langword="null"/> when the view does not exist.</returns>
+    public Task<RuntimeEditorCamera?> GetViewEditorCameraAsync(RuntimeViewId viewId);
+
+    /// <summary>
     /// Set the editor camera fly movement speed for an existing view.
     /// </summary>
     /// <param name="viewId">The id of the view to update.</param>

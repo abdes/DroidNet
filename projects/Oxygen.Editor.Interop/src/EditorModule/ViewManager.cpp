@@ -9,6 +9,7 @@
 #include "pch.h"
 
 #include <EditorModule/ViewManager.h>
+#include <EditorModule/ViewportInset.h>
 
 #include <Oxygen/Scene/Scene.h>
 
@@ -31,6 +32,22 @@ namespace oxygen::interop::module {
       }
       return { width, height };
     }
+
+    //! A view fills its surface; a camera preview inset takes its corner, or
+    //! nothing while the surface is too small for it.
+    [[nodiscard]] auto ViewExtent(const EditorView::Config& config,
+      const graphics::Surface& surface) -> std::pair<uint32_t, uint32_t> {
+      const auto [width, height] = SurfaceExtent(surface);
+      if (!config.inset_host.has_value()) {
+        return { width, height };
+      }
+      const auto inset = ResolveInsetViewport(
+        static_cast<float>(width), static_cast<float>(height));
+      return inset.has_value()
+        ? std::pair { static_cast<uint32_t>(inset->width),
+            static_cast<uint32_t>(inset->height) }
+        : std::pair { 0U, 0U };
+    }
   } // namespace
 
   ViewManager::ViewManager(const SurfaceRegistry& registry)
@@ -50,7 +67,7 @@ namespace oxygen::interop::module {
     try {
       if (config.compositing_target.has_value()) {
         if (const auto surface = registry_.FindSurface(*config.compositing_target)) {
-          std::tie(config.width, config.height) = SurfaceExtent(*surface);
+          std::tie(config.width, config.height) = ViewExtent(config, *surface);
         }
       }
       auto view = std::make_unique<EditorView>(config);
@@ -277,9 +294,9 @@ namespace oxygen::interop::module {
     const SurfaceRegistry::GuidKey& key, const graphics::Surface& surface) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    const auto [width, height] = SurfaceExtent(surface);
     for (auto& [id, entry] : views_) {
       if (entry.view && entry.view->GetConfig().compositing_target == key) {
+        const auto [width, height] = ViewExtent(entry.view->GetConfig(), surface);
         entry.view->Resize(width, height);
       }
     }

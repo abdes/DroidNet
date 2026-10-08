@@ -88,6 +88,7 @@
     <ClCompile Include="src\AssetRequests_native_test.cpp" />
     <ClCompile Include="src\EditorCameraPlacement_native_test.cpp" />
     <ClCompile Include="src\EditorViewCameraScene_native_test.cpp" />
+    <ClCompile Include="src\EditorViewCreationState_native_test.cpp" />
     <ClCompile Include="src\EnvironmentCommand_native_test.cpp" />
     <ClCompile Include="src\InputAccumulator_native_test.cpp" />
   </ItemGroup>

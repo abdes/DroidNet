@@ -9,6 +9,7 @@
 #include "pch.h"
 
 #include <Commands/QueryViewCameraPoseCommand.h>
+#include <Commands/QueryViewEditorCameraCommand.h>
 #include <Commands/SetViewScenePilotCommand.h>
 #include <EditorModule/ViewManager.h>
 
@@ -60,6 +61,31 @@ namespace oxygen::interop::module {
       callback(std::move(pose));
     } catch (...) {
       LOG_F(ERROR, "QueryViewCameraPoseCommand: callback failed");
+    }
+  }
+
+  QueryViewEditorCameraCommand::~QueryViewEditorCameraCommand() {
+    // A command dropped without running still answers its caller.
+    Complete(std::nullopt);
+  }
+
+  void QueryViewEditorCameraCommand::Execute(CommandContext& /*context*/) {
+    auto* view
+      = view_manager_ != nullptr ? view_manager_->GetView(view_id_) : nullptr;
+    Complete(view != nullptr ? view->GetEditorCameraState() : std::nullopt);
+  }
+
+  void QueryViewEditorCameraCommand::Complete(
+    std::optional<EditorCameraState> state) {
+    if (!callback_) {
+      return;
+    }
+    auto callback = std::move(callback_);
+    callback_ = nullptr;
+    try {
+      callback(std::move(state));
+    } catch (...) {
+      LOG_F(ERROR, "QueryViewEditorCameraCommand: callback failed");
     }
   }
 

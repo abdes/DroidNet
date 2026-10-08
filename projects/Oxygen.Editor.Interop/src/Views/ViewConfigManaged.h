@@ -12,13 +12,29 @@
 #include <EditorModule/EditorView.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 
+#include "Views/CameraViewPresetManaged.h"
 #include "Views/ColorManaged.h"
+#include "Views/EditorCameraStateManaged.h"
+#include "Views/ViewIdManaged.h"
 
 namespace Oxygen::Interop {
 
   namespace native = ::oxygen;
 
   using System::Guid;
+
+  namespace detail {
+    //! A 16-byte native key with the managed GUID's byte layout.
+    template <typename Key>
+    auto ToNativeKey(Guid id) -> Key {
+      auto bytes = id.ToByteArray();
+      Key key {};
+      for (int i = 0; i < 16; ++i) {
+        key[static_cast<std::size_t>(i)] = bytes[i];
+      }
+      return key;
+    }
+  } // namespace detail
 
   /// <summary>
   /// Managed mirror of <c>oxygen::interop::module::EditorView::Config</c>.
@@ -36,6 +52,7 @@ namespace Oxygen::Interop {
       Height = 1u;
       ClearColor = ColorManaged{ 0.1f, 0.2f, 0.38f, 1.0f };
       CompositingTarget = System::Nullable<Guid>();
+      CameraPreset = CameraViewPresetManaged::Perspective;
     }
 
     // Human readable name for the view
@@ -54,25 +71,23 @@ namespace Oxygen::Interop {
     // Background clear color used when building the offscreen color texture.
     property ColorManaged ClearColor;
 
-    static ViewConfigManaged^
-      FromNative(const native::interop::module::EditorView::Config& n) {
-      auto m = gcnew ViewConfigManaged();
-      m->Name = gcnew System::String(n.name.c_str());
-      m->Purpose = gcnew System::String(n.purpose.c_str());
-      m->Width = n.width;
-      m->Height = n.height;
-      m->ClearColor = ColorManaged::FromNative(n.clear_color);
+    /// <summary>The preset the editor camera starts with.</summary>
+    property CameraViewPresetManaged CameraPreset;
 
-      if (n.compositing_target.has_value()) {
-        auto bytes = gcnew cli::array<System::Byte>(16);
-        for (int i = 0; i < 16; ++i) {
-          bytes[i] = (*n.compositing_target)[static_cast<std::size_t>(i)];
-        }
-        m->CompositingTarget = Guid(bytes);
-      }
+    /// <summary>
+    /// Editor camera state to start from instead of framing the scene, or
+    /// null for a new pane.
+    /// </summary>
+    property EditorCameraStateManaged^ EditorCamera;
 
-      return m;
-    }
+    /// <summary>The authored camera node the view looks through, if any.</summary>
+    property System::Nullable<Guid> SceneCamera;
+
+    /// <summary>
+    /// The host view a camera preview inset is composed over, or no value for
+    /// a view that presents to its own surface.
+    /// </summary>
+    property System::Nullable<ViewIdManaged> InsetHost;
 
     native::interop::module::EditorView::Config ToNative() {
       native::interop::module::EditorView::Config n;
@@ -81,14 +96,24 @@ namespace Oxygen::Interop {
       n.width = Width;
       n.height = Height;
       n.clear_color = ClearColor.ToNative();
+      n.camera_preset = ToNativeCameraViewPreset(CameraPreset);
 
+      // The view names its surface by key; the engine thread resolves it
+      // every frame, so a released surface is never reached through a stale
+      // address.
       if (CompositingTarget.HasValue) {
-        auto bytes = CompositingTarget.Value.ToByteArray();
-        native::interop::module::SurfaceRegistry::GuidKey key {};
-        for (int i = 0; i < 16; ++i) {
-          key[static_cast<std::size_t>(i)] = bytes[i];
-        }
-        n.compositing_target = key;
+        n.compositing_target = detail::ToNativeKey<native::interop::module::SurfaceRegistry::GuidKey>(
+          CompositingTarget.Value);
+      }
+      if (EditorCamera != nullptr) {
+        n.editor_camera = EditorCamera->ToNative();
+      }
+      if (SceneCamera.HasValue) {
+        n.scene_camera
+          = detail::ToNativeKey<native::interop::module::UuidKey>(SceneCamera.Value);
+      }
+      if (InsetHost.HasValue) {
+        n.inset_host = InsetHost.Value.ToNative();
       }
 
       return n;

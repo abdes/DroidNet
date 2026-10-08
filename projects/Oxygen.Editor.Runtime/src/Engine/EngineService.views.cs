@@ -19,7 +19,8 @@ public sealed partial class EngineService
             var runner = this.EnsureIsRunning();
             this.LogCreateView(config);
             var viewId = await this.AwaitRuntimeOperationAsync(runner.CreateViewAsync(config)).ConfigureAwait(true);
-            if (viewId.IsValid && config.CompositingTarget is { } viewportId)
+            // A camera preview inset receives no input: its host stays the viewport's input target.
+            if (viewId.IsValid && config.InsetHost is null && config.CompositingTarget is { } viewportId)
             {
                 var lease = this.activeLeases.Values.FirstOrDefault(value => value.Key.ViewportId == viewportId);
                 if (lease is not null)
@@ -147,6 +148,21 @@ public sealed partial class EngineService
         {
             var runner = this.EnsureIsRunning();
             return await this.AwaitRuntimeOperationAsync(runner.GetViewCameraPoseAsync(viewId, nodeId)).ConfigureAwait(true);
+        }
+        finally
+        {
+            _ = this.lifecycleGate.Release();
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<RuntimeEditorCamera?> GetViewEditorCameraAsync(RuntimeViewId viewId)
+    {
+        await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
+        try
+        {
+            var runner = this.EnsureIsRunning();
+            return await this.AwaitRuntimeOperationAsync(runner.GetViewEditorCameraAsync(viewId)).ConfigureAwait(true);
         }
         finally
         {

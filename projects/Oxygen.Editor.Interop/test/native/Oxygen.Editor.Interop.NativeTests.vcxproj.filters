@@ -36,6 +36,9 @@
     <ClCompile Include="src\EditorViewCameraScene_native_test.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\EditorViewCreationState_native_test.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\EditorModule\SceneAssetRequests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

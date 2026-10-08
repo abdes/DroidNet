@@ -193,6 +193,9 @@
     <ClInclude Include="Views\ViewCameraPoseManaged.h">
       <Filter>Views</Filter>
     </ClInclude>
+    <ClInclude Include="Views\EditorCameraStateManaged.h">
+      <Filter>Views</Filter>
+    </ClInclude>
     <ClInclude Include="Views\ViewConfigManaged.h">
       <Filter>Views</Filter>
     </ClInclude>
@@ -203,6 +206,9 @@
       <Filter>Views</Filter>
     </ClInclude>
     <ClInclude Include="EditorModule\SurfaceFramebuffers.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\ViewportInset.h">
       <Filter>EditorModule</Filter>
     </ClInclude>
     <ClInclude Include="Utils\TokenHelpers.h">
@@ -281,6 +287,9 @@
       <Filter>Commands</Filter>
     </ClInclude>
     <ClInclude Include="Commands\QueryViewCameraPoseCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\QueryViewEditorCameraCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>
     <ClInclude Include="Commands\SetViewSceneCameraCommand.h">

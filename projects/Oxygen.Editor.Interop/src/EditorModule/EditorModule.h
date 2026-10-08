@@ -182,6 +182,11 @@ namespace oxygen::interop::module {
     void QueryViewCameraPose(ViewId view_id, UuidKey node_id,
       std::function<void(std::optional<EditorCameraPose>)> callback);
 
+    //! Reports, on the engine thread, a view's editor camera state; no value
+    //! when the view is missing.
+    void QueryViewEditorCamera(ViewId view_id,
+      std::function<void(std::optional<EditorCameraState>)> callback);
+
     //! Set the editor camera navigation mode for a specific view.
     void SetViewCameraControlMode(
       ViewId view_id,

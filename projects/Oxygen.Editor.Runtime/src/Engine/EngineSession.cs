@@ -111,6 +111,11 @@ internal abstract class EngineSession
     /// <returns>The pose, or <see langword="null"/> when the view or node does not exist.</returns>
     public abstract Task<RuntimeViewCameraPose?> GetViewCameraPoseAsync(RuntimeViewId viewId, Guid nodeId);
 
+    /// <summary>Reads a view's editor camera state.</summary>
+    /// <param name="viewId">The viewId value.</param>
+    /// <returns>The state, or <see langword="null"/> when the view does not exist.</returns>
+    public abstract Task<RuntimeEditorCamera?> GetViewEditorCameraAsync(RuntimeViewId viewId);
+
     /// <summary>Sets the editor camera navigation mode.</summary>
     /// <param name="viewId">The viewId value.</param>
     /// <param name="mode">The mode value.</param>

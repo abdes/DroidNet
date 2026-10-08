@@ -45,6 +45,11 @@ internal sealed partial class NativeEngineSession
     }
 
     /// <inheritdoc />
+    public override async Task<RuntimeEditorCamera?> GetViewEditorCameraAsync(RuntimeViewId viewId)
+        => NativeSessionConversions.FromNative(
+            await this.Runner.TryGetViewEditorCameraAsync(this.context, new(viewId.Value)).ConfigureAwait(false));
+
+    /// <inheritdoc />
     public override Task<bool> SetViewCameraControlModeAsync(RuntimeViewId viewId, CameraControlMode mode)
         => this.Runner.TrySetViewCameraControlModeAsync(this.context, new(viewId.Value), NativeSessionConversions.ToNative<CameraControlModeManaged>(mode));
 

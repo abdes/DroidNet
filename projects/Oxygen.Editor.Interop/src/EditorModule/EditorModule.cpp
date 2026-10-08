@@ -20,6 +20,7 @@
 #include <Commands/SetViewCameraSettingsCommand.h>
 #include <Commands/OrthographicCameraPropertyApplier.h>
 #include <Commands/QueryViewCameraPoseCommand.h>
+#include <Commands/QueryViewEditorCameraCommand.h>
 #include <Commands/SetViewSceneCameraCommand.h>
 #include <Commands/SetViewScenePilotCommand.h>
 #include <Commands/ShowViewCommand.h>
@@ -30,6 +31,7 @@
 #include <EditorModule/NodeRegistry.h>
 #include <EditorModule/SurfaceFramebuffers.h>
 #include <EditorModule/SurfaceRegistry.h>
+#include <EditorModule/ViewportInset.h>
 
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/ContentMounts.h>
@@ -719,13 +721,17 @@ namespace oxygen::interop::module {
         continue;
       }
 
-      view->EnsureRenderTarget(*gfx);
-      const auto scene_fb = view->GetFramebuffer();
+      // An inset with no room on its surface has no extent and renders nothing.
       const auto width = view->GetWidth();
       const auto height = view->GetHeight();
+      if (width <= 0.0F || height <= 0.0F) {
+        continue;
+      }
+
+      view->EnsureRenderTarget(*gfx);
+      const auto scene_fb = view->GetFramebuffer();
       const auto camera_node = view->GetRenderCameraNode();
-      if (!scene_fb || width <= 0.0F || height <= 0.0F
-        || !camera_node.IsAlive()) {
+      if (!scene_fb || !camera_node.IsAlive()) {
         DLOG_F(2,
           "OnPublishViews: view '{}' is not ready (framebuffer={}, extent={}x{}, "
           "camera={})",
@@ -837,11 +843,18 @@ namespace oxygen::interop::module {
     }
 
     auto& renderer = renderer_opt->get();
-    for (auto* view : view_manager_->GetAllRegisteredViews()) {
-      if (view == nullptr || !view->IsVisible()
-        || view->GetViewId() == kInvalidViewId
-        || renderer.ResolvePublishedRuntimeViewId(view->GetViewId())
-          == kInvalidViewId) {
+    const auto views = view_manager_->GetAllRegisteredViews();
+    const auto is_composable = [&renderer](const EditorView* view) {
+      return view != nullptr && view->IsVisible()
+        && view->GetViewId() != kInvalidViewId
+        && view->GetWidth() > 0.0F && view->GetHeight() > 0.0F
+        && renderer.ResolvePublishedRuntimeViewId(view->GetViewId())
+        != kInvalidViewId;
+    };
+
+    for (auto* view : views) {
+      // A camera preview inset is composed as a layer of its host.
+      if (!is_composable(view) || view->IsInset()) {
         continue;
       }
 
@@ -856,30 +869,45 @@ namespace oxygen::interop::module {
       }
 
       auto target_fb = framebuffers_->GetCurrent(key, *target_surface);
+      if (!target_fb) {
+        DLOG_F(2, "OnCompositing: view '{}' has no target", view->GetName());
+        continue;
+      }
+
       const auto width = view->GetWidth();
       const auto height = view->GetHeight();
-      if (!target_fb || width <= 0.0F || height <= 0.0F) {
-        DLOG_F(2, "OnCompositing: view '{}' has no target or extent",
-          view->GetName());
-        continue;
+      std::vector<vortex::Renderer::RuntimeCompositionLayer> layers {
+        vortex::Renderer::RuntimeCompositionLayer {
+          .intent_view_id = view->GetViewId(),
+          .viewport = ViewPort {
+            .top_left_x = 0.0F,
+            .top_left_y = 0.0F,
+            .width = width,
+            .height = height,
+            .min_depth = 0.0F,
+            .max_depth = 1.0F,
+          },
+          .opacity = 1.0F,
+        },
+      };
+
+      // Later layers draw on top: the host's insets go over its image.
+      if (const auto inset_viewport = ResolveInsetViewport(width, height)) {
+        for (const auto* inset : views) {
+          if (is_composable(inset) && inset->IsInset()
+            && *inset->GetConfig().inset_host == view->GetViewId()) {
+            layers.push_back(vortex::Renderer::RuntimeCompositionLayer {
+              .intent_view_id = inset->GetViewId(),
+              .viewport = *inset_viewport,
+              .opacity = 1.0F,
+            });
+          }
+        }
       }
 
       renderer.RegisterRuntimeComposition(
         vortex::Renderer::RuntimeCompositionInput {
-          .layers = {
-            vortex::Renderer::RuntimeCompositionLayer {
-              .intent_view_id = view->GetViewId(),
-              .viewport = ViewPort {
-                .top_left_x = 0.0F,
-                .top_left_y = 0.0F,
-                .width = width,
-                .height = height,
-                .min_depth = 0.0F,
-                .max_depth = 1.0F,
-              },
-              .opacity = 1.0F,
-            },
-          },
+          .layers = std::move(layers),
           .composite_target = std::move(target_fb),
           .target_surface = std::move(target_surface),
         });
@@ -1035,6 +1063,17 @@ namespace oxygen::interop::module {
 
     command_queue_.Enqueue(std::make_unique<QueryViewCameraPoseCommand>(
       view_manager_.get(), view_id, node_id, std::move(callback)));
+  }
+
+  void EditorModule::QueryViewEditorCamera(ViewId view_id,
+    std::function<void(std::optional<EditorCameraState>)> callback) {
+    if (view_id == kInvalidViewId || !view_manager_) {
+      callback(std::nullopt);
+      return;
+    }
+
+    command_queue_.Enqueue(std::make_unique<QueryViewEditorCameraCommand>(
+      view_manager_.get(), view_id, std::move(callback)));
   }
 
   void EditorModule::SetViewCameraControlMode(

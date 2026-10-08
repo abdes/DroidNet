@@ -18,12 +18,37 @@ internal static class NativeSessionConversions
         => Enum.IsDefined(value.GetType(), value) && Enum.TryParse<TNative>(value.ToString(), ignoreCase: false, out var native) && Enum.IsDefined(native)
             ? native : throw new ArgumentOutOfRangeException(nameof(value), value, "The runtime option is not supported by the native contract.");
 
+    /// <summary>Converts a native editor camera state.</summary>
+    /// <param name="state">The native state, or <see langword="null"/>.</param>
+    /// <returns>The managed state, or <see langword="null"/>.</returns>
+    public static RuntimeEditorCamera? FromNative(EditorCameraStateManaged? state)
+        => state is null ? null : new(state.Position, state.Rotation, state.FocusPoint, state.OrthographicSize);
+
     /// <summary>Creates the native view config while preserving omitted native defaults.</summary>
     /// <param name="config">The editor's managed view request.</param>
     /// <returns>The native configuration.</returns>
     public static ViewConfigManaged ToNative(RuntimeViewConfig config)
     {
-        var native = new ViewConfigManaged { Name = config.Name, Purpose = config.Purpose, CompositingTarget = config.CompositingTarget };
+        var native = new ViewConfigManaged
+        {
+            Name = config.Name,
+            Purpose = config.Purpose,
+            CompositingTarget = config.CompositingTarget,
+            CameraPreset = ToNative<CameraViewPresetManaged>(config.CameraPreset),
+            SceneCamera = config.SceneCameraNodeId,
+            InsetHost = config.InsetHost is { } host ? new ViewIdManaged(host.Value) : null,
+        };
+        if (config.EditorCamera is { } camera)
+        {
+            native.EditorCamera = new EditorCameraStateManaged
+            {
+                Position = camera.Position,
+                Rotation = camera.Rotation,
+                FocusPoint = camera.FocusPoint,
+                OrthographicSize = camera.OrthographicSize,
+            };
+        }
+
         if (config.Width is { } width)
         {
             native.Width = width;

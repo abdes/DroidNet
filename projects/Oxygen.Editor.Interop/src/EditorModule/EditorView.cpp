@@ -18,6 +18,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
+#include <glm/vec4.hpp>
 #include "EditorModule/EditorCameraPlacement.h"
 
 #include <Oxygen/Core/Constants.h>
@@ -272,6 +273,17 @@ void EditorView::Initialize(scene::Scene &scene, scene::Scene &camera_scene) {
   camera_scene_ = camera_scene.weak_from_this();
   CreateCamera(camera_scene);
 
+  // A recreated or restored pane starts as it was left. The preset goes first
+  // because it replaces the camera component; the kept pose then overrides
+  // the preset's own placement.
+  SetCameraViewPreset(config_.camera_preset);
+  if (config_.editor_camera.has_value()) {
+    ApplyEditorCameraState(*config_.editor_camera);
+  }
+  if (config_.scene_camera.has_value()) {
+    SetSceneCamera(config_.scene_camera);
+  }
+
   state_ = ViewState::kReady;
   LOG_F(INFO, "EditorView '{}' initialized.", config_.name);
 }
@@ -517,6 +529,29 @@ void EditorView::CreateCamera(scene::Scene &camera_scene) {
     kDefaultPerspectiveNearPlane, kDefaultPerspectiveFarPlane);
 }
 
+void EditorView::ApplyEditorCameraState(const EditorCameraState& state) {
+  const glm::vec4 rotation { state.rotation.x, state.rotation.y,
+    state.rotation.z, state.rotation.w };
+  if (!IsFinite(state.position) || !IsFinite(state.focus_point)
+    || !std::isfinite(rotation.x) || !std::isfinite(rotation.y)
+    || !std::isfinite(rotation.z) || !std::isfinite(rotation.w)
+    || glm::dot(rotation, rotation) <= std::numeric_limits<float>::epsilon()) {
+    LOG_F(WARNING, "EditorView '{}' ignored a non-finite editor camera state",
+      config_.name);
+    return;
+  }
+
+  auto transform = camera_node_.GetTransform();
+  (void)transform.SetLocalPosition(state.position);
+  (void)transform.SetLocalRotation(glm::normalize(state.rotation));
+  focus_point_ = state.focus_point;
+  SetOrthoHalfHeight(state.ortho_half_height);
+
+  // The kept pose replaces the first-frame scene framing.
+  initial_orientation_set_ = true;
+  initial_scene_frame_applied_ = true;
+}
+
 void EditorView::UpdateCameraForFrame() {
   if (!current_context_) {
     return;
@@ -750,6 +785,22 @@ auto EditorView::IsVisible() const -> bool { return visible_; }
 
 auto EditorView::GetCameraNode() const -> scene::SceneNode {
   return camera_node_;
+}
+
+auto EditorView::GetEditorCameraState() const
+  -> std::optional<EditorCameraState> {
+  if (!camera_node_.IsAlive()) {
+    return std::nullopt;
+  }
+  // The editor camera is a scene root: its local pose is its world pose.
+  auto transform = scene::SceneNode(camera_node_).GetTransform();
+  return EditorCameraState {
+    .position = transform.GetLocalPosition().value_or(glm::vec3 { 0.0F }),
+    .rotation = transform.GetLocalRotation().value_or(
+      glm::quat { 1.0F, 0.0F, 0.0F, 0.0F }),
+    .focus_point = focus_point_,
+    .ortho_half_height = ortho_half_height_,
+  };
 }
 
 void EditorView::SetSceneCamera(std::optional<UuidKey> node_id) {

@@ -104,6 +104,8 @@ internal sealed class FakeEngineSession : EngineSession
 
     public override Task<RuntimeViewCameraPose?> GetViewCameraPoseAsync(RuntimeViewId viewId, Guid nodeId) => Task.FromResult<RuntimeViewCameraPose?>(null);
 
+    public override Task<RuntimeEditorCamera?> GetViewEditorCameraAsync(RuntimeViewId viewId) => Task.FromResult<RuntimeEditorCamera?>(null);
+
     public override Task<bool> SetViewCameraMovementSpeedAsync(RuntimeViewId viewId, float speedUnitsPerSecond) => Task.FromResult(true);
 
     public override Task<bool> SetViewCameraSettingsAsync(RuntimeViewId viewId, float fieldOfViewDegrees, float nearPlane, float farPlane) => Task.FromResult(true);

@@ -5,6 +5,8 @@
 #pragma once
 #pragma managed
 
+#include <EditorModule/EditorView.h>
+
 namespace Oxygen::Interop {
 
   /// <summary>
@@ -32,5 +34,28 @@ namespace Oxygen::Interop {
     /// <summary>Back orthographic view.</summary>
     Back = 6,
   };
+
+  [[nodiscard]] inline auto ToNativeCameraViewPreset(
+    CameraViewPresetManaged preset)
+    -> ::oxygen::interop::module::CameraViewPreset {
+    using NativePreset = ::oxygen::interop::module::CameraViewPreset;
+    switch (preset) {
+    case CameraViewPresetManaged::Top:
+      return NativePreset::kTop;
+    case CameraViewPresetManaged::Bottom:
+      return NativePreset::kBottom;
+    case CameraViewPresetManaged::Left:
+      return NativePreset::kLeft;
+    case CameraViewPresetManaged::Right:
+      return NativePreset::kRight;
+    case CameraViewPresetManaged::Front:
+      return NativePreset::kFront;
+    case CameraViewPresetManaged::Back:
+      return NativePreset::kBack;
+    case CameraViewPresetManaged::Perspective:
+    default:
+      return NativePreset::kPerspective;
+    }
+  }
 
 } // namespace Oxygen::Interop

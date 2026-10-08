@@ -24,4 +24,23 @@ public sealed record RuntimeViewConfig
 
     /// <summary>Gets the initial clear color, when supplied.</summary>
     public RuntimeColor? ClearColor { get; init; }
+
+    /// <summary>Gets the preset the editor camera starts with.</summary>
+    public CameraViewPreset CameraPreset { get; init; } = CameraViewPreset.Perspective;
+
+    /// <summary>
+    /// Gets the editor camera state to start from, so a recreated or restored pane is correct on its
+    /// first presented frame; <see langword="null"/> frames the scene.
+    /// </summary>
+    public RuntimeEditorCamera? EditorCamera { get; init; }
+
+    /// <summary>Gets the authored camera node the view looks through from its first frame, if any.</summary>
+    public Guid? SceneCameraNodeId { get; init; }
+
+    /// <summary>
+    /// Gets the view a camera preview inset is composed over, or <see langword="null"/> for a view
+    /// that presents to its own surface. An inset names its host's surface as
+    /// <see cref="CompositingTarget"/> and receives no input.
+    /// </summary>
+    public RuntimeViewId? InsetHost { get; init; }
 }

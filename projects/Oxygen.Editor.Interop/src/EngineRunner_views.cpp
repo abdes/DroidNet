@@ -29,6 +29,7 @@
 #include <EngineRunner.h>
 #include <Views/CameraControlModeManaged.h>
 #include <Views/CameraViewPresetManaged.h>
+#include <Views/EditorCameraStateManaged.h>
 #include <Views/ViewConfigManaged.h>
 #include <Views/ViewIdManaged.h>
 
@@ -74,6 +75,27 @@ namespace {
     }
   }
 
+  // Resolves a pinned TaskCompletionSource with an editor camera state, or null.
+  static void ResolveViewEditorCameraCallback(void* handlePtr,
+    std::optional<::oxygen::interop::module::EditorCameraState> state) {
+    using namespace Oxygen::Interop;
+    try {
+      System::IntPtr stored(handlePtr);
+      auto gh = System::Runtime::InteropServices::GCHandle::FromIntPtr(stored);
+      auto tcsObj
+        = safe_cast<TaskCompletionSource<EditorCameraStateManaged^>^>(gh.Target);
+      if (tcsObj != nullptr) {
+        tcsObj->TrySetResult(state.has_value()
+            ? EditorCameraStateManaged::FromNative(*state)
+            : nullptr);
+      }
+      if (gh.IsAllocated) gh.Free();
+    }
+    catch (...) {
+      // Swallow: the native caller must not observe managed exceptions.
+    }
+  }
+
   // File-scope helper that resolves a pinned TaskCompletionSource and sets
   // the ViewIdManaged result. Kept in this file to avoid local lambda types
   // inside managed member functions.
@@ -105,28 +127,6 @@ namespace {
 namespace Oxygen::Interop {
 
   namespace {
-
-    [[nodiscard]] auto ToNativeCameraViewPreset(CameraViewPresetManaged preset)
-      -> ::oxygen::interop::module::CameraViewPreset {
-      using NativePreset = ::oxygen::interop::module::CameraViewPreset;
-      switch (preset) {
-      case CameraViewPresetManaged::Top:
-        return NativePreset::kTop;
-      case CameraViewPresetManaged::Bottom:
-        return NativePreset::kBottom;
-      case CameraViewPresetManaged::Left:
-        return NativePreset::kLeft;
-      case CameraViewPresetManaged::Right:
-        return NativePreset::kRight;
-      case CameraViewPresetManaged::Front:
-        return NativePreset::kFront;
-      case CameraViewPresetManaged::Back:
-        return NativePreset::kBack;
-      case CameraViewPresetManaged::Perspective:
-      default:
-        return NativePreset::kPerspective;
-      }
-    }
 
     [[nodiscard]] auto ToNativeCameraControlMode(CameraControlModeManaged mode)
       -> ::oxygen::interop::module::EditorViewportCameraControlMode {
@@ -167,23 +167,11 @@ namespace Oxygen::Interop {
       return System::Threading::Tasks::Task<ViewIdManaged>::FromResult(ViewIdManaged::Invalid);
     }
 
-    // Convert managed config to native EditorView::Config
-    oxygen::interop::module::EditorView::Config native_cfg;
-    native_cfg.name = marshal_as<std::string>(cfg->Name);
+    auto native_cfg = cfg->ToNative();
     // Defensive: if managed caller still supplied an empty string, set a
     // clear fallback name so native logs are useful for debugging.
     if (native_cfg.name.empty()) {
       native_cfg.name = "EditorView:Unnamed";
-    }
-    native_cfg.purpose = marshal_as<std::string>(cfg->Purpose);
-    native_cfg.width = static_cast<uint32_t>(cfg->Width);
-    native_cfg.height = static_cast<uint32_t>(cfg->Height);
-    native_cfg.clear_color = cfg->ClearColor.ToNative();
-
-    // The view names its surface by key; the engine thread resolves it every
-    // frame, so a released surface is never reached through a stale address.
-    if (cfg->CompositingTarget.HasValue) {
-      native_cfg.compositing_target = ToGuidKey(cfg->CompositingTarget.Value);
     }
 
     // Prepare TaskCompletionSource for ViewIdManaged result and pin it.
@@ -509,6 +497,50 @@ namespace Oxygen::Interop {
     }
     catch (...) {
       ResolveViewCameraPoseCallback(handlePtr, std::nullopt);
+    }
+    return tcs->Task;
+  }
+
+  auto EngineRunner::TryGetViewEditorCameraAsync(EngineContext^ ctx,
+    ViewIdManaged viewId)
+    -> System::Threading::Tasks::Task<EditorCameraStateManaged^>^
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (disposed_) {
+      throw gcnew ObjectDisposedException("EngineRunner");
+    }
+
+    ui_dispatcher_->VerifyAccess(
+      gcnew String(L"GetViewEditorCameraAsync requires the UI thread. Call CreateEngine() on the UI thread first."));
+
+    auto native_ctx = ctx->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      return System::Threading::Tasks::Task::FromResult<EditorCameraStateManaged^>(nullptr);
+    }
+
+    auto editor_module_opt =
+      native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (!editor_module_opt) {
+      return System::Threading::Tasks::Task::FromResult<EditorCameraStateManaged^>(nullptr);
+    }
+
+    auto tcs = gcnew TaskCompletionSource<EditorCameraStateManaged^>(
+      TaskCreationOptions::RunContinuationsAsynchronously);
+    auto gh = System::Runtime::InteropServices::GCHandle::Alloc(
+      tcs, System::Runtime::InteropServices::GCHandleType::Normal);
+    void* handlePtr = System::Runtime::InteropServices::GCHandle::ToIntPtr(gh).ToPointer();
+
+    try {
+      // The command answers exactly once, also when it is dropped unexecuted,
+      // which frees the handle.
+      editor_module_opt->get().QueryViewEditorCamera(viewId.ToNative(),
+        std::bind(&ResolveViewEditorCameraCallback, handlePtr,
+          std::placeholders::_1));
+    }
+    catch (...) {
+      ResolveViewEditorCameraCallback(handlePtr, std::nullopt);
     }
     return tcs->Task;
   }

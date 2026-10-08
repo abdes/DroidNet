@@ -82,7 +82,17 @@ namespace oxygen::interop::module {
     //! the view is perspective; none while that camera is piloted.
     std::optional<float> field_of_view_degrees;
   };
-  // struct ViewContext; // Removed forward declaration
+
+  //! The editor navigation camera's state: what a pane keeps when its view is
+  //! released and what a new view starts from.
+  struct EditorCameraState {
+    glm::vec3 position { 0.0F };
+    glm::quat rotation { 1.0F, 0.0F, 0.0F, 0.0F };
+    //! Point the orbit navigation turns around.
+    glm::vec3 focus_point { 0.0F };
+    //! Half-height of the orthographic presets' view volume.
+    float ortho_half_height { 10.0F };
+  };
 
   struct EditorViewContext {
     engine::FrameContext& frame_context;
@@ -111,6 +121,17 @@ namespace oxygen::interop::module {
       uint32_t width = 1;
       uint32_t height = 1;
       graphics::Color clear_color{ 0.1f, 0.2f, 0.38f, 1.0f };
+
+      //! Preset the editor camera starts with.
+      CameraViewPreset camera_preset { CameraViewPreset::kPerspective };
+      //! Editor camera state to start from instead of framing the scene, so
+      //! the first presented frame already shows it.
+      std::optional<EditorCameraState> editor_camera;
+      //! Authored camera the view looks through from its first frame.
+      std::optional<UuidKey> scene_camera;
+      //! A camera preview inset composed over this host view's surface; the
+      //! inset presents nothing on its own.
+      std::optional<ViewId> inset_host;
     };
 
     explicit EditorView(Config config);
@@ -154,6 +175,15 @@ namespace oxygen::interop::module {
     [[nodiscard]] auto IsVisible() const -> bool;
     //! The editor's own navigation camera for this view.
     [[nodiscard]] auto GetCameraNode() const -> scene::SceneNode;
+
+    //! The editor camera's current state; none before the view is initialized.
+    [[nodiscard]] auto GetEditorCameraState() const
+      -> std::optional<EditorCameraState>;
+
+    //! True for a camera preview inset composed over its host view.
+    [[nodiscard]] auto IsInset() const noexcept -> bool {
+      return config_.inset_host.has_value();
+    }
 
     //! Renders the view through the authored camera on the scene node
     //! `node_id`, or through the editor camera when it is empty.
@@ -256,6 +286,7 @@ namespace oxygen::interop::module {
     void ResizeIfNeeded(Graphics& graphics);
     // Camera setup helpers (all scene mutations happen here)
     void CreateCamera(scene::Scene& camera_scene);
+    void ApplyEditorCameraState(const EditorCameraState& state);
     void UpdateCameraForFrame();
     void ResolveSceneCamera(scene::Scene& scene);
     void BeginPilot();

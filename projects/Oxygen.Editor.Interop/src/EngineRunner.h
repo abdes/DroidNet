@@ -17,6 +17,7 @@
 #include <Views/ViewConfigManaged.h>
 #include <Views/CameraControlModeManaged.h>
 #include <Views/CameraViewPresetManaged.h>
+#include <Views/EditorCameraStateManaged.h>
 #include <Views/ViewCameraPoseManaged.h>
 #include <Views/ViewIdManaged.h>
 
@@ -272,6 +273,13 @@ namespace Oxygen::Interop {
     auto TryGetViewCameraPoseAsync(EngineContext^ ctx, ViewIdManaged viewId,
       System::Guid nodeId)
       -> System::Threading::Tasks::Task<ViewCameraPoseManaged^>^;
+
+    /// <summary>
+    /// Reads a view's editor camera state on the engine thread. Completes with
+    /// null when the view does not exist.
+    /// </summary>
+    auto TryGetViewEditorCameraAsync(EngineContext^ ctx, ViewIdManaged viewId)
+      -> System::Threading::Tasks::Task<EditorCameraStateManaged^>^;
 
     /// <summary>
     /// Set the editor camera navigation mode for an existing view.
