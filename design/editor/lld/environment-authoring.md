@@ -209,6 +209,12 @@ does. Lighting accepts only float radiance, so a cubemap that lights the scene,
 directly or through a captured backdrop, must be cooked as rgba16f or rgba32f.
 An LDR cube can still be shown.
 
+When the Sky Light is enabled but casts no light, the section shows a warning
+naming the cause and the fix: no cubemap, a failed load, a texture that is not
+a cube, an LDR cube, failed processing, a cube still loading, or nothing to
+capture. It reads the rendered state, which trails an edit by a few frames, so
+after each environment change it re-reads until the answer settles.
+
 ### Calibration
 
 Imported HDR images rarely carry physical units: a typical one delivers a few

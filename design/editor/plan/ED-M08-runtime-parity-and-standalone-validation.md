@@ -1,7 +1,8 @@
 # ED-M08 — Runtime parity and editor authoring workspace
 
 Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2 and M08.3–M08.9
-validated; rescoped on 2026-10-08; M08.10 added on 2026-10-09 and next**
+validated; rescoped on 2026-10-08; M08.10 added on 2026-10-09, M08.10a–d
+delivered on 2026-10-09 and M08.10e next**
 
 Current: **M08.10 Engine capability parity in the editor**. The
 [rescope](#retired-by-the-rescope) retires the development-only parity harness
@@ -1248,7 +1249,15 @@ stands behind them. This slice removes those lock-outs.
    the Sky Sphere's imported radiance when no atmosphere is authored. By owner
    decision on 2026-10-09 display and lighting are decoupled: the Sky
    Sphere's intensity and tint scale only the view, and lighting accepts only
-   float radiance.
+   float radiance. The Sky Sphere and a specified cubemap carry an optional
+   illuminance in lux that calibrates their radiance for both view and
+   lighting ([environment LLD](../lld/environment-authoring.md#calibration)).
+   The Sky Light section explains, from the rendered state, why it lights
+   nothing ([issue 23](https://github.com/abdes/DroidNet/issues/23)).
+   Eviction of a bound cubemap rewrites its descriptor with a 2D placeholder
+   while frames may still read it; the editor keeps applied textures
+   resident, and the engine fix is tracked in
+   [issue 25](https://github.com/abdes/DroidNet/issues/25).
 4. **Ground grid settings.** The grid's engine settings are per-user editor
    settings in the Settings flyout, applied through
    `Renderer::SetGroundGridConfig`: enabled, spacing, major lines every N,
@@ -1299,6 +1308,16 @@ Implementation, in build order:
 | M08.10g | WorldEditor                            | Physical camera controls                                              |
 | M08.10h | Design, with the owner                 | Scripting user interface design                                       |
 | M08.10i | Per the scripting design               | Script authoring, persistence and cooking                             |
+
+#### M08.10 status
+
+| Step      | Status                                                                                                         |
+| --------- | -------------------------------------------------------------------------------------------------------------- |
+| M08.10a   | Delivered on 2026-10-09: exclusions grounded in engine facts.                                                  |
+| M08.10b   | Delivered on 2026-10-09: height and volumetric fog; local fog volume component, viewport icon and composition. |
+| M08.10c–d | Validated on 2026-10-09 by owner review in the running editor: backdrop, Sky Sphere, Sky Light, calibration.   |
+| M08.10e   | Next: ground grid settings.                                                                                    |
+| M08.10f–i | Open.                                                                                                          |
 
 Checks: each authored capability survives save, reopen and cook, and the
 cooked project renders it in RenderScene as in the editor; the grid
