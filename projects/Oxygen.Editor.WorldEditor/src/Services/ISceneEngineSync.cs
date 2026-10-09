@@ -255,6 +255,24 @@ public interface ISceneEngineSync
     public Task<SyncOutcome> DetachLightAsync(Scene scene, Guid nodeId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    ///     Attaches or replaces the local fog volume on a scene node and returns a classified sync outcome.
+    /// </summary>
+    /// <param name="scene">The scene that owns the node.</param>
+    /// <param name="node">The node whose local fog volume should be synchronized.</param>
+    /// <param name="cancellationToken">Cancellation token to abort stale live-sync work.</param>
+    /// <returns>A classified live-sync outcome.</returns>
+    public Task<SyncOutcome> AttachLocalFogVolumeAsync(Scene scene, SceneNode node, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Removes the local fog volume from a scene node and returns a classified sync outcome.
+    /// </summary>
+    /// <param name="scene">The scene that owns the node.</param>
+    /// <param name="nodeId">The node id whose local fog volume should be removed.</param>
+    /// <param name="cancellationToken">Cancellation token to abort stale live-sync work.</param>
+    /// <returns>A classified live-sync outcome.</returns>
+    public Task<SyncOutcome> DetachLocalFogVolumeAsync(Scene scene, Guid nodeId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     ///     Attaches or replaces the light component on a scene node.
     /// </summary>
     /// <param name="node">The scene node that will receive the light.</param>

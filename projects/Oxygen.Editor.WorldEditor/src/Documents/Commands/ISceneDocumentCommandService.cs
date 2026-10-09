@@ -88,6 +88,14 @@ public interface ISceneDocumentCommandService
     public Task<SceneValueCommandResult<SceneNode>> CreateLightAsync(SceneDocumentCommandContext context, string kind, NodePlacement? placement = null);
 
     /// <summary>
+    /// Creates a root scene node carrying a local fog volume.
+    /// </summary>
+    /// <param name="context">The captured scene document context.</param>
+    /// <param name="placement">Where the root node is created; the scene origin when <see langword="null"/>.</param>
+    /// <returns>The command result with the created node.</returns>
+    public Task<SceneValueCommandResult<SceneNode>> CreateLocalFogVolumeAsync(SceneDocumentCommandContext context, NodePlacement? placement = null);
+
+    /// <summary>
     /// Creates a camera scene node.
     /// </summary>
     /// <param name="context">The document command context.</param>

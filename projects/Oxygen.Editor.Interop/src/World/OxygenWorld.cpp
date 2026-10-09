@@ -30,6 +30,7 @@
 #include <Commands/ReparentSceneNodeCommand.h>
 #include <Commands/ReparentSceneNodesCommand.h>
 #include <Commands/SetBackgroundColorCommand.h>
+#include <Commands/LocalFogVolumeCommands.h>
 #include <Commands/SetEnvironmentCommand.h>
 #include <World/FogEnvironmentConversion.h>
 #include <Commands/SetGeometryCommand.h>
@@ -242,6 +243,36 @@ namespace Oxygen::Interop::World {
       const auto handle = NodeRegistry::Lookup(key);
       if (!handle) return;
       editor_module->get().Enqueue(std::make_unique<AttachLightCommand>(*handle, std::move(light)));
+    }
+
+    struct NodeCommandTarget {
+      EditorModule& module;
+      oxygen::scene::NodeHandle node;
+    };
+
+    //! Resolves the editor module and a registered node, or nothing when
+    //! either is unavailable.
+    static auto LookupNodeForCommand(EngineContext^ context,
+      System::Guid nodeId) -> std::optional<NodeCommandTarget>
+    {
+      auto native_ctx = context->NativePtr();
+      if (!native_ctx || !native_ctx->engine) {
+        return std::nullopt;
+      }
+      auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+      if (!editor_module) {
+        return std::nullopt;
+      }
+      auto bytes = nodeId.ToByteArray();
+      std::array<uint8_t, 16> key {};
+      for (int i = 0; i < 16; ++i) {
+        key[i] = bytes[i];
+      }
+      const auto handle = NodeRegistry::Lookup(key);
+      if (!handle) {
+        return std::nullopt;
+      }
+      return NodeCommandTarget { .module = editor_module->get(), .node = *handle };
     }
 
     static void EnqueueDetachLight(EngineContext^ context, System::Guid nodeId)
@@ -1060,6 +1091,44 @@ namespace Oxygen::Interop::World {
 
   void OxygenWorld::DetachLight(System::Guid nodeId) {
     EnqueueDetachLight(context_, nodeId);
+  }
+
+  void OxygenWorld::AttachLocalFogVolume(System::Guid nodeId, bool enabled,
+    float radialFogExtinction, float heightFogExtinction,
+    float heightFogFalloff, float heightFogOffset, float fogPhaseG,
+    System::Numerics::Vector3 fogAlbedo, System::Numerics::Vector3 fogEmissive,
+    int sortPriority)
+  {
+    for (const auto value : { radialFogExtinction, heightFogExtinction,
+           heightFogFalloff, heightFogOffset, fogPhaseG, fogAlbedo.X,
+           fogAlbedo.Y, fogAlbedo.Z, fogEmissive.X, fogEmissive.Y,
+           fogEmissive.Z }) {
+      if (!std::isfinite(value)) {
+        throw gcnew System::ArgumentException(
+          "Local fog volume values must be finite.");
+      }
+    }
+    oxygen::scene::environment::LocalFogVolume volume;
+    volume.SetEnabled(enabled);
+    volume.SetRadialFogExtinction(radialFogExtinction);
+    volume.SetHeightFogExtinction(heightFogExtinction);
+    volume.SetHeightFogFalloff(heightFogFalloff);
+    volume.SetHeightFogOffset(heightFogOffset);
+    volume.SetFogPhaseG(fogPhaseG);
+    volume.SetFogAlbedo({ fogAlbedo.X, fogAlbedo.Y, fogAlbedo.Z });
+    volume.SetFogEmissive({ fogEmissive.X, fogEmissive.Y, fogEmissive.Z });
+    volume.SetSortPriority(sortPriority);
+    if (const auto handle = LookupNodeForCommand(context_, nodeId)) {
+      handle->module.Enqueue(
+        std::make_unique<AttachLocalFogVolumeCommand>(handle->node, volume));
+    }
+  }
+
+  void OxygenWorld::DetachLocalFogVolume(System::Guid nodeId) {
+    if (const auto handle = LookupNodeForCommand(context_, nodeId)) {
+      handle->module.Enqueue(
+        std::make_unique<DetachLocalFogVolumeCommand>(handle->node));
+    }
   }
 
   void OxygenWorld::ReparentSceneNode(System::Guid child,

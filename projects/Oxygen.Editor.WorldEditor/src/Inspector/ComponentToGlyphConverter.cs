@@ -24,6 +24,7 @@ public sealed partial class ComponentToGlyphConverter : IValueConverter
             "PerspectiveCamera" => "\uE714",
             "OrthographicCamera" => "\uE714",
             "DirectionalLightComponent" or "PointLightComponent" or "SpotLightComponent" => "\uE706",
+            "LocalFogVolumeComponent" => "\uE9CA",
             _ => UnknownComponentGlyph,
         };
 

@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.World.Inspector.LocalFogVolumeView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:fields="using:Oxygen.Editor.World.Inspector.Controls"
+    xmlns:ui="using:CommunityToolkit.WinUI">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="SceneInspectorStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <editorcontrols:PropertiesExpander
+        HorizontalAlignment="Stretch"
+        HorizontalContentAlignment="Stretch"
+        Description="{x:Bind ViewModel.Description, Mode=OneWay}"
+        Header="{x:Bind ViewModel.Header, Mode=OneWay}"
+        HeaderIcon="{ui:FontIcon Glyph='&#xE9CA;'}"
+        IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
+        <editorcontrols:PropertiesExpander.Items>
+            <editorcontrols:PropertyCard PropertyName="Enabled">
+                <ToggleSwitch AutomationProperties.Name="Enabled" IsOn="{x:Bind ViewModel.Enabled, Mode=TwoWay}" />
+            </editorcontrols:PropertyCard>
+            <editorcontrols:InspectorNumberField
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.RadialFogExtinctionDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.RadialFogExtinctionDiagnostic.HasError, Mode=OneWay}"
+                IsMixed="{x:Bind ViewModel.RadialFogExtinction.IsMixed, Mode=OneWay}"
+                Label="Radial extinction"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.RadialFogExtinction.Value, Mode=TwoWay}"
+                Tag="RadialFogExtinction" />
+            <editorcontrols:InspectorNumberField
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.HeightFogExtinctionDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.HeightFogExtinctionDiagnostic.HasError, Mode=OneWay}"
+                IsMixed="{x:Bind ViewModel.HeightFogExtinction.IsMixed, Mode=OneWay}"
+                Label="Height extinction"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.HeightFogExtinction.Value, Mode=TwoWay}"
+                Tag="HeightFogExtinction" />
+            <editorcontrols:InspectorNumberField
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.HeightFogFalloffDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.HeightFogFalloffDiagnostic.HasError, Mode=OneWay}"
+                IsMixed="{x:Bind ViewModel.HeightFogFalloff.IsMixed, Mode=OneWay}"
+                Label="Height falloff"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.HeightFogFalloff.Value, Mode=TwoWay}"
+                Tag="HeightFogFalloff" />
+            <editorcontrols:InspectorNumberField
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.HeightFogOffsetDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.HeightFogOffsetDiagnostic.HasError, Mode=OneWay}"
+                IsMixed="{x:Bind ViewModel.HeightFogOffset.IsMixed, Mode=OneWay}"
+                Label="Height offset"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.HeightFogOffset.Value, Mode=TwoWay}"
+                Qualifier="m"
+                Tag="HeightFogOffset" />
+            <editorcontrols:InspectorNumberField
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.FogPhaseGDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.FogPhaseGDiagnostic.HasError, Mode=OneWay}"
+                IsMixed="{x:Bind ViewModel.FogPhaseG.IsMixed, Mode=OneWay}"
+                Label="Phase"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.FogPhaseG.Value, Mode=TwoWay}"
+                Tag="FogPhaseG" />
+            <fields:InspectorRgbField
+                Blue="{x:Bind ViewModel.AlbedoB, Mode=TwoWay}"
+                ChannelAutomationName="Albedo, linear RGB"
+                ColorPicked="OnAlbedoPicked"
+                ComponentMask="~.#"
+                EditOwner="{x:Bind ViewModel, Mode=OneWay}"
+                EditSessionCompleted="VectorEditCompleted"
+                EditSessionStarted="VectorEditStarted"
+                ErrorText="{x:Bind ViewModel.AlbedoDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                Green="{x:Bind ViewModel.AlbedoG, Mode=TwoWay}"
+                HasError="{x:Bind ViewModel.AlbedoDiagnostic.HasError, Mode=OneWay}"
+                Label="Albedo"
+                PickerAutomationName="Pick fog albedo color"
+                Qualifier="Linear RGB"
+                Red="{x:Bind ViewModel.AlbedoR, Mode=TwoWay}"
+                Tag="Albedo" />
+            <fields:InspectorRgbField
+                Blue="{x:Bind ViewModel.EmissiveB, Mode=TwoWay}"
+                ChannelAutomationName="Emissive, luminance RGB"
+                DiagnosticSpacing="2"
+                EditSessionCompleted="VectorEditCompleted"
+                EditSessionStarted="VectorEditStarted"
+                ErrorText="{x:Bind ViewModel.EmissiveDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                Green="{x:Bind ViewModel.EmissiveG, Mode=TwoWay}"
+                HasError="{x:Bind ViewModel.EmissiveDiagnostic.HasError, Mode=OneWay}"
+                Label="Emissive"
+                Qualifier="Luminance RGB"
+                Red="{x:Bind ViewModel.EmissiveR, Mode=TwoWay}"
+                Tag="Emissive" />
+            <editorcontrols:InspectorNumberField
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.SortPriorityDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.SortPriorityDiagnostic.HasError, Mode=OneWay}"
+                Label="Sort priority"
+                Mask="~."
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.SortPriority, Mode=TwoWay}"
+                Tag="SortPriority" />
+        </editorcontrols:PropertiesExpander.Items>
+    </editorcontrols:PropertiesExpander>
+</UserControl>

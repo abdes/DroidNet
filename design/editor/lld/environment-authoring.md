@@ -102,6 +102,21 @@ the scene as the runtime does. The cooked descriptor carries the full native
 `fog` record; the inscattering cubemap fields stay at native defaults because
 the renderer does not sample them.
 
+### Local fog volumes
+
+`LocalFogVolumeComponent` places a sphere of fog on a node: 5 m in radius at
+unit scale, sized and positioned by the node's transform. One per node; it is
+added from the node inspector's Add Component menu or created on a new root
+node from the viewport's Quick Add menu. Its fields mirror the native
+`LocalFogVolume` with native defaults: Enabled, Radial and Height Extinction
+(≥0), Height Falloff (≥0), Height Offset (m, relative to the volume center),
+Phase (0 to 0.999), linear Albedo (0–1), Emissive luminance (≥0) and Sort
+Priority (integer, −127 to 127). Edits travel as descriptor-only property
+entries to a native applier that rejects an invalid candidate whole. The
+cooked descriptor lists the volumes in `local_fog_volumes` against their node
+indices, and editor panes request the local fog pass while any enabled volume
+exists, as the runtime does.
+
 ## 4. Captured SkyLight and background
 
 | Source path           | Default / unit          | Bounds                   | Effect                                                                        |

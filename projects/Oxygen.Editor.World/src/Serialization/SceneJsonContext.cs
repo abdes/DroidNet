@@ -26,6 +26,7 @@ namespace Oxygen.Editor.World.Serialization;
 [JsonSerializable(typeof(LightComponentData))]
 [JsonSerializable(typeof(DirectionalLightData))]
 [JsonSerializable(typeof(PointLightData))]
+[JsonSerializable(typeof(LocalFogVolumeData))]
 [JsonSerializable(typeof(SpotLightData))]
 [JsonSerializable(typeof(TransformData))]
 [JsonSerializable(typeof(OverrideSlotData))]

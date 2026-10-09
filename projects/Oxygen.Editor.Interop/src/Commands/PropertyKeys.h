@@ -53,6 +53,9 @@ namespace oxygen::interop::module {
 
     //! Authored node rendering flags (local values on the scene node).
     kNode = 7,
+
+    //! oxygen::scene::environment::LocalFogVolume.
+    kLocalFogVolume = 8,
   };
 
   //! One scalar entry on the property-pipeline wire.

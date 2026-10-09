@@ -28,12 +28,12 @@ public sealed class SceneEditorQuickAddMenuTests
 {
     /// <summary>The menu offers an empty node, then shapes, lights and cameras.</summary>
     [TestMethod]
-    public void QuickAddMenuOffersEmptyNodeShapesLightsAndCameras()
+    public void QuickAddMenuOffersEmptyNodeShapesLightsCamerasAndLocalFog()
     {
         using var fixture = new Fixture();
         var items = fixture.Editor.QuickAddMenu.Items;
 
-        _ = items.Where(item => !item.IsSeparator).Select(item => item.Text).Should().Equal("Empty node", "Shapes", "Lights", "Cameras");
+        _ = items.Where(item => !item.IsSeparator).Select(item => item.Text).Should().Equal("Empty node", "Shapes", "Lights", "Cameras", "Local fog volume");
         _ = Submenu(items, "Lights").Select(item => item.Text).Should().Equal("Directional light", "Point light", "Spot light");
         _ = Submenu(items, "Cameras").Select(item => item.Text).Should().Equal("Perspective camera", "Orthographic camera");
     }

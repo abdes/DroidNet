@@ -10,6 +10,7 @@
 #include <mutex>
 
 #include <Commands/DirectionalLightPropertyApplier.h>
+#include <Commands/LocalFogVolumePropertyApplier.h>
 #include <Commands/LocalLightPropertyApplier.h>
 #include <Commands/NodePropertyApplier.h>
 #include <Commands/OrthographicCameraPropertyApplier.h>
@@ -39,6 +40,7 @@ namespace oxygen::interop::module {
       reg.Register(
         std::make_unique<LocalLightPropertyApplier<scene::SpotLight>>());
       reg.Register(std::make_unique<NodePropertyApplier>());
+      reg.Register(std::make_unique<LocalFogVolumePropertyApplier>());
     });
   }
 

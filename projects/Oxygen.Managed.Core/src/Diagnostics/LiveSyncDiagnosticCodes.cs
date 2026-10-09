@@ -60,6 +60,12 @@ public static class LiveSyncDiagnosticCodes
     /// <summary>Light live sync failed.</summary>
     public const string LightFailed = DiagnosticCodes.LiveSyncPrefix + "LIGHT.Failed";
 
+    /// <summary>Local fog volume live sync was rejected.</summary>
+    public const string LocalFogVolumeRejected = DiagnosticCodes.LiveSyncPrefix + "LOCALFOG.Rejected";
+
+    /// <summary>Local fog volume live sync failed.</summary>
+    public const string LocalFogVolumeFailed = DiagnosticCodes.LiveSyncPrefix + "LOCALFOG.Failed";
+
     /// <summary>Material live sync was rejected.</summary>
     public const string MaterialRejected = DiagnosticCodes.LiveSyncPrefix + "MATERIAL.Rejected";
 

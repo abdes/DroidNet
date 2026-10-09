@@ -169,6 +169,16 @@ value struct CookedRootBindingManaged {
     int cascadeCount, int splitMode, float maxShadowDistance,
     System::Numerics::Vector4 cascadeDistances, float distributionExponent,
     float transitionFraction, float distanceFadeoutFraction);
+    //! Attaches or replaces the local fog volume on a node.
+    void AttachLocalFogVolume(System::Guid nodeId, bool enabled,
+      float radialFogExtinction, float heightFogExtinction,
+      float heightFogFalloff, float heightFogOffset, float fogPhaseG,
+      System::Numerics::Vector3 fogAlbedo,
+      System::Numerics::Vector3 fogEmissive, int sortPriority);
+
+    //! Removes the local fog volume from a node.
+    void DetachLocalFogVolume(System::Guid nodeId);
+
     void AttachPointLight(System::Guid nodeId, float luminousFluxLumens,
     float range, float sourceRadius, System::Numerics::Vector3 color,
     bool affectsWorld, bool castsShadows, float shadowBias, float shadowNormalBias,

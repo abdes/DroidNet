@@ -145,6 +145,29 @@ public class SceneTests
     }
 
     [TestMethod]
+    public void LocalFogVolume_RoundTripsThroughItsData()
+    {
+        var volume = new LocalFogVolumeComponent
+        {
+            Name = "Fog",
+            Enabled = false,
+            RadialFogExtinction = 2f,
+            HeightFogExtinction = 0.5f,
+            HeightFogFalloff = 10f,
+            HeightFogOffset = -1f,
+            FogPhaseG = 0.6f,
+            FogAlbedo = new Vector3(0.5f, 0.6f, 0.7f),
+            FogEmissive = new Vector3(0.1f, 0.2f, 0.3f),
+            SortPriority = -4,
+        };
+
+        var json = JsonSerializer.Serialize<ComponentData>(volume.Dehydrate(), SceneJsonContext.Default.ComponentData);
+        var restored = (LocalFogVolumeComponent)Components.GameComponent.CreateAndHydrate(JsonSerializer.Deserialize(json, SceneJsonContext.Default.ComponentData)!);
+
+        _ = restored.Dehydrate().Should().Be(volume.Dehydrate());
+    }
+
+    [TestMethod]
     public async Task Fog_RoundTripsThroughSaveAndLoad()
     {
         var fog = new FogEnvironmentData
@@ -352,7 +375,7 @@ public class SceneTests
         // Act: build DTO in code then hydrate into domain Scene (more robust than relying on string literals)
         var data = new Serialization.SceneData
         {
-            Id = Guid.Parse("00000000-0000-0000-0000-000000000000"),
+            Id = Guid.Empty,
             Name = "Scene Name",
             RootNodes = [
                 new()

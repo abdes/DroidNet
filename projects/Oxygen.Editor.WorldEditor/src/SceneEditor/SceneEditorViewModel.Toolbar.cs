@@ -89,6 +89,7 @@ public partial class SceneEditorViewModel
             _ = cameras.AddMenuItem("Perspective camera", new AsyncRelayCommand(() => this.AddCameraAsync("Perspective")));
             _ = cameras.AddMenuItem("Orthographic camera", new AsyncRelayCommand(() => this.AddCameraAsync("Orthographic")));
         });
+        _ = builder.AddMenuItem("Local fog volume", new AsyncRelayCommand(this.AddLocalFogVolumeAsync));
         return builder.Build();
     }
 
@@ -120,6 +121,16 @@ public partial class SceneEditorViewModel
             // A light keeps its kind's default orientation; only its position follows the view.
             var placement = await this.GetPlacementAsync(alignToView: false).ConfigureAwait(true);
             _ = await this.commandService.CreateLightAsync(this.CreateCommandContext(), kind, placement).ConfigureAwait(true);
+        }
+    }
+
+    private async Task AddLocalFogVolumeAsync()
+    {
+        this.LogQuickAddRequested("Local fog volume");
+        if (this.scene is not null)
+        {
+            var placement = await this.GetPlacementAsync(alignToView: false).ConfigureAwait(true);
+            _ = await this.commandService.CreateLocalFogVolumeAsync(this.CreateCommandContext(), placement).ConfigureAwait(true);
         }
     }
 

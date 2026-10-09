@@ -315,6 +315,19 @@ public sealed partial class SceneEngineSync
         }
     }
 
+    private static void ApplyLocalFogVolume(WorldDispatch world, SceneNode node, LocalFogVolumeComponent volume)
+        => world.Execute(new RuntimeAttachLocalFogVolume(
+            node.Id,
+            volume.Enabled,
+            volume.RadialFogExtinction,
+            volume.HeightFogExtinction,
+            volume.HeightFogFalloff,
+            volume.HeightFogOffset,
+            volume.FogPhaseG,
+            volume.FogAlbedo,
+            volume.FogEmissive,
+            volume.SortPriority));
+
     private static void ApplyDirectionalLight(WorldDispatch world, SceneNode node, DirectionalLightComponent directional)
         => world.Execute(new RuntimeAttachDirectionalLight(
             node.Id,

@@ -322,6 +322,8 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         childContainer.Register<PointLightView>(Reuse.Transient);
         childContainer.Register<SpotLightViewModel>(Reuse.Transient);
         childContainer.Register<SpotLightView>(Reuse.Transient);
+        childContainer.Register<LocalFogVolumeViewModel>(Reuse.Transient);
+        childContainer.Register<LocalFogVolumeView>(Reuse.Transient);
         childContainer.Register<NodeRenderingViewModel>(Reuse.Transient);
         childContainer.Register<NodeRenderingView>(Reuse.Transient);
         childContainer.Register<EnvironmentViewModel>(Reuse.Transient);

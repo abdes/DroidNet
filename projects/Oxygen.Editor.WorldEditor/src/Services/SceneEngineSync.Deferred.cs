@@ -60,11 +60,13 @@ public sealed partial class SceneEngineSync
             RuntimeAttachDirectionalLight light when FindNode(scene, light.NodeId)?.Components.Any(component => component is DirectionalLightComponent) != true => null,
             RuntimeAttachPointLight light when FindNode(scene, light.NodeId)?.Components.Any(component => component is PointLightComponent) != true => null,
             RuntimeAttachSpotLight light when FindNode(scene, light.NodeId)?.Components.Any(component => component is SpotLightComponent) != true => null,
+            RuntimeAttachLocalFogVolume volume when FindNode(scene, volume.NodeId)?.Components.Any(component => component is LocalFogVolumeComponent) != true => null,
             RuntimeRemoveSceneNode remove when FindNode(scene, remove.NodeId) is not null => null,
             RuntimeRemoveSceneNodes remove => remove with { Nodes = remove.Nodes.Where(id => FindNode(scene, id) is null).ToImmutableArray() },
             RuntimeReparentSceneNode reparent when FindNode(scene, reparent.Child) is null => null,
             RuntimeDetachGeometry detach when FindNode(scene, detach.NodeId)?.Components.Any(component => component is GeometryComponent) == true => null,
             RuntimeDetachLight detach when FindNode(scene, detach.NodeId)?.Components.Any(component => component is LightComponent) == true => null,
+            RuntimeDetachLocalFogVolume detach when FindNode(scene, detach.NodeId)?.Components.Any(component => component is LocalFogVolumeComponent) == true => null,
             RuntimeDetachCamera detach when FindNode(scene, detach.NodeId)?.Components.Any(component => component is CameraComponent) == true => null,
             RuntimeSetGeometry geometry when FindNode(scene, geometry.NodeId)?.Components.Any(component => component is GeometryComponent) != true => null,
             RuntimeSetMaterialOverride material when FindNode(scene, material.NodeId)?.Components.Any(component => component is GeometryComponent) != true => null,
@@ -293,6 +295,12 @@ public sealed partial class SceneEngineSync
                 break;
             case RuntimeDetachLight value:
                 this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, EngineComponentId.DirectionalLight, revision);
+                break;
+            case RuntimeAttachLocalFogVolume value:
+                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, EngineComponentId.LocalFogVolume, revision);
+                break;
+            case RuntimeDetachLocalFogVolume value:
+                this.pendingPropertySyncs.SupersedeTarget(scene.Id, value.NodeId, EngineComponentId.LocalFogVolume, revision);
                 break;
         }
     }

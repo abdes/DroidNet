@@ -167,6 +167,12 @@ internal sealed partial class NativeRuntimeCommandTransport(EngineContext contex
             case RuntimeDetachLight value:
                 this.world.DetachLight(value.NodeId);
                 break;
+            case RuntimeAttachLocalFogVolume value:
+                this.world.AttachLocalFogVolume(value.NodeId, value.Enabled, value.RadialFogExtinction, value.HeightFogExtinction, value.HeightFogFalloff, value.HeightFogOffset, value.FogPhaseG, value.FogAlbedo, value.FogEmissive, value.SortPriority);
+                break;
+            case RuntimeDetachLocalFogVolume value:
+                this.world.DetachLocalFogVolume(value.NodeId);
+                break;
             default:
                 throw new ArgumentException("Unsupported runtime world command.", nameof(command));
         }

@@ -51,5 +51,6 @@ internal static class InspectorEditorFactory
             [typeof(DirectionalLightComponent)] = _ => new DirectionalLightViewModel(commands, context),
             [typeof(PointLightComponent)] = _ => new PointLightViewModel(commands, context),
             [typeof(SpotLightComponent)] = _ => new SpotLightViewModel(commands, context),
+            [typeof(LocalFogVolumeComponent)] = _ => new LocalFogVolumeViewModel(commands, context),
         };
 }

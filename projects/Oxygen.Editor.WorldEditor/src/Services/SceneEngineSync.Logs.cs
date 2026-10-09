@@ -275,6 +275,12 @@ public partial class SceneEngineSync
     private void LogFailedToAttachLightComponent(Exception ex, Guid nodeId)
         => LogFailedToAttachLightComponent(this.logger, ex, nodeId);
 
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to attach local fog volume to node {NodeId}")]
+    private static partial void LogFailedToAttachLocalFogVolume(ILogger logger, Exception exception, Guid nodeId);
+
+    private void LogFailedToAttachLocalFogVolume(Exception ex, Guid nodeId)
+        => LogFailedToAttachLocalFogVolume(this.logger, ex, nodeId);
+
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to apply authored rendering flags to node {NodeId}")]
     private static partial void LogFailedToApplyNodeRendering(ILogger logger, Exception exception, Guid nodeId);
 

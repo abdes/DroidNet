@@ -134,6 +134,46 @@ public sealed partial class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
+    public async Task EditPropertiesAsync_WhenLocalFogVolumeChanges_SyncsFieldsAndUndoes()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Fog" };
+        scene.RootNodes.Add(node);
+        var volume = new LocalFogVolumeComponent { Name = "Fog" };
+        _ = node.AddComponent(volume);
+        var context = CreateContext(scene);
+        var synced = ConfigureDescriptorSync(fixture, scene);
+
+        var edit = new PropertyEdit();
+        edit.Set(new PropertyId<float>(SceneDocumentCommandService.LocalFogVolume.RadialFogExtinctionDescriptor.Id), 3f);
+        edit.Set(new PropertyId<System.Numerics.Vector3>(SceneDocumentCommandService.LocalFogVolume.FogAlbedoDescriptor.Id), new System.Numerics.Vector3(0.5f, 0.6f, 0.7f));
+        edit.Set(new PropertyId<int>(SceneDocumentCommandService.LocalFogVolume.SortPriorityDescriptor.Id), -2);
+        var result = await fixture.Sut.EditPropertiesAsync(context, [node.Id], edit, "Edit Local Fog Volume", EditSessionToken.OneShot).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = volume.RadialFogExtinction.Should().Be(3f);
+        _ = volume.SortPriority.Should().Be(-2);
+        _ = synced.Should().ContainSingle().Which.Should().BeEquivalentTo(
+        [
+            new EnginePropertyValueEntry(EngineComponentId.LocalFogVolume, (ushort)LocalFogVolumeField.RadialFogExtinction, 3f),
+            new EnginePropertyValueEntry(EngineComponentId.LocalFogVolume, (ushort)LocalFogVolumeField.FogAlbedoR, 0.5f),
+            new EnginePropertyValueEntry(EngineComponentId.LocalFogVolume, (ushort)LocalFogVolumeField.FogAlbedoG, 0.6f),
+            new EnginePropertyValueEntry(EngineComponentId.LocalFogVolume, (ushort)LocalFogVolumeField.FogAlbedoB, 0.7f),
+            new EnginePropertyValueEntry(EngineComponentId.LocalFogVolume, (ushort)LocalFogVolumeField.SortPriority, -2f),
+        ]);
+
+        var invalid = PropertyEdit.SingleEdit(new PropertyId<float>(SceneDocumentCommandService.LocalFogVolume.FogPhaseGDescriptor.Id), 1.5f);
+        _ = (await fixture.Sut.EditPropertiesAsync(context, [node.Id], invalid, "Edit Local Fog Volume", EditSessionToken.OneShot).ConfigureAwait(false))
+            .Succeeded.Should().BeFalse();
+        _ = volume.FogPhaseG.Should().Be(0.2f);
+
+        await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = volume.RadialFogExtinction.Should().Be(1f);
+        _ = volume.SortPriority.Should().Be(0);
+    }
+
+    [TestMethod]
     public async Task EditPropertiesAsync_WhenSpotInnerConeExceedsOuter_RejectsWithoutMutation()
     {
         var fixture = CreateFixture();

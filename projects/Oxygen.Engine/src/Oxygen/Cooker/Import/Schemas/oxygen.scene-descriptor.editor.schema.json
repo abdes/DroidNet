@@ -73,6 +73,62 @@
     }
   },
   "definitions": {
+    "local_fog_volume": {
+      "properties": {
+        "enabled": {
+          "x-editor-label": "Enabled",
+          "x-editor-group": "Local Fog Volume",
+          "x-editor-renderer": "toggle"
+        },
+        "radial_fog_extinction": {
+          "x-editor-label": "Radial Extinction",
+          "x-editor-group": "Local Fog Volume",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01
+        },
+        "height_fog_extinction": {
+          "x-editor-label": "Height Extinction",
+          "x-editor-group": "Local Fog Volume",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01
+        },
+        "height_fog_falloff": {
+          "x-editor-label": "Height Falloff",
+          "x-editor-group": "Local Fog Volume",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01
+        },
+        "height_fog_offset": {
+          "x-editor-label": "Height Offset",
+          "x-editor-group": "Local Fog Volume",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01,
+          "x-editor-unit": "m"
+        },
+        "fog_phase_g": {
+          "x-editor-label": "Phase",
+          "x-editor-group": "Local Fog Volume",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01
+        },
+        "fog_albedo": {
+          "x-editor-label": "Albedo",
+          "x-editor-group": "Local Fog Volume",
+          "x-editor-renderer": "color-rgb"
+        },
+        "fog_emissive": {
+          "x-editor-label": "Emissive",
+          "x-editor-group": "Local Fog Volume",
+          "x-editor-renderer": "color-rgb"
+        },
+        "sort_priority": {
+          "x-editor-label": "Sort Priority",
+          "x-editor-group": "Local Fog Volume",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 1
+        }
+      }
+    },
     "fog_environment": {
       "properties": {
         "enabled": {

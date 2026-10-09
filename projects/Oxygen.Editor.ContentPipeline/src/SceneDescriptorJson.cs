@@ -28,7 +28,20 @@ internal sealed record NativeSceneDescriptor(
     [property: JsonPropertyName("cameras")] NativeCameras? Cameras,
     [property: JsonPropertyName("lights")] NativeLights? Lights,
     [property: JsonPropertyName("environment")] NativeEnvironment? Environment,
+    [property: JsonPropertyName("local_fog_volumes")] IReadOnlyList<NativeLocalFogVolume>? LocalFogVolumes,
     [property: JsonPropertyName("references")] NativeReferences? References);
+
+internal sealed record NativeLocalFogVolume(
+    [property: JsonPropertyName("node")] int Node,
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("radial_fog_extinction")] float RadialFogExtinction,
+    [property: JsonPropertyName("height_fog_extinction")] float HeightFogExtinction,
+    [property: JsonPropertyName("height_fog_falloff")] float HeightFogFalloff,
+    [property: JsonPropertyName("height_fog_offset")] float HeightFogOffset,
+    [property: JsonPropertyName("fog_phase_g")] float FogPhaseG,
+    [property: JsonPropertyName("fog_albedo")] float[] FogAlbedo,
+    [property: JsonPropertyName("fog_emissive")] float[] FogEmissive,
+    [property: JsonPropertyName("sort_priority")] int SortPriority);
 
 internal sealed record NativeSceneNode(
     [property: JsonPropertyName("name")] string Name,

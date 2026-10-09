@@ -147,6 +147,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
         var directionalLights = new List<NativeDirectionalLight>();
         var pointLights = new List<NativePointLight>();
         var spotLights = new List<NativeSpotLight>();
+        var localFogVolumes = new List<NativeLocalFogVolume>();
         var materialRefs = new SortedSet<string>(StringComparer.Ordinal);
         var dependencyInputs = new List<ContentCookInput>(generatedGeometryInputs);
         if (scene.Environment.PostProcess.AutoExposureMeteringMask is { } maskUri)
@@ -196,6 +197,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             Cameras: CreateCameras(cameras, orthographicCameras),
             Lights: lights,
             Environment: CreateEnvironment(scene.Environment),
+            LocalFogVolumes: localFogVolumes.Count == 0 ? null : localFogVolumes,
             References: references);
 
         JsonNode? descriptorJson;
@@ -338,6 +340,21 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                     light.SourceRadius,
                     light.InnerConeAngleRadians,
                     light.OuterConeAngleRadians));
+            }
+
+            foreach (var volume in node.Components.OfType<LocalFogVolumeComponent>())
+            {
+                localFogVolumes.Add(new NativeLocalFogVolume(
+                    nodeIndex,
+                    volume.Enabled,
+                    volume.RadialFogExtinction,
+                    volume.HeightFogExtinction,
+                    volume.HeightFogFalloff,
+                    volume.HeightFogOffset,
+                    volume.FogPhaseG,
+                    ToArray(volume.FogAlbedo),
+                    ToArray(volume.FogEmissive),
+                    volume.SortPriority));
             }
 
             foreach (var child in node.Children)

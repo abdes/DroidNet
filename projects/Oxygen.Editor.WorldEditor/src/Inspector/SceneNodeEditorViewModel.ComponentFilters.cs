@@ -69,6 +69,7 @@ public sealed partial class SceneNodeEditorViewModel
             nameof(DirectionalLightComponent) => "Directional Light",
             nameof(PointLightComponent) => "Point Light",
             nameof(SpotLightComponent) => "Spot Light",
+            nameof(LocalFogVolumeComponent) => "Local Fog Volume",
             _ => type.Name,
         };
 

@@ -27,6 +27,9 @@ public sealed partial class SceneDocumentCommandService
     /// <summary>Component kind id used by spot light property identities.</summary>
     public const string SpotLightKind = "spot-light";
 
+    /// <summary>Component kind id used by local fog volume property identities.</summary>
+    public const string LocalFogVolumeKind = "local-fog-volume";
+
     /// <summary>Property kind id used by authored node rendering flags.</summary>
     public const string NodeRenderingKind = "node-rendering";
 
@@ -39,11 +42,14 @@ public sealed partial class SceneDocumentCommandService
     /// <summary>Gets the canonical descriptor catalog for spot lights.</summary>
     internal static LocalLightDescriptors SpotLight { get; } = LocalLightDescriptors.BuildSpot();
 
+    /// <summary>Gets the canonical descriptor catalog for local fog volumes.</summary>
+    internal static LocalFogVolumeDescriptors LocalFogVolume { get; } = LocalFogVolumeDescriptors.Build();
+
     /// <summary>Gets the canonical descriptor catalog for node rendering flags.</summary>
     internal static NodeRenderingDescriptors NodeRendering { get; } = NodeRenderingDescriptors.Build();
 
     private static bool IsDescriptorOnlyKind(string kind)
-        => kind is OrthographicCameraKind or PointLightKind or SpotLightKind or NodeRenderingKind;
+        => kind is OrthographicCameraKind or PointLightKind or SpotLightKind or LocalFogVolumeKind or NodeRenderingKind;
 
     private static IReadOnlyDictionary<PropertyId, PropertyDescriptor>? DescriptorOnlyCatalog(string kind)
         => kind switch
@@ -51,6 +57,7 @@ public sealed partial class SceneDocumentCommandService
             OrthographicCameraKind => OrthographicCamera.ById,
             PointLightKind => PointLight.ById,
             SpotLightKind => SpotLight.ById,
+            LocalFogVolumeKind => LocalFogVolume.ById,
             NodeRenderingKind => NodeRendering.ById,
             _ => null,
         };
@@ -61,6 +68,7 @@ public sealed partial class SceneDocumentCommandService
             OrthographicCameraKind => node.Components.OfType<OrthographicCamera>().FirstOrDefault(),
             PointLightKind => node.Components.OfType<PointLightComponent>().FirstOrDefault(),
             SpotLightKind => node.Components.OfType<SpotLightComponent>().FirstOrDefault(),
+            LocalFogVolumeKind => node.Components.OfType<LocalFogVolumeComponent>().FirstOrDefault(),
             NodeRenderingKind => node,
             _ => null,
         };
@@ -71,6 +79,7 @@ public sealed partial class SceneDocumentCommandService
             OrthographicCameraKind => SceneOperationKinds.EditOrthographicCamera,
             PointLightKind => SceneOperationKinds.EditPointLight,
             SpotLightKind => SceneOperationKinds.EditSpotLight,
+            LocalFogVolumeKind => SceneOperationKinds.EditLocalFogVolume,
             _ => SceneOperationKinds.EditNodeRendering,
         };
 
@@ -119,6 +128,7 @@ public sealed partial class SceneDocumentCommandService
             OrthographicCameraKind => BuildOrthographicCameraPropertyEntries(edit),
             PointLightKind => BuildLocalLightPropertyEntries(PointLight, EngineComponentId.PointLight, edit),
             SpotLightKind => BuildLocalLightPropertyEntries(SpotLight, EngineComponentId.SpotLight, edit),
+            LocalFogVolumeKind => BuildLocalFogVolumePropertyEntries(edit),
             NodeRenderingKind => BuildNodeRenderingPropertyEntries(edit),
             _ => [],
         };
@@ -180,6 +190,38 @@ public sealed partial class SceneDocumentCommandService
         {
             AddFloat(entries, edit, new PropertyId<float>(inner.Id), component, (ushort)LocalLightField.InnerConeAngleRadians);
             AddFloat(entries, edit, new PropertyId<float>(outer.Id), component, (ushort)LocalLightField.OuterConeAngleRadians);
+        }
+
+        return entries;
+    }
+
+    private static List<EnginePropertyValueEntry> BuildLocalFogVolumePropertyEntries(PropertyEdit edit)
+    {
+        const EngineComponentId component = EngineComponentId.LocalFogVolume;
+        var entries = new List<EnginePropertyValueEntry>(edit.Count + 4);
+        AddBool(entries, edit, LocalFogVolume.EnabledDescriptor, component, LocalFogVolumeField.Enabled);
+        AddFloat(entries, edit, new PropertyId<float>(LocalFogVolume.RadialFogExtinctionDescriptor.Id), component, (ushort)LocalFogVolumeField.RadialFogExtinction);
+        AddFloat(entries, edit, new PropertyId<float>(LocalFogVolume.HeightFogExtinctionDescriptor.Id), component, (ushort)LocalFogVolumeField.HeightFogExtinction);
+        AddFloat(entries, edit, new PropertyId<float>(LocalFogVolume.HeightFogFalloffDescriptor.Id), component, (ushort)LocalFogVolumeField.HeightFogFalloff);
+        AddFloat(entries, edit, new PropertyId<float>(LocalFogVolume.HeightFogOffsetDescriptor.Id), component, (ushort)LocalFogVolumeField.HeightFogOffset);
+        AddFloat(entries, edit, new PropertyId<float>(LocalFogVolume.FogPhaseGDescriptor.Id), component, (ushort)LocalFogVolumeField.FogPhaseG);
+        if (edit.GetTyped(new PropertyId<Vector3>(LocalFogVolume.FogAlbedoDescriptor.Id), out var albedo))
+        {
+            entries.Add(new(component, (ushort)LocalFogVolumeField.FogAlbedoR, albedo.X));
+            entries.Add(new(component, (ushort)LocalFogVolumeField.FogAlbedoG, albedo.Y));
+            entries.Add(new(component, (ushort)LocalFogVolumeField.FogAlbedoB, albedo.Z));
+        }
+
+        if (edit.GetTyped(new PropertyId<Vector3>(LocalFogVolume.FogEmissiveDescriptor.Id), out var emissive))
+        {
+            entries.Add(new(component, (ushort)LocalFogVolumeField.FogEmissiveR, emissive.X));
+            entries.Add(new(component, (ushort)LocalFogVolumeField.FogEmissiveG, emissive.Y));
+            entries.Add(new(component, (ushort)LocalFogVolumeField.FogEmissiveB, emissive.Z));
+        }
+
+        if (edit.GetTyped(new PropertyId<int>(LocalFogVolume.SortPriorityDescriptor.Id), out var priority))
+        {
+            entries.Add(new(component, (ushort)LocalFogVolumeField.SortPriority, priority));
         }
 
         return entries;

@@ -17,7 +17,7 @@ namespace Oxygen.Editor.World.Components;
 [JsonDerivedType(typeof(GeometryComponent), "Geometry")]
 [JsonDerivedType(typeof(TransformComponent), "Transform")]
 [JsonDerivedType(typeof(GameComponent), "Base")]
-public abstract partial class GameComponent : ScopedObservableObject, INamed, IPersistent<ComponentData>
+public abstract class GameComponent : ScopedObservableObject, INamed, IPersistent<ComponentData>
 {
     private static readonly ConcurrentDictionary<Type, Func<ComponentData, GameComponent>> Factories
         = new();
@@ -42,7 +42,7 @@ public abstract partial class GameComponent : ScopedObservableObject, INamed, IP
     /// <summary>
     /// Gets a value indicating whether this component is locked (read-only) in the editor.
     /// Concrete component types can override this to report that they cannot be deleted.
-    /// Default is <c>false</c>.
+    /// Default is <see langword="false"/>.
     /// </summary>
     [JsonIgnore]
     public virtual bool IsLocked => false;
@@ -109,5 +109,6 @@ public abstract partial class GameComponent : ScopedObservableObject, INamed, IP
         RuntimeHelpers.RunClassConstructor(typeof(DirectionalLightComponent).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(PointLightComponent).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(SpotLightComponent).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(LocalFogVolumeComponent).TypeHandle);
     }
 }

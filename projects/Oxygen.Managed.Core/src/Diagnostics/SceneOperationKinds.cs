@@ -30,6 +30,11 @@ public static class SceneOperationKinds
     public const string NodeCreateLight = "Scene.Node.CreateLight";
 
     /// <summary>
+    /// Local fog volume scene node creation.
+    /// </summary>
+    public const string NodeCreateLocalFogVolume = "Scene.Node.CreateLocalFogVolume";
+
+    /// <summary>
     /// Camera scene node creation.
     /// </summary>
     public const string NodeCreateCamera = "Scene.Node.CreateCamera";
@@ -95,6 +100,11 @@ public static class SceneOperationKinds
     /// Point light component edit.
     /// </summary>
     public const string EditPointLight = "Scene.Component.EditPointLight";
+
+    /// <summary>
+    /// Local fog volume component edit.
+    /// </summary>
+    public const string EditLocalFogVolume = "Scene.Component.EditLocalFogVolume";
 
     /// <summary>
     /// Spot light component edit.

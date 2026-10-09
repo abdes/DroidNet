@@ -48,6 +48,9 @@ public static class SceneDiagnosticCodes
     /// <summary>A point or spot light candidate failed the canonical light contract.</summary>
     public const string LocalLightInvalid = DiagnosticCodes.ScenePrefix + "LocalLight.Invalid";
 
+    /// <summary>Local fog volume value is invalid.</summary>
+    public const string LocalFogVolumeInvalid = DiagnosticCodes.ScenePrefix + "LocalFogVolume.Invalid";
+
     /// <summary>Directional light sun exclusivity was violated.</summary>
     public const string DirectionalLightSunExclusivity = DiagnosticCodes.ScenePrefix + "DirectionalLight.Sun.Exclusivity";
 

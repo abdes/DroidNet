@@ -393,6 +393,39 @@ public sealed class SceneDescriptorGeneratorTests
         _ = atmosphere.GetProperty("sun_disk_enabled").GetBoolean().Should().BeFalse();
     }
 
+    /// <summary>Emits each local fog volume against its node's index.</summary>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    public async Task GenerateAsyncShouldEmitLocalFogVolumes()
+    {
+        using var workspace = new DescriptorWorkspace();
+        var scope = CreateScope(workspace);
+        var scene = CreateScene(workspace.Project);
+        scene.RootNodes.Add(new SceneNode(scene) { Name = "Plain" });
+        var foggy = new SceneNode(scene) { Name = "Foggy" };
+        _ = foggy.AddComponent(new LocalFogVolumeComponent
+        {
+            Name = "Local Fog Volume",
+            RadialFogExtinction = 2f,
+            FogAlbedo = new Vector3(0.5f, 0.6f, 0.7f),
+            SortPriority = 3,
+        });
+        scene.RootNodes.Add(foggy);
+
+        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.Diagnostics.Should().BeEmpty();
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
+        var volume = document.RootElement.GetProperty("local_fog_volumes").EnumerateArray().Single();
+        _ = volume.GetProperty("node").GetInt32().Should().Be(1);
+        _ = volume.GetProperty("enabled").GetBoolean().Should().BeTrue();
+        _ = volume.GetProperty("radial_fog_extinction").GetSingle().Should().Be(2f);
+        _ = volume.GetProperty("fog_albedo").EnumerateArray().Select(static item => item.GetSingle()).Should().Equal(0.5f, 0.6f, 0.7f);
+        _ = volume.GetProperty("sort_priority").GetInt32().Should().Be(3);
+        _ = volume.EnumerateObject().Select(static property => property.Name).Should().HaveCount(10);
+    }
+
     /// <summary>Emits authored fog with every field the native scene loader requires.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]

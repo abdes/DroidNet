@@ -45,4 +45,7 @@ public enum EngineComponentId
 
     /// <summary>Authored node rendering flags, applied as local scene-node values.</summary>
     Node = 7,
+
+    /// <summary><c>oxygen::scene::environment::LocalFogVolume</c>.</summary>
+    LocalFogVolume = 8,
 }

@@ -225,6 +225,55 @@ public sealed partial class SceneEngineSync(
     }
 
     /// <inheritdoc/>
+    public Task<SyncOutcome> AttachLocalFogVolumeAsync(
+        Scene scene,
+        SceneNode node,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(node);
+
+        var volume = node.Components.OfType<LocalFogVolumeComponent>().FirstOrDefault();
+        return volume is null
+            ? Task.FromResult(
+                Rejected(
+                    SceneOperationKinds.EditLocalFogVolume,
+                    Scope(scene, node, componentType: nameof(LocalFogVolumeComponent)),
+                    LiveSyncDiagnosticCodes.LocalFogVolumeRejected,
+                    "Node has no local fog volume to attach."))
+            : this.ExecuteNodeSyncAsync(
+            scene,
+            node,
+            node.Id,
+            SceneOperationKinds.EditLocalFogVolume,
+            nameof(LocalFogVolumeComponent),
+            LiveSyncDiagnosticCodes.LocalFogVolumeRejected,
+            LiveSyncDiagnosticCodes.LocalFogVolumeFailed,
+            world => ApplyLocalFogVolume(world, node, volume),
+            cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public Task<SyncOutcome> DetachLocalFogVolumeAsync(
+        Scene scene,
+        Guid nodeId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+
+        return this.ExecuteNodeSyncAsync(
+            scene,
+            node: null,
+            nodeId,
+            SceneOperationKinds.EditLocalFogVolume,
+            nameof(LocalFogVolumeComponent),
+            LiveSyncDiagnosticCodes.LocalFogVolumeRejected,
+            LiveSyncDiagnosticCodes.LocalFogVolumeFailed,
+            world => world.Execute(new RuntimeDetachLocalFogVolume(nodeId)),
+            cancellationToken);
+    }
+
+    /// <inheritdoc/>
     public Task<SyncOutcome> AttachCameraAsync(
         Scene scene,
         SceneNode node,
@@ -1262,6 +1311,19 @@ public sealed partial class SceneEngineSync(
             {
                 succeeded = false;
                 this.LogFailedToAttachLightComponent(ex, node.Id);
+            }
+        }
+
+        if (node.Components.OfType<LocalFogVolumeComponent>().FirstOrDefault() is { } volume)
+        {
+            try
+            {
+                ApplyLocalFogVolume(world, node, volume);
+            }
+            catch (Exception ex) when (EngineInteropExceptionPolicy.IsRecoverable(ex))
+            {
+                succeeded = false;
+                this.LogFailedToAttachLocalFogVolume(ex, node.Id);
             }
         }
 

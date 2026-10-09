@@ -126,6 +126,7 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             this.AddOrthographicCameraCommand.NotifyCanExecuteChanged();
             this.AddDirectionalLightCommand.NotifyCanExecuteChanged();
             this.AddPointLightCommand.NotifyCanExecuteChanged();
+            this.AddLocalFogVolumeCommand.NotifyCanExecuteChanged();
             this.AddSpotLightCommand.NotifyCanExecuteChanged();
 
             return;
@@ -193,6 +194,7 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
                 LuminousFluxLumens = 1_600f,
                 Range = 15f,
             },
+            "LocalFogVolume" => new LocalFogVolumeComponent { Name = "Local Fog Volume" },
             _ => null,
         };
 
@@ -230,6 +232,7 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
                 _ = lights.AddMenuItem("Point Light", this.AddPointLightCommand);
                 _ = lights.AddMenuItem("Spot Light", this.AddSpotLightCommand);
             })
+            .AddMenuItem("Local Fog Volume", this.AddLocalFogVolumeCommand)
             .Build();
 
     [RelayCommand(CanExecute = nameof(CanAddGeometry))]
@@ -257,6 +260,11 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
     private void AddSpotLight() => this.AddComponent("SpotLight");
 
     private bool CanAddLight() => this.Node is not null && this.Node.Components.OfType<LightComponent>().FirstOrDefault() is null;
+
+    [RelayCommand(CanExecute = nameof(CanAddLocalFogVolume))]
+    private void AddLocalFogVolume() => this.AddComponent("LocalFogVolume");
+
+    private bool CanAddLocalFogVolume() => this.Node is not null && !this.Node.Components.OfType<LocalFogVolumeComponent>().Any();
 
     private bool CanAddCamera() => this.Node is not null && this.Node.Components.OfType<CameraComponent>().FirstOrDefault() is null;
 
@@ -320,6 +328,7 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             "Geometry" => this.CanAddGeometry(),
             "PerspectiveCamera" or "OrthographicCamera" => this.CanAddCamera(),
             "DirectionalLight" or "PointLight" or "SpotLight" => this.CanAddLight(),
+            "LocalFogVolume" => this.CanAddLocalFogVolume(),
             _ => false,
         };
 
@@ -342,6 +351,7 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
         this.AddOrthographicCameraCommand.NotifyCanExecuteChanged();
         this.AddDirectionalLightCommand.NotifyCanExecuteChanged();
         this.AddPointLightCommand.NotifyCanExecuteChanged();
+            this.AddLocalFogVolumeCommand.NotifyCanExecuteChanged();
         this.AddSpotLightCommand.NotifyCanExecuteChanged();
     }
 }

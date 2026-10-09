@@ -154,6 +154,38 @@ public sealed partial class SceneDocumentCommandService(
 
     /// <inheritdoc />
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
+    public async Task<SceneValueCommandResult<SceneNode>> CreateLocalFogVolumeAsync(SceneDocumentCommandContext context, NodePlacement? placement = null)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return SceneCommandResults.Failure<SceneNode>();
+        }
+
+        try
+        {
+            var node = new SceneNode(context.Scene) { Name = "Local Fog Volume" };
+            ApplyPlacement(node, placement);
+            _ = node.AddComponent(new LocalFogVolumeComponent { Name = "Local Fog Volume" });
+
+            await this.AddRootNodeAsync(context, node, SceneOperationKinds.NodeCreateLocalFogVolume, "Create Local Fog Volume").ConfigureAwait(true);
+            return SceneCommandResults.Success(node);
+        }
+        catch (Exception ex)
+        {
+            var operationResultId = this.PublishSceneFailure(
+                SceneOperationKinds.NodeCreateLocalFogVolume,
+                DiagnosticCodes.ScenePrefix + "CREATE_LOCAL_FOG_VOLUME_FAILED",
+                "Local fog volume was not created",
+                "The local fog volume could not be created.",
+                context,
+                ex);
+            return SceneCommandResults.Failure<SceneNode>(operationResultId);
+        }
+    }
+
+    /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
     public async Task<SceneValueCommandResult<SceneNode>> CreateCameraAsync(SceneDocumentCommandContext context, string kind, NodePlacement? placement = null)
     {
         using var authoring = EnterAuthoring(context);
@@ -1169,6 +1201,12 @@ public sealed partial class SceneDocumentCommandService(
             return !node.Components.OfType<LightComponent>().Any();
         }
 
+        if (componentType == typeof(LocalFogVolumeComponent))
+        {
+            reason = "This node already has a local fog volume.";
+            return !node.Components.OfType<LocalFogVolumeComponent>().Any();
+        }
+
         reason = $"Component type '{componentType.Name}' is not supported by ED-M04.";
         return false;
     }
@@ -1196,6 +1234,7 @@ public sealed partial class SceneDocumentCommandService(
                 LuminousFluxLumens = 1_600f,
                 Range = 15f,
             },
+            _ when componentType == typeof(LocalFogVolumeComponent) => new LocalFogVolumeComponent { Name = "Local Fog Volume" },
             _ => throw new NotSupportedException($"Component type '{componentType.Name}' is not supported."),
         };
 
@@ -1622,6 +1661,7 @@ public sealed partial class SceneDocumentCommandService(
             GeometryComponent => await this.sceneEngineSync.AttachGeometryAsync(context.Scene, node).ConfigureAwait(true),
             CameraComponent => await this.sceneEngineSync.AttachCameraAsync(context.Scene, node).ConfigureAwait(true),
             LightComponent => await this.sceneEngineSync.AttachLightAsync(context.Scene, node).ConfigureAwait(true),
+            LocalFogVolumeComponent => await this.sceneEngineSync.AttachLocalFogVolumeAsync(context.Scene, node).ConfigureAwait(true),
             _ => null,
         };
 
@@ -1637,6 +1677,7 @@ public sealed partial class SceneDocumentCommandService(
             GeometryComponent => await this.sceneEngineSync.DetachGeometryAsync(context.Scene, node.Id).ConfigureAwait(true),
             CameraComponent => await this.sceneEngineSync.DetachCameraAsync(context.Scene, node.Id).ConfigureAwait(true),
             LightComponent => await this.sceneEngineSync.DetachLightAsync(context.Scene, node.Id).ConfigureAwait(true),
+            LocalFogVolumeComponent => await this.sceneEngineSync.DetachLocalFogVolumeAsync(context.Scene, node.Id).ConfigureAwait(true),
             _ => null,
         };
 

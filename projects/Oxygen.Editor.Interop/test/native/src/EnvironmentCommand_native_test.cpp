@@ -18,6 +18,8 @@
 #include <Commands/PerspectiveCameraPropertyApplier.h>
 #include <Commands/PropertyApplierRegistry.h>
 #include <Commands/SetPropertiesCommand.h>
+#include <Commands/LocalFogVolumeCommands.h>
+#include <Commands/LocalFogVolumePropertyApplier.h>
 #include <Commands/NodePropertyApplier.h>
 #include <Commands/ObserveEnvironmentCommand.h>
 #include <Commands/SetEnvironmentCommand.h>
@@ -773,6 +775,75 @@ auto RunAuthoredFogContracts() -> NativeStatus
   }
 }
 
+auto RunLocalFogVolumeContracts() -> NativeStatus
+{
+  try {
+    using oxygen::scene::environment::LocalFogVolume;
+    auto scene = CreateTestScene("Local fog volumes");
+    auto context = BuildContext(*scene);
+    auto node = scene->CreateNode("Fog");
+    LocalFogVolume authored;
+    authored.SetRadialFogExtinction(2.0F);
+    authored.SetFogAlbedo({ 0.5F, 0.6F, 0.7F });
+    authored.SetSortPriority(3);
+    AttachLocalFogVolumeCommand(node.GetHandle(), authored).Execute(context);
+    const auto read = [&node]() -> const LocalFogVolume* {
+      auto impl = node.GetImpl();
+      return impl && impl->get().HasComponent<LocalFogVolume>()
+        ? &impl->get().GetComponent<LocalFogVolume>()
+        : nullptr;
+    };
+    if (read() == nullptr || read()->GetRadialFogExtinction() != 2.0F
+      || read()->GetSortPriority() != 3) {
+      throw std::runtime_error("Attached local fog volume lost authored values");
+    }
+
+    authored.SetHeightFogOffset(4.0F);
+    AttachLocalFogVolumeCommand(node.GetHandle(), authored).Execute(context);
+    if (read()->GetHeightFogOffset() != 4.0F) {
+      throw std::runtime_error("Re-attaching did not replace the local fog volume");
+    }
+
+    LocalFogVolumePropertyApplier applier;
+    const auto entry = [](LocalFogVolumeField field, float value) {
+      return PropertyEntry { .component = ComponentId::kLocalFogVolume,
+        .field = static_cast<std::uint16_t>(field), .value = value };
+    };
+    const auto edits = std::vector {
+      entry(LocalFogVolumeField::kEnabled, 0.0F),
+      entry(LocalFogVolumeField::kFogEmissiveG, 0.25F),
+      entry(LocalFogVolumeField::kSortPriority, -5.0F),
+    };
+    applier.Apply(node, edits);
+    if (read()->IsEnabled() || read()->GetFogEmissive().y != 0.25F
+      || read()->GetSortPriority() != -5) {
+      throw std::runtime_error("Local fog volume property edits were not applied");
+    }
+
+    const auto invalid = std::vector {
+      entry(LocalFogVolumeField::kRadialFogExtinction, 9.0F),
+      entry(LocalFogVolumeField::kFogAlbedoR, 2.0F),
+    };
+    bool rejected = false;
+    try {
+      applier.Apply(node, invalid);
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    if (!rejected || read()->GetRadialFogExtinction() != 2.0F) {
+      throw std::runtime_error("Invalid local fog volume edit was not rejected atomically");
+    }
+
+    DetachLocalFogVolumeCommand(node.GetHandle()).Execute(context);
+    if (read() != nullptr) {
+      throw std::runtime_error("Detach left the local fog volume attached");
+    }
+    return {};
+  } catch (const std::exception& error) {
+    return NativeFailure(error.what());
+  }
+}
+
 } // namespace
 
 #pragma managed
@@ -799,6 +870,12 @@ namespace InteropTests {
 [TestClass]
 public ref class EnvironmentCommandCliTests {
 public:
+  [TestMethod]
+  void LocalFogVolumesAttachEditAndDetachAtomically()
+  {
+    AssertSucceeded(RunLocalFogVolumeContracts());
+  }
+
   [TestMethod]
   void AuthoredFogReachesTheSceneAndRejectsNonFiniteValues()
   {
