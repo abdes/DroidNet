@@ -25,10 +25,12 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
         [Oxygen.Editor.ContentPipeline.Import.CubeLayout.VerticalStrip] = "Vertical strip 1:6",
         [Oxygen.Editor.ContentPipeline.Import.CubeLayout.HorizontalCross] = "Horizontal cross 4:3",
         [Oxygen.Editor.ContentPipeline.Import.CubeLayout.VerticalCross] = "Vertical cross 3:4",
+        [Oxygen.Editor.ContentPipeline.Import.CubeLayout.SixFaces] = "Six face files",
     };
 
     private readonly ProjectContext project;
     private readonly IDialogService dialogs;
+    private readonly IReadOnlyList<string>? sourceFaces;
     private string name = string.Empty;
     private string destinationFolder = string.Empty;
     private string intent = "albedo";
@@ -51,7 +53,9 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
         this.dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         this.SourcePath = Path.GetFullPath(sourcePath);
         this.SourceDimensions = ImageDimensions.TryRead(this.SourcePath);
-        this.Name = Path.GetFileNameWithoutExtension(sourcePath);
+        this.sourceFaces = TextureSourceAssetImporter.FindCubeFaces(this.SourcePath);
+        var stem = Path.GetFileNameWithoutExtension(sourcePath);
+        this.Name = this.sourceFaces is null ? stem : TextureSourceAssetImporter.StripFaceSuffix(stem);
         this.DestinationFolder = destinationFolder;
         this.Revalidate();
     }
@@ -118,12 +122,15 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
     /// <summary>Gets the layout the chosen or detected layout resolves to, or null when detection failed.</summary>
     public CubeLayout? ResolvedCubeLayout
         => string.Equals(this.cubeLayout, AutoLayout, StringComparison.Ordinal)
-            ? this.SourceDimensions is { } size ? TextureSourceAssetImporter.DetectCubeLayout(size.Width, size.Height) : null
+            ? this.sourceFaces is not null ? Oxygen.Editor.ContentPipeline.Import.CubeLayout.SixFaces
+            : this.SourceDimensions is { } size ? TextureSourceAssetImporter.DetectCubeLayout(size.Width, size.Height) : null
             : LayoutNames.First(entry => string.Equals(entry.Value, this.cubeLayout, StringComparison.Ordinal)).Key;
 
     /// <summary>Gets a description of the detected layout for the automatic choice.</summary>
     public string DetectedLayoutText
-        => this.SourceDimensions is not { } size ? "Image size unknown; choose the layout."
+        => this.sourceFaces is { } faces && this.ResolvedCubeLayout == Oxygen.Editor.ContentPipeline.Import.CubeLayout.SixFaces
+            ? "Faces +X, -X, +Y, -Y, +Z, -Z: " + string.Join(", ", faces.Select(Path.GetFileName)) + "."
+            : this.SourceDimensions is not { } size ? "Image size unknown; choose the layout."
             : this.ResolvedCubeLayout is { } layout && string.Equals(this.cubeLayout, AutoLayout, StringComparison.Ordinal)
             ? string.Create(CultureInfo.InvariantCulture, $"Detected {LayoutNames[layout]} from {size.Width} × {size.Height}.")
             : string.Create(CultureInfo.InvariantCulture, $"{size.Width} × {size.Height}");
@@ -320,14 +327,14 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
         this.OnPropertyChanged(nameof(this.IsPanorama));
         if (this.isCube && this.ResolvedCubeLayout is null)
         {
-            this.Error = "The image is not a 2:1 panorama, a strip or a cross. Choose its cube layout.";
+            this.Error = "The image is not a 2:1 panorama, a strip, a cross or one of six face files. Choose its cube layout.";
             return;
         }
 
         try
         {
             var target = TextureSourceImportTarget.Resolve(this.CreateRequest());
-            if (File.Exists(target.ImagePath) || File.Exists(target.DescriptorPath))
+            if (target.ImagePaths.Any(File.Exists) || File.Exists(target.DescriptorPath))
             {
                 this.Error = "A texture asset with this name already exists in the destination.";
                 this.OnPropertyChanged(nameof(this.OutputVirtualPath));

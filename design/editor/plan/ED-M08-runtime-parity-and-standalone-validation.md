@@ -1239,9 +1239,9 @@ stands behind them. This slice removes those lock-outs.
    Backdrop choice over engine-shaped records, a Sky Light section, EV
    intensities, and a Cube shape in texture import. Cooked cubemaps become
    scene texture bindings like the metering mask (scene format 12), and the
-   live editor loads all environment textures as one request. Importing six
-   separate face files joins the cube import and cook review in
-   [issue 21](https://github.com/abdes/DroidNet/issues/21).
+   live editor loads all environment textures as one request. Texture import
+   also takes six separate face files, detected by name
+   ([issue 21](https://github.com/abdes/DroidNet/issues/21)).
    The engine's captured-scene Sky Light did not read the Sky Sphere, so a
    cubemap or solid color backdrop lit nothing
    ([issue 22](https://github.com/abdes/DroidNet/issues/22)). It now captures

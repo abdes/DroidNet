@@ -241,7 +241,11 @@ volumetric multipliers stay linear because they balance shares of one light.
 Cubemap fields list the project's cube textures: texture descriptors whose cube
 settings produce a cube texture. Texture import offers a Cube shape. Its layout
 is detected from the image (2:1 panorama, 6:1 or 1:6 strip, 4:3 or 3:4 cross)
-or chosen, and a panorama takes a face size that is a multiple of 256. Cube
+or chosen, and a panorama takes a face size that is a multiple of 256. Six
+separate face files are detected from the selected file's name (`_px`/`_nx`,
+`_posx`/`_negx` or `_right`/`_left` suffixes, as the cooker names them); they
+must be square and the same size, and import copies them as `<name>_px` to
+`<name>_nz` for the cooker to assemble. Cube
 textures default to the hdr_env intent, linear color space and rgba16f output.
 Choosing an LDR format for a cube warns that it can only be displayed, and the
 cubemap pickers mark such cubes "display only". Half floats clamp radiance

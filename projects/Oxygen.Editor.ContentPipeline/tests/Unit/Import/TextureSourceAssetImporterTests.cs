@@ -124,6 +124,52 @@ public sealed class TextureSourceAssetImporterTests
         }
     }
 
+    [TestMethod]
+    public async Task SixFaceImportCopiesEveryFaceAndLetsTheCookerAssembleThem()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "OxygenTextureImport", Guid.NewGuid().ToString("N"));
+        var outside = Path.Combine(root, "Outside");
+        Directory.CreateDirectory(outside);
+        try
+        {
+            string[] names = ["posx", "negx", "posy", "negy", "posz", "negz"];
+            foreach (var name in names)
+            {
+                await File.WriteAllTextAsync(Path.Combine(outside, $"sky_{name}.hdr"), $"#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 8 +X 8\n{name}").ConfigureAwait(false);
+            }
+
+            var selected = Path.Combine(outside, "sky_negy.hdr");
+            _ = TextureSourceAssetImporter.FindCubeFaces(selected).Should().Equal(names.Select(name => Path.Combine(outside, $"sky_{name}.hdr")));
+            _ = TextureSourceAssetImporter.StripFaceSuffix("sky_negy").Should().Be("sky");
+            var request = new TextureSourceImportRequest(
+                CreateProject(root), selected, new Uri("asset:///Content/Sky"), "Sky", "hdr_env", "linear", "rgba16f")
+            {
+                Cube = new TextureCubeImport(CubeLayout.SixFaces),
+            };
+
+            _ = await TextureSourceAssetImporter.CreateAsync(request).ConfigureAwait(false);
+            var folder = Path.Combine(root, "Content", "Sky");
+            var suffixes = TextureSourceAssetImporter.FaceSuffixes;
+            for (var face = 0; face < suffixes.Count; ++face)
+            {
+                _ = (await File.ReadAllTextAsync(Path.Combine(folder, $"Sky{suffixes[face]}.hdr")).ConfigureAwait(false)).Should().EndWith(names[face]);
+            }
+
+            using var descriptor = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(folder, "Sky.otex.json")).ConfigureAwait(false));
+            _ = descriptor.RootElement.GetProperty("source").GetString().Should().Be("Sky_px.hdr");
+            _ = descriptor.RootElement.GetProperty("cube").GetProperty("cubemap").GetBoolean().Should().BeTrue();
+            _ = descriptor.RootElement.GetProperty("cube").TryGetProperty("cube_layout", out _).Should().BeFalse();
+
+            await File.WriteAllTextAsync(Path.Combine(outside, "sky_posz.hdr"), "#?RADIANCE\n\n-Y 8 +X 16\n").ConfigureAwait(false);
+            var mismatched = () => TextureSourceImportTarget.Resolve(request with { Name = "Other" });
+            _ = mismatched.Should().Throw<ArgumentException>().WithMessage("Cube faces must be square images of the same size.*");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static ProjectContext CreateProject(string root) => new()
     {
         ProjectId = Guid.NewGuid(),

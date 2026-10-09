@@ -34,6 +34,15 @@ public static class TextureSourceAssetImporter
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
+    // The cooker's face naming conventions, each in +X, -X, +Y, -Y, +Z, -Z order. The first
+    // set also names the faces an import writes.
+    private static readonly string[][] FaceSuffixSets =
+    [
+        ["_px", "_nx", "_py", "_ny", "_pz", "_nz"],
+        ["_posx", "_negx", "_posy", "_negy", "_posz", "_negz"],
+        ["_right", "_left", "_top", "_bottom", "_front", "_back"],
+    ];
+
     internal static bool IsSupportedIntent(string value) => Intents.Contains(value);
 
     internal static bool IsSupportedColorSpace(string value) => ColorSpaces.Contains(value);
@@ -42,6 +51,9 @@ public static class TextureSourceAssetImporter
 
     /// <summary>Gets the supported standalone image extensions.</summary>
     public static IReadOnlyCollection<string> SupportedExtensions => ImageExtensions;
+
+    /// <summary>Gets the suffixes an imported six-face cube gives its face files, in +X, -X, +Y, -Y, +Z, -Z order.</summary>
+    public static IReadOnlyList<string> FaceSuffixes => FaceSuffixSets[0];
 
     /// <summary>Creates an image texture descriptor under a project authoring mount.</summary>
     /// <param name="request">The selected image, destination, name and native cook settings.</param>
@@ -52,20 +64,22 @@ public static class TextureSourceAssetImporter
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
         var target = TextureSourceImportTarget.Resolve(request);
-        if (File.Exists(target.ImagePath) || File.Exists(target.DescriptorPath))
+        if (target.ImagePaths.Any(File.Exists) || File.Exists(target.DescriptorPath))
         {
             throw new IOException($"A texture asset named '{request.Name}' already exists in this folder.");
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(target.ImagePath)!);
-        var imageCreated = false;
+        var sources = request.Cube?.Layout == CubeLayout.SixFaces ? FindCubeFaces(request.SourcePath)! : [request.SourcePath];
+        var imagesCreated = 0;
         var descriptorCreated = false;
         try
         {
-            await using (var source = new FileStream(request.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan))
-            await using (var image = new FileStream(target.ImagePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan))
+            for (var index = 0; index < sources.Count; ++index)
             {
-                imageCreated = true;
+                await using var source = new FileStream(sources[index], FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+                await using var image = new FileStream(target.ImagePaths[index], FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+                ++imagesCreated;
                 await source.CopyToAsync(image, cancellationToken).ConfigureAwait(false);
             }
 
@@ -88,17 +102,17 @@ public static class TextureSourceAssetImporter
         }
         catch (OperationCanceledException)
         {
-            CleanupOwnedFiles(target, descriptorCreated, imageCreated);
+            CleanupOwnedFiles(target, descriptorCreated, imagesCreated);
             throw;
         }
         catch (IOException)
         {
-            CleanupOwnedFiles(target, descriptorCreated, imageCreated);
+            CleanupOwnedFiles(target, descriptorCreated, imagesCreated);
             throw;
         }
         catch (UnauthorizedAccessException)
         {
-            CleanupOwnedFiles(target, descriptorCreated, imageCreated);
+            CleanupOwnedFiles(target, descriptorCreated, imagesCreated);
             throw;
         }
     }
@@ -159,16 +173,65 @@ public static class TextureSourceAssetImporter
             => cube.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
     }
 
-    private static void CleanupOwnedFiles(TextureSourceImportTarget target, bool descriptorCreated, bool imageCreated)
+    /// <summary>Finds the six face files of a cube from any one of them, named as the cooker expects.</summary>
+    /// <param name="path">One face image, such as <c>sky_px.hdr</c>, <c>sky_posx.hdr</c> or <c>sky_right.hdr</c>.</param>
+    /// <returns>The six existing faces in +X, -X, +Y, -Y, +Z, -Z order, or <see langword="null"/> when the set is incomplete.</returns>
+    public static IReadOnlyList<string>? FindCubeFaces(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        var folder = Path.GetDirectoryName(Path.GetFullPath(path)) ?? string.Empty;
+        var stem = Path.GetFileNameWithoutExtension(path);
+        var extension = Path.GetExtension(path);
+        foreach (var suffixes in FaceSuffixSets)
+        {
+            var suffix = suffixes.FirstOrDefault(candidate => stem.Length > candidate.Length && stem.EndsWith(candidate, StringComparison.OrdinalIgnoreCase));
+            if (suffix is null)
+            {
+                continue;
+            }
+
+            var stemBase = stem[..^suffix.Length];
+            var faces = suffixes.Select(face => Path.Combine(folder, stemBase + face + extension)).ToArray();
+            if (faces.All(File.Exists))
+            {
+                return faces;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Removes a cube face suffix from an image name.</summary>
+    /// <param name="stem">The image file name without its extension.</param>
+    /// <returns>The name shared by the six faces, or the stem when it names no face.</returns>
+    public static string StripFaceSuffix(string stem)
+    {
+        ArgumentNullException.ThrowIfNull(stem);
+        foreach (var suffix in FaceSuffixSets.SelectMany(static suffixes => suffixes))
+        {
+            if (stem.Length > suffix.Length && stem.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                return stem[..^suffix.Length];
+            }
+        }
+
+        return stem;
+    }
+
+    private static void CleanupOwnedFiles(TextureSourceImportTarget target, bool descriptorCreated, int imagesCreated)
     {
         if (descriptorCreated)
         {
             File.Delete(target.DescriptorPath);
         }
 
-        if (imageCreated)
+        foreach (var image in target.ImagePaths.Take(imagesCreated))
         {
-            File.Delete(target.ImagePath);
+            File.Delete(image);
         }
     }
 
@@ -202,6 +265,9 @@ public static class TextureSourceAssetImporter
                 CubeLayout.VerticalStrip => new(Cubemap: true, EquirectToCube: null, FaceSize: null, "vstrip"),
                 CubeLayout.HorizontalCross => new(Cubemap: true, EquirectToCube: null, FaceSize: null, "hcross"),
                 CubeLayout.VerticalCross => new(Cubemap: true, EquirectToCube: null, FaceSize: null, "vcross"),
+
+                // The cooker finds the other faces from the +X face's name.
+                CubeLayout.SixFaces => new(Cubemap: true, EquirectToCube: null, FaceSize: null, Layout: null),
                 _ => throw new ArgumentOutOfRangeException(nameof(cube), cube.Layout, "Unknown cube layout."),
             };
     }
@@ -256,6 +322,9 @@ public enum CubeLayout
 
     /// <summary>A 3:4 vertical cross.</summary>
     VerticalCross,
+
+    /// <summary>Six square images of the same size, one per face, named with a face suffix such as <c>_px</c>.</summary>
+    SixFaces,
 }
 
 /// <summary>Cube import settings for a single source image.</summary>
@@ -266,6 +335,9 @@ public sealed record TextureCubeImport(CubeLayout Layout, int? FaceSize = null);
 /// <summary>A collision-checked filesystem target for a named texture asset.</summary>
 public sealed record TextureSourceImportTarget(string MountName, string VirtualPath, string ImagePath, string DescriptorPath, Uri AssetUri)
 {
+    /// <summary>Gets every image the import writes: the source image, or the six faces with the +X face first.</summary>
+    public IReadOnlyList<string> ImagePaths { get; init; } = [ImagePath];
+
     /// <summary>Resolves and validates a reviewed texture import request.</summary>
     /// <param name="request">The import request.</param>
     /// <returns>The in-mount descriptor and source paths.</returns>
@@ -332,14 +404,42 @@ public sealed record TextureSourceImportTarget(string MountName, string VirtualP
             throw new ArgumentException("The selected folder resolves outside its authoring mount.", nameof(request));
         }
 
-        var imageName = request.Name + Path.GetExtension(request.SourcePath).ToLowerInvariant();
+        var sixFaces = request.Cube?.Layout == CubeLayout.SixFaces;
+        if (sixFaces)
+        {
+            ValidateCubeFaces(request.SourcePath);
+        }
+
+        var extension = Path.GetExtension(request.SourcePath).ToLowerInvariant();
+        var imagePaths = (sixFaces ? TextureSourceAssetImporter.FaceSuffixes : [string.Empty])
+            .Select(suffix => Path.Combine(physicalFolder, request.Name + suffix + extension))
+            .ToArray();
         var descriptorName = request.Name + ".otex.json";
-        var imagePath = Path.Combine(physicalFolder, imageName);
+        var imagePath = imagePaths[0];
         var descriptorPath = Path.Combine(physicalFolder, descriptorName);
         var virtualDirectory = string.Join('/', parts.Skip(1));
         var virtualPath = "/" + mount.Name + (virtualDirectory.Length == 0 ? string.Empty : "/" + virtualDirectory) + "/" + request.Name + ".otex";
         var assetPath = string.Join('/', new[] { mount.Name }.Concat(parts.Skip(1)).Append(descriptorName).Select(Uri.EscapeDataString));
-        return new(mount.Name, virtualPath, imagePath, descriptorPath, new Uri(AssetUris.Scheme + ":///" + assetPath));
+        return new(mount.Name, virtualPath, imagePath, descriptorPath, new Uri(AssetUris.Scheme + ":///" + assetPath)) { ImagePaths = imagePaths };
+    }
+
+    private static void ValidateCubeFaces(string sourcePath)
+    {
+        var faces = TextureSourceAssetImporter.FindCubeFaces(sourcePath)
+            ?? throw new ArgumentException(
+                "Six-face import needs six images next to the selected one, named with _px, _nx, _py, _ny, _pz and _nz (or _posx... or _right, _left, _top, _bottom, _front, _back).",
+                nameof(sourcePath));
+        var sizes = faces.Select(ImageDimensions.TryRead).ToArray();
+        if (sizes.Any(static size => size is null))
+        {
+            throw new ArgumentException("A cube face image could not be read.", nameof(sourcePath));
+        }
+
+        var first = sizes[0]!.Value;
+        if (first.Width != first.Height || sizes.Any(size => size!.Value != first))
+        {
+            throw new ArgumentException("Cube faces must be square images of the same size.", nameof(sourcePath));
+        }
     }
 
     private static bool IsUnderRoot(string path, string root)
