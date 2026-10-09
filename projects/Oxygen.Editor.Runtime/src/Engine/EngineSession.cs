@@ -45,6 +45,14 @@ internal abstract class EngineSession
     /// <summary>Requests loop termination.</summary>
     public abstract void Stop();
 
+    /// <summary>Turns graphics vsync on or off for every viewport surface.</summary>
+    /// <param name="enabled">Whether presents wait for the display's vertical blank.</param>
+    public abstract void SetVSyncEnabled(bool enabled);
+
+    /// <summary>Chooses whether every visible viewport pane renders each frame.</summary>
+    /// <param name="alwaysRender">Whether idle panes render too.</param>
+    public abstract void SetAlwaysRenderPanes(bool alwaysRender);
+
     /// <summary>Waits for native loop exit cleanup, including dispatcher work.</summary>
     /// <returns>The operation completion task.</returns>
     public abstract Task CompleteLoopCleanupAsync();

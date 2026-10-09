@@ -9,8 +9,11 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// </summary>
 public static class EngineConstants
 {
-    /// <summary>The default editor preview frame rate.</summary>
-    public const int DefaultTargetFps = 60;
+    /// <summary>The default editor target frame rate: 0, no cap. The display paces frames when vsync is on.</summary>
+    public const int DefaultTargetFps = 0;
+
+    /// <summary>The frame-rate cap offered when the user first turns the cap on.</summary>
+    public const int DefaultFrameRateCap = 60;
 
     /// <summary>The default native logging threshold (Error).</summary>
     public const int DefaultLoggingVerbosity = -2;

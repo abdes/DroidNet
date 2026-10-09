@@ -35,6 +35,18 @@ internal sealed partial class NativeEngineSession
         set => this.Runner.SetTargetFps(this.context, value);
     }
 
+    /// <inheritdoc />
+    public override void SetVSyncEnabled(bool enabled) => this.Runner.SetVSyncEnabled(this.context, enabled);
+
+    /// <inheritdoc />
+    public override void SetAlwaysRenderPanes(bool alwaysRender)
+    {
+        if (!this.Runner.TrySetAlwaysRenderPanes(this.context, alwaysRender))
+        {
+            throw new InvalidOperationException("The native editor module is unavailable.");
+        }
+    }
+
     /// <summary>Builds editor startup configuration using the discovered SDK's data locations.</summary>
     /// <param name="settings">Authored engine settings, including explicit path overrides.</param>
     /// <param name="editorCVarsArchivePath">The editor's optional console archive.</param>

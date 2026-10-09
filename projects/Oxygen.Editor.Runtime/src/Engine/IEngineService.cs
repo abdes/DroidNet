@@ -118,6 +118,19 @@ public interface IEngineService : IAsyncDisposable
     /// <returns>Completion after native loading and current binding replacement settle.</returns>
     public Task RefreshProjectCookedRootsAsync(IReadOnlyList<RuntimeCookedRoot> bindings, IDisposable? readLease = null, bool keepPaused = false);
 
+    /// <summary>Turns graphics vsync on or off for every viewport; the engine applies it at its next frame.</summary>
+    /// <param name="enabled">Whether presents wait for the display's vertical blank.</param>
+    /// <throws cref="InvalidOperationException">If the service is neither ready nor running.</throws>
+    public void SetVSyncEnabled(bool enabled);
+
+    /// <summary>Chooses whether every visible viewport pane renders each frame.</summary>
+    /// <param name="alwaysRender">
+    ///     <see langword="true"/> to render every visible pane each frame; <see langword="false"/> to render a pane
+    ///     only when what it shows may have changed.
+    /// </param>
+    /// <throws cref="InvalidOperationException">If the service is neither ready nor running.</throws>
+    public void SetAlwaysRenderPanes(bool alwaysRender);
+
     /// <summary>Suspends preview and drains native I/O while retaining accepted immutable roots and their readers.</summary>
     /// <returns>The native suspension acknowledgement.</returns>
     public Task SuspendCookedContentAsync();

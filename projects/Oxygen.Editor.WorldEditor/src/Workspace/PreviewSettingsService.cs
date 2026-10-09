@@ -15,7 +15,7 @@ using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Workspace;
 
-/// <summary>Owns the active project's preview preferences and their user-local persistence.</summary>
+/// <summary>Owns the active project's embedded-engine preferences and their user-local persistence.</summary>
 /// <param name="engine">The shared embedded runtime.</param>
 /// <param name="settings">A dedicated settings manager, accessed serially by this service.</param>
 /// <param name="projects">The current project lifetime.</param>
@@ -42,21 +42,49 @@ public sealed partial class PreviewSettingsService(
     private ProjectContext? activeProject;
     private ProjectContext? requestedProject;
     private long activation;
-    private int runAtFps = EngineConstants.DefaultTargetFps;
-    private int loggingVerbosity = EngineConstants.DefaultLoggingVerbosity;
+    private Preferences accepted = new();
+    private int maxFrameRateCap = EngineConstants.DefaultFrameRateCap;
 
-    /// <summary>Gets or sets the accepted preview frame-rate limit.</summary>
-    public int RunAtFps
+    /// <summary>Gets or sets a value indicating whether presents wait for the display's vertical blank.</summary>
+    public bool VSyncEnabled
     {
-        get => this.runAtFps;
-        set => this.Apply(value, this.loggingVerbosity, changeFps: true);
+        get => this.accepted.VSyncEnabled;
+        set => this.Apply(this.accepted with { VSyncEnabled = value }, nameof(this.VSyncEnabled));
+    }
+
+    /// <summary>Gets or sets a value indicating whether the engine frame rate is capped at <see cref="FrameRateCap"/>.</summary>
+    public bool FrameRateCapEnabled
+    {
+        get => this.accepted.FrameRateCapEnabled;
+        set => this.Apply(this.accepted with { FrameRateCapEnabled = value }, nameof(this.FrameRateCapEnabled));
+    }
+
+    /// <summary>Gets or sets the frame-rate cap, kept while the cap is off.</summary>
+    public int FrameRateCap
+    {
+        get => this.accepted.FrameRateCap;
+        set => this.Apply(this.accepted with { FrameRateCap = value }, nameof(this.FrameRateCap));
+    }
+
+    /// <summary>Gets the highest frame-rate cap the engine supports.</summary>
+    public int MaxFrameRateCap
+    {
+        get => this.maxFrameRateCap;
+        private set => this.SetProperty(ref this.maxFrameRateCap, value);
+    }
+
+    /// <summary>Gets or sets a value indicating whether every visible viewport pane renders each frame.</summary>
+    public bool AlwaysRenderPanes
+    {
+        get => this.accepted.AlwaysRenderPanes;
+        set => this.Apply(this.accepted with { AlwaysRenderPanes = value }, nameof(this.AlwaysRenderPanes));
     }
 
     /// <summary>Gets or sets the accepted native logging threshold.</summary>
     public int LoggingVerbosity
     {
-        get => this.loggingVerbosity;
-        set => this.Apply(this.runAtFps, value, changeFps: false);
+        get => this.accepted.LoggingVerbosity;
+        set => this.Apply(this.accepted with { LoggingVerbosity = value }, nameof(this.LoggingVerbosity));
     }
 
     /// <summary>Restores project preferences before starting or resuming its preview.</summary>
@@ -96,20 +124,29 @@ public sealed partial class PreviewSettingsService(
     private static SettingContext Context(ProjectContext project)
         => SettingContext.Project(Path.TrimEndingDirectorySeparator(Path.GetFullPath(project.ProjectRoot)).ToUpperInvariant());
 
+    private static string RejectionCode(string property) => property switch
+    {
+        nameof(VSyncEnabled) => "VSYNC_REJECTED",
+        nameof(AlwaysRenderPanes) => "PANE_RENDERING_REJECTED",
+        nameof(LoggingVerbosity) => "LOGGING_VERBOSITY_REJECTED",
+        _ => "TARGET_FPS_REJECTED",
+    };
+
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A preference-store failure is reported and uses visible defaults without preventing project authoring.")]
     private async Task RestoreAfterAsync(Task previous, ProjectContext project, long activation)
     {
         await previous.ConfigureAwait(true);
-        var value = new Preferences(project.ProjectId, EngineConstants.DefaultTargetFps, EngineConstants.DefaultLoggingVerbosity);
+        var maxCap = (int)engine.MaxTargetFps;
+        var value = new Preferences { ProjectId = project.ProjectId };
         try
         {
             var stored = await settings.LoadSettingAsync(Key, Context(project)).ConfigureAwait(true);
             if (stored is not null && stored.ProjectId == project.ProjectId)
             {
-                if (stored.TargetFps < 1 || stored.TargetFps > engine.MaxTargetFps
+                if (stored.FrameRateCap < 1 || stored.FrameRateCap > maxCap
                     || stored.LoggingVerbosity is < EngineConstants.MinLoggingVerbosity or > EngineConstants.MaxLoggingVerbosity)
                 {
-                    throw new InvalidDataException("Saved preview preferences contain an unsupported FPS or logging value.");
+                    throw new InvalidDataException("Saved preview preferences contain an unsupported frame-rate cap or logging value.");
                 }
 
                 value = stored;
@@ -121,7 +158,7 @@ public sealed partial class PreviewSettingsService(
                 project,
                 "LOAD_FAILED",
                 "Preview preferences could not be restored",
-                "Using 60 FPS and Error logging. See Details for the storage error.",
+                "Using vsync, no frame-rate cap and Error logging. See Details for the storage error.",
                 failure);
         }
 
@@ -130,14 +167,14 @@ public sealed partial class PreviewSettingsService(
             return;
         }
 
-        engine.TargetFps = (uint)value.TargetFps;
-        engine.EngineLoggingVerbosity = value.LoggingVerbosity;
+        this.MaxFrameRateCap = maxCap;
+        this.ApplyToEngine(previous: null, value);
         this.activeProject = project;
         this.saveFailed = false;
-        this.SetAcceptedValues(value.TargetFps, value.LoggingVerbosity);
+        this.SetAccepted(value);
     }
 
-    private void Apply(int fps, int verbosity, bool changeFps)
+    private void Apply(Preferences requested, string property)
     {
         var project = this.activeProject;
         try
@@ -147,24 +184,20 @@ public sealed partial class PreviewSettingsService(
                 throw new InvalidOperationException("The project's preview preferences are not active.");
             }
 
-            fps = Math.Clamp(fps, 1, (int)engine.MaxTargetFps);
-            verbosity = Math.Clamp(verbosity, EngineConstants.MinLoggingVerbosity, EngineConstants.MaxLoggingVerbosity);
-            if (fps == this.runAtFps && verbosity == this.loggingVerbosity && !this.saveFailed)
+            var next = requested with
+            {
+                ProjectId = project.ProjectId,
+                FrameRateCap = Math.Clamp(requested.FrameRateCap, 1, this.MaxFrameRateCap),
+                LoggingVerbosity = Math.Clamp(requested.LoggingVerbosity, EngineConstants.MinLoggingVerbosity, EngineConstants.MaxLoggingVerbosity),
+            };
+            if (next == this.accepted && !this.saveFailed)
             {
                 return;
             }
 
-            if (changeFps)
-            {
-                engine.TargetFps = (uint)fps;
-            }
-            else
-            {
-                engine.EngineLoggingVerbosity = verbosity;
-            }
-
-            this.SetAcceptedValues(fps, verbosity);
-            this.pendingWrite = new(project, new(project.ProjectId, fps, verbosity));
+            this.ApplyToEngine(this.accepted, next);
+            this.SetAccepted(next);
+            this.pendingWrite = new(project, next);
             if (this.savePump.IsCompleted)
             {
                 this.persistence = this.savePump = this.SavePendingAfterAsync(this.persistence);
@@ -172,13 +205,37 @@ public sealed partial class PreviewSettingsService(
         }
         catch (Exception failure) when (failure is InvalidOperationException or ArgumentOutOfRangeException)
         {
-            this.OnPropertyChanged(changeFps ? nameof(this.RunAtFps) : nameof(this.LoggingVerbosity));
+            this.OnPropertyChanged(property);
             this.ReportFailure(
                 project ?? projects.ActiveProject,
-                changeFps ? "TARGET_FPS_REJECTED" : "LOGGING_VERBOSITY_REJECTED",
+                RejectionCode(property),
                 "Preview setting was not applied",
                 "The runtime rejected the preview setting.",
                 failure);
+        }
+    }
+
+    /// <summary>Pushes the settings that differ from <paramref name="previous"/>, or all of them when none were applied.</summary>
+    private void ApplyToEngine(Preferences? previous, Preferences next)
+    {
+        if (previous?.VSyncEnabled != next.VSyncEnabled)
+        {
+            engine.SetVSyncEnabled(next.VSyncEnabled);
+        }
+
+        if (previous is null || previous.FrameRateCapEnabled != next.FrameRateCapEnabled || previous.FrameRateCap != next.FrameRateCap)
+        {
+            engine.TargetFps = next.FrameRateCapEnabled ? (uint)next.FrameRateCap : 0U;
+        }
+
+        if (previous?.AlwaysRenderPanes != next.AlwaysRenderPanes)
+        {
+            engine.SetAlwaysRenderPanes(next.AlwaysRenderPanes);
+        }
+
+        if (previous?.LoggingVerbosity != next.LoggingVerbosity)
+        {
+            engine.EngineLoggingVerbosity = next.LoggingVerbosity;
         }
     }
 
@@ -207,10 +264,34 @@ public sealed partial class PreviewSettingsService(
         }
     }
 
-    private void SetAcceptedValues(int fps, int verbosity)
+    private void SetAccepted(Preferences value)
     {
-        _ = this.SetProperty(ref this.runAtFps, fps, nameof(this.RunAtFps));
-        _ = this.SetProperty(ref this.loggingVerbosity, verbosity, nameof(this.LoggingVerbosity));
+        var previous = this.accepted;
+        this.accepted = value;
+        if (previous.VSyncEnabled != value.VSyncEnabled)
+        {
+            this.OnPropertyChanged(nameof(this.VSyncEnabled));
+        }
+
+        if (previous.FrameRateCapEnabled != value.FrameRateCapEnabled)
+        {
+            this.OnPropertyChanged(nameof(this.FrameRateCapEnabled));
+        }
+
+        if (previous.FrameRateCap != value.FrameRateCap)
+        {
+            this.OnPropertyChanged(nameof(this.FrameRateCap));
+        }
+
+        if (previous.AlwaysRenderPanes != value.AlwaysRenderPanes)
+        {
+            this.OnPropertyChanged(nameof(this.AlwaysRenderPanes));
+        }
+
+        if (previous.LoggingVerbosity != value.LoggingVerbosity)
+        {
+            this.OnPropertyChanged(nameof(this.LoggingVerbosity));
+        }
     }
 
     private void ReportFailure(ProjectContext? project, string code, string title, string message, Exception exception)
@@ -228,14 +309,31 @@ public sealed partial class PreviewSettingsService(
             exception: exception);
     }
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Preview preferences failed ({Code}) for project {ProjectRoot}.")]
-    private partial void LogPreferenceFailure(Exception exception, string code, string? projectRoot);
-
     /// <summary>The saved user preferences, guarded by project identity.</summary>
-    /// <param name="ProjectId">The project owning these preferences.</param>
-    /// <param name="TargetFps">The preview frame-rate limit.</param>
-    /// <param name="LoggingVerbosity">The native logging threshold.</param>
-    internal sealed record Preferences(Guid ProjectId, int TargetFps, int LoggingVerbosity);
+    /// <remarks>
+    ///     Defaults apply to members a stored value lacks, so preferences saved before vsync, the frame-rate cap and
+    ///     pane rendering existed restore with vsync on and no cap, keeping their logging threshold.
+    /// </remarks>
+    internal sealed record Preferences
+    {
+        /// <summary>Gets the project owning these preferences.</summary>
+        public Guid ProjectId { get; init; }
+
+        /// <summary>Gets a value indicating whether presents wait for the display's vertical blank.</summary>
+        public bool VSyncEnabled { get; init; } = true;
+
+        /// <summary>Gets a value indicating whether the frame rate is capped.</summary>
+        public bool FrameRateCapEnabled { get; init; }
+
+        /// <summary>Gets the frame-rate cap, kept while the cap is off.</summary>
+        public int FrameRateCap { get; init; } = EngineConstants.DefaultFrameRateCap;
+
+        /// <summary>Gets a value indicating whether every visible viewport pane renders each frame.</summary>
+        public bool AlwaysRenderPanes { get; init; }
+
+        /// <summary>Gets the native logging threshold.</summary>
+        public int LoggingVerbosity { get; init; } = EngineConstants.DefaultLoggingVerbosity;
+    }
 
     private sealed record PendingWrite(ProjectContext Project, Preferences Value);
 }

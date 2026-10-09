@@ -19,6 +19,10 @@ internal sealed class FakeEngineSession : EngineSession
 
     public override uint TargetFps { get; set; }
 
+    public bool VSyncEnabled { get; private set; } = true;
+
+    public bool AlwaysRenderPanes { get; private set; }
+
     public override IRuntimeCommandTransport Commands { get; } = Moq.Mock.Of<IRuntimeCommandTransport>();
 
     public override bool HasRunner => this.hasRunner;
@@ -65,6 +69,10 @@ internal sealed class FakeEngineSession : EngineSession
             _ = this.Loop.TrySetResult();
         }
     }
+
+    public override void SetVSyncEnabled(bool enabled) => this.VSyncEnabled = enabled;
+
+    public override void SetAlwaysRenderPanes(bool alwaysRender) => this.AlwaysRenderPanes = alwaysRender;
 
     public override Task CompleteLoopCleanupAsync()
     {

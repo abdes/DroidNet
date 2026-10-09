@@ -126,20 +126,34 @@
                     <dnc:ToolBarButton.Flyout>
                         <Flyout Placement="Bottom">
                             <StackPanel Width="260" Padding="12">
-                                <TextBlock Margin="0,0,0,8" Text="Run at FPS:" />
+                                <TextBlock
+                                    Margin="0,0,0,4"
+                                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                                    Text="Engine" />
+                                <ToggleSwitch
+                                    Header="VSync"
+                                    IsOn="{x:Bind ViewModel.PreviewSettings.VSyncEnabled, Mode=TwoWay}"
+                                    ToolTipService.ToolTip="Wait for the display's refresh before showing each frame." />
+                                <ToggleSwitch Header="Limit frame rate" IsOn="{x:Bind ViewModel.PreviewSettings.FrameRateCapEnabled, Mode=TwoWay}" />
                                 <StackPanel
                                     VerticalAlignment="Center"
                                     Orientation="Horizontal"
                                     Spacing="12">
                                     <Slider
                                         Width="160"
-                                        LargeChange="5"
-                                        Maximum="60"
+                                        IsEnabled="{x:Bind ViewModel.PreviewSettings.FrameRateCapEnabled, Mode=OneWay}"
+                                        LargeChange="10"
+                                        Maximum="{x:Bind ViewModel.PreviewSettings.MaxFrameRateCap, Mode=OneWay}"
                                         Minimum="1"
                                         SmallChange="1"
-                                        Value="{x:Bind ViewModel.PreviewSettings.RunAtFps, Mode=TwoWay}" />
-                                    <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.PreviewSettings.RunAtFps, Mode=OneWay}" />
+                                        Value="{x:Bind ViewModel.PreviewSettings.FrameRateCap, Mode=TwoWay}" />
+                                    <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.PreviewSettings.FrameRateCap, Mode=OneWay}" />
                                 </StackPanel>
+                                <ToggleSwitch
+                                    Margin="0,8,0,0"
+                                    Header="Render idle viewports"
+                                    IsOn="{x:Bind ViewModel.PreviewSettings.AlwaysRenderPanes, Mode=TwoWay}"
+                                    ToolTipService.ToolTip="Render every viewport each frame, not only the ones whose view changed." />
                                 <TextBlock Margin="0,10,0,8" Text="Native engine log verbosity:" />
                                 <Grid ColumnSpacing="8">
                                     <Grid.ColumnDefinitions>

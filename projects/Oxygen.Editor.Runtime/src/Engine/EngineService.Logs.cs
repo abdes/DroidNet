@@ -76,6 +76,12 @@ public sealed partial class EngineService
         }
     }
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Engine vsync set to {Enabled}.")]
+    private partial void LogVSyncSet(bool enabled);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Viewport panes always render: {AlwaysRender}.")]
+    private partial void LogAlwaysRenderPanesSet(bool alwaysRender);
+
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,

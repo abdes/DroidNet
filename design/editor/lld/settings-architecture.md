@@ -29,8 +29,9 @@ policy remains in the project and content-pipeline contracts.
 - `Oxygen.Editor.Runtime/src/Engine/IEngineSettings.cs` — startup engine
   config; consumed by `EngineService.InitializeAsync`. Persisted via
   `ISettingsService<IEngineSettings>` from DroidNet hosting.
-- `IEngineService` exposes `TargetFps : uint`, `MaxTargetFps : uint`,
-  `EngineLoggingVerbosity : int` (read/write valid in `Ready`/`Running`).
+- `IEngineService` exposes `TargetFps : uint` (0 = no cap), `MaxTargetFps :
+uint`, `EngineLoggingVerbosity : int`, `SetVSyncEnabled(bool)` and
+  `SetAlwaysRenderPanes(bool)` (valid in `Ready`/`Running`).
 - `Scene` / `SceneNode` / components and `Scene.Environment` store authored
   values.
 - Workspace / docking layout is persisted by existing editor data services
@@ -160,9 +161,13 @@ The command path:
 
 ### 6.2 Project preview preferences
 
-`PreviewSettingsService` owns FPS and native log verbosity for the active project.
-The defaults are **60 FPS** and **Error (`-2`)**. Every scene tab binds to the same
-service; edits apply through `IEngineService` and save automatically using
+`PreviewSettingsService` owns the embedded engine's settings for the active
+project: VSync, an optional frame-rate cap, whether idle viewports render every
+frame, and native log verbosity. The defaults are **VSync on**, **no cap** (the
+cap value, kept while off, starts at 60), **idle viewports render on change**
+and **Error (`-2`)**; the editor imposes no frame rate of its own. Preferences
+saved before these settings existed restore with these defaults and keep their
+log verbosity. Every scene tab binds to the same service; edits apply through `IEngineService` and save automatically using
 `IEditorSettingsManager`, key `WorldEditor/Preview`, with `SettingContext.Project`
 for the canonical, case-insensitive Windows project root. The payload includes the project ID; a different
 project reusing that path starts with defaults.
@@ -210,8 +215,8 @@ Settings reach the user through these surfaces:
   [property-inspector.md](./property-inspector.md).
 - Inspector Environment section — scene-scope per
   [environment-authoring.md](./environment-authoring.md).
-- Scene editor toolbar / runtime strip — `TargetFps`,
-  `EngineLoggingVerbosity` (existing UI; wrap writes per §6.2).
+- Scene editor toolbar Settings flyout — VSync, frame-rate cap, idle
+  viewports and `EngineLoggingVerbosity` (writes per §6.2).
 - Output/log panel + inline error placement — for `Settings`-domain
   diagnostics.
 
@@ -240,7 +245,7 @@ pipeline owns conversion and numerical qualification rules.
 Per-setting validation lives in the command/setter, not in the UI control:
 
 - Numeric ranges (camera near/far, exposure compensation, intensity ≥ 0,
-  scale axes ≠ 0, FPS within `[1, MaxTargetFps]`) are enforced by the
+  scale axes ≠ 0, a frame-rate cap within `[1, MaxTargetFps]`) are enforced by the
   command/setter and surface diagnostics if rejected.
 - Enums are constrained to the declared enum's defined members.
 - The inspector, material and environment field tables define creation defaults.
@@ -255,7 +260,7 @@ Per-setting validation lives in the command/setter, not in the UI control:
 | -------------------------------- | ---------------- | ----------------------------------- |
 | Scene-scope value invalid        | `SceneAuthoring` | `OXE.SCENE.*.Invalid`               |
 | Cross-field constraint           | `SceneAuthoring` | `OXE.SCENE.*.<Constraint>`          |
-| Runtime setter rejected          | `Settings`       | `OXE.SETTINGS.TARGET_FPS_REJECTED`  |
+| Runtime setter rejected          | `Settings`       | `OXE.SETTINGS.<SETTING>_REJECTED`   |
 | Runtime not in `Ready`/`Running` | `Settings`       | `OXE.SETTINGS.RuntimeStateInvalid`  |
 | Editor preference save failed    | `Settings`       | `OXE.SETTINGS.PreferenceSaveFailed` |
 | Live sync rejected/unsupported   | `LiveSync`       | `OXE.LIVESYNC.*` (env LLD)          |

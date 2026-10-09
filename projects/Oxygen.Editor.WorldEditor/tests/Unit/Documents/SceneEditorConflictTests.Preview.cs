@@ -33,11 +33,11 @@ public sealed partial class SceneEditorConflictTests
             .Returns(saved.Task);
         var preferences = new PreviewSettingsService(engine.Object, store.Object, projects, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer());
         await preferences.RestoreAsync(project).ConfigureAwait(false);
-        using var fixture = new Fixture(active: true, preferences, () => preferences.RunAtFps = 45);
+        using var fixture = new Fixture(active: true, preferences, () => preferences.FrameRateCap = 45);
 
         var close = fixture.Editor.PrepareForCloseAsync();
 
-        _ = preferences.RunAtFps.Should().Be(45);
+        _ = preferences.FrameRateCap.Should().Be(45);
         _ = close.IsCompleted.Should().BeFalse();
         saved.SetResult();
         await close.ConfigureAwait(false);
