@@ -181,6 +181,32 @@ struct TextureResourceDesc {
   uint64_t content_hash = 0;
 };
 
+//! Values changed while narrowing float texels to RGBA16Float storage.
+/*!
+  Half floats cannot hold magnitudes above 65504. Narrowing clamps them to that
+  limit, stores non-finite values as zero and, for radiance intents, stores
+  negative values as zero. All counts are per component, across every
+  subresource.
+*/
+struct HalfNarrowingStats {
+  //! Components clamped to the half-float maximum.
+  uint64_t overflowed = 0;
+
+  //! NaN or infinite components stored as zero.
+  uint64_t non_finite = 0;
+
+  //! Negative radiance components stored as zero.
+  uint64_t negative = 0;
+
+  //! Largest finite component magnitude before narrowing.
+  float peak = 0.0F;
+
+  [[nodiscard]] auto Changed() const noexcept -> bool
+  {
+    return overflowed != 0 || non_finite != 0 || negative != 0;
+  }
+};
+
 //! Result of cooking a texture.
 /*!
   Contains the runtime descriptor and the complete payload bytes including
@@ -204,6 +230,9 @@ struct CookedTexturePayload {
 
   //! Subresource layouts for the payload.
   std::vector<data::pak::render::SubresourceLayout> layouts;
+
+  //! Changes made while narrowing to RGBA16Float; empty for other formats.
+  HalfNarrowingStats half_narrowing;
 };
 
 } // namespace oxygen::content::import

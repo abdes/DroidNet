@@ -161,10 +161,12 @@ namespace detail {
   /*!
     @param image Processed image with mips
     @param desc  Import descriptor with output format settings
+    @param half_narrowing Receives what RGBA16Float narrowing changed, if set
     @return Output format image or error
   */
   OXGN_COOK_NDAPI auto ConvertToOutputFormat(ScratchImage&& image,
-    const TextureImportDesc& desc) -> Result<ScratchImage, TextureImportError>;
+    const TextureImportDesc& desc, HalfNarrowingStats* half_narrowing = nullptr)
+    -> Result<ScratchImage, TextureImportError>;
 
   //! Pack subresource data according to policy.
   /*!

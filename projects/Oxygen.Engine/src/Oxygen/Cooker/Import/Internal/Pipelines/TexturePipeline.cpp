@@ -9,7 +9,9 @@
 #include <chrono>
 #include <iterator>
 #include <optional>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
@@ -52,6 +54,38 @@ namespace {
       .object_path = {},
     };
     return diag;
+  }
+
+  //! Describe the values half-float narrowing changed, for the import report.
+  [[nodiscard]] auto MakeHalfNarrowingDiagnostic(
+    const HalfNarrowingStats& stats, std::string_view source_id)
+    -> ImportDiagnostic
+  {
+    auto message = std::string("Half-float storage changed ");
+    auto parts = std::vector<std::string> {};
+    if (stats.overflowed != 0) {
+      parts.push_back(std::to_string(stats.overflowed)
+        + " component(s) above 65504, clamped (source peak "
+        + std::to_string(stats.peak) + "; use rgba32f to keep the range)");
+    }
+    if (stats.non_finite != 0) {
+      parts.push_back(
+        std::to_string(stats.non_finite) + " NaN/infinite component(s) to 0");
+    }
+    if (stats.negative != 0) {
+      parts.push_back(std::to_string(stats.negative)
+        + " negative radiance component(s) to 0");
+    }
+    for (std::size_t i = 0; i < parts.size(); ++i) {
+      message += (i == 0 ? "" : "; ") + parts[i];
+    }
+    return ImportDiagnostic {
+      .severity = ImportSeverity::kWarning,
+      .code = "texture.half_narrowing",
+      .message = std::move(message) + ".",
+      .source_path = std::string(source_id),
+      .object_path = {},
+    };
   }
 
   [[nodiscard]] auto MakeWarningDiagnostic(std::string code,
@@ -404,7 +438,8 @@ namespace {
    @param source Encoded payload bytes.
    @param desc Import description for the texture.
    @param policy Packing policy used by the cooker.
-   @param output_format_policy Source, material preset, or explicit storage policy.
+   @param output_format_policy Source, material preset, or explicit storage
+  policy.
    @param equirect_to_cubemap Whether to convert from equirectangular.
    @param cubemap_face_size Output face size for cubemap conversion.
    @param cubemap_layout Layout for cubemap face extraction.
@@ -421,9 +456,9 @@ namespace {
   [[nodiscard]] auto CookFromBytes(TexturePipeline::SourceBytes source,
     TextureImportDesc desc, const ITexturePackingPolicy& policy,
     const TexturePipeline::OutputFormatPolicy output_format_policy,
-    const bool equirect_to_cubemap,
-    const uint32_t cubemap_face_size, const CubeMapImageLayout cubemap_layout,
-    const bool with_content_hashing) -> CookOutcome
+    const bool equirect_to_cubemap, const uint32_t cubemap_face_size,
+    const CubeMapImageLayout cubemap_layout, const bool with_content_hashing)
+    -> CookOutcome
   {
     if (source.bytes.empty()) {
       return {
@@ -510,7 +545,8 @@ namespace {
    @param source_set Source set containing decoded subresources.
    @param desc Import description for the texture.
    @param policy Packing policy used by the cooker.
-   @param output_format_policy Source, material preset, or explicit storage policy.
+   @param output_format_policy Source, material preset, or explicit storage
+  policy.
    @return Cooked texture payload with accumulated decode duration.
 
   ### Performance Characteristics
@@ -524,8 +560,7 @@ namespace {
   [[nodiscard]] auto CookFromSourceSet(TextureSourceSet source_set,
     TextureImportDesc desc, const ITexturePackingPolicy& policy,
     const TexturePipeline::OutputFormatPolicy output_format_policy,
-    const bool with_content_hashing)
-    -> CookOutcome
+    const bool with_content_hashing) -> CookOutcome
   {
     if (source_set.IsEmpty()) {
       return {
@@ -924,6 +959,10 @@ namespace {
       = ComputeCookDuration(total_cook, cooked.decode_duration);
 
     if (cooked.cooked.has_value()) {
+      if (cooked.cooked->half_narrowing.Changed()) {
+        finalized.output.diagnostics.push_back(MakeHalfNarrowingDiagnostic(
+          cooked.cooked->half_narrowing, finalized.output.source_id));
+      }
       finalized.output.cooked = std::move(cooked.cooked.value());
       finalized.output.success = true;
       return finalized;

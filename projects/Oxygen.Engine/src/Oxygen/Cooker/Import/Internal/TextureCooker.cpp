@@ -4,10 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Cooker/Import/Internal/TextureCooker.h>
-
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <limits>
 #include <optional>
 #include <ranges>
@@ -17,6 +16,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/Internal/ImageDecode.h>
 #include <Oxygen/Cooker/Import/Internal/ImageProcessing.h>
+#include <Oxygen/Cooker/Import/Internal/TextureCooker.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/bc7/Bc7Encoder.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
@@ -27,12 +27,34 @@ namespace oxygen::content::import {
 
 namespace {
 
-  //! Convert RGBA32Float pixels to RGBA16Float in-place.
-  inline void ConvertRgba32FloatToRgba16Float(
-    std::span<const float> src, std::span<uint16_t> dst, size_t pixel_count)
+  constexpr float kHalfMaxFinite = 65504.0F;
+
+  //! Convert RGBA32Float pixels to finite RGBA16Float values.
+  /*!
+   A plain half conversion turns magnitudes above 65504 into infinity and keeps
+   NaN, and one such texel invalidates a whole sky-light generation. Clamp to
+   the largest finite half, store non-finite values as zero and, for radiance,
+   store negative values as zero. Alpha is never treated as radiance.
+  */
+  inline void ConvertRgba32FloatToRgba16Float(std::span<const float> src,
+    std::span<uint16_t> dst, const bool radiance, HalfNarrowingStats& stats)
   {
-    for (size_t i = 0; i < pixel_count * 4; ++i) {
-      dst[i] = glm::packHalf1x16(src[i]);
+    for (size_t i = 0; i < src.size(); ++i) {
+      auto value = src[i];
+      if (!std::isfinite(value)) {
+        ++stats.non_finite;
+        value = 0.0F;
+      } else {
+        stats.peak = (std::max)(stats.peak, std::abs(value));
+        if (radiance && i % 4 != 3 && value < 0.0F) {
+          ++stats.negative;
+          value = 0.0F;
+        } else if (std::abs(value) > kHalfMaxFinite) {
+          ++stats.overflowed;
+          value = std::copysign(kHalfMaxFinite, value);
+        }
+      }
+      dst[i] = glm::packHalf1x16(value);
     }
   }
 
@@ -466,10 +488,12 @@ namespace {
    Converts 32-bit float values to 16-bit half float using GLM.
 
    \param source RGBA32Float format image
+   \param radiance Whether negative colour components are invalid radiance
+   \param stats Accumulates the values narrowing changed
    \return RGBA16Float image, or invalid image on failure
   */
-  [[nodiscard]] auto ConvertFloat32ToFloat16(const ScratchImage& source)
-    -> ScratchImage
+  [[nodiscard]] auto ConvertFloat32ToFloat16(const ScratchImage& source,
+    const bool radiance, HalfNarrowingStats& stats) -> ScratchImage
   {
     if (!source.IsValid() || source.Meta().format != Format::kRGBA32Float) {
       return {};
@@ -500,7 +524,7 @@ namespace {
 
         const size_t pixel_count = src_view.width * src_view.height;
         ConvertRgba32FloatToRgba16Float(std::span { src_ptr, pixel_count * 4 },
-          std::span { dst_ptr, pixel_count * 4 }, pixel_count);
+          std::span { dst_ptr, pixel_count * 4 }, radiance, stats);
       }
     }
 
@@ -695,7 +719,8 @@ namespace detail {
   }
 
   auto ConvertToOutputFormat(ScratchImage&& image,
-    const TextureImportDesc& desc) -> Result<ScratchImage, TextureImportError>
+    const TextureImportDesc& desc, HalfNarrowingStats* half_narrowing)
+    -> Result<ScratchImage, TextureImportError>
   {
     if (auto canceled = CheckCancelled(desc)) {
       return Err(*canceled);
@@ -743,9 +768,12 @@ namespace detail {
 
     // Float format output - handle RGBA16Float and RGBA32Float separately
     if (output_format == Format::kRGBA16Float) {
+      auto ignored = HalfNarrowingStats {};
+      auto& stats = half_narrowing != nullptr ? *half_narrowing : ignored;
+      const bool radiance = IsHdrIntent(desc.intent);
       // RGBA16Float: convert from RGBA32Float or RGBA8
       if (current_format == Format::kRGBA32Float) {
-        auto half_image = ConvertFloat32ToFloat16(image);
+        auto half_image = ConvertFloat32ToFloat16(image, radiance, stats);
         if (!half_image.IsValid()) {
           return Err(TextureImportError::kOutputFormatInvalid);
         }
@@ -758,7 +786,8 @@ namespace detail {
         if (!float32_image.IsValid()) {
           return Err(TextureImportError::kOutputFormatInvalid);
         }
-        auto half_image = ConvertFloat32ToFloat16(float32_image);
+        auto half_image
+          = ConvertFloat32ToFloat16(float32_image, radiance, stats);
         if (!half_image.IsValid()) {
           return Err(TextureImportError::kOutputFormatInvalid);
         }
@@ -1008,10 +1037,18 @@ namespace {
     }
 
     // Stage 5: Convert to output format
-    auto output
-      = detail::ConvertToOutputFormat(std::move(*with_mips), resolved_desc);
+    auto half_narrowing = HalfNarrowingStats {};
+    auto output = detail::ConvertToOutputFormat(
+      std::move(*with_mips), resolved_desc, &half_narrowing);
     if (!output) {
       return Err(output.error());
+    }
+    if (half_narrowing.Changed()) {
+      LOG_F(WARNING,
+        "Half-float narrowing of '{}' changed {} overflowing, {} non-finite "
+        "and {} negative components (source peak {})",
+        desc.source_id, half_narrowing.overflowed, half_narrowing.non_finite,
+        half_narrowing.negative, half_narrowing.peak);
     }
 
     DLOG_F(INFO, "CookFromScratchImage: output {}x{} layers={} mips={} fmt={}",
@@ -1126,6 +1163,7 @@ namespace {
     result.desc.content_hash = header.content_hash;
     result.payload = std::move(final_payload);
     result.layouts = std::move(layouts);
+    result.half_narrowing = half_narrowing;
 
     return Ok(std::move(result));
   }

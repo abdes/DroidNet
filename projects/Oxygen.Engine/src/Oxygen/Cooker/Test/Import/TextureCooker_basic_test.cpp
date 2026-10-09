@@ -9,9 +9,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <vector>
-
-#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Cooker/Import/Internal/TextureCooker.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
@@ -22,6 +21,7 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -843,6 +843,65 @@ NOLINT_TEST_F(TextureCookerHdrTest, KeepFloatOverridesLdrOutputFormat)
   ASSERT_TRUE(result.has_value())
     << "Error: " << static_cast<int>(result.error());
   EXPECT_EQ(result->desc.format, Format::kRGBA32Float);
+}
+
+//! Test: RGBA16Float output stores only finite values and reports changes.
+NOLINT_TEST_F(TextureCookerHdrTest, HalfOutputClampsOutOfRangeRadiance)
+{
+  constexpr auto kInf = std::numeric_limits<float>::infinity();
+  const std::array<float, 8> source {
+    100000.0F,
+    kInf,
+    std::numeric_limits<float>::quiet_NaN(),
+    -2.0F, // alpha
+    -0.5F,
+    65504.0F,
+    -kInf,
+    0.25F, // alpha is never radiance
+  };
+  const auto cook = [&](const TextureIntent intent) {
+    auto image = ScratchImage::Create(
+      { .width = 2, .height = 1, .format = Format::kRGBA32Float });
+    std::memcpy(
+      image.GetMutablePixels(0, 0).data(), source.data(), sizeof(source));
+    auto desc = TextureImportDesc {};
+    desc.source_id = "hot_sky";
+    desc.intent = intent;
+    desc.source_color_space = ColorSpace::kLinear;
+    desc.output_format = Format::kRGBA16Float;
+    desc.mip_policy = MipPolicy::kNone;
+    return CookTexture(std::move(image), desc, TightPackedPolicy::Instance());
+  };
+  const auto decode = [](const CookedTexturePayload& cooked) {
+    oxygen::data::pak::render::TexturePayloadHeader header {};
+    std::memcpy(&header, cooked.payload.data(), sizeof(header));
+    std::array<std::uint16_t, 8> bits {};
+    std::memcpy(bits.data(),
+      cooked.payload.data() + header.data_offset_bytes
+        + cooked.layouts[0].offset_bytes,
+      sizeof(bits));
+    std::array<float, 8> values {};
+    for (std::size_t i = 0; i < bits.size(); ++i) {
+      values[i] = oxygen::data::HalfFloat { bits[i] }.ToFloat();
+    }
+    return values;
+  };
+
+  const auto radiance = cook(TextureIntent::kHdrEnvironment);
+  ASSERT_TRUE(radiance.has_value()) << static_cast<int>(radiance.error());
+  EXPECT_EQ(decode(*radiance),
+    (std::array { 65504.0F, 0.0F, 0.0F, -2.0F, 0.0F, 65504.0F, 0.0F, 0.25F }));
+  EXPECT_EQ(radiance->half_narrowing.overflowed, 1U);
+  EXPECT_EQ(radiance->half_narrowing.non_finite, 3U);
+  EXPECT_EQ(radiance->half_narrowing.negative, 1U);
+  EXPECT_FLOAT_EQ(radiance->half_narrowing.peak, 100000.0F);
+
+  // Data keeps its sign; only the range and non-finite values change.
+  const auto data = cook(TextureIntent::kData);
+  ASSERT_TRUE(data.has_value()) << static_cast<int>(data.error());
+  EXPECT_EQ(decode(*data),
+    (std::array { 65504.0F, 0.0F, 0.0F, -2.0F, -0.5F, 65504.0F, 0.0F, 0.25F }));
+  EXPECT_EQ(data->half_narrowing.negative, 0U);
 }
 
 //===----------------------------------------------------------------------===//
