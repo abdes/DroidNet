@@ -1244,12 +1244,17 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
       ImGui::TextUnformatted(std::string(status_message).c_str());
     }
 
+    // Always draw both rows so the controls below keep their position while a
+    // skybox loads or before the first one does.
     const int last_face_size = environment_vm_->GetSkyboxLastFaceSize();
     if (last_face_size > 0) {
       ImGui::Text("Last face size: %d", last_face_size);
       ImGui::Text("Last ResourceKey: %llu",
         static_cast<unsigned long long>(
           environment_vm_->GetSkyboxLastResourceKey().get()));
+    } else {
+      ImGui::TextDisabled("Last face size: -");
+      ImGui::TextDisabled("Last ResourceKey: -");
     }
 
   } else { // Solid color
