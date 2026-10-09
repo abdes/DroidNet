@@ -34,6 +34,7 @@ namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
 ///     process. If <see langword="null" />, logging is disabled.
 /// </param>
+/// <param name="relocation">Renames, moves and copies folders with their references; without it only empty folders rename.</param>
 public partial class ProjectLayoutViewModel(
     IProjectContextService projectContextService,
     IStorageProvider storage,
@@ -42,7 +43,8 @@ public partial class ProjectLayoutViewModel(
     ViewModelToView vmToView,
     IMessenger messenger,
     Oxygen.Editor.ContentPipeline.Publication.CookPublicationService publications,
-    ILoggerFactory? loggerFactory)
+    ILoggerFactory? loggerFactory,
+    Relocation.IAssetRelocationWorkflow? relocation = null)
     : DynamicTreeViewModel(loggerFactory), IRoutingAware
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger<ProjectLayoutViewModel>() ??
@@ -108,6 +110,7 @@ public partial class ProjectLayoutViewModel(
             this.messenger.Register<NavigateToFolderRequestMessage>(this, (_, message) => _ = HandleNavigateRequestAsync(message));
             this.messenger.Register<AssetsChangedMessage>(this, (_, _) => _ = this.RefreshPublishedFoldersAsync());
             this.messenger.Register<CreateFolderRequestMessage>(this, (_, message) => _ = this.CreateFolderAsync(message));
+            this.messenger.Register<AssetFilesChangedMessage>(this, (_, message) => _ = this.FollowChangedFilesAsync(message));
 
             this.isSubscribed = true;
         }

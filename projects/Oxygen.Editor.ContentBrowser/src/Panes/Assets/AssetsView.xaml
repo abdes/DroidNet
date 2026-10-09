@@ -174,10 +174,10 @@
 
                     <dnc:ToolBarButton
                         dnc:ToolBar.OverflowPriority="2"
-                        Command="{x:Bind ViewModel.RelocationCommand}"
+                        Command="{x:Bind ViewModel.RenameSelectedCommand}"
                         Label="Rename"
                         ToolBarLabelPosition="Collapsed"
-                        ToolTipService.ToolTip="{x:Bind local:AssetsViewModel.RenameToolTip}">
+                        ToolTipService.ToolTip="{x:Bind ViewModel.RenameToolTip, Mode=OneWay}">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Rename" />
                         </dnc:ToolBarButton.Icon>
@@ -187,10 +187,10 @@
                     </dnc:ToolBarButton>
                     <dnc:ToolBarButton
                         dnc:ToolBar.OverflowPriority="2"
-                        Command="{x:Bind ViewModel.RelocationCommand}"
+                        Command="{x:Bind ViewModel.CutSelectedCommand}"
                         Label="Cut"
                         ToolBarLabelPosition="Collapsed"
-                        ToolTipService.ToolTip="{x:Bind local:AssetsViewModel.CutToolTip}">
+                        ToolTipService.ToolTip="{x:Bind ViewModel.CutToolTip, Mode=OneWay}">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Cut" />
                         </dnc:ToolBarButton.Icon>
@@ -203,10 +203,10 @@
                     </dnc:ToolBarButton>
                     <dnc:ToolBarButton
                         dnc:ToolBar.OverflowPriority="2"
-                        Command="{x:Bind ViewModel.RelocationCommand}"
+                        Command="{x:Bind ViewModel.CopySelectedCommand}"
                         Label="Copy"
                         ToolBarLabelPosition="Collapsed"
-                        ToolTipService.ToolTip="{x:Bind local:AssetsViewModel.CopyToolTip}">
+                        ToolTipService.ToolTip="{x:Bind ViewModel.CopyToolTip, Mode=OneWay}">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Copy" />
                         </dnc:ToolBarButton.Icon>
@@ -219,10 +219,10 @@
                     </dnc:ToolBarButton>
                     <dnc:ToolBarButton
                         dnc:ToolBar.OverflowPriority="2"
-                        Command="{x:Bind ViewModel.RelocationCommand}"
+                        Command="{x:Bind ViewModel.PasteCommand}"
                         Label="Paste"
                         ToolBarLabelPosition="Collapsed"
-                        ToolTipService.ToolTip="{x:Bind local:AssetsViewModel.PasteToolTip}">
+                        ToolTipService.ToolTip="{x:Bind ViewModel.PasteToolTip, Mode=OneWay}">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Paste" />
                         </dnc:ToolBarButton.Icon>
@@ -235,10 +235,10 @@
                     </dnc:ToolBarButton>
                     <dnc:ToolBarButton
                         dnc:ToolBar.OverflowPriority="2"
-                        Command="{x:Bind ViewModel.RelocationCommand}"
+                        Command="{x:Bind ViewModel.DuplicateSelectedCommand}"
                         Label="Duplicate"
                         ToolBarLabelPosition="Collapsed"
-                        ToolTipService.ToolTip="{x:Bind local:AssetsViewModel.DuplicateToolTip}">
+                        ToolTipService.ToolTip="{x:Bind ViewModel.DuplicateToolTip, Mode=OneWay}">
                         <dnc:ToolBarButton.Icon>
                             <FontIconSource Glyph="&#xF413;" />
                         </dnc:ToolBarButton.Icon>
@@ -251,10 +251,10 @@
                     </dnc:ToolBarButton>
                     <dnc:ToolBarButton
                         dnc:ToolBar.OverflowPriority="2"
-                        Command="{x:Bind ViewModel.RelocationCommand}"
+                        Command="{x:Bind ViewModel.DeleteSelectedCommand}"
                         Label="Delete"
                         ToolBarLabelPosition="Collapsed"
-                        ToolTipService.ToolTip="{x:Bind local:AssetsViewModel.DeleteToolTip}">
+                        ToolTipService.ToolTip="{x:Bind ViewModel.DeleteToolTip, Mode=OneWay}">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Delete" />
                         </dnc:ToolBarButton.Icon>
@@ -388,7 +388,15 @@
                 IsClosable="True"
                 IsOpen="{x:Bind ViewModel.IsOperationResultVisible, Mode=TwoWay}"
                 Message="{x:Bind ViewModel.OperationResultMessage, Mode=OneWay}"
-                Severity="{x:Bind ViewModel.OperationResultSeverity, Mode=OneWay}" />
+                Severity="{x:Bind ViewModel.OperationResultSeverity, Mode=OneWay}">
+                <muxc:InfoBar.ActionButton>
+                    <Button
+                        Command="{x:Bind ViewModel.UndoRelocationCommand}"
+                        Content="Undo"
+                        ToolTipService.ToolTip="Restore the previous names, locations and references."
+                        Visibility="{x:Bind ViewModel.IsUndoAvailable, Mode=OneWay}" />
+                </muxc:InfoBar.ActionButton>
+            </muxc:InfoBar>
 
             <!--  The context menu mirrors the toolbar for the right-clicked selection or the folder.  -->
             <Grid Grid.Row="2" Background="Transparent">
@@ -409,57 +417,73 @@
                         </MenuFlyoutSubItem>
                         <MenuFlyoutSeparator />
                         <MenuFlyoutItem
-                            Command="{x:Bind ViewModel.RelocationCommand}"
+                            Command="{x:Bind ViewModel.RenameSelectedCommand}"
                             KeyboardAcceleratorTextOverride="F2"
                             Text="Rename"
-                            ToolTipService.ToolTip="{x:Bind local:AssetsViewModel.RelocationUnavailableReason}">
+                            ToolTipService.ToolTip="{x:Bind ViewModel.RenameToolTip, Mode=OneWay}">
                             <MenuFlyoutItem.Icon>
                                 <SymbolIcon Symbol="Rename" />
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
                         <MenuFlyoutItem
-                            Command="{x:Bind ViewModel.RelocationCommand}"
+                            Command="{x:Bind ViewModel.CutSelectedCommand}"
                             KeyboardAcceleratorTextOverride="Ctrl+X"
                             Text="Cut"
-                            ToolTipService.ToolTip="{x:Bind local:AssetsViewModel.RelocationUnavailableReason}">
+                            ToolTipService.ToolTip="{x:Bind ViewModel.CutToolTip, Mode=OneWay}">
                             <MenuFlyoutItem.Icon>
                                 <SymbolIcon Symbol="Cut" />
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
                         <MenuFlyoutItem
-                            Command="{x:Bind ViewModel.RelocationCommand}"
+                            Command="{x:Bind ViewModel.CopySelectedCommand}"
                             KeyboardAcceleratorTextOverride="Ctrl+C"
                             Text="Copy"
-                            ToolTipService.ToolTip="{x:Bind local:AssetsViewModel.RelocationUnavailableReason}">
+                            ToolTipService.ToolTip="{x:Bind ViewModel.CopyToolTip, Mode=OneWay}">
                             <MenuFlyoutItem.Icon>
                                 <SymbolIcon Symbol="Copy" />
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
                         <MenuFlyoutItem
-                            Command="{x:Bind ViewModel.RelocationCommand}"
+                            Command="{x:Bind ViewModel.PasteCommand}"
                             KeyboardAcceleratorTextOverride="Ctrl+V"
                             Text="Paste"
-                            ToolTipService.ToolTip="{x:Bind local:AssetsViewModel.RelocationUnavailableReason}">
+                            ToolTipService.ToolTip="{x:Bind ViewModel.PasteToolTip, Mode=OneWay}">
                             <MenuFlyoutItem.Icon>
                                 <SymbolIcon Symbol="Paste" />
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
                         <MenuFlyoutItem
-                            Command="{x:Bind ViewModel.RelocationCommand}"
+                            Command="{x:Bind ViewModel.DuplicateSelectedCommand}"
                             KeyboardAcceleratorTextOverride="Ctrl+D"
                             Text="Duplicate"
-                            ToolTipService.ToolTip="{x:Bind local:AssetsViewModel.RelocationUnavailableReason}">
+                            ToolTipService.ToolTip="{x:Bind ViewModel.DuplicateToolTip, Mode=OneWay}">
                             <MenuFlyoutItem.Icon>
                                 <FontIcon Glyph="&#xF413;" />
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
                         <MenuFlyoutItem
-                            Command="{x:Bind ViewModel.RelocationCommand}"
+                            Command="{x:Bind ViewModel.DeleteSelectedCommand}"
                             KeyboardAcceleratorTextOverride="Del"
                             Text="Delete"
-                            ToolTipService.ToolTip="{x:Bind local:AssetsViewModel.RelocationUnavailableReason}">
+                            ToolTipService.ToolTip="{x:Bind ViewModel.DeleteToolTip, Mode=OneWay}">
                             <MenuFlyoutItem.Icon>
                                 <SymbolIcon Symbol="Delete" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem
+                            Command="{x:Bind ViewModel.RenameOutputGroupCommand}"
+                            Text="Rename output group…"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.RenameOutputGroupToolTip, Mode=OneWay}">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE8F4;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem
+                            Command="{x:Bind ViewModel.FindReferencesCommand}"
+                            Text="Find references"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.FindReferencesToolTip, Mode=OneWay}">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE71B;" />
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
                         <MenuFlyoutSeparator />

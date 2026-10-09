@@ -7,7 +7,9 @@ using CommunityToolkit.Mvvm.Messaging;
 using Moq;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Messages;
+using Oxygen.Editor.ContentBrowser.Relocation;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core.Diagnostics;
@@ -49,18 +51,58 @@ public sealed class AssetsViewModelCommandTests
         }
     }
 
-    /// <summary>Identity-changing commands stay visible, unavailable and explained.</summary>
+    /// <summary>Rename, move, copy and delete follow the selection, explain why they are unavailable, and request relocations.</summary>
     /// <returns>The asynchronous availability check.</returns>
     [TestMethod]
-    public async Task RelocationCommandsExplainWhyTheyAreUnavailable()
+    public async Task RelocationCommandsFollowSelectionAndExplainWhy()
     {
-        var (browser, state, _) = await CreateBrowserAsync().ConfigureAwait(false);
-        using (browser)
+        var root = Path.Combine(Path.GetTempPath(), "OxygenBrowserCommands", Guid.NewGuid().ToString("N"));
+        var clayPath = Path.Combine(root, "Content", "Materials", "Clay.omat.json");
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(clayPath)!);
+        await File.WriteAllTextAsync(clayPath, "{}").ConfigureAwait(false);
+        var workflow = new Mock<IAssetRelocationWorkflow>();
+        _ = workflow.Setup(value => value.PromptNameAsync("Rename", "Clay", false)).ReturnsAsync("Brick");
+        var (browser, state, _) = await CreateBrowserAsync(root, workflow.Object).ConfigureAwait(false);
+        try
         {
-            state.PublishSelection([CreateAsset("/Content/Materials/Clay.omat.json", AssetKind.Material, descriptor: "C:/Project/Content/Materials/Clay.omat.json")]);
-            _ = browser.RelocationCommand.CanExecute(parameter: null).Should().BeFalse();
-            _ = AssetsViewModel.RenameToolTip.Should().StartWith("Rename (F2)").And.Contain(AssetsViewModel.RelocationUnavailableReason);
-            _ = AssetsViewModel.DeleteToolTip.Should().Contain(AssetsViewModel.RelocationUnavailableReason);
+            using (browser)
+            {
+                var clay = CreateAsset("/Content/Materials/Clay.omat.json", AssetKind.Material, descriptor: clayPath);
+                state.PublishSelection([clay]);
+                _ = browser.RenameSelectedCommand.CanExecute(parameter: null).Should().BeTrue();
+                _ = browser.RenameToolTip.Should().StartWith("Rename (F2)").And.Contain("Content that uses it is updated");
+                _ = browser.DeleteSelectedCommand.CanExecute(parameter: null).Should().BeTrue();
+                _ = browser.FindReferencesCommand.CanExecute(parameter: null).Should().BeTrue();
+                _ = browser.PasteCommand.CanExecute(parameter: null).Should().BeFalse();
+
+                browser.CopySelectedCommand.Execute(parameter: null);
+                state.SetSelectedFolders(["/Content/Materials"]);
+                _ = browser.PasteCommand.CanExecute(parameter: null).Should().BeTrue();
+                state.SetSelectedFolders(["/Cooked/Content"]);
+                _ = browser.PasteCommand.CanExecute(parameter: null).Should().BeFalse();
+
+                state.PublishSelection([clay]);
+                await browser.RenameSelectedCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+                workflow.Verify(value => value.RelocateAsync(
+                    It.Is<AssetRelocationRequest>(request => request.Moves.Single().SourcePath == "/Content/Materials/Clay.omat.json"
+                        && request.Moves.Single().TargetPath == "/Content/Materials/Brick.omat.json"),
+                    "Rename"));
+
+                var output = CreateAsset("/Content/Geometry/Robot/Body.ogeo", AssetKind.Geometry, descriptor: null) with { ImportSourceUri = new Uri("asset:///Content/SourceMedia/Robot/robot.gltf") };
+                state.PublishSelection([output]);
+                _ = browser.RenameSelectedCommand.CanExecute(parameter: null).Should().BeFalse();
+                _ = browser.RenameToolTip.Should().Contain("Rename output group");
+                _ = browser.DeleteToolTip.Should().Contain("Delete the model");
+
+                var cooked = CreateAsset("/Cooked/Content/Materials/Clay.omat", AssetKind.Material, descriptor: null);
+                state.PublishSelection([cooked]);
+                _ = browser.CutSelectedCommand.CanExecute(parameter: null).Should().BeFalse();
+                _ = browser.CutToolTip.Should().Contain("read-only");
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
         }
     }
 
@@ -87,7 +129,7 @@ public sealed class AssetsViewModelCommandTests
         }
     }
 
-    private static async Task<(AssetsViewModel Browser, ContentBrowserState State, IMessenger Messenger)> CreateBrowserAsync()
+    private static async Task<(AssetsViewModel browser, ContentBrowserState state, IMessenger messenger)> CreateBrowserAsync(string root = "C:/Project", IAssetRelocationWorkflow? relocation = null)
     {
         var projects = new ProjectContextService();
         projects.Activate(new()
@@ -95,7 +137,7 @@ public sealed class AssetsViewModelCommandTests
             ProjectId = Guid.NewGuid(),
             Name = "Commands",
             Category = Category.Games,
-            ProjectRoot = "C:/Project",
+            ProjectRoot = root,
             AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
             LocalFolderMounts = [],
             Scenes = [],
@@ -117,7 +159,8 @@ public sealed class AssetsViewModelCommandTests
             messenger,
             Mock.Of<DroidNet.Aura.Dialogs.IDialogService>(),
             Mock.Of<DroidNet.Aura.Windowing.IWindowManagerService>(),
-            Mock.Of<IAssetShell>());
+            Mock.Of<IAssetShell>(),
+            relocation);
         await browser.OnNavigatedToAsync(null!, null!).ConfigureAwait(false);
         return (browser, state, messenger);
     }

@@ -150,8 +150,8 @@ public sealed class ContentBrowserPresentationTests
         var bolt = CreateAsset("/Content/Geometry/Bolt.ogeo.json", AssetKind.Geometry, AssetCookFreshness.OutOfDate);
         var stone = CreateAsset("/Content/Materials/Stone.omat.json", AssetKind.Material, AssetCookFreshness.Current);
         var summary = AssetDetailsViewModel.BuildSummaryFacts([clay, bolt, stone]);
-        _ = summary.Single(static fact => fact.Label == "Types").Value.Should().Be("Material: 2" + Environment.NewLine + "Geometry: 1");
-        _ = summary.Single(static fact => fact.Label == "Statuses").Value.Should().Contain("Out of date: 1");
+        _ = summary.Single(static fact => string.Equals(fact.Label, "Types", StringComparison.Ordinal)).Value.Should().Be("Material: 2" + Environment.NewLine + "Geometry: 1");
+        _ = summary.Single(static fact => string.Equals(fact.Label, "Statuses", StringComparison.Ordinal)).Value.Should().Contain("Out of date: 1");
     }
 
     /// <summary>The details pane follows the published selection and copies its paths.</summary>
@@ -193,8 +193,8 @@ public sealed class ContentBrowserPresentationTests
     public void FilterChipsListAndRemoveSelectedFilters()
     {
         var query = new AssetBrowserQuery { SearchText = "clay" };
-        query.TypeOptions.Single(static option => option.Label == "Materials").IsSelected = true;
-        query.StatusOptions.Single(static option => option.Label == "Out of date").IsSelected = true;
+        query.TypeOptions.Single(static option => string.Equals(option.Label, "Materials", StringComparison.Ordinal)).IsSelected = true;
+        query.StatusOptions.Single(static option => string.Equals(option.Label, "Out of date", StringComparison.Ordinal)).IsSelected = true;
         _ = query.HasActiveFilters.Should().BeTrue();
         _ = query.ActiveFilters.Select(static option => option.Label).Should().Equal("Materials", "Out of date");
 
@@ -254,5 +254,9 @@ public sealed class ContentBrowserPresentationTests
         public void CopyText(string text) => this.Copied = text;
 
         public bool ShowInFileExplorer(string path) => true;
+
+        public void MoveToRecycleBin(IReadOnlyList<string> paths)
+        {
+        }
     }
 }

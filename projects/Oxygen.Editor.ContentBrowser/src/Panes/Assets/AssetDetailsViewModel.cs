@@ -22,15 +22,19 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
 
     private readonly ContentBrowserState state;
     private readonly IAssetShell shell;
+    private readonly Relocation.IAssetRelocationWorkflow? relocation;
+    private int referrersRequest;
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="AssetDetailsViewModel"/> class.</summary>
     /// <param name="state">The browser state that publishes the selection.</param>
     /// <param name="shell">The clipboard and File Explorer actions.</param>
-    public AssetDetailsViewModel(ContentBrowserState state, IAssetShell shell)
+    /// <param name="relocation">Finds the content that uses the selected asset; without it no referrers are shown.</param>
+    public AssetDetailsViewModel(ContentBrowserState state, IAssetShell shell, Relocation.IAssetRelocationWorkflow? relocation = null)
     {
         this.state = state;
         this.shell = shell;
+        this.relocation = relocation;
         state.PropertyChanged += this.OnStateChanged;
         this.Refresh();
     }
@@ -58,6 +62,18 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
     /// <summary>Gets the status explanation for a single asset.</summary>
     [ObservableProperty]
     public partial string Description { get; private set; } = string.Empty;
+
+    /// <summary>Gets the authored files that use the selected asset.</summary>
+    [ObservableProperty]
+    public partial IReadOnlyList<string> Referrers { get; private set; } = [];
+
+    /// <summary>Gets the referrer summary: who uses the asset, or that nothing does.</summary>
+    [ObservableProperty]
+    public partial string ReferrersSummary { get; private set; } = string.Empty;
+
+    /// <summary>Gets a value indicating whether referrer information is shown.</summary>
+    [ObservableProperty]
+    public partial bool HasReferrerInfo { get; private set; }
 
     /// <summary>Gets a value indicating whether nothing is selected.</summary>
     public bool IsEmpty => this.state.SelectedAssets.Count == 0;
@@ -188,12 +204,47 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
                 string.Join(" · ", new[] { asset.TypeDisplayName, AssetFileFacts.Read(asset).SizeText }.Where(static part => part.Length > 0))))];
         }
 
+        _ = this.RefreshReferrersAsync(assets is [var single] ? AssetUriHelper.GetVirtualPath(single.IdentityUri) : null);
         this.OnPropertyChanged(nameof(this.IsEmpty));
         this.OnPropertyChanged(nameof(this.HasSelection));
         this.OnPropertyChanged(nameof(this.IsSingle));
         this.OnPropertyChanged(nameof(this.IsMultiple));
         this.CopyPathCommand.NotifyCanExecuteChanged();
         this.LocateCommand.NotifyCanExecuteChanged();
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Referrers are informational; a failed scan only hides them.")]
+    private async Task RefreshReferrersAsync(string? virtualPath)
+    {
+        var request = ++this.referrersRequest;
+        this.Referrers = [];
+        this.ReferrersSummary = string.Empty;
+        this.HasReferrerInfo = false;
+        if (this.relocation is null || virtualPath is null)
+        {
+            return;
+        }
+
+        IReadOnlyList<string> referrers;
+        try
+        {
+            referrers = await this.relocation.FindReferrersAsync(virtualPath, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        if (request != this.referrersRequest || this.disposed)
+        {
+            return;
+        }
+
+        this.Referrers = [.. referrers.Select(WithPathBreaks)];
+        this.ReferrersSummary = referrers.Count == 0
+            ? "No other content uses it."
+            : string.Create(CultureInfo.CurrentCulture, $"Used by {referrers.Count} {(referrers.Count == 1 ? "file" : "files")}:");
+        this.HasReferrerInfo = true;
     }
 
     private bool CanCopyPath() => this.state.SelectedAssets.Count > 0;

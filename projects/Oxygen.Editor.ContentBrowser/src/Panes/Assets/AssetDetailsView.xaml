@@ -81,6 +81,24 @@
 
             <ItemsControl ItemTemplate="{StaticResource FactTemplate}" ItemsSource="{x:Bind ViewModel.Facts, Mode=OneWay}" />
 
+            <StackPanel Spacing="4" Visibility="{x:Bind ViewModel.HasReferrerInfo, Mode=OneWay}">
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Text="{x:Bind ViewModel.ReferrersSummary, Mode=OneWay}" />
+                <ItemsControl ItemsSource="{x:Bind ViewModel.Referrers, Mode=OneWay}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <TextBlock
+                                IsTextSelectionEnabled="True"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{x:Bind}"
+                                TextWrapping="Wrap" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
             <StackPanel Spacing="4" Visibility="{x:Bind ViewModel.IsMultiple, Mode=OneWay}">
                 <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="Selected" />
                 <ItemsControl ItemTemplate="{StaticResource FactTemplate}" ItemsSource="{x:Bind ViewModel.SelectedItems, Mode=OneWay}" />

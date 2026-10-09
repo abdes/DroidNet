@@ -7,21 +7,22 @@ using System.Globalization;
 using DroidNet.Controls;
 using DroidNet.Storage;
 using Oxygen.Editor.ContentBrowser.Messages;
+using Oxygen.Editor.ContentPipeline.Relocation;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 
 /// <summary>
-/// New Folder and folder renames. A folder's path is part of every asset identity inside it, so only a folder
-/// with no files may be renamed until relocation updates references.
+/// New Folder, folder renames and folder moves. A folder's path is part of every asset identity inside it, so
+/// renaming or moving a populated folder is a relocation that updates every reference to its assets.
 /// </summary>
 public partial class ProjectLayoutViewModel
 {
     /// <summary>The name a new folder starts with, before the user names it in place.</summary>
     internal const string NewFolderName = "New folder";
 
-    /// <summary>Why a folder that holds files cannot be renamed yet.</summary>
+    /// <summary>Why a folder that holds files cannot be renamed without the relocation workflow.</summary>
     internal const string FolderRenameUnavailableReason
-        = "Not available yet: renaming a folder that holds assets must also update the scenes and materials that use them.";
+        = "Renaming a folder that holds assets needs the project's relocation service, which is not available here.";
 
     /// <inheritdoc />
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The rename boundary reports any storage failure in place and keeps the old name.")]
@@ -40,17 +41,31 @@ public partial class ProjectLayoutViewModel
             return TreeItemRenameResult.Success;
         }
 
-        if (!folder.ValidateItemName(name))
+        var invalid = RelocationPaths.ValidateName(name);
+        if (invalid is not null || !folder.ValidateItemName(name))
         {
-            return TreeItemRenameResult.Rejected("Use a folder name without path separators or reserved characters.");
+            return TreeItemRenameResult.Rejected(invalid ?? "Use a folder name without path separators or reserved characters.");
         }
 
-        if (GetFolderRenameBlocker(folder) is { } reason)
+        if (GetFolderRenameBlocker(folder, relocation is not null) is { } reason)
         {
             return TreeItemRenameResult.Rejected(reason);
         }
 
         var before = this.GetVirtualPath(folder);
+        if (relocation is not null && before is not null)
+        {
+            var request = new AssetRelocationRequest { Moves = [new(before, RelocationPaths.Rename(before, name, isFolder: true))] };
+            this.LogFolderRenameRequested(before, request.Moves[0].TargetPath);
+            var outcome = await relocation.RelocateAsync(request, "Rename folder").ConfigureAwait(true);
+            return outcome switch
+            {
+                null => Renamed(folder, name),
+                { Succeeded: false } => TreeItemRenameResult.Rejected(outcome.Message),
+                _ => Renamed(folder, name),
+            };
+        }
+
         try
         {
             await folder.Folder.RenameAsync(name).ConfigureAwait(true);
@@ -67,6 +82,37 @@ public partial class ProjectLayoutViewModel
         }
 
         return TreeItemRenameResult.Success;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Dragging folders onto an authoring folder moves them, or copies them with Ctrl, through the relocation
+    /// workflow; the tree reloads from disk afterwards, so rows are not moved here.
+    /// </remarks>
+    public override async Task<TreeDropResult> CommitDropAsync(TreeDropRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (relocation is null || request.Items.Count == 0 || this.GetVirtualPath(request.Parent) is not { } parent
+            || request.Parent is not (FolderTreeItemAdapter or AuthoringMountPointTreeItemAdapter) || !IsWritable(request.Parent)
+            || request.Items.Any(static item => item is not FolderTreeItemAdapter folder || !IsUnderAuthoringMount(folder)))
+        {
+            return TreeDropResult.Rejected;
+        }
+
+        var sources = request.Items.Select(this.GetVirtualPath).OfType<string>().ToArray();
+        this.LogFolderDropRequested(request.Operation, sources, parent);
+
+        if (request.Operation == TreeDropOperation.Copy)
+        {
+            return (await relocation.CopyAsync(sources, parent, "Copy folders").ConfigureAwait(true)).Succeeded
+                ? TreeDropResult.Committed(request.Items) : TreeDropResult.Rejected;
+        }
+
+        var moves = sources.Where(source => !string.Equals(RelocationPaths.GetParent(source), parent, StringComparison.OrdinalIgnoreCase))
+            .Select(source => new AssetRelocationMove(source, RelocationPaths.Combine(parent, RelocationPaths.GetName(source)))).ToArray();
+        return moves.Length != 0 && await relocation.RelocateAsync(new AssetRelocationRequest { Moves = moves }, "Move folders").ConfigureAwait(true) is { Succeeded: true }
+            ? TreeDropResult.Committed(request.Items)
+            : TreeDropResult.Rejected;
     }
 
     /// <summary>Returns a folder name that does not exist yet: "New folder", then "New folder (2)" and so on.</summary>
@@ -86,13 +132,19 @@ public partial class ProjectLayoutViewModel
 
     /// <summary>Explains why a folder cannot be renamed, or returns null when it can.</summary>
     /// <param name="folder">The folder row.</param>
+    /// <param name="canRelocate">Whether populated folders can be relocated with their references.</param>
     /// <returns>The reason, or null.</returns>
-    internal static string? GetFolderRenameBlocker(FolderTreeItemAdapter folder)
+    internal static string? GetFolderRenameBlocker(FolderTreeItemAdapter folder, bool canRelocate = false)
     {
         ArgumentNullException.ThrowIfNull(folder);
         if (!IsUnderAuthoringMount(folder))
         {
             return "Mounted and derived content is read-only.";
+        }
+
+        if (canRelocate)
+        {
+            return null;
         }
 
         try
@@ -105,7 +157,22 @@ public partial class ProjectLayoutViewModel
         }
     }
 
-    private static bool IsUnderAuthoringMount(ITreeItem item)
+    // The relocation moved the folder on disk, or nothing had to change; a reload that follows replaces this row.
+    private static TreeItemRenameResult Renamed(FolderTreeItemAdapter folder, string name)
+    {
+        folder.Label = name;
+        return TreeItemRenameResult.Success;
+    }
+
+    private static bool IsWritable(ITreeItem item)
+        => item switch
+        {
+            AuthoringMountPointTreeItemAdapter mount => !IsPersistedProjectRelativeVirtualMount(mount.MountPoint),
+            FolderTreeItemAdapter folder => IsUnderAuthoringMount(folder),
+            _ => false,
+        };
+
+    private static bool IsUnderAuthoringMount(FolderTreeItemAdapter item)
     {
         for (var current = item.Parent; current is not null; current = current.Parent)
         {
@@ -121,14 +188,50 @@ public partial class ProjectLayoutViewModel
         return false;
     }
 
+    // Folders that moved or were deleted change the tree and the selected folders; reload both from disk.
+    private async Task FollowChangedFilesAsync(AssetFilesChangedMessage message)
+    {
+        // The tree shows folders only: a file move, rename or delete leaves it as it is.
+        if (projectContextService.ActiveProject is not { } project || !message.FoldersChanged)
+        {
+            return;
+        }
+
+        var moves = message.Moves.Where(static move => move.IsDirectory)
+            .Select(move => (From: RelocationPaths.ToVirtual(project, move.Source), To: RelocationPaths.ToVirtual(project, move.Target)))
+            .Where(static move => move.From is not null && move.To is not null).ToArray();
+        string Map(string folder)
+        {
+            foreach (var (from, to) in moves)
+            {
+                if (RelocationPaths.IsSameOrInside(folder, from!))
+                {
+                    return to + folder[from!.Length..];
+                }
+            }
+
+            return folder;
+        }
+
+        this.LogReloadingTreeAfterFileChanges(moves.Length, message.DeletedFiles.Count);
+        var selected = contentBrowserState.SelectedFolders.Select(Map).ToArray();
+        if (!selected.SequenceEqual(contentBrowserState.SelectedFolders, StringComparer.Ordinal))
+        {
+            contentBrowserState.SetSelectedFolders(selected);
+        }
+
+        await this.ReloadMountTreeAsync().ConfigureAwait(true);
+    }
+
     // Creates the folder on disk under a writable folder, shows it in the tree and starts naming it in place.
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "the tree owns the row it is given")]
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI operation boundary reports failures and leaves the tree unchanged.")]
     private async Task CreateFolderAsync(CreateFolderRequestMessage request)
     {
         try
         {
             var parent = await this.FindAdapterByVirtualPathAsync(request.ParentFolder.TrimEnd('/')).ConfigureAwait(true) as TreeItemAdapter;
-            var location = parent switch
+            var location = parent is null ? null : parent switch
             {
                 AuthoringMountPointTreeItemAdapter mount when !IsPersistedProjectRelativeVirtualMount(mount.MountPoint) => mount.RootFolder,
                 FolderTreeItemAdapter folder when IsUnderAuthoringMount(folder) => folder.Folder,

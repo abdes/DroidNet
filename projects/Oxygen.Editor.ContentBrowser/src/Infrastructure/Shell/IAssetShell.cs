@@ -15,4 +15,9 @@ public interface IAssetShell
     /// <param name="path">The absolute file or folder path.</param>
     /// <returns>False when the path no longer exists.</returns>
     public bool ShowInFileExplorer(string path);
+
+    /// <summary>Moves files and folders to the Recycle Bin.</summary>
+    /// <param name="paths">The absolute paths.</param>
+    /// <exception cref="IOException">The shell could not recycle every path.</exception>
+    public void MoveToRecycleBin(IReadOnlyList<string> paths);
 }

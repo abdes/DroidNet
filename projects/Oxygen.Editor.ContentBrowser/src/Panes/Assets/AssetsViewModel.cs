@@ -44,6 +44,7 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="dialogService">The existing dialog and folder-picker service.</param>
 /// <param name="windowManagerService">The window manager service.</param>
 /// <param name="shell">The clipboard and File Explorer actions.</param>
+/// <param name="relocation">The rename, move, copy and delete workflow; without it those commands are unavailable.</param>
 public partial class AssetsViewModel(
     Oxygen.Editor.ContentPipeline.Cooking.ICookRunService cookRuns,
     ViewModelToView vmToViewConverter,
@@ -59,7 +60,8 @@ public partial class AssetsViewModel(
     IMessenger messenger,
     IDialogService dialogService,
     IWindowManagerService windowManagerService,
-    IAssetShell shell) : AbstractOutletContainer, IRoutingAware
+    IAssetShell shell,
+    Relocation.IAssetRelocationWorkflow? relocation = null) : AbstractOutletContainer, IRoutingAware
 {
     private bool disposed;
 
@@ -144,6 +146,7 @@ public partial class AssetsViewModel(
             contentBrowserState.PropertyChanged += this.OnContentBrowserStatePropertyChanged;
 
             messenger.Register<AssetsChangedMessage>(this, (_, _) => this.OnAssetsChanged());
+            relocation?.Completed += this.OnRelocationCompleted;
 
             // Indexing is started by ContentBrowserViewModel - no need to start here
             this.isInitialized = true;
@@ -307,6 +310,8 @@ public partial class AssetsViewModel(
 
                 // Cleanup event subscriptions
                 contentBrowserState.PropertyChanged -= this.OnContentBrowserStatePropertyChanged;
+                relocation?.Completed -= this.OnRelocationCompleted;
+
                 this.PropertyChanging -= this.OnLayoutViewModelChanging;
                 this.PropertyChanged -= this.OnLayoutViewModelChanged;
 
