@@ -203,9 +203,10 @@ cameras; no synthetic fallback. A hidden camera node remains usable.
 
 Orthographic uses the same Auto/Fixed framing and bar composition as perspective,
 with OrthographicSize in place of vertical FOV; horizontal extent is
-OrthographicSize × aspect. Physical aperture/shutter/ISO, sensor/lens/DOF and
-ManualCamera authoring are excluded; existing native physical exposure is not
-removed or renamed.
+OrthographicSize × aspect. Aperture (f-number), shutter rate (1/s) and ISO are
+authored on both projections and set the camera EV that ManualCamera exposure
+uses (ED-M08.10). The engine renders no depth of field or motion blur, so
+sensor and lens fields are not offered.
 
 ## 8. Directional light
 

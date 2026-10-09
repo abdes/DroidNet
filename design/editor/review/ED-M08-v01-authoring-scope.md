@@ -114,11 +114,17 @@ migrate useful prior content, update references and recook through normal native
 producers. Atomic backups/recovery protect migration; they do not introduce
 legacy runtime readers, alias resolution or duplicate behavior paths.
 
-V0.1 excludes generic node activation, authored hidden-shadow/Shadows Only modes,
-blended-material shadow casting, more than two atmospheric sources, sky-only
-authoring, lunar surface/phase/orbit features, physical-camera editor authoring,
-texture/material-graph authoring, topology/slot creation and physics/script
-authoring. Multi-viewport layouts are in scope under ED-M08.V1.
+V0.1 exposes what the engine renders today. The engine has no generic node
+activation, authored hidden-shadow/Shadows Only mode, blended-material shadow
+casting, more than two atmospheric sources, sky-only light contribution or
+lunar surface/phase/orbit features, and no material graph, so the editor
+offers none; these are engine facts, not editor choices. Mesh topology and
+material-slot creation are modeling tools with no engine counterpart. Physical-camera exposure, fog, local fog
+volumes, the Sky Sphere and every Sky Light source and multiplier are rendered
+by the engine and authored in V0.1 (ED-M08.10), as are node scripts. Physics authoring is post-V0.1
+by owner decision. Script authoring is V0.1 work in ED-M08.10, with its
+user interface designed with the owner before implementation. Multi-viewport layouts are in
+scope under ED-M08.V1.
 
 The [engine deferred-capability record](../../../projects/Oxygen.Engine/design/vortex/milestones/ED-M08/deferred-capabilities.md)
 owns source-local TODO IDs and distinguishes existing native functionality from

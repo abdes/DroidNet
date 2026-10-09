@@ -37,8 +37,7 @@ link to its section here. For example:
 
 The annotations are present at the role enum/direction boundary,
 analytic-disk helper, light master gate, authored visibility rejection,
-opaque/masked caster routing, node-state contract, light mobility/angle fields
-and packed camera record.
+opaque/masked caster routing, node-state contract, light mobility/angle fields.
 These are comment-only tracking changes; they do not implement deferred or
 current V0.1 functionality. Later implementation must keep them at the relevant
 boundary and update/remove a note when its feature is delivered.
@@ -124,23 +123,6 @@ Source owners: [node flags](../../../../src/Oxygen/Scene/Types/Flags.h),
 [SceneNode.h](../../../../src/Oxygen/Scene/SceneNode.h),
 [Scene.cpp](../../../../src/Oxygen/Scene/Scene.cpp).
 
-### EV01-CAMERA-PHYSICAL-AUTHORING
-
-**Physical-camera authoring, persistence and qualification.** Native physical
-exposure already exists: aperture, shutter rate and ISO produce camera EV, and
-view initialization can consume it. Native source/cook/load persistence is now
-included in slice 6 of the [exposure package](../exposure/README.md),
-under the 2026-09-16 scope decision. Physical-camera editor controls remain
-deferred; preserve these native fields through existing adapters without adding
-new editor controls. Aperture/shutter/ISO currently control exposure;
-depth-of-field and motion blur are separate rendering features.
-
-Source owners/boundaries: [CameraExposure.h](../../../../src/Oxygen/Scene/Camera/CameraExposure.h),
-[Perspective.h](../../../../src/Oxygen/Scene/Camera/Perspective.h),
-[camera view resolution](../../../../src/Oxygen/Vortex/SceneCameraViewResolver.cpp),
-[view initialization](../../../../src/Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.cpp),
-[packed camera records](../../../../src/Oxygen/Data/PakFormat_world.h).
-
 ### EV01-LIGHT-BAKING
 
 **Mixed/Baked light authoring and production.** The native mobility enum names
@@ -164,22 +146,28 @@ images; the stored angular size alone does not implement those effects.
 Source boundary: [DirectionalLight.h](../../../../src/Oxygen/Scene/Light/DirectionalLight.h).
 Existing shadow scope: [conventional shadow parity](../VTX-M05D/README.md).
 
-## Other authoring exclusions: do not mislabel existing engine capabilities
+## Engine capabilities without a renderer
 
-Texture parameter/material-graph authoring, mesh topology/material-slot creation
-and general physics/script authoring are outside the V0.1 editor scope. Their
-corresponding native capabilities are not all absent. When touching a related
-engine boundary, track an actual remaining native/persistence requirement if one
-exists and link the owning editor LLD. Do not create generic engine TODOs to
-implement already working textures, parameterized geometry or scripting.
+These are in scene data or nowhere in the engine; the editor exposes none of
+them because nothing renders them, not by editor choice:
 
-The final inspector and environment field tables define retained advanced
-controls. Their required producer and renderer consumers belong to ED-M08;
-they are not implicitly deferred by this record.
+- Volumetric clouds: `VolumetricCloudsEnvironmentRecord` is loaded, but no
+  Vortex pass draws clouds.
+- Fog inscattering color cubemap: stored on `Fog`, but the environment
+  lighting service never marks it usable or binds it.
+- Depth of field and motion blur: no Vortex pass; aperture and shutter rate
+  affect exposure only.
+- Material graphs: the engine has none; materials are parameter and texture
+  channel assets.
+
+Physics authoring is post-V0.1 by owner decision; the native physics module
+and its cooked scene bindings are unaffected. Physical-camera, fog, local fog
+volume, Sky Sphere, Sky Light and script authoring are V0.1 editor work
+(ED-M08.10).
 
 ## Must remain V0.1 work
 
-Do **not** defer point and spot light authoring and rendering, either atmosphere
+Do **not** defer physical-camera exposure authoring, point and spot light authoring and rendering, either atmosphere
 slot's real direct lighting/shadowing, ordinary directional fill lighting,
 captured-sky diffuse/specular lighting, functional Receive Shadows, correct
 visibility invalidation, all material slots, scalar emission, Capsule and

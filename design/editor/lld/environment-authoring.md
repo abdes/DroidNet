@@ -86,9 +86,11 @@ Aerial Start is 100 m; 80 km and 0 m are not the native creation defaults.
 | SkyLight.IntensityMul | 1; dimensionless        | Finite, Clamp >=0        | SkyLight On; multiplies both diffuse/specular contribution                    |
 | BackgroundColor       | (0,0,0); linear SDR RGB | Finite, Clamp each [0,1] | Solid display background when atmosphere is off; always retains source intent |
 
-SkyLight uses the existing native CapturedScene source. V0.1 exposes no cubemap
-picker or alternate HDRI/probe/GI authoring workflow. Native tint, diffuse and
-specular multipliers remain 1; other internal defaults remain engine-owned.
+SkyLight sources its radiance from the captured scene or from a specified
+cubemap asset, and its tint, diffuse and specular multipliers, cubemap
+rotation, lower-hemisphere color, reflection and volumetric scattering
+contributions are authored (ED-M08.10). The Sky Sphere supplies a solid color
+or cubemap background with tint, intensity and rotation.
 Source radiance comes from the scene sky/atmosphere, including both assigned
 lights. The display-only Background supplies no illumination/reflection radiance.
 With no active lighting sky, sky contribution is zero; do not retain a stale
@@ -122,15 +124,15 @@ changing the backdrop must not replace or flatten that material's lighting.
 
 ## 5. Exposure fields
 
-ExposureEnabled is independent of tone-curve selection. Manual and Auto retain
-native enum values 0 and 2; native ManualCamera value 1 remains engine-owned and is
-not an editor choice without physical-camera authoring. Preserve existing API
+ExposureEnabled is independent of tone-curve selection. Manual, ManualCamera and Auto
+retain native enum values 0, 1 and 2; ManualCamera uses the camera EV from the
+authored aperture, shutter rate and ISO. Preserve existing API
 names; no enum renumbering or cosmetic aliases are introduced.
 
 | PostProcess path              | Default / unit                      | Bounds                                                | Conditional UI and active effect                                                              |
 | ----------------------------- | ----------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | ExposureEnabled               | true; bool                          | Boolean                                               | Primary; Off uses unit exposure without erasing settings                                      |
-| ExposureMode                  | Auto                                | Manual / Auto                                         | Primary; selects fixed EV or metered exposure                                                 |
+| ExposureMode                  | Auto                                | Manual / ManualCamera / Auto                          | Primary; selects fixed EV, camera EV or metered exposure                                      |
 | ManualExposureEv              | 9.7 EV100                           | Finite; validate resulting gain with key/compensation | Enabled + Manual; fixed exposure; [-24,24] is a typical control range, not a conversion clamp |
 | ExposureCompensationEv        | 0 EV                                | Finite and representable conversion                   | Enabled; +1 doubles exposure, -1 halves it; no light-only [-10,10] restriction                |
 | ExposureKey                   | 10; dimensionless calibration scale | Finite >0; validate coupled gain                      | Advanced, Enabled; same bias scale for Manual and Auto                                        |
@@ -231,8 +233,8 @@ Scene-v6 perspective camera records append aperture_f/shutter_rate/iso at
 (40 bytes total). Reject version-5 20/28-byte records. All scene producers and
 consumers migrate together; 11/125/100 are new-authoring defaults, not fallback
 values for old assets. Source schemas, cooker, loader, scripting and existing
-editor adapters preserve these fields. This does not add physical-camera editor
-controls, a new editor exposure mode, depth of field or motion blur.
+editor adapters preserve these fields. The camera inspector authors these
+fields (ED-M08.10); the engine renders no depth of field or motion blur.
 
 The engine mathematical authority is now the
 [PBR specification](../../../projects/Oxygen.Engine/design/renderer-core/physically-based-rendering.md);

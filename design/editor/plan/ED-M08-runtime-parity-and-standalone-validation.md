@@ -1204,15 +1204,18 @@ stands behind them. This slice removes those lock-outs.
 1. **Every exclusion is checked against the engine.** Each exclusion in the
    [authoring scope](../review/ED-M08-v01-authoring-scope.md#4-canonical-migration-and-excluded-scope),
    the [environment LLD](../lld/environment-authoring.md) and the
-   [inspector LLD](../lld/property-inspector.md) is verified: a capability
-   the engine renders today joins this slice; one it does not render stays
-   out, and its document records that as an engine fact, not an editor
-   choice. The list is generic node activation, Shadows Only and
-   hidden-shadow modes, blended-material shadow casting, more than two
-   atmospheric sources, sky-only authoring, lunar features, physical-camera
-   authoring with the ManualCamera exposure mode, and the Sky Light's fixed
-   source and multipliers. Volumetric clouds are in the scene format but no
-   renderer pass draws them, so they stay out.
+   [inspector LLD](../lld/property-inspector.md) was verified against the
+   engine source. The engine renders physical-camera exposure, the Sky
+   Sphere and every Sky Light source and multiplier, so they join this
+   slice. It has no generic node activation, authored Shadows Only or
+   hidden-shadow mode, blended-material shadow casting, more than two
+   atmospheric sources, sky-only light contribution, lunar surface or phase
+   shading, celestial motion, light baking, finite-source directional
+   shading, volumetric cloud pass, fog inscattering cubemap, depth of field
+   or motion blur; those stay out and the
+   [engine capability record](../../../projects/Oxygen.Engine/design/vortex/milestones/ED-M08/deferred-capabilities.md)
+   records them as engine facts. By owner decision on 2026-10-09, physics
+   authoring is post-V0.1 and script authoring joins this slice.
 2. **Fog.** Height fog, including its second layer, and volumetric fog are
    authored on the scene environment and round-trip through the scene file,
    cooking and the runtime loader, which already carry them
@@ -1220,9 +1223,18 @@ stands behind them. This slice removes those lock-outs.
    a node component with an inspector section, cooked as
    `LocalFogVolumeRecord`. M08.9 already derives the panes' fog passes from
    the scene, so authored fog renders in the editor as in the runtime.
-3. **Sky.** The Sky Sphere (solid color or cubemap sky background) and the
-   Sky Light's source (captured scene or a specified cubemap), tint and
-   diffuse and specular multipliers are authored.
+3. **Sky.** The Sky Sphere (solid color or cubemap background, with tint,
+   intensity and rotation) and the Sky Light's source (captured scene or a
+   specified cubemap, which yields diffuse and specular lighting), tint,
+   diffuse and specular multipliers, cubemap rotation, lower-hemisphere
+   color, reflection and volumetric scattering contributions are authored.
+   The cooker already imports cube textures; the editor's texture import
+   gains the cubemap option so both sources can name a cubemap asset. The
+   user interface for sky maps, sky cubemaps and image-based lighting (how a
+   cubemap is imported and previewed, how the Sky Sphere and Sky Light
+   sections present their sources, and how they relate to the atmosphere)
+   is designed with the owner interactively before any implementation, and
+   its design joins this plan before the code does.
 4. **Ground grid settings.** The grid's engine settings are per-user editor
    settings in the Settings flyout, applied through
    `Renderer::SetGroundGridConfig`: enabled, spacing, major lines every N,
@@ -1246,6 +1258,19 @@ stands behind them. This slice removes those lock-outs.
    qualification today, so a view adapting in auto exposure gains a small
    readback of its displayed and target scale per rendered frame; panes
    render a few frames past convergence because readbacks lag.
+6. **Physical camera.** Aperture, shutter rate and ISO set the camera's
+   exposure in the engine and already round-trip through the editor's scene
+   model, sync and cooking, and the exposure section already offers the
+   ManualCamera mode, but the camera inspector has no controls for them, so
+   ManualCamera exposure always uses the defaults. Perspective and
+   orthographic camera sections gain the three fields.
+7. **Scripting.** The engine attaches scripts to scene nodes as script slots
+   with typed parameters (`ScriptingComponentRecord`, `ScriptSlotRecord`,
+   `ScriptParamRecord`) and runs them in the runtime. The editor authors
+   them. Its user interface (how scripts are created or assigned, how slots
+   and parameters appear in the inspector, and how script assets appear in
+   the content browser) is designed with the owner interactively before any
+   implementation, and its design joins this plan before the code does.
 
 Implementation, in build order:
 
@@ -1253,10 +1278,13 @@ Implementation, in build order:
 | ------- | -------------------------------------- | --------------------------------------------------------------------- |
 | M08.10a | Design documents                       | Exclusion verification against the engine; confirmed items join below |
 | M08.10b | Editor.World, Interop, WorldEditor     | Height and volumetric fog; local fog volume component                 |
-| M08.10c | Editor.World, Interop, WorldEditor     | Sky Sphere; Sky Light source, tint and multipliers                    |
-| M08.10d | Editor.Interop, WorldEditor            | Ground grid settings                                                  |
-| M08.10e | Oxygen.Engine (Vortex), Editor.Interop | Per-pane view state; exposure-adaptation settling                     |
-| M08.10f | As each confirmed exclusion requires   | Remaining capabilities the verification confirms                      |
+| M08.10c | Design, with the owner                 | Sky map, sky cubemap and image-based lighting user interface design   |
+| M08.10d | Per the sky design                     | Cubemap texture import; Sky Sphere; Sky Light source and multipliers  |
+| M08.10e | Editor.Interop, WorldEditor            | Ground grid settings                                                  |
+| M08.10f | Oxygen.Engine (Vortex), Editor.Interop | Per-pane view state; exposure-adaptation settling                     |
+| M08.10g | WorldEditor                            | Physical camera controls                                              |
+| M08.10h | Design, with the owner                 | Scripting user interface design                                       |
+| M08.10i | Per the scripting design               | Script authoring, persistence and cooking                             |
 
 Checks: each authored capability survives save, reopen and cook, and the
 cooked project renders it in RenderScene as in the editor; the grid
