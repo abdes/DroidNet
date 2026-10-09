@@ -39,6 +39,7 @@
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Renderer.h>
 
@@ -416,6 +417,64 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     IM_CHECK_EQ(sky->GetSpecularIntensity(), 1.0F);
     ctx->ItemOpen("**/Sky Light (IBL)");
   };
+
+  // Runs only when RenderScene starts with --startup-skybox <HDR image>.
+  if (!app_.startup_skybox_path.empty()) {
+    test = IM_REGISTER_TEST(engine, "renderscene", "ibl_startup_skybox");
+    test->UserData = this;
+    test->TestFunc = [](ImGuiTestContext* ctx) -> void {
+      auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
+      for (unsigned wait = 0U;
+        wait < 600U && (!app.current_scene_key_ || app.active_scene_load_key_);
+        ++wait) {
+        ctx->Yield();
+      }
+      IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
+      const auto scene = app.GetShell().TryGetScene();
+      const auto renderer = app.ResolveVortexRenderer();
+      IM_CHECK(scene && renderer);
+      const auto env = scene->GetEnvironment();
+      IM_CHECK(env != nullptr);
+      // The startup skybox cooks and equips the Sky Sphere asynchronously.
+      const auto sphere_cubemap = [&]() -> content::ResourceKey {
+        const auto sphere = env->TryGetSystem<scene::environment::SkySphere>();
+        return sphere ? sphere->GetCubemapResource() : content::ResourceKey {};
+      };
+      for (unsigned wait = 0U; wait < 1800U
+        && (sphere_cubemap().get() == 0U || sphere_cubemap().IsPlaceholder());
+        ++wait) {
+        ctx->Yield();
+      }
+      const auto cubemap = sphere_cubemap();
+      IM_CHECK(cubemap.get() != 0U && !cubemap.IsPlaceholder());
+
+      // Switching the source after the load equips the loaded cubemap; an
+      // HDR skybox cooked to a float format then lights the scene.
+      SelectPanel(
+        ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
+      ctx->ItemOpen("**/Sky Light (IBL)");
+      ctx->ItemCheck("**/Enabled##SkyLight");
+      ctx->ItemClick("Source##SkyLight");
+      ctx->ItemClick("//$FOCUSED/$$1/Specified Cubemap");
+      ctx->Yield(3);
+      const auto light = env->TryGetSystem<scene::environment::SkyLight>();
+      IM_CHECK(light != nullptr);
+      IM_CHECK(light->GetSource()
+        == scene::environment::SkyLightSource::kSpecifiedCubemap);
+      IM_CHECK(light->GetCubemapResource() == cubemap);
+      for (unsigned wait = 0U;
+        wait < 600U && !renderer->InspectSkyLight(*scene).usable; ++wait) {
+        ctx->Yield();
+      }
+      const auto state = renderer->InspectSkyLight(*scene);
+      IM_CHECK(state.usable);
+      IM_CHECK(state.unavailable_reason
+        == vortex::environment::StaticSkyLightUnavailableReason::kNone);
+      ctx->ItemClick("Source##SkyLight");
+      ctx->ItemClick("//$FOCUSED/$$0/Captured Scene");
+      ctx->Yield(3);
+    };
+  }
 
   if (!testing::UiTestSession::UsesIsolatedSettings()) {
     return;

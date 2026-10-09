@@ -1,14 +1,21 @@
 <#
 .SYNOPSIS
 Run the real demo widget suite in an explicitly instrumented existing build.
+.PARAMETER SettingsFrom
+Settings file the run starts from. It is copied into the output directory and
+used in isolation, so the original is never modified.
+.PARAMETER DemoArguments
+Extra command-line arguments for the demo, such as --startup-skybox <path>.
 #>
 param(
-    [ValidateSet('LightBench', 'TexturedCube')][string]$Demo = 'LightBench',
+    [ValidateSet('LightBench', 'TexturedCube', 'RenderScene')][string]$Demo = 'LightBench',
     [string]$BuildTree = 'build-tracy-ninja',
     [ValidateSet('Debug', 'Release')][string]$Config = 'Release',
     [string]$Filter = '',
     [string]$Output,
-    [ValidateRange(10, 600)][int]$TimeoutSeconds = 180
+    [ValidateRange(10, 600)][int]$TimeoutSeconds = 180,
+    [string]$SettingsFrom,
+    [string[]]$DemoArguments = @()
 )
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/BuildSelection.ps1"
@@ -37,7 +44,12 @@ foreach ($entry in $selection.RuntimeEnvironment.GetEnumerator()) {
 }
 $start.Environment['OXYGEN_UI_TEST_OUTPUT'] = $Output
 $start.Environment['OXYGEN_UI_TEST_FILTER'] = $Filter
-foreach ($argument in @('--resolution', '1920x1080', '--fps', '60', '-v=INFO')) {
+if ($SettingsFrom) {
+    $settings = Join-Path $Output 'settings.json'
+    Copy-Item -LiteralPath $SettingsFrom -Destination $settings
+    $start.Environment['OXYGEN_UI_TEST_SETTINGS'] = $settings
+}
+foreach ($argument in @('--resolution', '1920x1080', '--fps', '60', '-v=INFO') + $DemoArguments) {
     $start.ArgumentList.Add($argument)
 }
 $startedUtc = [DateTime]::UtcNow.ToString('O')
