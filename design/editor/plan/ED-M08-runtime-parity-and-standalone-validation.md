@@ -167,9 +167,10 @@ implementation must produce new evidence for captured sky and specular lighting.
    stored in the project's local cache, and never authored, cooked or required
    for browsing.
 6. **Panes render on demand; the user owns the frame clock.** A pane renders
-   when what it shows changes and for a short settle window afterwards; an
-   idle pane keeps its last image and costs no rendering, composition or
-   present. VSync and the frame-rate cap are engine-wide settings in the
+   when an event may have changed what it shows: a scene-changing command, a
+   completed load, newly resident renderer content, input or a move of its
+   camera. An idle pane keeps its last image and costs no rendering,
+   composition or present. VSync and the frame-rate cap are engine-wide settings in the
    scene editor's Settings flyout; the editor imposes no rate of its own, and
    each frame has exactly one clock: the display with vsync on, the cap with
    it off.
@@ -1068,82 +1069,136 @@ found the gap in how the editor drives the shared engine, not in Vortex
 shading or managed code: both run one `AsyncEngine` frame loop on the engine
 thread, and the managed layer does no per-frame work. In priority order:
 
-1. **One frame clock, owned by the user.** Each composition surface presents
-   with a fixed `Present(1, 0)` (`CompositionSwapChain::Present`), ignoring
-   the vsync setting that the windowed swap chain honours, while the engine
-   also paces to a 60 FPS deadline that only the editor imposes. The two
-   clocks beat against each other, and every pane adds a vsync-interval
-   present that can block the engine thread; the native example presents
-   once. Composition surfaces follow the engine's vsync setting. With vsync
-   on, each surface's swap chain has a frame-latency waitable object at
-   maximum latency 1 and the engine waits once for all of them at frame
-   start, so presents never block and the display is the clock. With vsync
+1. **One frame clock, owned by the user.** Each composition surface
+   presented with a fixed `Present(1, 0)`, ignoring the vsync setting that
+   the windowed swap chain honours, while the engine also paced to a 60 FPS
+   deadline that only the editor imposed. The two clocks beat against each
+   other, and every pane added a vsync-interval present that could block the
+   engine thread; the native example presents once. Composition surfaces
+   follow the engine's vsync setting. Their swap chains carry a frame-latency
+   waitable object at maximum latency 2; with vsync on, the engine presents
+   every surface and then waits on each latency object, and because the
+   frames retire at the same vblank, N surfaces cost one wait. The wait is
+   bounded at 100 ms so a hidden panel never stalls the engine. With vsync
    off, surfaces present at interval 0 (DWM composition cannot tear) and the
    frame-rate cap is the clock, or nothing when the cap is off. A cap below
    the refresh rate with vsync on is the user's choice, and both apply.
 2. **Engine settings in the Settings flyout.** The scene editor's Settings
    flyout holds the settings that apply to the whole embedded engine,
    persisted with the project's preview preferences: VSync, on by default; a
-   frame-rate cap, off by default and 1–240 FPS (the engine maximum) when on;
-   idle panes, rendered on change by default or always rendered; and the
+   frame-rate cap, off by default and up to the engine maximum when on; idle
+   viewports, rendered on change by default or always rendered; and the
    existing native log verbosity. The editor imposes no rate of its own:
-   `EngineConstants.DefaultTargetFps`, the preferences' `[1, max]` clamp and
-   the slider's 60 maximum go, and preferences saved earlier keep their log
-   verbosity but not their 60 FPS cap. Interop exposes vsync on
-   `EngineRunner` through the engine's `gfx.vsync` setting. Renderer tuning
-   variables (fog, occlusion, atmosphere) stay console diagnostics.
-3. **Panes render on demand.** `EditorModule::OnPublishViews` publishes every
-   visible pane every frame, so four panes render four full deferred
-   pipelines (and the camera inset at 30 % scale) while one is navigated. A
-   pane renders when its camera, extent, render options or view mode change;
-   on any scene, selection, helper or gizmo change; for a pending pick; and
-   when an asset it may show becomes resident. It keeps rendering for a
-   settle window afterwards, until auto exposure converges and for at most
-   one second. An idle pane is not rendered, composed or presented, and its
-   surface keeps the last image; with idle panes set to always render, every
-   visible pane renders each frame as today. Vortex gains a per-frame skip
-   for a published runtime view that keeps its view state, exposure history
-   and last output; Interop owns the policy. Withdrawing and republishing
-   instead would discard exposure history.
-4. **One compositing submission.** `Renderer::OnCompositing` acquires a
+   `EngineConstants.DefaultTargetFps` is 0, and preferences saved earlier
+   keep their log verbosity but not their 60 FPS cap. `EngineRunner` exposes
+   vsync through the engine's `gfx.vsync` setting and the idle-pane choice
+   through `EditorModule`. Renderer tuning variables (fog, occlusion,
+   atmosphere) stay console diagnostics.
+3. **Panes render on demand.** `EditorModule::OnPublishViews` published every
+   visible pane every frame, so four panes rendered four full deferred
+   pipelines while one was navigated. A pane now renders only when what it
+   shows may have changed, and the triggers are events, not timers:
+   - every pane, when an executed command can change the scene, a completed
+     asset load or cooked-content refresh changes it, the selection outline
+     changes, a piloted scene camera moves, or the renderer's resident
+     content changes (`Renderer::GetResidentContentRevision`: streamed
+     textures, uploaded geometry, refreshed environment probes and exposure
+     masks);
+   - one pane, when a command that only affects that view runs (its settings,
+     camera mode, visibility, framing), input is routed to it, or a pick is
+     pending for it;
+   - one pane, when its resolved view and projection matrices or its extent
+     differ from the image it last rendered.
+
+   Each command declares its reach (`EditorCommand::GetInvalidation`: scene by
+   default, one view, or nothing for queries), so a new command cannot leave
+   panes stale by omission. A surface renders all its panes or none, because
+   a host and its camera inset compose together. A held pane stays published
+   through `Renderer::HoldPublishedRuntimeView`, keeping its identity and
+   output, and its surface is neither composed nor presented, so it keeps the
+   last image. Editor views are stateless, so there is no exposure history to
+   converge and no settle window. With idle viewports set to render, every
+   visible pane renders each frame.
+
+4. **One compositing submission.** `Renderer::OnCompositing` acquired a
    command recorder per target surface; it records every surface's
-   composition into one recorder per frame. The copy into each surface stays:
-   it is inherent to one swap chain per pane.
-5. **Lean per-frame editor work.** `ProcessResizeRequests` snapshots every
-   surface each frame to find resizes; the registry flags a pending resize
-   instead. The selection outline is rebuilt when selection changes, not per
-   frame; a pane reuses its overlay rather than allocating one per frame; and
-   a frame takes one view snapshot instead of copying the view list under the
-   manager's mutex in each phase. Publication policy, overlay building and
-   composition become separate parts of `EditorModule`, so the on-demand
-   rules live in one place.
-6. **Input path.** `RuntimeCommandDispatcher` calls the native input
-   transport while holding its run gate, so pointer moves contend with scene
-   and asset commands; the gate validates the target and the native call
-   runs outside it. Unheld navigation input (the wheel) allocates a debounce
-   cancellation source per event; one restartable timer replaces it.
+   composition into one recorder per frame, and each backbuffer reaches its
+   present state once after the last composition targeting it. The copy into
+   each surface stays: it is inherent to one swap chain per pane.
+5. **Lean per-frame editor work.** Publication is split into collecting the
+   panes, deciding which render and publishing them, so the on-demand rules
+   live in one place, and the selection outline and pane overlays are built
+   only for panes that render. Commands run through one helper that logs
+   failures and records their invalidation.
+
+6. **Editor views keep their own view state.** Runtime views carry a
+   persistent `ViewStateHandle` (RenderScene allocates one for its main view);
+   editor panes publish none, so they have no eye adaptation, no exposure
+   transitions and no temporal history, and the authored auto-exposure speeds
+   have no effect in the editor. Each `EditorView` owns a state handle for its
+   lifetime and releases it when the view is destroyed. Eye adaptation then
+   moves the image with no input change, so Vortex reports a view as settling
+   while its adapted exposure has not reached its target, from the exposure
+   status it already reads back, and the pane renders until it settles.
+7. **The editor renderer gets the runtime's capabilities.** The editor's
+   capability set left out shadowing, so shadow debug views and the
+   shadow-only profile were refused while shadows rendered, and enabled
+   diagnostics only with ImGui, which disabled the GPU timeline and pass
+   diagnostics in the editor. The editor requests all eight capability
+   families; ImGui stays governed by its own setting.
+8. **Fog follows the scene.** Editor views hardcode height and local fog off.
+   V0.1 offers no fog authoring and the environment command keeps scene fog
+   disabled, so nothing changes today, but the flags derive from the scene
+   environment as in the runtime shell (fog enabled and rendered in the main
+   pass; any enabled local fog volume), so authored fog is never overridden.
+9. **No unused pane depth.** Each pane allocates a depth texture that Vortex
+   never uses, since it renders depth in its own scene textures; the pane
+   framebuffer keeps only its color target.
+10. **The ground grid is stable on a floor at Z 0.** The grid writes its
+    analytic plane depth and depth-tests it against the scene, so a surface
+    at Z 0 has the same depth up to precision and the winner flips per pixel.
+    Other editors leave this unresolved: Unreal closed its grid z-fighting
+    reports as Won't Fix and users move floors off Z 0, and Blender biases its
+    grid behind coplanar geometry, losing the grid on floor objects. Our grid
+    resolves coplanarity in world units: its depth moves toward the camera by
+    the ray distance at which a surface within a height tolerance of the
+    plane would lie (the tolerance over the ray's vertical component), capped
+    to a fraction of the hit distance so it never bleeds through objects near
+    the horizon. The tolerance grows with distance to match depth precision.
+    A floor at Z 0 shows the grid drawn steadily on it, and anything clearly
+    above the plane still hides it.
+
+Kept as they are after review: the runtime command dispatcher calls the
+native input transport under its run gate, because the gate is what keeps
+teardown from destroying the transport during the call; and the wheel's
+navigation-settle debounce, one small allocation per wheel step.
 
 Implementation, in build order:
 
-| Step   | Projects                    | Delivers                                                                        |
-| ------ | --------------------------- | ------------------------------------------------------------------------------- |
-| M08.9a | Oxygen.Engine (D3D12)       | Composition presents follow vsync; latency waitables waited once per frame      |
-| M08.9b | Oxygen.Engine (Vortex)      | Per-frame skip of a published runtime view; one compositing recorder            |
-| M08.9c | Editor.Interop              | Vsync on `EngineRunner`; on-demand panes, settle window, per-frame cleanups     |
-| M08.9d | Editor.Runtime, WorldEditor | Engine settings flyout and preferences, no 60 FPS default, input path, debounce |
+| Step   | Projects                    | Delivers                                                                     |
+| ------ | --------------------------- | ---------------------------------------------------------------------------- |
+| M08.9a | Oxygen.Engine (Graphics)    | Composition presents follow vsync; one latency wait per frame; runtime vsync |
+| M08.9b | Oxygen.Engine (Vortex)      | Held runtime views, one compositing recorder, resident content revision      |
+| M08.9c | Editor.Interop              | Pane render policy, command invalidation, vsync and idle-pane runner calls   |
+| M08.9d | Editor.Runtime, WorldEditor | Engine settings flyout and preferences, no 60 FPS default                    |
+| M08.9e | Oxygen.Engine (Vortex)      | Exposure-adaptation settling; ground grid coplanar resolution                |
+| M08.9f | Editor.Interop              | Per-view state handles, full capabilities, scene-driven fog, no pane depth   |
 
-Checks: native tests that a composition surface's sync interval follows the
-vsync setting, that a skipped view keeps its exposure state and last output,
-and that every surface composes from one recorder; Interop tests that an
-unchanged pane is not republished, that each trigger republishes it, that the
-settle window ends and that always-render publishes every pane; managed tests
-that the preferences round-trip vsync, cap off and on, and idle panes, that
-cap off reaches the engine as 0 and that earlier preferences drop their cap;
-dispatcher tests that the native input call runs outside the gate; user review
-of one- to four-pane layouts in the running editor with vsync on and off and
-the cap off and on, including navigation, an edit, selection and gizmo drag in
-one pane updating the others, picking in an idle pane, resize, and a reimport
-refreshing idle panes.
+Checks: Vortex tests that a held view leaves the frame family yet stays
+published past the idle limit, and that texture descriptors and completed
+geometry uploads advance the resident revision, that the ground grid
+settles to rest and that a view reports settling while its exposure adapts; Interop tests of the pane
+policy (new, unchanged, moved, invalidated, scene-changed, always-render and
+forgotten panes); managed tests that the preferences round-trip vsync, the
+cap off and on, and idle viewports, that the cap off reaches the engine as 0
+and that earlier preferences drop their cap; MultiView's four-view layout
+with its ImGui overlay; user review of one- to four-pane layouts in the
+running editor with vsync on and off and the cap off and on, including
+navigation, an edit, selection and gizmo drag in one pane updating the
+others, picking in an idle pane, resize, and a reimport refreshing idle
+panes; and, in the running editor, eye adaptation in a pane that settles
+and then idles, a shadow debug view, and a floor at Z 0 showing the grid
+steadily while objects above it still hide it.
 
 ### M08.10 — Asset thumbnails and previews
 
@@ -1204,8 +1259,8 @@ walkthrough completes without manual file repair.
 | Frame margin                 | 10% of the framed bounds                                                                               |
 | Overlays on a new pane       | Grid, icons and outline on; statistics off                                                             |
 | VSync                        | On; engine-wide, persisted with the project's preview preferences                                      |
-| Frame-rate cap               | Off; 1–240 FPS when on; engine-wide, persisted with the project's preview preferences                  |
-| Idle panes                   | Render on change; always render as an option; engine-wide                                              |
+| Frame-rate cap               | Off; up to the engine maximum (240 FPS) when on; engine-wide, persisted with the preview preferences   |
+| Idle viewports               | Render on change; render every frame as an option; engine-wide, persisted with the preview preferences |
 | Thumbnail render size        | 256² at 100% scaling                                                                                   |
 | Content Browser default view | Tiles, sorted by name, details pane closed                                                             |
 
