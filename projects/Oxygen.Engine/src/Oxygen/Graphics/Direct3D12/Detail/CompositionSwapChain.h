@@ -43,8 +43,12 @@ namespace detail {
 
     [[nodiscard]] auto GetSwapChain() const { return swap_chain_; }
 
-    // Present the current frame to the screen.
+    //! Present the current frame, synchronized to vblank when vsync is on.
     auto Present() const -> void;
+
+    //! Block until the swap chain can queue another frame within its frame
+    //! latency, bounded by a timeout so a hidden panel never stalls the engine.
+    auto WaitForPresentSlot() const -> void;
 
     [[nodiscard]] auto GetFormat() const { return format_; }
     auto SetFormat(const DXGI_FORMAT format) -> void { format_ = format; }
@@ -82,6 +86,7 @@ namespace detail {
     Graphics* graphics_;
 
     dx::ISwapChain* swap_chain_ { nullptr };
+    HANDLE frame_latency_waitable_ { nullptr };
 
     mutable uint32_t current_back_buffer_index_ { 0 };
     StaticVector<std::shared_ptr<Texture>, frame::kFramesInFlight.get()>

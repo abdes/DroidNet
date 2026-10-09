@@ -468,6 +468,20 @@ auto Graphics::PresentSurfaces(
         surface->GetName(), e.what());
     }
   }
+
+  // Wait after every surface has presented: the frames retire at the same
+  // vblank, so N surfaces cost one wait rather than N serialized ones.
+  if (!IsVSyncEnabled()) {
+    return;
+  }
+  for (const auto& surface : surfaces) {
+    try {
+      surface->WaitForPresentSlot();
+    } catch (const std::exception& e) {
+      LOG_F(WARNING, "Present pacing on surface `{}` failed: {}",
+        surface->GetName(), e.what());
+    }
+  }
 }
 
 auto Graphics::SetVSyncEnabled([[maybe_unused]] const bool enabled) -> void { }

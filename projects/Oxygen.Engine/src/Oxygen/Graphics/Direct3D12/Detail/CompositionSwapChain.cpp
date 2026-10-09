@@ -4,25 +4,37 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <windows.h>
+
 #include <algorithm>
 
 #include <dxgi1_2.h>
 #include <dxgiformat.h>
-#include <windows.h>
 #include <wrl/client.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/CompositionSwapChain.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
-
-#include <Oxygen/Graphics/Direct3D12/Detail/CompositionSwapChain.h>
 
 using oxygen::windows::ThrowOnFailed;
 
 namespace oxygen::graphics::d3d12::detail {
+
+namespace {
+  // Presents never block on frame latency; the engine waits on the latency
+  // object once per frame instead (see WaitForPresentSlot).
+  constexpr UINT kSwapChainFlags
+    = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+  // Two queued frames let the CPU record the next frame while one waits for
+  // vblank, without letting latency grow further.
+  constexpr UINT kMaxFrameLatency = 2;
+  // Bounds the wait when DWM stops retiring frames (minimized or hidden).
+  constexpr DWORD kPresentSlotTimeoutMs = 100;
+} // namespace
 
 CompositionSwapChain::CompositionSwapChain(dx::ICommandQueue* command_queue,
   const DXGI_FORMAT format, Graphics* graphics)
@@ -43,8 +55,23 @@ auto CompositionSwapChain::Present() const -> void
   if (swap_chain_) {
     DLOG_F(3, "CompositionSwapChain::Present swap_chain={} current_index={}",
       fmt::ptr(swap_chain_), current_back_buffer_index_);
-    ThrowOnFailed(swap_chain_->Present(1, 0));
+    const UINT sync_interval = graphics_->IsVSyncEnabled() ? 1U : 0U;
+    ThrowOnFailed(swap_chain_->Present(sync_interval, 0));
     current_back_buffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
+  }
+}
+
+auto CompositionSwapChain::WaitForPresentSlot() const -> void
+{
+  if (frame_latency_waitable_ == nullptr) {
+    return;
+  }
+  const auto result
+    = WaitForSingleObjectEx(frame_latency_waitable_, kPresentSlotTimeoutMs, 0);
+  if (result == WAIT_TIMEOUT) {
+    DLOG_F(2,
+      "CompositionSwapChain::WaitForPresentSlot timed out swap_chain={}",
+      fmt::ptr(swap_chain_));
   }
 }
 
@@ -66,7 +93,7 @@ auto CompositionSwapChain::CreateSwapChain() -> void
   swap_chain_desc.Scaling = DXGI_SCALING_STRETCH;
   swap_chain_desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
   swap_chain_desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
-  swap_chain_desc.Flags = 0;
+  swap_chain_desc.Flags = kSwapChainFlags;
 
   Microsoft::WRL::ComPtr<dx::ISwapChainFactoryOutput> factory_output;
   ThrowOnFailed(graphics_->GetFactory()->CreateSwapChainForComposition(
@@ -74,8 +101,11 @@ auto CompositionSwapChain::CreateSwapChain() -> void
 
   Microsoft::WRL::ComPtr<dx::ISwapChain> swap_chain;
   ThrowOnFailed(factory_output.As(&swap_chain),
-    "The engine swap-chain interface is required for native back-buffer tracking");
+    "The engine swap-chain interface is required for native back-buffer "
+    "tracking");
   swap_chain_ = swap_chain.Detach();
+  ThrowOnFailed(swap_chain_->SetMaximumFrameLatency(kMaxFrameLatency));
+  frame_latency_waitable_ = swap_chain_->GetFrameLatencyWaitableObject();
 
   current_back_buffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
 }
@@ -99,8 +129,8 @@ auto CompositionSwapChain::Resize(uint32_t width, uint32_t height) -> void
     const auto target_width = std::max<uint32_t>(1u, width);
     const auto target_height = std::max<uint32_t>(1u, height);
 
-    ThrowOnFailed(swap_chain_->ResizeBuffers(
-      frame::kFramesInFlight.get(), target_width, target_height, format_, 0));
+    ThrowOnFailed(swap_chain_->ResizeBuffers(frame::kFramesInFlight.get(),
+      target_width, target_height, format_, kSwapChainFlags));
 
     // DXGI resets the current back buffer to zero after ResizeBuffers. Keep the
     // cached index in sync so we target the correct render target on the next
@@ -211,6 +241,11 @@ auto CompositionSwapChain::ReleaseRenderTargets(bool immediate) -> void
 auto CompositionSwapChain::ReleaseSwapChain() -> void
 {
   ReleaseRenderTargets();
+
+  if (frame_latency_waitable_ != nullptr) {
+    CloseHandle(frame_latency_waitable_);
+    frame_latency_waitable_ = nullptr;
+  }
 
   if (swap_chain_ == nullptr) {
     return;

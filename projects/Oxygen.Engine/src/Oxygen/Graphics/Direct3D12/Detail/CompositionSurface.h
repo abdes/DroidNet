@@ -6,11 +6,10 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <type_traits>
-
-#include <algorithm>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
@@ -83,6 +82,11 @@ public:
     // Present should not apply pending resizes. Resize application is an
     // explicit engine-module responsibility executed at frame start.
     GetComponent<CompositionSwapChain>().Present();
+  }
+
+  auto WaitForPresentSlot() const -> void override
+  {
+    GetComponent<CompositionSwapChain>().WaitForPresentSlot();
   }
 
   void Resize() override

@@ -71,6 +71,10 @@ public:
   //! Present the current frame if the surface supports it.
   virtual auto Present() const -> void = 0;
 
+  //! Block until the surface can accept another present within its frame
+  //! latency. Surfaces that do not pace presentation return immediately.
+  virtual auto WaitForPresentSlot() const -> void { }
+
   [[nodiscard]] virtual auto Width() const -> uint32_t = 0;
   [[nodiscard]] virtual auto Height() const -> uint32_t = 0;
 
