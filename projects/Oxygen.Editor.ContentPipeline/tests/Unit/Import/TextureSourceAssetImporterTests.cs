@@ -170,6 +170,30 @@ public sealed class TextureSourceAssetImporterTests
         }
     }
 
+    [TestMethod]
+    public void CrossLayoutRejectsAnImageThatIsNotExactlyItsFaceGrid()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "OxygenTextureImport", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var image = Path.Combine(root, "diagram.hdr");
+            File.WriteAllText(image, "#?RADIANCE\n\n-Y 451 +X 599\n");
+            var request = new TextureSourceImportRequest(
+                CreateProject(root), image, new Uri("asset:///Content/Sky"), "Diagram", "hdr_env", "linear", "rgba16f")
+            {
+                Cube = new TextureCubeImport(CubeLayout.HorizontalCross),
+            };
+
+            var resolve = () => TextureSourceImportTarget.Resolve(request);
+            _ = resolve.Should().Throw<ArgumentException>().WithMessage("A horizontal cross must be exactly 4 square faces wide and 3 high*599 × 451*");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static ProjectContext CreateProject(string root) => new()
     {
         ProjectId = Guid.NewGuid(),

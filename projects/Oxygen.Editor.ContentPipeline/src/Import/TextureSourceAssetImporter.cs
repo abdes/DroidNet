@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Oxygen.Editor.Projects;
@@ -409,6 +410,10 @@ public sealed record TextureSourceImportTarget(string MountName, string VirtualP
         {
             ValidateCubeFaces(request.SourcePath);
         }
+        else if (request.Cube is { } cube)
+        {
+            ValidateLayoutFits(request.SourcePath, cube.Layout);
+        }
 
         var extension = Path.GetExtension(request.SourcePath).ToLowerInvariant();
         var imagePaths = (sixFaces ? TextureSourceAssetImporter.FaceSuffixes : [string.Empty])
@@ -421,6 +426,30 @@ public sealed record TextureSourceImportTarget(string MountName, string VirtualP
         var virtualPath = "/" + mount.Name + (virtualDirectory.Length == 0 ? string.Empty : "/" + virtualDirectory) + "/" + request.Name + ".otex";
         var assetPath = string.Join('/', new[] { mount.Name }.Concat(parts.Skip(1)).Append(descriptorName).Select(Uri.EscapeDataString));
         return new(mount.Name, virtualPath, imagePath, descriptorPath, new Uri(AssetUris.Scheme + ":///" + assetPath)) { ImagePaths = imagePaths };
+    }
+
+    // A strip or cross is cut into faces without resampling, so the image must be exactly the
+    // grid of square faces; a panorama is resampled and fits any size.
+    private static void ValidateLayoutFits(string sourcePath, CubeLayout layout)
+    {
+        if (layout == CubeLayout.Panorama || ImageDimensions.TryRead(sourcePath) is not { } size
+            || TextureSourceAssetImporter.DetectCubeLayout(size.Width, size.Height) == layout)
+        {
+            return;
+        }
+
+        var (columns, rows, name) = layout switch
+        {
+            CubeLayout.HorizontalStrip => (6, 1, "A horizontal strip"),
+            CubeLayout.VerticalStrip => (1, 6, "A vertical strip"),
+            CubeLayout.HorizontalCross => (4, 3, "A horizontal cross"),
+            _ => (3, 4, "A vertical cross"),
+        };
+        throw new ArgumentException(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"{name} must be exactly {columns} square faces wide and {rows} high, with no margins (for example {columns * 256} × {rows * 256}); this image is {size.Width} × {size.Height}."),
+            nameof(sourcePath));
     }
 
     private static void ValidateCubeFaces(string sourcePath)
