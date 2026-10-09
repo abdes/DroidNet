@@ -155,6 +155,14 @@ public sealed partial class LocalFogVolumeViewModel : ComponentPropertyEditor, I
         this.SubmitPerTarget(this.albedoBinding.Id, _ => color);
     }
 
+    /// <summary>Authors the complete emitted luminance in one edit.</summary>
+    /// <param name="color">The emitted luminance.</param>
+    public void SetEmissive(Vector3 color)
+    {
+        this.SetDisplayColors(new(this.AlbedoR, this.AlbedoG, this.AlbedoB), color);
+        this.SubmitPerTarget(this.emissiveBinding.Id, _ => color);
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {

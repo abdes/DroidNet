@@ -168,6 +168,25 @@ public class SceneTests
     }
 
     [TestMethod]
+    public async Task Deserialize_SceneSavedWithoutFog_LoadsDefaultFog()
+    {
+        const string json = """
+            {
+              "Id": "11111111-1111-1111-1111-111111111111",
+              "Name": "Before Fog",
+              "RootNodes": [],
+              "Environment": { "AtmosphereEnabled": true }
+            }
+            """;
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        var serializer = new SceneSerializer(this.ExampleProject);
+
+        var scene = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
+
+        _ = scene.Environment.Fog.Should().Be(new FogEnvironmentData());
+    }
+
+    [TestMethod]
     public async Task Fog_RoundTripsThroughSaveAndLoad()
     {
         var fog = new FogEnvironmentData

@@ -63,9 +63,17 @@ public sealed partial class FogSectionView
 
     private void OnRgbColorPicked(object? sender, InspectorRgbColorPickedEventArgs args)
     {
-        if (args.Owner is SceneEnvironmentEditOwner owner)
+        var property = (sender as FrameworkElement)?.Tag switch
         {
-            owner.Apply(SceneFogFields.VolumetricAlbedoRgb, args.Color);
+            "InscatteringLuminanceRgb" => SceneFogFields.InscatteringLuminanceRgb,
+            "DirectionalInscatteringLuminanceRgb" => SceneFogFields.DirectionalInscatteringLuminanceRgb,
+            "VolumetricAlbedoRgb" => SceneFogFields.VolumetricAlbedoRgb,
+            "VolumetricEmissiveRgb" => SceneFogFields.VolumetricEmissiveRgb,
+            _ => null,
+        };
+        if (property is not null && args.Owner is SceneEnvironmentEditOwner owner)
+        {
+            owner.Apply(property, args.Color);
         }
     }
 

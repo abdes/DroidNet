@@ -105,7 +105,8 @@
             <fields:InspectorRgbField
                 Blue="{x:Bind ViewModel.EmissiveB, Mode=TwoWay}"
                 ChannelAutomationName="Emissive, luminance RGB"
-                DiagnosticSpacing="2"
+                ColorPicked="OnEmissivePicked"
+                EditOwner="{x:Bind ViewModel, Mode=OneWay}"
                 EditSessionCompleted="VectorEditCompleted"
                 EditSessionStarted="VectorEditStarted"
                 ErrorText="{x:Bind ViewModel.EmissiveDiagnostic.Message, Mode=OneWay}"
@@ -113,6 +114,7 @@
                 Green="{x:Bind ViewModel.EmissiveG, Mode=TwoWay}"
                 HasError="{x:Bind ViewModel.EmissiveDiagnostic.HasError, Mode=OneWay}"
                 Label="Emissive"
+                PickerAutomationName="Pick fog emissive color"
                 Qualifier="Luminance RGB"
                 Red="{x:Bind ViewModel.EmissiveR, Mode=TwoWay}"
                 Tag="Emissive" />

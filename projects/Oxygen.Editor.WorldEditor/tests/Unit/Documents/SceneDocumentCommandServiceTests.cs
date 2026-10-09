@@ -916,6 +916,33 @@ public sealed partial class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
+    public async Task EditSceneEnvironmentPropertiesAsync_WhenFogPropertiesChange_PersistsSyncsAndUndoes()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var context = CreateContext(scene);
+        var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal));
+        SceneEnvironmentData? syncedEnvironment = null;
+        _ = fixture.Sync
+            .Setup(sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()))
+            .Callback<Scene, SceneEnvironmentData, SceneSyncRevision, CancellationToken>((_, environment, _, _) => syncedEnvironment = environment)
+            .ReturnsAsync(accepted);
+        var edit = new PropertyEdit();
+        edit.Set(SceneFogFields.Enabled, true);
+        edit.Set(SceneFogFields.Density, 0.02f);
+        edit.Set(SceneFogFields.VolumetricAlbedoRgb, new Vector3(0.5f, 0.6f, 0.7f));
+
+        var result = await fixture.Sut.EditSceneEnvironmentPropertiesAsync(context, edit, "Edit Environment", EditSessionToken.OneShot).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        var expected = new FogEnvironmentData { Enabled = true, Density = 0.02f, VolumetricAlbedoRgb = new Vector3(0.5f, 0.6f, 0.7f) };
+        _ = scene.Environment.Fog.Should().Be(expected);
+        _ = syncedEnvironment!.Fog.Should().Be(expected);
+        await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = scene.Environment.Fog.Should().Be(new FogEnvironmentData());
+    }
+
+    [TestMethod]
     public async Task EditSceneEnvironmentPropertiesAsync_WhenSkyPropertiesChange_PersistsAndSyncs()
     {
         var fixture = CreateFixture();

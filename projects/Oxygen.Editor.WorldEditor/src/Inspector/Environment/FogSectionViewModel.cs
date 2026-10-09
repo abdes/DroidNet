@@ -143,8 +143,17 @@ public sealed partial class FogSectionViewModel : ObservableObject
     /// <summary>Gets the borrowed scene edit owner.</summary>
     public SceneEnvironmentEditOwner EditOwner { get; }
 
-    /// <summary>Gets the authored linear albedo as one color.</summary>
+    /// <summary>Gets the authored InscatteringLuminance channels as one linear color.</summary>
+    public Vector3 InscatteringLuminanceColor => new(this.InscatteringLuminanceR, this.InscatteringLuminanceG, this.InscatteringLuminanceB);
+
+    /// <summary>Gets the authored DirectionalInscatteringLuminance channels as one linear color.</summary>
+    public Vector3 DirectionalInscatteringLuminanceColor => new(this.DirectionalInscatteringLuminanceR, this.DirectionalInscatteringLuminanceG, this.DirectionalInscatteringLuminanceB);
+
+    /// <summary>Gets the authored VolumetricAlbedo channels as one linear color.</summary>
     public Vector3 VolumetricAlbedoColor => new(this.VolumetricAlbedoR, this.VolumetricAlbedoG, this.VolumetricAlbedoB);
+
+    /// <summary>Gets the authored VolumetricEmissive channels as one linear color.</summary>
+    public Vector3 VolumetricEmissiveColor => new(this.VolumetricEmissiveR, this.VolumetricEmissiveG, this.VolumetricEmissiveB);
 
     /// <summary>Gets feedback for whether the scene renders fog.</summary>
     public InspectorFieldDiagnostic EnabledDiagnostic => this.Diagnostic(SceneFogFields.Enabled.Id);
@@ -241,11 +250,22 @@ public sealed partial class FogSectionViewModel : ObservableObject
 
     /// <summary>Authors the complete linear color through the scene edit owner.</summary>
     /// <param name="color">The authored linear color.</param>
+    public void SetInscatteringLuminanceColor(Vector3 color) => this.EditOwner.Apply(SceneFogFields.InscatteringLuminanceRgb, color);
+
+    /// <summary>Authors the complete linear color through the scene edit owner.</summary>
+    /// <param name="color">The authored linear color.</param>
+    public void SetDirectionalInscatteringLuminanceColor(Vector3 color) => this.EditOwner.Apply(SceneFogFields.DirectionalInscatteringLuminanceRgb, color);
+
+    /// <summary>Authors the complete linear color through the scene edit owner.</summary>
+    /// <param name="color">The authored linear color.</param>
     public void SetVolumetricAlbedoColor(Vector3 color) => this.EditOwner.Apply(SceneFogFields.VolumetricAlbedoRgb, color);
+
+    /// <summary>Authors the complete linear color through the scene edit owner.</summary>
+    /// <param name="color">The authored linear color.</param>
+    public void SetVolumetricEmissiveColor(Vector3 color) => this.EditOwner.Apply(SceneFogFields.VolumetricEmissiveRgb, color);
 
     /// <summary>Refreshes display adapters under the parent's model-refresh guard.</summary>
     /// <param name="value">The authored fog snapshot.</param>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "MA0051:Method is too long", Justification = "fields staying together make more sense")]
     internal void Refresh(FogEnvironmentData value)
     {
         this.Enabled = value.Enabled;
@@ -289,7 +309,10 @@ public sealed partial class FogSectionViewModel : ObservableObject
         this.Holdout = value.Holdout;
         this.VisibleInReflectionCaptures = value.VisibleInReflectionCaptures;
         this.VisibleInRealTimeSkyCaptures = value.VisibleInRealTimeSkyCaptures;
+        this.OnPropertyChanged(nameof(this.InscatteringLuminanceColor));
+        this.OnPropertyChanged(nameof(this.DirectionalInscatteringLuminanceColor));
         this.OnPropertyChanged(nameof(this.VolumetricAlbedoColor));
+        this.OnPropertyChanged(nameof(this.VolumetricEmissiveColor));
     }
 
     partial void OnEnabledChanged(bool value) => this.EditOwner.Apply(SceneFogFields.Enabled, value);
@@ -304,11 +327,11 @@ public sealed partial class FogSectionViewModel : ObservableObject
 
     partial void OnMaxOpacityChanged(float value) => this.EditOwner.Apply(SceneFogFields.MaxOpacity, value);
 
-    partial void OnInscatteringLuminanceRChanged(float value) => this.EditOwner.Apply(SceneFogFields.InscatteringLuminanceRgb, new Vector3(value, this.InscatteringLuminanceG, this.InscatteringLuminanceB));
+    partial void OnInscatteringLuminanceRChanged(float value) => this.ApplyInscatteringLuminance(new(value, this.InscatteringLuminanceG, this.InscatteringLuminanceB));
 
-    partial void OnInscatteringLuminanceGChanged(float value) => this.EditOwner.Apply(SceneFogFields.InscatteringLuminanceRgb, new Vector3(this.InscatteringLuminanceR, value, this.InscatteringLuminanceB));
+    partial void OnInscatteringLuminanceGChanged(float value) => this.ApplyInscatteringLuminance(new(this.InscatteringLuminanceR, value, this.InscatteringLuminanceB));
 
-    partial void OnInscatteringLuminanceBChanged(float value) => this.EditOwner.Apply(SceneFogFields.InscatteringLuminanceRgb, new Vector3(this.InscatteringLuminanceR, this.InscatteringLuminanceG, value));
+    partial void OnInscatteringLuminanceBChanged(float value) => this.ApplyInscatteringLuminance(new(this.InscatteringLuminanceR, this.InscatteringLuminanceG, value));
 
     partial void OnSkyAmbientScaleRChanged(float value) => this.EditOwner.Apply(SceneFogFields.SkyAmbientScaleRgb, new Vector3(value, this.SkyAmbientScaleG, this.SkyAmbientScaleB));
 
@@ -328,11 +351,11 @@ public sealed partial class FogSectionViewModel : ObservableObject
 
     partial void OnCutoffDistanceMetersChanged(float value) => this.EditOwner.Apply(SceneFogFields.CutoffDistanceMeters, value);
 
-    partial void OnDirectionalInscatteringLuminanceRChanged(float value) => this.EditOwner.Apply(SceneFogFields.DirectionalInscatteringLuminanceRgb, new Vector3(value, this.DirectionalInscatteringLuminanceG, this.DirectionalInscatteringLuminanceB));
+    partial void OnDirectionalInscatteringLuminanceRChanged(float value) => this.ApplyDirectionalInscatteringLuminance(new(value, this.DirectionalInscatteringLuminanceG, this.DirectionalInscatteringLuminanceB));
 
-    partial void OnDirectionalInscatteringLuminanceGChanged(float value) => this.EditOwner.Apply(SceneFogFields.DirectionalInscatteringLuminanceRgb, new Vector3(this.DirectionalInscatteringLuminanceR, value, this.DirectionalInscatteringLuminanceB));
+    partial void OnDirectionalInscatteringLuminanceGChanged(float value) => this.ApplyDirectionalInscatteringLuminance(new(this.DirectionalInscatteringLuminanceR, value, this.DirectionalInscatteringLuminanceB));
 
-    partial void OnDirectionalInscatteringLuminanceBChanged(float value) => this.EditOwner.Apply(SceneFogFields.DirectionalInscatteringLuminanceRgb, new Vector3(this.DirectionalInscatteringLuminanceR, this.DirectionalInscatteringLuminanceG, value));
+    partial void OnDirectionalInscatteringLuminanceBChanged(float value) => this.ApplyDirectionalInscatteringLuminance(new(this.DirectionalInscatteringLuminanceR, this.DirectionalInscatteringLuminanceG, value));
 
     partial void OnDirectionalInscatteringExponentChanged(float value) => this.EditOwner.Apply(SceneFogFields.DirectionalInscatteringExponent, value);
 
@@ -348,11 +371,11 @@ public sealed partial class FogSectionViewModel : ObservableObject
 
     partial void OnVolumetricAlbedoBChanged(float value) => this.ApplyVolumetricAlbedo(new(this.VolumetricAlbedoR, this.VolumetricAlbedoG, value));
 
-    partial void OnVolumetricEmissiveRChanged(float value) => this.EditOwner.Apply(SceneFogFields.VolumetricEmissiveRgb, new Vector3(value, this.VolumetricEmissiveG, this.VolumetricEmissiveB));
+    partial void OnVolumetricEmissiveRChanged(float value) => this.ApplyVolumetricEmissive(new(value, this.VolumetricEmissiveG, this.VolumetricEmissiveB));
 
-    partial void OnVolumetricEmissiveGChanged(float value) => this.EditOwner.Apply(SceneFogFields.VolumetricEmissiveRgb, new Vector3(this.VolumetricEmissiveR, value, this.VolumetricEmissiveB));
+    partial void OnVolumetricEmissiveGChanged(float value) => this.ApplyVolumetricEmissive(new(this.VolumetricEmissiveR, value, this.VolumetricEmissiveB));
 
-    partial void OnVolumetricEmissiveBChanged(float value) => this.EditOwner.Apply(SceneFogFields.VolumetricEmissiveRgb, new Vector3(this.VolumetricEmissiveR, this.VolumetricEmissiveG, value));
+    partial void OnVolumetricEmissiveBChanged(float value) => this.ApplyVolumetricEmissive(new(this.VolumetricEmissiveR, this.VolumetricEmissiveG, value));
 
     partial void OnVolumetricExtinctionScaleChanged(float value) => this.EditOwner.Apply(SceneFogFields.VolumetricExtinctionScale, value);
 
@@ -376,9 +399,27 @@ public sealed partial class FogSectionViewModel : ObservableObject
 
     private InspectorFieldDiagnostic Diagnostic(PropertyId property) => this.EditOwner.Diagnostics.Get(property);
 
+    private void ApplyInscatteringLuminance(Vector3 color)
+    {
+        this.OnPropertyChanged(nameof(this.InscatteringLuminanceColor));
+        this.EditOwner.Apply(SceneFogFields.InscatteringLuminanceRgb, color);
+    }
+
+    private void ApplyDirectionalInscatteringLuminance(Vector3 color)
+    {
+        this.OnPropertyChanged(nameof(this.DirectionalInscatteringLuminanceColor));
+        this.EditOwner.Apply(SceneFogFields.DirectionalInscatteringLuminanceRgb, color);
+    }
+
     private void ApplyVolumetricAlbedo(Vector3 color)
     {
         this.OnPropertyChanged(nameof(this.VolumetricAlbedoColor));
         this.EditOwner.Apply(SceneFogFields.VolumetricAlbedoRgb, color);
+    }
+
+    private void ApplyVolumetricEmissive(Vector3 color)
+    {
+        this.OnPropertyChanged(nameof(this.VolumetricEmissiveColor));
+        this.EditOwner.Apply(SceneFogFields.VolumetricEmissiveRgb, color);
     }
 }

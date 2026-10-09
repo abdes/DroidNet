@@ -241,6 +241,7 @@ public sealed partial class SceneDocumentCommandService
         var after = target.Value;
         var postProcessEdited = edit.Ids.Any(static id => id.JsonPointer.StartsWith("/post_process/", StringComparison.Ordinal));
         var skyEdited = edit.Ids.Any(static id => id.JsonPointer.StartsWith("/sky_atmosphere/", StringComparison.Ordinal));
+        var fogEdited = edit.Ids.Any(static id => id.JsonPointer.StartsWith("/fog/", StringComparison.Ordinal));
 
         var atmosphereEnabled = edit.Contains(SceneEnvironment.AtmosphereEnabled.Id)
             ? OptionalEditValues.Supplied<bool>(after.AtmosphereEnabled)
@@ -254,6 +255,9 @@ public sealed partial class SceneDocumentCommandService
         var postProcess = postProcessEdited
             ? OptionalEditValues.Supplied<PostProcessEnvironmentData>(after.PostProcess)
             : OptionalEditValues.Unspecified<PostProcessEnvironmentData>();
+        var fog = fogEdited
+            ? OptionalEditValues.Supplied<FogEnvironmentData>(after.Fog)
+            : OptionalEditValues.Unspecified<FogEnvironmentData>();
 
         return new SceneEnvironmentEditConversion(
             new SceneEnvironmentEdit(
@@ -264,7 +268,8 @@ public sealed partial class SceneDocumentCommandService
                 OptionalEditValues.Unspecified<ToneMappingMode>(),
                 backgroundColor,
                 skyAtmosphere,
-                postProcess),
+                postProcess,
+                fog),
             Result: null);
 
         static SceneEnvironmentEdit EmptyEnvironmentEdit()

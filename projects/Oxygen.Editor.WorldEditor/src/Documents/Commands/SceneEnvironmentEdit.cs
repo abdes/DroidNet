@@ -18,6 +18,7 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// <param name="BackgroundColor">Optional linear background color.</param>
 /// <param name="SkyAtmosphere">Optional sky atmosphere settings.</param>
 /// <param name="PostProcess">Optional post-process settings.</param>
+/// <param name="Fog">Optional height fog and volumetric fog settings.</param>
 public sealed record SceneEnvironmentEdit(
     OptionalEditValue<bool> AtmosphereEnabled,
     OptionalEditValue<ExposureMode> ExposureMode,
@@ -26,4 +27,5 @@ public sealed record SceneEnvironmentEdit(
     OptionalEditValue<ToneMappingMode> ToneMapping,
     OptionalEditValue<Vector3> BackgroundColor,
     OptionalEditValue<SkyAtmosphereEnvironmentData> SkyAtmosphere = default,
-    OptionalEditValue<PostProcessEnvironmentData> PostProcess = default);
+    OptionalEditValue<PostProcessEnvironmentData> PostProcess = default,
+    OptionalEditValue<FogEnvironmentData> Fog = default);

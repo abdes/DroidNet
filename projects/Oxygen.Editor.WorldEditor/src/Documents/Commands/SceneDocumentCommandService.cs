@@ -777,7 +777,8 @@ public sealed partial class SceneDocumentCommandService(
            edit.ToneMapping.HasValue ||
            edit.BackgroundColor.HasValue ||
            edit.SkyAtmosphere.HasValue ||
-           edit.PostProcess.HasValue;
+           edit.PostProcess.HasValue ||
+           edit.Fog.HasValue;
 
     private static T Get<T>(OptionalEditValue<T> optional) => optional.Value!;
 
@@ -1131,6 +1132,7 @@ public sealed partial class SceneDocumentCommandService(
             PostProcess = postProcess,
             BackgroundColor = edit.BackgroundColor.HasValue ? Get(edit.BackgroundColor) : current.BackgroundColor,
             SkyAtmosphere = edit.SkyAtmosphere.HasValue ? SanitizeSkyAtmosphere(Get(edit.SkyAtmosphere)) : current.SkyAtmosphere ?? new(),
+            Fog = edit.Fog.HasValue ? Get(edit.Fog) : current.Fog ?? new(),
         };
     }
 

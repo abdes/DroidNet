@@ -24,6 +24,14 @@ public sealed partial class LocalFogVolumeView
         }
     }
 
+    private void OnEmissivePicked(object? sender, InspectorRgbColorPickedEventArgs args)
+    {
+        if (args.Owner is LocalFogVolumeViewModel model)
+        {
+            model.SetEmissive(args.Color);
+        }
+    }
+
     private void NumberEditStarted(object? sender, NumberBoxEditSessionEventArgs args)
     {
         if (sender is FrameworkElement { Tag: string field })

@@ -169,6 +169,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
         {
             SkyAtmosphere = environment.SkyAtmosphere ?? new(),
             PostProcess = environment.PostProcess ?? new(),
+            Fog = environment.Fog ?? new(),
         };
     }
 
