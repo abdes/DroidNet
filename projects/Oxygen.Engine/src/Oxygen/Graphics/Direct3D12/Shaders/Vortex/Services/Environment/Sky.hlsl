@@ -166,6 +166,9 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
             * max(env_data.sky_sphere.intensity, 0.0f);
         CheckHdrStoreRange(float4(sky_color, 1.0), 7u,
             LoadViewFrameBindings(bindless_view_frame_bindings_slot).exposure_status_uav, 0u, 1.0);
+        // The store-range check above records a non-finite texel; the view
+        // shows it black rather than letting Inf or NaN reach exposure.
+        if (!all(isfinite(sky_color))) sky_color = 0.0.xxx;
         sky_color = (max(sky_color, 0.0.xxx) * height_fog.a + height_fog.rgb) * view_pre_exposure;
         CheckHdrStoreRange(float4(sky_color, 1.0), 7u,
             LoadViewFrameBindings(bindless_view_frame_bindings_slot).exposure_status_uav, 0u, view_pre_exposure);
