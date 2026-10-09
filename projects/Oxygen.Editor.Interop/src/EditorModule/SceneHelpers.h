@@ -29,10 +29,12 @@ namespace oxygen::interop::module {
     kPointLight,
     kSpotLight,
     kCamera,
+    kLocalFogVolume,
   };
 
-  //! A light or camera the viewport draws an icon and, when selected, a
-  //! helper for. Editor overlay data, never authored or cooked.
+  //! A light, camera or local fog volume the viewport draws an icon and,
+  //! when selected, a helper for. Editor overlay data, never authored or
+  //! cooked.
   struct SceneHelperNode {
     UuidKey id {};
     SceneHelperKind kind { SceneHelperKind::kPointLight };
@@ -42,7 +44,7 @@ namespace oxygen::interop::module {
     glm::vec3 direction { 0.0F, -1.0F, 0.0F };
     //! Linear light colour; white for cameras.
     glm::vec3 color { 1.0F };
-    //! Metres; point and spot lights.
+    //! Metres; point and spot lights' range, a local fog volume's radius.
     float range { 0.0F };
     //! Half angles in radians; spot lights.
     float inner_cone { 0.0F };
@@ -192,7 +194,8 @@ namespace oxygen::interop::module {
 
   //! Draws the selected nodes' helpers into the scene layer: a camera's
   //! viewing volume and frame, a directional light's arrow, a point light's
-  //! range sphere and a spot light's cones, with the editable handles.
+  //! range sphere, a spot light's cones and a local fog volume's sphere,
+  //! with the editable handles.
   void BuildSelectedHelpers(const GizmoCamera& camera,
     std::span<const SceneHelperNode> nodes, const HelperVisual& visual,
     vortex::ViewOverlay& overlay);

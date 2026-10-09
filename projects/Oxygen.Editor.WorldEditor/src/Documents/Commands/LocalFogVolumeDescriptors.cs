@@ -27,14 +27,14 @@ internal sealed class LocalFogVolumeDescriptors
             engineCommandKey: "local_fog_volume.enabled");
         this.RadialFogExtinctionDescriptor = FloatDescriptor(
             "/radial_fog_extinction",
-            "Radial Extinction",
+            "Density",
             static volume => volume.RadialFogExtinction,
             static (volume, value) => volume.RadialFogExtinction = value,
             minimum: 0f,
             maximum: null);
         this.HeightFogExtinctionDescriptor = FloatDescriptor(
             "/height_fog_extinction",
-            "Height Extinction",
+            "Height Density",
             static volume => volume.HeightFogExtinction,
             static (volume, value) => volume.HeightFogExtinction = value,
             minimum: 0f,

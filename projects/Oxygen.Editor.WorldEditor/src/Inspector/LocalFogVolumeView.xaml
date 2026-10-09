@@ -32,9 +32,10 @@
                 FontSize="14"
                 HasError="{x:Bind ViewModel.RadialFogExtinctionDiagnostic.HasError, Mode=OneWay}"
                 IsMixed="{x:Bind ViewModel.RadialFogExtinction.IsMixed, Mode=OneWay}"
-                Label="Radial extinction"
+                Label="Density"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.RadialFogExtinction.Value, Mode=TwoWay}"
+                Qualifier="1/m"
                 Tag="RadialFogExtinction" />
             <editorcontrols:InspectorNumberField
                 CardStyle="{StaticResource ScenePropertyCardStyle}"
@@ -44,9 +45,10 @@
                 FontSize="14"
                 HasError="{x:Bind ViewModel.HeightFogExtinctionDiagnostic.HasError, Mode=OneWay}"
                 IsMixed="{x:Bind ViewModel.HeightFogExtinction.IsMixed, Mode=OneWay}"
-                Label="Height extinction"
+                Label="Height density"
                 NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.HeightFogExtinction.Value, Mode=TwoWay}"
+                Qualifier="1/m"
                 Tag="HeightFogExtinction" />
             <editorcontrols:InspectorNumberField
                 CardStyle="{StaticResource ScenePropertyCardStyle}"

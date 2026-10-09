@@ -44,7 +44,7 @@ public sealed partial class LocalFogVolumeComponent : GameComponent
         set => _ = this.SetProperty(ref this.enabled, value);
     }
 
-    /// <summary>Gets or sets the extinction at the volume's center, fading to zero at its edge.</summary>
+    /// <summary>Gets or sets the fog density: extinction per metre at the volume's center, fading to zero at its edge.</summary>
     public float RadialFogExtinction
     {
         get => this.radialFogExtinction;

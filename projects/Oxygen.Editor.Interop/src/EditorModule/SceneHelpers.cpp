@@ -71,6 +71,7 @@ namespace oxygen::interop::module {
     const glm::vec4 kActiveColor { 1.0F, 0.80F, 0.35F, 1.0F };
     const glm::vec4 kHoverColor { 1.0F, 0.84F, 0.24F, 1.0F };
     const glm::vec4 kCameraColor { 0.86F, 0.88F, 0.91F, 1.0F };
+    const glm::vec4 kFogColor { 0.72F, 0.82F, 0.92F, 1.0F };
     const glm::vec4 kIconBackdrop { 0.07F, 0.08F, 0.09F, 0.55F };
 
     auto IsFinite(const glm::vec3& value) -> bool
@@ -97,6 +98,9 @@ namespace oxygen::interop::module {
     {
       if (node.kind == SceneHelperKind::kCamera) {
         return kCameraColor;
+      }
+      if (node.kind == SceneHelperKind::kLocalFogVolume) {
+        return kFogColor;
       }
       const auto peak = std::max({ node.color.r, node.color.g, node.color.b });
       if (!std::isfinite(peak) || peak <= 1.0e-4F) {
@@ -324,6 +328,15 @@ namespace oxygen::interop::module {
         b.Line(layer, { -7.0F, -1.0F }, { -7.0F, -11.0F }, stroke, color);
         b.Line(layer, { 0.0F, -2.5F }, { 0.0F, -11.5F }, stroke, color);
         b.Line(layer, { 7.0F, -1.0F }, { 7.0F, -11.0F }, stroke, color);
+        break;
+      }
+      case SceneHelperKind::kLocalFogVolume: {
+        // Drifting bands of fog, as on a weather map.
+        b.Line(layer, { -6.0F, 7.0F }, { 9.0F, 7.0F }, stroke, color);
+        b.Line(layer, { -10.0F, 2.5F }, { 6.0F, 2.5F }, stroke, color);
+        b.Line(layer, { -7.0F, -2.0F }, { 10.0F, -2.0F }, stroke, color);
+        b.Line(layer, { -10.0F, -6.5F }, { 4.0F, -6.5F }, stroke, color);
+        b.Line(layer, { -4.0F, -11.0F }, { 8.0F, -11.0F }, stroke, color);
         break;
       }
       case SceneHelperKind::kCamera: {
@@ -785,6 +798,10 @@ namespace oxygen::interop::module {
         break;
       case SceneHelperKind::kCamera:
         AddCameraHelper(overlay.scene, node, color, width);
+        break;
+      case SceneHelperKind::kLocalFogVolume:
+        // The volume's sphere; it is sized by the node's scale, not a handle.
+        AddPointHelper(overlay.scene, camera, node, color, width);
         break;
       }
       if (!node.editable) {

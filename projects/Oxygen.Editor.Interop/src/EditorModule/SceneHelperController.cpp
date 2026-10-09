@@ -19,6 +19,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
@@ -197,6 +198,15 @@ namespace oxygen::interop::module {
         helper.color = sun->get().Common().color_rgb;
       } else if (node.HasCamera()) {
         helper.kind = SceneHelperKind::kCamera;
+      } else if (const auto impl = node.GetImpl(); impl
+        && impl->get().HasComponent<scene::environment::LocalFogVolume>()) {
+        helper.kind = SceneHelperKind::kLocalFogVolume;
+        // The renderer's sphere: the base radius scaled by the largest axis.
+        const auto scale = glm::abs(
+          node.GetTransform().GetWorldScale().value_or(glm::vec3 { 1.0F }));
+        helper.range
+          = scene::environment::LocalFogVolume::kBaseVolumeRadiusMeters
+          * std::max({ scale.x, scale.y, scale.z });
       } else {
         continue;
       }

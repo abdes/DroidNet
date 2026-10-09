@@ -108,14 +108,18 @@ the renderer does not sample them.
 unit scale, sized and positioned by the node's transform. One per node; it is
 added from the node inspector's Add Component menu or created on a new root
 node from the viewport's Quick Add menu. Its fields mirror the native
-`LocalFogVolume` with native defaults: Enabled, Radial and Height Extinction
-(≥0), Height Falloff (≥0), Height Offset (m, relative to the volume center),
+`LocalFogVolume` with native defaults: Enabled, Density (the radial
+extinction, 1/m at the center, fading to zero at the edge) and Height Density
+(1/m, both ≥0), Height Falloff (≥0), Height Offset (m, relative to the center),
 Phase (0 to 0.999), linear Albedo (0–1), Emissive luminance (≥0) and Sort
 Priority (integer, −127 to 127). Edits travel as descriptor-only property
 entries to a native applier that rejects an invalid candidate whole. The
 cooked descriptor lists the volumes in `local_fog_volumes` against their node
 indices, and editor panes request the local fog pass while any enabled volume
-exists, as the runtime does.
+exists, as the runtime does. The viewport draws a fog icon at each volume and,
+while it is selected, its sphere: a silhouette circle and three faint great
+circles at the radius the renderer uses (5 m times the largest world-scale
+axis). The sphere has no handle; the node's scale sizes it.
 
 ## 4. Captured SkyLight and background
 

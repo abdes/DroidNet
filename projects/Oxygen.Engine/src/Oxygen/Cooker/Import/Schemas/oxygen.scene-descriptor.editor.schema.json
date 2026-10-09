@@ -81,13 +81,13 @@
           "x-editor-renderer": "toggle"
         },
         "radial_fog_extinction": {
-          "x-editor-label": "Radial Extinction",
+          "x-editor-label": "Density",
           "x-editor-group": "Local Fog Volume",
           "x-editor-renderer": "numberbox",
           "x-editor-step": 0.01
         },
         "height_fog_extinction": {
-          "x-editor-label": "Height Extinction",
+          "x-editor-label": "Height Density",
           "x-editor-group": "Local Fog Volume",
           "x-editor-renderer": "numberbox",
           "x-editor-step": 0.01

@@ -302,6 +302,29 @@ public:
   }
 
   [TestMethod]
+  void ALocalFogVolumeDrawsItsSphereWithoutHandles() {
+    const auto camera = FrontCamera();
+    SceneHelperNode fog;
+    fog.id = Id(5);
+    fog.kind = SceneHelperKind::kLocalFogVolume;
+    fog.range = 5.0F;
+    fog.selected = true;
+    fog.editable = true;
+
+    Assert::IsFalse(HelperHandlePosition(camera, fog, HelperHandle::kRange).has_value());
+    ViewOverlay overlay;
+    BuildSelectedHelpers(camera, std::vector { fog }, HelperVisual {}, overlay);
+    Assert::IsFalse(overlay.scene.lines.empty());
+    for (const auto& line : overlay.scene.lines) {
+      Assert::AreEqual(5.0F, glm::length(line.start), 1.0e-3F);
+    }
+
+    ViewOverlay icons;
+    BuildHelperIcons(camera, std::vector { fog }, 1.0F, icons);
+    Assert::IsFalse(icons.scene.lines.empty());
+  }
+
+  [TestMethod]
   void SelectedHelpersDrawOnlyForSelectedNodes() {
     const auto camera = FrontCamera();
     auto node = SpotLight(4.0F, 20.0F, 30.0F);
