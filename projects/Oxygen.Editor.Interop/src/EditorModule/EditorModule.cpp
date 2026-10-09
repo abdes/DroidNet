@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <tuple>
 
 #include <EditorModule/SceneAssetRequests.h>
 
@@ -47,9 +48,13 @@
 #include <Oxygen/OxCo/TaskCancelledException.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Platform/Platform.h>
+#include <Oxygen/Scene/Environment/Fog.h>
+#include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Scene/SceneTraversal.h>
+#include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneCameraViewResolver.h>
 
@@ -96,6 +101,37 @@ namespace oxygen::interop::module {
       }
 
       surfaces.clear();
+    }
+
+    //! Whether the scene's height fog renders in the main pass, the rule the
+    //! runtime shell applies.
+    auto IsHeightFogRequested(const scene::Scene* scene) -> bool {
+      if (scene == nullptr || scene->GetEnvironment() == nullptr) {
+        return false;
+      }
+      const auto fog
+        = scene->GetEnvironment()->TryGetSystem<scene::environment::Fog>();
+      return fog && fog->IsEnabled() && fog->GetRenderInMainPass();
+    }
+
+    //! Whether any enabled local fog volume exists; the renderer gathers the
+    //! volumes only for views that request local fog.
+    auto HasEnabledLocalFog(const scene::Scene& scene) -> bool {
+      bool found = false;
+      std::ignore = scene.Traverse().Traverse(
+        [&found](const scene::ConstVisitedNode& visited, const bool dry_run) {
+          if (dry_run || visited.node_impl == nullptr
+            || !visited.node_impl
+                  ->HasComponent<scene::environment::LocalFogVolume>()) {
+            return scene::VisitResult::kContinue;
+          }
+          found = visited.node_impl
+                    ->GetComponent<scene::environment::LocalFogVolume>()
+                    .IsEnabled();
+          return found ? scene::VisitResult::kStop
+                       : scene::VisitResult::kContinue;
+        });
+      return found;
     }
 
     //! Maps a pane's presentation onto the view it publishes. An inset is a
@@ -933,6 +969,9 @@ namespace oxygen::interop::module {
   void EditorModule::DecidePaneRenders(
     vortex::Renderer& renderer, std::vector<PaneCandidate>& panes) {
     bool scene_changed = std::exchange(scene_changed_, false);
+    if (scene_changed) {
+      scene_has_local_fog_ = scene_ && HasEnabledLocalFog(*scene_);
+    }
 
     // Streamed textures, uploaded geometry and refreshed probes change every
     // pane's image without any scene edit.
@@ -1024,8 +1063,8 @@ namespace oxygen::interop::module {
     composition_view.name = config.name;
     composition_view.clear_color = config.clear_color;
     composition_view.with_atmosphere = true;
-    composition_view.with_height_fog = false;
-    composition_view.with_local_fog = false;
+    composition_view.with_height_fog = IsHeightFogRequested(scene_.get());
+    composition_view.with_local_fog = scene_has_local_fog_;
     composition_view.shading_mode = vortex::ShadingMode::kDeferred;
     ApplyRenderOptions(composition_view, view);
     // A camera preview shows what the camera sees, without editor aids.

@@ -405,6 +405,9 @@ namespace oxygen::interop::module {
     //! publication: scene commands, completed loads, cooked content.
     bool scene_changed_ { true };
     std::optional<vortex::ResidentContentRevision> resident_revision_;
+    //! Whether the scene has an enabled local fog volume; refreshed when the
+    //! scene changes, so panes request local fog only when there is some.
+    bool scene_has_local_fog_ { false };
     //! Panes kept without rendering this frame; their surfaces are neither
     //! composed nor presented.
     std::unordered_set<ViewId> held_views_;

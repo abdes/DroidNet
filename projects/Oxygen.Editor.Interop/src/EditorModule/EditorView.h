@@ -398,7 +398,6 @@ namespace oxygen::interop::module {
 
     // Resources
     std::shared_ptr<graphics::Texture> color_texture_;
-    std::shared_ptr<graphics::Texture> depth_texture_;
     std::shared_ptr<graphics::Framebuffer> framebuffer_;
 
     std::weak_ptr<Graphics> graphics_;

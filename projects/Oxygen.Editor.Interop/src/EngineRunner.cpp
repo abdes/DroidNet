@@ -67,24 +67,11 @@ namespace Oxygen::Interop {
       return [owner]() { owner->TrySetResult(true); };
     }
 
-    auto MakeEditorVortexCapabilities(const oxygen::RendererConfig& config)
-      -> oxygen::vortex::CapabilitySet
-    {
-      using oxygen::vortex::RendererCapabilityFamily;
-
-      auto capabilities = RendererCapabilityFamily::kScenePreparation
-        | RendererCapabilityFamily::kGpuUploadAndAssetBinding
-        | RendererCapabilityFamily::kLightingData
-        | RendererCapabilityFamily::kDeferredShading
-        | RendererCapabilityFamily::kEnvironmentLighting
-        | RendererCapabilityFamily::kFinalOutputComposition;
-
-      if (config.enable_imgui) {
-        capabilities |= RendererCapabilityFamily::kDiagnosticsAndProfiling;
-      }
-
-      return capabilities;
-    }
+    // The editor shows what the runtime renders, and its viewports use the
+    // shadow debug views and GPU diagnostics: it takes every capability.
+    // ImGui stays governed by its own renderer setting.
+    constexpr auto kEditorVortexCapabilities
+      = oxygen::vortex::RendererCapabilityFamily::kAll;
 
   } // namespace
 
@@ -213,8 +200,7 @@ namespace Oxygen::Interop {
             shared->queue_strategy.KeyFor(QueueRole::kTransfer).get();
         }
 
-        const auto renderer_capabilities =
-          MakeEditorVortexCapabilities(renderer_config);
+        const auto renderer_capabilities = kEditorVortexCapabilities;
         interop::LogInfoMessage(fmt::format(fmt::runtime(
           "Creating editor Vortex renderer with capabilities: {}"),
           oxygen::vortex::to_string(renderer_capabilities)).c_str());

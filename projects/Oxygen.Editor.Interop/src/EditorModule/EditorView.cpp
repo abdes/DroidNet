@@ -391,8 +391,6 @@ void EditorView::ReleaseResources() {
     auto &reclaimer = gfx->GetDeferredReclaimer();
     if (color_texture_)
       graphics::DeferredObjectRelease(color_texture_, reclaimer);
-    if (depth_texture_)
-      graphics::DeferredObjectRelease(depth_texture_, reclaimer);
     if (framebuffer_)
       graphics::DeferredObjectRelease(framebuffer_, reclaimer);
   }
@@ -439,8 +437,6 @@ void EditorView::ResizeIfNeeded(Graphics& gfx) {
       auto &reclaimer = gfx.GetDeferredReclaimer();
       if (color_texture_)
         graphics::DeferredObjectRelease(color_texture_, reclaimer);
-      if (depth_texture_)
-        graphics::DeferredObjectRelease(depth_texture_, reclaimer);
       if (framebuffer_)
         graphics::DeferredObjectRelease(framebuffer_, reclaimer);
 
@@ -465,19 +461,10 @@ void EditorView::ResizeIfNeeded(Graphics& gfx) {
       color_desc.debug_name = dbg_base + ".Color";
       color_texture_ = gfx.CreateTexture(color_desc);
 
-      graphics::TextureDesc depth_desc = color_desc;
-      depth_desc.format = oxygen::Format::kDepth32;
-      depth_desc.is_shader_resource = false;
-      depth_desc.use_clear_value = true;
-      depth_desc.clear_value = {1.0f, 0.0f, 0.0f, 0.0f};
-      depth_desc.initial_state = oxygen::graphics::ResourceStates::kDepthWrite;
-
-      depth_desc.debug_name = dbg_base + ".Depth";
-      depth_texture_ = gfx.CreateTexture(depth_desc);
-
+      // Vortex renders depth in its own scene textures; the pane receives
+      // only the post-processed color, as runtime views do.
       graphics::FramebufferDesc fb_desc;
       fb_desc.AddColorAttachment(color_texture_);
-      fb_desc.SetDepthAttachment(depth_texture_);
 
       framebuffer_ = gfx.CreateFramebuffer(fb_desc);
 
