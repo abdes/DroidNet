@@ -16,6 +16,12 @@ public sealed class TextureImportDialogView : UserControl
     private readonly TextBox destination;
     private readonly TextBlock outputPath;
     private readonly TextBlock errorText;
+    private readonly ComboBox faceSize;
+    private readonly TextBlock detectedLayout;
+    private readonly StackPanel cubeSettings;
+    private readonly ComboBox intent;
+    private readonly ComboBox colorSpace;
+    private readonly ComboBox format;
     private ContentDialog? dialog;
 
     /// <summary>Initializes the image import form for the reviewed request.</summary>
@@ -25,6 +31,26 @@ public sealed class TextureImportDialogView : UserControl
         this.viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         var content = new StackPanel { MaxWidth = 560, Spacing = 12 };
         content.Children.Add(new TextBlock { Text = viewModel.SourcePath, TextWrapping = TextWrapping.Wrap });
+
+        var shape = new ComboBox { Header = "Shape", ItemsSource = viewModel.Shapes, SelectedItem = viewModel.Shape };
+        shape.SelectionChanged += (_, _) => viewModel.Shape = shape.SelectedItem as string ?? string.Empty;
+        content.Children.Add(shape);
+
+        var layout = new ComboBox { Header = "Cube layout", ItemsSource = viewModel.CubeLayouts, SelectedItem = viewModel.SelectedCubeLayout };
+        layout.SelectionChanged += (_, _) => viewModel.SelectedCubeLayout = layout.SelectedItem as string ?? string.Empty;
+        this.faceSize = new ComboBox { Header = "Face size", ItemsSource = viewModel.FaceSizes, SelectedItem = viewModel.FaceSize };
+        this.faceSize.SelectionChanged += (_, _) => viewModel.FaceSize = this.faceSize.SelectedItem is int size ? size : 0;
+        var cubeRow = new Grid { ColumnSpacing = 8 };
+        cubeRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        cubeRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        cubeRow.Children.Add(layout);
+        Grid.SetColumn(this.faceSize, 1);
+        cubeRow.Children.Add(this.faceSize);
+        this.detectedLayout = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        this.cubeSettings = new StackPanel { Spacing = 4 };
+        this.cubeSettings.Children.Add(cubeRow);
+        this.cubeSettings.Children.Add(this.detectedLayout);
+        content.Children.Add(this.cubeSettings);
 
         var name = new TextBox { Header = "Texture name", Text = viewModel.Name };
         name.TextChanged += (_, _) => viewModel.Name = name.Text;
@@ -42,9 +68,11 @@ public sealed class TextureImportDialogView : UserControl
         destinationRow.Children.Add(browse);
         content.Children.Add(destinationRow);
 
-        var intent = new ComboBox { Header = "Intent", ItemsSource = viewModel.Intents, SelectedItem = viewModel.Intent };
+        this.intent = new ComboBox { Header = "Intent", ItemsSource = viewModel.Intents, SelectedItem = viewModel.Intent };
+        var intent = this.intent;
         intent.SelectionChanged += (_, _) => viewModel.Intent = intent.SelectedItem as string ?? string.Empty;
-        var colorSpace = new ComboBox { Header = "Color space", ItemsSource = viewModel.ColorSpaces, SelectedItem = viewModel.ColorSpace };
+        this.colorSpace = new ComboBox { Header = "Color space", ItemsSource = viewModel.ColorSpaces, SelectedItem = viewModel.ColorSpace };
+        var colorSpace = this.colorSpace;
         colorSpace.SelectionChanged += (_, _) => viewModel.ColorSpace = colorSpace.SelectedItem as string ?? string.Empty;
         var settings = new Grid { ColumnSpacing = 8 };
         settings.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -54,7 +82,8 @@ public sealed class TextureImportDialogView : UserControl
         settings.Children.Add(colorSpace);
         content.Children.Add(settings);
 
-        var format = new ComboBox { Header = "Output format", ItemsSource = viewModel.Formats, SelectedItem = viewModel.Format };
+        this.format = new ComboBox { Header = "Output format", ItemsSource = viewModel.Formats, SelectedItem = viewModel.Format };
+        var format = this.format;
         format.SelectionChanged += (_, _) => viewModel.Format = format.SelectedItem as string ?? string.Empty;
         content.Children.Add(format);
 
@@ -101,6 +130,14 @@ public sealed class TextureImportDialogView : UserControl
     {
         this.outputPath.Text = this.viewModel.OutputVirtualPath;
         this.errorText.Text = this.viewModel.Error;
+        this.cubeSettings.Visibility = this.viewModel.IsCube ? Visibility.Visible : Visibility.Collapsed;
+        this.faceSize.Visibility = this.viewModel.IsPanorama ? Visibility.Visible : Visibility.Collapsed;
+        this.detectedLayout.Text = this.viewModel.DetectedLayoutText;
+
+        // A shape change resets the defaults, which the combo boxes must show.
+        this.intent.SelectedItem = this.viewModel.Intent;
+        this.colorSpace.SelectedItem = this.viewModel.ColorSpace;
+        this.format.SelectedItem = this.viewModel.Format;
         if (this.dialog is null && this.IsLoaded)
         {
             this.dialog = this.FindAscendant<ContentDialog>();

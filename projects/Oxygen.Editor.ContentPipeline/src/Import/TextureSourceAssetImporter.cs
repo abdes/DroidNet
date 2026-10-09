@@ -19,7 +19,7 @@ public static class TextureSourceAssetImporter
 
     private static readonly HashSet<string> Intents = new(StringComparer.Ordinal)
     {
-        "albedo", "normal", "roughness", "metallic", "ao", "orm", "emissive", "opacity", "data", "height",
+        "albedo", "normal", "roughness", "metallic", "ao", "orm", "emissive", "opacity", "data", "height", "hdr_env", "hdr_probe",
     };
 
     private static readonly HashSet<string> ColorSpaces = new(StringComparer.Ordinal)
@@ -75,7 +75,8 @@ public static class TextureSourceAssetImporter
                 Path.GetFileName(target.ImagePath),
                 request.Intent,
                 request.ColorSpace,
-                request.Format);
+                request.Format,
+                CubeSettings.From(request.Cube));
             var descriptorBytes = JsonSerializer.SerializeToUtf8Bytes(descriptor, JsonOptions);
             await using (var output = new FileStream(target.DescriptorPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan))
             {
@@ -108,6 +109,45 @@ public static class TextureSourceAssetImporter
     public static bool IsSupportedImage(string path)
         => !string.IsNullOrWhiteSpace(path) && ImageExtensions.Contains(Path.GetExtension(path));
 
+    /// <summary>Infers how a single image lays out a cube from its aspect ratio.</summary>
+    /// <param name="width">The image width in pixels.</param>
+    /// <param name="height">The image height in pixels.</param>
+    /// <returns>The detected layout, or null when the aspect matches none.</returns>
+    public static CubeLayout? DetectCubeLayout(int width, int height)
+        => width <= 0 || height <= 0 ? null
+            : width == 2 * height ? CubeLayout.Panorama
+            : width == 6 * height ? CubeLayout.HorizontalStrip
+            : height == 6 * width ? CubeLayout.VerticalStrip
+            : width * 3 == height * 4 ? CubeLayout.HorizontalCross
+            : width * 4 == height * 3 ? CubeLayout.VerticalCross
+            : null;
+
+    /// <summary>Gets whether a texture descriptor cooks a cube texture.</summary>
+    /// <param name="descriptorPath">The texture descriptor file.</param>
+    /// <returns><see langword="true"/> when its cube settings produce a cube texture.</returns>
+    public static bool IsCubeDescriptor(string descriptorPath)
+    {
+        try
+        {
+            using var stream = File.OpenRead(descriptorPath);
+            using var document = JsonDocument.Parse(stream);
+            if (!document.RootElement.TryGetProperty("cube", out var cube) || cube.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            return IsTrue(cube, "cubemap") || IsTrue(cube, "equirect_to_cube")
+                || (cube.TryGetProperty("cube_layout", out var layout) && layout.ValueKind == JsonValueKind.String);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return false;
+        }
+
+        static bool IsTrue(JsonElement cube, string name)
+            => cube.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
+    }
+
     private static void CleanupOwnedFiles(TextureSourceImportTarget target, bool descriptorCreated, bool imageCreated)
     {
         if (descriptorCreated)
@@ -127,12 +167,32 @@ public static class TextureSourceAssetImporter
         [property: JsonPropertyName("source")] string Source,
         [property: JsonPropertyName("intent")] string Intent,
         [property: JsonPropertyName("decode")] DecodeSettings Decode,
-        [property: JsonPropertyName("output")] OutputSettings Output)
+        [property: JsonPropertyName("output")] OutputSettings Output,
+        [property: JsonPropertyName("cube"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CubeSettings? Cube)
     {
-        public TextureDescriptor(string name, string virtualPath, string source, string intent, string colorSpace, string format)
-            : this(name, virtualPath, source, intent, new DecodeSettings(colorSpace), new OutputSettings(format))
+        public TextureDescriptor(string name, string virtualPath, string source, string intent, string colorSpace, string format, CubeSettings? cube)
+            : this(name, virtualPath, source, intent, new DecodeSettings(colorSpace), new OutputSettings(format), cube)
         {
         }
+    }
+
+    private sealed record CubeSettings(
+        [property: JsonPropertyName("cubemap"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Cubemap,
+        [property: JsonPropertyName("equirect_to_cube"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? EquirectToCube,
+        [property: JsonPropertyName("cube_face_size"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? FaceSize,
+        [property: JsonPropertyName("cube_layout"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Layout)
+    {
+        public static CubeSettings? From(TextureCubeImport? cube)
+            => cube?.Layout switch
+            {
+                null => null,
+                CubeLayout.Panorama => new(Cubemap: null, EquirectToCube: true, cube.FaceSize, Layout: null),
+                CubeLayout.HorizontalStrip => new(Cubemap: true, EquirectToCube: null, FaceSize: null, "hstrip"),
+                CubeLayout.VerticalStrip => new(Cubemap: true, EquirectToCube: null, FaceSize: null, "vstrip"),
+                CubeLayout.HorizontalCross => new(Cubemap: true, EquirectToCube: null, FaceSize: null, "hcross"),
+                CubeLayout.VerticalCross => new(Cubemap: true, EquirectToCube: null, FaceSize: null, "vcross"),
+                _ => throw new ArgumentOutOfRangeException(nameof(cube), cube.Layout, "Unknown cube layout."),
+            };
     }
 
     private sealed record DecodeSettings([property: JsonPropertyName("color_space")] string ColorSpace);
@@ -155,7 +215,35 @@ public sealed record TextureSourceImportRequest(
     string Name,
     string Intent,
     string ColorSpace,
-    string Format);
+    string Format)
+{
+    /// <summary>Gets how the image becomes a cube texture, or null for a 2D texture.</summary>
+    public TextureCubeImport? Cube { get; init; }
+}
+
+/// <summary>How a single image lays out the six faces of a cube texture.</summary>
+public enum CubeLayout
+{
+    /// <summary>A 2:1 equirectangular (latitude-longitude) panorama, resampled to faces.</summary>
+    Panorama,
+
+    /// <summary>Six faces side by side, 6:1.</summary>
+    HorizontalStrip,
+
+    /// <summary>Six faces stacked, 1:6.</summary>
+    VerticalStrip,
+
+    /// <summary>A 4:3 horizontal cross.</summary>
+    HorizontalCross,
+
+    /// <summary>A 3:4 vertical cross.</summary>
+    VerticalCross,
+}
+
+/// <summary>Cube import settings for a single source image.</summary>
+/// <param name="Layout">How the image lays out the faces.</param>
+/// <param name="FaceSize">The face size in pixels for a panorama, a multiple of 256; ignored otherwise.</param>
+public sealed record TextureCubeImport(CubeLayout Layout, int? FaceSize = null);
 
 /// <summary>A collision-checked filesystem target for a named texture asset.</summary>
 public sealed record TextureSourceImportTarget(string MountName, string VirtualPath, string ImagePath, string DescriptorPath, Uri AssetUri)
@@ -188,6 +276,12 @@ public sealed record TextureSourceImportTarget(string MountName, string VirtualP
             || !TextureSourceAssetImporter.IsSupportedFormat(request.Format))
         {
             throw new ArgumentException("Choose a supported texture intent, color space and output format.", nameof(request));
+        }
+
+        if (request.Cube is { Layout: CubeLayout.Panorama } panorama
+            && (panorama.FaceSize is not { } faceSize || faceSize <= 0 || faceSize % 256 != 0))
+        {
+            throw new ArgumentException("A panorama cube needs a face size that is a multiple of 256.", nameof(request));
         }
 
         var folder = request.DestinationFolder;

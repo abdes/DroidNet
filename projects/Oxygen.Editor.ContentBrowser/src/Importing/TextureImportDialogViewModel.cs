@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura.Dialogs;
@@ -13,6 +14,19 @@ namespace Oxygen.Editor.ContentBrowser.Importing;
 /// <summary>Reviews a standalone image's name, destination and native texture settings.</summary>
 public sealed partial class TextureImportDialogViewModel : ObservableObject
 {
+    private const string Texture2DShape = "2D";
+    private const string CubeShape = "Cube";
+    private const string AutoLayout = "Auto";
+
+    private static readonly IReadOnlyDictionary<CubeLayout, string> LayoutNames = new Dictionary<CubeLayout, string>
+    {
+        [Oxygen.Editor.ContentPipeline.Import.CubeLayout.Panorama] = "Panorama 2:1",
+        [Oxygen.Editor.ContentPipeline.Import.CubeLayout.HorizontalStrip] = "Horizontal strip 6:1",
+        [Oxygen.Editor.ContentPipeline.Import.CubeLayout.VerticalStrip] = "Vertical strip 1:6",
+        [Oxygen.Editor.ContentPipeline.Import.CubeLayout.HorizontalCross] = "Horizontal cross 4:3",
+        [Oxygen.Editor.ContentPipeline.Import.CubeLayout.VerticalCross] = "Vertical cross 3:4",
+    };
+
     private readonly ProjectContext project;
     private readonly IDialogService dialogs;
     private string name = string.Empty;
@@ -22,6 +36,9 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
     private string format = "rgba8_srgb";
     private string error = string.Empty;
     private bool canAccept;
+    private bool isCube;
+    private string cubeLayout = AutoLayout;
+    private int faceSize = 1024;
 
     /// <summary>Initializes a new instance of the <see cref="TextureImportDialogViewModel"/> class for a reviewed image import.</summary>
     /// <param name="project">The active project.</param>
@@ -33,6 +50,7 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         this.SourcePath = Path.GetFullPath(sourcePath);
+        this.SourceDimensions = ImageDimensions.TryRead(this.SourcePath);
         this.Name = Path.GetFileNameWithoutExtension(sourcePath);
         this.DestinationFolder = destinationFolder;
         this.Revalidate();
@@ -42,7 +60,89 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
     public string SourcePath { get; }
 
     /// <summary>Gets the native intents available for a standalone image.</summary>
-    public IReadOnlyList<string> Intents { get; } = ["albedo", "normal", "roughness", "metallic", "ao", "orm", "emissive", "opacity", "data", "height"];
+    public IReadOnlyList<string> Intents { get; } = ["albedo", "normal", "roughness", "metallic", "ao", "orm", "emissive", "opacity", "data", "height", "hdr_env", "hdr_probe"];
+
+    /// <summary>Gets the texture shapes the import can produce.</summary>
+    public IReadOnlyList<string> Shapes { get; } = [Texture2DShape, CubeShape];
+
+    /// <summary>Gets the cube layouts: automatic detection, then each explicit layout.</summary>
+    public IReadOnlyList<string> CubeLayouts { get; } = [AutoLayout, .. LayoutNames.Values];
+
+    /// <summary>Gets the panorama face sizes the cooker accepts.</summary>
+    public IReadOnlyList<int> FaceSizes { get; } = [256, 512, 1024, 2048, 4096];
+
+    /// <summary>Gets the source image dimensions, or null when its header could not be read.</summary>
+    public (int Width, int Height)? SourceDimensions { get; }
+
+    /// <summary>Gets or sets the shape: a 2D texture, or a cube texture built from this image.</summary>
+    public string Shape
+    {
+        get => this.isCube ? CubeShape : Texture2DShape;
+        set
+        {
+            var cube = string.Equals(value, CubeShape, StringComparison.Ordinal);
+            if (cube == this.isCube)
+            {
+                return;
+            }
+
+            this.isCube = cube;
+            this.OnPropertyChanged();
+            this.OnPropertyChanged(nameof(this.IsCube));
+
+            // Environment cubemaps are linear HDR; 2D textures default to color.
+            this.Intent = cube ? "hdr_env" : "albedo";
+            this.ColorSpace = cube ? "linear" : "srgb";
+            this.Format = cube ? "rgba16f" : "rgba8_srgb";
+            this.Revalidate();
+        }
+    }
+
+    /// <summary>Gets a value indicating whether the import produces a cube texture.</summary>
+    public bool IsCube => this.isCube;
+
+    /// <summary>Gets or sets how the image lays out the cube faces.</summary>
+    public string SelectedCubeLayout
+    {
+        get => this.cubeLayout;
+        set
+        {
+            if (this.SetProperty(ref this.cubeLayout, value))
+            {
+                this.OnPropertyChanged(nameof(this.IsPanorama));
+                this.Revalidate();
+            }
+        }
+    }
+
+    /// <summary>Gets the layout the chosen or detected layout resolves to, or null when detection failed.</summary>
+    public CubeLayout? ResolvedCubeLayout
+        => string.Equals(this.cubeLayout, AutoLayout, StringComparison.Ordinal)
+            ? this.SourceDimensions is { } size ? TextureSourceAssetImporter.DetectCubeLayout(size.Width, size.Height) : null
+            : LayoutNames.First(entry => string.Equals(entry.Value, this.cubeLayout, StringComparison.Ordinal)).Key;
+
+    /// <summary>Gets a description of the detected layout for the automatic choice.</summary>
+    public string DetectedLayoutText
+        => this.SourceDimensions is not { } size ? "Image size unknown; choose the layout."
+            : this.ResolvedCubeLayout is { } layout && string.Equals(this.cubeLayout, AutoLayout, StringComparison.Ordinal)
+            ? string.Create(CultureInfo.InvariantCulture, $"Detected {LayoutNames[layout]} from {size.Width} × {size.Height}.")
+            : string.Create(CultureInfo.InvariantCulture, $"{size.Width} × {size.Height}");
+
+    /// <summary>Gets a value indicating whether the resolved layout is a panorama, which needs a face size.</summary>
+    public bool IsPanorama => this.ResolvedCubeLayout == Oxygen.Editor.ContentPipeline.Import.CubeLayout.Panorama;
+
+    /// <summary>Gets or sets the cube face size for a panorama, in pixels.</summary>
+    public int FaceSize
+    {
+        get => this.faceSize;
+        set
+        {
+            if (this.SetProperty(ref this.faceSize, value))
+            {
+                this.Revalidate();
+            }
+        }
+    }
 
     /// <summary>Gets supported native color spaces.</summary>
     public IReadOnlyList<string> ColorSpaces { get; } = ["srgb", "linear"];
@@ -201,11 +301,24 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
     }
 
     private TextureSourceImportRequest CreateRequest()
-        => new(this.project, this.SourcePath, ToUri(this.DestinationFolder), this.Name.Trim(), this.Intent, this.ColorSpace, this.Format);
+        => new(this.project, this.SourcePath, ToUri(this.DestinationFolder), this.Name.Trim(), this.Intent, this.ColorSpace, this.Format)
+        {
+            Cube = this.isCube && this.ResolvedCubeLayout is { } layout
+                ? new TextureCubeImport(layout, layout == Oxygen.Editor.ContentPipeline.Import.CubeLayout.Panorama ? this.faceSize : null)
+                : null,
+        };
 
     private void Revalidate()
     {
         this.CanAccept = false;
+        this.OnPropertyChanged(nameof(this.DetectedLayoutText));
+        this.OnPropertyChanged(nameof(this.IsPanorama));
+        if (this.isCube && this.ResolvedCubeLayout is null)
+        {
+            this.Error = "The image is not a 2:1 panorama, a strip or a cross. Choose its cube layout.";
+            return;
+        }
+
         try
         {
             var target = TextureSourceImportTarget.Resolve(this.CreateRequest());
