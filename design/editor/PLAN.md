@@ -89,7 +89,7 @@ are assigned to 07A/07B, with no new M04 closure action. M08 still requires its
 joint review with the recorded ED-M02 evidence.
 
 Within ED-M08, execute M08.1 → [M08.F1 descriptor-local references](plan/ED-M08.F1-descriptor-local-references.md)
-→ M08.2 → M08.V0–V2 → M08.3–M08.11. M08.F1 is validated and closed on 2026-10-06: editor workflow checks,
+→ M08.2 → M08.V0–V2 → M08.3–M08.12. M08.F1 is validated and closed on 2026-10-06: editor workflow checks,
 the user's Main/Lantern scene packaged and rendered from its PAK alone, and
 focused native origin/binding/cache evidence pass. Its
 [closure record](plan/ED-M08.F1-descriptor-local-references.md#closure-verification)
@@ -102,8 +102,8 @@ viewport editing tools (absorbing ED-M09) and the Content Browser redesign,
 including reference-aware rename/move. M08.3 viewport HUD, M08.4 picking,
 selection outline and framing, M08.5 transform gizmos and snapping, and M08.6
 scene helpers and orientation, and the M08.7 Content Browser redesign are
-validated on 2026-10-08; M08.8 asset relocation on 2026-10-09. M08.9
-viewport performance and per-frame editor work, added on 2026-10-09, is next.
+validated on 2026-10-08; M08.8 asset relocation on 2026-10-09. M08.9 viewport performance and per-frame editor work on 2026-10-09; M08.10
+engine capability parity in the editor is next.
 
 ## 4. Milestone Roadmap
 
@@ -406,8 +406,8 @@ ED-M07A/07B are validated. The
 the slices: canonical data and rendering (M08.1, M08.F1, M08.2), viewport
 layouts and persistence (M08.V0–V2), the viewport HUD and editing tools
 (M08.3–M08.6, absorbing ED-M09), and the Content Browser redesign, asset
-relocation, viewport performance, thumbnails and drag-and-drop
-(M08.7–M08.11). The
+relocation, viewport performance, engine capability parity, thumbnails and
+drag-and-drop (M08.7–M08.12). The
 [V0.1 authoring contract](review/ED-M08-v01-authoring-scope.md) defines the
 final property surface and exclusions.
 

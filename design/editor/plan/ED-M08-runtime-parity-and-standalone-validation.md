@@ -1,9 +1,9 @@
 # ED-M08 — Runtime parity and editor authoring workspace
 
-Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2 and M08.3–M08.8
-validated; rescoped on 2026-10-08; M08.9 added on 2026-10-09 and next**
+Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2 and M08.3–M08.9
+validated; rescoped on 2026-10-08; M08.10 added on 2026-10-09 and next**
 
-Current: **M08.9 Viewport performance and per-frame editor work**. The
+Current: **M08.10 Engine capability parity in the editor**. The
 [rescope](#retired-by-the-rescope) retires the development-only parity harness
 (former M08.3 and M08.5–M08.8) and the former M08.4 audit, and replaces them
 with what the editor still lacks as an authoring tool: viewport picking,
@@ -106,19 +106,20 @@ implementation must produce new evidence for captured sky and specular lighting.
 - One- to four-pane layouts with independent panes, focus routing, a camera
   preview inset and persisted per-pane state.
 
-### Remaining deliverables (M08.3–M08.11)
+### Remaining deliverables (M08.3–M08.12)
 
-| Slice  | User-visible outcome                                                                                   |
-| ------ | ------------------------------------------------------------------------------------------------------ |
-| M08.3  | One icon-led viewport HUD; view modes that change the render; layout picker; scene document toolbar.   |
-| M08.4  | Click/marquee picking, selection outline in every pane, frame selected/all.                            |
-| M08.5  | Native translate/rotate/scale gizmos, World/Local, snapping, tool rail and viewport editing shortcuts. |
-| M08.6  | Light/camera icons, selected-helper visuals with editable range/cone handles, orientation triad.       |
-| M08.7  | Redesigned Content Browser: sources/results/details layout, three views, sort, working commands.       |
-| M08.8  | Rename, move, cut/copy/paste and delete that update every authored reference in one transaction.       |
-| M08.9  | Smooth multi-pane viewports: one frame clock, panes render on demand, lean per-frame editor work.      |
-| M08.10 | Rendered thumbnails for materials, geometry, textures and scenes in browser, pickers, Material Editor. |
-| M08.11 | Drag-and-drop scene assembly, Browse to asset and the editor-to-runtime closeout walkthrough.          |
+| Slice  | User-visible outcome                                                                                      |
+| ------ | --------------------------------------------------------------------------------------------------------- |
+| M08.3  | One icon-led viewport HUD; view modes that change the render; layout picker; scene document toolbar.      |
+| M08.4  | Click/marquee picking, selection outline in every pane, frame selected/all.                               |
+| M08.5  | Native translate/rotate/scale gizmos, World/Local, snapping, tool rail and viewport editing shortcuts.    |
+| M08.6  | Light/camera icons, selected-helper visuals with editable range/cone handles, orientation triad.          |
+| M08.7  | Redesigned Content Browser: sources/results/details layout, three views, sort, working commands.          |
+| M08.8  | Rename, move, cut/copy/paste and delete that update every authored reference in one transaction.          |
+| M08.9  | Smooth multi-pane viewports: one frame clock, panes render on demand, lean per-frame editor work.         |
+| M08.10 | Engine capability parity: fog, local fog volumes, sky, grid settings, eye adaptation, audited exclusions. |
+| M08.11 | Rendered thumbnails for materials, geometry, textures and scenes in browser, pickers, Material Editor.    |
+| M08.12 | Drag-and-drop scene assembly, Browse to asset and the editor-to-runtime closeout walkthrough.             |
 
 ### Retired by the rescope
 
@@ -139,7 +140,7 @@ implementation must produce new evidence for captured sky and specular lighting.
   validated by M08.2 and the inspector refactoring plan. Defects found while
   using them are fixed as bugs in the slice that finds them.
 
-### Architecture decisions for M08.3–M08.11
+### Architecture decisions for M08.3–M08.12
 
 1. **WinUI draws chrome; Vortex draws anything anchored in 3D.** The HUD,
    flyouts, tool rail, readout chips, marquee rectangle and Content Browser are
@@ -190,10 +191,11 @@ contracts and rendered behavior pass before editor implementation relies on them
 From M08.3 on, every slice closes only after the user has reviewed the running
 editor UI; implementation pauses at that point for feedback. Order: M08.1 →
 M08.F1 → M08.2 → M08.V0 → M08.V1 → M08.V2 → M08.3 → M08.4 → M08.5 → M08.6 →
-M08.7 → M08.8 → M08.9 → M08.10 → M08.11. Viewport slices come first for
-immediate value; M08.7 and M08.8 are managed-only. M08.9 precedes thumbnails
-because previews render alongside the viewports and need the frame budget it
-recovers.
+M08.7 → M08.8 → M08.9 → M08.10 → M08.11 → M08.12. Viewport slices come first
+for immediate value; M08.7 and M08.8 are managed-only. M08.9 precedes
+thumbnails because previews render alongside the viewports and need the frame
+budget it recovers; M08.10 precedes them so previews render with every
+capability the editor exposes.
 
 ### M08.1 — Native canonical data, producers and primitives
 
@@ -918,7 +920,7 @@ library work waits for dock improvements.
    columns); tile-size slider in Tiles; Sort by any of those fields, ascending
    or descending. Ctrl/Shift multi-selection in every view, kept across view
    switches and re-sorts. Enter and double-click open. Previews are the
-   material base colour or the type glyph; rendered previews are M08.10.
+   material base colour or the type glyph; rendered previews are M08.11.
 3. **Commands.** New ▾ (Folder, Scene, Material); Import ▾ (Source model,
    Texture or image, Reimport, Show import source); Cook ▾ grouped as build
    scope (Cook selected, current folder, project), published output (Inspect,
@@ -1131,42 +1133,33 @@ thread, and the managed layer does no per-frame work. In priority order:
    only for panes that render. Commands run through one helper that logs
    failures and records their invalidation.
 
-6. **Editor views keep their own view state.** Runtime views carry a
-   persistent `ViewStateHandle` (RenderScene allocates one for its main view);
-   editor panes publish none, so they have no eye adaptation, no exposure
-   transitions and no temporal history, and the authored auto-exposure speeds
-   have no effect in the editor. Each `EditorView` owns a state handle for its
-   lifetime and releases it when the view is destroyed. Eye adaptation then
-   moves the image with no input change, so Vortex reports a view as settling
-   while its adapted exposure has not reached its target, from the exposure
-   status it already reads back, and the pane renders until it settles.
-7. **The editor renderer gets the runtime's capabilities.** The editor's
+6. **The editor renderer gets the runtime's capabilities.** The editor's
    capability set left out shadowing, so shadow debug views and the
    shadow-only profile were refused while shadows rendered, and enabled
    diagnostics only with ImGui, which disabled the GPU timeline and pass
    diagnostics in the editor. The editor requests all eight capability
    families; ImGui stays governed by its own setting.
-8. **Fog follows the scene.** Editor views hardcode height and local fog off.
-   V0.1 offers no fog authoring and the environment command keeps scene fog
-   disabled, so nothing changes today, but the flags derive from the scene
-   environment as in the runtime shell (fog enabled and rendered in the main
-   pass; any enabled local fog volume), so authored fog is never overridden.
-9. **No unused pane depth.** Each pane allocates a depth texture that Vortex
+7. **Fog follows the scene.** Editor views hardcoded height and local fog off,
+   overriding the scene. The flags derive from the scene environment as in the
+   runtime shell (fog enabled and rendered in the main pass; any enabled local
+   fog volume), so fog authored in M08.10 renders in the editor.
+8. **No unused pane depth.** Each pane allocates a depth texture that Vortex
    never uses, since it renders depth in its own scene textures; the pane
    framebuffer keeps only its color target.
-10. **The ground grid is stable on a floor at Z 0.** The grid writes its
-    analytic plane depth and depth-tests it against the scene, so a surface
-    at Z 0 has the same depth up to precision and the winner flips per pixel.
-    Other editors leave this unresolved: Unreal closed its grid z-fighting
-    reports as Won't Fix and users move floors off Z 0, and Blender biases its
-    grid behind coplanar geometry, losing the grid on floor objects. Our grid
-    resolves coplanarity in world units: its depth moves toward the camera by
-    the ray distance at which a surface within a height tolerance of the
-    plane would lie (the tolerance over the ray's vertical component), capped
-    to a fraction of the hit distance so it never bleeds through objects near
-    the horizon. The tolerance grows with distance to match depth precision.
-    A floor at Z 0 shows the grid drawn steadily on it, and anything clearly
-    above the plane still hides it.
+9. **The ground grid is stable on a floor at Z 0.** The grid writes its
+   analytic plane depth and depth-tests it against the scene, so a surface
+   at Z 0 has the same depth up to precision and the winner flips per pixel.
+   Other editors leave this unresolved: Unreal closed its grid z-fighting
+   reports as Won't Fix and users move floors off Z 0, and Blender biases its
+   grid behind coplanar geometry, losing the grid on floor objects. Our grid
+   resolves coplanarity in world units: its depth moves toward the camera by
+   the ray distance at which a surface within a height tolerance of the
+   plane would lie (the tolerance over the ray's vertical component). An
+   object standing on the plane shows the grid only within that height of its
+   base, at any viewing angle, because the ray meets it no higher than the
+   tolerance. The tolerance grows with distance to match depth precision.
+   A floor at Z 0 shows the grid drawn steadily on it, and anything clearly
+   above the plane still hides it.
 
 Kept as they are after review: the runtime command dispatcher calls the
 native input transport under its run gate, because the gate is what keeps
@@ -1181,13 +1174,13 @@ Implementation, in build order:
 | M08.9b | Oxygen.Engine (Vortex)      | Held runtime views, one compositing recorder, resident content revision      |
 | M08.9c | Editor.Interop              | Pane render policy, command invalidation, vsync and idle-pane runner calls   |
 | M08.9d | Editor.Runtime, WorldEditor | Engine settings flyout and preferences, no 60 FPS default                    |
-| M08.9e | Oxygen.Engine (Vortex)      | Exposure-adaptation settling; ground grid coplanar resolution                |
-| M08.9f | Editor.Interop              | Per-view state handles, full capabilities, scene-driven fog, no pane depth   |
+| M08.9e | Oxygen.Engine (Vortex)      | Ground grid coplanar resolution                                              |
+| M08.9f | Editor.Interop              | Full capabilities, scene-driven fog, no pane depth                           |
 
 Checks: Vortex tests that a held view leaves the frame family yet stays
 published past the idle limit, and that texture descriptors and completed
 geometry uploads advance the resident revision, that the ground grid
-settles to rest and that a view reports settling while its exposure adapts; Interop tests of the pane
+settles to rest; Interop tests of the pane
 policy (new, unchanged, moved, invalidated, scene-changed, always-render and
 forgotten panes); managed tests that the preferences round-trip vsync, the
 cap off and on, and idle viewports, that the cap off reaches the engine as 0
@@ -1196,11 +1189,84 @@ with its ImGui overlay; user review of one- to four-pane layouts in the
 running editor with vsync on and off and the cap off and on, including
 navigation, an edit, selection and gizmo drag in one pane updating the
 others, picking in an idle pane, resize, and a reimport refreshing idle
-panes; and, in the running editor, eye adaptation in a pane that settles
-and then idles, a shadow debug view, and a floor at Z 0 showing the grid
-steadily while objects above it still hide it.
+panes; and, in the running editor, a shadow debug view and a floor at Z 0
+showing the grid steadily while objects above it still hide it.
 
-### M08.10 — Asset thumbnails and previews
+### M08.10 — Engine capability parity in the editor
+
+The editor exposes what the engine renders today. Several engine capabilities
+were locked out of the editor by implementation choices that later documents
+recorded as scope: an environment command that forces scene fog off,
+documents stating that V0.1 offers no fog, cubemap or physical-camera
+authoring, and no editor settings for the ground grid. No owner decision
+stands behind them. This slice removes those lock-outs.
+
+1. **Every exclusion is checked against the engine.** Each exclusion in the
+   [authoring scope](../review/ED-M08-v01-authoring-scope.md#4-canonical-migration-and-excluded-scope),
+   the [environment LLD](../lld/environment-authoring.md) and the
+   [inspector LLD](../lld/property-inspector.md) is verified: a capability
+   the engine renders today joins this slice; one it does not render stays
+   out, and its document records that as an engine fact, not an editor
+   choice. The list is generic node activation, Shadows Only and
+   hidden-shadow modes, blended-material shadow casting, more than two
+   atmospheric sources, sky-only authoring, lunar features, physical-camera
+   authoring with the ManualCamera exposure mode, and the Sky Light's fixed
+   source and multipliers. Volumetric clouds are in the scene format but no
+   renderer pass draws them, so they stay out.
+2. **Fog.** Height fog, including its second layer, and volumetric fog are
+   authored on the scene environment and round-trip through the scene file,
+   cooking and the runtime loader, which already carry them
+   (`FogEnvironmentRecord`). `EnsureDisabledFog` goes. Local fog volumes are
+   a node component with an inspector section, cooked as
+   `LocalFogVolumeRecord`. M08.9 already derives the panes' fog passes from
+   the scene, so authored fog renders in the editor as in the runtime.
+3. **Sky.** The Sky Sphere (solid color or cubemap sky background) and the
+   Sky Light's source (captured scene or a specified cubemap), tint and
+   diffuse and specular multipliers are authored.
+4. **Ground grid settings.** The grid's engine settings are per-user editor
+   settings in the Settings flyout, applied through
+   `Renderer::SetGroundGridConfig`: enabled, spacing, major lines every N,
+   line, major and axis thickness, fade start and power, horizon boost,
+   origin, smooth motion and its time, and the minor, major, axis and origin
+   colors. The pane-level grid toggle stays.
+5. **Eye adaptation in editor panes.** Auto exposure in the runtime adapts
+   gradually: when the view moves from a dark area to a bright one, the
+   exposure eases toward the new level at the authored speeds (EV per second
+   brightening and darkening), as an eye adapts. That needs the previous
+   frame's exposure, which Vortex keeps per view state. Runtime views carry
+   a persistent `ViewStateHandle` (RenderScene allocates one for its main
+   view); editor panes publish none, so editor auto exposure jumps to its
+   metered value every frame, the authored adaptation speeds have no effect,
+   and exposure transitions and other temporal history are unavailable. Each
+   `EditorView` owns a state handle for its lifetime and releases it when the
+   view is destroyed. Adaptation then moves the image with no input change,
+   so Vortex reports a view as settling while its adapted exposure has not
+   reached its target, and the pane renders until it settles. The exposure
+   service reads exposure state back only for transitions and precision
+   qualification today, so a view adapting in auto exposure gains a small
+   readback of its displayed and target scale per rendered frame; panes
+   render a few frames past convergence because readbacks lag.
+
+Implementation, in build order:
+
+| Step    | Projects                               | Delivers                                                              |
+| ------- | -------------------------------------- | --------------------------------------------------------------------- |
+| M08.10a | Design documents                       | Exclusion verification against the engine; confirmed items join below |
+| M08.10b | Editor.World, Interop, WorldEditor     | Height and volumetric fog; local fog volume component                 |
+| M08.10c | Editor.World, Interop, WorldEditor     | Sky Sphere; Sky Light source, tint and multipliers                    |
+| M08.10d | Editor.Interop, WorldEditor            | Ground grid settings                                                  |
+| M08.10e | Oxygen.Engine (Vortex), Editor.Interop | Per-pane view state; exposure-adaptation settling                     |
+| M08.10f | As each confirmed exclusion requires   | Remaining capabilities the verification confirms                      |
+
+Checks: each authored capability survives save, reopen and cook, and the
+cooked project renders it in RenderScene as in the editor; the grid
+settings persist per user and apply to every pane; a Vortex test that a
+view reports settling while its exposure adapts and stops when it
+converges; user review in the running editor of fog, local fog volumes, the
+sky settings, the grid settings, and eye adaptation in a pane that settles
+and then idles.
+
+### M08.11 — Asset thumbnails and previews
 
 1. **Native preview renderer.** Interop renders through Vortex into an
    offscreen target with a private preview scene: neutral studio lighting and
@@ -1226,7 +1292,7 @@ cook; the cache survives restart and regenerates when deleted; viewports stay
 interactive while previews render; device loss and project close cancel
 pending work cleanly.
 
-### M08.11 — Drag-and-drop scene assembly and closeout
+### M08.12 — Drag-and-drop scene assembly and closeout
 
 1. **Geometry into the scene.** Dragging a geometry asset over the viewport
    shows a placement preview at the surface under the cursor (pick depth,
@@ -1287,10 +1353,12 @@ UI tests never drive the system mouse or need window focus.
 - [x] Scene helpers, editable light handles and orientation triad (M08.6).
 - [x] Content Browser layout, views and working commands (M08.7).
 - [x] Rename, move, cut/copy/paste and delete with reference updates (M08.8).
-- [ ] Viewport frame clock, on-demand pane rendering and lean per-frame
+- [x] Viewport frame clock, on-demand pane rendering and lean per-frame
       editor work (M08.9).
-- [ ] Rendered thumbnails in browser, pickers and Material Editor (M08.10).
+- [ ] Engine capabilities the editor exposes: fog, local fog volumes, sky,
+      grid settings, eye adaptation and the audited exclusions (M08.10).
+- [ ] Rendered thumbnails in browser, pickers and Material Editor (M08.11).
 - [ ] Drag-and-drop assembly and the closeout walkthrough, including the
-      RenderScene load of the editor-cooked project (M08.11).
+      RenderScene load of the editor-cooked project (M08.12).
 - [ ] Owning LLDs and API prose match the implemented contracts; post-V0.1
       annotations mark every deferred boundary.
