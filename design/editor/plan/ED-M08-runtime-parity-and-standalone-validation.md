@@ -1240,7 +1240,8 @@ stands behind them. This slice removes those lock-outs.
    intensities, and a Cube shape in texture import. Cooked cubemaps become
    scene texture bindings like the metering mask (scene format 12), and the
    live editor loads all environment textures as one request. Importing six
-   separate face files is a follow-up to the Cube shape.
+   separate face files joins the cube import and cook review in
+   [issue 21](https://github.com/abdes/DroidNet/issues/21).
 4. **Ground grid settings.** The grid's engine settings are per-user editor
    settings in the Settings flyout, applied through
    `Renderer::SetGroundGridConfig`: enabled, spacing, major lines every N,
