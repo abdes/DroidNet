@@ -70,6 +70,20 @@ namespace oxygen::interop::module {
     {
       return drag_.has_value();
     }
+
+    //! The view that draws hover feedback and what it highlights; a change
+    //! means those views draw differently. Engine thread only.
+    struct HoverState {
+      ViewId view { kInvalidViewId };
+      std::optional<HelperHandleHit> handle;
+      TriadAxis triad { TriadAxis::kNone };
+
+      auto operator==(const HoverState&) const -> bool = default;
+    };
+    [[nodiscard]] auto GetHoverState() const noexcept -> HoverState
+    {
+      return { .view = hover_view_, .handle = hovered_handle_, .triad = hovered_triad_ };
+    }
     //! Handles a view's input, removing what the helpers take. While
     //! `gizmo_has_pointer`, the transform gizmo has precedence.
     void ProcessInput(

@@ -44,6 +44,13 @@ public:
     , complete_(std::move(complete)) {}
 
   //! Returns native component presence and stored values.
+  //! Only reads scene state; changes nothing a pane shows.
+  [[nodiscard]] auto GetInvalidation() const noexcept
+    -> CommandInvalidation override
+  {
+    return CommandInvalidation::None();
+  }
+
   void Execute(CommandContext& context) override
   {
     EnvironmentObservation result;

@@ -58,6 +58,13 @@ public:
   {
   }
 
+  //! Only reads scene state; changes nothing a pane shows.
+  [[nodiscard]] auto GetInvalidation() const noexcept
+    -> CommandInvalidation override
+  {
+    return CommandInvalidation::None();
+  }
+
   void Execute(CommandContext& context) override
   {
     NodeObservation result;

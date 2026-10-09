@@ -122,7 +122,8 @@ public:
   [[nodiscard]] auto RefreshError() const -> std::string;
 
   //! Drain after authoring commands. Reject dead targets and obsolete results.
-  void Drain(scene::Scene &scene);
+  //! Returns whether a completed load changed the scene.
+  auto Drain(scene::Scene &scene) -> bool;
 
 private:
   void QueueMaterial(scene::NodeHandle node, MaterialSlotTarget target,

@@ -24,6 +24,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Vortex/Types/ResidentContentRevision.h>
 #include <Oxygen/Vortex/Types/ViewOutline.h>
 #include <Oxygen/Vortex/Types/ViewPick.h>
 
@@ -55,11 +56,13 @@ namespace oxygen::interop::module {
   class EditorViewportNavigation;
   class SurfaceRegistry;
   class EditorCommand;
+  struct CommandContext;
   class SceneAssetRequests;
   class SurfaceFramebuffers;
 } // namespace oxygen::interop::module
 
 #include "EditorModule/InputAccumulator.h"
+#include "EditorModule/PaneRenderPolicy.h"
 #include "EditorModule/SceneHelperController.h"
 #include "EditorModule/ThreadSafeQueue.h"
 #include "EditorModule/TransformGizmoController.h"
@@ -252,6 +255,10 @@ namespace oxygen::interop::module {
     void SetSelectionOutline(
       std::vector<UuidKey> nodes, std::optional<UuidKey> active);
 
+    //! Renders every visible pane each frame instead of only the panes whose
+    //! content may have changed. Callable from any thread.
+    void SetAlwaysRenderPanes(bool always_render) noexcept;
+
     //! The selection's transform gizmo: its settings and event listener are
     //! callable from any thread.
     [[nodiscard]] auto GetTransformGizmo() noexcept -> TransformGizmoController&
@@ -285,6 +292,35 @@ namespace oxygen::interop::module {
 
   private:
     struct SubscriptionToken;
+
+    //! A visible pane that can render this frame, and whether it will.
+    struct PaneCandidate {
+      EditorView* view { nullptr };
+      PaneFingerprint fingerprint {};
+      bool render { false };
+    };
+
+    //! Runs a command, logging failures, and records what it invalidates.
+    void RunCommand(EditorCommand& command, CommandContext& context,
+      std::string_view label);
+    //! The panes that can publish this frame; withdraws the others.
+    auto CollectPanes(oxygen::engine::FrameContext& context,
+      vortex::Renderer& renderer, oxygen::Graphics& graphics)
+      -> std::vector<PaneCandidate>;
+    //! Marks which panes render: a surface renders all its panes or none.
+    void DecidePaneRenders(
+      vortex::Renderer& renderer, std::vector<PaneCandidate>& panes);
+    //! Publishes a pane for rendering; false when the renderer rejects it.
+    auto PublishPane(oxygen::engine::FrameContext& context,
+      vortex::Renderer& renderer, EditorView& view,
+      const std::shared_ptr<const vortex::ViewOutline>& outline) -> bool;
+    //! Makes every pane composed on the surface render this frame.
+    void InvalidatePanesOn(const SurfaceRegistry::GuidKey& key);
+    //! Withdraws a pane's publication so the renderer never prepares it
+    //! without a camera.
+    void WithdrawPane(oxygen::engine::FrameContext& context,
+      vortex::Renderer& renderer, const EditorView& view,
+      std::string_view reason);
 
     auto SynchronizeCookedRootsAsync() -> oxygen::co::Co<bool>;
     auto ProcessContentPauseAsync(oxygen::engine::FrameContext& frame_context) -> oxygen::co::Co<>;
@@ -358,6 +394,20 @@ namespace oxygen::interop::module {
     std::mutex outline_mutex_;
     std::vector<UuidKey> outline_nodes_;
     std::optional<UuidKey> outline_active_;
+    //! Advances with every selection outline change.
+    std::atomic<std::uint64_t> outline_revision_ { 0U };
+    std::uint64_t published_outline_revision_ { 0U };
+
+    //! Which panes render; see PaneRenderPolicy. Engine thread only.
+    PaneRenderPolicy pane_policy_;
+    std::atomic<bool> always_render_panes_ { false };
+    //! Set by anything that changes what every pane shows since the last
+    //! publication: scene commands, completed loads, cooked content.
+    bool scene_changed_ { true };
+    std::optional<vortex::ResidentContentRevision> resident_revision_;
+    //! Panes kept without rendering this frame; their surfaces are neither
+    //! composed nor presented.
+    std::unordered_set<ViewId> held_views_;
 
     std::mutex picks_mutex_;
     std::vector<PendingPick> pending_picks_;

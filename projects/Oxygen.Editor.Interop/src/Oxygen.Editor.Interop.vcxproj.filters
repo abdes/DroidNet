@@ -132,6 +132,9 @@
     <ClCompile Include="EditorModule\SceneHelperController.cpp">
       <Filter>EditorModule</Filter>
     </ClCompile>
+    <ClCompile Include="EditorModule\PaneRenderPolicy.cpp">
+      <Filter>EditorModule</Filter>
+    </ClCompile>
     <ClCompile Include="Commands\SetViewCameraSettingsCommand.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
@@ -347,6 +350,9 @@
       <Filter>EditorModule</Filter>
     </ClInclude>
     <ClInclude Include="EditorModule\SceneHelperController.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\PaneRenderPolicy.h">
       <Filter>EditorModule</Filter>
     </ClInclude>
     <ClInclude Include="Views\ViewPickManaged.h">

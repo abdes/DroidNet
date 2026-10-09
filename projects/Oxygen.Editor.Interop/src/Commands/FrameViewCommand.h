@@ -45,6 +45,12 @@ namespace oxygen::interop::module {
     OXYGEN_MAKE_NON_COPYABLE(FrameViewCommand)
     OXYGEN_MAKE_NON_MOVABLE(FrameViewCommand)
 
+    //! Changes only what its own view shows.
+    [[nodiscard]] auto GetInvalidation() const noexcept
+      -> CommandInvalidation override {
+      return CommandInvalidation::View(view_id_);
+    }
+
     void Execute(CommandContext& context) override;
 
   private:

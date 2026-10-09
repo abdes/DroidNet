@@ -158,6 +158,12 @@ namespace Oxygen::Interop {
     auto SetTargetFps(EngineContext^ ctx, System::UInt32 fps) -> void;
 
     /// <summary>
+    /// Turns graphics vsync on or off for every viewport surface; the engine
+    /// applies it at its next frame.
+    /// </summary>
+    auto SetVSyncEnabled(EngineContext^ ctx, bool enabled) -> void;
+
+    /// <summary>
     /// Reads the current native EngineConfig for inspection. Returns a managed
     /// `EngineConfig` object converted from the native config.
     /// </summary>
@@ -344,6 +350,12 @@ namespace Oxygen::Interop {
     auto TrySetSelectionOutline(EngineContext^ ctx,
       array<System::Guid>^ nodeIds, System::Nullable<System::Guid> activeNodeId)
       -> bool;
+
+    /// <summary>
+    /// Renders every visible viewport pane each frame when true; otherwise a
+    /// pane renders only when what it shows may have changed.
+    /// </summary>
+    auto TrySetAlwaysRenderPanes(EngineContext^ ctx, bool alwaysRender) -> bool;
 
     /// <summary>
     /// Shows the transform gizmo of <paramref name="targets"/> in every editing

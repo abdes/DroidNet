@@ -496,9 +496,11 @@ auto SceneAssetRequests::RefreshError() const -> std::string
   return state_->refresh_error;
 }
 
-void SceneAssetRequests::Drain(scene::Scene& scene)
+auto SceneAssetRequests::Drain(scene::Scene& scene) -> bool
 {
-  state_->mask_inbox->Drain([this, &scene](State::MaskCompletion& result) {
+  bool changed = false;
+  state_->mask_inbox->Drain([this, &scene, &changed](
+                              State::MaskCompletion& result) {
     auto& request = state_->mask;
     if (request.generation != result.generation || !request.status.pending) {
       return;
@@ -511,6 +513,7 @@ void SceneAssetRequests::Drain(scene::Scene& scene)
         result.error = error.what();
       }
       if (result.error.empty()) {
+        changed = true;
         request.status.accepted = result.key;
         if (request.on_success) {
           request.on_success(result.generation);
@@ -537,7 +540,7 @@ void SceneAssetRequests::Drain(scene::Scene& scene)
     const auto node = scene.GetNode(entry.first);
     return !node || !node->IsAlive();
   });
-  state_->inbox->Drain([this, &scene](State::Completion& result) {
+  state_->inbox->Drain([this, &scene, &changed](State::Completion& result) {
     const auto found = state_->targets.find(result.node);
     if (found == state_->targets.end()) {
       return;
@@ -558,6 +561,7 @@ void SceneAssetRequests::Drain(scene::Scene& scene)
         return;
       }
       node->GetRenderable().SetGeometry(std::move(result.geometry_asset));
+      changed = true;
       if (target.geometry_success) {
         target.geometry_success(result.generation);
       }
@@ -636,6 +640,7 @@ void SceneAssetRequests::Drain(scene::Scene& scene)
         slot.rejected_slot = true;
         continue;
       }
+      changed = changed || slot_exists;
       slot.accepted_geometry = geometry->GetAssetKey();
       slot.target.layout_revision = geometry->MaterialSlots().layout_revision;
       slot.material.reset();
@@ -645,6 +650,7 @@ void SceneAssetRequests::Drain(scene::Scene& scene)
       }
     }
   }
+  return changed;
 }
 
 } // namespace oxygen::interop::module

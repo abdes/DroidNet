@@ -882,6 +882,30 @@ namespace Oxygen::Interop {
     }
   }
 
+  auto EngineRunner::TrySetAlwaysRenderPanes(EngineContext^ ctx,
+    bool alwaysRender) -> bool
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (disposed_) {
+      return false;
+    }
+
+    auto native_ctx = ctx->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      return false;
+    }
+    auto editor_module_opt =
+      native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (!editor_module_opt) {
+      return false;
+    }
+
+    editor_module_opt->get().SetAlwaysRenderPanes(alwaysRender);
+    return true;
+  }
+
   auto EngineRunner::TrySetTransformGizmo(EngineContext^ ctx,
     TransformToolManaged tool, TransformSpaceManaged space, bool snapEnabled,
     float translationStep, float rotationStepDegrees, float scaleStep,

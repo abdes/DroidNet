@@ -44,6 +44,12 @@ namespace oxygen::interop::module {
     OXYGEN_MAKE_NON_COPYABLE(QueryViewCameraPoseCommand)
     OXYGEN_MAKE_NON_MOVABLE(QueryViewCameraPoseCommand)
 
+    //! Only reads a camera pose; changes nothing a pane shows.
+    [[nodiscard]] auto GetInvalidation() const noexcept
+      -> CommandInvalidation override {
+      return CommandInvalidation::None();
+    }
+
     void Execute(CommandContext& context) override;
 
   private:

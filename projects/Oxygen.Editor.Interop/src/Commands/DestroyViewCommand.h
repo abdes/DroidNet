@@ -22,6 +22,12 @@ namespace oxygen::interop::module {
       : EditorCommand(oxygen::core::PhaseId::kFrameStart), view_manager_(mgr),
       view_id_(id) {
     }
+    //! Manages a pane's lifetime; a new pane renders on its first frame anyway.
+    [[nodiscard]] auto GetInvalidation() const noexcept
+      -> CommandInvalidation override {
+      return CommandInvalidation::None();
+    }
+
     void Execute(CommandContext& ctx) override;
     [[nodiscard]] auto GetViewId() const noexcept -> ViewId { return view_id_; }
 

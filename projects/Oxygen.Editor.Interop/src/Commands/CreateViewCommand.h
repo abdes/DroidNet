@@ -37,6 +37,12 @@ namespace oxygen::interop::module {
     // The ViewManager will use the active FrameContext (provided by
     // EditorModule::OnFrameStart) to register the view. Note commands do not
     // receive a FrameContext argument.
+    //! Manages a pane's lifetime; a new pane renders on its first frame anyway.
+    [[nodiscard]] auto GetInvalidation() const noexcept
+      -> CommandInvalidation override {
+      return CommandInvalidation::None();
+    }
+
     void Execute(CommandContext& context) override;
 
   private:

@@ -51,6 +51,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/SceneCameraViewResolver.h>
 
 namespace oxygen::interop::module {
 
@@ -379,6 +380,10 @@ namespace oxygen::interop::module {
       scene_helpers_.BeginFrame(
         scene_.get(), scene_generation_->load(), selected, active);
     }
+    // Hover feedback draws only in the hovered view: when it moves, the view
+    // it left and the view it entered both draw differently.
+    const auto gizmo_hover = transform_gizmo_.GetHoverState();
+    const auto helper_hover = scene_helpers_.GetHoverState();
     for (auto* view : view_manager_->GetAllViews()) {
       const auto view_id = view->GetViewId();
       auto batch = input_accumulator_->Drain(view_id);
@@ -398,6 +403,8 @@ namespace oxygen::interop::module {
       const bool has_keys = !batch.key_events.empty();
       const bool has_buttons = !batch.button_events.empty();
       if (has_mouse || has_wheel || has_keys || has_buttons) {
+        // Hover feedback and navigation change only this pane.
+        pane_policy_.Invalidate(view_id);
         DLOG_F(2,
           "EditorModule input: draining+dispatching view={} mouse(dx={},dy={}) wheel(dx={},dy={}) keys={} buttons={} pos(x={},y={})",
           view_id.get(),
@@ -408,6 +415,16 @@ namespace oxygen::interop::module {
       }
 
       input_accumulator_adapter_->DispatchForView(view_id, batch);
+    }
+    if (const auto hover = transform_gizmo_.GetHoverState();
+      hover != gizmo_hover) {
+      pane_policy_.Invalidate(gizmo_hover.view);
+      pane_policy_.Invalidate(hover.view);
+    }
+    if (const auto hover = scene_helpers_.GetHoverState();
+      hover != helper_hover) {
+      pane_policy_.Invalidate(helper_hover.view);
+      pane_policy_.Invalidate(hover.view);
     }
 
     // After surface handling, execute frame-start commands related to views
@@ -429,19 +446,14 @@ namespace oxygen::interop::module {
       },
       [&](std::unique_ptr<EditorCommand>& cmd) {
         if (cmd) {
-          try {
-            if (const auto* destroy_view =
-                  dynamic_cast<const DestroyViewCommand*>(cmd.get());
-                destroy_view != nullptr) {
-              RemovePublishedRuntimeViewForIntent(
-                destroy_view->GetViewId(), context.get());
-            }
-            cmd->Execute(cmd_ctx);
-          } catch (const std::exception& e) {
-            LOG_F(ERROR, "Exception executing DestroyViewCommand: {}", e.what());
-          } catch (...) {
-            LOG_F(ERROR, "Unknown exception executing DestroyViewCommand");
+          if (const auto* destroy_view =
+                dynamic_cast<const DestroyViewCommand*>(cmd.get());
+              destroy_view != nullptr) {
+            RemovePublishedRuntimeViewForIntent(
+              destroy_view->GetViewId(), context.get());
+            pane_policy_.Forget(destroy_view->GetViewId());
           }
+          RunCommand(*cmd, cmd_ctx, "DestroyViewCommand");
         }
       });
 
@@ -454,13 +466,7 @@ namespace oxygen::interop::module {
       },
       [&](std::unique_ptr<EditorCommand>& cmd) {
         if (cmd) {
-          try {
-            cmd->Execute(cmd_ctx);
-          } catch (const std::exception& e) {
-            LOG_F(ERROR, "Exception executing CreateViewCommand: {}", e.what());
-          } catch (...) {
-            LOG_F(ERROR, "Unknown exception executing CreateViewCommand");
-          }
+          RunCommand(*cmd, cmd_ctx, "CreateViewCommand");
         }
       });
 
@@ -472,13 +478,7 @@ namespace oxygen::interop::module {
       },
       [&](std::unique_ptr<EditorCommand>& cmd) {
         if (cmd) {
-          try {
-            cmd->Execute(cmd_ctx);
-          } catch (const std::exception& e) {
-            LOG_F(ERROR, "Exception executing FrameStart command: {}", e.what());
-          } catch (...) {
-            LOG_F(ERROR, "Unknown exception executing FrameStart command");
-          }
+          RunCommand(*cmd, cmd_ctx, "FrameStart command");
         }
       });
 
@@ -524,6 +524,8 @@ namespace oxygen::interop::module {
           fmt::ptr(surface.get()));
 
         registry_->CommitRegistration(key, surface);
+        // A new swap chain holds no image until its panes render into it.
+        InvalidatePanesOn(key);
 
         LOG_F(INFO, "Committed surface registration for surface ptr={}",
           fmt::ptr(surface.get()));
@@ -621,6 +623,8 @@ namespace oxygen::interop::module {
 
       surface->Resize();
       view_manager_->OnSurfaceResized(key, *surface);
+      // Resizing discards the swap chain's buffers and their image.
+      InvalidatePanesOn(key);
 
       const bool ok = surface->GetCurrentBackBuffer() != nullptr;
       for (auto& callback : registry_->DrainResizeCallbacks(key)) {
@@ -659,21 +663,20 @@ namespace oxygen::interop::module {
       },
       [&](std::unique_ptr<EditorCommand>& cmd) {
         if (cmd) {
-          try {
-            cmd->Execute(cmd_context);
-          } catch (const std::exception& e) {
-            LOG_F(ERROR, "Exception executing editor command: {}", e.what());
-          } catch (...) {
-            LOG_F(ERROR, "Unknown exception executing editor command");
-          }
+          RunCommand(*cmd, cmd_context, "editor command");
         }
       });
 
+    if (content_changed) {
+      scene_changed_ = true;
+    }
     if (scene_ && asset_requests_) {
       if (content_changed) {
         asset_requests_->Refresh(*scene_);
       }
-      asset_requests_->Drain(*scene_);
+      if (asset_requests_->Drain(*scene_)) {
+        scene_changed_ = true;
+      }
     }
 
     if (active_roots_completion_ && (!asset_requests_ || !asset_requests_->IsRefreshPending())) {
@@ -805,6 +808,7 @@ namespace oxygen::interop::module {
 
   auto EditorModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
     -> co::Co<> {
+    held_views_.clear();
     if (preview_paused_ || context == nullptr || engine_ == nullptr
       || !view_manager_) {
       CancelPendingPicks();
@@ -819,35 +823,76 @@ namespace oxygen::interop::module {
     }
 
     auto& renderer = renderer_opt->get();
-    const auto outline = BuildSelectionOutline();
+    auto panes = CollectPanes(*context, renderer, *gfx);
+    DecidePaneRenders(renderer, panes);
+
+    const bool any_render = std::ranges::any_of(
+      panes, [](const PaneCandidate& pane) { return pane.render; });
+    const auto outline = any_render ? BuildSelectionOutline() : nullptr;
     std::unordered_set<ViewId> published_views;
-
-    // A publication lasts until it is removed, but its resolved camera only
-    // lasts one frame. A view not republished this frame is withdrawn, or the
-    // renderer would prepare it without a camera and fail the frame's views.
-    const auto withdraw = [&](const EditorView& view, std::string_view reason) {
-      if (renderer.ResolvePublishedRuntimeViewId(view.GetViewId())
-        == kInvalidViewId) {
-        return;
+    for (const auto& pane : panes) {
+      const auto view_id = pane.view->GetViewId();
+      if (!pane.render
+        && renderer.HoldPublishedRuntimeView(*context, view_id)) {
+        held_views_.insert(view_id);
+        continue;
       }
-      LOG_F(INFO, "OnPublishViews: view '{}' withdrawn: {}", view.GetName(),
-        reason);
-      RemovePublishedRuntimeViewForIntent(view.GetViewId(), context.get());
-    };
+      if (PublishPane(*context, renderer, *pane.view, outline)) {
+        published_views.insert(view_id);
+        pane_policy_.MarkRendered(view_id, pane.fingerprint);
+      }
+      else {
+        pane_policy_.Forget(view_id);
+      }
+    }
 
+    SubmitPendingPicks(renderer, published_views);
+    co_return;
+  }
+
+  void EditorModule::RunCommand(EditorCommand& command,
+    CommandContext& context, const std::string_view label) {
+    try {
+      command.Execute(context);
+    }
+    catch (const std::exception& e) {
+      LOG_F(ERROR, "Exception executing {}: {}", label, e.what());
+    }
+    catch (...) {
+      LOG_F(ERROR, "Unknown exception executing {}", label);
+    }
+
+    // A failed command may still have applied part of its change.
+    const auto invalidation = command.GetInvalidation();
+    switch (invalidation.scope) {
+    case CommandInvalidation::Scope::kNone:
+      break;
+    case CommandInvalidation::Scope::kView:
+      pane_policy_.Invalidate(invalidation.view);
+      break;
+    case CommandInvalidation::Scope::kScene:
+      scene_changed_ = true;
+      break;
+    }
+  }
+
+  auto EditorModule::CollectPanes(engine::FrameContext& context,
+    vortex::Renderer& renderer, Graphics& graphics)
+    -> std::vector<PaneCandidate> {
+    std::vector<PaneCandidate> panes;
     for (auto* view : view_manager_->GetAllViews()) {
       if (view == nullptr || view->GetViewId() == kInvalidViewId) {
         continue;
       }
       if (!view->IsVisible()) {
-        withdraw(*view, "hidden");
+        WithdrawPane(context, renderer, *view, "hidden");
         continue;
       }
 
       const auto& config = view->GetConfig();
       if (!config.compositing_target.has_value()
         || !registry_->FindSurface(*config.compositing_target)) {
-        withdraw(*view, "no registered surface");
+        WithdrawPane(context, renderer, *view, "no registered surface");
         continue;
       }
 
@@ -855,75 +900,187 @@ namespace oxygen::interop::module {
       const auto width = view->GetWidth();
       const auto height = view->GetHeight();
       if (width <= 0.0F || height <= 0.0F) {
-        withdraw(*view, "no extent");
+        WithdrawPane(context, renderer, *view, "no extent");
         continue;
       }
 
-      view->EnsureRenderTarget(*gfx);
+      view->EnsureRenderTarget(graphics);
       const auto scene_fb = view->GetFramebuffer();
-      const auto camera_node = view->GetRenderCameraNode();
+      auto camera_node = view->GetRenderCameraNode();
       if (!scene_fb || !camera_node.IsAlive()) {
-        withdraw(*view, scene_fb ? "no camera" : "no render target");
+        WithdrawPane(
+          context, renderer, *view, scene_fb ? "no camera" : "no render target");
         continue;
       }
 
-      View view_desc {};
-      view_desc.viewport = ViewPort {
-        .top_left_x = 0.0F,
-        .top_left_y = 0.0F,
-        .width = width,
-        .height = height,
-        .min_depth = 0.0F,
-        .max_depth = 1.0F,
-      };
-      view_desc.scissor = Scissors {
-        .left = 0,
-        .top = 0,
-        .right = static_cast<int32_t>(width),
-        .bottom = static_cast<int32_t>(height),
-      };
-
-      auto composition_view = vortex::CompositionView::ForScene(
-        view->GetViewId(), view_desc, camera_node);
-      composition_view.name = config.name;
-      composition_view.clear_color = config.clear_color;
-      composition_view.with_atmosphere = true;
-      composition_view.with_height_fog = false;
-      composition_view.with_local_fog = false;
-      composition_view.shading_mode = vortex::ShadingMode::kDeferred;
-      ApplyRenderOptions(composition_view, *view);
-      // A camera preview shows what the camera sees, without editor aids.
-      if (!view->IsInset() && config.render_options.show_selection_outline) {
-        composition_view.outline = outline;
-      }
-      // Helpers first: the gizmo draws over them.
-      auto overlay = std::make_shared<vortex::ViewOverlay>();
-      scene_helpers_.BuildOverlay(*view, *overlay);
-      transform_gizmo_.BuildOverlay(*view, *overlay);
-      if (!overlay->IsEmpty()) {
-        composition_view.overlay = std::move(overlay);
-      }
-
-      const auto published_view_id = renderer.PublishRuntimeCompositionView(
-        *context,
-        vortex::Renderer::RuntimeViewPublishInput {
-          .composition_view = composition_view,
-          .render_target = observer_ptr { scene_fb.get() },
-          .composite_source = observer_ptr { scene_fb.get() },
+      const auto resolved = vortex::SceneCameraViewResolver {
+        [camera_node](const ViewId& /*view_id*/) { return camera_node; },
+      }(view->GetViewId());
+      panes.push_back(PaneCandidate {
+        .view = view,
+        .fingerprint = PaneFingerprint {
+          .view = resolved.ViewMatrix(),
+          .projection = resolved.ProjectionMatrix(),
+          .width = width,
+          .height = height,
         },
-        vortex::ShadingMode::kDeferred);
-      if (published_view_id == kInvalidViewId) {
-        withdraw(*view, "publication rejected");
-        continue;
-      }
-      published_views.insert(view->GetViewId());
-      DLOG_F(2, "OnPublishViews: view '{}' intent={} published={} extent={}x{}",
-        view->GetName(), view->GetViewId().get(), published_view_id.get(),
-        width, height);
+        .render = false,
+      });
+    }
+    return panes;
+  }
+
+  void EditorModule::DecidePaneRenders(
+    vortex::Renderer& renderer, std::vector<PaneCandidate>& panes) {
+    bool scene_changed = std::exchange(scene_changed_, false);
+
+    // Streamed textures, uploaded geometry and refreshed probes change every
+    // pane's image without any scene edit.
+    const auto resident = renderer.GetResidentContentRevision();
+    if (resident_revision_ != resident) {
+      resident_revision_ = resident;
+      scene_changed = true;
     }
 
-    SubmitPendingPicks(renderer, published_views);
-    co_return;
+    const auto outline_revision
+      = outline_revision_.load(std::memory_order_acquire);
+    if (outline_revision != published_outline_revision_) {
+      published_outline_revision_ = outline_revision;
+      scene_changed = true;
+    }
+
+    // A piloted scene camera moves with its pane; the other panes draw it.
+    for (const auto& pane : panes) {
+      if (pane.view->IsPilotingSceneCamera()
+        && !pane_policy_.IsCurrent(pane.view->GetViewId(), pane.fingerprint)) {
+        scene_changed = true;
+      }
+    }
+
+    // A view whose image is still moving on its own, such as the ground grid
+    // easing after the camera stops, renders until the renderer reports rest.
+    for (const auto& pane : panes) {
+      const auto published
+        = renderer.ResolvePublishedRuntimeViewId(pane.view->GetViewId());
+      if (const auto status = renderer.InspectViewRenderStatus(published);
+        status.has_value() && status->settling) {
+        pane_policy_.Invalidate(pane.view->GetViewId());
+      }
+    }
+
+    pane_policy_.SetAlwaysRender(
+      always_render_panes_.load(std::memory_order_relaxed));
+    pane_policy_.BeginFrame(scene_changed);
+    {
+      std::lock_guard lock(picks_mutex_);
+      for (const auto& pick : pending_picks_) {
+        pane_policy_.Invalidate(pick.view_id);
+      }
+    }
+
+    // Panes sharing a surface (a host and its inset) are composed together,
+    // so the surface renders all of them or none.
+    std::vector<SurfaceRegistry::GuidKey> rendering_surfaces;
+    for (const auto& pane : panes) {
+      const auto view_id = pane.view->GetViewId();
+      const bool unpublished
+        = renderer.ResolvePublishedRuntimeViewId(view_id) == kInvalidViewId;
+      if (unpublished || pane_policy_.NeedsRender(view_id, pane.fingerprint)) {
+        rendering_surfaces.push_back(*pane.view->GetConfig().compositing_target);
+      }
+    }
+    for (auto& pane : panes) {
+      pane.render = std::ranges::find(rendering_surfaces,
+                      *pane.view->GetConfig().compositing_target)
+        != rendering_surfaces.end();
+    }
+  }
+
+  auto EditorModule::PublishPane(engine::FrameContext& context,
+    vortex::Renderer& renderer, EditorView& view,
+    const std::shared_ptr<const vortex::ViewOutline>& outline) -> bool {
+    const auto width = view.GetWidth();
+    const auto height = view.GetHeight();
+    View view_desc {};
+    view_desc.viewport = ViewPort {
+      .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
+      .width = width,
+      .height = height,
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    };
+    view_desc.scissor = Scissors {
+      .left = 0,
+      .top = 0,
+      .right = static_cast<int32_t>(width),
+      .bottom = static_cast<int32_t>(height),
+    };
+
+    const auto& config = view.GetConfig();
+    const auto scene_fb = view.GetFramebuffer();
+    auto composition_view = vortex::CompositionView::ForScene(
+      view.GetViewId(), view_desc, view.GetRenderCameraNode());
+    composition_view.name = config.name;
+    composition_view.clear_color = config.clear_color;
+    composition_view.with_atmosphere = true;
+    composition_view.with_height_fog = false;
+    composition_view.with_local_fog = false;
+    composition_view.shading_mode = vortex::ShadingMode::kDeferred;
+    ApplyRenderOptions(composition_view, view);
+    // A camera preview shows what the camera sees, without editor aids.
+    if (!view.IsInset() && config.render_options.show_selection_outline) {
+      composition_view.outline = outline;
+    }
+    // Helpers first: the gizmo draws over them.
+    auto overlay = std::make_shared<vortex::ViewOverlay>();
+    scene_helpers_.BuildOverlay(view, *overlay);
+    transform_gizmo_.BuildOverlay(view, *overlay);
+    if (!overlay->IsEmpty()) {
+      composition_view.overlay = std::move(overlay);
+    }
+
+    const auto published_view_id = renderer.PublishRuntimeCompositionView(
+      context,
+      vortex::Renderer::RuntimeViewPublishInput {
+        .composition_view = composition_view,
+        .render_target = observer_ptr { scene_fb.get() },
+        .composite_source = observer_ptr { scene_fb.get() },
+      },
+      vortex::ShadingMode::kDeferred);
+    if (published_view_id == kInvalidViewId) {
+      WithdrawPane(context, renderer, view, "publication rejected");
+      return false;
+    }
+    DLOG_F(2, "OnPublishViews: view '{}' intent={} published={} extent={}x{}",
+      view.GetName(), view.GetViewId().get(), published_view_id.get(), width,
+      height);
+    return true;
+  }
+
+  void EditorModule::InvalidatePanesOn(const SurfaceRegistry::GuidKey& key) {
+    for (const auto* view : view_manager_->GetAllViews()) {
+      if (view != nullptr && view->GetConfig().compositing_target == key) {
+        pane_policy_.Invalidate(view->GetViewId());
+      }
+    }
+  }
+
+  void EditorModule::WithdrawPane(engine::FrameContext& context,
+    vortex::Renderer& renderer, const EditorView& view,
+    const std::string_view reason) {
+    // A publication lasts until it is removed, but its resolved camera only
+    // lasts one frame. A pane neither published nor held this frame is
+    // withdrawn, or the renderer would prepare it without a camera and fail
+    // the frame's views.
+    pane_policy_.Forget(view.GetViewId());
+    if (renderer.ResolvePublishedRuntimeViewId(view.GetViewId())
+      == kInvalidViewId) {
+      return;
+    }
+    LOG_F(INFO, "OnPublishViews: view '{}' withdrawn: {}", view.GetName(),
+      reason);
+    RemovePublishedRuntimeViewForIntent(view.GetViewId(), &context);
   }
 
   auto EditorModule::BuildSelectionOutline()
@@ -1087,6 +1244,11 @@ namespace oxygen::interop::module {
     std::lock_guard lock(outline_mutex_);
     outline_nodes_ = std::move(nodes);
     outline_active_ = active;
+    outline_revision_.fetch_add(1U, std::memory_order_release);
+  }
+
+  void EditorModule::SetAlwaysRenderPanes(const bool always_render) noexcept {
+    always_render_panes_.store(always_render, std::memory_order_relaxed);
   }
 
   auto EditorModule::OnPreRender(observer_ptr<engine::FrameContext> context) -> co::Co<> {
@@ -1161,8 +1323,10 @@ namespace oxygen::interop::module {
     };
 
     for (auto* view : views) {
-      // A camera preview inset is composed as a layer of its host.
-      if (!is_composable(view) || view->IsInset()) {
+      // A camera preview inset is composed as a layer of its host. A held
+      // pane keeps the image its surface last presented.
+      if (!is_composable(view) || view->IsInset()
+        || held_views_.contains(view->GetViewId())) {
         continue;
       }
 

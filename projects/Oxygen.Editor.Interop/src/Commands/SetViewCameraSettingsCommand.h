@@ -32,6 +32,12 @@ namespace oxygen::interop::module {
       far_plane_(far_plane) {
     }
 
+    //! Changes only what its own view shows.
+    [[nodiscard]] auto GetInvalidation() const noexcept
+      -> CommandInvalidation override {
+      return CommandInvalidation::View(view_id_);
+    }
+
     void Execute(CommandContext& /*context*/) override;
 
   private:

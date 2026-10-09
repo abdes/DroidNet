@@ -73,6 +73,8 @@ namespace oxygen::interop::module {
     //! Index into the helper nodes.
     std::size_t node { 0U };
     HelperHandle handle { HelperHandle::kNone };
+
+    auto operator==(const HelperHandleHit&) const -> bool = default;
   };
 
   //! An icon inside a picked rectangle.

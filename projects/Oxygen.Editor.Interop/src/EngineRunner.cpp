@@ -369,6 +369,15 @@ namespace Oxygen::Interop {
       static_cast<uint32_t>(fps));
   }
 
+  auto EngineRunner::SetVSyncEnabled(EngineContext^ ctx, bool enabled)
+    -> void {
+    if (ctx == nullptr) {
+      return;
+    }
+
+    oxygen::engine::interop::SetVSyncEnabled(ctx->NativeShared(), enabled);
+  }
+
   auto EngineRunner::GetEngineConfig(EngineContext^ ctx) -> EngineConfig^ {
     if (ctx == nullptr) {
       throw gcnew ArgumentNullException("ctx");

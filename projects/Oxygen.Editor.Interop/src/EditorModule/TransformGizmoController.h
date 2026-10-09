@@ -123,6 +123,19 @@ namespace oxygen::interop::module {
       return view == hover_view_ && hovered_ != GizmoHandle::kNone;
     }
 
+    //! The view that draws hover feedback and the handle it highlights; a
+    //! change means those views draw differently. Engine thread only.
+    struct HoverState {
+      ViewId view { kInvalidViewId };
+      GizmoHandle handle { GizmoHandle::kNone };
+
+      auto operator==(const HoverState&) const -> bool = default;
+    };
+    [[nodiscard]] auto GetHoverState() const noexcept -> HoverState
+    {
+      return { .view = hover_view_, .handle = hovered_ };
+    }
+
     //! What a view shows, as the gizmo projects it; none for a view without
     //! a camera or extent.
     [[nodiscard]] static auto CameraOf(EditorView& view)

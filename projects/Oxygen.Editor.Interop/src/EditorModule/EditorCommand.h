@@ -7,8 +7,11 @@
 #pragma once
 #pragma managed(push, off)
 
+#include <cstdint>
+
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Scene/Scene.h>
 
 namespace oxygen {
@@ -43,6 +46,30 @@ namespace oxygen::interop::module {
     oxygen::observer_ptr<oxygen::vortex::Renderer> Renderer;
   };
 
+  //! What executing a command can change in the viewport panes.
+  struct CommandInvalidation {
+    enum class Scope : std::uint8_t {
+      kNone, //!< Nothing any pane shows.
+      kView, //!< Only what `view` shows.
+      kScene, //!< Anything every pane shows.
+    };
+
+    Scope scope { Scope::kScene };
+    ViewId view { kInvalidViewId };
+
+    [[nodiscard]] static constexpr auto None() noexcept -> CommandInvalidation {
+      return { .scope = Scope::kNone, .view = kInvalidViewId };
+    }
+    [[nodiscard]] static constexpr auto View(const ViewId view_id) noexcept
+      -> CommandInvalidation {
+      return { .scope = Scope::kView, .view = view_id };
+    }
+    [[nodiscard]] static constexpr auto Scene() noexcept
+      -> CommandInvalidation {
+      return { .scope = Scope::kScene, .view = kInvalidViewId };
+    }
+  };
+
   //! Abstract base class for all editor commands.
   class EditorCommand {
   public:
@@ -63,6 +90,14 @@ namespace oxygen::interop::module {
 
     [[nodiscard]] auto GetTargetPhase() const noexcept -> oxygen::core::PhaseId {
       return target_phase_;
+    }
+
+    //! What this command's execution can change on screen. Commands that
+    //! touch the scene keep the default; view-only and read-only commands
+    //! narrow it so idle panes are not re-rendered.
+    [[nodiscard]] virtual auto GetInvalidation() const noexcept
+      -> CommandInvalidation {
+      return CommandInvalidation::Scene();
     }
 
   private:
