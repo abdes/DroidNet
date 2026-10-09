@@ -144,7 +144,11 @@ public sealed partial class SkyLightSectionViewModel : ObservableObject, IDispos
     public void SetCubemap(Uri? cubemap) => this.Cubemap = cubemap;
 
     /// <inheritdoc />
-    public void Dispose() => this.Cubemaps.Dispose();
+    public void Dispose()
+    {
+        this.StopRuntimeWatch();
+        this.Cubemaps.Dispose();
+    }
 
     /// <summary>Starts the cube texture feed.</summary>
     internal void StartAssets() => this.Cubemaps.Start();

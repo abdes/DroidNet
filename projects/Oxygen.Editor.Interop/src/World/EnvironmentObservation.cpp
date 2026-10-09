@@ -44,8 +44,12 @@ public:
     result.AtmosphereExists = value.atmosphere_exists;
     result.PostProcessExists = value.post_process_exists;
     result.SkyLightObserved = value.sky_light.observed;
+    result.SkyLightEnabled = value.sky_light.enabled;
     result.SkyLightUsable = value.sky_light.usable;
     result.SkyLightEmptyCapture = value.sky_light.empty_capture;
+    result.SkyLightStatus = static_cast<int>(value.sky_light.status);
+    result.SkyLightUnavailableReason
+      = static_cast<int>(value.sky_light.unavailable_reason);
     result.SkyLightSceneLifetime = value.sky_light.scene_lifetime;
     result.SkyLightFrameSequence = value.sky_light.frame_sequence;
     result.SkyLightPublishedRevision = value.sky_light.published_revision;

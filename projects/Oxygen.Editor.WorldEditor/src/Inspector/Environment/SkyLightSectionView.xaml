@@ -23,6 +23,15 @@
         HeaderIcon="{ui:FontIcon Glyph='&#xE706;'}"
         IsExpanded="True"
         Tag="Environment">
+        <editorcontrols:PropertiesExpander.ItemsHeader>
+            <InfoBar
+                x:Name="RuntimeStatusBar"
+                Margin="0,0,0,4"
+                IsClosable="False"
+                IsOpen="{x:Bind ViewModel.HasRuntimeStatus, Mode=OneWay}"
+                Message="{x:Bind ViewModel.RuntimeStatus, Mode=OneWay}"
+                Severity="Warning" />
+        </editorcontrols:PropertiesExpander.ItemsHeader>
         <editorcontrols:PropertiesExpander.Items>
             <editorcontrols:PropertyCard
                 x:Name="EnabledCard"

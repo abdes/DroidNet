@@ -23,8 +23,14 @@ public sealed record RuntimeEnvironmentState
     /// <summary>Gets a value indicating whether this scene has a rendered sky-light snapshot.</summary>
     public bool SkyLightObserved { get; init; }
 
+    /// <summary>Gets a value indicating whether the rendered sky light is enabled.</summary>
+    public bool SkyLightEnabled { get; init; }
+
     /// <summary>Gets a value indicating whether complete sky-light products were accepted for GPU-ordered consumption.</summary>
     public bool SkyLightUsable { get; init; }
+
+    /// <summary>Gets why the rendered sky light has no image-based lighting.</summary>
+    public RuntimeSkyLightUnavailableReason SkyLightUnavailableReason { get; init; }
 
     /// <summary>Gets a value indicating whether neither atmosphere nor captured height fog supplies radiance.</summary>
     public bool SkyLightEmptyCapture { get; init; }

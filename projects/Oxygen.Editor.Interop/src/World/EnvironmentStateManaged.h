@@ -25,8 +25,13 @@ public value struct EnvironmentStateManaged {
   bool PostProcessExists;
   // Last rendered scene snapshot, independent of authored values below.
   bool SkyLightObserved;
+  bool SkyLightEnabled;
   bool SkyLightUsable;
   bool SkyLightEmptyCapture;
+  //! Native StaticSkyLightProductStatus value.
+  int SkyLightStatus;
+  //! Native StaticSkyLightUnavailableReason value.
+  int SkyLightUnavailableReason;
   System::UInt64 SkyLightSceneLifetime;
   System::UInt64 SkyLightFrameSequence;
   System::UInt32 SkyLightPublishedRevision;

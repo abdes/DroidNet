@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Serialization;
@@ -385,6 +386,12 @@ public interface ISceneEngineSync
         Scene scene,
         SceneEnvironmentData environment,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Reads the live environment and its last rendered sky-light state.</summary>
+    /// <param name="scene">The authoring scene, which must be the one the runtime shows.</param>
+    /// <param name="cancellationToken">Cancels the observation.</param>
+    /// <returns>The observed state, or <see langword="null"/> when the runtime does not show this scene.</returns>
+    public Task<RuntimeEnvironmentState?> ObserveEnvironmentAsync(Scene scene, CancellationToken cancellationToken = default);
 
     /// <summary>Projects an environment snapshot in its captured authoring order.</summary>
     /// <param name="scene">The source authoring scene.</param>

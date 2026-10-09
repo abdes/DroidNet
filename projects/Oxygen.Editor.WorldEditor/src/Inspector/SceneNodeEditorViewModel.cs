@@ -124,7 +124,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             loggerFactory,
             commandService,
             this.CreateCommandContext);
-        this.environmentEditor = new EnvironmentViewModel(commandService, this.CreateCommandContext, assetProvider, this.InspectAtmosphereSource, hosting.DispatcherScheduler);
+        this.environmentEditor = new EnvironmentViewModel(commandService, this.CreateCommandContext, assetProvider, this.InspectAtmosphereSource, hosting.DispatcherScheduler, sceneEngineSync.ObserveEnvironmentAsync);
         this.renderingEditor = new NodeRenderingViewModel(commandService, this.CreateCommandContext);
 
         this.items = this.messenger.Send(new SceneNodeSelectionRequestMessage()).SelectedEntities;

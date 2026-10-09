@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -10,6 +11,19 @@ namespace Oxygen.Editor.World.Services;
 /// <summary>Keeps environment publication ordered without converting scene systems to scalar properties.</summary>
 public sealed partial class SceneEngineSync
 {
+    /// <inheritdoc/>
+    public async Task<RuntimeEnvironmentState?> ObserveEnvironmentAsync(Scene scene, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        if (this.activeWorld is not { } world || !ReferenceEquals(this.activeScene, scene))
+        {
+            return null;
+        }
+
+        var observation = await world.Commands.ObserveEnvironmentAsync(Guid.NewGuid(), world.Target, cancellationToken).ConfigureAwait(false);
+        return observation.Outcome.Succeeded ? observation.State : null;
+    }
+
     /// <inheritdoc/>
     public async Task<EnvironmentSyncResult> UpdateEnvironmentAsync(
         Scene scene,

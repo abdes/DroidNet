@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.Reactive.Concurrency;
 using DroidNet.Controls;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
+using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Inspector.Environment;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
@@ -15,6 +16,7 @@ namespace Oxygen.Editor.World.Inspector;
 /// <summary>Owns scene identity, shared edit lifetime and parent-owned section composition.</summary>
 public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner
 {
+    private readonly Func<Scene, CancellationToken, Task<RuntimeEnvironmentState?>>? observeEnvironment;
     private Scene? scene;
     private bool disposed;
 
@@ -24,13 +26,16 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
     /// <param name="assetProvider">The shared content catalog.</param>
     /// <param name="inspectSceneNode">The existing hierarchy navigation operation.</param>
     /// <param name="observerScheduler">The injected catalog-notification scheduler.</param>
+    /// <param name="observeEnvironment">Reads the runtime environment that renders a scene.</param>
     public EnvironmentViewModel(
         ISceneDocumentCommandService? commandService = null,
         Func<SceneDocumentCommandContext?>? commandContextProvider = null,
         IContentBrowserAssetProvider? assetProvider = null,
         Func<Guid, Task>? inspectSceneNode = null,
-        IScheduler? observerScheduler = null)
+        IScheduler? observerScheduler = null,
+        Func<Scene, CancellationToken, Task<RuntimeEnvironmentState?>>? observeEnvironment = null)
     {
+        this.observeEnvironment = observeEnvironment;
         this.EditOwner = new(commandService, commandContextProvider, this.RefreshFromScene, this.ValidationFeedback);
         var scheduler = observerScheduler ?? ImmediateScheduler.Instance;
         var cubeTextures = CubemapPickerModel.CubeTextures(assetProvider);
@@ -206,6 +211,11 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
             this.Exposure.Refresh(value.PostProcess ?? new());
             this.PostProcessing.Refresh(value.PostProcess ?? new());
         });
+
+        // Each authored change can alter the rendered sky light, which settles a few frames later.
+        this.SkyLight.WatchRuntime(this.scene is { } current && this.observeEnvironment is { } observe
+            ? cancellationToken => observe(current, cancellationToken)
+            : null);
     }
 
     private void OnSceneChanged(object? sender, PropertyChangedEventArgs args)
