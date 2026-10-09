@@ -350,6 +350,46 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(RuntimeViewPublicationTest,
+  HoldPublishedRuntimeViewKeepsViewOutOfFrameFamilyAndAlive)
+{
+  auto frame_context = FrameContext {};
+  PrepareFrameContext(frame_context, 1U);
+  const auto held_intent = ViewId { 21U };
+  const auto live_intent = ViewId { 22U };
+  constexpr auto kStateless
+    = oxygen::vortex::CompositionView::kInvalidViewStateHandle;
+  const auto held = PublishExposureView(frame_context, held_intent, kStateless);
+  const auto live = PublishExposureView(frame_context, live_intent, kStateless);
+  ASSERT_NE(held, oxygen::kInvalidViewId);
+  ASSERT_NE(live, oxygen::kInvalidViewId);
+
+  frame_context.SetFrameSequenceNumber(oxygen::frame::SequenceNumber { 1000U },
+    oxygen::engine::internal::EngineTagFactory::Get());
+  std::ignore = PublishExposureView(frame_context, live_intent, kStateless);
+  EXPECT_TRUE(renderer_->HoldPublishedRuntimeView(frame_context, held_intent));
+
+  auto context = oxygen::vortex::RenderContext {};
+  RendererPublicationProbe::PopulateRenderContextViewState(
+    *renderer_, context, frame_context, false);
+  ASSERT_EQ(context.frame_views.size(), 1U);
+  EXPECT_EQ(context.frame_views.front().view_id, live);
+
+  EXPECT_TRUE(
+    renderer_->PruneStalePublishedRuntimeViews(frame_context).empty());
+  EXPECT_EQ(renderer_->ResolvePublishedRuntimeViewId(held_intent), held);
+}
+
+NOLINT_TEST_F(
+  RuntimeViewPublicationTest, HoldPublishedRuntimeViewRejectsUnpublishedIntent)
+{
+  auto frame_context = FrameContext {};
+  PrepareFrameContext(frame_context, 1U);
+
+  EXPECT_FALSE(
+    renderer_->HoldPublishedRuntimeView(frame_context, ViewId { 31U }));
+}
+
+NOLINT_TEST_F(RuntimeViewPublicationTest,
   RemovePublishedRuntimeViewReleasesTrackedViewConstantsForPublishedView)
 {
   auto frame_context = FrameContext {};

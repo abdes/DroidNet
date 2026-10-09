@@ -1905,6 +1905,7 @@ auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
   {
     std::unique_lock lock(view_state_mutex_);
     view_ready_states_.clear();
+    held_published_views_.clear();
   }
 
   if (context == nullptr) {
@@ -2057,7 +2058,27 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
       = std::make_shared<internal::CompositingPass>(compositing_pass_config_);
   }
 
+  const auto has_work = std::ranges::any_of(
+    submissions, [](const PendingComposition& pending) -> bool {
+      return !pending.submission.tasks.empty()
+        || !pending.submission.surface_overlays.empty();
+    });
+  if (!has_work) {
+    co_return;
+  }
+
+  // One recorder composes every surface, so the submission count does not
+  // grow with the number of surfaces. Backbuffers reach their final present
+  // state once, after the last composition that targets them.
   const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
+  auto recorder_ptr
+    = gfx->AcquireCommandRecorder(queue_key, "Vortex Renderer Compositing");
+  CHECK_F(
+    static_cast<bool>(recorder_ptr), "Compositing recorder acquisition failed");
+  diagnostics_service_->AttachGpuTimelineCollector(*recorder_ptr);
+  auto& recorder = *recorder_ptr;
+  auto present_backbuffers = std::vector<graphics::Texture*> {};
+
   for (const auto& pending : submissions) {
     const auto& payload = pending.submission;
     if (payload.tasks.empty() && payload.surface_overlays.empty()) {
@@ -2067,13 +2088,6 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
     CHECK_F(static_cast<bool>(payload.composite_target),
       "Compositing requires a target framebuffer");
 
-    auto recorder_ptr
-      = gfx->AcquireCommandRecorder(queue_key, "Vortex Renderer Compositing");
-    CHECK_F(static_cast<bool>(recorder_ptr),
-      "Compositing recorder acquisition failed");
-    diagnostics_service_->AttachGpuTimelineCollector(*recorder_ptr);
-
-    auto& recorder = *recorder_ptr;
     auto& target_fb = *payload.composite_target;
     TrackCompositionFramebuffer(recorder, target_fb);
 
@@ -2277,9 +2291,10 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
     DispatchViewExtensionsOnPostComposition(
       *context, payload.surface_id, target_fb, recorder);
 
-    recorder.RequireResourceStateFinal(
-      backbuffer, graphics::ResourceStates::kPresent);
-    recorder.FlushBarriers();
+    if (std::ranges::find(present_backbuffers, &backbuffer)
+      == present_backbuffers.end()) {
+      present_backbuffers.push_back(&backbuffer);
+    }
 
     if (pending.target_surface) {
       const auto surfaces = context->GetSurfaces();
@@ -2291,6 +2306,12 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
       }
     }
   }
+
+  for (auto* backbuffer : present_backbuffers) {
+    recorder.RequireResourceStateFinal(
+      *backbuffer, graphics::ResourceStates::kPresent);
+  }
+  recorder.FlushBarriers();
 
   co_return;
 }
@@ -2625,6 +2646,19 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
         .pending_pick = nullptr,
       };
   return published_view_id;
+}
+
+auto Renderer::HoldPublishedRuntimeView(
+  engine::FrameContext& frame_context, const ViewId intent_view_id) -> bool
+{
+  std::unique_lock state_lock(view_state_mutex_);
+  const auto it = published_runtime_views_by_intent_.find(intent_view_id);
+  if (it == published_runtime_views_by_intent_.end()) {
+    return false;
+  }
+  it->second.last_seen_frame = frame_context.GetFrameSequenceNumber();
+  held_published_views_.insert(it->second.published_view_id);
+  return true;
 }
 
 auto Renderer::ResolvePublishedRuntimeViewId(
@@ -3499,8 +3533,17 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
   render_context.frame_views.clear();
   render_context.pass_target.reset(nullptr);
 
+  auto held_views = std::unordered_set<ViewId> {};
+  {
+    std::shared_lock state_lock(view_state_mutex_);
+    held_views = held_published_views_;
+  }
+
   for (const auto& view_ref : context.GetViews()) {
     const auto& view = view_ref.get();
+    if (held_views.contains(view.id)) {
+      continue;
+    }
     if (view.render_target != nullptr) {
       render_context.view_outputs.insert_or_assign(view.id, view.render_target);
     } else if (view.composite_source != nullptr) {

@@ -14,6 +14,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -634,6 +635,15 @@ public:
     std::string debug_name = {},
     std::optional<scene::ExposureSettings> exposure_override = {},
     std::optional<ShaderDebugMode> shader_debug_mode_override = {}) -> ViewId;
+  //! Keep a published runtime view without rendering it this frame.
+  /*!
+   The view keeps its registration, view state, exposure history and last
+   output, and is not pruned as idle; it is left out of this frame's render
+   family. The hold lasts for the current frame only. Callers must not compose
+   a held view this frame. Returns false when the intent view is not published.
+  */
+  OXGN_VRTX_API auto HoldPublishedRuntimeView(
+    engine::FrameContext& frame_context, ViewId intent_view_id) -> bool;
   OXGN_VRTX_NDAPI auto ResolvePublishedRuntimeViewId(
     ViewId intent_view_id) const noexcept -> ViewId;
   //! Picks a published runtime view the next time it renders.
@@ -1031,6 +1041,8 @@ private:
   std::unordered_map<ViewId, bool> view_ready_states_;
   std::unordered_map<ViewId, PublishedRuntimeViewState>
     published_runtime_views_by_intent_;
+  // Published view ids held out of the current frame's render family.
+  std::unordered_set<ViewId> held_published_views_;
   std::unique_ptr<RendererPublicationState> publication_state_;
 
   struct PendingComposition {
