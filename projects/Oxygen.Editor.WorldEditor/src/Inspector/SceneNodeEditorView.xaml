@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:DroidNet.Controls"
     xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
     xmlns:local="using:Oxygen.Editor.World.Inspector"
     x:Name="Root"
     KeyboardAcceleratorPlacementMode="Hidden"
@@ -210,7 +211,7 @@
                     ItemsSource="{x:Bind ViewModel.PropertyEditors}"
                     TabFocusNavigation="Local">
                     <ItemsRepeater.Layout>
-                        <StackLayout Orientation="Vertical" Spacing="4" />
+                        <editorcontrols:PropertyItemsLayout Spacing="4" />
                     </ItemsRepeater.Layout>
                     <ItemsRepeater.ItemTemplate>
                         <DataTemplate x:DataType="local:IDetailsSection">

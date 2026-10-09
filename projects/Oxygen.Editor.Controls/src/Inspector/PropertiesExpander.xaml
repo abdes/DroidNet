@@ -133,7 +133,7 @@
                                             ItemsSource="{TemplateBinding Items}"
                                             TabFocusNavigation="Local">
                                             <ItemsRepeater.Layout>
-                                                <StackLayout Orientation="Vertical" Spacing="{ThemeResource PropertiesExpanderItemsSpacing}" />
+                                                <local:PropertyItemsLayout Spacing="{ThemeResource PropertiesExpanderItemsSpacing}" />
                                             </ItemsRepeater.Layout>
                                         </ItemsRepeater>
                                         <ContentPresenter Grid.Row="2" Content="{TemplateBinding ItemsFooter}" />
