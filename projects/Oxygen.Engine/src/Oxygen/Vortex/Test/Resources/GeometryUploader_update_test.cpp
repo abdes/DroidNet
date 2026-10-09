@@ -195,4 +195,28 @@ NOLINT_TEST_F(GeometryUploaderUpdateTest, UpdateStaleHandleIsRejected)
   EXPECT_TRUE(uploader.IsHandleValid(current_handle));
 }
 
+//! The uploader-wide resident revision advances when an upload completes, not
+//! when geometry is merely registered.
+NOLINT_TEST_F(
+  GeometryUploaderUpdateTest, ResidentContentRevisionAdvancesOnCompletedUpload)
+{
+  auto& uploader = GeoUploader();
+  BeginFrame(Slot { 0 });
+  const auto initial = uploader.GetResidentContentRevision();
+  const auto handle
+    = uploader.GetOrAllocate(oxygen::vortex::sceneprep::GeometryRef {
+      .asset_key = MakeGeometryAssetKey("resident_revision"),
+      .mesh = MakeValidTriangleMesh("Resident", true),
+    });
+  // Requesting the indices schedules the upload, as drawing would.
+  EXPECT_EQ(uploader.GetShaderVisibleIndices(handle).content_revision, 0U);
+  EXPECT_EQ(uploader.GetResidentContentRevision(), initial);
+
+  BeginFrame(Slot { 1 });
+
+  ASSERT_TRUE(
+    uploader.GetShaderVisibleIndices(handle).vertex_srv_index.IsValid());
+  EXPECT_GT(uploader.GetResidentContentRevision(), initial);
+}
+
 } // namespace

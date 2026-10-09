@@ -43,6 +43,7 @@
 #include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 #include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/Types/GroundGridConfig.h>
+#include <Oxygen/Vortex/Types/ResidentContentRevision.h>
 #include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
 #include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
@@ -470,6 +471,10 @@ public:
 
   [[nodiscard]] OXGN_VRTX_API auto InspectViewRenderStatus(ViewId view_id) const
     -> std::optional<ViewRenderStatus>;
+  //! Resident content that can change a view's image without a scene edit.
+  //! Hosts rendering on demand re-render when successive values differ.
+  [[nodiscard]] OXGN_VRTX_API auto GetResidentContentRevision() const noexcept
+    -> ResidentContentRevision;
   //! Acquire during the view's publication window, before accepting an
   //! asynchronous IBL inspection/readback. kBusy leaves normal updates intact.
   [[nodiscard]] OXGN_VRTX_API auto AcquireIblCapture(ViewId view)

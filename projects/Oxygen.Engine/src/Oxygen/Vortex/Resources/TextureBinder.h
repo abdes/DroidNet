@@ -203,6 +203,10 @@ public:
 
   [[nodiscard]] OXGN_VRTX_API auto GetPendingUploadCount() const noexcept
     -> std::size_t;
+  //! Advances whenever any descriptor this binder serves is repointed, so a
+  //! host can tell that sampled texture content changed without a scene edit.
+  [[nodiscard]] OXGN_VRTX_API auto GetResidentContentRevision() const noexcept
+    -> std::uint64_t;
   //! Changes whenever an existing shader-visible texture descriptor is
   //! repointed.
   [[nodiscard]] OXGN_VRTX_API auto GetContentRevision(

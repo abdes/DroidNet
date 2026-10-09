@@ -3502,6 +3502,13 @@ auto Renderer::AcquireIblCapture(const ViewId view)
   return scene_renderer_->AcquireIblCapture(view);
 }
 
+auto Renderer::GetResidentContentRevision() const noexcept
+  -> ResidentContentRevision
+{
+  return scene_renderer_ ? scene_renderer_->GetResidentContentRevision()
+                         : ResidentContentRevision {};
+}
+
 auto Renderer::InspectViewRenderStatus(ViewId view_id) const
   -> std::optional<ViewRenderStatus>
 {

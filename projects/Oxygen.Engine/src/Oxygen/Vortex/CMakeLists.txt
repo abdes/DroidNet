@@ -242,6 +242,7 @@ set(
   "Types/ExposureSettingsStatus.h"
   "Types/EnvironmentLightingState.h"
   "Types/SkyLightRuntimeState.h"
+  "Types/ResidentContentRevision.h"
   "Types/ExposureTargetData.h"
   "Types/ExposureStateData.h"
   "Types/ViewConstants.h"

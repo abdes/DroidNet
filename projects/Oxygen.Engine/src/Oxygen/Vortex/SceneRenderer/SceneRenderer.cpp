@@ -1853,6 +1853,20 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
     scene_texture_pool_.GetLiveLeaseCount());
 }
 
+auto SceneRenderer::GetResidentContentRevision() const noexcept
+  -> ResidentContentRevision
+{
+  return ResidentContentRevision {
+    .textures = init_views_ ? init_views_->GetTextureContentRevision() : 0U,
+    .geometry = init_views_ ? init_views_->GetGeometryContentRevision() : 0U,
+    .environment_probes = environment_
+      ? environment_->InspectProbeState().probes.probe_revision
+      : 0U,
+    .exposure_masks
+    = post_process_ ? post_process_->GetExposureMaskContentRevision() : 0U,
+  };
+}
+
 auto SceneRenderer::InspectViewRenderStatus(ViewId view_id) const
   -> std::optional<ViewRenderStatus>
 {

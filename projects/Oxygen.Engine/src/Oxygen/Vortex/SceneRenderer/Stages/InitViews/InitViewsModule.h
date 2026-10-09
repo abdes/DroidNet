@@ -85,6 +85,13 @@ public:
   OXGN_VRTX_NDAPI auto GetPreparedSceneFrame(ViewId view_id) const
     -> const PreparedSceneFrame*;
 
+  //! Revision of resident scene textures; 0 before the first execution.
+  [[nodiscard]] OXGN_VRTX_API auto GetTextureContentRevision() const noexcept
+    -> std::uint64_t;
+  //! Revision of resident scene geometry; 0 before the first execution.
+  [[nodiscard]] OXGN_VRTX_API auto GetGeometryContentRevision() const noexcept
+    -> std::uint64_t;
+
 private:
   std::optional<frame::SequenceNumber> maintenance_sequence_;
   frame::Slot maintenance_slot_ { frame::kInvalidSlot };

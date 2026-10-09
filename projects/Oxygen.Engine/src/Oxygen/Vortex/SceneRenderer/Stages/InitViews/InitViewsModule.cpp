@@ -743,6 +743,19 @@ void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     [](const auto& entry) -> bool { return !entry.second.published; });
 }
 
+auto InitViewsModule::GetTextureContentRevision() const noexcept
+  -> std::uint64_t
+{
+  return texture_binder_ ? texture_binder_->GetResidentContentRevision() : 0U;
+}
+
+auto InitViewsModule::GetGeometryContentRevision() const noexcept
+  -> std::uint64_t
+{
+  const auto geometry = scene_prep_state_.GetGeometryUploader();
+  return geometry ? geometry->GetResidentContentRevision() : 0U;
+}
+
 auto InitViewsModule::GetPreparedSceneFrame(const ViewId view_id) const
   -> const PreparedSceneFrame*
 {

@@ -124,6 +124,12 @@ public:
   OXGN_VRTX_NDAPI auto GetShaderVisibleIndices(
     vortex::sceneprep::GeometryHandle handle) -> MeshShaderVisibleIndices;
 
+  //! Advances whenever a geometry upload completes and its buffers become
+  //! resident, so a host can tell drawable content changed without a scene
+  //! edit.
+  OXGN_VRTX_NDAPI auto GetResidentContentRevision() const noexcept
+    -> std::uint64_t;
+
   //! Returns the number of pending upload operations.
   //! Useful for debugging and monitoring upload queue health.
   OXGN_VRTX_NDAPI auto GetPendingUploadCount() const -> std::size_t;

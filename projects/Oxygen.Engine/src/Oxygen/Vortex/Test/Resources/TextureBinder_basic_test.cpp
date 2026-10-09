@@ -231,4 +231,24 @@ NOLINT_TEST_F(
   EXPECT_EQ(AllocatedSrvCount(), 0U);
 }
 
+//! A new descriptor advances the binder-wide resident revision; a cache hit
+//! leaves it unchanged.
+NOLINT_TEST_F(
+  TextureBinderBasicTest, ResidentContentRevision_AdvancesOnNewDescriptorOnly)
+{
+  // Arrange
+  const auto before = TexBinder().GetResidentContentRevision();
+  const ResourceKey key = Loader().MintSyntheticTextureKey();
+
+  // Act
+  const auto first = TexBinder().GetOrAllocate(key);
+  const auto allocated = TexBinder().GetResidentContentRevision();
+  const auto second = TexBinder().GetOrAllocate(key);
+
+  // Assert
+  EXPECT_EQ(first, second);
+  EXPECT_GT(allocated, before);
+  EXPECT_EQ(TexBinder().GetResidentContentRevision(), allocated);
+}
+
 } // namespace

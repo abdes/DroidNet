@@ -580,6 +580,11 @@ public:
     const auto found = content_revisions_.find(descriptor);
     return found != content_revisions_.end() ? found->second : 0U;
   }
+  [[nodiscard]] auto GetResidentContentRevision() const noexcept
+    -> std::uint64_t
+  {
+    return resident_content_revision_;
+  }
   [[nodiscard]] auto GetPendingUploadBytes() const noexcept -> std::size_t;
   [[nodiscard]] auto GetDeferredRetryCount() const noexcept -> std::size_t;
   [[nodiscard]] auto GetPendingUploadByteBudget() const noexcept -> std::size_t;
@@ -587,6 +592,14 @@ public:
 private:
   mutable std::unordered_map<ShaderVisibleIndex, std::uint64_t>
     content_revisions_;
+  // Advances with every descriptor repoint, whatever texture it serves.
+  mutable std::uint64_t resident_content_revision_ { 0U };
+
+  auto BumpContentRevision(const ShaderVisibleIndex descriptor) const -> void
+  {
+    ++content_revisions_[descriptor];
+    ++resident_content_revision_;
+  }
   enum class FailurePolicy : uint8_t {
     kBindErrorTexture,
     kKeepPlaceholderBound,
@@ -809,6 +822,11 @@ auto TextureBinder::GetPendingUploadCount() const noexcept -> std::size_t
   return impl_->GetPendingUploadCount();
 }
 
+auto TextureBinder::GetResidentContentRevision() const noexcept -> std::uint64_t
+{
+  return impl_->GetResidentContentRevision();
+}
+
 auto TextureBinder::GetContentRevision(
   ShaderVisibleIndex descriptor) const noexcept -> std::uint64_t
 {
@@ -1029,7 +1047,7 @@ auto TextureBinder::Impl::GetOrAllocate(
 
   registry.Register(entry.texture);
   registry.RegisterView(*entry.texture, std::move(handle), view_desc);
-  ++content_revisions_[entry.srv_index];
+  BumpContentRevision(entry.srv_index);
 
   // Insert before initiating the load to ensure completion callbacks can
   // always resolve the entry even if the load completes synchronously.
@@ -1353,7 +1371,6 @@ auto TextureBinder::Impl::PublishCompletedUploads() -> void
               texture.reset();
             });
         }
-        auto& revision = content_revisions_.at(entry.srv_index);
         const bool updated = registry.UpdateView(*entry.texture,
           entry.descriptor_handle.ToBindlessHandle(), *entry.pending_view_desc);
         if (!updated) {
@@ -1368,7 +1385,7 @@ auto TextureBinder::Impl::PublishCompletedUploads() -> void
             reclaimer.CommitDeferredAction(std::move(retirement));
             entry.placeholder_texture.reset();
           }
-          ++revision;
+          BumpContentRevision(entry.srv_index);
           entry.is_placeholder = false;
           entry.load_failed = false;
         }
@@ -2036,7 +2053,6 @@ auto TextureBinder::Impl::ProcessEvictions() -> void
     auto release_placeholder = prepare(old_placeholder);
 
     if (entry.descriptor_handle.IsValid()) {
-      auto& revision = content_revisions_.at(entry.srv_index);
       const auto description
         = MakeTextureSrvViewDesc(Format::kRGBA8UNorm, {}, {});
       if (!registry.UpdateView(*placeholder_texture_,
@@ -2045,7 +2061,7 @@ auto TextureBinder::Impl::ProcessEvictions() -> void
         eviction_work_.splice(eviction_work_.end(), eviction_work_, work);
         continue;
       }
-      ++revision;
+      BumpContentRevision(entry.srv_index);
       entry.is_placeholder = true;
     }
     if (old_texture) {
@@ -2269,7 +2285,7 @@ auto TextureBinder::Impl::TryRepointEntryToErrorTexture(
     return false;
   }
 
-  ++content_revisions_[entry.srv_index];
+  BumpContentRevision(entry.srv_index);
   LOG_F(INFO, "Repointed descriptor {} to error texture for resource {}",
     entry.descriptor_handle.ToBindlessHandle(), resource_key);
   return true;

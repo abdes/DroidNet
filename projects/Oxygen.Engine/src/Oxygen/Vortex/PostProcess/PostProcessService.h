@@ -130,6 +130,9 @@ public:
 
   OXGN_VRTX_API auto OnFrameStart(
     frame::SequenceNumber sequence, frame::Slot slot) -> void;
+  //! Revision of resident exposure metering mask textures.
+  [[nodiscard]] OXGN_VRTX_API auto
+  GetExposureMaskContentRevision() const noexcept -> std::uint64_t;
   //! Validate and atomically apply authored settings. Missing camera context
   //! reuses the accepted camera EV only when remaining in ManualCamera mode.
   OXGN_VRTX_API auto SetConfig(const PostProcessConfig& config,

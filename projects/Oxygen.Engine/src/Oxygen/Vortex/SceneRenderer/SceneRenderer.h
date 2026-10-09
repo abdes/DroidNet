@@ -35,6 +35,7 @@
 #include <Oxygen/Vortex/Types/EnvironmentLightingState.h>
 #include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/ResidentContentRevision.h>
 #include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
 #include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
@@ -162,6 +163,8 @@ public:
   OXGN_VRTX_API auto OnRender(RenderContext& ctx) -> bool;
   [[nodiscard]] OXGN_VRTX_API auto InspectViewRenderStatus(ViewId view_id) const
     -> std::optional<ViewRenderStatus>;
+  [[nodiscard]] OXGN_VRTX_API auto GetResidentContentRevision() const noexcept
+    -> ResidentContentRevision;
   [[nodiscard]] auto ResolveViewLightingFrameSlot(ViewId view_id) const
     -> ShaderVisibleIndex;
   OXGN_VRTX_API void OnCompositing(RenderContext& ctx);

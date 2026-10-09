@@ -182,6 +182,11 @@ public:
     -> MeshShaderVisibleIndices;
 
   [[nodiscard]] auto GetPendingUploadCount() const -> std::size_t;
+  [[nodiscard]] auto GetResidentContentRevision() const noexcept
+    -> std::uint64_t
+  {
+    return resident_content_revision_;
+  }
 
   [[nodiscard]] auto GetPendingUploadTickets() const
     -> std::vector<vortex::upload::UploadTicket>;
@@ -286,6 +291,8 @@ private:
   std::vector<GeometryEntry> geometry_entries_;
   AssetHandles assets_;
   std::list<PendingCompletion> pending_completions_;
+  // Advances each time an upload makes geometry buffers resident.
+  std::uint64_t resident_content_revision_ { 0U };
   MaintenanceLimits limits_;
 };
 
@@ -1163,6 +1170,7 @@ auto GeometryUploader::Impl::RetireCompletedUploads() -> void
                            : entry->pending_index_srv_index;
     if (result->success) {
       published = pending;
+      ++resident_content_revision_;
     } else {
       const std::error_code error
         = result->error.value_or(vortex::upload::UploadError::kSubmitFailed);
@@ -1177,6 +1185,12 @@ auto GeometryUploader::Impl::RetireCompletedUploads() -> void
       || (entry->mesh->IsIndexed() && !entry->index_srv_index.IsValid());
     pending_completions_.erase(work);
   }
+}
+
+auto GeometryUploader::GetResidentContentRevision() const noexcept
+  -> std::uint64_t
+{
+  return impl_->GetResidentContentRevision();
 }
 
 auto GeometryUploader::GetPendingUploadCount() const -> std::size_t

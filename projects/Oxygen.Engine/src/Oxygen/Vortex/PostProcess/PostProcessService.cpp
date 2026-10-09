@@ -122,6 +122,12 @@ auto PostProcessService::EnsurePublishResources() -> bool
   return true;
 }
 
+auto PostProcessService::GetExposureMaskContentRevision() const noexcept
+  -> std::uint64_t
+{
+  return mask_binder_ ? mask_binder_->GetResidentContentRevision() : 0U;
+}
+
 auto PostProcessService::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
