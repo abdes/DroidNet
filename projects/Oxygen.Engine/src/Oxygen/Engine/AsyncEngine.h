@@ -182,6 +182,10 @@ public:
   //! responsibility.
   OXGN_NGIN_API auto SetTargetFps(uint32_t fps) noexcept -> void;
 
+  //! Request graphics vsync on or off through the `gfx.vsync` console
+  //! variable; the engine thread applies it at the next frame start.
+  OXGN_NGIN_API auto SetVSyncEnabled(bool enabled) noexcept -> void;
+
   // Clock accessors
   OXGN_NGIN_NDAPI auto GetPhysicalClock() const noexcept
     -> const time::PhysicalClock&;

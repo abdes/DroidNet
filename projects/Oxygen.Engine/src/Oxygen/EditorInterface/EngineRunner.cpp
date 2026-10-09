@@ -293,6 +293,17 @@ auto SetTargetFps(std::shared_ptr<EngineContext> ctx, uint32_t fps) -> void
   }
 }
 
+auto SetVSyncEnabled(std::shared_ptr<EngineContext> ctx, const bool enabled)
+  -> void
+{
+  const std::scoped_lock lock(engine_owner_mutex);
+  if (!ctx || !ctx->engine) {
+    return;
+  }
+
+  ctx->engine->SetVSyncEnabled(enabled);
+}
+
 auto GetEngineConfig(std::shared_ptr<EngineContext> ctx) -> EngineConfig
 {
   const std::scoped_lock lock(engine_owner_mutex);

@@ -83,6 +83,7 @@ namespace {
   using oxygen::console::ExecutionStatus;
 
   constexpr std::string_view kCVarEngineTargetFps = "ngin.target_fps";
+  constexpr std::string_view kCVarGraphicsVsync = "gfx.vsync";
   constexpr std::string_view kCVarEngineScriptingHotReloadEnabled
     = "ngin.scripting.hot_reload";
   constexpr std::string_view kCVarEngineScriptingHotReloadPollIntervalMs
@@ -379,6 +380,18 @@ auto AsyncEngine::SetTargetFps(uint32_t fps) noexcept -> void
   }
   config_.target_fps = fps;
   LOG_F(INFO, "AsyncEngine target_fps set to {}", config_.target_fps);
+}
+
+auto AsyncEngine::SetVSyncEnabled(const bool enabled) noexcept -> void
+{
+  const auto result = console_.SetCVarFromText({
+    .name = kCVarGraphicsVsync,
+    .text = enabled ? "true" : "false",
+  });
+  if (result.status != ExecutionStatus::kOk) {
+    DLOG_F(WARNING, "Failed to update {} CVar from SetVSyncEnabled({}): {}",
+      kCVarGraphicsVsync, enabled, result.error);
+  }
 }
 
 auto AsyncEngine::GetConsole() noexcept -> console::Console&

@@ -60,6 +60,11 @@ OXGN_EI_API auto StopEngine(std::shared_ptr<EngineContext> ctx) -> void;
 OXGN_EI_API auto SetTargetFps(std::shared_ptr<EngineContext> ctx, uint32_t fps)
   -> void;
 
+// Turn graphics vsync on or off for every presented surface; applied by the
+// engine thread at the next frame start.
+OXGN_EI_API auto SetVSyncEnabled(
+  std::shared_ptr<EngineContext> ctx, bool enabled) -> void;
+
 // Returns a copy of the current engine configuration for inspection by
 // managed code or tests. If ctx or ctx->engine is null, returns a default
 // EngineConfig value-initialized to defaults.
