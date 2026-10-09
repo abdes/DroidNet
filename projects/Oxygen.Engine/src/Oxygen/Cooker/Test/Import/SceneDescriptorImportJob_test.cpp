@@ -75,6 +75,7 @@ namespace {
     const std::filesystem::path& path, const std::string_view text) -> void
   {
     std::filesystem::create_directories(path.parent_path());
+    // NOLINTNEXTLINE(*-signed-bitwise)
     auto out = std::ofstream(path, std::ios::binary | std::ios::trunc);
     ASSERT_TRUE(out.is_open());
     out << text;
@@ -84,6 +85,7 @@ namespace {
   {
     namespace geometry = data::pak::geometry;
     std::filesystem::create_directories(path.parent_path());
+    // NOLINTNEXTLINE(*-signed-bitwise)
     serio::FileStream<> stream(path, std::ios::out | std::ios::trunc);
     serio::Writer writer(stream);
     const auto packed = writer.ScopedAlignment(1);
@@ -131,6 +133,7 @@ namespace {
     in.seekg(0, std::ios::beg);
 
     auto bytes = std::vector<std::byte>(size);
+    // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
     in.read(reinterpret_cast<char*>(bytes.data()),
       static_cast<std::streamsize>(bytes.size()));
     EXPECT_TRUE(in.good() || in.eof());
@@ -175,13 +178,11 @@ namespace {
   class SceneDescriptorImportJobTest : public testing::Test {
   protected:
     auto MakeRequest(const std::filesystem::path& cooked_root,
-      std::string descriptor_json, std::string_view job_name = "DemoScene")
-      -> ImportRequest
+      const std::string& descriptor_json,
+      std::string_view job_name = "DemoScene") -> ImportRequest
     {
       auto document = nlohmann::json::parse(descriptor_json);
-      if (!document.contains("version")) {
-        document["version"] = data::pak::world::kSceneAssetVersion;
-      }
+      document.emplace("version", data::pak::world::kSceneAssetVersion);
       auto request = ImportRequest {};
       request.source_path = "inline://scene-descriptor";
       request.job_name = std::string(job_name);
@@ -273,8 +274,10 @@ namespace {
     }));
     const auto path = root / "Textures/Meter.otex";
     std::filesystem::create_directories(path.parent_path());
+    // NOLINTNEXTLINE(*-signed-bitwise)
     auto output = std::ofstream(path, std::ios::binary | std::ios::trunc);
     const auto bytes = stream.Data();
+    // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
     output.write(reinterpret_cast<const char*>(bytes.data()),
       static_cast<std::streamsize>(bytes.size()));
     ASSERT_TRUE(output.good());
@@ -303,8 +306,10 @@ namespace {
     const auto scene_key
       = index.FindAssetKeyByVirtualPath("/.cooked/Scenes/MaskScene.oscene");
     ASSERT_TRUE(scene_key.has_value());
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
     const auto references = index.FindAssetReferences(scene_key.value());
     ASSERT_TRUE(references.has_value());
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
     EXPECT_THAT(references.value().Resources(),
       ::testing::ElementsAre(data::ResourceBinding {
         .kind = data::ResourceKind::kTexture,
@@ -330,6 +335,20 @@ namespace {
     EXPECT_FALSE(foreign.success);
     EXPECT_TRUE(HasDiagnosticCode(
       foreign.diagnostics, "scene.descriptor.mask_source_invalid"));
+
+    // A deleted mask leaves the scene without one, with a warning.
+    std::filesystem::remove(root / "Textures/Meter.otex");
+    const auto deleted = SubmitAndWait(service, MakeRequest(root, kDescriptor));
+    EXPECT_TRUE(deleted.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      deleted.diagnostics, "scene.descriptor.texture_descriptor_missing"));
+    const auto unmasked = data::SceneAsset(
+      data::AssetKey {}, ReadBinaryFile(root / "Scenes/MaskScene.oscene"))
+                            .TryGetPostProcessVolumeEnvironment();
+    ASSERT_TRUE(unmasked.has_value());
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+    EXPECT_EQ(
+      unmasked->auto_exposure_metering_mask, data::kNoResourceReference);
   }
 
   NOLINT_TEST_F(SceneDescriptorImportJobTest,
@@ -497,7 +516,7 @@ namespace {
     auto service = AsyncImportService {};
     const auto stop_service
       = oxygen::Finally([&service] -> void { service.Stop(); });
-    const auto descriptor = R"({"name":"Scene","nodes":[{"name":"Mesh"}],
+    const auto* const descriptor = R"({"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { false, true }) {
       auto request = MakeRequest(output, descriptor);
@@ -532,7 +551,7 @@ namespace {
     auto service = AsyncImportService {};
     const auto stop_service
       = oxygen::Finally([&service] -> void { service.Stop(); });
-    const auto descriptor = R"({"name":"Scene","nodes":[{"name":"Mesh"}],
+    const auto* const descriptor = R"({"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { true, false }) {
       auto request = MakeRequest(output, descriptor);
@@ -765,17 +784,21 @@ namespace {
     EXPECT_FLOAT_EQ(CheckedAt(directional, 0).distance_fadeout_fraction, 0.1F);
 
     // Exercise strict binary ingress with otherwise valid cooked content.
-    using namespace oxygen::data::pak::world;
+    using oxygen::data::pak::world::SceneAssetDesc;
+    using oxygen::data::pak::world::SceneComponentTableDesc;
     SceneAssetDesc descriptor {};
     std::memcpy(&descriptor, scene_bytes.data(), sizeof(descriptor));
     ASSERT_EQ(descriptor.component_table_count, 1U);
     SceneComponentTableDesc table {};
     std::memcpy(&table,
-      scene_bytes.data() + descriptor.component_table_directory_offset,
+      std::span(scene_bytes)
+        .subspan(descriptor.component_table_directory_offset)
+        .data(),
       sizeof(table));
     for (unsigned malformed = 0U; malformed < 8U; ++malformed) {
       SCOPED_TRACE(malformed);
       auto record = CheckedAt(directional, 0);
+      // NOLINTBEGIN(*-magic-numbers) - distinct malformed-field cases
       switch (malformed) {
       case 0:
         record.common.affects_world = 2U;
@@ -802,9 +825,10 @@ namespace {
         record.atmosphere_disk_luminance_scale_rgb[1] = -1.0F;
         break;
       }
+      // NOLINTEND(*-magic-numbers)
       auto malformed_bytes = scene_bytes;
-      std::memcpy(
-        malformed_bytes.data() + table.table.offset, &record, sizeof(record));
+      std::memcpy(std::span(malformed_bytes).subspan(table.table.offset).data(),
+        &record, sizeof(record));
       EXPECT_THROW(
         static_cast<void>(oxygen::data::SceneAsset(oxygen::data::AssetKey {},
           std::span<const std::byte>(malformed_bytes))),
@@ -1035,9 +1059,12 @@ namespace {
       for (uint32_t exposure = 0; exposure != 3; ++exposure) {
         for (uint32_t metering = 0; metering != 3; ++metering) {
           auto& input = document.at("environment").at("post_process_volume");
-          input.update({ { "tone_mapper", tone }, { "exposure_mode", exposure },
+          input.update({
+            { "tone_mapper", tone },
+            { "exposure_mode", exposure },
             { "auto_exposure_metering_mode", metering },
-            { "exposure_enabled", exposure == 1 } });
+            { "exposure_enabled", exposure == 1 },
+          });
           SCOPED_TRACE(document.dump());
           const auto report = SubmitAndWait(
             service, MakeRequest(root, document.dump(), "Environment"));

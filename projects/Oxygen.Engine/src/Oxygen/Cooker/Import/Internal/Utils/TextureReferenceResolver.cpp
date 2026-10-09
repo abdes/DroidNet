@@ -90,6 +90,21 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
     co_return sidecar;
   }
 
+  if (reference.allow_missing) {
+    session->AddDiagnostic({
+      .severity = ImportSeverity::kWarning,
+      .code
+      = std::string(reference.diagnostic_prefix) + "texture_descriptor_missing",
+      .message = "Texture descriptor virtual_path was not found: "
+        + std::string(virtual_path) + "; cooking continues without it",
+      .source_path = request->source_path.string(),
+      .object_path = reference.object_path,
+    });
+    auto missing = ResolvedTextureReference {};
+    missing.missing = true;
+    co_return missing;
+  }
+
   report_error("texture_descriptor_missing",
     "Texture descriptor virtual_path was not found: "
       + std::string(virtual_path));

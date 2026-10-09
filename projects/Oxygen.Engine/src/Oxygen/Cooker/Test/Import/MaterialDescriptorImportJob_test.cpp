@@ -42,6 +42,7 @@ namespace {
 
 #pragma pack(push, 1)
   struct TextureSidecarFile final {
+    // NOLINTNEXTLINE(*-avoid-c-arrays) - fixed on-disk layout
     char magic[4] = { 'O', 'T', 'E', 'X' };
     uint16_t version = 1;
     uint16_t reserved = 0;
@@ -68,8 +69,10 @@ namespace {
     const std::filesystem::path& path, std::span<const std::byte> bytes) -> void
   {
     std::filesystem::create_directories(path.parent_path());
+    // NOLINTNEXTLINE(*-signed-bitwise)
     auto out = std::ofstream(path, std::ios::binary | std::ios::trunc);
     ASSERT_TRUE(out.is_open());
+    // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
     out.write(reinterpret_cast<const char*>(bytes.data()),
       static_cast<std::streamsize>(bytes.size()));
     ASSERT_TRUE(out.good());
@@ -96,6 +99,7 @@ namespace {
     const auto size = static_cast<size_t>(in.tellg());
     in.seekg(0, std::ios::beg);
     auto bytes = std::vector<std::byte>(size);
+    // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
     in.read(reinterpret_cast<char*>(bytes.data()),
       static_cast<std::streamsize>(bytes.size()));
     EXPECT_TRUE(in.good() || in.eof());
@@ -195,7 +199,8 @@ namespace {
       = MakeTempCookedRoot("resolve_hashed_texture_virtual_path");
     const auto sidecar_path = cooked_root / "Resources" / "Textures"
       / "woodfloor007_color_1234567890abcdef.otex";
-    WriteTextureSidecar(sidecar_path, ResourceIndexT { 7U });
+    constexpr auto kTextureIndex = ResourceIndexT { 7U };
+    WriteTextureSidecar(sidecar_path, kTextureIndex);
 
     auto service = AsyncImportService(AsyncImportService::Config {
       .thread_pool_size = 2U,
@@ -228,17 +233,21 @@ namespace {
     const auto key
       = index.FindAssetKeyByVirtualPath("/.cooked/Materials/woodfloor007.omat");
     ASSERT_TRUE(key.has_value());
+    // NOLINTBEGIN(bugprone-unchecked-optional-access) - asserted above
     const auto references = index.FindAssetReferences(key.value());
     ASSERT_TRUE(references.has_value());
     EXPECT_THAT(references.value().Resources(),
       ::testing::ElementsAre(data::ResourceBinding {
         .kind = data::ResourceKind::kTexture,
-        .index = ResourceIndexT { 7U },
+        .index = kTextureIndex,
       }));
+    // NOLINTEND(bugprone-unchecked-optional-access)
   }
 
+  //! A deleted texture leaves its slot unbound with a warning, so the material
+  //! and everything that depends on it still cook.
   NOLINT_TEST_F(MaterialDescriptorImportJobTest,
-    MissingTextureDescriptorVirtualPathProducesDiagnostic)
+    MissingTextureDescriptorCooksMaterialWithoutTextureAndWarns)
   {
     const auto cooked_root = MakeTempCookedRoot("missing_texture_descriptor");
     auto service = AsyncImportService(AsyncImportService::Config {
@@ -257,9 +266,21 @@ namespace {
       }
     })"));
 
-    EXPECT_FALSE(report.success);
-    EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "material.descriptor.texture_descriptor_missing"));
+    EXPECT_TRUE(report.success);
+    EXPECT_EQ(report.materials_written, 1U);
+    const auto missing = std::ranges::find_if(
+      report.diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
+        return diagnostic.code
+          == "material.descriptor.texture_descriptor_missing";
+      });
+    ASSERT_NE(missing, report.diagnostics.end());
+    EXPECT_EQ(missing->severity, ImportSeverity::kWarning);
+
+    const auto bytes
+      = ReadBinaryFile(cooked_root / "Materials" / "woodfloor007.omat");
+    ASSERT_GE(bytes.size(), sizeof(data::pak::render::MaterialAssetDesc));
+    EXPECT_EQ(
+      ReadMaterialDesc(bytes).base_color_texture, data::kNoResourceReference);
   }
 
 } // namespace

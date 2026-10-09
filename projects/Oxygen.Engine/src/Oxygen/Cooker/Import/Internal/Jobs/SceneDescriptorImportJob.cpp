@@ -44,6 +44,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialSlotId.h>
@@ -68,8 +69,10 @@ namespace {
   };
 
   struct SceneDescriptorExecutionContext final {
+    // NOLINTBEGIN(*-avoid-const-or-ref-data-members)
     ImportSession& session;
     const ImportRequest& request;
+    // NOLINTEND(*-avoid-const-or-ref-data-members)
     std::vector<MountedInspection> mounts;
     std::unordered_map<std::string, std::pair<data::AssetKey, data::AssetType>>
       index_cache;
@@ -384,9 +387,11 @@ namespace {
     return resolved;
   }
 
+  // NOLINTBEGIN(*-avoid-reference-coroutine-parameters) - awaited in place
   auto LoadSlotInventories(SceneDescriptorExecutionContext& context,
     const internal::SceneSource& source, IAsyncFileReader& file_reader)
     -> co::Co<bool>
+  // NOLINTEND(*-avoid-reference-coroutine-parameters)
   {
     for (const auto& renderable : source.renderables) {
       if (renderable.materials.empty()) {
@@ -505,6 +510,7 @@ namespace {
       .build = std::move(source.build),
       .geometry_keys = {},
       .environment_systems = {},
+      .environment_references = {},
     };
     const auto scene_virtual_path
       = context.request.loose_cooked_layout.SceneVirtualPath(
@@ -636,6 +642,8 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   const auto job_start = std::chrono::steady_clock::now();
   auto telemetry = ImportTelemetry {};
+  // NOLINTBEGIN(*-avoid-capturing-lambda-coroutines,*-avoid-reference-coroutine-parameters)
+  // The lambda is awaited in place and the session outlives it.
   const auto FinalizeWithTelemetry
     = [&](ImportSession& session) -> co::Co<ImportReport> {
     const auto finalize_start = std::chrono::steady_clock::now();
@@ -653,6 +661,7 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     report.telemetry = telemetry;
     co_return report;
   };
+  // NOLINTEND(*-avoid-capturing-lambda-coroutines,*-avoid-reference-coroutine-parameters)
 
   EnsureCookedRoot();
   auto& session = Session();
@@ -710,45 +719,49 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
         .object_path
         = "environment.post_process_volume.auto_exposure_metering_mask",
         .diagnostic_prefix = "scene.descriptor.",
+        .allow_missing = true,
       });
     if (!reference) {
       co_return co_await FinalizeWithTelemetry(session);
     }
-    auto source_error = std::error_code {};
-    const bool local_source = std::filesystem::equivalent(
-      reference->cooked_root, session.CookedRoot(), source_error);
-    if (source_error || !local_source
-      || reference->index == data::pak::core::kNoResourceIndex) {
-      AddDiagnostic(session, Request(), ImportSeverity::kError,
-        "scene.descriptor.mask_source_invalid",
-        "Metering mask must reference a texture cooked into the scene's own "
-        "source",
-        "environment.post_process_volume.auto_exposure_metering_mask");
-      co_return co_await FinalizeWithTelemetry(session);
+    // A deleted metering mask leaves the scene without one until it is fixed.
+    if (!reference->missing) {
+      auto source_error = std::error_code {};
+      const bool local_source = std::filesystem::equivalent(
+        reference->cooked_root, session.CookedRoot(), source_error);
+      if (source_error || !local_source
+        || reference->index == data::pak::core::kNoResourceIndex) {
+        AddDiagnostic(session, Request(), ImportSeverity::kError,
+          "scene.descriptor.mask_source_invalid",
+          "Metering mask must reference a texture cooked into the scene's own "
+          "source",
+          "environment.post_process_volume.auto_exposure_metering_mask");
+        co_return co_await FinalizeWithTelemetry(session);
+      }
+      const auto& desc = reference->descriptor;
+      const auto format = static_cast<Format>(desc.format);
+      if (format == Format::kUnknown || format > Format::kMaxFormat
+        || desc.texture_type != static_cast<uint8_t>(TextureType::kTexture2D)
+        || desc.width == 0U || desc.height == 0U || desc.depth != 1U
+        || desc.array_layers != 1U) {
+        AddDiagnostic(session, Request(), ImportSeverity::kError,
+          "scene.descriptor.mask_format_invalid",
+          "Metering mask requires a valid linear 2D color texture",
+          "environment.post_process_volume.auto_exposure_metering_mask");
+        co_return co_await FinalizeWithTelemetry(session);
+      }
+      const auto& info = graphics::detail::GetFormatInfo(format);
+      if (info.is_srgb || info.has_depth || info.has_stencil || !info.has_red
+        || info.kind == graphics::detail::FormatKind::kInteger) {
+        AddDiagnostic(session, Request(), ImportSeverity::kError,
+          "scene.descriptor.mask_format_invalid",
+          "Metering mask requires a linear non-integer color format with a red "
+          "channel",
+          "environment.post_process_volume.auto_exposure_metering_mask");
+        co_return co_await FinalizeWithTelemetry(session);
+      }
+      mask_index = reference->index;
     }
-    const auto& desc = reference->descriptor;
-    const auto format = static_cast<Format>(desc.format);
-    if (format == Format::kUnknown || format > Format::kMaxFormat
-      || desc.texture_type != static_cast<uint8_t>(TextureType::kTexture2D)
-      || desc.width == 0U || desc.height == 0U || desc.depth != 1U
-      || desc.array_layers != 1U) {
-      AddDiagnostic(session, Request(), ImportSeverity::kError,
-        "scene.descriptor.mask_format_invalid",
-        "Metering mask requires a valid linear 2D color texture",
-        "environment.post_process_volume.auto_exposure_metering_mask");
-      co_return co_await FinalizeWithTelemetry(session);
-    }
-    const auto& info = graphics::detail::GetFormatInfo(format);
-    if (info.is_srgb || info.has_depth || info.has_stencil || !info.has_red
-      || info.kind == graphics::detail::FormatKind::kInteger) {
-      AddDiagnostic(session, Request(), ImportSeverity::kError,
-        "scene.descriptor.mask_format_invalid",
-        "Metering mask requires a linear non-integer color format with a red "
-        "channel",
-        "environment.post_process_volume.auto_exposure_metering_mask");
-      co_return co_await FinalizeWithTelemetry(session);
-    }
-    mask_index = reference->index;
   }
   auto prepared_opt
     = LinkSceneDescriptor(context, std::move(*source), mask_index);
@@ -818,6 +831,7 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   co_return report;
 }
 
+// NOLINTNEXTLINE(*-avoid-reference-coroutine-parameters)
 auto SceneDescriptorImportJob::FinalizeSession(ImportSession& session)
   -> co::Co<ImportReport>
 {

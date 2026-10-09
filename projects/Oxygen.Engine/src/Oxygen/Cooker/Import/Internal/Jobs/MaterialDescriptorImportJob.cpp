@@ -64,6 +64,8 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     -> std::chrono::microseconds {
     return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
   };
+  // NOLINTBEGIN(*-avoid-capturing-lambda-coroutines,*-avoid-reference-coroutine-parameters)
+  // The lambda is awaited in place and the session outlives it.
   const auto FinalizeWithTelemetry
     = [&](ImportSession& session) -> co::Co<ImportReport> {
     const auto finalize_start = std::chrono::steady_clock::now();
@@ -81,6 +83,7 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     report.telemetry = telemetry;
     co_return report;
   };
+  // NOLINTEND(*-avoid-capturing-lambda-coroutines,*-avoid-reference-coroutine-parameters)
 
   EnsureCookedRoot();
 
@@ -134,9 +137,16 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
             .virtual_path = binding.source_id,
             .object_path = "textures." + std::string(slot.name),
             .diagnostic_prefix = "material.descriptor.",
+            .allow_missing = true,
           });
       if (!index) {
         parse_failed = true;
+        continue;
+      }
+      if (index->missing) {
+        // A deleted texture leaves the slot unbound; the material keeps its
+        // scalar fallback until the reference is fixed.
+        binding.assigned = false;
         continue;
       }
       binding.index = index->index.get();
@@ -195,6 +205,7 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   co_return report;
 }
 
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
 auto MaterialDescriptorImportJob::FinalizeSession(ImportSession& session)
   -> co::Co<ImportReport>
 {
