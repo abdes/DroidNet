@@ -313,6 +313,16 @@ public interface ISceneDocumentCommandService
         Guid? parentNodeId,
         string name);
 
+    /// <summary>
+    /// Re-points the open scene's references to a committed relocation in memory, outside undo history, records the
+    /// rewritten file as its saved state, and refreshes only the affected nodes in the runtime after the cook publishes.
+    /// </summary>
+    /// <param name="context">The document command context.</param>
+    /// <param name="change">The committed relocation.</param>
+    /// <param name="rewrite">The relocation's rewrite of this scene's file.</param>
+    /// <returns>The result; the document stays clean.</returns>
+    public Task<SceneCommandResult> FollowRelocationAsync(SceneDocumentCommandContext context, Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationChange change, Oxygen.Editor.ContentPipeline.Relocation.RelocatedFile rewrite);
+
     /// <summary>Renames the scene asset through its persistence owner and records reversible document history.</summary>
     /// <param name="context">The document command context.</param>
     /// <param name="newName">The desired authored name and file stem.</param>

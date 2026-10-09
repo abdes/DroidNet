@@ -14,9 +14,9 @@ namespace Oxygen.Editor.MaterialEditor;
 public sealed class MaterialDocumentMetadata(Uri materialUri, Guid? documentId = null) : BaseDocumentMetadata(documentId)
 {
     /// <summary>
-    /// Gets the material source asset URI.
+    /// Gets or sets the material source asset URI. A relocation of the open material re-points it in place.
     /// </summary>
-    public Uri MaterialUri { get; } = materialUri;
+    public Uri MaterialUri { get; set; } = materialUri;
 
     /// <inheritdoc />
     public override string DocumentType => "Material";

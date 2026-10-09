@@ -31,6 +31,10 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 [TestCategory("Scene Commands")]
 public sealed partial class SceneDocumentCommandServiceTests
 {
+    private static readonly ProjectInfo SlotTestProjectInfo = new("Material slot tests", Category.Games, Path.Combine(Path.GetTempPath(), "Oxygen-Slot-Tests"));
+    private static readonly Guid PrimarySlotId = Guid.Parse("10000000-0000-0000-0000-000000000001");
+    private static readonly Guid SecondarySlotId = Guid.Parse("10000000-0000-0000-0000-000000000002");
+
     [TestMethod]
     public void ScenePropertyDescriptors_ShouldUseSceneSchemaOverlayAnnotations()
     {
@@ -480,7 +484,11 @@ public sealed partial class SceneDocumentCommandServiceTests
             .Setup(sync => sync.UpdateMaterialSlotAsync(scene, node, TestSlotTarget(geometry.Geometry!.Uri), materialUri: null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(accepted);
 
-        var result = await fixture.Sut.EditMaterialSlotAsync(context, [node.Id], TestSlotTarget(geometry.Geometry!.Uri), null,
+        var result = await fixture.Sut.EditMaterialSlotAsync(
+            context,
+            [node.Id],
+            TestSlotTarget(geometry.Geometry!.Uri),
+            null,
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
@@ -1331,14 +1339,13 @@ public sealed partial class SceneDocumentCommandServiceTests
                 (_, _, sync, cancellationToken) => sync(cancellationToken));
     }
 
-    private static readonly ProjectInfo SlotTestProjectInfo = new("Material slot tests", Category.Games, Path.Combine(Path.GetTempPath(), "Oxygen-Slot-Tests"));
-    private static readonly Guid PrimarySlotId = Guid.Parse("10000000-0000-0000-0000-000000000001");
-    private static readonly Guid SecondarySlotId = Guid.Parse("10000000-0000-0000-0000-000000000002");
-
     private static MaterialSlotTarget TestSlotTarget(Uri geometry) => new(geometry, PrimarySlotId, new string('a', 64));
 
     private static GeometryMaterialSlotMetadata TestSlotInventory(Uri geometry)
-        => new(geometry, Guid.Parse("20000000-0000-0000-0000-000000000001"), new string('a', 64),
+        => new(
+            geometry,
+            Guid.Parse("20000000-0000-0000-0000-000000000001"),
+            new string('a', 64),
             [new(PrimarySlotId, "Body", [new(0, 0, Guid.Empty)]), new(SecondarySlotId, "Trim", [new(0, 1, Guid.Empty), new(1, 2, Guid.Empty)])]);
 
     private static Scene CreateScene()
@@ -1354,7 +1361,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         return new(metadata.DocumentId, metadata, scene, new HistoryKeeper(scene));
     }
 
-    private static Fixture CreateFixture(ISceneEngineSync? synchronization = null, IProjectManagerService? projectManager = null, Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService? automaticCooking = null, Oxygen.Editor.World.Workspace.WorkspaceInteractionService? interaction = null)
+    private static Fixture CreateFixture(ISceneEngineSync? synchronization = null, IProjectManagerService? projectManager = null, Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService? automaticCooking = null, Oxygen.Editor.World.Workspace.WorkspaceInteractionService? interaction = null, Oxygen.Editor.ContentPipeline.Relocation.IAssetRedirects? redirects = null)
     {
         var sync = new Mock<ISceneEngineSync>(MockBehavior.Strict);
         long sequence = 0;
@@ -1379,15 +1386,20 @@ public sealed partial class SceneDocumentCommandServiceTests
             default,
             WeakReferenceMessenger.Default,
             results,
-            new OperationStatusReducer(), inventories.Object, projects,
-            new SceneMutator(NullLogger<SceneMutator>.Instance), new SceneOrganizer(NullLogger<SceneOrganizer>.Instance), interaction);
+            new OperationStatusReducer(),
+            inventories.Object,
+            projects,
+            new SceneMutator(NullLogger<SceneMutator>.Instance),
+            new SceneOrganizer(NullLogger<SceneOrganizer>.Instance),
+            interaction,
+            redirects);
 
         return new(sut, sync, documentService, results, inventories, projects, interaction);
     }
 
     /// <summary>Builds a workspace interaction owner over an in-memory settings store.</summary>
     /// <returns>A fresh service and the mock settings manager backing it.</returns>
-    private static (Oxygen.Editor.World.Workspace.WorkspaceInteractionService Service, Mock<Oxygen.Editor.Data.Services.IEditorSettingsManager> Settings) CreateInteraction()
+    private static (Oxygen.Editor.World.Workspace.WorkspaceInteractionService service, Mock<Oxygen.Editor.Data.Services.IEditorSettingsManager> settings) CreateInteraction()
     {
         var settings = new Mock<Oxygen.Editor.Data.Services.IEditorSettingsManager>(MockBehavior.Loose);
         var service = new Oxygen.Editor.World.Workspace.WorkspaceInteractionService(

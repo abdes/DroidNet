@@ -34,8 +34,10 @@ public sealed partial class MaterialDocumentService(
     ICookDocumentRegistry cookDocuments,
     IAtomicFileStore atomicFiles,
     IOperationResultPublisher? operationResults = null,
-    ILoggerFactory? loggerFactory = null) : IMaterialDocumentService, IMaterialPropertyEditService
+    ILoggerFactory? loggerFactory = null,
+    Oxygen.Editor.ContentPipeline.Relocation.IAssetRedirects? redirects = null) : IMaterialDocumentService, IMaterialPropertyEditService
 {
+    private readonly Oxygen.Editor.ContentPipeline.Relocation.IAssetRedirects? redirects = redirects;
     private readonly IMaterialSourcePathResolver pathResolver = pathResolver ?? throw new ArgumentNullException(nameof(pathResolver));
     private readonly IMaterialCookService cookService = cookService ?? throw new ArgumentNullException(nameof(cookService));
     private readonly IOperationResultPublisher? operationResults = operationResults;

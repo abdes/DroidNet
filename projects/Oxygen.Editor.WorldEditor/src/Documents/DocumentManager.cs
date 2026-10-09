@@ -33,8 +33,8 @@ public sealed partial class DocumentManager : IDisposable
     private readonly Oxygen.Managed.Core.Diagnostics.IOperationResultPublisher? operationResults;
     private readonly Oxygen.Managed.Core.Diagnostics.IStatusReducer? statusReducer;
     private long sceneRequestId;
-    private bool disposed;
     private (Guid projectId, string? projectRoot, Guid sceneId)? previousSavedScene;
+    private bool disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DocumentManager"/> class.
@@ -50,6 +50,7 @@ public sealed partial class DocumentManager : IDisposable
     /// <param name="loggerFactory">Optional logger factory for logging.</param>
     /// <param name="operationResults">Optional visible operation-result publisher.</param>
     /// <param name="statusReducer">Optional reducer for scene-load diagnostics.</param>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "MA0147:Avoid async void method for delegate", Justification = "messenger handlers reply to the requester once the awaited open or creation completes")]
     public DocumentManager(
         IEditorDocumentService documentService,
         IMessenger messenger,
@@ -80,6 +81,7 @@ public sealed partial class DocumentManager : IDisposable
         this.messenger.Register<OpenMaterialRequestMessage>(this, this.OnOpenMaterialRequested);
         this.messenger.Register<CreateMaterialRequestMessage>(this, this.OnCreateMaterialRequested);
         this.messenger.Register<OpenCookedInspectionRequestMessage>(this, (_, message) => message.Reply(this.OpenInspectionAsync(message)));
+        this.RegisterRelocationMessages();
         this.messenger.Register<ReloadPreviousSceneRequestMessage>(this, (_, message) =>
         {
             if (message.WindowId == this.windowId && !message.HasReceivedResponse)
@@ -95,6 +97,7 @@ public sealed partial class DocumentManager : IDisposable
         this.disposed = true;
         _ = Interlocked.Increment(ref this.sceneRequestId);
         this.messenger.UnregisterAll(this);
+        this.sceneReplacementGate.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -126,96 +129,10 @@ public sealed partial class DocumentManager : IDisposable
             return false;
         }
 
-        SceneDocumentMetadata? incoming = null;
-        var installed = false;
-        var retired = false;
+        var replacement = new SceneReplacement();
         try
         {
-            var project = this.projectManager.CurrentProject;
-            if (this.disposed || requestId != Volatile.Read(ref this.sceneRequestId) || !ReferenceEquals(scene.Project, project)
-                || !scene.Project.Scenes.Contains(scene))
-            {
-                return false;
-            }
-
-            var openScenes = this.documentService.GetOpenDocuments(this.windowId).OfType<SceneDocumentMetadata>().ToArray();
-            var existing = openScenes.FirstOrDefault(document => document.DocumentId == scene.Id);
-            if (existing is not null && this.sceneEngineSync.GetDocumentScene(existing) is { } current)
-            {
-                var selected = await this.documentService.SelectDocumentAsync(this.windowId, scene.Id).ConfigureAwait(true);
-                if (selected)
-                {
-                    await this.MarkSceneActivatedAsync(current).ConfigureAwait(true);
-                }
-
-                return selected;
-            }
-
-            var staged = await this.projectManager.StageSceneLoadAsync(scene, cancellationToken).ConfigureAwait(true);
-            if (staged is null)
-            {
-                this.PublishSceneLoadFailure(scene, unavailable: false);
-                return false;
-            }
-
-            if (requestId != Volatile.Read(ref this.sceneRequestId)
-                || !ReferenceEquals(project, this.projectManager.CurrentProject))
-            {
-                return false;
-            }
-
-            foreach (var previous in openScenes)
-            {
-                var graph = this.sceneEngineSync.GetDocumentScene(previous);
-                using var replacement = await this.documentService.PrepareCloseDocumentAsync(this.windowId, previous.DocumentId).ConfigureAwait(true);
-                cancellationToken.ThrowIfCancellationRequested();
-                if (replacement is null || requestId != Volatile.Read(ref this.sceneRequestId)
-                    || !ReferenceEquals(project, this.projectManager.CurrentProject)
-                    || !await replacement.CommitAsync().ConfigureAwait(true))
-                {
-                    return false;
-                }
-
-                if (graph is not null)
-                {
-                    this.previousSavedScene = (graph.Project.ProjectInfo.Id, graph.Project.ProjectInfo.Location, graph.Id);
-                    this.sceneEngineSync.CloseDocument(previous);
-                    SceneAuthoringGate.Retire(graph);
-                    this.projectManager.RetireScene(graph);
-                }
-
-                retired = true;
-            }
-
-            var loadedScene = this.projectManager.AcceptSceneLoad(staged);
-            incoming = new SceneDocumentMetadata(loadedScene.Id) { Title = loadedScene.Name, IsSceneLoadPending = true };
-            var openedId = await this.documentService.OpenDocumentAsync(this.windowId, incoming, shouldSelect: false).ConfigureAwait(true);
-            if (openedId == Guid.Empty)
-            {
-                this.projectManager.RetireScene(loadedScene);
-                return false;
-            }
-
-            if (!await this.documentService.SelectDocumentAsync(this.windowId, loadedScene.Id).ConfigureAwait(true))
-            {
-                return false;
-            }
-
-            var installation = this.messenger.Send(new InstallSceneRequestMessage(this.windowId, loadedScene, incoming));
-            if (!installation.HasReceivedResponse || !await installation.Response.ConfigureAwait(true)
-                || !ReferenceEquals(project, this.projectManager.CurrentProject)
-                || !this.documentService.GetOpenDocuments(this.windowId).Contains(incoming)
-                || !ReferenceEquals(this.sceneEngineSync.GetDocumentScene(incoming), loadedScene))
-            {
-                return false;
-            }
-
-            installed = true;
-            incoming.IsSceneLoadPending = false;
-            loadedScene.Project.ActiveScene = loadedScene;
-            this.LogOpenedNewScene(loadedScene);
-            await this.MarkSceneActivatedAsync(loadedScene).ConfigureAwait(true);
-            return true;
+            return await this.ReplaceSceneAsync(scene, requestId, replacement, cancellationToken).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -224,7 +141,7 @@ public sealed partial class DocumentManager : IDisposable
         catch (Exception exception)
         {
             this.LogSceneReplacementFailed(exception, scene.Id);
-            if (!retired && incoming is null)
+            if (!replacement.Retired && replacement.Incoming is null)
             {
                 this.PublishSceneLoadFailure(scene, unavailable: false);
             }
@@ -233,26 +150,7 @@ public sealed partial class DocumentManager : IDisposable
         }
         finally
         {
-            try
-            {
-                if (!installed && incoming is not null)
-                {
-                    _ = await this.documentService.CloseDocumentAsync(this.windowId, incoming.DocumentId, force: true).ConfigureAwait(true);
-                    if (scene.Project.Scenes.FirstOrDefault(value => value.Id == incoming.DocumentId) is { } failed)
-                    {
-                        this.projectManager.RetireScene(failed);
-                    }
-                }
-            }
-            finally
-            {
-                _ = this.sceneReplacementGate.Release();
-
-                if (!installed && (retired || incoming is not null))
-                {
-                    this.PublishSceneLoadFailure(scene, unavailable: true);
-                }
-            }
+            await this.FinishSceneReplacementAsync(scene, replacement).ConfigureAwait(true);
         }
     }
 
@@ -291,6 +189,140 @@ public sealed partial class DocumentManager : IDisposable
 
     private static bool UriValuesEqual(Uri left, Uri right)
         => string.Equals(left.ToString(), right.ToString(), StringComparison.OrdinalIgnoreCase);
+
+    private async Task FinishSceneReplacementAsync(World.Scene scene, SceneReplacement replacement)
+    {
+        try
+        {
+            if (!replacement.Installed && replacement.Incoming is not null)
+            {
+                _ = await this.documentService.CloseDocumentAsync(this.windowId, replacement.Incoming.DocumentId, force: true).ConfigureAwait(true);
+                if (scene.Project.Scenes.FirstOrDefault(value => value.Id == replacement.Incoming.DocumentId) is { } failed)
+                {
+                    this.projectManager.RetireScene(failed);
+                }
+            }
+        }
+        finally
+        {
+            _ = this.sceneReplacementGate.Release();
+
+            if (!replacement.Installed && (replacement.Retired || replacement.Incoming is not null))
+            {
+                this.PublishSceneLoadFailure(scene, unavailable: true);
+            }
+        }
+    }
+
+    private async Task<bool> ReplaceSceneAsync(World.Scene scene, long requestId, SceneReplacement replacement, CancellationToken cancellationToken)
+    {
+        var project = this.projectManager.CurrentProject;
+        if (this.disposed || requestId != Volatile.Read(ref this.sceneRequestId) || !ReferenceEquals(scene.Project, project)
+            || !scene.Project.Scenes.Contains(scene))
+        {
+            return false;
+        }
+
+        var openScenes = this.documentService.GetOpenDocuments(this.windowId).OfType<SceneDocumentMetadata>().ToArray();
+        var existing = openScenes.FirstOrDefault(document => document.DocumentId == scene.Id);
+        if (existing is not null && this.sceneEngineSync.GetDocumentScene(existing) is { } current)
+        {
+            var selected = await this.documentService.SelectDocumentAsync(this.windowId, scene.Id).ConfigureAwait(true);
+            if (selected)
+            {
+                await this.MarkSceneActivatedAsync(current).ConfigureAwait(true);
+            }
+
+            return selected;
+        }
+
+        var staged = await this.projectManager.StageSceneLoadAsync(scene, cancellationToken).ConfigureAwait(true);
+        if (staged is null)
+        {
+            this.PublishSceneLoadFailure(scene, unavailable: false);
+            return false;
+        }
+
+        if (requestId != Volatile.Read(ref this.sceneRequestId)
+            || !ReferenceEquals(project, this.projectManager.CurrentProject))
+        {
+            return false;
+        }
+
+        if (!await this.RetireOpenScenesAsync(openScenes, project, requestId, replacement, cancellationToken).ConfigureAwait(true))
+        {
+            return false;
+        }
+
+        return await this.InstallStagedSceneAsync(staged, project, replacement).ConfigureAwait(true);
+    }
+
+    private async Task<bool> RetireOpenScenesAsync(
+        SceneDocumentMetadata[] openScenes,
+        IProject? project,
+        long requestId,
+        SceneReplacement replacement,
+        CancellationToken cancellationToken)
+    {
+        foreach (var previous in openScenes)
+        {
+            var graph = this.sceneEngineSync.GetDocumentScene(previous);
+            using var closing = await this.documentService.PrepareCloseDocumentAsync(this.windowId, previous.DocumentId).ConfigureAwait(true);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (closing is null || requestId != Volatile.Read(ref this.sceneRequestId)
+                || !ReferenceEquals(project, this.projectManager.CurrentProject)
+                || !await closing.CommitAsync().ConfigureAwait(true))
+            {
+                return false;
+            }
+
+            if (graph is not null)
+            {
+                this.previousSavedScene = (graph.Project.ProjectInfo.Id, graph.Project.ProjectInfo.Location, graph.Id);
+                this.sceneEngineSync.CloseDocument(previous);
+                SceneAuthoringGate.Retire(graph);
+                this.projectManager.RetireScene(graph);
+            }
+
+            replacement.Retired = true;
+        }
+
+        return true;
+    }
+
+    private async Task<bool> InstallStagedSceneAsync(SceneLoadSnapshot staged, IProject? project, SceneReplacement replacement)
+    {
+        var loadedScene = this.projectManager.AcceptSceneLoad(staged);
+        var incoming = new SceneDocumentMetadata(loadedScene.Id) { Title = loadedScene.Name, IsSceneLoadPending = true };
+        replacement.Incoming = incoming;
+        var openedId = await this.documentService.OpenDocumentAsync(this.windowId, incoming, shouldSelect: false).ConfigureAwait(true);
+        if (openedId == Guid.Empty)
+        {
+            this.projectManager.RetireScene(loadedScene);
+            return false;
+        }
+
+        if (!await this.documentService.SelectDocumentAsync(this.windowId, loadedScene.Id).ConfigureAwait(true))
+        {
+            return false;
+        }
+
+        var installation = this.messenger.Send(new InstallSceneRequestMessage(this.windowId, loadedScene, incoming));
+        if (!installation.HasReceivedResponse || !await installation.Response.ConfigureAwait(true)
+            || !ReferenceEquals(project, this.projectManager.CurrentProject)
+            || !this.documentService.GetOpenDocuments(this.windowId).Contains(incoming)
+            || !ReferenceEquals(this.sceneEngineSync.GetDocumentScene(incoming), loadedScene))
+        {
+            return false;
+        }
+
+        replacement.Installed = true;
+        incoming.IsSceneLoadPending = false;
+        loadedScene.Project.ActiveScene = loadedScene;
+        this.LogOpenedNewScene(loadedScene);
+        await this.MarkSceneActivatedAsync(loadedScene).ConfigureAwait(true);
+        return true;
+    }
 
     private void OnOpenSceneRequested(object recipient, OpenSceneRequestMessage message)
         => message.Reply(this.OpenSceneAsync(message.Scene));
@@ -363,5 +395,14 @@ public sealed partial class DocumentManager : IDisposable
         {
             this.LogSceneUsageUpdateFailed(ex, scene.Name, project.Name);
         }
+    }
+
+    private sealed class SceneReplacement
+    {
+        public SceneDocumentMetadata? Incoming { get; set; }
+
+        public bool Installed { get; set; }
+
+        public bool Retired { get; set; }
     }
 }

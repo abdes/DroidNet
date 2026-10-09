@@ -7,6 +7,8 @@ using Microsoft.Extensions.Logging;
 
 namespace Oxygen.Editor.World.Documents;
 
+#pragma warning disable SA1204 // Each log method keeps its static and instance forms together
+
 /// <summary>
 ///     Logging methods for <see cref="DocumentHostViewModel" />.
 /// </summary>
@@ -81,4 +83,7 @@ public partial class DocumentHostViewModel
 
     private void LogSurfaceReleaseFailed(Guid documentId, Exception exception)
         => LogSurfaceReleaseFailed(this.logger, documentId, exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to deactivate previous scene editor view during document switch.")]
+    private partial void LogViewDeactivationFailed(Exception exception);
 }

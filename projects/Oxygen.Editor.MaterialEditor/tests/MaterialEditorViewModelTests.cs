@@ -247,6 +247,8 @@ public sealed partial class MaterialEditorViewModelTests
 
         public MaterialDocument GetDocument(Guid documentId) => this.Document;
 
+        public bool FollowRelocation(Guid documentId, Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationChange change) => false;
+
         public Task<MaterialDocument> CreateAsync(Uri targetUri, CancellationToken cancellationToken = default)
         {
             _ = targetUri;

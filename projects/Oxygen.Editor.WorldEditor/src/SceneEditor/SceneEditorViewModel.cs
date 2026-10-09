@@ -239,6 +239,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         if (disposing)
         {
             this.isDisposed = true;
+            this.DisposeRelocationParticipant();
             this.cookInputRegistration?.Dispose();
             this.cookInputRegistration = null;
             if (this.scene is not null)
@@ -286,6 +287,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.messenger.Register<SceneLoadedMessage>(this, (r, m) => ((SceneEditorViewModel)r).OnSceneLoadedMessage(r, m));
         this.RegisterCameraMessages();
         this.RegisterSelectionMessages();
+        this.RegisterRelocationMessages();
     }
 
     private void RefreshCookInputRegistration()

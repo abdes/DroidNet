@@ -34,7 +34,7 @@ internal sealed class ViewportHudViewTests : DroidNet.Tests.VisualUserInterfaceT
 
         var dropDowns = view.FindDescendants().OfType<DropDownButton>().ToList();
         _ = dropDowns.Select(button => Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(button))
-            .Should().Equal("View camera", "View mode", "Show");
+            .Should().Equal("View camera", "View mode", "Show", "Move snap increment", "Rotate snap increment", "Scale snap increment");
 
         // Camera: three perspective modes and six orthographic directions.
         await OpenAsync(dropDowns[0], content => _ = Texts(content).Should().Contain(["Turntable", "Trackball", "Fly", "Top", "Back", "Right", "Clipping"])).ConfigureAwait(true);
@@ -46,8 +46,8 @@ internal sealed class ViewportHudViewTests : DroidNet.Tests.VisualUserInterfaceT
         await OpenAsync(dropDowns[2], content =>
         {
             var checks = content.FindDescendants().OfType<CheckBox>().ToList();
-            _ = checks.Select(check => check.Content).Should().Equal("Grid", "Camera preview", "Statistics");
-            checks[2].IsChecked = true;
+            _ = checks.Select(check => check.Content).Should().Equal("Grid", "Selection outline", "Camera preview", "Statistics");
+            checks[3].IsChecked = true;
         }).ConfigureAwait(true);
         _ = model.ShowStatistics.Should().BeTrue();
 

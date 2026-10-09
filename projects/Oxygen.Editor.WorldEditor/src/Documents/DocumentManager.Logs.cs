@@ -5,8 +5,11 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI;
+using Oxygen.Editor.ContentBrowser.Messages;
 
 namespace Oxygen.Editor.World.Documents;
+
+#pragma warning disable SA1204 // Each log method keeps its static and instance forms together
 
 /// <summary>
 ///     Logging helpers for <see cref="DocumentManager"/>.
@@ -85,4 +88,22 @@ public partial class DocumentManager
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Scene replacement failed for {SceneId}. Reload the previous saved scene if its document was retired.")]
     private partial void LogSceneReplacementFailed(Exception exception, Guid sceneId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Scene {Command} of '{Scene}' not done: {Reason}")]
+    private partial void LogSceneCommandRejected(SceneAssetCommand command, string scene, string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Renamed saved scene '{Previous}' to '{Name}'.")]
+    private partial void LogSavedSceneRenamed(string previous, string name);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Duplicated saved scene '{Scene}' as '{Name}'.")]
+    private partial void LogSceneDuplicated(string scene, string name);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Deleted scene '{Scene}': moved '{Path}' to the Recycle Bin and removed it from the project.")]
+    private partial void LogSceneDeleted(string scene, string path);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Closed the material document '{Material}' because its file was deleted.")]
+    private partial void LogDeletedMaterialClosed(Uri material);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The material document '{Material}' stays open although its file was deleted; saving it recreates the file.")]
+    private partial void LogDeletedMaterialNotClosed(Uri material);
 }

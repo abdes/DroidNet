@@ -42,6 +42,9 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// <param name="projectContexts">The active project lifetime.</param>
 /// <param name="sceneMutator">The scene-graph mutation owner.</param>
 /// <param name="sceneOrganizer">The explorer-layout mutation owner.</param>
+/// <param name="interaction">The workspace interaction service, when available.</param>
+/// <param name="redirects">Resolves references captured before asset relocations; optional.</param>
+/// <param name="logger">Records relocation follow-up and restored deleted references.</param>
 public sealed partial class SceneDocumentCommandService(
     Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService automaticCooking,
     ISceneSelectionService selectionService,
@@ -56,7 +59,9 @@ public sealed partial class SceneDocumentCommandService(
     IProjectContextService projectContexts,
     ISceneMutator sceneMutator,
     ISceneOrganizer sceneOrganizer,
-    Oxygen.Editor.World.Workspace.WorkspaceInteractionService? interaction = null) : ISceneDocumentCommandService
+    Oxygen.Editor.World.Workspace.WorkspaceInteractionService? interaction = null,
+    Oxygen.Editor.ContentPipeline.Relocation.IAssetRedirects? redirects = null,
+    Microsoft.Extensions.Logging.ILogger<SceneDocumentCommandService>? logger = null) : ISceneDocumentCommandService
 {
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Scene, SemaphoreSlim> SaveGates = [];
 
@@ -71,6 +76,8 @@ public sealed partial class SceneDocumentCommandService(
     private readonly ISceneMutator sceneMutator = sceneMutator;
     private readonly ISceneOrganizer sceneOrganizer = sceneOrganizer;
     private readonly Oxygen.Editor.World.Workspace.WorkspaceInteractionService? interaction = interaction;
+    private readonly Oxygen.Editor.ContentPipeline.Relocation.IAssetRedirects? redirects = redirects;
+    private readonly Microsoft.Extensions.Logging.ILogger logger = (Microsoft.Extensions.Logging.ILogger?)logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
 
     /// <inheritdoc />
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The authoring operation boundary preserves committed state and reports failures to the editor instead of terminating the command loop.")]
@@ -1500,6 +1507,10 @@ public sealed partial class SceneDocumentCommandService(
             return;
         }
 
+        // History keeps the references it captured; restore the assets' current identities after relocations.
+        states = [.. states.Select(state => state with { GeometryUri = this.RedirectCaptured(state.GeometryUri) })];
+        this.WarnIfDeleted(context, states.Select(static state => state.GeometryUri));
+
         foreach (var state in states)
         {
             state.Apply();
@@ -1597,6 +1608,7 @@ public sealed partial class SceneDocumentCommandService(
             return;
         }
 
+        environment = this.RedirectCaptured(context, environment);
         context.Scene.SetEnvironment(environment);
         context.History.AddChange("Reapply Environment", async () => await this.ApplyEnvironmentForHistoryAsync(context, inverse, environment).ConfigureAwait(true));
         var metadataUpdate = this.MarkDirtyAsync(context, out var revision);

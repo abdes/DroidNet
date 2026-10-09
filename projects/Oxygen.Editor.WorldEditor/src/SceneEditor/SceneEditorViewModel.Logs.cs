@@ -9,6 +9,8 @@ using Oxygen.Editor.World.Documents;
 
 namespace Oxygen.Editor.World.SceneEditor;
 
+#pragma warning disable SA1204 // Each log method keeps its static and instance forms together
+
 /// <summary>Structured scene-editor lifecycle logging.</summary>
 public partial class SceneEditorViewModel
 {
@@ -158,4 +160,20 @@ public partial class SceneEditorViewModel
 
     private void LogSceneHelpersFailed(Exception exception)
         => LogSceneHelpersFailed(this.logger, exception, this.Metadata?.DocumentId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Scene editor '{Scene}' cannot follow asset relocations: no relocation service in its workspace.")]
+    private partial void LogRelocationUnavailable(string scene);
+
+    [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Open scene '{Scene}' has nothing to follow: {Reason}.")]
+    private static partial void LogRelocationSkipped(ILogger logger, string scene, string reason);
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void LogRelocationSkipped(string scene, string reason)
+        => LogRelocationSkipped(this.logger, scene, reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Renamed the open scene '{Previous}' to '{Name}' from the Content Browser.")]
+    private partial void LogOpenSceneRenamed(string previous, string name);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The open scene '{Previous}' was not renamed to '{Name}'.")]
+    private partial void LogOpenSceneNotRenamed(string previous, string name);
 }

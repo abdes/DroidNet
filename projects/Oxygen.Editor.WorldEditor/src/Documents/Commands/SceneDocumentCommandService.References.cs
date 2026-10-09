@@ -51,23 +51,6 @@ public sealed partial class SceneDocumentCommandService
         return SceneCommandResult.Success;
     }
 
-    private async Task ApplySceneReferencesForHistoryAsync(
-        SceneDocumentCommandContext context,
-        SceneReferencesData references,
-        SceneReferencesData inverse)
-    {
-        using var authoring = EnterAuthoring(context);
-        if (authoring is null)
-        {
-            return;
-        }
-
-        context.Scene.SetReferences(CopyReferences(references));
-        context.History.AddChange("Reapply Scene References", async () =>
-            await this.ApplySceneReferencesForHistoryAsync(context, inverse, references).ConfigureAwait(true));
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-    }
-
     private static string? ValidateReferences(SceneReferencesData references)
     {
         if (references.Scripts is null || references.InputActions is null
@@ -147,4 +130,21 @@ public sealed partial class SceneDocumentCommandService
             && left.InputMappingContexts.SequenceEqual(right.InputMappingContexts)
             && left.PhysicsSidecars.SequenceEqual(right.PhysicsSidecars)
             && left.ExtraAssets.SequenceEqual(right.ExtraAssets, StringComparer.Ordinal);
+
+    private async Task ApplySceneReferencesForHistoryAsync(
+        SceneDocumentCommandContext context,
+        SceneReferencesData references,
+        SceneReferencesData inverse)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return;
+        }
+
+        context.Scene.SetReferences(CopyReferences(this.RedirectCaptured(references)));
+        context.History.AddChange("Reapply Scene References", async () =>
+            await this.ApplySceneReferencesForHistoryAsync(context, inverse, references).ConfigureAwait(true));
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
+    }
 }

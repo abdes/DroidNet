@@ -193,71 +193,73 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to deactivate previous scene editor view during document switch.")]
-    private partial void LogViewDeactivationFailed(Exception exception);
-
     private IDocumentCloseParticipant? CreateEditor(IDocumentMetadata metadata)
     {
         // Create the editor ViewModel based on metadata type
-        IDocumentCloseParticipant? editor = null;
-        if (metadata is SceneDocumentMetadata sceneMeta)
+        switch (metadata)
         {
-            var messenger = this.container.Resolve<CommunityToolkit.Mvvm.Messaging.IMessenger>();
-            editor = new SceneEditorViewModel(
-                sceneMeta,
-                this.DocumentService,
-                this.windowId,
-                this.engineService,
-                this.container.Resolve<ISceneEngineSync>(),
-                this.container.Resolve<IDocumentInputCommitter>(),
-                this.operationResults,
-                this.statusReducer,
-                this.container.Resolve<ISceneDocumentCommandService>(),
-                this.container.Resolve<Oxygen.Editor.ContentPipeline.IContentPipelineService>(),
-                this.container,
-                messenger,
-                this.container.Resolve<SceneCookInputRegistrar>(),
-                this.container.Resolve<Oxygen.Editor.World.Workspace.PreviewSettingsService>(),
-                this.loggerFactory,
-                conflictPrompt: this.container.Resolve<IDocumentConflictPrompt>());
+            case SceneDocumentMetadata sceneMeta:
+                return this.CreateSceneEditor(sceneMeta);
+            case MaterialDocumentMetadata materialMeta:
+                return this.CreateMaterialEditor(materialMeta);
+            case Inspection.CookedInspectionDocumentMetadata inspection:
+                return this.CreateInspectionEditor(inspection);
+            default:
+                this.LogUnknownMetadataType(metadata.GetType().Name);
+                return null;
         }
-        else if (metadata is MaterialDocumentMetadata materialMeta)
-        {
-            editor = new MaterialEditorViewModel(
-                materialMeta,
-                this.container.Resolve<IMaterialDocumentService>(),
-                this.container.Resolve<Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider>(),
-                this.container.Resolve<DroidNet.Hosting.WinUI.HostingContext>().DispatcherScheduler,
-                this.loggerFactory,
-                assetChanged: uri =>
-                {
-                    var messenger = this.container.Resolve<CommunityToolkit.Mvvm.Messaging.IMessenger>();
-                    _ = messenger.Send(new AssetsChangedMessage(uri));
-                },
-                inputCommitter: this.container.Resolve<IDocumentInputCommitter>(),
-                windowId: this.windowId,
-                conflictPrompt: this.container.Resolve<IDocumentConflictPrompt>());
-        }
-        else if (metadata is Inspection.CookedInspectionDocumentMetadata inspection)
-        {
-            editor = new Inspection.CookedInspectionViewModel(
-                inspection,
-                this.container.Resolve<Oxygen.Editor.ContentPipeline.IContentPipelineService>(),
-                this.container.Resolve<IContentBrowserAssetProvider>(),
-                this.container.Resolve<Oxygen.Editor.Projects.IProjectContextService>(),
-                async uri =>
-                {
-                    var request = this.container.Resolve<IMessenger>().Send(new ShowAssetRequestMessage(inspection.Project, uri));
-                    return request.HasReceivedResponse && await request.Response.ConfigureAwait(true);
-                });
-        }
-        else
-        {
-            this.LogUnknownMetadataType(metadata.GetType().Name);
-        }
-
-        return editor;
     }
+
+    private SceneEditorViewModel CreateSceneEditor(SceneDocumentMetadata sceneMeta)
+    {
+        var messenger = this.container.Resolve<CommunityToolkit.Mvvm.Messaging.IMessenger>();
+        return new SceneEditorViewModel(
+            sceneMeta,
+            this.DocumentService,
+            this.windowId,
+            this.engineService,
+            this.container.Resolve<ISceneEngineSync>(),
+            this.container.Resolve<IDocumentInputCommitter>(),
+            this.operationResults,
+            this.statusReducer,
+            this.container.Resolve<ISceneDocumentCommandService>(),
+            this.container.Resolve<Oxygen.Editor.ContentPipeline.IContentPipelineService>(),
+            this.container,
+            messenger,
+            this.container.Resolve<SceneCookInputRegistrar>(),
+            this.container.Resolve<Oxygen.Editor.World.Workspace.PreviewSettingsService>(),
+            this.loggerFactory,
+            conflictPrompt: this.container.Resolve<IDocumentConflictPrompt>());
+    }
+
+    private MaterialEditorViewModel CreateMaterialEditor(MaterialDocumentMetadata materialMeta)
+        => new(
+            materialMeta,
+            this.container.Resolve<IMaterialDocumentService>(),
+            this.container.Resolve<Oxygen.Editor.ContentBrowser.AssetIdentity.IContentBrowserAssetProvider>(),
+            this.container.Resolve<DroidNet.Hosting.WinUI.HostingContext>().DispatcherScheduler,
+            this.loggerFactory,
+            assetChanged: uri =>
+            {
+                var messenger = this.container.Resolve<CommunityToolkit.Mvvm.Messaging.IMessenger>();
+                _ = messenger.Send(new AssetsChangedMessage(uri));
+            },
+            inputCommitter: this.container.Resolve<IDocumentInputCommitter>(),
+            windowId: this.windowId,
+            conflictPrompt: this.container.Resolve<IDocumentConflictPrompt>(),
+            relocation: this.container.Resolve<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>(DryIoc.IfUnresolved.ReturnDefault));
+
+    private Inspection.CookedInspectionViewModel CreateInspectionEditor(Inspection.CookedInspectionDocumentMetadata inspection)
+        => new(
+            inspection,
+            this.container.Resolve<Oxygen.Editor.ContentPipeline.IContentPipelineService>(),
+            this.container.Resolve<IContentBrowserAssetProvider>(),
+            this.container.Resolve<Oxygen.Editor.Projects.IProjectContextService>(),
+            async uri =>
+            {
+                var request = this.container.Resolve<IMessenger>().Send(new ShowAssetRequestMessage(inspection.Project, uri));
+                return request.HasReceivedResponse && await request.Response.ConfigureAwait(true);
+            });
 
     private void OnDocumentClosed(object? sender, DocumentClosedEventArgs e)
     {

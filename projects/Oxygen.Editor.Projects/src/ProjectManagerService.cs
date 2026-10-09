@@ -184,6 +184,17 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
     }
 
     /// <inheritdoc/>
+    public void RecordSceneSourceRewrite(Scene scene, string sourcePath, FileVersion written)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(sourcePath);
+        ArgumentNullException.ThrowIfNull(written);
+        var projectRoot = scene.Project.ProjectInfo.Location ?? throw new InvalidOperationException("The scene's project has no location.");
+        this.sceneVersions[sourcePath] = written;
+        this.sceneSources[SceneSourceKey(projectRoot, scene.Id)] = new(sourcePath, written);
+    }
+
+    /// <inheritdoc/>
     public async Task<SceneReloadSnapshot?> ReadSceneForReloadAsync(Scene scene, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -457,46 +468,6 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             return null;
         }
     }
-
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "Could not load project info from `{location}`; {error}")]
-    partial void CouldNotSaveProjectInfo(string location, string error);
-
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "Could not load project info from `{location}`; {error}")]
-    partial void CouldNotLoadProjectInfo(string location, string error);
-
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "Could not load project info from `{location}`; {error}")]
-    partial void CouldNotLoadProject(string location, string error);
-
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "Could not load scene from `{location}`; {error}")]
-    partial void CouldNotLoadScene(string location, string error);
-
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "Could not load scene from `{location}`; {error}")]
-    partial void CouldNotLoadSceneEntities(string location, string error);
-
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "Could not create scene `{sceneName}`; {error}")]
-    partial void CouldNotCreateScene(string sceneName, string error);
-
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "Could not save scene `{sceneName}`; {error}")]
-    partial void CouldNotSaveScene(string sceneName, string error);
-
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "Failed to load scene metadata from {ScenePath}")]
-    partial void CouldNotLoadSceneMetadata(Exception ex, string ScenePath);
 
     private sealed record SceneRead(Scene Scene, string SourcePath, FileVersion Version);
 }

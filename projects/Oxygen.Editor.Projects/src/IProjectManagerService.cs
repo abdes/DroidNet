@@ -104,6 +104,15 @@ public interface IProjectManagerService
     /// <returns>The saved source, or null if this service has not loaded or saved the scene.</returns>
     public SceneSourceVersion? GetSceneSourceVersion(Scene scene);
 
+    /// <summary>
+    /// Records a version of an open scene's file written for it by an asset relocation, after the scene re-pointed
+    /// its references to match, as the scene's saved source.
+    /// </summary>
+    /// <param name="scene">The open scene.</param>
+    /// <param name="sourcePath">The scene's file.</param>
+    /// <param name="written">The version the relocation wrote.</param>
+    public void RecordSceneSourceRewrite(Scene scene, string sourcePath, FileVersion written);
+
     /// <summary>Reads a possible reload without replacing the model or adopting a new save baseline.</summary>
     /// <param name="scene">The open scene whose source should be read.</param>
     /// <param name="cancellationToken">Cancels the read before accepting a replacement.</param>

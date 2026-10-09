@@ -348,6 +348,11 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             resolver => resolver.Resolve<Oxygen.Editor.ContentPipeline.IContentPipelineService>(), Reuse.Singleton);
         childContainer.Register<IContentBrowserAssetProvider, ContentBrowserAssetProvider>(Reuse.Singleton);
         childContainer.Register<IMaterialPickerService, MaterialPickerService>(Reuse.Singleton);
+        childContainer.Register<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService, Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationService>(Reuse.Singleton);
+
+        // One instance for the workspace: open documents register as participants on it, and the Content Browser's
+        // child container must reach the same instance instead of creating its own on first use.
+        _ = childContainer.Resolve<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>();
     }
 
     private static Oxygen.Editor.World.Scene? TryResolveSceneFromAssetUri(IProject project, Uri sceneAssetUri)

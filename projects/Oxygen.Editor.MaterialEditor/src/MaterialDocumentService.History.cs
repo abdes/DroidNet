@@ -175,7 +175,7 @@ public sealed partial class MaterialDocumentService
     {
         var keeper = this.histories[documentId].Keeper;
         var entry = undo ? keeper.UndoStack.LastOrDefault() : keeper.RedoStack.FirstOrDefault();
-        return entry?.Key is MaterialHistoryKey key ? this.ValidateEditedSource(this.GetDocument(documentId), key.Source) : null;
+        return entry?.Key is MaterialHistoryKey key ? this.ValidateEditedSource(this.GetDocument(documentId), this.RedirectCaptured(documentId, key.Source, warn: false)) : null;
     }
 
     private void RecordMaterialHistory(Guid documentId, MaterialSource restore, string label)
@@ -183,8 +183,9 @@ public sealed partial class MaterialDocumentService
         {
             lock (this.sync)
             {
-                // Undo/redo validates the snapshot before popping history, under this same lock.
-                this.CommitMaterialSource(this.GetDocument(documentId), restore, label);
+                // Undo/redo validates the snapshot before popping history, under this same lock. Texture paths
+                // captured before a relocation resolve to the textures' current identities.
+                this.CommitMaterialSource(this.GetDocument(documentId), this.RedirectCaptured(documentId, restore, warn: true), label);
             }
         })
         { Key = new MaterialHistoryKey(label, restore) });

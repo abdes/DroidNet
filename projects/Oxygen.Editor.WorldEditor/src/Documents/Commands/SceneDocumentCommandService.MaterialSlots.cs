@@ -4,6 +4,7 @@
 
 using DroidNet.TimeMachine;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Slots;
@@ -45,13 +46,7 @@ public sealed partial class SceneDocumentCommandService
             return this.SlotFailure(context, "The originating project is no longer active.");
         }
 
-        if (target.SlotId == Guid.Empty || target.LayoutRevision is not { Length: 64 }
-            || !target.LayoutRevision.All(Uri.IsHexDigit) || target.GeometryUri is not { IsAbsoluteUri: true }
-            || !string.Equals(target.GeometryUri.Scheme, AssetUris.Scheme
-, StringComparison.Ordinal) || target.GeometryUri.Query.Length != 0 || target.GeometryUri.Fragment.Length != 0
-            || newMaterialUri is not null && (!newMaterialUri.IsAbsoluteUri
-                || !string.Equals(newMaterialUri.Scheme, AssetUris.Scheme, StringComparison.Ordinal) || string.Equals(newMaterialUri.AbsolutePath, "/__uninitialized__"
-, StringComparison.Ordinal) || newMaterialUri.Query.Length != 0 || newMaterialUri.Fragment.Length != 0))
+        if (!IsValidSlotRequest(target, newMaterialUri))
         {
             return this.SlotFailure(context, "Select an existing material slot and a valid material asset.");
         }
@@ -63,67 +58,66 @@ public sealed partial class SceneDocumentCommandService
         }
 
         var geometries = nodes.Select(static node => node.Components.OfType<GeometryComponent>().FirstOrDefault()).ToArray();
-        if (nodeIds.Count == 0 || nodeIds.Distinct().Count() != nodeIds.Count || nodes.Count != nodeIds.Count
-            || geometries.Any(geometry => geometry?.Geometry?.Uri != target.GeometryUri)
-            || nodes.Any(static node => node.Components.OfType<GeometryComponent>().Skip(1).Any()))
+        if (!SelectionOwnsGeometry(nodeIds, nodes, geometries, target))
         {
             return this.SlotFailure(context, "All selected nodes must still use the geometry that owns this slot.");
         }
 
-        GeometryMaterialSlotMetadata? inventory;
-        try
+        var (inventory, readFailure) = await this.ReadSlotInventoryAsync(context, project, target, cancellationToken).ConfigureAwait(true);
+        if (readFailure is { } inventoryFailure)
         {
-            inventory = await materialSlots.ReadAsync(project, target.GeometryUri, cancellationToken).ConfigureAwait(true);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return new(Succeeded: false);
-        }
-        catch (Exception error) when (error is IOException or InvalidDataException or FormatException or InvalidOperationException or ArgumentException)
-        {
-            return this.SlotFailure(context, "The native material-slot inventory could not be read. " + error.Message,
-                SceneDiagnosticCodes.MaterialSlotInventoryUnavailable);
+            return inventoryFailure;
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        if (!ReferenceEquals(projectContexts.ActiveProject, project) || SceneAuthoringGate.IsRetired(context.Scene)
-            || nodes.Where((node, index) => !ReferenceEquals(FindNode(context.Scene, node.Id), node)
-                || !ReferenceEquals(node.Components.OfType<GeometryComponent>().FirstOrDefault(), geometries[index])
-                || node.Components.OfType<GeometryComponent>().Skip(1).Any()
-                || geometries[index]!.Geometry?.Uri != target.GeometryUri).Any())
+        if (this.ValidateSlotInventory(context, project, nodes, geometries, target, inventory) is { } inventoryMismatch)
         {
-            return this.SlotFailure(context, "The selection or geometry changed while its material slots were being read.");
+            return inventoryMismatch;
         }
 
-        if (inventory is null)
-        {
-            return this.SlotFailure(context, "Cook or refresh the geometry before editing its material slots.", SceneDiagnosticCodes.MaterialSlotInventoryUnavailable);
-        }
-
-        if (inventory.GeometryUri != target.GeometryUri || !string.Equals(inventory.LayoutRevision, target.LayoutRevision, StringComparison.Ordinal) || !inventory.Slots.Any(slot => slot.SlotId == target.SlotId)
-            || geometries.Any(geometry => geometry!.OverrideSlots.OfType<MaterialsSlot>().Where(slot => SameSlot(slot.Target, target)).Skip(1).Any()))
-        {
-            return this.SlotFailure(context, "The observed slot changed or has conflicting overrides. Refresh its inventory before editing.");
-        }
-
-        var before = nodes.Select((node, index) => MaterialSlotState.Capture(node, geometries[index]!, target)).ToArray();
-        foreach (var geometry in geometries)
-        {
-            ApplyMaterialSlotEdit(geometry!, target, newMaterialUri);
-        }
-
-        var after = nodes.Select((node, index) => MaterialSlotState.Capture(node, geometries[index]!, target)).ToArray();
-        if (before.SequenceEqual(after))
-        {
-            return SceneCommandResult.Success;
-        }
-
-        context.History.AddChange("Restore Material Slot", async () => await this.ApplyMaterialSlotStatesForHistoryAsync(context, before, after).ConfigureAwait(true));
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        var operation = await this.SyncEditedNodesAsync(context, nodes, SceneOperationKinds.EditMaterialSlot,
-            node => this.sceneEngineSync.UpdateMaterialSlotAsync(context.Scene, node, target, newMaterialUri)).ConfigureAwait(true);
-        return new(Succeeded: true, operation);
+        return await this.ApplySlotEditAsync(context, nodes, geometries, target, newMaterialUri).ConfigureAwait(true);
     }
+
+    private static bool IsValidSlotRequest(MaterialSlotTarget target, Uri? newMaterialUri)
+    {
+        var validTarget = target.SlotId != Guid.Empty
+            && target.LayoutRevision is { Length: 64 }
+            && target.LayoutRevision.All(Uri.IsHexDigit)
+            && target.GeometryUri is { IsAbsoluteUri: true }
+            && string.Equals(target.GeometryUri.Scheme, AssetUris.Scheme, StringComparison.Ordinal)
+            && target.GeometryUri.Query.Length == 0
+            && target.GeometryUri.Fragment.Length == 0;
+        if (!validTarget)
+        {
+            return false;
+        }
+
+        return newMaterialUri is null
+            || (newMaterialUri.IsAbsoluteUri
+                && string.Equals(newMaterialUri.Scheme, AssetUris.Scheme, StringComparison.Ordinal)
+                && !string.Equals(newMaterialUri.AbsolutePath, "/__uninitialized__", StringComparison.Ordinal)
+                && newMaterialUri.Query.Length == 0
+                && newMaterialUri.Fragment.Length == 0);
+    }
+
+    private static bool SelectionOwnsGeometry(IReadOnlyList<Guid> nodeIds, List<SceneNode> nodes, GeometryComponent?[] geometries, MaterialSlotTarget target)
+        => nodeIds.Count != 0
+            && nodeIds.Distinct().Count() == nodeIds.Count
+            && nodes.Count == nodeIds.Count
+            && !geometries.Any(geometry => geometry?.Geometry?.Uri != target.GeometryUri)
+            && !nodes.Any(static node => node.Components.OfType<GeometryComponent>().Skip(1).Any());
+
+    private static bool SelectionChanged(SceneDocumentCommandContext context, List<SceneNode> nodes, GeometryComponent?[] geometries, MaterialSlotTarget target)
+        => nodes.Where((node, index) => !ReferenceEquals(FindNode(context.Scene, node.Id), node)
+            || !ReferenceEquals(node.Components.OfType<GeometryComponent>().FirstOrDefault(), geometries[index])
+            || node.Components.OfType<GeometryComponent>().Skip(1).Any()
+            || geometries[index]!.Geometry?.Uri != target.GeometryUri).Any();
+
+    private static bool InventoryMatches(GeometryMaterialSlotMetadata inventory, GeometryComponent?[] geometries, MaterialSlotTarget target)
+        => inventory.GeometryUri == target.GeometryUri
+            && string.Equals(inventory.LayoutRevision, target.LayoutRevision, StringComparison.Ordinal)
+            && inventory.Slots.Any(slot => slot.SlotId == target.SlotId)
+            && !geometries.Any(geometry => geometry!.OverrideSlots.OfType<MaterialsSlot>().Where(slot => SameSlot(slot.Target, target)).Skip(1).Any());
 
     private static bool SameSlot(MaterialSlotTarget left, MaterialSlotTarget right)
         => left.GeometryUri == right.GeometryUri && left.SlotId == right.SlotId;
@@ -152,7 +146,86 @@ public sealed partial class SceneDocumentCommandService
         }
     }
 
-    private SceneCommandResult SlotFailure(SceneDocumentCommandContext context, string message,
+    private SceneCommandResult? ValidateSlotInventory(
+        SceneDocumentCommandContext context,
+        ProjectContext project,
+        List<SceneNode> nodes,
+        GeometryComponent?[] geometries,
+        MaterialSlotTarget target,
+        GeometryMaterialSlotMetadata? inventory)
+    {
+        if (!ReferenceEquals(projectContexts.ActiveProject, project) || SceneAuthoringGate.IsRetired(context.Scene) || SelectionChanged(context, nodes, geometries, target))
+        {
+            return this.SlotFailure(context, "The selection or geometry changed while its material slots were being read.");
+        }
+
+        if (inventory is null)
+        {
+            return this.SlotFailure(context, "Cook or refresh the geometry before editing its material slots.", SceneDiagnosticCodes.MaterialSlotInventoryUnavailable);
+        }
+
+        return InventoryMatches(inventory, geometries, target)
+            ? null
+            : this.SlotFailure(context, "The observed slot changed or has conflicting overrides. Refresh its inventory before editing.");
+    }
+
+    private async Task<(GeometryMaterialSlotMetadata? inventory, SceneCommandResult? failure)> ReadSlotInventoryAsync(
+        SceneDocumentCommandContext context,
+        ProjectContext project,
+        MaterialSlotTarget target,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await materialSlots.ReadAsync(project, target.GeometryUri, cancellationToken).ConfigureAwait(true), null);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return (null, new SceneCommandResult(Succeeded: false));
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or FormatException or InvalidOperationException or ArgumentException)
+        {
+            return (
+                null,
+                this.SlotFailure(
+                    context,
+                    "The native material-slot inventory could not be read. " + error.Message,
+                    SceneDiagnosticCodes.MaterialSlotInventoryUnavailable));
+        }
+    }
+
+    private async Task<SceneCommandResult> ApplySlotEditAsync(
+        SceneDocumentCommandContext context,
+        List<SceneNode> nodes,
+        GeometryComponent?[] geometries,
+        MaterialSlotTarget target,
+        Uri? newMaterialUri)
+    {
+        var before = nodes.Select((node, index) => MaterialSlotState.Capture(node, geometries[index]!, target)).ToArray();
+        foreach (var geometry in geometries)
+        {
+            ApplyMaterialSlotEdit(geometry!, target, newMaterialUri);
+        }
+
+        var after = nodes.Select((node, index) => MaterialSlotState.Capture(node, geometries[index]!, target)).ToArray();
+        if (before.SequenceEqual(after))
+        {
+            return SceneCommandResult.Success;
+        }
+
+        context.History.AddChange("Restore Material Slot", async () => await this.ApplyMaterialSlotStatesForHistoryAsync(context, before, after).ConfigureAwait(true));
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        var operation = await this.SyncEditedNodesAsync(
+            context,
+            nodes,
+            SceneOperationKinds.EditMaterialSlot,
+            node => this.sceneEngineSync.UpdateMaterialSlotAsync(context.Scene, node, target, newMaterialUri)).ConfigureAwait(true);
+        return new(Succeeded: true, operation);
+    }
+
+    private SceneCommandResult SlotFailure(
+        SceneDocumentCommandContext context,
+        string message,
         string code = SceneDiagnosticCodes.MaterialSlotTargetInvalid)
         => this.ValidationFailure(SceneOperationKinds.EditMaterialSlot, code, "Material slot was not edited", message, context);
 
@@ -164,11 +237,19 @@ public sealed partial class SceneDocumentCommandService
             return;
         }
 
+        // History keeps the references it captured; restore the assets' current identities after relocations.
+        states = [.. states.Select(state => state with
+        {
+            Target = state.Target with { GeometryUri = this.RedirectCaptured(state.Target.GeometryUri)! },
+            MaterialUri = this.RedirectCaptured(state.MaterialUri),
+        })];
         if (states.Any(state => !ReferenceEquals(FindNode(context.Scene, state.Node.Id), state.Node)
             || !state.Node.Components.Contains(state.Geometry) || state.Geometry.Geometry?.Uri != state.Target.GeometryUri))
         {
             throw new InvalidOperationException("Material history no longer targets the same geometry components.");
         }
+
+        this.WarnIfDeleted(context, states.Select(static state => state.MaterialUri));
 
         // History restores authored identity, including unresolved intent after reimport.
         // Native synchronization resolves surviving slot identity against the current inventory.

@@ -59,6 +59,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     /// <param name="inputCommitter">Completes the focused numeric control before snapshot capture.</param>
     /// <param name="windowId">The owner window.</param>
     /// <param name="conflictPrompt">Presents recovery actions after an ordinary Save conflict.</param>
+    /// <param name="relocation">Keeps the open material in step with asset relocations; optional.</param>
     public MaterialEditorViewModel(
         MaterialDocumentMetadata metadata,
         IMaterialDocumentService documentService,
@@ -68,7 +69,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         Action<Uri>? assetChanged = null,
         IDocumentInputCommitter? inputCommitter = null,
         WindowId windowId = default,
-        IDocumentConflictPrompt? conflictPrompt = null)
+        IDocumentConflictPrompt? conflictPrompt = null,
+        Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService? relocation = null)
     {
         this.metadata = metadata ?? throw new ArgumentNullException(nameof(metadata));
         this.documentService = documentService ?? throw new ArgumentNullException(nameof(documentService));
@@ -98,6 +100,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             .Subscribe(this.ApplyAssetItems, this.OnAssetStatusFailed);
         this.assetStatusRefresh = this.RefreshAssetStatusAsync(assetProvider, this.assetStatusLifetime.Token);
         this.loadTask = this.LoadAsync();
+        this.relocationParticipant = relocation?.AddParticipant(new RelocationParticipant(this, Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()));
     }
 
     /// <summary>
@@ -215,6 +218,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         }
 
         this.isDisposed = true;
+        this.relocationParticipant?.Dispose();
         this.assetStatusSubscription.Dispose();
         this.assetStatusLifetime.Cancel();
         this.EndEditSession(NumberBoxEditCompletionKind.Cancel);
@@ -331,9 +335,6 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             ? mode
             : MaterialAlphaMode.Opaque;
 
-    [LoggerMessage(EventId = 0, Level = LogLevel.Warning, Message = "Failed to open material document {MaterialUri}.")]
-    private static partial void LogMaterialOpenFailed(ILogger logger, Exception exception, Uri materialUri);
-
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Disposal drains pending work, logs its failure, and still releases the edit gate.")]
     private async Task DisposeGateAsync()
     {
@@ -398,6 +399,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Globalization", "CA1308:Normalize strings to uppercase", Justification = "the channel name is lowered for display in a sentence, not normalized for comparison")]
     private async Task ApplyTextureReferenceAsync(MaterialTextureChannel channel, string? virtualPath)
     {
         var current = this.document;
@@ -429,9 +431,6 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             _ = this.editGate.Release();
         }
     }
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Pending material work failed while disposing the editor.")]
-    private partial void LogPendingWorkFailedDuringDispose(Exception exception);
 
     private Task<bool> SaveCoreAsync() => this.pendingSave = this.SaveAfterPendingAsync(this.pendingSave);
 

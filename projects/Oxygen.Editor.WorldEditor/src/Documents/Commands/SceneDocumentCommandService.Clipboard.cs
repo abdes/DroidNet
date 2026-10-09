@@ -42,73 +42,12 @@ public sealed partial class SceneDocumentCommandService
         var topLevelIds = this.sceneOrganizer.FilterTopLevelSelectedNodeIds([.. nodeIds], context.Scene);
         if (topLevelIds.Count == 0)
         {
-            return this.DuplicateFailure(
-                DiagnosticCodes.ScenePrefix + "STALE_TARGET",
-                "The nodes to duplicate no longer exist in the scene.",
-                context);
+            return this.DuplicateStaleTarget("The nodes to duplicate no longer exist in the scene.", context);
         }
 
-        SceneNode? parentNode = null;
-        if (newParentNodeId.HasValue)
+        if (this.ResolveDuplicateDestination(context, newParentNodeId, newParentFolderId, insertAfterNodeId, out var destination) is { } destinationFailure)
         {
-            parentNode = FindNode(context.Scene, newParentNodeId.Value);
-            if (parentNode is null)
-            {
-                return this.DuplicateFailure(
-                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
-                    "The target parent node no longer exists.",
-                    context);
-            }
-        }
-
-        Guid? folderSceneParentNodeId = null;
-        if (newParentFolderId.HasValue)
-        {
-            var (found, nodeId) = FindFolderSceneParentNodeId(context.Scene.ExplorerLayout, newParentFolderId.Value);
-            if (!found)
-            {
-                return this.DuplicateFailure(
-                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
-                    "The target folder no longer exists.",
-                    context);
-            }
-
-            folderSceneParentNodeId = nodeId;
-        }
-
-        // Resolve the sibling anchor up front; inserting after a node implies its parent.
-        var insertIndex = -1;
-        if (insertAfterNodeId.HasValue)
-        {
-            var anchor = FindNode(context.Scene, insertAfterNodeId.Value);
-            if (anchor is null)
-            {
-                return this.DuplicateFailure(
-                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
-                    "The destination sibling no longer exists.",
-                    context);
-            }
-
-            parentNode = anchor.Parent;
-            insertIndex = anchor.Parent is null
-                ? context.Scene.RootNodes.IndexOf(anchor) + 1
-                : anchor.Parent.Children.IndexOf(anchor) + 1;
-        }
-
-        var destinationParent = parentNode
-            ?? (folderSceneParentNodeId is { } parentId ? FindNode(context.Scene, parentId) : null);
-        if (folderSceneParentNodeId.HasValue && destinationParent is null)
-        {
-            return this.DuplicateFailure(
-                DiagnosticCodes.ScenePrefix + "STALE_TARGET",
-                "The target folder's scene parent no longer exists.",
-                context);
-        }
-
-        if (destinationParent is not null
-            && this.RejectLockedTargets(context, SceneOperationKinds.NodeDuplicate, [destinationParent]) is { } lockFailure)
-        {
-            return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>(lockFailure.OperationResultId);
+            return destinationFailure;
         }
 
         // Resolve every source up front so a stale id cannot leave a partially committed batch.
@@ -118,56 +57,18 @@ public sealed partial class SceneDocumentCommandService
             var source = FindNode(context.Scene, nodeId);
             if (source is null)
             {
-                return this.DuplicateFailure(
-                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
-                    "One or more copied nodes no longer exist.",
-                    context);
+                return this.DuplicateStaleTarget("One or more copied nodes no longer exist.", context);
             }
 
             sources.Add(source);
         }
 
-        var created = new List<SceneNode>(sources.Count);
-        context.History.BeginChangeSet($"Duplicate {sources.Count} node(s)");
-        try
-        {
-            foreach (var source in sources)
-            {
-                var clone = SceneNode.CreateAndHydrate(context.Scene, RemapNodeIds(source.Dehydrate()));
-                var actualParent = parentNode ?? (folderSceneParentNodeId.HasValue ? FindNode(context.Scene, folderSceneParentNodeId.Value) : null);
-                _ = actualParent is null
-                    ? this.sceneMutator.CreateNodeAtRoot(clone, context.Scene)
-                    : this.sceneMutator.CreateNodeUnderParent(clone, actualParent, context.Scene);
-
-                if (insertIndex >= 0)
-                {
-                    MoveToIndex(actualParent is null ? context.Scene.RootNodes : actualParent.Children, clone, insertIndex);
-                    insertIndex++;
-                }
-
-                if (newParentFolderId.HasValue)
-                {
-                    EnsureExplorerLayout(context.Scene);
-                    _ = this.sceneOrganizer.MoveNodeToFolder(clone.Id, newParentFolderId.Value, context.Scene);
-                }
-
-                this.RecordCreateNodeUndo(context, clone);
-                this.PublishNodeAdded(context, clone);
-                created.Add(clone);
-            }
-        }
-        finally
-        {
-            context.History.EndChangeSet();
-        }
-
-        await this.MarkDirtyAsync(context).ConfigureAwait(true);
-        foreach (var clone in created)
-        {
-            await this.SyncNodeSubtreeAsync(context, clone).ConfigureAwait(true);
-        }
-
-        return SceneCommandResults.Success<IReadOnlyList<SceneNode>>(created);
+        return await this.InsertDuplicatesAsync(
+            context,
+            destination,
+            newParentFolderId,
+            sources.Count,
+            index => SceneNode.CreateAndHydrate(context.Scene, RemapNodeIds(sources[index].Dehydrate()))).ConfigureAwait(true);
     }
 
     /// <inheritdoc />
@@ -189,22 +90,58 @@ public sealed partial class SceneDocumentCommandService
 
         if (rootData.Count == 0)
         {
-            return this.DuplicateFailure(
-                DiagnosticCodes.ScenePrefix + "STALE_TARGET",
-                "The clipboard no longer contains any node data.",
-                context);
+            return this.DuplicateStaleTarget("The clipboard no longer contains any node data.", context);
         }
 
+        if (this.ResolveDuplicateDestination(context, newParentNodeId, newParentFolderId, insertAfterNodeId, out var destination) is { } destinationFailure)
+        {
+            return destinationFailure;
+        }
+
+        return await this.InsertDuplicatesAsync(
+            context,
+            destination,
+            newParentFolderId,
+            rootData.Count,
+            index =>
+            {
+                var clone = SceneNode.CreateAndHydrate(context.Scene, RemapNodeIds(rootData[index]));
+                this.RedirectCapturedSubtree(context, clone);
+                return clone;
+            }).ConfigureAwait(true);
+    }
+
+    private static SceneNodeData RemapNodeIds(SceneNodeData data)
+        => data with
+        {
+            Id = Guid.NewGuid(),
+            Components = [.. data.Components.Select(RemapComponentId)],
+            Children = data.Children?.Select(RemapNodeIds).ToList(),
+        };
+
+    private static ComponentData RemapComponentId(ComponentData data)
+        => data switch
+        {
+            // Duplicated lights must not steal the source's Primary/Secondary atmosphere role.
+            DirectionalLightData directional => directional with { Id = Guid.NewGuid(), AtmosphereSlot = AtmosphereLightSlot.None },
+            _ => data with { Id = Guid.NewGuid() },
+        };
+
+    private SceneValueCommandResult<IReadOnlyList<SceneNode>>? ResolveDuplicateDestination(
+        SceneDocumentCommandContext context,
+        Guid? newParentNodeId,
+        Guid? newParentFolderId,
+        Guid? insertAfterNodeId,
+        out DuplicateDestination destination)
+    {
+        destination = new(null, null, -1);
         SceneNode? parentNode = null;
         if (newParentNodeId.HasValue)
         {
             parentNode = FindNode(context.Scene, newParentNodeId.Value);
             if (parentNode is null)
             {
-                return this.DuplicateFailure(
-                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
-                    "The target parent node no longer exists.",
-                    context);
+                return this.DuplicateStaleTarget("The target parent node no longer exists.", context);
             }
         }
 
@@ -214,25 +151,20 @@ public sealed partial class SceneDocumentCommandService
             var (found, nodeId) = FindFolderSceneParentNodeId(context.Scene.ExplorerLayout, newParentFolderId.Value);
             if (!found)
             {
-                return this.DuplicateFailure(
-                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
-                    "The target folder no longer exists.",
-                    context);
+                return this.DuplicateStaleTarget("The target folder no longer exists.", context);
             }
 
             folderSceneParentNodeId = nodeId;
         }
 
+        // Resolve the sibling anchor up front; inserting after a node implies its parent.
         var insertIndex = -1;
         if (insertAfterNodeId.HasValue)
         {
             var anchor = FindNode(context.Scene, insertAfterNodeId.Value);
             if (anchor is null)
             {
-                return this.DuplicateFailure(
-                    DiagnosticCodes.ScenePrefix + "STALE_TARGET",
-                    "The destination sibling no longer exists.",
-                    context);
+                return this.DuplicateStaleTarget("The destination sibling no longer exists.", context);
             }
 
             parentNode = anchor.Parent;
@@ -245,10 +177,7 @@ public sealed partial class SceneDocumentCommandService
             ?? (folderSceneParentNodeId is { } parentId ? FindNode(context.Scene, parentId) : null);
         if (folderSceneParentNodeId.HasValue && destinationParent is null)
         {
-            return this.DuplicateFailure(
-                DiagnosticCodes.ScenePrefix + "STALE_TARGET",
-                "The target folder's scene parent no longer exists.",
-                context);
+            return this.DuplicateStaleTarget("The target folder's scene parent no longer exists.", context);
         }
 
         if (destinationParent is not null
@@ -257,14 +186,27 @@ public sealed partial class SceneDocumentCommandService
             return SceneCommandResults.Failure<IReadOnlyList<SceneNode>>(lockFailure.OperationResultId);
         }
 
-        var created = new List<SceneNode>(rootData.Count);
-        context.History.BeginChangeSet($"Duplicate {rootData.Count} node(s)");
+        destination = new(parentNode, folderSceneParentNodeId, insertIndex);
+        return null;
+    }
+
+    private async Task<SceneValueCommandResult<IReadOnlyList<SceneNode>>> InsertDuplicatesAsync(
+        SceneDocumentCommandContext context,
+        DuplicateDestination destination,
+        Guid? newParentFolderId,
+        int count,
+        Func<int, SceneNode> createClone)
+    {
+        var insertIndex = destination.InsertIndex;
+        var created = new List<SceneNode>(count);
+        context.History.BeginChangeSet($"Duplicate {count} node(s)");
         try
         {
-            foreach (var data in rootData)
+            for (var index = 0; index < count; index++)
             {
-                var clone = SceneNode.CreateAndHydrate(context.Scene, RemapNodeIds(data));
-                var actualParent = parentNode ?? (folderSceneParentNodeId.HasValue ? FindNode(context.Scene, folderSceneParentNodeId.Value) : null);
+                var clone = createClone(index);
+                var actualParent = destination.ParentNode
+                    ?? (destination.FolderSceneParentNodeId.HasValue ? FindNode(context.Scene, destination.FolderSceneParentNodeId.Value) : null);
                 _ = actualParent is null
                     ? this.sceneMutator.CreateNodeAtRoot(clone, context.Scene)
                     : this.sceneMutator.CreateNodeUnderParent(clone, actualParent, context.Scene);
@@ -300,21 +242,8 @@ public sealed partial class SceneDocumentCommandService
         return SceneCommandResults.Success<IReadOnlyList<SceneNode>>(created);
     }
 
-    private static SceneNodeData RemapNodeIds(SceneNodeData data)
-        => data with
-        {
-            Id = Guid.NewGuid(),
-            Components = [.. data.Components.Select(RemapComponentId)],
-            Children = data.Children?.Select(RemapNodeIds).ToList(),
-        };
-
-    private static ComponentData RemapComponentId(ComponentData data)
-        => data switch
-        {
-            // Duplicated lights must not steal the source's Primary/Secondary atmosphere role.
-            DirectionalLightData directional => directional with { Id = Guid.NewGuid(), AtmosphereSlot = AtmosphereLightSlot.None },
-            _ => data with { Id = Guid.NewGuid() },
-        };
+    private SceneValueCommandResult<IReadOnlyList<SceneNode>> DuplicateStaleTarget(string message, SceneDocumentCommandContext context)
+        => this.DuplicateFailure(DiagnosticCodes.ScenePrefix + "STALE_TARGET", message, context);
 
     private SceneValueCommandResult<IReadOnlyList<SceneNode>> DuplicateFailure(
         string code,
@@ -335,4 +264,6 @@ public sealed partial class SceneDocumentCommandService
             await this.SyncNodeSubtreeAsync(context, child).ConfigureAwait(true);
         }
     }
+
+    private sealed record DuplicateDestination(SceneNode? ParentNode, Guid? FolderSceneParentNodeId, int InsertIndex);
 }

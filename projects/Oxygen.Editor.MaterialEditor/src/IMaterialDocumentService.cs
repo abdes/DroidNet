@@ -16,6 +16,15 @@ public interface IMaterialDocumentService : IMaterialPropertyEditService
     /// <returns>The current document snapshot.</returns>
     public MaterialDocument GetDocument(Guid documentId);
 
+    /// <summary>
+    /// Re-points an open, saved document to a committed relocation in memory, outside undo history: its texture paths,
+    /// and its own URI and file when it moved; records the rewritten file as its saved state.
+    /// </summary>
+    /// <param name="documentId">The open material document identity.</param>
+    /// <param name="change">The committed relocation.</param>
+    /// <returns>Whether the document changed.</returns>
+    public bool FollowRelocation(Guid documentId, Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationChange change);
+
     /// <summary>Begins a grouped material gesture with an owned before snapshot.</summary>
     /// <param name="documentId">The open material document.</param>
     /// <param name="field">The user-visible edited field.</param>

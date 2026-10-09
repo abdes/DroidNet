@@ -7,6 +7,8 @@ using Oxygen.Editor.ContentPipeline;
 
 namespace Oxygen.Editor.MaterialEditor;
 
+#pragma warning disable SA1204 // Each log method keeps its static and instance forms together
+
 /// <summary>Source-generated diagnostics for material authoring and persistence.</summary>
 public sealed partial class MaterialDocumentService
 {
@@ -27,4 +29,10 @@ public sealed partial class MaterialDocumentService
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Material schema validator could not be loaded; material saves will rely on cooker validation.")]
     private partial void LogSchemaUnavailable(Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Material document '{Previous}' followed a relocation in memory as '{Current}' (file rewritten: {Rewritten}).")]
+    private partial void LogMaterialFollowedRelocation(Uri previous, Uri current, bool rewritten);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Material '{Material}' restored a reference to the deleted texture(s) {Textures}; it shows as missing.")]
+    private partial void LogRestoredDeletedTexture(Uri material, string textures);
 }
