@@ -15,6 +15,15 @@ public sealed partial class SceneEngineSync
 {
     private IRuntimeWorldCommands? observedWorld;
 
+    // The native failure names each failed texture in its message but not by slot, so the
+    // failure is attributed to a texture only when the edit loads exactly one.
+    private static string? SoleEnvironmentTexture(RuntimeSetEnvironment environment)
+    {
+        RuntimeTextureReference?[] textures = [environment.AutoExposureMeteringMask, environment.SkySphereCubemap, environment.SkyLightCubemap];
+        var loaded = textures.OfType<RuntimeTextureReference>().ToArray();
+        return loaded.Length == 1 ? loaded[0].AssetUri.AbsoluteUri : null;
+    }
+
     private void ObserveWorld(IRuntimeWorldCommands commands)
     {
         if (ReferenceEquals(commands, this.observedWorld))
@@ -64,7 +73,7 @@ public sealed partial class SceneEngineSync
         {
             RuntimeSetGeometry geometry => (geometry.NodeId, geometry.AssetPath, SceneOperationKinds.EditGeometry, LiveSyncDiagnosticCodes.GeometryUnresolvedAtRuntime),
             RuntimeSetMaterialOverride material => (material.NodeId, material.MaterialPath, SceneOperationKinds.EditMaterialSlot, LiveSyncDiagnosticCodes.MaterialFailed),
-            RuntimeSetEnvironment environment => (Guid.Empty, environment.AutoExposureMeteringMask?.AssetUri.AbsoluteUri, SceneOperationKinds.EditEnvironment, LiveSyncDiagnosticCodes.EnvironmentFailed),
+            RuntimeSetEnvironment environment => (Guid.Empty, SoleEnvironmentTexture(environment), SceneOperationKinds.EditEnvironment, LiveSyncDiagnosticCodes.EnvironmentFailed),
             _ => (Guid.Empty, null, string.Empty, string.Empty),
         };
         var node = FindNode(scene, nodeId);

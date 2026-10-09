@@ -8,14 +8,6 @@ namespace Oxygen.Editor.Runtime.Engine;
 internal sealed partial class RuntimeCommandDispatcher
 {
     /// <inheritdoc/>
-    public async Task<RuntimeBackgroundObservation> ObserveBackgroundAsync(
-        Guid operationId, RuntimeSceneTarget target, CancellationToken cancellationToken = default)
-    {
-        var (outcome, state) = await this.ObserveAsync(operationId, target, static transport => transport.ObserveBackgroundAsync(), cancellationToken).ConfigureAwait(false);
-        return new(outcome, state);
-    }
-
-    /// <inheritdoc/>
     public async Task<RuntimeEnvironmentObservation> ObserveEnvironmentAsync(
         Guid operationId, RuntimeSceneTarget target, CancellationToken cancellationToken = default)
     {

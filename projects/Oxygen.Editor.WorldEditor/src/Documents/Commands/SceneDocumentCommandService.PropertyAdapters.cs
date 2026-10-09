@@ -243,12 +243,24 @@ public sealed partial class SceneDocumentCommandService
         var skyEdited = edit.Ids.Any(static id => id.JsonPointer.StartsWith("/sky_atmosphere/", StringComparison.Ordinal));
         var fogEdited = edit.Ids.Any(static id => id.JsonPointer.StartsWith("/fog/", StringComparison.Ordinal));
 
-        var atmosphereEnabled = edit.Contains(SceneEnvironment.AtmosphereEnabled.Id)
+        // The backdrop choice spans the atmosphere, sky sphere and background, so
+        // its edits carry all three records.
+        var backdropEdited = edit.Ids.Any(static id => id.JsonPointer.StartsWith("/backdrop/", StringComparison.Ordinal));
+        var skySphereEdited = backdropEdited || edit.Ids.Any(static id => id.JsonPointer.StartsWith("/sky_sphere/", StringComparison.Ordinal));
+        var skyLightEdited = edit.Ids.Any(static id => id.JsonPointer.StartsWith("/sky_light/", StringComparison.Ordinal));
+
+        var atmosphereEnabled = backdropEdited || edit.Contains(SceneEnvironment.AtmosphereEnabled.Id)
             ? OptionalEditValues.Supplied<bool>(after.AtmosphereEnabled)
             : OptionalEditValues.Unspecified<bool>();
-        var backgroundColor = edit.Contains(SceneEnvironment.BackgroundColor.Id)
-            ? OptionalEditValues.Supplied<Vector3>(after.BackgroundColor)
-            : OptionalEditValues.Unspecified<Vector3>();
+        var background = backdropEdited
+            ? OptionalEditValues.Supplied<BackgroundEnvironmentData>(after.Background)
+            : OptionalEditValues.Unspecified<BackgroundEnvironmentData>();
+        var skySphere = skySphereEdited
+            ? OptionalEditValues.Supplied<SkySphereEnvironmentData>(after.SkySphere)
+            : OptionalEditValues.Unspecified<SkySphereEnvironmentData>();
+        var skyLight = skyLightEdited
+            ? OptionalEditValues.Supplied<SkyLightEnvironmentData>(after.SkyLight)
+            : OptionalEditValues.Unspecified<SkyLightEnvironmentData>();
         var skyAtmosphere = skyEdited
             ? OptionalEditValues.Supplied<SkyAtmosphereEnvironmentData>(after.SkyAtmosphere)
             : OptionalEditValues.Unspecified<SkyAtmosphereEnvironmentData>();
@@ -266,10 +278,12 @@ public sealed partial class SceneDocumentCommandService
                 OptionalEditValues.Unspecified<float>(),
                 OptionalEditValues.Unspecified<float>(),
                 OptionalEditValues.Unspecified<ToneMappingMode>(),
-                backgroundColor,
+                background,
                 skyAtmosphere,
                 postProcess,
-                fog),
+                fog,
+                skySphere,
+                skyLight),
             Result: null);
 
         static SceneEnvironmentEdit EmptyEnvironmentEdit()
@@ -279,7 +293,7 @@ public sealed partial class SceneDocumentCommandService
                 OptionalEditValues.Unspecified<float>(),
                 OptionalEditValues.Unspecified<float>(),
                 OptionalEditValues.Unspecified<ToneMappingMode>(),
-                OptionalEditValues.Unspecified<Vector3>());
+                OptionalEditValues.Unspecified<BackgroundEnvironmentData>());
     }
 
     /// <summary>

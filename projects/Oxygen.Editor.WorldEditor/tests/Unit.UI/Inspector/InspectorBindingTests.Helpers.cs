@@ -32,23 +32,35 @@ public sealed partial class InspectorBindingTests
     private static readonly Dictionary<string, Func<Oxygen.Editor.WorldEditor.TestSupport.EnvironmentInspectorScenario, Task>> VectorFieldPreparations = new(StringComparer.Ordinal)
     {
         ["GroundAlbedo"] = scenario => scenario.ExpandGroupAsync("SkyAtmosphereSection", "Planet & ground"),
+        ["SolidColor"] = scenario =>
+        {
+            ShowSolidColorBackdrop(scenario.Fixture);
+            return scenario.WaitForRenderAsync();
+        },
     };
 
+    // Shows the solid color backdrop without recording authoring history.
+    private static void ShowSolidColorBackdrop(Oxygen.Editor.WorldEditor.TestSupport.SceneAuthoringFixture fixture)
+        => fixture.Scene.SetEnvironment(fixture.Scene.Environment with
+        {
+            AtmosphereEnabled = false,
+            SkySphere = fixture.Scene.Environment.SkySphere with { Enabled = true, Source = Oxygen.Editor.World.Serialization.SkySphereSource.SolidColor },
+        });
+
     private static IEnumerable<Oxygen.Editor.Controls.PropertyCard> SceneCards(Oxygen.Editor.Controls.PropertiesExpander section)
-        => section.Items.SelectMany(item => item switch
+        => section.Items.SelectMany(SceneCardsOf);
+
+    // Disclosures and conditional field groups nest cards one panel deep.
+    private static IEnumerable<Oxygen.Editor.Controls.PropertyCard> SceneCardsOf(object item)
+        => item switch
         {
             Oxygen.Editor.Controls.PropertyCard card => [card],
             Oxygen.Editor.Controls.InspectorNumberField { Content: Oxygen.Editor.Controls.PropertyCard card } => [card],
             Oxygen.Editor.World.Inspector.Controls.InspectorRgbField { Content: Oxygen.Editor.Controls.PropertyCard card } => [card],
-            Expander { Content: StackPanel content } => content.Children.SelectMany(child => child switch
-            {
-                Oxygen.Editor.Controls.PropertyCard card => [card],
-                Oxygen.Editor.Controls.InspectorNumberField { Content: Oxygen.Editor.Controls.PropertyCard card } => [card],
-                Oxygen.Editor.World.Inspector.Controls.InspectorRgbField { Content: Oxygen.Editor.Controls.PropertyCard card } => [card],
-                _ => Enumerable.Empty<Oxygen.Editor.Controls.PropertyCard>(),
-            }),
+            Expander { Content: StackPanel content } => content.Children.SelectMany(SceneCardsOf),
+            StackPanel panel => panel.Children.SelectMany(SceneCardsOf),
             _ => [],
-        });
+        };
 
     private static IEnumerable<string> SceneFieldLabels(Oxygen.Editor.Controls.PropertiesExpander section)
         => section.Items.SelectMany(item => item switch

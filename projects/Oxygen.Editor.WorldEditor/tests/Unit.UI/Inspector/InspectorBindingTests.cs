@@ -235,13 +235,12 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
     public Task BackgroundColorCardUsesTwoRowLayoutWithSwatch(double width) => EnqueueAsync(async () =>
     {
         // Theme matrix dropped — no assertion is theme-dependent; Dark is the editor default.
-        using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, width, theme: ElementTheme.Dark).ConfigureAwait(true);
+        using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, width, theme: ElementTheme.Dark, prepareFixture: ShowSolidColorBackdrop).ConfigureAwait(true);
         await scenario.SearchAsync("background").ConfigureAwait(true);
-        var section = scenario.Section("BackgroundSection");
-        _ = section.Description.Should().Be("Fallback color when atmosphere rendering is disabled.");
-        _ = scenario.Element<Button>("ResetBackgroundButton").IsEnabled.Should().BeTrue();
+        var section = scenario.Section("BackdropSection");
+        _ = section.Description.Should().Be("What shows behind the scene: the atmosphere, a cubemap or a solid color.");
         var card = SceneCards(section).Single(property => string.Equals(property.PropertyName, "Color", StringComparison.Ordinal));
-        _ = section.BringItemIntoView(scenario.Named("BackgroundColorCard"));
+        _ = section.BringItemIntoView(scenario.Named("SolidColorCard"));
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         var label = card.FindDescendant<TextBlock>(text => string.Equals(text.Text, "Color", StringComparison.Ordinal))!;
         var unit = card.FindDescendant<TextBlock>(text => string.Equals(text.Text, "Linear RGB", StringComparison.Ordinal))!;
@@ -286,11 +285,11 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
     public Task BackgroundColorChannelEditSessionsKeepGeometry(double width) => EnqueueAsync(async () =>
     {
         // Theme matrix dropped — no assertion is theme-dependent; Dark is the editor default.
-        using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, width, theme: ElementTheme.Dark).ConfigureAwait(true);
+        using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, width, theme: ElementTheme.Dark, prepareFixture: ShowSolidColorBackdrop).ConfigureAwait(true);
         await scenario.SearchAsync("background").ConfigureAwait(true);
-        var section = scenario.Section("BackgroundSection");
+        var section = scenario.Section("BackdropSection");
         var card = SceneCards(section).Single(property => string.Equals(property.PropertyName, "Color", StringComparison.Ordinal));
-        _ = section.BringItemIntoView(scenario.Named("BackgroundColorCard"));
+        _ = section.BringItemIntoView(scenario.Named("SolidColorCard"));
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         var channels = card.FindDescendant<VectorBox>()!;
         var inputs = channels.FindDescendants().OfType<NumberBox>().ToArray();
@@ -608,7 +607,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, width: null, height: null, host: ScenarioHost.Scroll).ConfigureAwait(true);
         var exposure = scenario.Section("ExposureSection");
         var sky = scenario.Section("SkyAtmosphereSection");
-        var background = scenario.Section("BackgroundSection");
+        var background = scenario.Section("BackdropSection");
         var references = (FrameworkElement)scenario.View.FindName("SceneReferencesView");
 
         // collapsed baseline: search restore cycles must return the section to this state
@@ -712,10 +711,10 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             UserControl { Content: StackPanel effects } => effects.Children.OfType<Oxygen.Editor.Controls.PropertiesExpander>(),
             _ => Enumerable.Empty<Oxygen.Editor.Controls.PropertiesExpander>(),
         }).ToArray();
-        _ = sections.Select(section => section.Header).Should().Equal("Scene References", "Atmosphere Lights", "Sky Atmosphere", "Background", "Exposure", "Tone Mapping", "Color Grading", "Bloom");
-        _ = sections.SelectMany(SceneCards).Should().HaveCount(47);
-        _ = sections.Select(section => section.IsExpanded).Should().Equal(true, true, true, true, true, true, false, false);
-        var sky = sections[2];
+        _ = sections.Select(section => section.Header).Should().Equal("Scene References", "Atmosphere Lights", "Backdrop", "Sky Atmosphere", "Sky Light", "Fog", "Exposure", "Tone Mapping", "Color Grading", "Bloom");
+        _ = sections.SelectMany(SceneCards).Should().HaveCount(96);
+        _ = sections.Select(section => section.IsExpanded).Should().Equal(true, true, true, true, true, true, true, true, false, false);
+        var sky = sections.Single(section => Equals(section.Header, "Sky Atmosphere"));
         var skyGroups = sky.Items.OfType<Expander>().ToArray();
         _ = skyGroups.Select(group => group.Header).Should().Equal("Planet & ground", "Scattering", "Aerial perspective");
         _ = skyGroups.Select(group => group.IsExpanded).Should().OnlyContain(expanded => !expanded);
@@ -974,7 +973,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
     [TestMethod]
     [DataRow("GroundAlbedo")]
     [DataRow("SkyLuminance")]
-    [DataRow("BackgroundColor")]
+    [DataRow("SolidColor")]
     public Task EnvironmentVectorControlGroupsSamplesAndUndoRefreshesTheControl(string field) => EnqueueAsync(async () =>
     {
         using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync).ConfigureAwait(true);

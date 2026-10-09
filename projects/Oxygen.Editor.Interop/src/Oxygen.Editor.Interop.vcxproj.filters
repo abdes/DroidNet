@@ -152,7 +152,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Commands\SetBackgroundColorCommand.h" />
     <ClInclude Include="Base\LoguruWrapper.h">
       <Filter>Base</Filter>
     </ClInclude>

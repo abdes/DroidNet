@@ -23,7 +23,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="proceduralGeometryDescriptors">The generated geometry descriptor service.</param>
 public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescriptorService proceduralGeometryDescriptors) : ISceneDescriptorGenerator
 {
-    private const int NativeSceneDescriptorVersion = 11;
+    private const int NativeSceneDescriptorVersion = 12;
     private const double MaximumExposureLogLuminance = 32;
     private static readonly Lazy<EditorSchemaCatalog> SceneSchemas = new(() =>
         EditorSchemaCatalog.LoadFromDirectory(Path.Combine(
@@ -150,18 +150,18 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
         var localFogVolumes = new List<NativeLocalFogVolume>();
         var materialRefs = new SortedSet<string>(StringComparer.Ordinal);
         var dependencyInputs = new List<ContentCookInput>(generatedGeometryInputs);
-        if (scene.Environment.PostProcess.AutoExposureMeteringMask is { } maskUri)
+        foreach (var (textureUri, label) in EnvironmentTextures(scene.Environment))
         {
-            var maskInput = CookInputResolver.IsAuthoringUri(scope.Project, maskUri)
-                ? CookInputResolver.Resolve(scope.Project, maskUri, ContentCookInputRole.Dependency) : null;
-            if (maskInput is null || maskInput.Kind != ContentCookAssetKind.Texture
-                || !string.Equals(maskInput.MountName, sceneInput.MountName, StringComparison.Ordinal))
+            var textureInput = CookInputResolver.IsAuthoringUri(scope.Project, textureUri)
+                ? CookInputResolver.Resolve(scope.Project, textureUri, ContentCookInputRole.Dependency) : null;
+            if (textureInput is null || textureInput.Kind != ContentCookAssetKind.Texture
+                || !string.Equals(textureInput.MountName, sceneInput.MountName, StringComparison.Ordinal))
             {
                 diagnostics.Add(CreateDiagnostic(
                     operationId,
                     DiagnosticSeverity.Error,
                     ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
-                    "The exposure metering mask must be a texture descriptor in the scene's own content mount.",
+                    $"The {label} must be a texture descriptor in the scene's own content mount.",
                     descriptorPath,
                     descriptorVirtualPath));
                 return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, Dependencies: [], diagnostics);
@@ -624,26 +624,63 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
         return null;
     }
 
-    // Match the captured lighting supplied by Interop's ApplySkyLight.
     private static NativeEnvironment CreateEnvironment(SceneEnvironmentData environment)
         => new(
             CreateSkyAtmosphere(environment.AtmosphereEnabled, environment.SkyAtmosphere ?? new()),
-            new NativeSkyLightEnvironment(
-                Enabled: true,
-                Source: 0,
-                Intensity: 1.0f,
-                TintRgb: [1.0f, 1.0f, 1.0f],
-                DiffuseIntensity: 1.0f,
-                SpecularIntensity: 1.0f,
-                SourceCubemapAngleRadians: 0.0f,
-                LowerHemisphereColor: [0.02f, 0.02f, 0.03f],
-                LowerHemisphereIsSolidColor: true,
-                LowerHemisphereBlendAlpha: 1.0f,
-                VolumetricScatteringIntensity: 1.0f,
-                AffectReflections: true),
+            CreateSkyLight(environment.SkyLight ?? new()),
+            CreateSkySphere(environment.SkySphere ?? new()),
             CreateFog(environment.Fog ?? new()),
             CreatePostProcess(environment.PostProcess ?? new()),
-            new NativeBackgroundEnvironment(Enabled: true, ToArray(environment.BackgroundColor)));
+            new NativeBackgroundEnvironment(environment.Background.Enabled, ToArray(environment.Background.ColorRgb)));
+
+    // The textures the cooked environment references: each must be cooked into
+    // the scene's own source, as the native scene record binds it there. A
+    // cubemap is referenced only while an enabled system's source uses it, so a
+    // stale reference behind another source or a disabled system does not block
+    // the cook.
+    private static IEnumerable<(Uri Uri, string Label)> EnvironmentTextures(SceneEnvironmentData environment)
+    {
+        if (environment.PostProcess.AutoExposureMeteringMask is { } mask)
+        {
+            yield return (mask, "exposure metering mask");
+        }
+
+        if (environment.SkySphere.ActiveCubemap is { } backdrop)
+        {
+            yield return (backdrop, "sky sphere cubemap");
+        }
+
+        if (environment.SkyLight.ActiveCubemap is { } light)
+        {
+            yield return (light, "sky light cubemap");
+        }
+    }
+
+    private static NativeSkyLightEnvironment CreateSkyLight(SkyLightEnvironmentData authored)
+        => new(
+            Enabled: authored.Enabled,
+            Source: (int)authored.Source,
+            CubemapRef: GetTexturePath(authored.ActiveCubemap),
+            Intensity: authored.Intensity,
+            TintRgb: ToArray(authored.TintRgb),
+            DiffuseIntensity: authored.DiffuseIntensity,
+            SpecularIntensity: authored.SpecularIntensity,
+            SourceCubemapAngleRadians: authored.CubemapAngleRadians,
+            LowerHemisphereColor: ToArray(authored.LowerHemisphereColor),
+            LowerHemisphereIsSolidColor: authored.LowerHemisphereIsSolidColor,
+            LowerHemisphereBlendAlpha: authored.LowerHemisphereBlendAlpha,
+            VolumetricScatteringIntensity: authored.VolumetricScatteringIntensity,
+            AffectReflections: authored.AffectReflections);
+
+    private static NativeSkySphereEnvironment CreateSkySphere(SkySphereEnvironmentData authored)
+        => new(
+            Enabled: authored.Enabled,
+            Source: (int)authored.Source,
+            CubemapRef: GetTexturePath(authored.ActiveCubemap),
+            SolidColorRgb: ToArray(authored.SolidColorRgb),
+            Intensity: authored.Intensity,
+            RotationRadians: authored.RotationRadians,
+            TintRgb: ToArray(authored.TintRgb));
 
     // The fog cubemap and its distances stay at native defaults: the renderer
     // does not sample an inscattering cubemap.
@@ -710,7 +747,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             AutoExposureSpotMeterRadius: authored.AutoExposureSpotMeterRadius,
             AutoExposureBlackInfluence: authored.AutoExposureBlackInfluence,
             AutoExposureTransitionDistanceEv: authored.AutoExposureTransitionDistanceEv,
-            AutoExposureMeteringMask: GetMeteringMaskPath(authored.AutoExposureMeteringMask),
+            AutoExposureMeteringMask: GetTexturePath(authored.AutoExposureMeteringMask),
             AutoExposureCompensationCurve: authored.AutoExposureCompensationCurve
                 .Select(static key => new NativeExposureCompensationKey(key.MeteredEv, key.CompensationEv)).ToArray(),
             BloomIntensity: authored.BloomIntensity,
@@ -720,8 +757,8 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             VignetteIntensity: authored.VignetteIntensity,
             DisplayGamma: authored.DisplayGamma);
 
-    private static string? GetMeteringMaskPath(Uri? mask)
-        => mask is null ? null : ContentPipelinePaths.ToNativeDescriptorPath(mask, ".otex");
+    private static string? GetTexturePath(Uri? texture)
+        => texture is null ? null : ContentPipelinePaths.ToNativeDescriptorPath(texture, ".otex");
 
     // Mirrors the native Earth baseline in Oxygen/Core/Types/Atmosphere.h.
     private static NativeSkyAtmosphereEnvironment CreateSkyAtmosphere(bool enabled, SkyAtmosphereEnvironmentData authored)

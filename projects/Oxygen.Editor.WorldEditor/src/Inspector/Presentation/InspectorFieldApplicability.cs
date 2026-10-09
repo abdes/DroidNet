@@ -21,4 +21,19 @@ public enum InspectorFieldApplicability
 
     /// <summary>The existing presentation depends on the selected tone mapper.</summary>
     ToneMapping,
+
+    /// <summary>The field applies while the atmosphere is the backdrop.</summary>
+    AtmosphereBackdrop,
+
+    /// <summary>The field applies while a cubemap is the backdrop.</summary>
+    CubemapBackdrop,
+
+    /// <summary>The field applies while a solid color is the backdrop.</summary>
+    SolidColorBackdrop,
+
+    /// <summary>The field scales the sky sphere: a cubemap backdrop, or a solid color that lights the scene.</summary>
+    SkySphereTone,
+
+    /// <summary>The field applies while the Sky Light takes its radiance from a cubemap.</summary>
+    SkyLightCubemap,
 }

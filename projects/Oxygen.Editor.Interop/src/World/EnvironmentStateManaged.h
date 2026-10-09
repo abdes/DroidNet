@@ -8,6 +8,7 @@
 #pragma managed(push, on)
 
 #include <World/FogEnvironmentManaged.h>
+#include <World/SkyEnvironmentManaged.h>
 
 namespace Oxygen::Interop::World {
 
@@ -76,6 +77,18 @@ public value struct EnvironmentStateManaged {
   float DisplayGamma;
   bool FogExists;
   FogEnvironmentManaged Fog;
+  bool SkySphereExists;
+  SkySphereEnvironmentManaged SkySphere;
+  System::UInt64 SkySphereCubemap;
+  bool SkySphereCubemapPending;
+  System::String^ SkySphereCubemapError;
+  bool SkyLightExists;
+  SkyLightEnvironmentManaged SkyLight;
+  System::UInt64 SkyLightCubemap;
+  bool SkyLightCubemapPending;
+  System::String^ SkyLightCubemapError;
+  bool BackgroundExists;
+  BackgroundEnvironmentManaged Background;
 };
 
 } // namespace Oxygen::Interop::World

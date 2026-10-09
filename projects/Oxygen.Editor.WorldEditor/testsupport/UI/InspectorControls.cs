@@ -33,7 +33,7 @@ internal static class InspectorControls
 
         if (view is EnvironmentView environment)
         {
-            foreach (var section in new[] { "AtmosphereLights", "SkyAtmosphere", "Background", "Exposure", "ToneMapping" })
+            foreach (var section in new[] { "AtmosphereLights", "Backdrop", "SkyAtmosphere", "SkyLight", "Fog", "Exposure", "ToneMapping" })
             {
                 if (environment.SectionView(section).FindName(name) is { } element)
                 {

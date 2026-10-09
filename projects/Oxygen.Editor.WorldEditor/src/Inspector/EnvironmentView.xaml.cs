@@ -28,9 +28,10 @@ public sealed partial class EnvironmentView
         this.InitializeComponent();
         this.registry = new(this.search, (IValueConverter)this.Resources["InspectorDiagnosticVisibility"]);
         this.AtmosphereLightsView.Register(this.registry);
+        this.BackdropView.Register(this.registry);
         this.SkyAtmosphereView.Register(this.registry);
+        this.SkyLightView.Register(this.registry);
         this.FogView.Register(this.registry);
-        this.BackgroundView.Register(this.registry);
         this.ExposureView.Register(this.registry);
         this.PostProcessingView.Register(this.registry);
         _ = this.ScenePropertySearchBox.RegisterPropertyChangedCallback(TextBox.TextProperty, (_, _) => this.ApplyScenePropertyFilter());
@@ -70,6 +71,8 @@ public sealed partial class EnvironmentView
             model.FieldFocusRequested += this.OnFieldFocusRequested;
             model.Exposure.PropertyChanged += this.OnSectionPropertyChanged;
             model.PostProcessing.PropertyChanged += this.OnSectionPropertyChanged;
+            model.Backdrop.PropertyChanged += this.OnSectionPropertyChanged;
+            model.SkyLight.PropertyChanged += this.OnSectionPropertyChanged;
             model.SceneReferences.PropertyChanged += this.OnSectionPropertyChanged;
             this.ApplyScenePropertyFilter();
             this.FocusPendingField();
@@ -83,6 +86,8 @@ public sealed partial class EnvironmentView
             model.FieldFocusRequested -= this.OnFieldFocusRequested;
             model.Exposure.PropertyChanged -= this.OnSectionPropertyChanged;
             model.PostProcessing.PropertyChanged -= this.OnSectionPropertyChanged;
+            model.Backdrop.PropertyChanged -= this.OnSectionPropertyChanged;
+            model.SkyLight.PropertyChanged -= this.OnSectionPropertyChanged;
             model.SceneReferences.PropertyChanged -= this.OnSectionPropertyChanged;
             this.observedModel = null;
         }
@@ -97,7 +102,9 @@ public sealed partial class EnvironmentView
         }
 
         if (args.PropertyName is nameof(ExposureSectionViewModel.ExposureMode)
-            or nameof(ExposureSectionViewModel.AutoExposureMeteringMode) or nameof(PostProcessingSectionViewModel.ToneMapping))
+            or nameof(ExposureSectionViewModel.AutoExposureMeteringMode) or nameof(PostProcessingSectionViewModel.ToneMapping)
+            or nameof(BackdropSectionViewModel.Backdrop) or nameof(BackdropSectionViewModel.SolidColorLightsScene)
+            or nameof(SkyLightSectionViewModel.Source))
         {
             this.ApplyScenePropertyFilter();
         }
@@ -127,7 +134,14 @@ public sealed partial class EnvironmentView
             return;
         }
 
-        this.registry.Apply(this.ScenePropertySearchBox.Text, this.propertyScope, model.Exposure.ExposureMode, model.Exposure.AutoExposureMeteringMode, model.PostProcessing.ToneMapping);
+        var modes = new InspectorApplicabilityContext(
+            model.Exposure.ExposureMode,
+            model.Exposure.AutoExposureMeteringMode,
+            model.PostProcessing.ToneMapping,
+            model.Backdrop.Backdrop,
+            model.Backdrop.SolidColorLightsScene,
+            model.SkyLight.Source);
+        this.registry.Apply(this.ScenePropertySearchBox.Text, this.propertyScope, modes);
         this.EnvironmentHeading.Visibility = this.search.IsScopeVisible(InspectorPropertyScope.Environment) ? Visibility.Visible : Visibility.Collapsed;
         this.PostProcessingHeading.Visibility = this.search.IsScopeVisible(InspectorPropertyScope.PostProcessing) ? Visibility.Visible : Visibility.Collapsed;
         var showReferences = (this.propertyScope is InspectorPropertyScope.All or InspectorPropertyScope.SceneReferences)

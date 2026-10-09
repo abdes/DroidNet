@@ -85,15 +85,8 @@ internal sealed class InspectorSceneFieldRegistry(InspectorSearchModel search, I
     /// <summary>Applies browsing state without constructing, reparenting or replacing editors.</summary>
     /// <param name="query">The property query.</param>
     /// <param name="scope">The current property scope.</param>
-    /// <param name="exposure">The authored exposure mode.</param>
-    /// <param name="metering">The authored metering mode.</param>
-    /// <param name="mapper">The authored tone mapper.</param>
-    internal void Apply(
-        string query,
-        InspectorPropertyScope scope,
-        Oxygen.Editor.World.Serialization.ExposureMode exposure,
-        Oxygen.Editor.World.Serialization.MeteringMode metering,
-        Oxygen.Editor.World.Serialization.ToneMappingMode mapper)
+    /// <param name="modes">The authored modes that decide which stored fields apply.</param>
+    internal void Apply(string query, InspectorPropertyScope scope, InspectorApplicabilityContext modes)
     {
         foreach (var (key, section) in this.Sections)
         {
@@ -105,7 +98,7 @@ internal sealed class InspectorSceneFieldRegistry(InspectorSearchModel search, I
             search.RecordExpansion(key, disclosure.IsExpanded);
         }
 
-        search.Update(query, scope, exposure, metering, mapper);
+        search.Update(query, scope, modes);
         foreach (var (key, section) in this.Sections)
         {
             section.Visibility = search.IsGroupVisible(key) ? Visibility.Visible : Visibility.Collapsed;

@@ -93,4 +93,19 @@ public sealed record RuntimeSetEnvironment(
 {
     /// <summary>Gets the authored height fog and volumetric fog.</summary>
     public FogEnvironmentData Fog { get; init; } = new();
+
+    /// <summary>Gets the authored Sky Sphere; its cubemap travels as <see cref="SkySphereCubemap"/>.</summary>
+    public SkySphereEnvironmentData SkySphere { get; init; } = new();
+
+    /// <summary>Gets the resolved Sky Sphere cubemap, or null for none.</summary>
+    public RuntimeTextureReference? SkySphereCubemap { get; init; }
+
+    /// <summary>Gets the authored Sky Light; its cubemap travels as <see cref="SkyLightCubemap"/>.</summary>
+    public SkyLightEnvironmentData SkyLight { get; init; } = new();
+
+    /// <summary>Gets the resolved Sky Light cubemap, or null for none.</summary>
+    public RuntimeTextureReference? SkyLightCubemap { get; init; }
+
+    /// <summary>Gets the authored display-only background.</summary>
+    public BackgroundEnvironmentData Background { get; init; } = new();
 }

@@ -13,12 +13,14 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
 public sealed class InspectorSearchModelTests
 {
     [TestMethod]
-    public void Catalog_RegistersEveryScenePropertyAndAllSeventyThreeCards()
+    public void Catalog_RegistersEveryScenePropertyAndAllNinetyOneCards()
     {
         var model = EnvironmentFieldCatalog.Create();
-        _ = model.Fields.Should().HaveCount(73);
+        _ = model.Fields.Should().HaveCount(91);
+        // The backdrop choice authors whether the atmosphere shows.
         _ = model.Fields.Values.Select(field => field.Property).Should().Contain(
-            SceneDocumentCommandService.SceneEnvironment.ById.Keys);
+            SceneDocumentCommandService.SceneEnvironment.ById.Keys.Where(static property => property != SceneDocumentCommandService.SceneEnvironment.AtmosphereEnabled.Id));
+        _ = model.Fields["Backdrop"].Property.Should().Be(SceneSkyFields.Backdrop.Id);
         _ = model.Fields.Values.Should().OnlyHaveUniqueItems(field => field.Key);
     }
 
@@ -33,10 +35,10 @@ public sealed class InspectorSearchModelTests
     public void Search_UsesStableAliasesAndAndMatching(string query, string expected)
     {
         var model = EnvironmentFieldCatalog.Create();
-        model.Update(query, InspectorPropertyScope.All, ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted);
+        model.Update(query, InspectorPropertyScope.All, new(ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted));
         _ = model.Fields[expected].IsVisible.Should().BeTrue();
         _ = model.HasNoMatches.Should().BeFalse();
-        model.Update($"{query} unknown-field", InspectorPropertyScope.All, ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted);
+        model.Update($"{query} unknown-field", InspectorPropertyScope.All, new(ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted));
         _ = model.HasNoMatches.Should().BeTrue();
     }
 
@@ -48,9 +50,9 @@ public sealed class InspectorSearchModelTests
     public void AcceptedExposureLabels_SearchUsesTheAcceptedNameWithoutProposed(string key, string label)
     {
         var model = EnvironmentFieldCatalog.Create();
-        model.Update(label, InspectorPropertyScope.All, ExposureMode.Auto, MeteringMode.Average, ToneMappingMode.AcesFitted);
+        model.Update(label, InspectorPropertyScope.All, new(ExposureMode.Auto, MeteringMode.Average, ToneMappingMode.AcesFitted));
         _ = model.Fields[key].IsVisible.Should().BeTrue();
-        model.Update("Proposed", InspectorPropertyScope.All, ExposureMode.Auto, MeteringMode.Average, ToneMappingMode.AcesFitted);
+        model.Update("Proposed", InspectorPropertyScope.All, new(ExposureMode.Auto, MeteringMode.Average, ToneMappingMode.AcesFitted));
         _ = model.HasNoMatches.Should().BeTrue();
     }
 
@@ -59,16 +61,47 @@ public sealed class InspectorSearchModelTests
     {
         var model = EnvironmentFieldCatalog.Create();
         var field = model.Fields["AutoExposureSpotMeterRadius"];
-        model.Update("spot radius", InspectorPropertyScope.All, ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted);
+        model.Update("spot radius", InspectorPropertyScope.All, new(ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted));
         _ = field.IsVisible.Should().BeTrue();
         _ = field.ApplicabilityText.Should().Contain("Auto exposure mode with Spot metering");
-        model.Update("spot radius", InspectorPropertyScope.All, ExposureMode.Auto, MeteringMode.Spot, ToneMappingMode.AcesFitted);
+        model.Update("spot radius", InspectorPropertyScope.All, new(ExposureMode.Auto, MeteringMode.Spot, ToneMappingMode.AcesFitted));
         _ = field.IsVisible.Should().BeTrue();
         _ = field.HasApplicabilityText.Should().BeFalse();
-        model.Update(string.Empty, InspectorPropertyScope.All, ExposureMode.Auto, MeteringMode.Average, ToneMappingMode.None);
+        model.Update(string.Empty, InspectorPropertyScope.All, new(ExposureMode.Auto, MeteringMode.Average, ToneMappingMode.None));
         _ = field.IsVisible.Should().BeFalse();
         _ = model.Fields["DisplayGamma"].IsVisible.Should().BeTrue();
         _ = model.Fields["ExposureKey"].IsVisible.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void Browsing_ShowsOnlyTheSkyFieldsOfTheShownBackdropAndSkyLightSource()
+    {
+        var model = EnvironmentFieldCatalog.Create();
+        model.Update(string.Empty, InspectorPropertyScope.All, new(ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted, EnvironmentBackdrop.Cubemap, SolidColorLightsScene: true, SkyLightSource.CapturedScene));
+
+        _ = model.IsGroupVisible("SkyAtmosphere").Should().BeFalse("the atmosphere is not the backdrop");
+        _ = model.Fields["SkySphereCubemap"].IsVisible.Should().BeTrue();
+        _ = model.Fields["SkySphereIntensity"].IsVisible.Should().BeTrue();
+        _ = model.Fields["SolidColor"].IsVisible.Should().BeFalse();
+        _ = model.Fields["SkyLightCubemap"].IsVisible.Should().BeFalse();
+
+        model.Update(string.Empty, InspectorPropertyScope.All, new(ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted, EnvironmentBackdrop.SolidColor, SolidColorLightsScene: false, SkyLightSource.SpecifiedCubemap));
+
+        _ = model.Fields["SolidColor"].IsVisible.Should().BeTrue();
+        _ = model.Fields["SkySphereIntensity"].IsVisible.Should().BeFalse("a display-only color has no sky sphere tone");
+        _ = model.Fields["SkySphereCubemap"].IsVisible.Should().BeFalse();
+        _ = model.Fields["SkyLightCubemap"].IsVisible.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void Search_RevealsAStoredAtmosphereFieldWhileAnotherBackdropShows()
+    {
+        var model = EnvironmentFieldCatalog.Create();
+        model.Update("planet radius", InspectorPropertyScope.All, new(ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted, EnvironmentBackdrop.Cubemap));
+
+        _ = model.HasNoMatches.Should().BeFalse();
+        _ = model.Fields["PlanetRadiusKm"].IsVisible.Should().BeTrue();
+        _ = model.Fields["PlanetRadiusKm"].ApplicabilityText.Should().Be("Stored value; applies while the backdrop is Atmosphere.");
     }
 
     [TestMethod]
@@ -77,12 +110,12 @@ public sealed class InspectorSearchModelTests
         var model = EnvironmentFieldCatalog.Create();
         model.RecordExpansion("PlanetGround", expanded: false);
         model.RecordExpansion("Exposure", expanded: true);
-        model.Update("ground_albedo", InspectorPropertyScope.All, ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted);
+        model.Update("ground_albedo", InspectorPropertyScope.All, new(ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted));
         _ = model.IsExpanded("PlanetGround").Should().BeTrue();
         model.RecordExpansion("PlanetGround", expanded: true);
-        model.Update("ground_albedo", InspectorPropertyScope.PostProcessing, ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted);
+        model.Update("ground_albedo", InspectorPropertyScope.PostProcessing, new(ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted));
         _ = model.HasNoMatches.Should().BeTrue();
-        model.Update(string.Empty, InspectorPropertyScope.All, ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted);
+        model.Update(string.Empty, InspectorPropertyScope.All, new(ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted));
         _ = model.IsExpanded("PlanetGround").Should().BeFalse();
         _ = model.IsExpanded("Exposure").Should().BeTrue();
     }
@@ -91,9 +124,9 @@ public sealed class InspectorSearchModelTests
     public void Search_HasNoDependenceOnCurrentEnumSelectionOrDiagnosticText()
     {
         var model = EnvironmentFieldCatalog.Create();
-        model.Update("CenterWeighted", InspectorPropertyScope.All, ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.None);
+        model.Update("CenterWeighted", InspectorPropertyScope.All, new(ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.None));
         _ = model.Fields["AutoExposureMeteringMode"].IsVisible.Should().BeTrue();
-        model.Update("stored value", InspectorPropertyScope.All, ExposureMode.Manual, MeteringMode.Spot, ToneMappingMode.None);
+        model.Update("stored value", InspectorPropertyScope.All, new(ExposureMode.Manual, MeteringMode.Spot, ToneMappingMode.None));
         _ = model.HasNoMatches.Should().BeTrue();
     }
 
@@ -101,11 +134,11 @@ public sealed class InspectorSearchModelTests
     public void Search_PreservesBrowsingScopeKeywordsIndependentlyOfRealization()
     {
         var model = EnvironmentFieldCatalog.Create();
-        model.Update("post processing", InspectorPropertyScope.All, ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.None);
+        model.Update("post processing", InspectorPropertyScope.All, new(ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.None));
         _ = model.Fields.Values.Where(entry => entry.IsVisible).Should().HaveCount(27);
         _ = model.Fields.Values.Where(entry => entry.IsVisible).Should().OnlyContain(entry => entry.Scope == InspectorPropertyScope.PostProcessing);
-        model.Update("environment", InspectorPropertyScope.All, ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.None);
-        _ = model.Fields.Values.Where(entry => entry.IsVisible).Should().HaveCount(46);
+        model.Update("environment", InspectorPropertyScope.All, new(ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.None));
+        _ = model.Fields.Values.Where(entry => entry.IsVisible).Should().HaveCount(64);
     }
 
     [TestMethod]

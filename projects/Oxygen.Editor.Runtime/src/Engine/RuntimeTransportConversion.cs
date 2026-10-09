@@ -90,6 +90,90 @@ internal static class RuntimeTransportConversion
             VisibleInRealTimeSkyCaptures = value.VisibleInRealTimeSkyCaptures,
         };
 
+    /// <summary>Converts an authored sky sphere and its resolved cubemap without changing units.</summary>
+    /// <param name="value">The authored sky sphere.</param>
+    /// <param name="cubemap">The resolved cubemap, or null for none.</param>
+    /// <returns>The native transport value.</returns>
+    public static SkySphereEnvironmentManaged ToNative(SkySphereEnvironmentData value, RuntimeTextureReference? cubemap)
+        => new()
+        {
+            Enabled = value.Enabled,
+            Source = (int)value.Source,
+            Cubemap = ToNative(cubemap),
+            SolidColorRgb = value.SolidColorRgb,
+            Intensity = value.Intensity,
+            RotationRadians = value.RotationRadians,
+            TintRgb = value.TintRgb,
+        };
+
+    /// <summary>Converts an authored sky light and its resolved cubemap without changing units.</summary>
+    /// <param name="value">The authored sky light.</param>
+    /// <param name="cubemap">The resolved cubemap, or null for none.</param>
+    /// <returns>The native transport value.</returns>
+    public static SkyLightEnvironmentManaged ToNative(SkyLightEnvironmentData value, RuntimeTextureReference? cubemap)
+        => new()
+        {
+            Enabled = value.Enabled,
+            Source = (int)value.Source,
+            Cubemap = ToNative(cubemap),
+            Intensity = value.Intensity,
+            TintRgb = value.TintRgb,
+            DiffuseIntensity = value.DiffuseIntensity,
+            SpecularIntensity = value.SpecularIntensity,
+            CubemapAngleRadians = value.CubemapAngleRadians,
+            LowerHemisphereColor = value.LowerHemisphereColor,
+            LowerHemisphereIsSolidColor = value.LowerHemisphereIsSolidColor,
+            LowerHemisphereBlendAlpha = value.LowerHemisphereBlendAlpha,
+            VolumetricScatteringIntensity = value.VolumetricScatteringIntensity,
+            AffectReflections = value.AffectReflections,
+        };
+
+    /// <summary>Converts an authored background without changing units.</summary>
+    /// <param name="value">The authored background.</param>
+    /// <returns>The native transport value.</returns>
+    public static BackgroundEnvironmentManaged ToNative(BackgroundEnvironmentData value)
+        => new() { Enabled = value.Enabled, ColorRgb = value.ColorRgb };
+
+    /// <summary>Converts an observed native sky sphere; its cubemap is observed separately.</summary>
+    /// <param name="value">The native transport value.</param>
+    /// <returns>The observed sky sphere.</returns>
+    public static SkySphereEnvironmentData FromNative(SkySphereEnvironmentManaged value)
+        => new()
+        {
+            Enabled = value.Enabled,
+            Source = (SkySphereSource)value.Source,
+            SolidColorRgb = value.SolidColorRgb,
+            Intensity = value.Intensity,
+            RotationRadians = value.RotationRadians,
+            TintRgb = value.TintRgb,
+        };
+
+    /// <summary>Converts an observed native sky light; its cubemap is observed separately.</summary>
+    /// <param name="value">The native transport value.</param>
+    /// <returns>The observed sky light.</returns>
+    public static SkyLightEnvironmentData FromNative(SkyLightEnvironmentManaged value)
+        => new()
+        {
+            Enabled = value.Enabled,
+            Source = (SkyLightSource)value.Source,
+            Intensity = value.Intensity,
+            TintRgb = value.TintRgb,
+            DiffuseIntensity = value.DiffuseIntensity,
+            SpecularIntensity = value.SpecularIntensity,
+            CubemapAngleRadians = value.CubemapAngleRadians,
+            LowerHemisphereColor = value.LowerHemisphereColor,
+            LowerHemisphereIsSolidColor = value.LowerHemisphereIsSolidColor,
+            LowerHemisphereBlendAlpha = value.LowerHemisphereBlendAlpha,
+            VolumetricScatteringIntensity = value.VolumetricScatteringIntensity,
+            AffectReflections = value.AffectReflections,
+        };
+
+    /// <summary>Converts an observed native background.</summary>
+    /// <param name="value">The native transport value.</param>
+    /// <returns>The observed background.</returns>
+    public static BackgroundEnvironmentData FromNative(BackgroundEnvironmentManaged value)
+        => new() { Enabled = value.Enabled, ColorRgb = value.ColorRgb };
+
     /// <summary>Converts a managed payload without changing its identity or units.</summary>
     /// <param name="entries">The managed payload.</param>
     /// <returns>The native transport value.</returns>
@@ -148,4 +232,14 @@ internal static class RuntimeTransportConversion
         RuntimeMouseButton.ExtButton2 => PlatformMouseButton.ExtButton2,
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
     };
+
+    private static CubemapReferenceManaged ToNative(RuntimeTextureReference? cubemap)
+        => cubemap is null
+            ? default
+            : new()
+            {
+                CookedRoot = cubemap.CookedRoot,
+                DescriptorRelativePath = cubemap.DescriptorRelativePath,
+                ProjectMount = cubemap.ProjectMount,
+            };
 }

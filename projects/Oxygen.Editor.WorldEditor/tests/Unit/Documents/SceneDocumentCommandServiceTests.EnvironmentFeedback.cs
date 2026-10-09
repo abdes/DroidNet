@@ -22,16 +22,16 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = ConfigureGestureSync(fixture, scene);
         using var editor = new EnvironmentViewModel(fixture.Sut, () => context);
         editor.SetScene(scene);
-        var original = editor.Background.BackgroundR;
+        var original = editor.Backdrop.SolidColorR;
         editor.BeginEditSession("BackgroundR", NumberBoxEditInteractionKind.PointerDrag);
-        editor.Background.BackgroundR = 0.8f;
+        editor.Backdrop.SolidColorR = 0.8f;
         editor.EndEditSession(NumberBoxEditCompletionKind.Commit);
         await editor.PendingEdits.ConfigureAwait(false);
 
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = editor.Background.BackgroundR.Should().Be(original);
+        _ = editor.Backdrop.SolidColorR.Should().Be(original);
         await context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = editor.Background.BackgroundR.Should().Be(0.8f);
+        _ = editor.Backdrop.SolidColorR.Should().Be(0.8f);
     }
 
     [TestMethod]
@@ -114,7 +114,7 @@ public sealed partial class SceneDocumentCommandServiceTests
             editor.BeginEditSession("BackgroundR", NumberBoxEditInteractionKind.PointerDrag);
         }
 
-        editor.Background.BackgroundR = 0.8f;
+        editor.Backdrop.SolidColorR = 0.8f;
         if (gesture)
         {
             editor.EndEditSession(NumberBoxEditCompletionKind.Commit);

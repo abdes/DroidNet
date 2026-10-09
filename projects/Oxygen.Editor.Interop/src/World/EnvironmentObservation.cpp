@@ -16,6 +16,7 @@
 #include <Commands/ObserveEnvironmentCommand.h>
 #include <EditorModule/EditorModule.h>
 #include <World/FogEnvironmentConversion.h>
+#include <World/SkyEnvironmentConversion.h>
 #include <World/OxygenWorld.h>
 
 using namespace System::Threading::Tasks;
@@ -104,6 +105,20 @@ public:
     result.DisplayGamma = value.post_process.display_gamma;
     result.FogExists = value.fog_exists;
     result.Fog = ToManagedFog(value.fog);
+    result.SkySphereExists = value.sky_sphere_exists;
+    result.SkySphere = ToManagedSkySphere(value.sky.sky_sphere);
+    result.SkySphereCubemap = value.sky_sphere_cubemap.key.get();
+    result.SkySphereCubemapPending = value.sky_sphere_cubemap.pending;
+    result.SkySphereCubemapError
+      = gcnew System::String(value.sky_sphere_cubemap.error.c_str());
+    result.SkyLightExists = value.sky_light_exists;
+    result.SkyLight = ToManagedSkyLight(value.sky.sky_light);
+    result.SkyLightCubemap = value.sky_light_cubemap.key.get();
+    result.SkyLightCubemapPending = value.sky_light_cubemap.pending;
+    result.SkyLightCubemapError
+      = gcnew System::String(value.sky_light_cubemap.error.c_str());
+    result.BackgroundExists = value.background_exists;
+    result.Background = ToManagedBackground(value.sky.background);
     completion_->TrySetResult(result);
   }
 

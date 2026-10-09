@@ -11,15 +11,25 @@
 #include <utility>
 
 #include <Commands/SetEnvironmentCommand.h>
+#include <Oxygen/Scene/Environment/Background.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Scene/Environment/SkyLight.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 
 namespace oxygen::interop::module {
+
+//! A bound environment texture and its current load status.
+struct EnvironmentTextureObservation {
+  content::ResourceKey key {};
+  bool pending { false };
+  std::string error;
+};
 
 //! Scene-owned environment values sampled after preceding mutations.
 struct EnvironmentObservation {
@@ -33,6 +43,13 @@ struct EnvironmentObservation {
   content::ResourceKey metering_mask {};
   bool metering_mask_pending { false };
   std::string metering_mask_error;
+  bool sky_sphere_exists = false;
+  bool sky_light_exists = false;
+  bool background_exists = false;
+  //! Stored sky values; cubemap locators stay empty, keys are reported below.
+  SkyParams sky;
+  EnvironmentTextureObservation sky_sphere_cubemap;
+  EnvironmentTextureObservation sky_light_cubemap;
   //! Last rendered state for this scene, preceding this mutation boundary.
   vortex::SkyLightRuntimeState sky_light;
 };
@@ -58,9 +75,19 @@ public:
   {
     EnvironmentObservation result;
     if (context.AssetRequests) {
-      const auto mask = context.AssetRequests->InspectExposureMask();
+      const auto& requests = *context.AssetRequests;
+      const auto mask = requests.InspectEnvironmentTexture(
+        EnvironmentTextureSlot::kMeteringMask);
       result.metering_mask_pending = mask.pending;
       result.metering_mask_error = mask.error;
+      const auto sphere = requests.InspectEnvironmentTexture(
+        EnvironmentTextureSlot::kSkySphereCubemap);
+      result.sky_sphere_cubemap.pending = sphere.pending;
+      result.sky_sphere_cubemap.error = sphere.error;
+      const auto light = requests.InspectEnvironmentTexture(
+        EnvironmentTextureSlot::kSkyLightCubemap);
+      result.sky_light_cubemap.pending = light.pending;
+      result.sky_light_cubemap.error = light.error;
     }
     if (context.Scene) {
       if (context.Renderer) {
@@ -119,6 +146,43 @@ public:
           result.fog.holdout = fog->GetHoldout();
           result.fog.visible_in_reflection_captures = fog->GetVisibleInReflectionCaptures();
           result.fog.visible_in_real_time_sky_captures = fog->GetVisibleInRealTimeSkyCaptures();
+        }
+        if (const auto sphere = environment->TryGetSystem<env::SkySphere>()) {
+          result.sky_sphere_exists = true;
+          auto& observed = result.sky.sky_sphere;
+          observed.enabled = sphere->IsEnabled();
+          observed.source = static_cast<int>(sphere->GetSource());
+          observed.solid_color_rgb = sphere->GetSolidColorRgb();
+          observed.intensity = sphere->GetIntensity();
+          observed.rotation_radians = sphere->GetRotationRadians();
+          observed.tint_rgb = sphere->GetTintRgb();
+          result.sky_sphere_cubemap.key = sphere->GetCubemapResource();
+        }
+        if (const auto light = environment->TryGetSystem<env::SkyLight>()) {
+          result.sky_light_exists = true;
+          auto& observed = result.sky.sky_light;
+          observed.enabled = light->IsEnabled();
+          observed.source = static_cast<int>(light->GetSource());
+          observed.intensity = light->GetIntensityMul();
+          observed.tint_rgb = light->GetTintRgb();
+          observed.diffuse_intensity = light->GetDiffuseIntensity();
+          observed.specular_intensity = light->GetSpecularIntensity();
+          observed.cubemap_angle_radians
+            = light->GetSourceCubemapAngleRadians();
+          observed.lower_hemisphere_color = light->GetLowerHemisphereColor();
+          observed.lower_hemisphere_is_solid_color
+            = light->GetLowerHemisphereIsSolidColor();
+          observed.lower_hemisphere_blend_alpha
+            = light->GetLowerHemisphereBlendAlpha();
+          observed.volumetric_scattering_intensity
+            = light->GetVolumetricScatteringIntensity();
+          observed.affect_reflections = light->GetAffectReflections();
+          result.sky_light_cubemap.key = light->GetCubemapResource();
+        }
+        if (const auto background = environment->TryGetSystem<env::Background>()) {
+          result.background_exists = true;
+          result.sky.background.enabled = background->IsEnabled();
+          result.sky.background.color_rgb = background->GetColorRgb();
         }
         if (const auto post = environment->TryGetSystem<env::PostProcessVolume>()) {
           result.post_process_exists = true;

@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.World.Inspector.Environment.SkyLightSectionView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:fields="using:Oxygen.Editor.World.Inspector.Controls"
+    xmlns:seg="using:CommunityToolkit.WinUI.Controls"
+    xmlns:ui="using:CommunityToolkit.WinUI">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Inspector/SceneInspectorStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <editorcontrols:PropertiesExpander
+        x:Name="SkyLightSection"
+        HorizontalAlignment="Stretch"
+        HorizontalContentAlignment="Stretch"
+        Description="Image-based diffuse and specular light from the sky."
+        Header="Sky Light"
+        HeaderIcon="{ui:FontIcon Glyph='&#xE706;'}"
+        IsExpanded="True"
+        Tag="Environment">
+        <editorcontrols:PropertiesExpander.Items>
+            <editorcontrols:PropertyCard
+                x:Name="EnabledCard"
+                HorizontalContentAlignment="Stretch"
+                PropertyName="Enabled">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.Enabled, Mode=TwoWay}" Tag="SkyLightEnabled" />
+            </editorcontrols:PropertyCard>
+            <editorcontrols:PropertyCard
+                x:Name="SourceCard"
+                HorizontalContentAlignment="Stretch"
+                PropertyName="Source">
+                <seg:Segmented
+                    HorizontalAlignment="Stretch"
+                    AutomationProperties.Name="Sky light source"
+                    IsEnabled="{x:Bind ViewModel.EditOwner.IsInputEnabled, Mode=OneWay}"
+                    SelectedIndex="{x:Bind ViewModel.SourceIndex, Mode=TwoWay}"
+                    Tag="SkyLightSource">
+                    <seg:SegmentedItem Content="Capture sky" ToolTipService.ToolTip="Light from the scene's backdrop, captured by the renderer" />
+                    <seg:SegmentedItem Content="Cubemap" ToolTipService.ToolTip="Light from an authored cube texture" />
+                </seg:Segmented>
+            </editorcontrols:PropertyCard>
+            <StackPanel x:Name="CubemapFields" Spacing="4">
+                <editorcontrols:PropertyCard
+                    x:Name="CubemapCard"
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Cubemap">
+                    <StackPanel Spacing="4">
+                        <Grid ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Button
+                                HorizontalAlignment="Stretch"
+                                Content="{x:Bind ViewModel.CubemapDisplayName, Mode=OneWay}"
+                                IsEnabled="{x:Bind ViewModel.EditOwner.IsInputEnabled, Mode=OneWay}"
+                                Tag="SkyLightCubemap"
+                                ToolTipService.ToolTip="Choose the sky light cubemap">
+                                <Button.Flyout>
+                                    <Flyout x:Name="CubemapFlyout">
+                                        <StackPanel Width="320" Spacing="6">
+                                            <TextBox PlaceholderText="Search cube textures…" Text="{x:Bind ViewModel.Cubemaps.SearchText, Mode=TwoWay}" />
+                                            <TextBlock
+                                                FontSize="12"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Text="Import an image with the Cube shape to list it here."
+                                                TextWrapping="Wrap" />
+                                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.Cubemaps.FilteredRows, Mode=OneWay}">
+                                                <ItemsRepeater.Layout>
+                                                    <StackLayout Spacing="2" />
+                                                </ItemsRepeater.Layout>
+                                                <ItemsRepeater.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Button
+                                                            HorizontalAlignment="Stretch"
+                                                            HorizontalContentAlignment="Left"
+                                                            Click="CubemapItem_Click"
+                                                            IsEnabled="{Binding Item.IsEnabled, Mode=OneWay}"
+                                                            ToolTipService.ToolTip="{Binding Item.DisplayPath, Mode=OneWay}">
+                                                            <StackPanel>
+                                                                <TextBlock Text="{Binding Item.Name, Mode=OneWay}" />
+                                                                <TextBlock
+                                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                    Text="{Binding Item.DisplayPath, Mode=OneWay}"
+                                                                    TextTrimming="CharacterEllipsis" />
+                                                            </StackPanel>
+                                                        </Button>
+                                                    </DataTemplate>
+                                                </ItemsRepeater.ItemTemplate>
+                                            </ItemsRepeater>
+                                        </StackPanel>
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
+                            <Button
+                                Grid.Column="1"
+                                Click="ClearCubemap_Click"
+                                IsEnabled="{x:Bind ViewModel.EditOwner.IsInputEnabled, Mode=OneWay}"
+                                ToolTipService.ToolTip="Clear the sky light cubemap">
+                                <FontIcon Glyph="&#xE711;" />
+                            </Button>
+                        </Grid>
+                        <TextBlock
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.CubemapDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.CubemapDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
+                    </StackPanel>
+                </editorcontrols:PropertyCard>
+                <editorcontrols:InspectorNumberField
+                    x:Name="CubemapAngleCard"
+                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                    EditSessionCompleted="NumberEditCompleted"
+                    EditSessionStarted="NumberEditStarted"
+                    ErrorText="{x:Bind ViewModel.CubemapAngleDiagnostic.Message, Mode=OneWay}"
+                    FontSize="14"
+                    HasError="{x:Bind ViewModel.CubemapAngleDiagnostic.HasError, Mode=OneWay}"
+                    Label="Rotation"
+                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                    NumberValue="{x:Bind ViewModel.CubemapAngleDegrees, Mode=TwoWay}"
+                    Qualifier="°"
+                    Tag="SkyLightCubemapAngle" />
+            </StackPanel>
+            <editorcontrols:InspectorNumberField
+                x:Name="IntensityCard"
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.IntensityDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.IntensityDiagnostic.HasError, Mode=OneWay}"
+                Label="Intensity"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.IntensityEv, Mode=TwoWay}"
+                Qualifier="EV"
+                Tag="SkyLightIntensity"
+                ToolTipService.ToolTip="Brightness in exposure stops (EV). The radiance is multiplied by 2 to the power EV: EV 0 keeps the authored radiance, each +1 EV doubles it (EV +10 is 1024x) and each -1 EV halves it. The minimum, EV -16, is effectively off." />
+            <fields:InspectorRgbField
+                x:Name="TintCard"
+                Blue="{x:Bind ViewModel.TintB, Mode=TwoWay}"
+                ChannelAutomationName="Sky light tint, linear RGB"
+                ColorPicked="OnRgbColorPicked"
+                EditOwner="{x:Bind ViewModel.EditOwner, Mode=OneWay}"
+                EditSessionCompleted="VectorEditCompleted"
+                EditSessionStarted="VectorEditStarted"
+                ErrorText="{x:Bind ViewModel.TintDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                Green="{x:Bind ViewModel.TintG, Mode=TwoWay}"
+                HasError="{x:Bind ViewModel.TintDiagnostic.HasError, Mode=OneWay}"
+                Label="Tint"
+                PickerAutomationName="Pick sky light tint"
+                Qualifier="Linear RGB"
+                Red="{x:Bind ViewModel.TintR, Mode=TwoWay}"
+                Tag="SkyLightTint" />
+            <editorcontrols:InspectorNumberField
+                x:Name="DiffuseIntensityCard"
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.DiffuseIntensityDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.DiffuseIntensityDiagnostic.HasError, Mode=OneWay}"
+                Label="Diffuse"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.DiffuseIntensity, Mode=TwoWay}"
+                Qualifier="×"
+                Tag="SkyLightDiffuse" />
+            <editorcontrols:InspectorNumberField
+                x:Name="SpecularIntensityCard"
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.SpecularIntensityDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.SpecularIntensityDiagnostic.HasError, Mode=OneWay}"
+                Label="Specular"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.SpecularIntensity, Mode=TwoWay}"
+                Qualifier="×"
+                Tag="SkyLightSpecular" />
+            <Expander
+                x:Name="LowerHemisphereDisclosure"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.AutomationId="Scene.SkyLight.LowerHemisphere"
+                Header="Lower hemisphere"
+                IsExpanded="False"
+                Style="{StaticResource QuietDisclosure}">
+                <StackPanel Spacing="4">
+                    <editorcontrols:PropertyCard
+                        x:Name="LowerHemisphereIsSolidColorCard"
+                        HorizontalContentAlignment="Stretch"
+                        PropertyName="Solid Color">
+                        <ToggleSwitch IsOn="{x:Bind ViewModel.LowerHemisphereIsSolidColor, Mode=TwoWay}" Tag="SkyLightLowerHemisphereIsSolidColor" />
+                    </editorcontrols:PropertyCard>
+                    <fields:InspectorRgbField
+                        x:Name="LowerHemisphereColorCard"
+                        Blue="{x:Bind ViewModel.LowerHemisphereB, Mode=TwoWay}"
+                        ChannelAutomationName="Lower hemisphere color, linear RGB"
+                        ColorPicked="OnRgbColorPicked"
+                        EditOwner="{x:Bind ViewModel.EditOwner, Mode=OneWay}"
+                        EditSessionCompleted="VectorEditCompleted"
+                        EditSessionStarted="VectorEditStarted"
+                        ErrorText="{x:Bind ViewModel.LowerHemisphereColorDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        Green="{x:Bind ViewModel.LowerHemisphereG, Mode=TwoWay}"
+                        HasError="{x:Bind ViewModel.LowerHemisphereColorDiagnostic.HasError, Mode=OneWay}"
+                        Label="Color"
+                        PickerAutomationName="Pick lower hemisphere color"
+                        Qualifier="Linear RGB"
+                        Red="{x:Bind ViewModel.LowerHemisphereR, Mode=TwoWay}"
+                        Tag="SkyLightLowerHemisphereColor" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="LowerHemisphereBlendAlphaCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.LowerHemisphereBlendAlphaDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.LowerHemisphereBlendAlphaDiagnostic.HasError, Mode=OneWay}"
+                        Label="Blend"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.LowerHemisphereBlendAlpha, Mode=TwoWay}"
+                        Tag="SkyLightLowerHemisphereBlend" />
+                </StackPanel>
+            </Expander>
+            <Expander
+                x:Name="AdvancedDisclosure"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.AutomationId="Scene.SkyLight.Advanced"
+                Header="Advanced"
+                IsExpanded="False"
+                Style="{StaticResource QuietDisclosure}">
+                <StackPanel Spacing="4">
+                    <editorcontrols:InspectorNumberField
+                        x:Name="VolumetricScatteringIntensityCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.VolumetricScatteringIntensityDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.VolumetricScatteringIntensityDiagnostic.HasError, Mode=OneWay}"
+                        Label="Volumetric Scattering"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.VolumetricScatteringIntensity, Mode=TwoWay}"
+                        Qualifier="×"
+                        Tag="SkyLightVolumetricScattering" />
+                    <editorcontrols:PropertyCard
+                        x:Name="AffectReflectionsCard"
+                        HorizontalContentAlignment="Stretch"
+                        PropertyName="Affect Reflections">
+                        <ToggleSwitch IsOn="{x:Bind ViewModel.AffectReflections, Mode=TwoWay}" Tag="SkyLightAffectReflections" />
+                    </editorcontrols:PropertyCard>
+                </StackPanel>
+            </Expander>
+        </editorcontrols:PropertiesExpander.Items>
+    </editorcontrols:PropertiesExpander>
+</UserControl>

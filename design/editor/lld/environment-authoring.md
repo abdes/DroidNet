@@ -27,8 +27,8 @@ belongs to workspace/view state and does not alter these values. See
 
 ## 2. Canonical source and validation
 
-SceneEnvironmentData contains AtmosphereEnabled, SkyAtmosphere, SkyLight,
-PostProcess and BackgroundColor. PostProcess is the sole exposure/tonemapping
+SceneEnvironmentData contains AtmosphereEnabled, SkyAtmosphere, SkySphere,
+SkyLight, Background, Fog and PostProcess. PostProcess is the sole exposure/tonemapping
 source; duplicate legacy mirrors are removed through migration. Each directional
 light owns AtmosphereLightSlot. No SceneEnvironmentData.SunNodeId or independent
 IsSunLight/Contributes authoring value remains.
@@ -121,49 +121,130 @@ while it is selected, its sphere: a silhouette circle and three faint great
 circles at the radius the renderer uses (5 m times the largest world-scale
 axis). The sphere has no handle; the node's scale sizes it.
 
-## 4. Captured SkyLight and background
+## 4. Backdrop, Sky Sphere, Sky Light and background
 
-| Source path           | Default / unit          | Bounds                   | Effect                                                                        |
-| --------------------- | ----------------------- | ------------------------ | ----------------------------------------------------------------------------- |
-| SkyLight.Enabled      | true; bool              | Boolean                  | Enables scene-sky diffuse and specular image-based lighting                   |
-| SkyLight.IntensityMul | 1; dimensionless        | Finite, Clamp >=0        | SkyLight On; multiplies both diffuse/specular contribution                    |
-| BackgroundColor       | (0,0,0); linear SDR RGB | Finite, Clamp each [0,1] | Solid display background when atmosphere is off; always retains source intent |
+### Engine-shaped storage
 
-SkyLight sources its radiance from the captured scene or from a specified
-cubemap asset, and its tint, diffuse and specular multipliers, cubemap
-rotation, lower-hemisphere color, reflection and volumetric scattering
-contributions are authored (ED-M08.10). The Sky Sphere supplies a solid color
-or cubemap background with tint, intensity and rotation.
-Source radiance comes from the scene sky/atmosphere, including both assigned
-lights. The display-only Background supplies no illumination/reflection radiance.
-With no active lighting sky, sky contribution is zero; do not retain a stale
-capture or invent ambient energy from the background picker.
+Scenes store the engine's own records: AtmosphereEnabled, SkySphere, SkyLight
+and Background, each with its enabled flag, exactly as the cooked scene records
+them. Cooking and live sync copy them through. Scenes saved with the former
+BackgroundColor load with an enabled Background of that color.
+
+| Source path                            | Default / unit           | Bounds                   | Effect                                            |
+| -------------------------------------- | ------------------------ | ------------------------ | ------------------------------------------------- |
+| SkySphere.Enabled                      | false; bool              | Boolean                  | May show behind the scene                         |
+| SkySphere.Source                       | Cubemap; enum            | Cubemap, SolidColor      | What the sphere shows                             |
+| SkySphere.Cubemap                      | none; cube texture asset | Absolute asset URI       | Backdrop radiance                                 |
+| SkySphere.SolidColorRgb                | (0,0,0); linear RGB      | Finite, >= 0             | Solid backdrop radiance                           |
+| SkySphere.Intensity                    | 1; multiplier            | Finite, >= 0             | Scales the shown radiance                         |
+| SkySphere.RotationRadians              | 0; radians               | Finite                   | Turns the cubemap around up                       |
+| SkySphere.TintRgb                      | (1,1,1); linear RGB      | Finite, >= 0             | Multiplies the shown radiance                     |
+| SkyLight.Enabled                       | true; bool               | Boolean                  | Image-based diffuse and specular lighting         |
+| SkyLight.Source                        | CapturedScene; enum      | CapturedScene, Cubemap   | Radiance captured from the sky, or a cube texture |
+| SkyLight.Cubemap                       | none; cube texture asset | Absolute asset URI       | Lighting radiance for the cubemap source          |
+| SkyLight.Intensity                     | 1; multiplier            | Finite, >= 0             | Scales diffuse and specular                       |
+| SkyLight.TintRgb                       | (1,1,1); linear RGB      | Finite, >= 0             | Multiplies the sky radiance                       |
+| SkyLight.DiffuseIntensity              | 1; multiplier            | Finite, >= 0             | Diffuse only                                      |
+| SkyLight.SpecularIntensity             | 1; multiplier            | Finite, >= 0             | Specular only                                     |
+| SkyLight.CubemapAngleRadians           | 0; radians               | Finite                   | Turns the cubemap source around up                |
+| SkyLight.LowerHemisphereColor          | (0,0,0); linear RGB      | Finite, >= 0             | Ground color below the horizon                    |
+| SkyLight.LowerHemisphereIsSolidColor   | true; bool               | Boolean                  | Replaces the lower hemisphere with that color     |
+| SkyLight.LowerHemisphereBlendAlpha     | 1                        | [0,1]                    | How much of the lower hemisphere it replaces      |
+| SkyLight.VolumetricScatteringIntensity | 1; multiplier            | Finite, >= 0             | Sky light scattered by volumetric fog             |
+| SkyLight.AffectReflections             | true; bool               | Boolean                  | Contributes to specular reflections               |
+| Background.Enabled                     | false; bool              | Boolean                  | May show behind the scene                         |
+| Background.ColorRgb                    | (0,0,0); linear SDR RGB  | Finite, Clamp each [0,1] | Display-only color                                |
+
+Defaults are the native ones, except that the Sky Sphere and the Background
+start disabled so that scenes without them show neither.
+
+### One backdrop choice
+
+The renderer shows one backdrop: an enabled atmosphere, else an enabled
+background, else an enabled sky sphere. The inspector therefore presents one
+choice, Show: Atmosphere, Cubemap or Solid color, as Godot's Background Mode
+and Unity HDRP's sky type do. Each choice sets the enable flags so that exactly
+it shows:
+
+- Atmosphere enables the atmosphere and disables the sky sphere and background.
+- Cubemap disables the atmosphere and background and enables the sky sphere
+  with its cubemap source.
+- Solid color disables the atmosphere. Its "Light the scene with this color"
+  toggle selects the record: on, the sky sphere's solid color, which sky light
+  captures see; off, the background, which only paints the view. Toggling
+  carries the color across, clamped to [0,1] for the background.
+
+Choosing Cubemap or Solid color turns the atmosphere off, including aerial
+perspective and the atmospheric tint of the sun; the inspector says so beside
+the choice. The atmosphere's own section shows only while it is the backdrop,
+and its settings are kept while it is off. A hand-edited scene enabling several
+systems shows the backdrop the renderer would show.
+
+Fields that apply only to some choices follow the inspector's applicability
+rule, as the exposure modes do: browsing shows the atmosphere fields for the
+Atmosphere backdrop, the cubemap and its rotation for Cubemap, the color and
+its lighting toggle for Solid color, the intensity and tint for Cubemap or a
+color that lights the scene, and the Sky Light cubemap and its rotation for the
+cubemap source. A search also finds the stored values of fields that do not
+apply, each with a note saying when it applies.
+
+### Sky Light
+
+The Sky Light section mirrors the engine's fields: Enabled; Source, "Capture
+sky" or "Cubemap"; the cubemap and its rotation, shown for the cubemap source;
+intensity, tint, diffuse and specular multipliers; a Lower hemisphere
+disclosure; and an Advanced disclosure with volumetric scattering and affect
+reflections. Capture sky already follows the backdrop, rotation included, so
+the cubemap rotation stays separate from the backdrop rotation, as in Unreal.
+
+### Units and pickers
+
+Oxygen renders with physical exposure, so both radiance multipliers,
+SkySphere.Intensity and SkyLight.Intensity, are presented as Intensity in EV:
+the stored multiplier is 2^EV, so EV 0 keeps the authored radiance and each
+stop doubles it. The lowest presented stop, EV -16, stands for a zero
+multiplier. Rotations are presented in degrees. Diffuse, specular and
+volumetric multipliers stay linear because they balance shares of one light.
+
+Cubemap fields list the project's cube textures: texture descriptors whose cube
+settings produce a cube texture. Texture import offers a Cube shape. Its layout
+is detected from the image (2:1 panorama, 6:1 or 1:6 strip, 4:3 or 3:4 cross)
+or chosen, and a panorama takes a face size that is a multiple of 256. Cube
+textures default to the hdr_env intent, linear color space and rgba16f output.
+
+### Runtime, cooking and the display-only background
+
+One environment command applies the atmosphere, sky sphere, sky light,
+background, fog and post process in one scene mutation. It loads the exposure
+mask and both cubemaps together and applies them only when all have loaded; a
+failed texture rejects the edit and keeps the previous revision. A texture
+whose source is unchanged keeps its accepted load, so edits to other settings
+apply at once; a refresh after cooking reloads every texture. A cubemap is
+loaded, and cooked as a scene reference, only while an enabled system's source
+uses it, so a stale reference behind another source or a disabled system
+blocks nothing. Scenes saved with the former BackgroundColor clamp it to the
+background's [0,1] range on load. Cooked cubemaps are
+texture bindings in the scene's resource table, as the metering mask is, and
+must be cooked into the scene's own content mount.
+
+The background paints only the presented view: sky light captures and
+reflections skip it, it does not become emissive or an ambient light, and an
+enabled atmosphere takes precedence. Convert picker sRGB to stored linear SDR
+once and keep the picked display result independent of scene exposure and tone
+mapping. Translucent foreground uses correct coverage composition; changing the
+backdrop must not replace or flatten that material's lighting.
 
 Capture produces diffuse irradiance and roughness-dependent specular radiance
-with the required BRDF integration. Both effects are mandatory. CapturedScene's
-current unavailable path and specified-cubemap diffuse-only products are
-implementation gaps, not acceptable substitutes. Neither a stored Enabled flag
-nor two visible sky disks proves captured lighting.
-
-The engine [captured-sky IBL contract](../../../projects/Oxygen.Engine/design/vortex/lld/captured-sky-ibl.md)
-defines the scene-global anchor, processing products, filtering, publication and
-Stage 13 ownership. Camera navigation leaves this shared lighting unchanged;
-the authored atmosphere and contributing light state determine its radiance.
-
-Changes to either contributing light, effective visibility/participation,
-assignment, atmosphere parameters or applicable sky source invalidate affected
-products. Publish one dependency-ordered current generation for rendering;
-qualification readiness additionally requires completed processing/uploads and
-valid GPU metadata, as defined by the IBL contract. Ordinary light edits produce
-and consume their updated sky in the same frame without a CPU fence wait.
-Explicit disks are excluded from reflection captures to avoid double-counting
-direct source energy, while both sources' atmospheric scattering remains.
-
-Background is a display backdrop. Convert picker sRGB to stored linear SDR once,
-and retain the picked display result independent of scene exposure/tone mapping.
-It does not become emissive or an ambient light. Atmosphere takes precedence over
-its visual presentation. Translucent foreground uses correct coverage composition;
-changing the backdrop must not replace or flatten that material's lighting.
+with the required BRDF integration. With no active lighting sky, sky
+contribution is zero; do not retain a stale capture or invent ambient energy
+from the background. The engine
+[captured-sky IBL contract](../../../projects/Oxygen.Engine/design/vortex/lld/captured-sky-ibl.md)
+defines the scene-global anchor, processing products, filtering, publication
+and Stage 13 ownership. Changes to either contributing light, effective
+visibility or participation, assignment, atmosphere parameters or the
+applicable sky source invalidate affected products. Explicit disks are excluded
+from reflection captures to avoid double-counting direct source energy, while
+both sources' atmospheric scattering remains.
 
 ## 5. Exposure fields
 

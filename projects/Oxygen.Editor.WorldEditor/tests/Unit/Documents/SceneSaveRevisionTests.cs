@@ -26,6 +26,9 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 [TestClass]
 public sealed class SceneSaveRevisionTests
 {
+    // The saved node's name, not a bare "Cube": environment fields such as CubemapAngleRadians contain it.
+    private const string CubeNodeName = "\"Name\": \"Cube\"";
+
     public TestContext TestContext { get; set; }
 
     [TestMethod]
@@ -109,14 +112,14 @@ public sealed class SceneSaveRevisionTests
         _ = fixture.Context.Metadata.IsDirty.Should().BeTrue();
         _ = fixture.Context.Metadata.SavedVersion.Should().Be(failWrite ? 0 : 1);
         _ = fixture.Context.Scene.RootNodes.Should().ContainSingle();
-        _ = fixture.Persisted.Should().NotContain("Cube");
+        _ = fixture.Persisted.Should().NotContain(CubeNodeName);
         sync.SetResult();
         _ = (await edit.ConfigureAwait(false)).Succeeded.Should().BeTrue();
         _ = fixture.Context.Metadata.ChangeVersion.Should().Be(2);
         fixture.FailWrite = false;
         _ = (await fixture.Commands.SaveSceneAsync(fixture.Context).ConfigureAwait(false)).Succeeded.Should().BeTrue();
         _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
-        _ = fixture.Persisted.Should().Contain("Cube");
+        _ = fixture.Persisted.Should().Contain(CubeNodeName);
     }
 
     [TestMethod]
@@ -131,7 +134,7 @@ public sealed class SceneSaveRevisionTests
         fixture.ReleaseWrite.SetResult();
         _ = (await Task.WhenAll(first, second).ConfigureAwait(false)).Should().OnlyContain(result => result.Succeeded);
         _ = fixture.Writes.Should().Be(2);
-        _ = fixture.Persisted.Should().Contain("Cube");
+        _ = fixture.Persisted.Should().Contain(CubeNodeName);
         _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
     }
 

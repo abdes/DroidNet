@@ -775,10 +775,12 @@ public sealed partial class SceneDocumentCommandService(
            edit.ManualExposureEv.HasValue ||
            edit.ExposureCompensation.HasValue ||
            edit.ToneMapping.HasValue ||
-           edit.BackgroundColor.HasValue ||
+           edit.Background.HasValue ||
            edit.SkyAtmosphere.HasValue ||
            edit.PostProcess.HasValue ||
-           edit.Fog.HasValue;
+           edit.Fog.HasValue ||
+           edit.SkySphere.HasValue ||
+           edit.SkyLight.HasValue;
 
     private static T Get<T>(OptionalEditValue<T> optional) => optional.Value!;
 
@@ -901,9 +903,16 @@ public sealed partial class SceneDocumentCommandService(
             return new(SceneDiagnosticCodes.EnvironmentExposureCompensationInvalid, "Environment was not edited", "Exposure compensation must be finite.", IsFailure: true);
         }
 
-        if (edit.BackgroundColor.HasValue && !IsFinite(Get(edit.BackgroundColor)))
+        if (edit.Background.HasValue && !IsFinite(Get(edit.Background).ColorRgb))
         {
             return new(SceneDiagnosticCodes.EnvironmentBackgroundColorInvalid, "Environment was not edited", "Background color values must be finite.", IsFailure: true);
+        }
+
+        var skyIssue = (edit.SkySphere.HasValue ? SceneSkyFields.ValidateSkySphere(Get(edit.SkySphere)) : null)
+            ?? (edit.SkyLight.HasValue ? SceneSkyFields.ValidateSkyLight(Get(edit.SkyLight)) : null);
+        if (skyIssue is not null)
+        {
+            return new(SceneDiagnosticCodes.EnvironmentSkyInvalid, "Environment was not edited", skyIssue, IsFailure: true);
         }
 
         if (edit.SkyAtmosphere.HasValue && !IsFinite(Get(edit.SkyAtmosphere)))
@@ -1130,9 +1139,11 @@ public sealed partial class SceneDocumentCommandService(
             AtmosphereEnabled = edit.AtmosphereEnabled.HasValue ? Get(edit.AtmosphereEnabled) : current.AtmosphereEnabled,
 
             PostProcess = postProcess,
-            BackgroundColor = edit.BackgroundColor.HasValue ? Get(edit.BackgroundColor) : current.BackgroundColor,
+            Background = edit.Background.HasValue ? Get(edit.Background) : current.Background ?? new(),
             SkyAtmosphere = edit.SkyAtmosphere.HasValue ? SanitizeSkyAtmosphere(Get(edit.SkyAtmosphere)) : current.SkyAtmosphere ?? new(),
             Fog = edit.Fog.HasValue ? Get(edit.Fog) : current.Fog ?? new(),
+            SkySphere = edit.SkySphere.HasValue ? Get(edit.SkySphere) : current.SkySphere ?? new(),
+            SkyLight = edit.SkyLight.HasValue ? Get(edit.SkyLight) : current.SkyLight ?? new(),
         };
     }
 

@@ -152,6 +152,7 @@ internal sealed record NativeSpotLight(
 internal sealed record NativeEnvironment(
     [property: JsonPropertyName("sky_atmosphere")] NativeSkyAtmosphereEnvironment SkyAtmosphere,
     [property: JsonPropertyName("sky_light")] NativeSkyLightEnvironment SkyLight,
+    [property: JsonPropertyName("sky_sphere")] NativeSkySphereEnvironment SkySphere,
     [property: JsonPropertyName("fog")] NativeFogEnvironment Fog,
     [property: JsonPropertyName("post_process_volume")] NativePostProcessEnvironment PostProcess,
     [property: JsonPropertyName("background")] NativeBackgroundEnvironment Background);
@@ -199,6 +200,7 @@ internal sealed record NativeFogEnvironment(
 internal sealed record NativeSkyLightEnvironment(
     [property: JsonPropertyName("enabled")] bool Enabled,
     [property: JsonPropertyName("source")] int Source,
+    [property: JsonPropertyName("cubemap_ref")] string? CubemapRef,
     [property: JsonPropertyName("intensity")] float Intensity,
     [property: JsonPropertyName("tint_rgb")] float[] TintRgb,
     [property: JsonPropertyName("diffuse_intensity")] float DiffuseIntensity,
@@ -209,6 +211,15 @@ internal sealed record NativeSkyLightEnvironment(
     [property: JsonPropertyName("lower_hemisphere_blend_alpha")] float LowerHemisphereBlendAlpha,
     [property: JsonPropertyName("volumetric_scattering_intensity")] float VolumetricScatteringIntensity,
     [property: JsonPropertyName("affect_reflections")] bool AffectReflections);
+
+internal sealed record NativeSkySphereEnvironment(
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("source")] int Source,
+    [property: JsonPropertyName("cubemap_ref")] string? CubemapRef,
+    [property: JsonPropertyName("solid_color_rgb")] float[] SolidColorRgb,
+    [property: JsonPropertyName("intensity")] float Intensity,
+    [property: JsonPropertyName("rotation_radians")] float RotationRadians,
+    [property: JsonPropertyName("tint_rgb")] float[] TintRgb);
 
 internal sealed record NativeBackgroundEnvironment(
     [property: JsonPropertyName("enabled")] bool Enabled,

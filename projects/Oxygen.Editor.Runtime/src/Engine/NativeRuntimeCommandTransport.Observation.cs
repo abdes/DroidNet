@@ -87,6 +87,18 @@ internal sealed partial class NativeRuntimeCommandTransport
             DisplayGamma = state.DisplayGamma,
             FogExists = state.FogExists,
             Fog = RuntimeTransportConversion.FromNative(state.Fog),
+            SkySphereExists = state.SkySphereExists,
+            SkySphere = RuntimeTransportConversion.FromNative(state.SkySphere),
+            SkySphereCubemap = state.SkySphereCubemap,
+            SkySphereCubemapPending = state.SkySphereCubemapPending,
+            SkySphereCubemapError = state.SkySphereCubemapError ?? string.Empty,
+            SkyLightExists = state.SkyLightExists,
+            SkyLight = RuntimeTransportConversion.FromNative(state.SkyLight),
+            SkyLightCubemap = state.SkyLightCubemap,
+            SkyLightCubemapPending = state.SkyLightCubemapPending,
+            SkyLightCubemapError = state.SkyLightCubemapError ?? string.Empty,
+            BackgroundExists = state.BackgroundExists,
+            Background = RuntimeTransportConversion.FromNative(state.Background),
         };
     }
 }

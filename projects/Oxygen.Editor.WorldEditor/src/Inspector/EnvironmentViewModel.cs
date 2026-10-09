@@ -32,7 +32,10 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
         IScheduler? observerScheduler = null)
     {
         this.EditOwner = new(commandService, commandContextProvider, this.RefreshFromScene, this.ValidationFeedback);
-        this.Background = new(this.EditOwner);
+        var scheduler = observerScheduler ?? ImmediateScheduler.Instance;
+        var cubeTextures = CubemapPickerModel.CubeTextures(assetProvider);
+        this.Backdrop = new(this.EditOwner, cubeTextures, scheduler);
+        this.SkyLight = new(this.EditOwner, cubeTextures, scheduler);
         this.SkyAtmosphere = new(this.EditOwner);
         this.Fog = new(this.EditOwner);
         this.Exposure = new(this.EditOwner, assetProvider, observerScheduler ?? ImmediateScheduler.Instance);
@@ -47,8 +50,11 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
     /// <summary>Gets the one scene edit owner shared by ordinary sections.</summary>
     public SceneEnvironmentEditOwner EditOwner { get; }
 
-    /// <summary>Gets the owned background section.</summary>
-    public BackgroundSectionViewModel Background { get; }
+    /// <summary>Gets the owned backdrop section.</summary>
+    public BackdropSectionViewModel Backdrop { get; }
+
+    /// <summary>Gets the owned sky light section.</summary>
+    public SkyLightSectionViewModel SkyLight { get; }
 
     /// <summary>Gets the owned atmosphere section.</summary>
     public SkyAtmosphereSectionViewModel SkyAtmosphere { get; }
@@ -78,7 +84,7 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
     public override string Header => "Environment";
 
     /// <inheritdoc />
-    public override string Description => "Scene atmosphere, sun, fog, exposure, tone mapping, and background intent.";
+    public override string Description => "Scene backdrop, atmosphere, sky light, sun, fog, exposure and tone mapping.";
 
     /// <summary>Gets an unacknowledged diagnostic focus request.</summary>
     internal string? PendingFieldFocus { get; private set; }
@@ -108,6 +114,8 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
         this.AtmosphereLights.Bind(value);
         this.SceneReferences.Bind(value);
         this.Exposure.StartAssets();
+        this.Backdrop.StartAssets();
+        this.SkyLight.StartAssets();
         if (value is { } currentScene)
         {
             currentScene.PropertyChanged += this.OnSceneChanged;
@@ -156,6 +164,8 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
         this.AtmosphereLights.Dispose();
         this.SceneReferences.Dispose();
         this.Exposure.Dispose();
+        this.Backdrop.Dispose();
+        this.SkyLight.Dispose();
         this.EditOwner.Dispose();
         this.scene = null;
     }
@@ -189,8 +199,9 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
         var value = this.scene?.Environment ?? new SceneEnvironmentData();
         this.EditOwner.Refresh(() =>
         {
-            this.Background.Refresh(value.BackgroundColor);
-            this.SkyAtmosphere.Refresh(value.AtmosphereEnabled, value.SkyAtmosphere ?? new());
+            this.Backdrop.Refresh(value);
+            this.SkyLight.Refresh(value.SkyLight ?? new());
+            this.SkyAtmosphere.Refresh(value.SkyAtmosphere ?? new());
             this.Fog.Refresh(value.Fog ?? new());
             this.Exposure.Refresh(value.PostProcess ?? new());
             this.PostProcessing.Refresh(value.PostProcess ?? new());

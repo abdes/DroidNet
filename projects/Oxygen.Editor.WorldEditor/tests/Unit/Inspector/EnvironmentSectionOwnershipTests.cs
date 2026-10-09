@@ -18,7 +18,7 @@ public sealed class EnvironmentSectionOwnershipTests
         using var fixture = new SceneAuthoringFixture();
         using var model = new EnvironmentViewModel(fixture.Commands, () => fixture.Context);
         model.SetScene(fixture.Scene);
-        _ = model.Background.EditOwner.Should().BeSameAs(model.EditOwner);
+        _ = model.Backdrop.EditOwner.Should().BeSameAs(model.EditOwner);
         _ = model.SkyAtmosphere.EditOwner.Should().BeSameAs(model.EditOwner);
         _ = model.Exposure.EditOwner.Should().BeSameAs(model.EditOwner);
         _ = model.PostProcessing.EditOwner.Should().BeSameAs(model.EditOwner);
@@ -49,7 +49,7 @@ public sealed class EnvironmentSectionOwnershipTests
         var original = fixture.Scene.Environment;
         model.SetInputEnabled(false);
         sky.PlanetRadiusKm = 6400;
-        model.Background.BackgroundR = 0.25f;
+        model.Backdrop.SolidColorR = 0.25f;
         model.Exposure.ManualExposureEv = 8;
         await model.PendingEdits.ConfigureAwait(false);
         _ = fixture.Scene.Environment.Should().Be(original);

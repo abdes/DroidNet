@@ -32,7 +32,6 @@ class SetPropertiesCommand;
 struct PropertyEntry;
 enum class ComponentId : std::uint16_t;
 class SetGeometryCommand;
-class SetBackgroundColorCommand;
 class SetMaterialOverrideCommand;
 struct MaterialSlotTarget;
 enum class MaterialSlotAssignmentIntent : std::uint8_t;
@@ -78,14 +77,13 @@ namespace Oxygen::Interop::World {
         oxygen::interop::module::MaterialSlotTarget target, std::optional<std::string> materialUri,
         oxygen::interop::module::MaterialSlotAssignmentIntent intent);
 
-    oxygen::interop::module::SetBackgroundColorCommand*
-      CreateSetBackgroundColor(glm::vec3 color);
 
     oxygen::interop::module::SetEnvironmentCommand*
       CreateSetEnvironment(
         oxygen::interop::module::SkyAtmosphereParams atmosphere,
         oxygen::interop::module::PostProcessParams postProcess,
-        oxygen::interop::module::FogParams fog);
+        oxygen::interop::module::FogParams fog,
+        oxygen::interop::module::SkyParams sky);
 
     oxygen::interop::module::DetachGeometryCommand*
       CreateDetachGeometry(oxygen::scene::NodeHandle handle);

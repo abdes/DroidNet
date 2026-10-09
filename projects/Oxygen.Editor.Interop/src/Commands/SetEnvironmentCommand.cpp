@@ -8,6 +8,8 @@
 
 #include "pch.h"
 
+#include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <cmath>
 #include <stdexcept>
@@ -15,7 +17,6 @@
 #include <Oxygen/Scene/ExposureSettings.h>
 
 #include <Commands/SetEnvironmentCommand.h>
-#include <Commands/SetBackgroundColorCommand.h>
 
 #include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Core/Types/PostProcess.h>
@@ -24,6 +25,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Environment/Background.h>
 #include <Oxygen/Scene/Scene.h>
 
@@ -141,24 +143,113 @@ auto ApplySkyAtmosphere(
   atmosphere.SetHoldout(false);
 }
 
-auto ApplySkyLight(oxygen::scene::SceneEnvironment& environment) -> void
+auto RequireFinite(const oxygen::Vec3& value, const char* message) -> void
+{
+  if (!std::isfinite(value.x) || !std::isfinite(value.y)
+    || !std::isfinite(value.z)) {
+    throw std::invalid_argument(message);
+  }
+}
+
+auto RequireNonNegative(const float value, const char* message) -> void
+{
+  if (!std::isfinite(value) || value < 0.0F) {
+    throw std::invalid_argument(message);
+  }
+}
+
+auto RequireNonNegative(const oxygen::Vec3& value, const char* message) -> void
+{
+  RequireFinite(value, message);
+  if (value.x < 0.0F || value.y < 0.0F || value.z < 0.0F) {
+    throw std::invalid_argument(message);
+  }
+}
+
+auto ValidateSky(const oxygen::interop::module::SkyParams& sky) -> void
+{
+  const auto& sphere = sky.sky_sphere;
+  if (sphere.source != 0 && sphere.source != 1) {
+    throw std::invalid_argument("Unknown sky sphere source");
+  }
+  RequireNonNegative(sphere.solid_color_rgb,
+    "Sky sphere solid color must be finite and nonnegative");
+  RequireNonNegative(
+    sphere.intensity, "Sky sphere intensity must be finite and nonnegative");
+  if (!std::isfinite(sphere.rotation_radians)) {
+    throw std::invalid_argument("Sky sphere rotation must be finite");
+  }
+  RequireNonNegative(
+    sphere.tint_rgb, "Sky sphere tint must be finite and nonnegative");
+
+  const auto& light = sky.sky_light;
+  if (light.source != 0 && light.source != 1) {
+    throw std::invalid_argument("Unknown sky light source");
+  }
+  for (const auto value : { light.intensity, light.diffuse_intensity,
+         light.specular_intensity, light.volumetric_scattering_intensity }) {
+    RequireNonNegative(
+      value, "Sky light multipliers must be finite and nonnegative");
+  }
+  RequireNonNegative(
+    light.tint_rgb, "Sky light tint must be finite and nonnegative");
+  if (!std::isfinite(light.cubemap_angle_radians)) {
+    throw std::invalid_argument("Sky light cubemap rotation must be finite");
+  }
+  RequireNonNegative(light.lower_hemisphere_color,
+    "Sky light lower hemisphere color must be finite and nonnegative");
+  if (!std::isfinite(light.lower_hemisphere_blend_alpha)
+    || light.lower_hemisphere_blend_alpha < 0.0F
+    || light.lower_hemisphere_blend_alpha > 1.0F) {
+    throw std::invalid_argument(
+      "Sky light lower hemisphere blend must be between 0 and 1");
+  }
+
+  const auto& color = sky.background.color_rgb;
+  RequireFinite(color, "Background color must be finite.");
+  if (color.x < 0.0F || color.y < 0.0F || color.z < 0.0F || color.x > 1.0F
+    || color.y > 1.0F || color.z > 1.0F) {
+    throw std::invalid_argument("Background color must be between 0 and 1.");
+  }
+}
+
+auto ApplySky(oxygen::scene::SceneEnvironment& environment,
+  const oxygen::interop::module::SkyParams& sky,
+  const oxygen::content::ResourceKey sky_sphere_cubemap,
+  const oxygen::content::ResourceKey sky_light_cubemap) -> void
 {
   namespace env = oxygen::scene::environment;
 
-  auto* const sky_light = EnsureSystem<env::SkyLight>(environment);
-  if (sky_light == nullptr) {
-    return;
-  }
+  auto* const sphere = EnsureSystem<env::SkySphere>(environment);
+  sphere->SetEnabled(sky.sky_sphere.enabled);
+  sphere->SetSource(static_cast<env::SkySphereSource>(sky.sky_sphere.source));
+  sphere->SetCubemapResource(sky_sphere_cubemap);
+  sphere->SetSolidColorRgb(sky.sky_sphere.solid_color_rgb);
+  sphere->SetIntensity(sky.sky_sphere.intensity);
+  sphere->SetRotationRadians(sky.sky_sphere.rotation_radians);
+  sphere->SetTintRgb(sky.sky_sphere.tint_rgb);
 
-  sky_light->SetEnabled(true);
-  sky_light->SetSource(env::SkyLightSource::kCapturedScene);
-  sky_light->SetIntensityMul(1.0F);
-  sky_light->SetTintRgb({ 1.0F, 1.0F, 1.0F });
-  sky_light->SetDiffuseIntensity(1.0F);
-  sky_light->SetSpecularIntensity(1.0F);
-  sky_light->SetLowerHemisphereColor({ 0.02F, 0.02F, 0.03F });
-  sky_light->SetVolumetricScatteringIntensity(1.0F);
-  sky_light->SetAffectReflections(true);
+  const auto& authored = sky.sky_light;
+  auto* const light = EnsureSystem<env::SkyLight>(environment);
+  light->SetEnabled(authored.enabled);
+  light->SetSource(static_cast<env::SkyLightSource>(authored.source));
+  light->SetCubemapResource(sky_light_cubemap);
+  light->SetIntensityMul(authored.intensity);
+  light->SetTintRgb(authored.tint_rgb);
+  light->SetDiffuseIntensity(authored.diffuse_intensity);
+  light->SetSpecularIntensity(authored.specular_intensity);
+  light->SetSourceCubemapAngleRadians(authored.cubemap_angle_radians);
+  light->SetLowerHemisphereColor(authored.lower_hemisphere_color);
+  light->SetLowerHemisphereIsSolidColor(
+    authored.lower_hemisphere_is_solid_color);
+  light->SetLowerHemisphereBlendAlpha(authored.lower_hemisphere_blend_alpha);
+  light->SetVolumetricScatteringIntensity(
+    authored.volumetric_scattering_intensity);
+  light->SetAffectReflections(authored.affect_reflections);
+
+  auto* const background = EnsureSystem<env::Background>(environment);
+  background->SetEnabled(sky.background.enabled);
+  background->SetColorRgb(sky.background.color_rgb);
 }
 
 auto ResolvePostProcessExposure(const oxygen::interop::module::PostProcessParams& params)
@@ -311,57 +402,6 @@ auto ApplyFog(oxygen::scene::SceneEnvironment& environment,
 
 namespace oxygen::interop::module {
 
-  /*!
-   Applies the authored background through the engine-owned sky system.
-   Atmosphere keeps precedence in the renderer; this command does not change
-   that independent authored setting. No tone mapping is applied here.
-
-   @param context The scene-mutation context.
-   @throw std::invalid_argument If any color channel is non-finite.
-   @throw std::logic_error If there is no active scene.
-  */
-  void SetBackgroundColorCommand::Execute(CommandContext& context)
-  {
-    if (!std::isfinite(color_.x) || !std::isfinite(color_.y)
-      || !std::isfinite(color_.z)) {
-      throw std::invalid_argument("Background color must be finite.");
-    }
-    if (!context.Scene) {
-      throw std::logic_error("Background requires an active scene.");
-    }
-    auto* environment = EnsureEnvironment(*context.Scene);
-    auto* background
-      = EnsureSystem<scene::environment::Background>(*environment);
-    background->SetColorRgb(color_);
-    background->SetEnabled(true);
-    context.Scene->Update(false);
-  }
-
-  /*!
-   Reads native background state after preceding scene mutations.
-
-   @param context The scene-mutation context.
-   @note A captured value does not establish that a frame was presented.
-  */
-  void ObserveBackgroundCommand::Execute(CommandContext& context)
-  {
-    BackgroundObservation observation;
-    if (context.Scene) {
-      if (auto environment = context.Scene->GetEnvironment()) {
-        if (auto background
-          = environment->TryGetSystem<scene::environment::Background>()) {
-          observation.exists = background->IsEnabled();
-          observation.color = background->GetColorRgb();
-        }
-        if (auto atmosphere
-          = environment->TryGetSystem<scene::environment::SkyAtmosphere>()) {
-          observation.atmosphere_enabled = atmosphere->IsEnabled();
-        }
-      }
-    }
-    complete_(observation);
-  }
-
   void SetEnvironmentCommand::Execute(CommandContext& context)
   {
     if (!context.Scene) {
@@ -369,30 +409,49 @@ namespace oxygen::interop::module {
     }
 
     ValidateFog(fog_);
+    ValidateSky(sky_);
     auto apply = [atmosphere_params = atmosphere_, post_process = post_process_,
-        fog_params = fog_,
-        exposure = ResolvePostProcessExposure(post_process_)]
-        (scene::Scene& scene, content::ResourceKey mask) mutable {
+                   fog_params = fog_, sky = sky_,
+                   exposure = ResolvePostProcessExposure(post_process_)](
+                   scene::Scene& scene,
+                   const EnvironmentTextureKeys& textures) mutable {
       auto* const environment = EnsureEnvironment(scene);
       auto* const atmosphere
         = EnsureSkyAtmosphereWhenEnabled(*environment, atmosphere_params.enabled);
       if (atmosphere != nullptr) {
         ApplySkyAtmosphere(*atmosphere, atmosphere_params);
       }
-      exposure.metering_mask = mask;
-      ApplySkyLight(*environment);
+      exposure.metering_mask = textures.at(
+        static_cast<std::size_t>(EnvironmentTextureSlot::kMeteringMask));
+      ApplySky(*environment, sky,
+        textures.at(
+          static_cast<std::size_t>(EnvironmentTextureSlot::kSkySphereCubemap)),
+        textures.at(
+          static_cast<std::size_t>(EnvironmentTextureSlot::kSkyLightCubemap)));
       ApplyPostProcess(*environment, post_process, exposure);
       ApplyFog(*environment, fog_params);
       scene.Update(false);
       scene.NotifyEnvironmentAuthoringChange();
     };
+    auto sources = EnvironmentTextureSources {};
+    sources.at(static_cast<std::size_t>(EnvironmentTextureSlot::kMeteringMask))
+      = { .locator = post_process_.auto_exposure_metering_mask,
+          .project_mount = post_process_.auto_exposure_metering_mask_mount };
+    sources.at(
+      static_cast<std::size_t>(EnvironmentTextureSlot::kSkySphereCubemap))
+      = { .locator = sky_.sky_sphere.cubemap.locator,
+          .project_mount = sky_.sky_sphere.cubemap.project_mount };
+    sources.at(static_cast<std::size_t>(EnvironmentTextureSlot::kSkyLightCubemap))
+      = { .locator = sky_.sky_light.cubemap.locator,
+          .project_mount = sky_.sky_light.cubemap.project_mount };
     if (context.AssetRequests) {
-      context.AssetRequests->SetExposureMask(*context.Scene,
-        post_process_.auto_exposure_metering_mask, std::move(apply),
-        std::move(failure_callback_), std::move(success_callback_),
-        post_process_.auto_exposure_metering_mask_mount);
-    } else if (post_process_.auto_exposure_metering_mask) {
-      throw std::logic_error("Exposure mask requires scene asset request state");
+      context.AssetRequests->SetEnvironmentTextures(*context.Scene,
+        std::move(sources), std::move(apply), std::move(failure_callback_),
+        std::move(success_callback_));
+    } else if (std::ranges::any_of(sources,
+                 [](const auto& source) { return source.locator.has_value(); })) {
+      throw std::logic_error(
+        "Environment textures require scene asset request state");
     } else {
       apply(*context.Scene, {});
     }

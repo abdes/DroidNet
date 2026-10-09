@@ -112,14 +112,14 @@ public sealed partial class SceneDocumentCommandServiceTests
         var scene = CreateScene();
         var context = CreateContext(scene);
         var terminal = ConfigureGestureSync(fixture, scene);
-        var original = scene.Environment.BackgroundColor;
+        var original = SceneSkyFields.SolidColorOf(scene.Environment);
         using var editor = new EnvironmentViewModel(fixture.Sut, () => context);
         editor.SetScene(scene);
         editor.BeginEditSession("BackgroundR", NumberBoxEditInteractionKind.PointerDrag);
 
         for (var sample = 1; sample <= 100; ++sample)
         {
-            editor.Background.BackgroundR = sample / 100f;
+            editor.Backdrop.SolidColorR = sample / 100f;
         }
 
         _ = context.History.UndoStack.Should().BeEmpty();
@@ -127,12 +127,12 @@ public sealed partial class SceneDocumentCommandServiceTests
         await editor.PendingEdits.ConfigureAwait(false);
         _ = context.History.UndoStack.Should().ContainSingle();
         _ = terminal.Should().ContainSingle();
-        _ = scene.Environment.BackgroundColor.Should().Be(new Vector3(1, original.Y, original.Z));
+        _ = SceneSkyFields.SolidColorOf(scene.Environment).Should().Be(new Vector3(1, original.Y, original.Z));
 
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = scene.Environment.BackgroundColor.Should().Be(original);
+        _ = SceneSkyFields.SolidColorOf(scene.Environment).Should().Be(original);
         await context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = scene.Environment.BackgroundColor.Should().Be(new Vector3(1, original.Y, original.Z));
+        _ = SceneSkyFields.SolidColorOf(scene.Environment).Should().Be(new Vector3(1, original.Y, original.Z));
     }
 
     [TestMethod]
@@ -320,17 +320,17 @@ public sealed partial class SceneDocumentCommandServiceTests
         var scene = CreateScene();
         var context = CreateContext(scene);
         _ = ConfigureGestureSync(fixture, scene);
-        var original = scene.Environment.BackgroundColor;
+        var original = SceneSkyFields.SolidColorOf(scene.Environment);
         using var editor = new EnvironmentViewModel(fixture.Sut, () => context);
         editor.SetScene(scene);
         editor.BeginEditSession("BackgroundR", NumberBoxEditInteractionKind.PointerDrag);
-        editor.Background.BackgroundR = 0.8f;
-        _ = scene.Environment.BackgroundColor.X.Should().Be(0.8f);
+        editor.Backdrop.SolidColorR = 0.8f;
+        _ = SceneSkyFields.SolidColorOf(scene.Environment).X.Should().Be(0.8f);
 
         editor.EndEditSession(NumberBoxEditCompletionKind.Cancel);
         await editor.PendingEdits.ConfigureAwait(false);
 
-        _ = scene.Environment.BackgroundColor.Should().Be(original);
+        _ = SceneSkyFields.SolidColorOf(scene.Environment).Should().Be(original);
         _ = context.History.UndoStack.Should().BeEmpty();
         _ = context.Metadata.IsDirty.Should().BeFalse();
     }

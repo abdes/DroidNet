@@ -27,10 +27,6 @@ internal interface IRuntimeCommandTransport
     /// <returns>The native acknowledgment task.</returns>
     public Task CreateNodeAsync(RuntimeCreateNode command);
 
-    /// <summary>Observes native background after earlier scene mutations.</summary>
-    /// <returns>The native background state.</returns>
-    public Task<RuntimeBackgroundState> ObserveBackgroundAsync();
-
     /// <summary>Reads native atmosphere and post-process values after earlier mutations.</summary>
     /// <returns>The native environment state.</returns>
     public Task<RuntimeEnvironmentState> ObserveEnvironmentAsync();

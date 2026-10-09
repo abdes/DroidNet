@@ -10,7 +10,7 @@ using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector.Presentation;
 
-/// <summary>Explicit presentation metadata for the 73 scene cards.</summary>
+/// <summary>Explicit presentation metadata for the 91 scene cards.</summary>
 internal static class EnvironmentFieldCatalog
 {
     /// <summary>Gets the ten nested source-field identities without consulting their views.</summary>
@@ -20,7 +20,6 @@ internal static class EnvironmentFieldCatalog
     /// <returns>A new view-owned search model.</returns>
     internal static InspectorSearchModel Create()
         => new([
-            Sky("AtmosphereEnabled", "/atmosphere_enabled", "Enabled"),
             Sky("SunDiskEnabled", "/sky_atmosphere/sun_disk_enabled", "Sun Disk"),
             Sky("PlanetRadiusKm", "/sky_atmosphere/planet_radius_meters", "Planet Radius", "PlanetGround", "planet_radius_meters km"),
             Sky("AtmosphereHeightKm", "/sky_atmosphere/atmosphere_height_meters", "Atmosphere Height", "PlanetGround", "atmosphere_height_meters km"),
@@ -92,7 +91,26 @@ internal static class EnvironmentFieldCatalog
             Post("Saturation", "saturation", "Saturation", "ColorGrading", "Color and lens-style post-process adjustments.", InspectorFieldApplicability.ToneMapping),
             Post("Contrast", "contrast", "Contrast", "ColorGrading", "Color and lens-style post-process adjustments.", InspectorFieldApplicability.ToneMapping),
             Post("VignetteIntensity", "vignette_intensity", "Vignette", "ColorGrading", "Color and lens-style post-process adjustments.", InspectorFieldApplicability.ToneMapping),
-            new("BackgroundColor", SceneDocumentCommandService.SceneEnvironment.BackgroundColor.Id, InspectorPropertyScope.Environment, "Background", group: null, "Color", "Background Fallback color when atmosphere rendering is disabled.", "BackgroundColor Linear RGB"),
+            Backdrop("Backdrop", SceneSkyFields.Backdrop.Id, "Show", "Atmosphere Cubemap Solid color sky background skybox HDRI"),
+            Backdrop("SkySphereCubemap", SceneSkyFields.SkySphereCubemap.Id, "Cubemap", "sky sphere cube texture skybox HDRI panorama", InspectorFieldApplicability.CubemapBackdrop),
+            Backdrop("SkySphereRotation", SceneSkyFields.SkySphereRotationRadians.Id, "Rotation", "rotation_radians degrees", InspectorFieldApplicability.CubemapBackdrop),
+            Backdrop("SolidColor", SceneSkyFields.SolidColor.Id, "Color", "solid color background Linear RGB", InspectorFieldApplicability.SolidColorBackdrop),
+            Backdrop("SolidColorLightsScene", SceneSkyFields.SolidColorLightsScene.Id, "Light the scene with this color", "capture ambient", InspectorFieldApplicability.SolidColorBackdrop),
+            Backdrop("SkySphereIntensity", SceneSkyFields.SkySphereIntensity.Id, "Intensity", "sky sphere intensity EV stops brightness", InspectorFieldApplicability.SkySphereTone),
+            Backdrop("SkySphereTint", SceneSkyFields.SkySphereTintRgb.Id, "Tint", "sky sphere tint_rgb Linear RGB", InspectorFieldApplicability.SkySphereTone),
+            SkyLight("SkyLightEnabled", SceneSkyFields.SkyLightEnabled.Id, "Enabled", null, "sky light IBL image-based lighting"),
+            SkyLight("SkyLightSource", SceneSkyFields.SkyLightSource.Id, "Source", null, "Capture sky Cubemap captured scene specified cubemap"),
+            SkyLight("SkyLightCubemap", SceneSkyFields.SkyLightCubemap.Id, "Cubemap", null, "cube texture HDRI", InspectorFieldApplicability.SkyLightCubemap),
+            SkyLight("SkyLightCubemapAngle", SceneSkyFields.SkyLightCubemapAngleRadians.Id, "Rotation", null, "source_cubemap_angle_radians degrees", InspectorFieldApplicability.SkyLightCubemap),
+            SkyLight("SkyLightIntensity", SceneSkyFields.SkyLightIntensity.Id, "Intensity", null, "sky light intensity EV stops brightness"),
+            SkyLight("SkyLightTint", SceneSkyFields.SkyLightTintRgb.Id, "Tint", null, "tint_rgb Linear RGB"),
+            SkyLight("SkyLightDiffuse", SceneSkyFields.SkyLightDiffuseIntensity.Id, "Diffuse", null, "diffuse_intensity irradiance ambient"),
+            SkyLight("SkyLightSpecular", SceneSkyFields.SkyLightSpecularIntensity.Id, "Specular", null, "specular_intensity reflections"),
+            SkyLight("SkyLightLowerHemisphereIsSolidColor", SceneSkyFields.SkyLightLowerHemisphereIsSolidColor.Id, "Solid Color", "LowerHemisphere", "lower_hemisphere_is_solid_color ground"),
+            SkyLight("SkyLightLowerHemisphereColor", SceneSkyFields.SkyLightLowerHemisphereColor.Id, "Color", "LowerHemisphere", "lower_hemisphere_color ground Linear RGB"),
+            SkyLight("SkyLightLowerHemisphereBlend", SceneSkyFields.SkyLightLowerHemisphereBlendAlpha.Id, "Blend", "LowerHemisphere", "lower_hemisphere_blend_alpha"),
+            SkyLight("SkyLightVolumetricScattering", SceneSkyFields.SkyLightVolumetricScatteringIntensity.Id, "Volumetric Scattering", "SkyLightAdvanced", "volumetric_scattering_intensity fog"),
+            SkyLight("SkyLightAffectReflections", SceneSkyFields.SkyLightAffectReflections.Id, "Affect Reflections", "SkyLightAdvanced", "affect_reflections specular"),
         ]);
 
     private static ReadOnlyCollection<AtmosphereSourceFieldIdentity> CreateSourceFields()
@@ -125,7 +143,43 @@ internal static class EnvironmentFieldCatalog
             group,
             label,
             "Sky Atmosphere Atmospheric sky and aerial perspective authored on the scene.",
-            $"{key} {aliases}");
+            $"{key} {aliases}",
+            InspectorFieldApplicability.AtmosphereBackdrop);
+
+    private static InspectorFieldPresentation Backdrop(
+        string key,
+        PropertyId property,
+        string label,
+        string aliases,
+        InspectorFieldApplicability applicability = InspectorFieldApplicability.Always)
+        => new(
+            key,
+            property,
+            InspectorPropertyScope.Environment,
+            "Backdrop",
+            group: null,
+            label,
+            "Backdrop What shows behind the scene: the atmosphere, a cubemap or a solid color.",
+            $"{key} {aliases}",
+            applicability);
+
+    private static InspectorFieldPresentation SkyLight(
+        string key,
+        PropertyId property,
+        string label,
+        string? group,
+        string aliases,
+        InspectorFieldApplicability applicability = InspectorFieldApplicability.Always)
+        => new(
+            key,
+            property,
+            InspectorPropertyScope.Environment,
+            "SkyLight",
+            group,
+            label,
+            "Sky Light Image-based diffuse and specular light from the sky.",
+            $"{key} {aliases}",
+            applicability);
 
     private static InspectorFieldPresentation Fog(string key, string pointer, string label, string? group, string aliases)
         => new(
@@ -169,7 +223,7 @@ internal static class EnvironmentFieldCatalog
             new PropertyId(SceneDocumentCommandService.SceneEnvironmentKind, $"/post_process/{pointer}"),
             InspectorPropertyScope.PostProcessing,
             section,
-group: null,
+            group: null,
             label,
             $"{section} {description}",
             $"{key} {aliases}",

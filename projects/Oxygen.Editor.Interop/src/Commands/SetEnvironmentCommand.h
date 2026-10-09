@@ -109,14 +109,64 @@ namespace oxygen::interop::module {
     bool visible_in_real_time_sky_captures = true;
   };
 
+  //! A cooked cube texture an environment system binds; no locator binds none.
+  struct CubemapSource {
+    std::optional<content::TextureResourceLocator> locator;
+    //! Project mount whose current cooked root replaces the locator's root.
+    std::optional<std::wstring> project_mount;
+  };
+
+  //! Authored Sky Sphere backdrop. Defaults match the native system except
+  //! `enabled`, which is off for scenes without an authored sky sphere.
+  struct SkySphereParams {
+    bool enabled = false;
+    int source = 0; //!< SkySphereSource: 0 cubemap, 1 solid color.
+    CubemapSource cubemap;
+    Vec3 solid_color_rgb { 0.0F, 0.0F, 0.0F };
+    float intensity = 1.0F;
+    float rotation_radians = 0.0F;
+    Vec3 tint_rgb { 1.0F, 1.0F, 1.0F };
+  };
+
+  //! Authored Sky Light image-based lighting; defaults match the native system.
+  struct SkyLightParams {
+    bool enabled = true;
+    int source = 0; //!< SkyLightSource: 0 captured scene, 1 specified cubemap.
+    CubemapSource cubemap;
+    float intensity = 1.0F;
+    Vec3 tint_rgb { 1.0F, 1.0F, 1.0F };
+    float diffuse_intensity = 1.0F;
+    float specular_intensity = 1.0F;
+    float cubemap_angle_radians = 0.0F;
+    Vec3 lower_hemisphere_color { 0.0F, 0.0F, 0.0F };
+    bool lower_hemisphere_is_solid_color = true;
+    float lower_hemisphere_blend_alpha = 1.0F;
+    float volumetric_scattering_intensity = 1.0F;
+    bool affect_reflections = true;
+  };
+
+  //! Authored display-only backdrop color, in linear SDR RGB.
+  struct BackgroundParams {
+    bool enabled = false;
+    Vec3 color_rgb { 0.0F, 0.0F, 0.0F };
+  };
+
+  //! What shows behind the scene and how the sky lights it.
+  struct SkyParams {
+    SkySphereParams sky_sphere;
+    SkyLightParams sky_light;
+    BackgroundParams background;
+  };
+
   class SetEnvironmentCommand final : public EditorCommand {
   public:
     SetEnvironmentCommand(SkyAtmosphereParams atmosphere,
-      PostProcessParams post_process, FogParams fog = {})
+      PostProcessParams post_process, FogParams fog = {}, SkyParams sky = {})
       : EditorCommand(oxygen::core::PhaseId::kSceneMutation)
       , atmosphere_(atmosphere)
       , post_process_(std::move(post_process))
       , fog_(fog)
+      , sky_(std::move(sky))
     {
     }
 
@@ -132,6 +182,7 @@ namespace oxygen::interop::module {
     SkyAtmosphereParams atmosphere_;
     PostProcessParams post_process_;
     FogParams fog_;
+    SkyParams sky_;
     SceneAssetRequests::FailureCallback failure_callback_;
     SceneAssetRequests::SuccessCallback success_callback_;
   };

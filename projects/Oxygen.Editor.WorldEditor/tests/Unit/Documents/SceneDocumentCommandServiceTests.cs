@@ -772,7 +772,7 @@ public sealed partial class SceneDocumentCommandServiceTests
                 OptionalEditValues.Unspecified<float>(),
                 OptionalEditValues.Unspecified<float>(),
                 OptionalEditValues.Unspecified<ToneMappingMode>(),
-                OptionalEditValues.Unspecified<System.Numerics.Vector3>(),
+                OptionalEditValues.Unspecified<BackgroundEnvironmentData>(),
                 OptionalEditValues.Supplied<SkyAtmosphereEnvironmentData>(new() { MieAnisotropy = float.NaN })),
             EditSessionToken.OneShot).ConfigureAwait(false);
 
@@ -812,7 +812,7 @@ public sealed partial class SceneDocumentCommandServiceTests
                 OptionalEditValues.Supplied<float>(3.5f),
                 OptionalEditValues.Unspecified<float>(),
                 OptionalEditValues.Unspecified<ToneMappingMode>(),
-                OptionalEditValues.Unspecified<System.Numerics.Vector3>()),
+                OptionalEditValues.Unspecified<BackgroundEnvironmentData>()),
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
@@ -872,7 +872,7 @@ public sealed partial class SceneDocumentCommandServiceTests
                 OptionalEditValues.Unspecified<float>(),
                 OptionalEditValues.Unspecified<float>(),
                 OptionalEditValues.Unspecified<ToneMappingMode>(),
-                OptionalEditValues.Unspecified<System.Numerics.Vector3>(),
+                OptionalEditValues.Unspecified<BackgroundEnvironmentData>(),
                 OptionalEditValues.Unspecified<SkyAtmosphereEnvironmentData>(),
                 OptionalEditValues.Supplied<PostProcessEnvironmentData>(postProcess)),
             EditSessionToken.OneShot).ConfigureAwait(false);
@@ -987,7 +987,7 @@ public sealed partial class SceneDocumentCommandServiceTests
                 OptionalEditValues.Supplied<float>(float.NaN),
                 OptionalEditValues.Unspecified<float>(),
                 OptionalEditValues.Unspecified<ToneMappingMode>(),
-                OptionalEditValues.Unspecified<System.Numerics.Vector3>()),
+                OptionalEditValues.Unspecified<BackgroundEnvironmentData>()),
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
@@ -1027,7 +1027,7 @@ public sealed partial class SceneDocumentCommandServiceTests
                     OptionalEditValues.Unspecified<float>(),
                     OptionalEditValues.Unspecified<float>(),
                     OptionalEditValues.Unspecified<ToneMappingMode>(),
-                    OptionalEditValues.Unspecified<System.Numerics.Vector3>(),
+                    OptionalEditValues.Unspecified<BackgroundEnvironmentData>(),
                     PostProcess: OptionalEditValues.Supplied(candidate)),
                 EditSessionToken.OneShot).ConfigureAwait(false);
             _ = result.Succeeded.Should().BeFalse();

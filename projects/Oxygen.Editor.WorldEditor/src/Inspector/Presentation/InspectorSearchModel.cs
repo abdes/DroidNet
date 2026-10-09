@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.ComponentModel;
-using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.World.Inspector.Presentation;
 
@@ -34,10 +33,8 @@ public sealed partial class InspectorSearchModel : ObservableObject
     /// <summary>Updates the existing AND-token search and authored-mode applicability.</summary>
     /// <param name="query">The query text.</param>
     /// <param name="scope">The browsing scope.</param>
-    /// <param name="exposure">The current exposure mode.</param>
-    /// <param name="metering">The current metering mode.</param>
-    /// <param name="toneMapping">The current tone mapper.</param>
-    public void Update(string query, InspectorPropertyScope scope, ExposureMode exposure, MeteringMode metering, ToneMappingMode toneMapping)
+    /// <param name="modes">The authored modes that decide which stored fields apply.</param>
+    public void Update(string query, InspectorPropertyScope scope, InspectorApplicabilityContext modes)
     {
         var wasSearching = this.IsSearching;
         this.terms = query.Trim().Split([' ', '\t', '/', '_', '-'], StringSplitOptions.RemoveEmptyEntries)
@@ -62,26 +59,12 @@ public sealed partial class InspectorSearchModel : ObservableObject
 
         foreach (var field in this.Fields.Values)
         {
-            var applicable = field.Applicability switch
-            {
-                InspectorFieldApplicability.AutoExposure => exposure == ExposureMode.Auto,
-                InspectorFieldApplicability.AutoExposureSpot => exposure == ExposureMode.Auto && metering == MeteringMode.Spot,
-                InspectorFieldApplicability.ManualExposure => exposure == ExposureMode.Manual,
-                InspectorFieldApplicability.ToneMapping => toneMapping != ToneMappingMode.None,
-                _ => true,
-            };
+            var applicable = modes.Applies(field.Applicability);
             var matches = this.terms.All(term => field.SearchText.Contains(term, StringComparison.Ordinal));
             field.IsVisible = (scope == InspectorPropertyScope.All || field.Scope == scope)
                 && (this.IsSearching ? matches : applicable);
             field.ApplicabilityText = this.IsSearching && matches && !applicable
-                ? field.Applicability switch
-                {
-                    InspectorFieldApplicability.AutoExposureSpot => "Stored value; applies in Auto exposure mode with Spot metering.",
-                    InspectorFieldApplicability.AutoExposure => $"Stored value; applies in Auto exposure mode. Current mode: {exposure}.",
-                    InspectorFieldApplicability.ManualExposure => $"Stored value; applies in Manual exposure mode. Current mode: {exposure}.",
-                    InspectorFieldApplicability.ToneMapping => "Stored value; color grading is inactive while tone mapping is set to None.",
-                    _ => string.Empty,
-                }
+                ? modes.InapplicableNote(field.Applicability)
                 : string.Empty;
         }
 

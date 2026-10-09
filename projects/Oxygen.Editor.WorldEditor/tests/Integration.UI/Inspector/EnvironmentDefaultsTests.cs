@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.World.Inspector;
+using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldCases;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
@@ -43,7 +44,7 @@ public sealed partial class EnvironmentDefaultsTests : DroidNet.Tests.VisualUser
             ViewModel = model,
         };
         await LoadTestContentAsync(new ScrollViewer { Content = view }).ConfigureAwait(true);
-        _ = model.SkyAtmosphere.AtmosphereEnabled.Should().BeTrue();
+        _ = model.Backdrop.Backdrop.Should().Be(EnvironmentBackdrop.Atmosphere);
         var expected = NativeEnvironmentFields.ToDictionary(field => field.Field, field => field.ReadSource(fixture.Source.Environment), StringComparer.Ordinal);
         await AssertEnvironmentFieldValuesAsync(fixture, expected, timeout.Token).ConfigureAwait(true);
         await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);

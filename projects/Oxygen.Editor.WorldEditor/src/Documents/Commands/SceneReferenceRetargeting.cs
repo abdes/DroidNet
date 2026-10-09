@@ -104,7 +104,7 @@ internal static class SceneReferenceRetargeting
         return changed ? result : null;
     }
 
-    /// <summary>Re-points the environment's metering mask.</summary>
+    /// <summary>Re-points the environment's metering mask and sky cubemaps.</summary>
     /// <param name="environment">The environment.</param>
     /// <param name="map">Returns the new URI, or null when the reference does not move.</param>
     /// <returns>The re-pointed environment, or null when nothing changed.</returns>
@@ -112,8 +112,33 @@ internal static class SceneReferenceRetargeting
     {
         ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(map);
-        return environment.PostProcess.AutoExposureMeteringMask is { } mask && map(mask) is { } mapped
-            ? environment with { PostProcess = environment.PostProcess with { AutoExposureMeteringMask = mapped } }
-            : null;
+        var result = environment;
+        if (Moved(environment.PostProcess.AutoExposureMeteringMask, map) is { } mask)
+        {
+            result = result with { PostProcess = result.PostProcess with { AutoExposureMeteringMask = mask } };
+        }
+
+        if (Moved(environment.SkySphere.Cubemap, map) is { } backdrop)
+        {
+            result = result with { SkySphere = result.SkySphere with { Cubemap = backdrop } };
+        }
+
+        if (Moved(environment.SkyLight.Cubemap, map) is { } light)
+        {
+            result = result with { SkyLight = result.SkyLight with { Cubemap = light } };
+        }
+
+        return ReferenceEquals(result, environment) ? null : result;
+
+        static Uri? Moved(Uri? reference, Func<Uri, Uri?> map) => reference is null ? null : map(reference);
+    }
+
+    /// <summary>Gets the asset references an environment holds.</summary>
+    /// <param name="environment">The environment.</param>
+    /// <returns>The metering mask and sky cubemaps that are set.</returns>
+    public static IEnumerable<Uri> ReferencedUris(SceneEnvironmentData environment)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        return new[] { environment.PostProcess.AutoExposureMeteringMask, environment.SkySphere.Cubemap, environment.SkyLight.Cubemap }.OfType<Uri>();
     }
 }

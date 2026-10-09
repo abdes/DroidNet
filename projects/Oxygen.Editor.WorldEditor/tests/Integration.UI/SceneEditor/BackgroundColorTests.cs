@@ -8,6 +8,7 @@ using System.Reactive.Concurrency;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
+using CommunityToolkit.WinUI.Controls;
 using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Storage.Native;
@@ -101,7 +102,8 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
         sync.CloseDocument(metadata);
         var reopened = await manager.LoadSceneAsync(scene).ConfigureAwait(true);
         _ = reopened.Should().NotBeNull();
-        AssertColorClose(reopened!.Environment.BackgroundColor, new Vector3(0.12743768f, 0.05126946f, 0.2158605f));
+        AssertColorClose(reopened!.Environment.Background.ColorRgb, new Vector3(0.12743768f, 0.05126946f, 0.2158605f));
+        _ = reopened.Environment.Background.Enabled.Should().BeTrue();
         _ = reopened.Environment.AtmosphereEnabled.Should().BeFalse();
         metadata = new SceneDocumentMetadata(reopened.Id);
         ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -109,7 +111,7 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
         _ = (await sync.SyncSceneWhenReadyAsync(reopened, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
         target = await ready.Task.WaitAsync(cancellationToken).ConfigureAwait(true);
         var observed = await ReadNativeBackgroundAsync(engine, target, cancellationToken).ConfigureAwait(true);
-        _ = observed.Color.Should().Be(reopened.Environment.BackgroundColor);
+        _ = observed.Background.ColorRgb.Should().Be(reopened.Environment.Background.ColorRgb);
         _ = observed.AtmosphereEnabled.Should().BeFalse();
         sync.CloseDocument(metadata);
     }
@@ -134,35 +136,38 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             };
             await LoadTestContentAsync(scroller).ConfigureAwait(true);
-            var atmosphereCase = NativeEnvironmentFields.Single(static value => string.Equals(value.Field, "AtmosphereEnabled", StringComparison.Ordinal));
-            var atmosphereToggle = (ToggleSwitch)await FindEnvironmentFieldControlAsync(view, scroller, model, atmosphereCase, cancellationToken).ConfigureAwait(true);
-            _ = atmosphereToggle.Tag.Should().Be("AtmosphereEnabled", "the Sky Atmosphere enable switch is the control under test");
-            atmosphereToggle.IsOn = false;
+            // Show a solid color that only paints the view: the background.
+            ((TextBox)view.FindName("ScenePropertySearchBox")).Text = "backdrop";
+            var backdrop = (Segmented)await FindInspectorControlAsync(scroller, () => view.FindDescendant<Segmented>(element => Equals(element.Tag, "Backdrop")), "Backdrop", cancellationToken).ConfigureAwait(true);
+            backdrop.SelectedIndex = 2;
+            await model.PendingEdits.ConfigureAwait(true);
+            var lightsScene = (ToggleSwitch)await FindInspectorControlAsync(scroller, () => view.FindDescendant<ToggleSwitch>(element => Equals(element.Tag, "SolidColorLightsScene")), "SolidColorLightsScene", cancellationToken).ConfigureAwait(true);
+            lightsScene.IsOn = false;
             await model.PendingEdits.ConfigureAwait(true);
             var original = await ReadNativeBackgroundAsync(engine, target, cancellationToken).ConfigureAwait(true);
             _ = original.AtmosphereEnabled.Should().BeFalse();
             ((TextBox)view.FindName("ScenePropertySearchBox")).Text = string.Empty;
             await EditBackgroundPickerAsync(view, scroller, cancellationToken).ConfigureAwait(true);
             await model.PendingEdits.ConfigureAwait(true);
-            var expected = scene.Environment.BackgroundColor;
+            var expected = scene.Environment.Background.ColorRgb;
             AssertColorClose(expected, new Vector3(0.12743768f, 0.05126946f, 0.2158605f));
-            _ = context.History.UndoStack.Should().HaveCount(2);
-            _ = (await ReadNativeBackgroundAsync(engine, target, cancellationToken).ConfigureAwait(true)).Color.Should().Be(expected);
+            _ = context.History.UndoStack.Should().HaveCount(3);
+            _ = (await ReadNativeBackgroundAsync(engine, target, cancellationToken).ConfigureAwait(true)).Background.ColorRgb.Should().Be(expected);
             await context.History.UndoAsync(cancellationToken).ConfigureAwait(true);
-            _ = (await ReadNativeBackgroundAsync(engine, target, cancellationToken).ConfigureAwait(true)).Color.Should().Be(original.Color);
+            _ = (await ReadNativeBackgroundAsync(engine, target, cancellationToken).ConfigureAwait(true)).Background.ColorRgb.Should().Be(original.Background.ColorRgb);
             await context.History.RedoAsync(cancellationToken).ConfigureAwait(true);
-            _ = (await ReadNativeBackgroundAsync(engine, target, cancellationToken).ConfigureAwait(true)).Color.Should().Be(expected);
+            _ = (await ReadNativeBackgroundAsync(engine, target, cancellationToken).ConfigureAwait(true)).Background.ColorRgb.Should().Be(expected);
             _ = (await commands.SaveSceneAsync(context).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         }
     }
 
     private static async Task EditBackgroundPickerAsync(EnvironmentView view, ScrollViewer scroller, CancellationToken cancellationToken)
     {
-        _ = await FindVisibleVectorAsync(view, scroller, "BackgroundColor").ConfigureAwait(true);
+        _ = await FindVisibleVectorAsync(view, scroller, "SolidColor").ConfigureAwait(true);
 
         // The restructured inspector hosts the swatch as PropertyCard leading content, so the picker button is an
         // owned accessory of the background field rather than a sibling of the vector box.
-        var button = view.FindDescendant<Button>(element => string.Equals(AutomationProperties.GetName(element), "Pick background color", StringComparison.Ordinal));
+        var button = view.FindDescendant<Button>(element => string.Equals(AutomationProperties.GetName(element), "Pick backdrop color", StringComparison.Ordinal));
         _ = button.Should().NotBeNull("the swatch realizes as leading content of the background field");
         var flyout = (Flyout)button!.Flyout;
         var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -181,12 +186,12 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
         await closed.Task.WaitAsync(cancellationToken).ConfigureAwait(true);
     }
 
-    private static async Task<RuntimeBackgroundState> ReadNativeBackgroundAsync(EngineService engine, RuntimeSceneTarget target, CancellationToken cancellationToken)
+    private static async Task<RuntimeEnvironmentState> ReadNativeBackgroundAsync(EngineService engine, RuntimeSceneTarget target, CancellationToken cancellationToken)
     {
-        var observed = await engine.WorldCommands.ObserveBackgroundAsync(Guid.NewGuid(), target, cancellationToken).ConfigureAwait(true);
+        var observed = await engine.WorldCommands.ObserveEnvironmentAsync(Guid.NewGuid(), target, cancellationToken).ConfigureAwait(true);
         _ = observed.Outcome.Succeeded.Should().BeTrue();
         _ = observed.State.Should().NotBeNull();
-        _ = observed.State!.Exists.Should().BeTrue();
+        _ = observed.State!.BackgroundExists.Should().BeTrue();
         return observed.State;
     }
 }

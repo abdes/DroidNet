@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.World.Inspector.Environment.BackdropSectionView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:fields="using:Oxygen.Editor.World.Inspector.Controls"
+    xmlns:seg="using:CommunityToolkit.WinUI.Controls"
+    xmlns:ui="using:CommunityToolkit.WinUI">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Inspector/SceneInspectorStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <editorcontrols:PropertiesExpander
+        x:Name="BackdropSection"
+        HorizontalAlignment="Stretch"
+        HorizontalContentAlignment="Stretch"
+        Description="What shows behind the scene: the atmosphere, a cubemap or a solid color."
+        Header="Backdrop"
+        HeaderIcon="{ui:FontIcon Glyph='&#xE790;'}"
+        IsExpanded="True"
+        Tag="Environment">
+        <editorcontrols:PropertiesExpander.Items>
+            <editorcontrols:PropertyCard
+                x:Name="BackdropCard"
+                HorizontalContentAlignment="Stretch"
+                PropertyName="Show">
+                <StackPanel Spacing="4">
+                    <seg:Segmented
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.Name="Backdrop"
+                        IsEnabled="{x:Bind ViewModel.EditOwner.IsInputEnabled, Mode=OneWay}"
+                        SelectedIndex="{x:Bind ViewModel.BackdropIndex, Mode=TwoWay}"
+                        Tag="Backdrop">
+                        <seg:SegmentedItem Content="Atmosphere" />
+                        <seg:SegmentedItem Content="Cubemap" />
+                        <seg:SegmentedItem Content="Solid color" />
+                    </seg:Segmented>
+                    <TextBlock
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="The atmosphere is off: no aerial perspective and no atmospheric tint on the sun."
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind ViewModel.IsAtmosphereOff, Mode=OneWay, Converter={StaticResource SceneExpandedVisibility}}" />
+                    <TextBlock
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        Text="{x:Bind ViewModel.BackdropDiagnostic.Message, Mode=OneWay}"
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind ViewModel.BackdropDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
+                </StackPanel>
+            </editorcontrols:PropertyCard>
+            <StackPanel x:Name="CubemapFields" Spacing="4">
+                <editorcontrols:PropertyCard
+                    x:Name="CubemapCard"
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Cubemap">
+                    <StackPanel Spacing="4">
+                        <Grid ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Button
+                                HorizontalAlignment="Stretch"
+                                Content="{x:Bind ViewModel.CubemapDisplayName, Mode=OneWay}"
+                                IsEnabled="{x:Bind ViewModel.EditOwner.IsInputEnabled, Mode=OneWay}"
+                                Tag="Cubemap"
+                                ToolTipService.ToolTip="Choose the backdrop cubemap">
+                                <Button.Flyout>
+                                    <Flyout x:Name="CubemapFlyout">
+                                        <StackPanel Width="320" Spacing="6">
+                                            <TextBox PlaceholderText="Search cube textures…" Text="{x:Bind ViewModel.Cubemaps.SearchText, Mode=TwoWay}" />
+                                            <TextBlock
+                                                FontSize="12"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Text="Import an image with the Cube shape to list it here."
+                                                TextWrapping="Wrap" />
+                                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.Cubemaps.FilteredRows, Mode=OneWay}">
+                                                <ItemsRepeater.Layout>
+                                                    <StackLayout Spacing="2" />
+                                                </ItemsRepeater.Layout>
+                                                <ItemsRepeater.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Button
+                                                            HorizontalAlignment="Stretch"
+                                                            HorizontalContentAlignment="Left"
+                                                            Click="CubemapItem_Click"
+                                                            IsEnabled="{Binding Item.IsEnabled, Mode=OneWay}"
+                                                            ToolTipService.ToolTip="{Binding Item.DisplayPath, Mode=OneWay}">
+                                                            <StackPanel>
+                                                                <TextBlock Text="{Binding Item.Name, Mode=OneWay}" />
+                                                                <TextBlock
+                                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                    Text="{Binding Item.DisplayPath, Mode=OneWay}"
+                                                                    TextTrimming="CharacterEllipsis" />
+                                                            </StackPanel>
+                                                        </Button>
+                                                    </DataTemplate>
+                                                </ItemsRepeater.ItemTemplate>
+                                            </ItemsRepeater>
+                                        </StackPanel>
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
+                            <Button
+                                Grid.Column="1"
+                                Click="ClearCubemap_Click"
+                                IsEnabled="{x:Bind ViewModel.EditOwner.IsInputEnabled, Mode=OneWay}"
+                                ToolTipService.ToolTip="Clear the backdrop cubemap">
+                                <FontIcon Glyph="&#xE711;" />
+                            </Button>
+                        </Grid>
+                        <TextBlock
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{x:Bind ViewModel.CubemapDiagnostic.Message, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.CubemapDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
+                    </StackPanel>
+                </editorcontrols:PropertyCard>
+                <editorcontrols:InspectorNumberField
+                    x:Name="RotationCard"
+                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                    EditSessionCompleted="NumberEditCompleted"
+                    EditSessionStarted="NumberEditStarted"
+                    ErrorText="{x:Bind ViewModel.RotationDiagnostic.Message, Mode=OneWay}"
+                    FontSize="14"
+                    HasError="{x:Bind ViewModel.RotationDiagnostic.HasError, Mode=OneWay}"
+                    Label="Rotation"
+                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                    NumberValue="{x:Bind ViewModel.RotationDegrees, Mode=TwoWay}"
+                    Qualifier="°"
+                    Tag="SkySphereRotation" />
+            </StackPanel>
+            <StackPanel x:Name="SolidColorFields" Spacing="4">
+                <fields:InspectorRgbField
+                    x:Name="SolidColorCard"
+                    Blue="{x:Bind ViewModel.SolidColorB, Mode=TwoWay}"
+                    ChannelAutomationName="Backdrop color, linear RGB"
+                    ColorPicked="OnRgbColorPicked"
+                    EditOwner="{x:Bind ViewModel.EditOwner, Mode=OneWay}"
+                    EditSessionCompleted="VectorEditCompleted"
+                    EditSessionStarted="VectorEditStarted"
+                    ErrorText="{x:Bind ViewModel.SolidColorDiagnostic.Message, Mode=OneWay}"
+                    FontSize="14"
+                    Green="{x:Bind ViewModel.SolidColorG, Mode=TwoWay}"
+                    HasError="{x:Bind ViewModel.SolidColorDiagnostic.HasError, Mode=OneWay}"
+                    Label="Color"
+                    PickerAutomationName="Pick backdrop color"
+                    Qualifier="Linear RGB"
+                    Red="{x:Bind ViewModel.SolidColorR, Mode=TwoWay}"
+                    Tag="SolidColor" />
+                <editorcontrols:PropertyCard
+                    x:Name="SolidColorLightsSceneCard"
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Light the scene with this color">
+                    <ToggleSwitch
+                        IsEnabled="{x:Bind ViewModel.EditOwner.IsInputEnabled, Mode=OneWay}"
+                        IsOn="{x:Bind ViewModel.SolidColorLightsScene, Mode=TwoWay}"
+                        Tag="SolidColorLightsScene"
+                        ToolTipService.ToolTip="On: the sky light captures the color. Off: the color only paints the view." />
+                </editorcontrols:PropertyCard>
+            </StackPanel>
+            <StackPanel x:Name="ToneFields" Spacing="4">
+                <editorcontrols:InspectorNumberField
+                    x:Name="IntensityCard"
+                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                    EditSessionCompleted="NumberEditCompleted"
+                    EditSessionStarted="NumberEditStarted"
+                    ErrorText="{x:Bind ViewModel.IntensityDiagnostic.Message, Mode=OneWay}"
+                    FontSize="14"
+                    HasError="{x:Bind ViewModel.IntensityDiagnostic.HasError, Mode=OneWay}"
+                    Label="Intensity"
+                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                    NumberValue="{x:Bind ViewModel.IntensityEv, Mode=TwoWay}"
+                    Qualifier="EV"
+                    Tag="SkySphereIntensity"
+                    ToolTipService.ToolTip="Brightness in exposure stops (EV). The radiance is multiplied by 2 to the power EV: EV 0 keeps the authored radiance, each +1 EV doubles it (EV +10 is 1024x) and each -1 EV halves it. The minimum, EV -16, is effectively off." />
+                <fields:InspectorRgbField
+                    x:Name="TintCard"
+                    Blue="{x:Bind ViewModel.TintB, Mode=TwoWay}"
+                    ChannelAutomationName="Backdrop tint, linear RGB"
+                    ColorPicked="OnRgbColorPicked"
+                    EditOwner="{x:Bind ViewModel.EditOwner, Mode=OneWay}"
+                    EditSessionCompleted="VectorEditCompleted"
+                    EditSessionStarted="VectorEditStarted"
+                    ErrorText="{x:Bind ViewModel.TintDiagnostic.Message, Mode=OneWay}"
+                    FontSize="14"
+                    Green="{x:Bind ViewModel.TintG, Mode=TwoWay}"
+                    HasError="{x:Bind ViewModel.TintDiagnostic.HasError, Mode=OneWay}"
+                    Label="Tint"
+                    PickerAutomationName="Pick backdrop tint"
+                    Qualifier="Linear RGB"
+                    Red="{x:Bind ViewModel.TintR, Mode=TwoWay}"
+                    Tag="SkySphereTint" />
+            </StackPanel>
+        </editorcontrols:PropertiesExpander.Items>
+    </editorcontrols:PropertiesExpander>
+</UserControl>

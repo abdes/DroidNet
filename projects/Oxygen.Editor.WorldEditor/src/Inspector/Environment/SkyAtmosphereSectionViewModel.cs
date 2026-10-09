@@ -18,9 +18,6 @@ public sealed partial class SkyAtmosphereSectionViewModel : ObservableObject
     internal SkyAtmosphereSectionViewModel(SceneEnvironmentEditOwner owner) => this.EditOwner = owner;
 
     [ObservableProperty]
-    public partial bool AtmosphereEnabled { get; set; }
-
-    [ObservableProperty]
     public partial bool SunDiskEnabled { get; set; }
 
     [ObservableProperty]
@@ -73,9 +70,6 @@ public sealed partial class SkyAtmosphereSectionViewModel : ObservableObject
 
     /// <summary>Gets authored linear albedo.</summary>
     public Vector3 GroundAlbedoColor => new(this.GroundAlbedoR, this.GroundAlbedoG, this.GroundAlbedoB);
-
-    /// <summary>Gets canonical enablement feedback.</summary>
-    public InspectorFieldDiagnostic AtmosphereEnabledDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.AtmosphereEnabled.Id);
 
     /// <summary>Gets canonical sun-disk feedback.</summary>
     public InspectorFieldDiagnostic SunDiskEnabledDiagnostic => this.Diagnostic(SceneDocumentCommandService.SceneEnvironment.SunDiskEnabled.Id);
@@ -141,11 +135,9 @@ public sealed partial class SkyAtmosphereSectionViewModel : ObservableObject
     public void SetGroundAlbedoColor(Vector3 color) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.GroundAlbedo, color);
 
     /// <summary>Refreshes display adapters under the parent's model-refresh guard.</summary>
-    /// <param name="enabled">The atmosphere enablement.</param>
     /// <param name="value">The authored atmosphere snapshot.</param>
-    internal void Refresh(bool enabled, SkyAtmosphereEnvironmentData value)
+    internal void Refresh(SkyAtmosphereEnvironmentData value)
     {
-        this.AtmosphereEnabled = enabled;
         this.SunDiskEnabled = value.SunDiskEnabled;
         this.PlanetRadiusKm = value.PlanetRadiusMeters / 1000f;
         this.AtmosphereHeightKm = value.AtmosphereHeightMeters / 1000f;
@@ -165,8 +157,6 @@ public sealed partial class SkyAtmosphereSectionViewModel : ObservableObject
         this.HeightFogContribution = value.HeightFogContribution;
         this.OnPropertyChanged(nameof(this.GroundAlbedoColor));
     }
-
-    partial void OnAtmosphereEnabledChanged(bool value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.AtmosphereEnabled, value);
 
     partial void OnSunDiskEnabledChanged(bool value) => this.EditOwner.Apply(SceneDocumentCommandService.SceneEnvironment.SunDiskEnabled, value);
 

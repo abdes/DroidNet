@@ -18,7 +18,6 @@ internal static class NativeEnvironmentSupport
 
     internal static FrameworkElement? FindEnvironmentControl(EnvironmentView view, EnvironmentViewModel model, EnvironmentFieldCase field) => field.Field switch
     {
-        "AtmosphereEnabled" => FindEnvironmentToggle(view, "Sky Atmosphere"),
         "ExposureEnabled" => FindEnvironmentToggle(view, "Exposure"),
         "SunDiskEnabled" => view.FindDescendant<ToggleSwitch>(element => Equals(element.Tag, "SunDiskEnabled")),
         "ExposureMode" => view.FindDescendant<ComboBox>(element => ReferenceEquals(element.ItemsSource, model.Exposure.ExposureModes)),

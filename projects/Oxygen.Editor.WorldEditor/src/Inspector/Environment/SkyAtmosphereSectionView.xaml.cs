@@ -37,7 +37,6 @@ public sealed partial class SkyAtmosphereSectionView
         registry.Disclosures.Add("PlanetGround", this.PlanetGroundDisclosure);
         registry.Disclosures.Add("Scattering", this.ScatteringDisclosure);
         registry.Disclosures.Add("AerialPerspective", this.AerialPerspectiveDisclosure);
-        registry.Field("AtmosphereEnabled", this.AtmosphereEnabledCard);
         registry.Field("SunDiskEnabled", this.SunDiskEnabledCard);
         registry.Field("SkyLuminance", this.SkyLuminanceCard);
         registry.Field("PlanetRadiusKm", this.PlanetRadiusKmCard);

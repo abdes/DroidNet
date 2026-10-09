@@ -315,6 +315,116 @@
         }
       }
     },
+    "sky_sphere_environment": {
+      "properties": {
+        "cubemap_ref": {
+          "x-editor-label": "Cubemap",
+          "x-editor-group": "Backdrop",
+          "x-editor-renderer": "asset-picker"
+        },
+        "intensity": {
+          "x-editor-label": "Intensity",
+          "x-editor-group": "Backdrop",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01,
+          "x-editor-unit": "EV",
+          "x-editor-tooltip": "Brightness in exposure stops (EV). The radiance is multiplied by 2 to the power EV: EV 0 keeps the authored radiance, each +1 EV doubles it (EV +10 is 1024x) and each -1 EV halves it. The minimum, EV -16, is effectively off."
+        },
+        "rotation_radians": {
+          "x-editor-label": "Rotation",
+          "x-editor-group": "Backdrop",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 1,
+          "x-editor-unit": "°"
+        },
+        "tint_rgb": {
+          "x-editor-label": "Tint",
+          "x-editor-group": "Backdrop",
+          "x-editor-renderer": "color-rgb"
+        }
+      }
+    },
+    "sky_light_environment": {
+      "properties": {
+        "enabled": {
+          "x-editor-label": "Enabled",
+          "x-editor-group": "Sky Light",
+          "x-editor-renderer": "toggle"
+        },
+        "source": {
+          "x-editor-label": "Source",
+          "x-editor-group": "Sky Light",
+          "x-editor-renderer": "segmented"
+        },
+        "cubemap_ref": {
+          "x-editor-label": "Cubemap",
+          "x-editor-group": "Sky Light",
+          "x-editor-renderer": "asset-picker"
+        },
+        "source_cubemap_angle_radians": {
+          "x-editor-label": "Rotation",
+          "x-editor-group": "Sky Light",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 1,
+          "x-editor-unit": "°"
+        },
+        "intensity": {
+          "x-editor-label": "Intensity",
+          "x-editor-group": "Sky Light",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01,
+          "x-editor-unit": "EV",
+          "x-editor-tooltip": "Brightness in exposure stops (EV). The radiance is multiplied by 2 to the power EV: EV 0 keeps the authored radiance, each +1 EV doubles it (EV +10 is 1024x) and each -1 EV halves it. The minimum, EV -16, is effectively off."
+        },
+        "tint_rgb": {
+          "x-editor-label": "Tint",
+          "x-editor-group": "Sky Light",
+          "x-editor-renderer": "color-rgb"
+        },
+        "diffuse_intensity": {
+          "x-editor-label": "Diffuse",
+          "x-editor-group": "Sky Light",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01,
+          "x-editor-unit": "×"
+        },
+        "specular_intensity": {
+          "x-editor-label": "Specular",
+          "x-editor-group": "Sky Light",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01,
+          "x-editor-unit": "×"
+        },
+        "lower_hemisphere_is_solid_color": {
+          "x-editor-label": "Solid Color",
+          "x-editor-group": "Sky Light",
+          "x-editor-renderer": "toggle"
+        },
+        "lower_hemisphere_color": {
+          "x-editor-label": "Color",
+          "x-editor-group": "Sky Light",
+          "x-editor-renderer": "color-rgb"
+        },
+        "lower_hemisphere_blend_alpha": {
+          "x-editor-label": "Blend",
+          "x-editor-group": "Sky Light",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01
+        },
+        "volumetric_scattering_intensity": {
+          "x-editor-label": "Volumetric Scattering",
+          "x-editor-group": "Sky Light",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01,
+          "x-editor-unit": "×"
+        },
+        "affect_reflections": {
+          "x-editor-label": "Affect Reflections",
+          "x-editor-group": "Sky Light",
+          "x-editor-renderer": "toggle"
+        }
+      }
+    },
     "renderable": {
       "properties": {
         "geometry_ref": {
@@ -669,11 +779,28 @@
           "x-editor-order": 0,
           "x-editor-renderer": "toggle"
         },
-        "background_color": {
-          "x-editor-label": "Background",
+        "backdrop": {
+          "x-editor-label": "Backdrop",
           "x-editor-group": "Environment",
           "x-editor-order": 20,
-          "x-editor-renderer": "color-rgb"
+          "x-editor-renderer": "section",
+          "properties": {
+            "mode": {
+              "x-editor-label": "Show",
+              "x-editor-group": "Backdrop",
+              "x-editor-renderer": "segmented"
+            },
+            "solid_color_lights_scene": {
+              "x-editor-label": "Light the scene with this color",
+              "x-editor-group": "Backdrop",
+              "x-editor-renderer": "toggle"
+            },
+            "solid_color": {
+              "x-editor-label": "Color",
+              "x-editor-group": "Backdrop",
+              "x-editor-renderer": "color-rgb"
+            }
+          }
         },
         "post_process": {
           "x-editor-label": "Post Process",

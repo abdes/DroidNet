@@ -7,6 +7,7 @@
 #pragma once
 #pragma managed(push, off)
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -45,6 +46,27 @@ enum class MaterialSlotAssignmentIntent : std::uint8_t {
   kRetainedAssignment = 1,
 };
 
+//! Texture an environment edit binds. Each slot loads independently; the edit
+//! applies once every slot has settled.
+enum class EnvironmentTextureSlot : std::uint8_t {
+  kMeteringMask = 0,
+  kSkySphereCubemap = 1,
+  kSkyLightCubemap = 2,
+};
+inline constexpr std::size_t kEnvironmentTextureSlotCount = 3U;
+
+//! Authored source of one environment texture; no locator clears the slot.
+struct EnvironmentTextureSource final {
+  std::optional<content::TextureResourceLocator> locator;
+  //! Project mount whose current cooked root replaces the locator's root.
+  std::optional<std::wstring> project_mount;
+};
+
+using EnvironmentTextureSources
+  = std::array<EnvironmentTextureSource, kEnvironmentTextureSlotCount>;
+using EnvironmentTextureKeys
+  = std::array<content::ResourceKey, kEnvironmentTextureSlotCount>;
+
 //! Native target captured from the currently observed authored geometry.
 struct MaterialSlotTarget final {
   std::string geometry_uri;
@@ -69,8 +91,9 @@ public:
   using Texture = std::shared_ptr<const data::TextureResource>;
   using TextureCompletion = std::function<void(content::ResourceKey, Texture, std::string)>;
   using TextureLoader = std::function<void(const content::TextureResourceLocator&, TextureCompletion)>;
-  using TextureApply = std::function<void(scene::Scene&, content::ResourceKey)>;
-  struct ExposureMaskStatus {
+  using EnvironmentApply
+    = std::function<void(scene::Scene&, const EnvironmentTextureKeys&)>;
+  struct EnvironmentTextureStatus {
     content::ResourceKey accepted {};
     bool pending { false };
     std::string error;
@@ -102,12 +125,14 @@ public:
                    SuccessCallback on_success = {});
   void Detach(scene::NodeHandle node);
 
-  //! Supersede pending mask work and apply the complete revision when ready.
-  void SetExposureMask(scene::Scene& scene,
-    std::optional<content::TextureResourceLocator> locator, TextureApply apply,
-    FailureCallback on_failure = {}, SuccessCallback on_success = {},
-    std::optional<std::wstring> project_mount = {});
-  [[nodiscard]] auto InspectExposureMask() const -> ExposureMaskStatus;
+  //! Supersede pending environment texture work and apply the complete
+  //! revision, with every slot's key, once all slots have loaded. A failed slot
+  //! rejects the revision and retains the previously applied one.
+  void SetEnvironmentTextures(scene::Scene& scene,
+    EnvironmentTextureSources sources, EnvironmentApply apply,
+    FailureCallback on_failure = {}, SuccessCallback on_success = {});
+  [[nodiscard]] auto InspectEnvironmentTexture(
+    EnvironmentTextureSlot slot) const -> EnvironmentTextureStatus;
 
   //! Accept the same immutable bindings as the native mount owners.
   void SetCookedRoots(

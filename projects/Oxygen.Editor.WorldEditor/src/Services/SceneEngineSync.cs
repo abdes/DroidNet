@@ -719,6 +719,8 @@ public sealed partial class SceneEngineSync(
     {
         var sky = environment.SkyAtmosphere ?? new SkyAtmosphereEnvironmentData();
         var post = environment.PostProcess ?? new PostProcessEnvironmentData();
+        var skySphere = environment.SkySphere ?? new SkySphereEnvironmentData();
+        var skyLight = environment.SkyLight ?? new SkyLightEnvironmentData();
         return new RuntimeSetEnvironment(
                 environment.AtmosphereEnabled,
                 sky.SunDiskEnabled,
@@ -753,7 +755,7 @@ public sealed partial class SceneEngineSync(
                 post.AutoExposureBlackInfluence,
                 post.AutoExposureTransitionDistanceEv,
                 post.AutoExposureCompensationCurve.Select(static key => new RuntimeExposureCompensationKey(key.MeteredEv, key.CompensationEv)).ToImmutableArray(),
-                this.CreateExposureMaskReference(scene, post.AutoExposureMeteringMask),
+                this.CreateTextureReference(scene, post.AutoExposureMeteringMask, "exposure mask"),
                 post.BloomIntensity,
                 post.BloomThreshold,
                 post.Saturation,
@@ -762,27 +764,35 @@ public sealed partial class SceneEngineSync(
                 post.DisplayGamma)
         {
             Fog = environment.Fog ?? new(),
+            SkySphere = skySphere,
+
+            // Only a cubemap the renderer uses is loaded, so a stale reference
+            // behind another source or a disabled system cannot reject the edit.
+            SkySphereCubemap = this.CreateTextureReference(scene, skySphere.ActiveCubemap, "sky sphere cubemap"),
+            SkyLight = skyLight,
+            SkyLightCubemap = this.CreateTextureReference(scene, skyLight.ActiveCubemap, "sky light cubemap"),
+            Background = environment.Background ?? new(),
         };
     }
 
-    private RuntimeTextureReference? CreateExposureMaskReference(Scene scene, Uri? mask)
+    private RuntimeTextureReference? CreateTextureReference(Scene scene, Uri? texture, string label)
     {
-        if (mask is null)
+        if (texture is null)
         {
             return null;
         }
 
-        var path = ContentPipeline.ContentPipelinePaths.ToNativeDescriptorPath(mask, ".otex");
+        var path = ContentPipeline.ContentPipelinePaths.ToNativeDescriptorPath(texture, ".otex");
         var separator = path.IndexOf('/', 1);
         if (separator <= 1 || scene.Project.ProjectInfo.Location is not { } projectRoot
             || !Path.IsPathFullyQualified(projectRoot))
         {
-            throw new InvalidOperationException("An exposure mask requires a saved project and a source mount.");
+            throw new InvalidOperationException($"The {label} requires a saved project and a source mount.");
         }
 
         var cookedRoot = this.engineService.ContentStatus.Bindings.SingleOrDefault(root => string.Equals(root.ProjectMount, path[1..separator], StringComparison.OrdinalIgnoreCase))?.Path
-            ?? throw new InvalidOperationException("The exposure mask has no accepted cooked generation. Cook its content before previewing it.");
-        return new(mask, cookedRoot, path[(separator + 1)..]) { ProjectMount = path[1..separator] };
+            ?? throw new InvalidOperationException($"The {label} has no accepted cooked generation. Cook its content before previewing it.");
+        return new(texture, cookedRoot, path[(separator + 1)..]) { ProjectMount = path[1..separator] };
     }
 
     private async Task<bool> SyncSceneCoreAsync(Scene scene, bool skipIfCurrent, CancellationToken cancellationToken)
@@ -863,12 +873,11 @@ public sealed partial class SceneEngineSync(
                 cancellationToken,
                 out var readinessOutcome))
         {
-            return EnvironmentResult(readinessOutcome, readinessOutcome);
+            return EnvironmentResult(readinessOutcome);
         }
 
         var environmentOutcome = await this.SyncEnvironmentSystemsAsync(scene, environment, cancellationToken, dispatchOverride).ConfigureAwait(false);
-        var backgroundOutcome = await this.SyncBackgroundAsync(scene, environment, cancellationToken, dispatchOverride).ConfigureAwait(false);
-        return EnvironmentResult(environmentOutcome, backgroundOutcome);
+        return EnvironmentResult(environmentOutcome);
     }
 
     private async Task<bool> BuildSceneInEngineAsync(
@@ -926,7 +935,6 @@ public sealed partial class SceneEngineSync(
         }
 
         world.Execute(this.BuildEnvironmentCommand(scene, scene.Environment));
-        world.Execute(new RuntimeSetBackgroundColor(scene.Environment.BackgroundColor));
         lock (this.documentGate)
         {
             if (!this.IsDocumentCurrent(projection.Lifetime) || this.activeWorld?.Target != target)

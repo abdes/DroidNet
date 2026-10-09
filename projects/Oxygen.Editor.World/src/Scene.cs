@@ -170,6 +170,13 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
             SkyAtmosphere = environment.SkyAtmosphere ?? new(),
             PostProcess = environment.PostProcess ?? new(),
             Fog = environment.Fog ?? new(),
+            SkySphere = environment.SkySphere ?? new(),
+            SkyLight = environment.SkyLight ?? new(),
+            // The former color was only required to be finite; the background is display-only SDR.
+            Background = environment.LegacyBackgroundColor is { } legacy
+                ? new() { Enabled = true, ColorRgb = System.Numerics.Vector3.Clamp(legacy, System.Numerics.Vector3.Zero, System.Numerics.Vector3.One) }
+                : environment.Background ?? new(),
+            LegacyBackgroundColor = null,
         };
     }
 

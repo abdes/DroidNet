@@ -9,6 +9,7 @@
 #include <cstring>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -32,6 +33,8 @@
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyLight.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 
@@ -1155,6 +1158,15 @@ auto MakeMaskTexture() -> Requests::Texture
     descriptor, std::move(bytes));
 }
 
+auto MaskSources(oxygen::content::TextureResourceLocator locator,
+  std::optional<std::wstring> mount = {}) -> EnvironmentTextureSources
+{
+  auto sources = EnvironmentTextureSources {};
+  sources.front() = { .locator = std::move(locator),
+    .project_mount = std::move(mount) };
+  return sources;
+}
+
 void ExposureMaskRequestsAreAtomicAndLatestWins()
 {
   Fixture f;
@@ -1198,7 +1210,10 @@ void ExposureMaskRequestsAreAtomicAndLatestWins()
   f.Drain();
   Require(exposure().manual_ev == 8.0F && exposure().metering_mask.get() == 41U,
     "failed mask replaced the previously accepted revision");
-  Require(failures == 1 && !f.requests->InspectExposureMask().error.empty(),
+  Require(failures == 1
+      && !f.requests
+            ->InspectEnvironmentTexture(EnvironmentTextureSlot::kMeteringMask)
+            .error.empty(),
     "current mask failure was not observable");
   f.requests->Refresh(*f.scene);
   Require(f.requests->IsRefreshPending(), "mask refresh was not tracked");
@@ -1228,8 +1243,8 @@ void ExposureMaskRequestsRespectPauseAndSceneLifetime()
     = oxygen::content::TextureResourceLocator { .cooked_root = "C:/Cooked",
         .descriptor_relative_path = "Mask.otex" };
   f.requests->SuspendLoads();
-  f.requests->SetExposureMask(
-    *f.scene, locator, [&](auto&, auto) { ++applied; });
+  f.requests->SetEnvironmentTextures(
+    *f.scene, MaskSources(locator), [&](auto&, const auto&) { ++applied; });
   Require(f.texture_loads.empty(), "suspended mask request started a load");
   f.requests->ResumeLoads(*f.scene);
   Require(
@@ -1255,12 +1270,13 @@ void ExposureMaskFollowsOwnedGenerationsAndRollback()
   const auto texture = MakeMaskTexture();
   oxygen::content::ResourceKey applied {};
   f.requests->SetCookedRoots(first);
-  f.requests->SetExposureMask(
-    *f.scene,
-    oxygen::content::TextureResourceLocator {
-      .cooked_root = first->front().path,
-      .descriptor_relative_path = "Mask.otex" },
-    [&](auto&, auto key) { applied = key; }, {}, {}, L"CONTENT");
+  f.requests->SetEnvironmentTextures(*f.scene,
+    MaskSources(
+      oxygen::content::TextureResourceLocator {
+        .cooked_root = first->front().path,
+        .descriptor_relative_path = "Mask.otex" },
+      L"CONTENT"),
+    [&](auto&, const auto& keys) { applied = keys.front(); });
   f.texture_loads.back()(oxygen::content::ResourceKey { 41U }, texture, {});
   f.requests->Drain(*f.scene);
   Require(applied == oxygen::content::ResourceKey { 41U },
@@ -1293,10 +1309,10 @@ void ExposureMaskFollowsOwnedGenerationsAndRollback()
   Require(applied == oxygen::content::ResourceKey { 42U },
     "replacement mask did not apply");
 
-  f.requests->SetExposureMask(*f.scene,
-    oxygen::content::TextureResourceLocator {
-      .cooked_root = "C:/External", .descriptor_relative_path = "Mask.otex" },
-    [&](auto&, auto key) { applied = key; });
+  f.requests->SetEnvironmentTextures(*f.scene,
+    MaskSources(oxygen::content::TextureResourceLocator {
+      .cooked_root = "C:/External", .descriptor_relative_path = "Mask.otex" }),
+    [&](auto&, const auto& keys) { applied = keys.front(); });
   f.requests->SetCookedRoots(first);
   f.requests->Refresh(*f.scene);
   Require(f.texture_locators.back().cooked_root
@@ -1304,10 +1320,82 @@ void ExposureMaskFollowsOwnedGenerationsAndRollback()
     "project replacement redirected an explicit external locator");
 }
 
+// Both sky cubemaps load before the edit applies; a failed one rejects it. An
+// unchanged cubemap keeps its accepted texture; a refresh reloads it.
+void SkyCubemapsApplyTogetherOrNotAtAll()
+{
+  Fixture f;
+  const auto texture = MakeMaskTexture();
+  auto failures = 0;
+  const auto request = [&](float intensity,
+                         const char* light_descriptor = "Light.otex") {
+    auto sky = SkyParams {};
+    sky.sky_sphere.enabled = true;
+    sky.sky_sphere.intensity = intensity;
+    sky.sky_sphere.cubemap.locator = oxygen::content::TextureResourceLocator {
+      .cooked_root = "C:/Cooked", .descriptor_relative_path = "Backdrop.otex" };
+    sky.sky_light.source = 1;
+    sky.sky_light.cubemap.locator = oxygen::content::TextureResourceLocator {
+      .cooked_root = "C:/Cooked",
+      .descriptor_relative_path = light_descriptor };
+    auto command = SetEnvironmentCommand(
+      SkyAtmosphereParams {}, PostProcessParams {}, FogParams {}, sky);
+    command.SetFailureCallback(
+      [&](uint64_t, const std::string&) { ++failures; });
+    f.Execute(command);
+  };
+  const auto sphere = [&] {
+    return f.scene->GetEnvironment()
+      ->TryGetSystem<oxygen::scene::environment::SkySphere>();
+  };
+  const auto light = [&] {
+    return f.scene->GetEnvironment()
+      ->TryGetSystem<oxygen::scene::environment::SkyLight>();
+  };
+  request(2.0F);
+  Require(f.texture_loads.size() == 2U, "sky cubemaps did not both load");
+  f.texture_loads.at(0)(oxygen::content::ResourceKey { 51U }, texture, {});
+  f.Drain();
+  Require(!f.scene->GetEnvironment() || !sphere(),
+    "a partially loaded sky applied before its second cubemap");
+  f.texture_loads.at(1)(oxygen::content::ResourceKey { 52U }, texture, {});
+  f.Drain();
+  Require(sphere() && sphere()->GetIntensity() == 2.0F
+      && sphere()->GetCubemapResource().get() == 51U && light()
+      && light()->GetCubemapResource().get() == 52U,
+    "the sky did not apply both cubemaps together");
+  request(2.5F);
+  f.Drain();
+  Require(f.texture_loads.size() == 2U && sphere()->GetIntensity() == 2.5F
+      && sphere()->GetCubemapResource().get() == 51U
+      && light()->GetCubemapResource().get() == 52U,
+    "an edit with unchanged cubemaps reloaded them or did not apply");
+  request(3.0F, "OtherLight.otex");
+  Require(f.texture_loads.size() == 3U,
+    "only the changed sky light cubemap should load");
+  f.texture_loads.at(2)({}, {}, "missing cube texture");
+  f.Drain();
+  Require(failures == 1 && sphere()->GetIntensity() == 2.5F
+      && sphere()->GetCubemapResource().get() == 51U
+      && light()->GetCubemapResource().get() == 52U,
+    "a failed sky cubemap replaced the previously applied sky");
+  Require(!f.requests
+             ->InspectEnvironmentTexture(
+               EnvironmentTextureSlot::kSkyLightCubemap)
+             .error.empty(),
+    "the failed sky light cubemap was not observable");
+  f.requests->Refresh(*f.scene);
+  Require(f.texture_loads.size() == 5U,
+    "a refresh did not reload both sky cubemaps");
+}
+
 auto RunScenario(int scenario) -> const char*
 {
   try {
     switch (scenario) {
+    case 42:
+      SkyCubemapsApplyTogetherOrNotAtAll();
+      break;
     case 41:
       ExposureMaskFollowsOwnedGenerationsAndRollback();
       break;
@@ -1496,6 +1584,10 @@ public:
 
   [TestMethod] void ExposureMaskTracksProjectGenerationsAndRollback() {
     Check(41);
+  }
+
+  [TestMethod] void SkyCubemapsApplyTogetherOrNotAtAll() {
+    Check(42);
   }
 
     [TestMethod] void LoadedMaterialRecoversAfterGeometryFailure()

@@ -187,6 +187,49 @@ public class SceneTests
     }
 
     [TestMethod]
+    public async Task Deserialize_SceneWithLegacyBackgroundColor_MigratesToEnabledBackground()
+    {
+        const string json = """
+            {
+              "Id": "11111111-1111-1111-1111-111111111111",
+              "Name": "Before Backdrop",
+              "RootNodes": [],
+              "Environment": { "AtmosphereEnabled": false, "BackgroundColor": { "X": 0.1, "Y": 0.2, "Z": 0.3 } }
+            }
+            """;
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        var serializer = new SceneSerializer(this.ExampleProject);
+
+        var scene = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
+
+        _ = scene.Environment.Background.Should().Be(new BackgroundEnvironmentData { Enabled = true, ColorRgb = new Vector3(0.1f, 0.2f, 0.3f) });
+        _ = scene.Environment.LegacyBackgroundColor.Should().BeNull();
+        _ = scene.Environment.SkySphere.Should().Be(new SkySphereEnvironmentData());
+        _ = scene.Environment.SkyLight.Should().Be(new SkyLightEnvironmentData());
+        using var saved = new MemoryStream();
+        await serializer.SerializeAsync(saved, scene).ConfigureAwait(false);
+        _ = Encoding.UTF8.GetString(saved.ToArray()).Should().NotContain("BackgroundColor");
+    }
+
+    [TestMethod]
+    public async Task Deserialize_LegacyBackgroundColorOutsideTheSdrRange_ClampsIt()
+    {
+        const string json = """
+            {
+              "Id": "22222222-2222-2222-2222-222222222222",
+              "Name": "Bright Background",
+              "RootNodes": [],
+              "Environment": { "AtmosphereEnabled": false, "BackgroundColor": { "X": 2, "Y": -0.5, "Z": 0.25 } }
+            }
+            """;
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+
+        var scene = await new SceneSerializer(this.ExampleProject).DeserializeAsync(stream).ConfigureAwait(false);
+
+        _ = scene.Environment.Background.ColorRgb.Should().Be(new Vector3(1f, 0f, 0.25f));
+    }
+
+    [TestMethod]
     public async Task Fog_RoundTripsThroughSaveAndLoad()
     {
         var fog = new FogEnvironmentData
@@ -311,8 +354,33 @@ public class SceneTests
         var expected = new SceneEnvironmentData
         {
             AtmosphereEnabled = false,
-
-            BackgroundColor = new Vector3(0.2f, 0.3f, 0.4f),
+            Background = new BackgroundEnvironmentData { Enabled = true, ColorRgb = new Vector3(0.2f, 0.3f, 0.4f) },
+            SkySphere = new SkySphereEnvironmentData
+            {
+                Enabled = true,
+                Source = SkySphereSource.SolidColor,
+                Cubemap = new Uri("asset:///Content/Sky.otex.json"),
+                SolidColorRgb = new Vector3(2.0f, 3.0f, 4.0f),
+                Intensity = 256.0f,
+                RotationRadians = 1.5f,
+                TintRgb = new Vector3(0.9f, 0.8f, 0.7f),
+            },
+            SkyLight = new SkyLightEnvironmentData
+            {
+                Enabled = false,
+                Source = SkyLightSource.SpecifiedCubemap,
+                Cubemap = new Uri("asset:///Content/Light.otex.json"),
+                Intensity = 2.0f,
+                TintRgb = new Vector3(0.5f, 0.6f, 0.7f),
+                DiffuseIntensity = 0.25f,
+                SpecularIntensity = 0.75f,
+                CubemapAngleRadians = -0.5f,
+                LowerHemisphereColor = new Vector3(0.1f, 0.2f, 0.3f),
+                LowerHemisphereIsSolidColor = false,
+                LowerHemisphereBlendAlpha = 0.4f,
+                VolumetricScatteringIntensity = 3.0f,
+                AffectReflections = false,
+            },
             SkyAtmosphere = new SkyAtmosphereEnvironmentData
             {
                 PlanetRadiusMeters = 6_400_000.0f,

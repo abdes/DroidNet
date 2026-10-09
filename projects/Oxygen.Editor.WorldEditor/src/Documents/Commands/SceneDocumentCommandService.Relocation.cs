@@ -104,11 +104,7 @@ public sealed partial class SceneDocumentCommandService
     private SceneEnvironmentData RedirectCaptured(SceneDocumentCommandContext context, SceneEnvironmentData environment)
     {
         var resolved = SceneReferenceRetargeting.Retarget(environment, this.RedirectOrNull) ?? environment;
-        if (resolved.PostProcess.AutoExposureMeteringMask is { } mask)
-        {
-            this.WarnIfDeleted(context, [mask]);
-        }
-
+        this.WarnIfDeleted(context, SceneReferenceRetargeting.ReferencedUris(resolved));
         return resolved;
     }
 

@@ -5,6 +5,7 @@
 using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.World;
+using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core;
 
@@ -12,7 +13,7 @@ namespace Oxygen.Editor.WorldEditor.TestSupport;
 
 internal static class SceneTestData
 {
-    internal static Vector3 ReadSceneColor(SceneAuthoringFixture fixture, string kind) => string.Equals(kind, "Environment", StringComparison.Ordinal) ? fixture.Scene.Environment.BackgroundColor : fixture.Node.Components.OfType<DirectionalLightComponent>().Single().Color;
+    internal static Vector3 ReadSceneColor(SceneAuthoringFixture fixture, string kind) => string.Equals(kind, "Environment", StringComparison.Ordinal) ? SceneSkyFields.SolidColorOf(fixture.Scene.Environment) : fixture.Node.Components.OfType<DirectionalLightComponent>().Single().Color;
 
     internal static void AssertColorClose(Vector3 actual, Vector3 expected)
     {

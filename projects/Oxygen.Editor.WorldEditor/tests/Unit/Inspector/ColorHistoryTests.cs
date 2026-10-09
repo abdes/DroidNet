@@ -34,21 +34,21 @@ public sealed partial class ColorHistoryTests
         using var model = CreateColorModel(kind, fixture);
         if (model is EnvironmentViewModel environment)
         {
-            environment.Background.SetBackgroundColor(Vector3.One);
+            environment.Backdrop.SetSolidColor(Vector3.One);
             await environment.PendingEdits.ConfigureAwait(true);
         }
 
         fixture.Context.History.Clear();
         var before = ReadSceneColor(fixture, kind);
         var owner = (IInspectorEditSessionOwner)model;
-        owner.BeginEditSession(model is EnvironmentViewModel ? "BackgroundColor" : "Color", NumberBoxEditInteractionKind.PointerDrag);
+        owner.BeginEditSession(model is EnvironmentViewModel ? "SolidColor" : "Color", NumberBoxEditInteractionKind.PointerDrag);
         var preview = default(Vector3);
         for (var sample = 1; sample <= samples; sample++)
         {
             preview = new Vector3(0.15f * sample, 0.25f, 0.5f);
             if (model is EnvironmentViewModel background)
             {
-                background.Background.SetBackgroundColor(preview);
+                background.Backdrop.SetSolidColor(preview);
             }
             else
             {

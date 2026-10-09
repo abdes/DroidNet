@@ -23,7 +23,6 @@
 #include <Commands/NodePropertyApplier.h>
 #include <Commands/ObserveEnvironmentCommand.h>
 #include <Commands/SetEnvironmentCommand.h>
-#include <Commands/SetBackgroundColorCommand.h>
 #include <EditorModule/EditorCommand.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Core/Types/PostProcess.h>
@@ -571,60 +570,173 @@ struct BackgroundSnapshot {
 };
 
 // Exercises background values, independent atmosphere toggling and rejection
-// through the same mutation commands used by the managed editor.
+// through the same environment command used by the managed editor.
 void RunBackgroundContract(BackgroundSnapshot& result) {
   CaptureNative(result, [&result] {
     auto scene = CreateTestScene("Background");
     auto context = BuildContext(*scene);
     SkyAtmosphereParams atmosphere;
     atmosphere.enabled = false;
-    SetEnvironmentCommand environment(atmosphere, PostProcessParams {});
-    environment.Execute(context);
-    auto& sphere = scene->GetEnvironment()
-      ->AddSystem<oxygen::scene::environment::SkySphere>();
-    sphere.SetSource(oxygen::scene::environment::SkySphereSource::kSolidColor);
-    sphere.SetSolidColorRgb({ 0.8F, 0.1F, 0.2F });
-    sphere.SetIntensity(64.0F);
-    SetBackgroundColorCommand color({ 0.25F, 0.5F, 0.75F });
-    color.Execute(context);
-    BackgroundObservation observed;
-    ObserveBackgroundCommand observe([&observed](BackgroundObservation value) {
-      observed = value;
-    });
+    SkyParams sky;
+    sky.sky_sphere.enabled = true;
+    sky.sky_sphere.source = 1;
+    sky.sky_sphere.solid_color_rgb = { 0.8F, 0.1F, 0.2F };
+    sky.sky_sphere.intensity = 64.0F;
+    sky.background.enabled = true;
+    sky.background.color_rgb = { 0.25F, 0.5F, 0.75F };
+    SetEnvironmentCommand(atmosphere, PostProcessParams {}, FogParams {}, sky)
+      .Execute(context);
+    EnvironmentObservation observed;
+    ObserveEnvironmentCommand observe(
+      [&observed](EnvironmentObservation value) { observed = std::move(value); });
     observe.Execute(context);
-    result.exists = observed.exists;
-    result.red = observed.color.x;
-    result.green = observed.color.y;
-    result.blue = observed.color.z;
-    result.atmosphere_disabled = !observed.atmosphere_enabled;
+    const auto& background = observed.sky.background;
+    result.exists = observed.background_exists && background.enabled;
+    result.red = background.color_rgb.x;
+    result.green = background.color_rgb.y;
+    result.blue = background.color_rgb.z;
+    result.atmosphere_disabled
+      = !observed.atmosphere_exists || !observed.atmosphere.enabled;
     oxygen::vortex::RenderContext render_context;
     render_context.scene = oxygen::observer_ptr { scene.get() };
     const auto selected = oxygen::vortex::environment::ResolveSceneBackground(render_context);
-    result.presentation_source = selected.has_value() && *selected == observed.color;
-    result.hdr_sky_preserved = sphere.GetSolidColorRgb() == oxygen::Vec3(0.8F, 0.1F, 0.2F)
-      && sphere.GetIntensity() == 64.0F;
+    result.presentation_source = selected.has_value() && *selected == background.color_rgb;
+    result.hdr_sky_preserved = observed.sky_sphere_exists
+      && observed.sky.sky_sphere.solid_color_rgb == oxygen::Vec3(0.8F, 0.1F, 0.2F)
+      && observed.sky.sky_sphere.intensity == 64.0F;
     render_context.current_view.is_reflection_capture = true;
     result.excluded_from_reflections = !oxygen::vortex::environment::ResolveSceneBackground(render_context).has_value();
     render_context.current_view.is_reflection_capture = false;
     atmosphere.enabled = true;
-    SetEnvironmentCommand reenable(atmosphere, PostProcessParams {});
-    reenable.Execute(context);
+    SetEnvironmentCommand(atmosphere, PostProcessParams {}, FogParams {}, sky)
+      .Execute(context);
     render_context.current_view.with_atmosphere = true;
     result.atmosphere_takes_precedence = !oxygen::vortex::environment::ResolveSceneBackground(render_context).has_value();
     observe.Execute(context);
-    result.preserved_after_atmosphere_cycle = observed.atmosphere_enabled
-      && observed.color == oxygen::Vec3(0.25F, 0.5F, 0.75F);
+    result.preserved_after_atmosphere_cycle = observed.atmosphere.enabled
+      && observed.sky.background.color_rgb == oxygen::Vec3(0.25F, 0.5F, 0.75F);
     try {
-      SetBackgroundColorCommand invalid(
-        { std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F });
-      invalid.Execute(context);
+      auto invalid = sky;
+      invalid.background.color_rgb
+        = { std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F };
+      SetEnvironmentCommand(atmosphere, PostProcessParams {}, FogParams {}, invalid)
+        .Execute(context);
     } catch (const std::invalid_argument&) {
       result.invalid_rejected = true;
     }
     observe.Execute(context);
     result.invalid_rejected = result.invalid_rejected
-      && observed.color == oxygen::Vec3(0.25F, 0.5F, 0.75F);
+      && observed.sky.background.color_rgb == oxygen::Vec3(0.25F, 0.5F, 0.75F);
   });
+}
+
+// Sky Sphere and Sky Light reach the scene and its observation; invalid values
+// and cubemaps without asset request state are rejected without a write.
+auto RunSkyContracts() -> NativeStatus
+{
+  try {
+    auto scene = CreateTestScene("Sky edits");
+    auto context = BuildContext(*scene);
+    SkyAtmosphereParams atmosphere {};
+    atmosphere.enabled = false;
+    SkyParams sky {};
+    sky.sky_sphere.enabled = true;
+    sky.sky_sphere.source = 1;
+    sky.sky_sphere.solid_color_rgb = { 0.1F, 0.2F, 0.3F };
+    sky.sky_sphere.intensity = 2.5F;
+    sky.sky_sphere.rotation_radians = 0.75F;
+    sky.sky_sphere.tint_rgb = { 0.9F, 0.8F, 0.7F };
+    sky.sky_light.enabled = true;
+    sky.sky_light.source = 0;
+    sky.sky_light.intensity = 1.5F;
+    sky.sky_light.tint_rgb = { 0.6F, 0.7F, 0.8F };
+    sky.sky_light.diffuse_intensity = 0.5F;
+    sky.sky_light.specular_intensity = 0.25F;
+    sky.sky_light.cubemap_angle_radians = 1.25F;
+    sky.sky_light.lower_hemisphere_color = { 0.05F, 0.04F, 0.03F };
+    sky.sky_light.lower_hemisphere_is_solid_color = false;
+    sky.sky_light.lower_hemisphere_blend_alpha = 0.4F;
+    sky.sky_light.volumetric_scattering_intensity = 2.0F;
+    sky.sky_light.affect_reflections = false;
+    SetEnvironmentCommand(atmosphere, PostProcessParams {}, FogParams {}, sky)
+      .Execute(context);
+
+    namespace env = oxygen::scene::environment;
+    const auto sphere = scene->GetEnvironment()->TryGetSystem<env::SkySphere>();
+    const auto light = scene->GetEnvironment()->TryGetSystem<env::SkyLight>();
+    if (!sphere || !sphere->IsEnabled()
+      || sphere->GetSource() != env::SkySphereSource::kSolidColor
+      || sphere->GetSolidColorRgb() != oxygen::Vec3(0.1F, 0.2F, 0.3F)
+      || sphere->GetIntensity() != 2.5F || sphere->GetRotationRadians() != 0.75F
+      || sphere->GetTintRgb() != oxygen::Vec3(0.9F, 0.8F, 0.7F)) {
+      throw std::runtime_error("Authored sky sphere did not reach the scene");
+    }
+    if (!light || !light->IsEnabled()
+      || light->GetSource() != env::SkyLightSource::kCapturedScene
+      || light->GetIntensityMul() != 1.5F
+      || light->GetTintRgb() != oxygen::Vec3(0.6F, 0.7F, 0.8F)
+      || light->GetDiffuseIntensity() != 0.5F
+      || light->GetSpecularIntensity() != 0.25F
+      || light->GetSourceCubemapAngleRadians() != 1.25F
+      || light->GetLowerHemisphereColor() != oxygen::Vec3(0.05F, 0.04F, 0.03F)
+      || light->GetLowerHemisphereIsSolidColor()
+      || light->GetLowerHemisphereBlendAlpha() != 0.4F
+      || light->GetVolumetricScatteringIntensity() != 2.0F
+      || light->GetAffectReflections()) {
+      throw std::runtime_error("Authored sky light did not reach the scene");
+    }
+
+    EnvironmentObservation observed {};
+    ObserveEnvironmentCommand(
+      [&observed](EnvironmentObservation value) { observed = std::move(value); })
+      .Execute(context);
+    if (!observed.sky_sphere_exists || !observed.sky_light_exists
+      || observed.sky.sky_sphere.source != 1
+      || observed.sky.sky_sphere.rotation_radians != 0.75F
+      || observed.sky.sky_light.specular_intensity != 0.25F
+      || observed.sky.sky_light.lower_hemisphere_blend_alpha != 0.4F
+      || observed.sky.sky_light.affect_reflections
+      || observed.sky_sphere_cubemap.key.get() != 0U
+      || observed.sky_light_cubemap.key.get() != 0U) {
+      throw std::runtime_error("Sky observation does not report authored values");
+    }
+
+    const auto expect_rejected = [&](SkyParams candidate, auto exception_tag) {
+      using Exception = decltype(exception_tag);
+      bool rejected = false;
+      try {
+        SetEnvironmentCommand(
+          atmosphere, PostProcessParams {}, FogParams {}, std::move(candidate))
+          .Execute(context);
+      } catch (const Exception&) {
+        rejected = true;
+      }
+      if (!rejected || sphere->GetIntensity() != 2.5F
+        || light->GetSpecularIntensity() != 0.25F) {
+        throw std::runtime_error("Invalid sky edit was not rejected atomically");
+      }
+    };
+    auto invalid_tint = sky;
+    invalid_tint.sky_sphere.tint_rgb.y = std::numeric_limits<float>::quiet_NaN();
+    invalid_tint.sky_sphere.intensity = 9.0F;
+    expect_rejected(invalid_tint, std::invalid_argument("tag"));
+    auto invalid_blend = sky;
+    invalid_blend.sky_light.lower_hemisphere_blend_alpha = 1.5F;
+    invalid_blend.sky_light.specular_intensity = 9.0F;
+    expect_rejected(invalid_blend, std::invalid_argument("tag"));
+    auto invalid_source = sky;
+    invalid_source.sky_light.source = 7;
+    expect_rejected(invalid_source, std::invalid_argument("tag"));
+    auto unrequested = sky;
+    unrequested.sky_sphere.source = 0;
+    unrequested.sky_sphere.intensity = 9.0F;
+    unrequested.sky_sphere.cubemap.locator = oxygen::content::TextureResourceLocator {
+      .cooked_root = "C:/Cooked", .descriptor_relative_path = "Sky.otex" };
+    expect_rejected(unrequested, std::logic_error("tag"));
+    return {};
+  } catch (const std::exception& error) {
+    return NativeFailure(error.what());
+  }
 }
 
 auto RunExposureEditContracts() -> NativeStatus
@@ -886,6 +998,12 @@ public:
   void ExposureEditsPreservePhysicalValuesAndRejectInvalidCandidates()
   {
     AssertSucceeded(RunExposureEditContracts());
+  }
+
+  [TestMethod]
+  void SkySphereAndSkyLightReachTheSceneAndRejectInvalidValues()
+  {
+    AssertSucceeded(RunSkyContracts());
   }
 
   [TestMethod]

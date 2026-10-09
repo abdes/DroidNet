@@ -42,6 +42,16 @@ internal static class InspectorColorGestures
         }
     }
 
+    /// <summary>Commits the picker's open color gesture, if any.</summary>
+    /// <param name="picker">The picker whose gesture ends.</param>
+    public static void Commit(ColorPicker picker)
+    {
+        if (Gestures.TryGetValue(picker, out var gesture))
+        {
+            gesture.Commit();
+        }
+    }
+
     private sealed class Gesture
     {
         private IInspectorEditSessionOwner? owner;
@@ -79,6 +89,8 @@ internal static class InspectorColorGestures
             this.Begin(NumberBoxEditInteractionKind.PointerDrag);
             apply(this.owner);
         }
+
+        public void Commit() => this.End(NumberBoxEditCompletionKind.Commit);
 
         private void Begin(NumberBoxEditInteractionKind kind)
         {

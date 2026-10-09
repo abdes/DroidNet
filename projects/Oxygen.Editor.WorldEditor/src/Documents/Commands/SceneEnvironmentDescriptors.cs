@@ -55,7 +55,6 @@ internal sealed class SceneEnvironmentDescriptors
 
     private readonly List<PropertyDescriptor> all;
     private readonly PropertyDescriptor<bool> atmosphereEnabledDescriptor;
-    private readonly PropertyDescriptor<Vector3> backgroundColorDescriptor;
     private readonly PropertyDescriptor<ExposureMode> exposureModeDescriptor;
     private readonly PropertyDescriptor<bool> exposureEnabledDescriptor;
     private readonly PropertyDescriptor<float> manualExposureEvDescriptor;
@@ -101,7 +100,6 @@ internal sealed class SceneEnvironmentDescriptors
         this.all = [.. descriptors];
         this.ById = this.all.ToDictionary(static descriptor => descriptor.Id);
         this.atmosphereEnabledDescriptor = this.Get<bool>("/atmosphere_enabled");
-        this.backgroundColorDescriptor = this.Get<Vector3>("/background_color");
         this.exposureModeDescriptor = this.Get<ExposureMode>("/post_process/exposure_mode");
         this.exposureEnabledDescriptor = this.Get<bool>("/post_process/exposure_enabled");
         this.manualExposureEvDescriptor = this.Get<float>("/post_process/manual_exposure_ev");
@@ -148,9 +146,6 @@ internal sealed class SceneEnvironmentDescriptors
 
     /// <summary>Gets the typed property id for atmosphere enablement.</summary>
     internal PropertyId<bool> AtmosphereEnabled => this.atmosphereEnabledDescriptor.TypedId;
-
-    /// <summary>Gets the typed property id for the background color.</summary>
-    internal PropertyId<Vector3> BackgroundColor => this.backgroundColorDescriptor.TypedId;
 
     /// <summary>Gets the typed property id for exposure mode.</summary>
     internal PropertyId<ExposureMode> ExposureMode => this.exposureModeDescriptor.TypedId;
@@ -281,20 +276,13 @@ internal sealed class SceneEnvironmentDescriptors
         AddPostProcessFloatDescriptors(descriptors);
         AddSkyAtmosphereDescriptors(descriptors);
         AddFogDescriptors(descriptors);
+        SceneSkyFields.AddDescriptors(descriptors);
         return new SceneEnvironmentDescriptors(descriptors);
     }
 
     private static void AddRootDescriptors(List<PropertyDescriptor> descriptors)
     {
         descriptors.Add(BoolDescriptor("/atmosphere_enabled", "Enabled", static value => value.AtmosphereEnabled, static (value, next) => value with { AtmosphereEnabled = next }, "environment.atmosphere_enabled"));
-        descriptors.Add(VectorDescriptor(
-            "/background_color",
-            "Background",
-            static value => value.BackgroundColor,
-            static (value, next) => value with { BackgroundColor = next },
-            SceneDiagnosticCodes.EnvironmentBackgroundColorInvalid,
-            "Background color values must be finite.",
-            "environment.background_color"));
     }
 
     private static void AddExposureDescriptors(List<PropertyDescriptor> descriptors)
@@ -536,7 +524,6 @@ internal sealed class SceneEnvironmentDescriptors
         {
             "/atmosphere_enabled" => "#/definitions/editor_scene_environment/atmosphere_enabled",
             "/sun_node_id" => "#/definitions/editor_scene_environment/sun_node_id",
-            "/background_color" => "#/definitions/editor_scene_environment/background_color",
             "/post_process/exposure_mode" => "#/definitions/editor_scene_environment/post_process/exposure_mode",
             "/post_process/exposure_enabled" => "#/definitions/editor_scene_environment/post_process/exposure_enabled",
             "/post_process/manual_exposure_ev" => "#/definitions/editor_scene_environment/post_process/manual_exposure_ev",
@@ -577,6 +564,7 @@ internal sealed class SceneEnvironmentDescriptors
             "/sky_atmosphere/height_fog_contribution" => "#/definitions/sky_atmosphere_environment/height_fog_contribution",
             "/sky_atmosphere/sun_disk_enabled" => "#/definitions/sky_atmosphere_environment/sun_disk_enabled",
             _ when FogSchemaKeys.TryGetValue(pointer, out var fogKey) => $"#/definitions/fog_environment/{fogKey}",
+            _ when SceneSkyFields.SchemaPointer(pointer) is { } skyPointer => skyPointer,
             _ => throw new ArgumentOutOfRangeException(nameof(pointer), pointer, "Unknown scene environment property pointer."),
         };
 

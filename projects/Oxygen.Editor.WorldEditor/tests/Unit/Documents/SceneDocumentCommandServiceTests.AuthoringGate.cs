@@ -37,14 +37,14 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = replacement.Should().NotBeNull();
         replacement!.Retire();
         replacement.Dispose();
-        var previous = scene.Environment.BackgroundColor;
+        var previous = SceneSkyFields.SolidColorOf(scene.Environment);
         var late = await fixture.Sut.EditSceneEnvironmentPropertiesAsync(
             context,
-            PropertyEdit.SingleEdit(SceneDocumentCommandService.SceneEnvironment.BackgroundColor, System.Numerics.Vector3.One),
+            PropertyEdit.SingleEdit(SceneSkyFields.SolidColor, System.Numerics.Vector3.One),
             "Late background",
             EditSessionToken.OneShot).ConfigureAwait(false);
         _ = late.Succeeded.Should().BeFalse();
-        _ = scene.Environment.BackgroundColor.Should().Be(previous);
+        _ = SceneSkyFields.SolidColorOf(scene.Environment).Should().Be(previous);
         _ = context.History.UndoStack.Should().ContainSingle();
     }
 

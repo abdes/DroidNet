@@ -173,9 +173,10 @@
                     Visibility="Collapsed" />
                 <environment:SceneReferencesSectionView x:Name="SceneReferencesView" ViewModel="{x:Bind ViewModel.SceneReferences, Mode=OneWay}" />
                 <environment:AtmosphereLightsSectionView x:Name="AtmosphereLightsView" ViewModel="{x:Bind ViewModel.AtmosphereLights, Mode=OneWay}" />
+                <environment:BackdropSectionView x:Name="BackdropView" ViewModel="{x:Bind ViewModel.Backdrop, Mode=OneWay}" />
                 <environment:SkyAtmosphereSectionView x:Name="SkyAtmosphereView" ViewModel="{x:Bind ViewModel.SkyAtmosphere, Mode=OneWay}" />
+                <environment:SkyLightSectionView x:Name="SkyLightView" ViewModel="{x:Bind ViewModel.SkyLight, Mode=OneWay}" />
                 <environment:FogSectionView x:Name="FogView" ViewModel="{x:Bind ViewModel.Fog, Mode=OneWay}" />
-                <environment:BackgroundSectionView x:Name="BackgroundView" ViewModel="{x:Bind ViewModel.Background, Mode=OneWay}" />
                 <TextBlock
                     x:Name="PostProcessingHeading"
                     Margin="4,10,4,2"

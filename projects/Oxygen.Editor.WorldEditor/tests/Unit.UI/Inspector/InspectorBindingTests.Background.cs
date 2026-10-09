@@ -5,11 +5,10 @@
 using System.Numerics;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
-using Microsoft.UI.Xaml.Automation.Peers;
-using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.WorldEditor.Documents.Commands;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
@@ -54,56 +53,68 @@ public sealed partial class InspectorBindingTests
     });
 
     [TestMethod]
-    public Task BackgroundResetIsUndoableAndPreservesOtherSceneSettings() => EnqueueAsync(async () =>
+    public Task BackdropChoiceSetsEngineFlagsAndIsUndoable() => EnqueueAsync(async () =>
     {
         using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, width: null, height: null, host: ScenarioHost.None).ConfigureAwait(true);
-        await scenario.SearchAsync("background").ConfigureAwait(true);
-
-        scenario.Model.Background.SetBackgroundColor(InspectorRgbPresentation.ToLinearRgb(Windows.UI.Color.FromArgb(255, 128, 64, 32)));
-        await scenario.Model.PendingEdits.ConfigureAwait(true);
+        await scenario.SearchAsync("backdrop").ConfigureAwait(true);
         var original = scenario.Fixture.Scene.Environment;
         var count = scenario.Fixture.Context.History.UndoStack.Count;
-        var reset = scenario.Element<Button>("ResetBackgroundButton");
-        ((IInvokeProvider)new ButtonAutomationPeer(reset).GetPattern(PatternInterface.Invoke)).Invoke();
+        var choice = scenario.View.FindDescendant<CommunityToolkit.WinUI.Controls.Segmented>(element => Equals(element.Tag, "Backdrop"));
+        _ = choice.Should().NotBeNull();
+
+        choice!.SelectedIndex = 2;
         await scenario.Model.PendingEdits.ConfigureAwait(true);
 
-        _ = scenario.Fixture.Scene.Environment.BackgroundColor.Should().Be(Vector3.Zero);
-        _ = scenario.Fixture.Scene.Environment.Should().Be(original with { BackgroundColor = Vector3.Zero });
-        _ = scenario.Fixture.Context.Metadata.IsDirty.Should().BeTrue();
+        var environment = scenario.Fixture.Scene.Environment;
+        _ = environment.AtmosphereEnabled.Should().BeFalse();
+        _ = environment.SkySphere.Enabled.Should().BeTrue();
+        _ = environment.SkySphere.Source.Should().Be(SkySphereSource.SolidColor);
+        _ = environment.Background.Enabled.Should().BeFalse();
+        _ = scenario.Model.Backdrop.Backdrop.Should().Be(EnvironmentBackdrop.SolidColor);
         _ = scenario.Fixture.Context.History.UndoStack.Should().HaveCount(count + 1);
-        _ = scenario.Model.Background.BackgroundR.Should().Be(0);
-        _ = scenario.Model.Background.BackgroundG.Should().Be(0);
-        _ = scenario.Model.Background.BackgroundB.Should().Be(0);
+
+        scenario.Model.Backdrop.SolidColorLightsScene = false;
+        await scenario.Model.PendingEdits.ConfigureAwait(true);
+        _ = scenario.Fixture.Scene.Environment.Background.Enabled.Should().BeTrue();
+        _ = scenario.Fixture.Scene.Environment.SkySphere.Enabled.Should().BeFalse();
 
         await scenario.Fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        await scenario.Fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
         _ = scenario.Fixture.Scene.Environment.Should().Be(original);
-        _ = new Vector3(scenario.Model.Background.BackgroundR, scenario.Model.Background.BackgroundG, scenario.Model.Background.BackgroundB).Should().Be(original.BackgroundColor);
-        await scenario.Fixture.Context.History.RedoAsync(CancellationToken.None).ConfigureAwait(true);
-        _ = scenario.Fixture.Scene.Environment.BackgroundColor.Should().Be(Vector3.Zero);
+        _ = choice.SelectedIndex.Should().Be(0);
     });
 
     [TestMethod]
     public Task BackgroundPickerAndLinearChannelsKeepDisplaySwatchInSync() => EnqueueAsync(async () =>
     {
-        using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, width: null, height: null, host: ScenarioHost.None).ConfigureAwait(true);
+        using var scenario = await EnvironmentInspectorScenario.LoadAsync(
+            LoadTestContentAsync,
+            width: null,
+            height: null,
+            host: ScenarioHost.None,
+            prepareModel: static model =>
+            {
+                model.Backdrop.BackdropIndex = 2;
+                return model.PendingEdits;
+            }).ConfigureAwait(true);
         await scenario.SearchAsync("background").ConfigureAwait(true);
-        var field = scenario.Element<Oxygen.Editor.World.Inspector.Controls.InspectorRgbField>("BackgroundColorCard");
+        var field = scenario.Element<Oxygen.Editor.World.Inspector.Controls.InspectorRgbField>("SolidColorCard");
         var swatch = (Button)((Oxygen.Editor.Controls.PropertyCard)field.Content).LeadingContent!;
         var displayColor = Windows.UI.Color.FromArgb(255, 128, 64, 32);
         await PickDisplayColorAsync(swatch, displayColor).ConfigureAwait(true);
         await scenario.Model.PendingEdits.ConfigureAwait(true);
 
-        _ = scenario.Model.Background.BackgroundR.Should().BeApproximately(0.21586f, 0.00001f);
-        _ = scenario.Model.Background.BackgroundG.Should().BeApproximately(0.05127f, 0.00001f);
-        _ = scenario.Model.Background.BackgroundB.Should().BeApproximately(0.01444f, 0.00001f);
-        _ = scenario.Model.Background.BackgroundColor.Should().Be(scenario.Fixture.Scene.Environment.BackgroundColor);
+        _ = scenario.Model.Backdrop.SolidColorR.Should().BeApproximately(0.21586f, 0.00001f);
+        _ = scenario.Model.Backdrop.SolidColorG.Should().BeApproximately(0.05127f, 0.00001f);
+        _ = scenario.Model.Backdrop.SolidColorB.Should().BeApproximately(0.01444f, 0.00001f);
+        _ = scenario.Model.Backdrop.SolidColor.Should().Be(SceneSkyFields.SolidColorOf(scenario.Fixture.Scene.Environment));
         _ = ((Microsoft.UI.Xaml.Media.SolidColorBrush)((Border)swatch.Content).Background).Color.Should().Be(displayColor);
-        scenario.Model.Background.BackgroundR = 1;
+        scenario.Model.Backdrop.SolidColorR = 1;
         await scenario.Model.PendingEdits.ConfigureAwait(true);
         var display = ((Microsoft.UI.Xaml.Media.SolidColorBrush)((Border)swatch.Content).Background).Color;
         _ = display.R.Should().Be(255);
         _ = display.G.Should().Be(64);
         _ = display.B.Should().Be(32);
-        _ = scenario.Fixture.Scene.Environment.BackgroundColor.Should().Be(new Vector3(1, scenario.Model.Background.BackgroundG, scenario.Model.Background.BackgroundB));
+        _ = SceneSkyFields.SolidColorOf(scenario.Fixture.Scene.Environment).Should().Be(new Vector3(1, scenario.Model.Backdrop.SolidColorG, scenario.Model.Backdrop.SolidColorB));
     });
 }

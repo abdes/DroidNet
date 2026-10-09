@@ -21,23 +21,23 @@ public sealed partial class SceneDocumentCommandServiceTests
         var fixture = CreateFixture();
         var scene = CreateScene();
         var context = CreateContext(scene);
-        var failure = new SyncOutcome(SyncStatus.Rejected, SceneOperationKinds.EditEnvironment, AffectedScope.Empty, LiveSyncDiagnosticCodes.EnvironmentBackgroundRejected, "Native background was rejected");
+        var failure = new SyncOutcome(SyncStatus.Rejected, SceneOperationKinds.EditEnvironment, AffectedScope.Empty, LiveSyncDiagnosticCodes.EnvironmentRejected, "Native background was rejected");
         _ = fixture.Sync.Setup(value => value.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new EnvironmentSyncResult(SyncStatus.Rejected, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal)
             {
-                [nameof(SceneEnvironmentData.BackgroundColor)] = failure,
+                [nameof(SceneEnvironmentData.Background)] = failure,
             }));
         var color = new Vector3(0.25f, 0.5f, 0.75f);
 
         var result = await fixture.Sut.EditSceneEnvironmentPropertiesAsync(
             context,
-            PropertyEdit.SingleEdit(SceneDocumentCommandService.SceneEnvironment.BackgroundColor, color),
+            PropertyEdit.SingleEdit(SceneSkyFields.SolidColor, color),
             "Edit Background",
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
-        _ = scene.Environment.BackgroundColor.Should().Be(color);
+        _ = SceneSkyFields.SolidColorOf(scene.Environment).Should().Be(color);
         _ = context.History.UndoStack.Should().ContainSingle();
-        _ = fixture.Results.Published.SelectMany(value => value.Diagnostics).Should().Contain(value => value.Code == LiveSyncDiagnosticCodes.EnvironmentBackgroundRejected && value.Message == failure.Message);
+        _ = fixture.Results.Published.SelectMany(value => value.Diagnostics).Should().Contain(value => value.Code == LiveSyncDiagnosticCodes.EnvironmentRejected && value.Message == failure.Message);
     }
 }

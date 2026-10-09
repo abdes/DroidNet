@@ -25,12 +25,6 @@
         Tag="Environment">
         <editorcontrols:PropertiesExpander.Items>
             <editorcontrols:PropertyCard
-                x:Name="AtmosphereEnabledCard"
-                HorizontalContentAlignment="Stretch"
-                PropertyName="Enabled">
-                <ToggleSwitch IsOn="{x:Bind ViewModel.AtmosphereEnabled, Mode=TwoWay}" Tag="AtmosphereEnabled" />
-            </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard
                 x:Name="SunDiskEnabledCard"
                 HorizontalContentAlignment="Stretch"
                 PropertyName="Sun Disk">

@@ -10,6 +10,7 @@
 #include <EditorModule/ICommandFactory.h>
 #include <EngineContext.h>
 #include <World/EnvironmentStateManaged.h>
+#include <World/SkyEnvironmentManaged.h>
 
 namespace Oxygen::Interop::World {
 
@@ -44,12 +45,6 @@ value struct CookedRootBindingManaged {
 };
 
   //! Native scene background values observed at the mutation boundary.
-  public value struct BackgroundStateManaged {
-    bool Exists;
-    System::Numerics::Vector3 Color;
-    bool AtmosphereEnabled;
-  };
-
   //! Stored component values and resolved LOD-zero assets for a native node.
   public value struct NodeStateManaged {
     bool Exists;
@@ -114,11 +109,6 @@ value struct CookedRootBindingManaged {
     void SetMaterialOverride(System::Guid nodeId, String^ geometryUri,
       System::Guid slotId, String^ layoutRevision, String^ materialUri, System::Byte intent, Action<System::UInt64, String^>^ onFailure,
       Action<System::UInt64>^ onSuccess);
-    //! Queues a scene-owned solid background without changing atmosphere.
-    void SetBackgroundColor(System::Numerics::Vector3 color);
-    //! Observes native background state after preceding queued mutations.
-    System::Threading::Tasks::Task<BackgroundStateManaged>^
-      ObserveBackgroundAsync();
 
     //! Reads native atmosphere and post-process values after preceding mutations.
     System::Threading::Tasks::Task<EnvironmentStateManaged>^
@@ -150,6 +140,9 @@ value struct CookedRootBindingManaged {
       String ^ exposureMaskProjectMount, float bloomIntensity,
       float bloomThreshold, float saturation, float contrast,
       float vignetteIntensity, float displayGamma, FogEnvironmentManaged fog,
+      SkySphereEnvironmentManaged skySphere,
+      SkyLightEnvironmentManaged skyLight,
+      BackgroundEnvironmentManaged background,
       Action<System::UInt64, String ^> ^ onFailure,
       Action<System::UInt64> ^ onSuccess);
     void DetachGeometry(System::Guid nodeId);

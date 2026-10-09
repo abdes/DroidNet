@@ -1234,7 +1234,13 @@ stands behind them. This slice removes those lock-outs.
    cubemap is imported and previewed, how the Sky Sphere and Sky Light
    sections present their sources, and how they relate to the atmosphere)
    is designed with the owner interactively before any implementation, and
-   its design joins this plan before the code does.
+   its design joins this plan before the code does. The agreed design is in
+   the [environment LLD](../lld/environment-authoring.md) section 4: one
+   Backdrop choice over engine-shaped records, a Sky Light section, EV
+   intensities, and a Cube shape in texture import. Cooked cubemaps become
+   scene texture bindings like the metering mask (scene format 12), and the
+   live editor loads all environment textures as one request. Importing six
+   separate face files is a follow-up to the Cube shape.
 4. **Ground grid settings.** The grid's engine settings are per-user editor
    settings in the Settings flyout, applied through
    `Renderer::SetGroundGridConfig`: enabled, spacing, major lines every N,

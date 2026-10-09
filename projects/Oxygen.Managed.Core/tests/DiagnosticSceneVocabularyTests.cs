@@ -70,7 +70,6 @@ public sealed class DiagnosticSceneVocabularyTests
         _ = LiveSyncDiagnosticCodes.EnvironmentSunUnsupported.Should().Be("OXE.LIVESYNC.ENVIRONMENT.Sun.Unsupported");
         _ = LiveSyncDiagnosticCodes.EnvironmentExposureUnsupported.Should().Be("OXE.LIVESYNC.ENVIRONMENT.Exposure.Unsupported");
         _ = LiveSyncDiagnosticCodes.EnvironmentToneMappingUnsupported.Should().Be("OXE.LIVESYNC.ENVIRONMENT.ToneMapping.Unsupported");
-        _ = LiveSyncDiagnosticCodes.EnvironmentBackgroundUnsupported.Should().Be("OXE.LIVESYNC.ENVIRONMENT.Background.Unsupported");
         _ = LiveSyncDiagnosticCodes.EnvironmentRejected.Should().Be("OXE.LIVESYNC.ENVIRONMENT.Rejected");
     }
 

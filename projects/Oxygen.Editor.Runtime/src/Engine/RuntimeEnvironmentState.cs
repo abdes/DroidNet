@@ -178,4 +178,40 @@ public sealed record RuntimeEnvironmentState
 
     /// <summary>Gets the native height fog and volumetric fog values.</summary>
     public FogEnvironmentData Fog { get; init; } = new();
+
+    /// <summary>Gets a value indicating whether sky sphere values are present, including a disabled sky sphere.</summary>
+    public bool SkySphereExists { get; init; }
+
+    /// <summary>Gets the native sky sphere values; its cubemap is reported as <see cref="SkySphereCubemap"/>.</summary>
+    public SkySphereEnvironmentData SkySphere { get; init; } = new();
+
+    /// <summary>Gets the observed process-local sky sphere cubemap identity; zero means none.</summary>
+    public ulong SkySphereCubemap { get; init; }
+
+    /// <summary>Gets a value indicating whether the current environment request awaits its sky sphere cubemap.</summary>
+    public bool SkySphereCubemapPending { get; init; }
+
+    /// <summary>Gets the current sky sphere cubemap failure, or an empty string when none is reported.</summary>
+    public string SkySphereCubemapError { get; init; } = string.Empty;
+
+    /// <summary>Gets a value indicating whether sky light values are present, including a disabled sky light.</summary>
+    public bool SkyLightExists { get; init; }
+
+    /// <summary>Gets the native sky light values; its cubemap is reported as <see cref="SkyLightCubemap"/>.</summary>
+    public SkyLightEnvironmentData SkyLight { get; init; } = new();
+
+    /// <summary>Gets the observed process-local sky light cubemap identity; zero means none.</summary>
+    public ulong SkyLightCubemap { get; init; }
+
+    /// <summary>Gets a value indicating whether the current environment request awaits its sky light cubemap.</summary>
+    public bool SkyLightCubemapPending { get; init; }
+
+    /// <summary>Gets the current sky light cubemap failure, or an empty string when none is reported.</summary>
+    public string SkyLightCubemapError { get; init; } = string.Empty;
+
+    /// <summary>Gets a value indicating whether background values are present, including a disabled background.</summary>
+    public bool BackgroundExists { get; init; }
+
+    /// <summary>Gets the native display-only background values.</summary>
+    public BackgroundEnvironmentData Background { get; init; } = new();
 }

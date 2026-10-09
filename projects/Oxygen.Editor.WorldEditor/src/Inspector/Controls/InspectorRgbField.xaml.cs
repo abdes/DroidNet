@@ -198,12 +198,18 @@ public sealed partial class InspectorRgbField : UserControl
                 CornerRadius = this.SwatchCornerRadius,
                 Style = (Style)this.Resources["SwatchBorderStyle"],
             };
+            var flyout = new Flyout { Content = this.picker };
+
+            // Closing the picker finishes the pick: commit it now rather than when the picker
+            // later unloads, so the edit is in history as soon as the flyout reports closed.
+            var picker = this.picker;
+            flyout.Closed += (_, _) => InspectorColorGestures.Commit(picker);
             this.swatch = new Button
             {
                 Name = "Swatch",
                 Style = (Style)this.Resources["InspectorColorSwatchStyle"],
                 Content = this.swatchBorder,
-                Flyout = new Flyout { Content = this.picker },
+                Flyout = flyout,
             };
         }
 

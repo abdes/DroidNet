@@ -182,7 +182,7 @@ public sealed partial class SceneEngineSyncTests
         SetPosition(node, metadata, 7);
         _ = await fixture.Sync.UpdatePropertiesAsync(scene, node, [CreateTransformEntry(7)], fixture.Sync.CaptureRevision(scene, metadata), this.TestContext.CancellationToken).ConfigureAwait(false);
         var color = new Vector3(0.2f, 0.4f, 0.6f);
-        var environment = scene.Environment with { BackgroundColor = color };
+        var environment = scene.Environment with { Background = new() { Enabled = true, ColorRgb = color } };
         scene.SetEnvironment(environment);
         metadata.IsDirty = true;
 
@@ -193,8 +193,8 @@ public sealed partial class SceneEngineSyncTests
         _ = (await sync.ConfigureAwait(false)).Should().BeTrue();
 
         var commands = fixture.Requests.Select(value => value.Command).ToList();
-        _ = commands.OfType<RuntimeSetBackgroundColor>().Select(value => value.Color).Should().Equal(Vector3.Zero, color);
-        _ = commands.FindIndex(value => value is RuntimeSetProperties).Should().BeLessThan(commands.FindLastIndex(value => value is RuntimeSetBackgroundColor));
+        _ = commands.OfType<RuntimeSetEnvironment>().Select(value => value.Background.ColorRgb).Should().Equal(Vector3.Zero, color);
+        _ = commands.FindIndex(value => value is RuntimeSetProperties).Should().BeLessThan(commands.FindLastIndex(value => value is RuntimeSetEnvironment));
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(0);
     }
 
@@ -207,7 +207,7 @@ public sealed partial class SceneEngineSyncTests
         var sync = fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken);
         var request = await createdRequest.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         var color = new Vector3(0.2f, 0.4f, 0.6f);
-        var environment = scene.Environment with { BackgroundColor = color };
+        var environment = scene.Environment with { Background = new() { Enabled = true, ColorRgb = color } };
         scene.SetEnvironment(environment);
         metadata.IsDirty = true;
         _ = await fixture.Sync.UpdateEnvironmentAsync(scene, environment, fixture.Sync.CaptureRevision(scene, metadata), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -218,13 +218,13 @@ public sealed partial class SceneEngineSyncTests
 
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(1);
         var diagnostic = fixture.Results.Should().ContainSingle().Which.Diagnostics.Should().ContainSingle().Which;
-        _ = diagnostic.AffectedEntity!.ComponentName.Should().Be(nameof(SceneEnvironmentData.BackgroundColor));
-        _ = diagnostic.Code.Should().Be(LiveSyncDiagnosticCodes.EnvironmentBackgroundRejected);
+        _ = diagnostic.AffectedEntity!.ComponentType.Should().Be(nameof(SceneEnvironmentData));
+        _ = diagnostic.Code.Should().Be(LiveSyncDiagnosticCodes.EnvironmentRejected);
         fixture.RejectedBackground = null;
         fixture.ResumeNodeCreation();
         _ = (await fixture.Sync.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(0);
-        _ = fixture.Requests.Select(value => value.Command).OfType<RuntimeSetBackgroundColor>().Last().Color.Should().Be(color);
+        _ = fixture.Requests.Select(value => value.Command).OfType<RuntimeSetEnvironment>().Last().Background.ColorRgb.Should().Be(color);
     }
 
     [TestMethod]
@@ -382,7 +382,7 @@ public sealed partial class SceneEngineSyncTests
                 .Returns((RuntimeWorldRequest request, CancellationToken _) =>
                 {
                     this.Requests.Enqueue(request);
-                    return request.Command is RuntimeSetBackgroundColor background && this.RejectedBackground == background.Color
+                    return request.Command is RuntimeSetEnvironment environment && this.RejectedBackground == environment.Background.ColorRgb
                         ? new(request.OperationId, request.Target.RunId, RuntimeCommandStatus.Rejected, "Controlled background rejection")
                         : request.Command is RuntimeSetProperties properties
                             && properties.Entries.Any(entry => entry.ComponentId == (ushort?)this.RejectedPropertyComponent)

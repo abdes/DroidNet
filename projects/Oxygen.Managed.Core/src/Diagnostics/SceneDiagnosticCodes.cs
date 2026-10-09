@@ -81,6 +81,9 @@ public static class SceneDiagnosticCodes
     /// <summary>Environment fog value is invalid.</summary>
     public const string EnvironmentFogInvalid = DiagnosticCodes.ScenePrefix + "ENVIRONMENT.Fog.Invalid";
 
+    /// <summary>Environment backdrop, sky sphere or sky light value is invalid.</summary>
+    public const string EnvironmentSkyInvalid = DiagnosticCodes.ScenePrefix + "ENVIRONMENT.Sky.Invalid";
+
     /// <summary>Component add operation was denied.</summary>
     public const string ComponentAddDenied = DiagnosticCodes.ScenePrefix + "COMPONENT.AddDenied";
 
