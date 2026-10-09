@@ -26,6 +26,10 @@ struct LocalFogTileVertexOutput
     nointerpolation uint packed_tile : TEXCOORD1;
 };
 
+// Length of the view ray traced through local fog over the sky; volumes clamp
+// the ray to their own extent, so it only needs to exceed every volume.
+static const float kLocalFogSkyRayLengthMeters = 1.0e6f;
+
 static inline float ResolveFarDepthReference()
 {
     return reverse_z != 0u ? 0.0f : 1.0f;
@@ -109,13 +113,23 @@ float4 VortexLocalFogVolumeComposePS(LocalFogTileVertexOutput input) : SV_Target
     const SceneTextureBindingData bindings
         = LoadSceneTextureBindings(bindless_view_frame_bindings_slot);
     const float raw_depth = SampleSceneDepth(input.uv, bindings);
+    float3 translated_world_position;
     if (IsFarBackgroundPixel(raw_depth))
     {
-        return 0.0f.xxxx;
+        // The sky has no surface: trace the view ray past every volume, so a
+        // volume in front of the sky is composed like one in front of geometry.
+        // The far plane itself may be at infinity, so take the ray direction
+        // from a point between the planes.
+        const float3 mid_position = ReconstructWorldPosition(
+            input.uv, 0.5f, inverse_view_projection_matrix);
+        translated_world_position
+            = normalize(mid_position - camera_position) * kLocalFogSkyRayLengthMeters;
     }
-    const float3 world_position = ReconstructWorldPosition(
-        input.uv, raw_depth, inverse_view_projection_matrix);
-    const float3 translated_world_position = world_position - camera_position;
+    else
+    {
+        translated_world_position = ReconstructWorldPosition(
+            input.uv, raw_depth, inverse_view_projection_matrix) - camera_position;
+    }
     const uint2 tile_coord = UnpackLocalFogTile(input.packed_tile);
 
     StructuredBuffer<LocalFogVolumeInstanceData> instances
