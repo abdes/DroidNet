@@ -831,7 +831,13 @@ path behavior. Changing a sidecar alone cannot relocate content because native
 asset keys derive from virtual paths; output groups move only through the
 reference-aware relocation in
 [Content Browser §9.5](content-browser-asset-identity.md#95-asset-relocation),
-which rewrites the sidecar with the files. Ownership,
+which rewrites the sidecar with the files. After a relocation or delete, a
+prior product whose authored source no longer exists is retired for every
+asset kind, and an imported product whose outputs fall outside its sidecar's
+current group is rebuilt into the new group: the affected root is rebuilt
+from its remaining owners, so old native keys leave the index, and neither
+case is treated as a forbidden identity change or as a namespace overlap with
+the retired owner. Ownership,
 collision checks, folder cooking and source inspection cover every disjoint
 output namespace, without claiming the whole mount for one imported model.
 

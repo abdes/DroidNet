@@ -496,8 +496,8 @@ Rules:
   context menus mirror the row. Unavailable commands stay visible, disabled,
   and explain why.
 - New Folder creates "New folder" in the current authoring folder and names it
-  in place in the sources tree. A folder can be renamed only while it holds no
-  files; asset identity follows its path (§9.5).
+  in place in the sources tree. Folder rename and drag-move relocate every
+  asset inside and update their referrers (§9.5).
 - the optional details pane shows identity facts, referrers and copy/locate
   actions; multi-selection shows aggregated counts. No hover tooltip carries
   information that is unavailable elsewhere.
@@ -555,37 +555,75 @@ Asset identity is the virtual path, and native asset keys derive from it.
 Rename, move (tree drag, Cut/Paste) and folder rename/move therefore change
 identity and must update every authored referrer in one transaction.
 
-- **Reference index.** Built at project open from authored sources through
-  their owning serializers and kept current from `AssetChange` events. It covers
-  scene geometry/material-slot URIs, environment texture references, material,
-  geometry and texture descriptor references, and import sidecar source paths.
-  Open documents contribute their in-memory references.
-- **Plan.** Source moves with their companion files, a folder prefix mapping
-  and the rewritten references of every referrer. Rejected: collisions, invalid
-  names, read-only or derived targets, moves out of authoring mounts and
-  renaming or moving the importer's fixed type folders (`Materials`,
-  `Geometry`, `Scenes` at a mount root).
+- **Reference index.** Built on demand from saved authored files, cached
+  until a catalog change and rebuilt inside every relocation. Each file kind
+  is read structurally: scene component and material-slot geometry/material
+  URIs (component and targeted overrides), the exposure metering mask and
+  `ExtraAssets`; material texture paths; geometry descriptor material, buffer
+  and skeleton paths; texture descriptor `source`, `sources[].file` and
+  `virtual_path`; import sidecar `BundleRoot`, `PrimaryRelativePath`, `Files`
+  and `OutputDirectory`. Identities compare without the scheme and `.json`
+  suffix; a rewrite keeps the field's form (full URI, virtual path or
+  file-relative path).
+- **Plan.** Source moves with their companion files (a texture's image, a
+  model's sidecar), a folder prefix mapping and the rewritten references of
+  every referrer, including a moved descriptor's own `virtual_path`. Rejected:
+  collisions, invalid names, read-only or derived targets, moves out of
+  authoring mounts or into the moved folder, renaming or moving a mount root or
+  the importer's fixed type folders (`Materials`, `Geometry`, `Scenes`),
+  moving a model file out of its bundle folder, and cooked-only imported
+  outputs. Rename and move ask no confirmation; the result reports what moved
+  and how many referrers were updated, and offers Undo.
 - **Imported outputs.** A model import owns one output group in its mount,
   `Materials/<group>`, `Geometry/<group>` and `Scenes/<group>`, where the group
-  is the sidecar's `OutputDirectory` and may be nested. Renaming or moving a
-  folder inside a type folder that is, or contains, an output group applies the
-  same prefix mapping under all three type folders, rewrites `OutputDirectory`
-  in every affected sidecar and checks collisions in all three; the
-  confirmation names every folder that moves. This is also how an import's
-  destination changes. Moving one output asset out of its group, or a group to
-  another mount, is rejected. Renaming the retained source bundle rewrites the
-  sidecar's bundle path.
-- **Transaction.** Runs under the project coordinator admission. Referrers are
-  staged, files move and referrers are replaced through the journaled file
-  store; any failure restores every file. A referencing document with unsaved
-  changes must be saved first or the operation is cancelled; clean open
-  documents are updated in memory. Live scenes re-resolve the new URIs and
-  incremental cooking republishes the moved assets and their referrers.
-- **Undo.** The operation result offers Undo, which runs the reverse
-  relocation. It is not part of scene history.
-- Copy/Paste and Duplicate create unique new paths and rewrite nothing. Delete
-  lists referrers, confirms when any exist and uses the Recycle Bin; remaining
-  referrers report the existing missing-reference diagnostics.
+  is the sidecar's `OutputDirectory` and may be nested. Import creates no
+  folders there, so **Rename output group…** on the model source or any of its
+  outputs relocates the group; a real folder inside a type folder that is, or
+  contains, a group expands the same way. The plan applies one prefix mapping
+  under all three type folders, rewrites `OutputDirectory` in every affected
+  sidecar and checks collisions in all three, including other imports' groups;
+  the result reports the moved group folders. This is also how an import's
+  destination changes. Moving a group to another mount is rejected. Renaming
+  or moving the bundle folder rewrites `BundleRoot`; renaming the model file
+  renames its sidecar and rewrites `PrimaryRelativePath` and `Files`.
+- **Scenes.** Editor scenes live in `Content/Scenes` and are identified by
+  name: they can be renamed (through the scene rename operation) and
+  duplicated, not moved. Deleting the open scene is rejected.
+- **Transaction.** Runs as the content cook coordinator's project writer. Any
+  open document with unsaved changes rejects the operation with the names of
+  the documents to save. A journal under `.build/relocation/<operation>/`
+  records each move and edit with before/after hashes; files move and
+  referrers are written through the atomic file store against their
+  baselines; any failure restores every file, and project activation recovers
+  an interrupted journal. After the commit, and before the writer is released,
+  registered document participants bring open documents in step; then an
+  explicit cook republishes the moved assets and their referrers. Every move,
+  rewrite, restore, delete and document change is logged.
+- **Open documents.** Nothing reloads or closes on a rename or move. A scene
+  re-points the references of the affected nodes, slot targets, environment
+  mask and `ExtraAssets` in memory; a material re-points its texture paths; a
+  moved material document re-points its own path and keeps its history. These
+  changes are outside undo history and leave the document clean: the owner
+  records the transaction's written version as its saved state, so cooking
+  accepts it. After the follow-up cook publishes, the runtime refreshes only
+  the affected nodes and the environment. A deleted asset's open document
+  closes.
+- **Identity redirects.** A session-wide, in-memory table composes every
+  committed relocation's old-to-new identities and resets when the project
+  closes. Undo, redo and paste resolve restored asset references through it,
+  so history is never rewritten or cleared. Restoring a deleted asset
+  completes as a missing reference with the existing diagnostic and a warning,
+  never blocking older undo steps.
+- **Undo.** The operation result offers Undo, which plans and runs the
+  reverse relocation. It is not part of scene history.
+- Copy/Paste and Duplicate create unique new paths, give copied descriptors
+  their new identity and rewrite no referrers; model sources and cooked-only
+  outputs are not copied. Delete lists referrers, confirms when any exist and
+  moves files and companions to the Recycle Bin, keeping an image another
+  texture still uses; remaining referrers report the existing
+  missing-reference diagnostics. The cooker treats a deleted texture as a
+  warning: a material cooks with that slot unbound and a scene without its
+  metering mask, so the rest of the project still cooks.
 
 ## 10. Persistence And Round Trip
 

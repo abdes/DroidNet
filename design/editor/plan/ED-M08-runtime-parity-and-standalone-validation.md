@@ -1,9 +1,9 @@
 # ED-M08 — Runtime parity and editor authoring workspace
 
-Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2 and M08.3–M08.7
-validated; rescoped on 2026-10-08; M08.8 is next**
+Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2 and M08.3–M08.8
+validated; rescoped on 2026-10-08; M08.9 is next**
 
-Current: **M08.8 Asset relocation and references**. The
+Current: **M08.9 Asset thumbnails and previews**. The
 [rescope](#retired-by-the-rescope) retires the development-only parity harness
 (former M08.3 and M08.5–M08.8) and the former M08.4 audit, and replaces them
 with what the editor still lacks as an authoring tool: viewport picking,
@@ -944,55 +944,112 @@ would still need a reverse index for delete warnings and Find references.
 Relocation is therefore a reference-aware project transaction; the contract
 is [Content Browser LLD §9.5](../lld/content-browser-asset-identity.md#95-asset-relocation).
 
-1. **Reference index.** A managed index of every authored outgoing reference
-   (scene geometry and material-slot URIs, environment texture references,
-   material and geometry descriptor references, texture descriptor sources,
-   import sidecar source paths), read with the owning serializers rather than
-   text search. It is built when a project opens and updated from catalog
-   change events. Open documents contribute their in-memory references, so
-   unsaved edits are included. The details pane and a Find references command
-   show an asset's referrers.
+1. **Reference index.** Every authored outgoing reference, read structurally
+   per file kind rather than by text search: scene component and material-slot
+   geometry/material URIs, the exposure metering mask and `ExtraAssets`;
+   material texture paths; geometry descriptor material, buffer and skeleton
+   paths; texture descriptor sources and identity; import sidecar bundle and
+   output paths. Identities compare without the scheme and the `.json`
+   authoring suffix, so `asset:///Content/M/Red.omat.json` and
+   `/Content/M/Red.omat` are one asset; each rewrite keeps its field's form.
+   The index is built on demand from saved files, cached until a catalog
+   change, and always rebuilt inside a relocation. The details pane and Find
+   references show an asset's referrers.
 2. **Relocation plan.** Rename, move by drag in the source tree, Cut/Paste
    and folder rename/move produce one plan: source moves (each asset with its
-   companion files such as `.import.json`), a folder prefix mapping, and the
-   rewritten references for every referrer. The plan rejects name collisions,
-   invalid names, read-only or derived targets, moves out of the authoring
-   mounts, and renaming or moving the importer's fixed type folders
-   (`Materials`, `Geometry`, `Scenes` at a mount root). A confirmation lists
-   affected referrers whenever there are any.
+   companion files: a texture's image, a model's sidecar), a folder prefix
+   mapping, and the rewritten bytes of every referrer, including a moved
+   descriptor's own `virtual_path` and file-relative sources. The plan rejects
+   name collisions, invalid names, read-only or derived targets, moves out of
+   the authoring mounts, moves into the moved folder itself, renaming or moving
+   a mount root or the importer's fixed type folders (`Materials`, `Geometry`,
+   `Scenes`), moving a model file out of its bundle folder, and cooked-only
+   imported outputs. Rename and move ask no confirmation: updating referrers is
+   the operation, and the result reports what moved and how many files were
+   updated, with Undo.
 3. **Imported model outputs.** A model import owns one output group in its
    mount: `Materials/<group>`, `Geometry/<group>` and `Scenes/<group>`, named
    by the sidecar's `OutputDirectory` (which may be nested, such as
-   `Vehicles/Car`). Renaming or moving a folder inside a type folder that is,
-   or contains, an output group relocates it in all three type folders
-   together: the plan applies the same prefix mapping to the matching folder
-   under each type folder, rewrites `OutputDirectory` in every affected
-   sidecar, checks collisions in all three, and the confirmation names every
-   folder that moves. Moving a single output asset out of its group, or a
-   group to another mount, is rejected. Reimport and cooking then write to
-   the new group; changing an import's destination is this same operation.
-4. **Transaction.** The plan runs under the existing project coordinator
-   admission, like cooking: rewritten referrers are staged, then files move
-   and referrers are replaced atomically through the journaled file store, and
-   any failure rolls back completely. Open clean documents are updated in
-   memory; a referencing document with unsaved changes must be saved or the
-   operation is cancelled. The live scene re-resolves the new URIs, and
-   incremental cooking republishes the moved assets and their referrers while
-   publication retires the old keys. The operation result offers Undo, which
-   runs the reverse relocation; it does not enter scene history.
-5. **Copy, Duplicate and Delete.** Copy/Paste and Duplicate create new paths
-   with a unique name and rewrite no referrers. Delete shows the referrers,
-   requires confirmation when any exist, moves files to the Recycle Bin, and
-   leaves referrers with the existing missing-reference diagnostics.
+   `Vehicles/Car`). Import creates no folders there, so the group is renamed
+   or moved with **Rename output group…** on the model source or any of its
+   outputs. A real folder inside a type folder that is, or contains, an output
+   group relocates it in all three type folders together. Either way the plan
+   applies one prefix mapping under each type folder, rewrites
+   `OutputDirectory` in every affected sidecar, checks collisions in all three
+   (including other imports' groups), and the result reports the moved group
+   folders. Moving a group to another mount is rejected. Renaming or moving
+   the bundle folder rewrites the sidecar's `BundleRoot`; renaming the model
+   file renames its sidecar and rewrites `PrimaryRelativePath` and `Files`.
+4. **Scenes.** Editor scenes are `Content/Scenes/<Name>.oscene.json` and are
+   identified by name, so a scene can be renamed (through the existing scene
+   rename, which also fixes `ExtraAssets` and the open document) and
+   duplicated, but not moved. Deleting the open scene is rejected.
+5. **Transaction.** The plan runs under the content cook coordinator's
+   project writer, so it never overlaps a cook or import. If any open
+   document has unsaved changes, the operation is rejected and names the
+   documents to save. Referrer bytes are prepared first; a journal under
+   `.build/relocation/<operation>/` records every move and edit with its
+   before and after hashes; files move and referrers are written through the
+   atomic file store against their baselines; any failure restores every file,
+   and project activation recovers an interrupted journal. Every step is
+   logged. The operation result offers Undo, which plans and runs the reverse
+   relocation; it does not enter scene history.
+6. **Open documents.** No document is reloaded or closed by a rename or move.
+   Before the writer is released, each open document that the relocation
+   rewrote or moved updates itself in memory: a scene re-points the geometry
+   and material-slot references, slot targets, environment mask and
+   `ExtraAssets` of the affected nodes only; a material re-points its texture
+   paths, and a moved material document re-points its own path and keeps its
+   history. Neither change enters undo history or marks the document dirty;
+   the owner records the version the transaction wrote as its saved state, so
+   cooking sees a consistent document. After the follow-up cook publishes,
+   the runtime refreshes only the affected scene nodes and the environment.
+   A deleted asset's open document closes.
+7. **Undo history.** History is never rewritten or cleared. The session keeps
+   a combined in-memory table of every committed relocation's old-to-new
+   identities (A to B then B to C resolves A to C; the relocation's Undo maps
+   back). When undo, redo or paste restores an asset reference, it passes
+   through the table, so older edits restore the asset's current path. An
+   edit that restores a deleted asset completes as a missing reference with
+   the existing missing-reference diagnostic and a visible warning; it never
+   blocks older undo steps. The table resets when the project closes.
+8. **Cooking.** A prior cooked product whose authored source no longer exists
+   is retired for every asset kind, not only scenes: its root is rebuilt from
+   the remaining owners, so the old native key leaves the index. An imported
+   product whose outputs fall outside its sidecar's current group is rebuilt
+   into the new group; neither case counts as a forbidden identity change or a
+   namespace overlap with the retired owner.
+9. **Copy, Duplicate and Delete.** Copy/Paste and Duplicate create new paths
+   with a unique name (`Name (2)`), give copied descriptors their new identity
+   and rewrite no referrers; model sources and cooked-only outputs cannot be
+   copied (import again instead). Delete shows the referrers, requires
+   confirmation when any exist, moves files and companions to the Recycle Bin
+   (an image another texture still uses stays), and leaves referrers with the
+   existing missing-reference diagnostics. The cooker reports a deleted
+   texture as a warning and cooks the material without it (a scene without
+   its metering mask), so one deleted texture never stops the project cook.
 
-Checks: rename and move of a material, geometry descriptor, scene, source
-model with its sidecar and a populated folder, each with referrers in saved
-and open documents; renaming one imported output folder relocates all three
-group folders and the sidecar, and a later reimport writes only to the new
-group; type-folder renames, collisions and read-only targets rejected; an
-injected failure leaves sources and publication unchanged; Undo restores paths
-and references; cooked output and the live viewport show the moved assets with
-no stale key; delete with and without referrers.
+Implementation, in build order:
+
+| Step   | Projects                    | Delivers                                                                 |
+| ------ | --------------------------- | ------------------------------------------------------------------------ |
+| M08.8a | ContentPipeline             | Reference readers/rewriters per kind, index, path mapping                |
+| M08.8b | ContentPipeline             | Planner, rejection rules, journaled transaction, recovery, coordinator   |
+| M08.8c | ContentPipeline             | Retirement of moved/deleted products and relocated import groups         |
+| M08.8d | ContentBrowser              | Commands, tree rename/drag, confirmations, Undo, referrers, Recycle Bin  |
+| M08.8e | WorldEditor, MaterialEditor | Dirty-document guard, document reload/reopen, scene rename and duplicate |
+
+Checks: unit tests for each reader/rewriter (form preservation, nested slots,
+targeted overrides, texture `source` and `virtual_path`, sidecar fields), the
+planner's rejection rules and group expansion, and the transaction's rollback
+from an injected failure at each step and recovery from an interrupted
+journal; cooking tests that a renamed material and a renamed import group
+retire their old keys and keep other assets; Content Browser command
+availability and tooltips; user review of rename and move of a material,
+texture, geometry descriptor, scene, source model with its sidecar, a
+populated folder and an import group with referrers in saved and open
+documents, the dirty-document rejection, Undo, and delete with and without
+referrers.
 
 ### M08.9 — Asset thumbnails and previews
 
@@ -1076,8 +1133,8 @@ UI tests never drive the system mouse or need window focus.
 - [x] Picking, outline and framing (M08.4).
 - [x] Gizmos, snapping and viewport editing shortcuts (M08.5).
 - [x] Scene helpers, editable light handles and orientation triad (M08.6).
-- [ ] Content Browser layout, views and working commands (M08.7).
-- [ ] Rename, move, cut/copy/paste and delete with reference updates (M08.8).
+- [x] Content Browser layout, views and working commands (M08.7).
+- [x] Rename, move, cut/copy/paste and delete with reference updates (M08.8).
 - [ ] Rendered thumbnails in browser, pickers and Material Editor (M08.9).
 - [ ] Drag-and-drop assembly and the closeout walkthrough, including the
       RenderScene load of the editor-cooked project (M08.10).
