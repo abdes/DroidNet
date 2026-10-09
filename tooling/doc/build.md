@@ -129,10 +129,10 @@ traverse Invoke-Tests --start projects/Oxygen.Editor.ContentBrowser/tests/UI -- 
 dotnet test --project projects/Controls/DynamicTree/tests/UI/Controls.DynamicTree.UI.Tests.csproj --no-build -c Release --filter FullyQualifiedName~ReusesWindowAcrossContentLoads
 ```
 
-The SDK is pinned to `4.5.0-preview.26480.13` (MTP `2.5.0-preview.26480.13`),
-source commit `19db2c848caec237de9ba5e3388e5e694b68ad37`, from Microsoft's
-`test-tools` feed. [DroidNet #19](https://github.com/abdes/DroidNet/issues/19)
-tracks qualification of the final release and removal of the preview feed.
+The SDK is pinned to stable `4.5.1` (MTP `2.5.1`) from nuget.org. The preview
+feed has been removed. [DroidNet #19](https://github.com/abdes/DroidNet/issues/19)
+records the completed version adoption. The DynamicTree UI suite passed in Debug
+and Release; package-identity coverage remains a separate integration gap.
 See the [migration plan](test-migration.md) for validation status and commit scope.
 
 C# test projects use embedded English diagnostics for the MSTest adapter and

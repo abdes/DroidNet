@@ -1,16 +1,18 @@
 # MSTest migration
 
-Status: the C# test projects and templates use MSTest.Sdk and the shared unpackaged
-WinUI host. The final-release update remains tracked in
-[DroidNet #19](https://github.com/abdes/DroidNet/issues/19).
+Status: C# test projects and templates use MSTest.Sdk 4.5.1 and Microsoft.Testing.Platform
+2.5.1 with the shared unpackaged WinUI host. Version adoption is complete in
+[DroidNet #19](https://github.com/abdes/DroidNet/issues/19). The DynamicTree UI suite
+passed 111 tests in both Debug and Release; packaged-identity paths remain outside
+that focused qualification.
 See [hosting](#hosting), [release qualification](#release-qualification), and
 [WorldEditor test organization](../../projects/Oxygen.Editor.WorldEditor/tests/README.md).
 
 ## Hosting
 
-- The SDK is pinned to `4.5.0-preview.26480.13`, with MTP
-  `2.5.0-preview.26480.13`, from Microsoft's public `test-tools` feed. Its source
-  revision is `19db2c848caec237de9ba5e3388e5e694b68ad37`.
+- The SDK is pinned to stable `4.5.1`, with Microsoft.Testing.Platform `2.5.1`.
+  Both packages are available from nuget.org; the preview-only upstream feed has
+  been removed.
 - C# projects use the generated MTP entry point. Native C++ tests retain VSTest.
   Managed test discovery uses `IsTestApplication`; native discovery uses
   `IsTestProject`. Production interop is explicitly not a test project.
@@ -27,12 +29,12 @@ See [hosting](#hosting), [release qualification](#release-qualification), and
 
 ## Release qualification
 
-Before replacing the pin, check Test Explorer discovery, selected execution and
-debugging; CLI failure/timeout propagation; resource/native dependency loading;
-and host startup/shutdown. Then remove the upstream feed when no longer needed.
+The stable pin was built and exercised by the full DynamicTree UI suite in Debug
+and Release (111 tests each); the resolved graph includes MTP 2.5.1. This does not
+cover Visual Studio Test Explorer discovery/debugging or package identity. Package-
+sensitive asset resolution and Project Browser thumbnail loading need a packaged
+integration host; unpackaged component tests do not cover those paths.
 
-Package-sensitive asset resolution and Project Browser thumbnail loading need
-explicit coverage. Running unpackaged component tests does not cover those paths.
 C# test projects use the supported `EnableMSTestV2CopyResources=false` setting
 for English adapter/platform-service diagnostics. This removes their satellite
 DLLs from the PRI inputs without suppressing warnings or changing application
