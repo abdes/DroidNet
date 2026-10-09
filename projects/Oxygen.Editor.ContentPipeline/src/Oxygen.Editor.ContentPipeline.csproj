@@ -28,6 +28,8 @@
         <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.Integration.Tests" />
         <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.Benchmarks.Tests" />
         <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.WorkerProbe" />
+        <InternalsVisibleTo Include="Oxygen.Editor.WorldEditor.Unit.Tests" />
+        <InternalsVisibleTo Include="Oxygen.Editor.MaterialEditor.Tests" />
         <InternalsVisibleTo Include="Oxygen.Editor.WorldEditor.Unit.UI.Tests" />
         <InternalsVisibleTo Include="Oxygen.Editor.WorldEditor.Integration.UI.Tests" />
         <InternalsVisibleTo Include="Oxygen.Editor.WorldEditor.Benchmarks.UI.Tests" />

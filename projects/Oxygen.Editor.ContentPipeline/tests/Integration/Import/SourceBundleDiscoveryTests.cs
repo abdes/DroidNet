@@ -38,7 +38,7 @@ public sealed class SourceBundleDiscoveryTests
             {
                 Jobs = [report.Jobs.Single() with
                 {
-                    Observations = [.. report.Jobs.Single().Observations, new(directory, true, CookSavedSourceReader.ReadMetadata(directory), [])],
+                    Observations = [.. report.Jobs.Single().Observations, new(directory, Exists: true, CookSavedSourceReader.ReadMetadata(directory), [])],
                 }],
             };
         });
@@ -288,7 +288,7 @@ public sealed class SourceBundleDiscoveryTests
         {
             if (!File.Exists(path))
             {
-                observations.Add(new(path, false, null, []));
+                observations.Add(new(path, Exists: false, Metadata: null, []));
                 diagnostics.Add(new()
                 {
                     OperationId = execution.OperationId,
@@ -302,16 +302,24 @@ public sealed class SourceBundleDiscoveryTests
             }
 
             var bytes = await File.ReadAllBytesAsync(path, token).ConfigureAwait(false);
-            observations.Add(new(path, true, CookSavedSourceReader.ReadMetadata(path), [new(0, 0, Convert.ToHexStringLower(SHA256.HashData(bytes)))]));
+            observations.Add(new(path, Exists: true, CookSavedSourceReader.ReadMetadata(path), [new(0, 0, Convert.ToHexStringLower(SHA256.HashData(bytes)))]));
         }
 
-        return new("native-source-test", diagnostics.Count == 0, [new(job.Id, job.Type, job.Source, diagnostics.Count == 0,
-            [], [], [.. paths.Select(static path => new NativeSourceFileDependency(path, true))], observations.ToImmutable(), diagnostics.ToImmutable())]);
+        return new("native-source-test", diagnostics.Count == 0, [new(
+            job.Id,
+            job.Type,
+            job.Source,
+            diagnostics.Count == 0,
+            [],
+            [],
+            [.. paths.Select(static path => new NativeSourceFileDependency(path, Required: true))],
+            observations.ToImmutable(),
+            diagnostics.ToImmutable())]);
     }
 
     private static Task<ImportSourceRetentionResult> RetainDiscoveredAsync(RetentionWorkspace workspace, string sourcePath, IEngineContentPipelineApi native, CancellationToken cancellationToken)
     {
-        var input = new ContentCookInput(new Uri(sourcePath), ContentCookAssetKind.ForeignSource, "Content", Path.GetFileName(sourcePath), sourcePath, null, ContentCookInputRole.Primary);
+        var input = new ContentCookInput(new Uri(sourcePath), ContentCookAssetKind.ForeignSource, "Content", Path.GetFileName(sourcePath), sourcePath, OutputVirtualPath: null, ContentCookInputRole.Primary);
         var recipe = new ContentImportManifestBuilder().BuildModelJob(input, [], "Model", new SceneImportTarget("Content", "Model").CreateLayout(sourcePath), NativeMaterialSlotProvenance.Create());
         var discovery = new SceneImportSourceDiscovery(workspace.Documents, workspace.Coordinator, native);
         return workspace.Coordinator.RunAsync(

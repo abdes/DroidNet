@@ -65,6 +65,7 @@ public sealed class CookedContentMountTests
     /// <summary>A damaged library cannot be accepted merely because project output masks its top-level assets.</summary>
     /// <returns>The asynchronous validation regression.</returns>
     [TestMethod]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2025:Do not pass IDisposable instances into unawaited tasks", Justification = "the test awaits the preparation before the reader is disposed")]
     public async Task DamagedMaskedLibraryFailsBeforeMountAndReleasesReaders()
     {
         using var fixture = new MountFixture();
@@ -80,6 +81,7 @@ public sealed class CookedContentMountTests
     /// <summary>Cancellation waits for preparation to end and releases every acquired file reader.</summary>
     /// <returns>The asynchronous cancellation regression.</returns>
     [TestMethod]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2025:Do not pass IDisposable instances into unawaited tasks", Justification = "the test awaits the preparation before the reader is disposed")]
     public async Task CancelledPreparationReleasesTheBorrowedReader()
     {
         using var fixture = new MountFixture();
@@ -132,9 +134,16 @@ public sealed class CookedContentMountTests
         {
             using var libraries = await CookedLibraryReadSet.AcquireAsync(project, token).ConfigureAwait(false);
             var index = await CookedIndexSnapshot.ReadAsync(this.ProjectOutput, token).ConfigureAwait(false);
-            var roots = libraries.OrderBindings([new(CookPublicationRootOwner.Project, "Content", this.sourceKey, index.Fingerprint, null)]);
-            var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, project.ProjectId, Guid.NewGuid(),
-                DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(project), roots, [], null);
+            var roots = libraries.OrderBindings([new(CookPublicationRootOwner.Project, "Content", this.sourceKey, index.Fingerprint, LibraryPath: null)]);
+            var document = new CookPublicationDocument(
+                CookPublicationDocument.CurrentVersion,
+                project.ProjectId,
+                Guid.NewGuid(),
+                DateTimeOffset.UtcNow,
+                CookPublicationDocument.ConfigurationIdentity(project),
+                roots,
+                [],
+                CookInputs: null);
             var path = CookPublicationPaths.Document(project.ProjectRoot, document.OperationId);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             using var gate = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, token).ConfigureAwait(false);

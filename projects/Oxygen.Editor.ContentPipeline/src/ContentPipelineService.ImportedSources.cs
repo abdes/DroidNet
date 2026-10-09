@@ -54,7 +54,7 @@ public sealed partial class ContentPipelineService
     private static DiagnosticRecord[] ChangedImportedSourceDiagnostics(Guid operationId, Snapshots.CookDependencyGraph graph, Incremental.CookProvenance previous, Incremental.CookIncrementalPlan plan)
     {
         var prior = previous.Products.Where(static product => product.ImportedSource is not null).ToDictionary(static product => product.SourceUri);
-        return graph.ImportedSources.Where(pair => !plan.Reusable.ContainsKey(pair.Key) && prior.TryGetValue(pair.Key, out var published)
+        return [.. graph.ImportedSources.Where(pair => !plan.Reusable.ContainsKey(pair.Key) && prior.TryGetValue(pair.Key, out var published)
                 && (published.ImportedSource!.ContentFingerprint is null || !string.Equals(published.ImportedSource.ContentFingerprint, pair.Value.ContentFingerprint, StringComparison.Ordinal)))
             .Select(pair => new DiagnosticRecord
             {
@@ -64,13 +64,13 @@ public sealed partial class ContentPipelineService
                 Code = "asset_import.reimport_required",
                 AffectedVirtualPath = pair.Key.AbsolutePath,
                 Message = $"Reimport '{Path.GetFileName(Uri.UnescapeDataString(pair.Key.AbsolutePath))}' to confirm its source changes before automatic cooking updates it.",
-            }).ToArray();
+            })];
     }
 
     private static DiagnosticRecord[] MissingImportedOutputs(Guid operationId, Snapshots.CookDependencyGraph graph, IEnumerable<ContentCookedAsset> outputs)
     {
         var available = outputs.Select(static output => output.CookedAssetUri).ToHashSet();
-        return graph.ImportedReferences.Where(uri => !available.Contains(uri)).Select(uri => new DiagnosticRecord
+        return [.. graph.ImportedReferences.Where(uri => !available.Contains(uri)).Select(uri => new DiagnosticRecord
         {
             OperationId = operationId,
             Domain = FailureDomain.AssetImport,
@@ -78,19 +78,22 @@ public sealed partial class ContentPipelineService
             Code = AssetImportDiagnosticCodes.ImportFailed,
             AffectedVirtualPath = uri.AbsolutePath,
             Message = $"The retained model does not produce '{uri}'. Choose an existing imported output or correct the source before reimporting.",
-        }).ToArray();
+        })];
     }
 
-    private static ContentCookResult ValidateImportedIdentities(Guid operationId, ContentCookScope scope, ContentCookInput source, ContentCookResult result)
+    private static ContentCookResult ValidateImportedIdentities(Guid operationId, ContentCookScope scope, ContentCookInput source, NativeSceneImportSettings settings, ContentCookResult result)
     {
         if (result.Status is not (OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings))
         {
             return result;
         }
 
+        // Outputs outside the sidecar's current group were relocated with it on purpose; only outputs that
+        // stay in the group keep their identities.
         var previous = scope.PreviousProvenance?.Products.FirstOrDefault(product => product.SourceUri == source.AssetUri);
+        var kept = previous?.Outputs.Where(output => settings.OutputPrefixes.Any(prefix => output.Asset.VirtualPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))).ToArray() ?? [];
         var produced = result.CookedAssets.Select(static asset => asset.VirtualPath).ToHashSet(StringComparer.Ordinal);
-        var missing = previous?.Outputs.FirstOrDefault(output => !produced.Contains(output.Asset.VirtualPath));
+        var missing = kept.FirstOrDefault(output => !produced.Contains(output.Asset.VirtualPath));
         if (result.CookedAssets.Count == 0 || missing is not null)
         {
             var message = missing is not null
@@ -103,7 +106,7 @@ public sealed partial class ContentPipelineService
         {
             var oldEntries = previousInventory.Assets.ToDictionary(static asset => asset.VirtualPath, StringComparer.Ordinal);
             var newEntries = result.Inspection!.Assets.ToDictionary(static asset => asset.VirtualPath, StringComparer.Ordinal);
-            foreach (var output in previous.Outputs)
+            foreach (var output in kept)
             {
                 if (oldEntries.TryGetValue(output.Asset.VirtualPath, out var old)
                     && !string.Equals(old.Key.ToString(), newEntries[output.Asset.VirtualPath].AssetKey, StringComparison.Ordinal))
@@ -135,8 +138,12 @@ public sealed partial class ContentPipelineService
             ],
         };
 
-    private Task<ImportSourceBundle> DiscoverChangedImportedSourceAsync(ContentCookOperation operation, ContentCookInput input,
-        NativeSceneImportSettings settings, NativeArtifactLease? artifacts, CancellationToken cancellationToken)
+    private Task<ImportSourceBundle> DiscoverChangedImportedSourceAsync(
+        ContentCookOperation operation,
+        ContentCookInput input,
+        NativeSceneImportSettings settings,
+        NativeArtifactLease? artifacts,
+        CancellationToken cancellationToken)
     {
         this.cookCoordinator.VerifyWriter(operation);
         var recipe = this.manifestBuilder.BuildJob(input, [], settings);
@@ -154,7 +161,7 @@ public sealed partial class ContentPipelineService
             var collision = await this.FindImportedOutputCollisionAsync(operationId, scope, input, settings, cancellationToken).ConfigureAwait(false);
             if (collision is not null)
             {
-                results.Add(new(operationId, scope.TargetKind, OperationStatus.Failed, [collision], [], null, null));
+                results.Add(new(operationId, scope.TargetKind, OperationStatus.Failed, [collision], [], Inspection: null, Validation: null));
                 continue;
             }
 
@@ -165,7 +172,7 @@ public sealed partial class ContentPipelineService
                 settings.CreateLayout(),
                 [scope.NativeJobs.GetValueOrDefault(input.AssetUri) ?? this.manifestBuilder.BuildJob(input, [], settings)]);
             var result = await this.ExecuteManifestAsync(operationId, scope.TargetKind, sourceScope, manifest, [], cancellationToken).ConfigureAwait(false);
-            results.Add(ValidateImportedIdentities(operationId, scope, input, result));
+            results.Add(ValidateImportedIdentities(operationId, scope, input, settings, result));
         }
 
         var authored = scope.Inputs.Where(static input => input.Kind != ContentCookAssetKind.ForeignSource).ToArray();
@@ -206,7 +213,7 @@ public sealed partial class ContentPipelineService
 
         var inspection = await this.engineContentPipelineApi.InspectLooseCookedRootAsync((scope.Output ?? throw new InvalidOperationException("The import has no generation owner.")).Path, cancellationToken).ConfigureAwait(false);
         var owned = scope.PreviousProvenance?.Products.FirstOrDefault(product => product.SourceUri == source.AssetUri)?.Outputs
-            .Select(static output => output.Asset.VirtualPath).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+            .Select(static output => output.Asset.VirtualPath).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [with(StringComparer.OrdinalIgnoreCase)];
         var conflict = inspection.Assets.FirstOrDefault(asset => prefixes.Any(prefix => asset.VirtualPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) && !owned.Contains(asset.VirtualPath));
         return conflict is null ? null : Collision(conflict.VirtualPath);
 

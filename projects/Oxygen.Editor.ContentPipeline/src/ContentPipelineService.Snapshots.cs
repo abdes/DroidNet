@@ -47,6 +47,14 @@ public sealed partial class ContentPipelineService
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default).Unwrap();
 
+    private static async Task ReleaseCookOpeningAfterDrainAsync(Task drain, NativeArtifactLease artifacts, CookPublicationReadLease baseline)
+    {
+        using (baseline)
+        {
+            await ReleaseArtifactsAfterDrainAsync(drain, artifacts).ConfigureAwait(false);
+        }
+    }
+
     private async Task<ContentCookResult> CookCapturedScopesAsync(
         ContentCookOperation operation,
         Func<IReadOnlyList<ContentCookScope>> resolveScopes,
@@ -77,7 +85,8 @@ public sealed partial class ContentPipelineService
             return CreateFailedCook(operation, targetKind, failure);
         }
 
-        if (await this.ValidatePrimaryInputsAsync(operation, targetKind, primaryInputs, resolveScopes().Any(static scope => scope.ImportReplacement is not null), cancellationToken).ConfigureAwait(false) is { } preflight)
+        var scopes = resolveScopes();
+        if (await this.ValidatePrimaryInputsAsync(operation, targetKind, primaryInputs, scopes.Any(static scope => scope.ImportReplacement is not null), scopes.All(static scope => scope.IsAutomatic), cancellationToken).ConfigureAwait(false) is { } preflight)
         {
             return preflight;
         }
@@ -88,7 +97,20 @@ public sealed partial class ContentPipelineService
             return new(operation.OperationId, targetKind, OperationStatus.Failed, compatibility.Diagnostics, [], Inspection: null, Validation: null);
         }
 
-        var artifacts = compatibility.Artifacts!;
+        return await this.ExecuteWithArtifactsAsync(operation, baseline, resolveScopes, targetKind, compatibility.Artifacts!, previous, imports, cancellationToken).ConfigureAwait(false);
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2025:Do not pass IDisposable instances into unawaited tasks", Justification = "the drain task takes ownership of the retained baseline and disposes it when the drain completes")]
+    private async Task<ContentCookResult> ExecuteWithArtifactsAsync(
+        ContentCookOperation operation,
+        CookPublicationReadLease baseline,
+        Func<IReadOnlyList<ContentCookScope>> resolveScopes,
+        CookTargetKind targetKind,
+        NativeArtifactLease artifacts,
+        Incremental.CookProvenance previous,
+        Import.ImportedSourceIndex imports,
+        CancellationToken cancellationToken)
+    {
         Task? retainedDrain = null;
         try
         {
@@ -133,11 +155,28 @@ public sealed partial class ContentPipelineService
         }
     }
 
-    private async Task<ContentCookResult?> ValidatePrimaryInputsAsync(ContentCookOperation operation, CookTargetKind targetKind, ContentCookInput[] primaryInputs, bool replacingSource, CancellationToken cancellationToken)
+    private async Task<ContentCookResult?> ValidatePrimaryInputsAsync(ContentCookOperation operation, CookTargetKind targetKind, ContentCookInput[] primaryInputs, bool replacingSource, bool isAutomatic, CancellationToken cancellationToken)
     {
         if (primaryInputs.Length == 0)
         {
             return new(operation.OperationId, targetKind, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null);
+        }
+
+        // A save or preview may have queued this cook before the Content Browser moved or deleted its source.
+        // There is nothing left to cook; the next cook retires the old output.
+        if (isAutomatic && primaryInputs.All(static input => !File.Exists(input.SourceAbsolutePath)))
+        {
+            var retired = CreateSourceMissingDiagnostics(operation.OperationId, primaryInputs).Select(diagnostic => diagnostic with
+            {
+                Severity = DiagnosticSeverity.Info,
+                Message = $"'{Path.GetFileName(diagnostic.AffectedPath)}' was moved or deleted after this cook was requested; there is nothing to cook.",
+            }).ToArray();
+            foreach (var diagnostic in retired)
+            {
+                CookRunContext.Report(new(Message: diagnostic.Message));
+            }
+
+            return new(operation.OperationId, targetKind, OperationStatus.Cancelled, NormalizeDiagnostics(operation.OperationId, retired), [], Inspection: null, Validation: null);
         }
 
         await this.RequireSavedDocumentsAsync(primaryInputs, cancellationToken).ConfigureAwait(false);
@@ -156,14 +195,6 @@ public sealed partial class ContentPipelineService
         var previous = baseline.ProductState;
         var imports = await Import.ImportedSourceIndex.ReadAsync(operation.Project, cookDocuments, previous, cancellationToken).ConfigureAwait(false);
         return (previous, imports, () => scopes().Select(imports.ResolveScope).ToArray());
-    }
-
-    private static async Task ReleaseCookOpeningAfterDrainAsync(Task drain, NativeArtifactLease artifacts, CookPublicationReadLease baseline)
-    {
-        using (baseline)
-        {
-            await ReleaseArtifactsAfterDrainAsync(drain, artifacts).ConfigureAwait(false);
-        }
     }
 
     private async Task<(CookInputSnapshot snapshot, CookDependencyGraph graph)> CaptureScopesAsync(
@@ -204,15 +235,32 @@ public sealed partial class ContentPipelineService
         };
     }
 
-    private CookDependencyDiscovery CreateDependencyDiscovery(ContentCookOperation operation, NativeArtifactLease artifacts,
-        Incremental.CookProvenance previous, Import.ImportedSourceIndex imports, CookedLibraryReadSet libraries)
+    private CookDependencyDiscovery CreateDependencyDiscovery(
+        ContentCookOperation operation,
+        NativeArtifactLease artifacts,
+        Incremental.CookProvenance previous,
+        Import.ImportedSourceIndex imports,
+        CookedLibraryReadSet libraries)
         => new(
-            new CookSourceAnalyzer(operation, artifacts, this.engineContentPipelineApi, this.manifestBuilder, this.sceneDescriptorGenerator, this.cookScopeProvider, cookDocuments, previous),
+            new CookSourceAnalyzer(
+                operation,
+                artifacts,
+                this.engineContentPipelineApi,
+                this.manifestBuilder,
+                this.sceneDescriptorGenerator,
+                this.cookScopeProvider,
+                cookDocuments,
+                previous),
             resolveImported: uri => imports.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency),
             resolveBufferOwner: path => previous.FindBufferOwner(operation.Project, path),
             preferCookedReference: libraries.IsLibraryPreferred,
-            expandCookedReferences: (input, references, token) => libraries.ExpandReferencesAsync(input, references, this.engineContentPipelineApi as Inspection.ICookedDependencyInspector,
-                Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")), artifacts, token));
+            expandCookedReferences: (input, references, token) => libraries.ExpandReferencesAsync(
+                input,
+                references,
+                this.engineContentPipelineApi as Inspection.ICookedDependencyInspector,
+                Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")),
+                artifacts,
+                token));
 
     private async Task<bool> InputsAreCurrentAsync(
         CookInputSnapshot snapshot,

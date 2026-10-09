@@ -16,6 +16,15 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Cooking;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores", Justification = "Scenario-based MSTest method names separate the operation and expected behavior.")]
 public sealed class TextureCookTests
 {
+    private const string MeterDescriptor = """
+        { "source": "Meter.tga", "intent": "data", "decode": { "color_space": "linear" },
+          "output": { "format": "rgba8" } }
+        """;
+
+    private const string MaskedMaterial = """
+        { "name": "Masked", "textures": { "base_color": { "virtual_path": "/Content/Textures/Meter.otex" } } }
+        """;
+
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>Named textures remain source-associated and resolve from native material and scene imports.</summary>
@@ -25,10 +34,7 @@ public sealed class TextureCookTests
     public async Task NamedTextureCooksResolvesReusesAndRepairs()
     {
         using var workspace = new CookWorkspace();
-        workspace.WriteText("Content/Textures/Meter.otex.json", """
-            { "source": "Meter.tga", "intent": "data", "decode": { "color_space": "linear" },
-              "output": { "format": "rgba8" } }
-            """);
+        workspace.WriteText("Content/Textures/Meter.otex.json", MeterDescriptor);
         byte[] image = [0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 32, 8, 255, 255, 255, 255];
         await File.WriteAllBytesAsync(Path.Combine(workspace.Root, "Content/Textures/Meter.tga"), image, this.TestContext.CancellationToken).ConfigureAwait(false);
         var texture = new Uri("asset:///Content/Textures/Meter.otex.json");
@@ -37,9 +43,7 @@ public sealed class TextureCookTests
             PostProcess = new PostProcessEnvironmentData { AutoExposureMeteringMask = texture },
         });
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        workspace.WriteText("Content/Materials/Masked.omat.json", """
-            { "name": "Masked", "textures": { "base_color": { "virtual_path": "/Content/Textures/Meter.otex" } } }
-            """);
+        workspace.WriteText("Content/Materials/Masked.omat.json", MaskedMaterial);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var service = CreateIncrementalService(workspace, api, compatibility);
@@ -50,7 +54,7 @@ public sealed class TextureCookTests
         _ = output.VirtualPath.Should().Be("/Content/Textures/Meter.otex");
         _ = output.DescriptorRelativePath.Should().Be("Textures/Meter.otex");
         var root = workspace.CookedRoot("Content");
-        var inventory = await api.ReadInventoryAsync(root, null, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var inventory = await api.ReadInventoryAsync(root, artifacts: null, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = inventory.Resources.Should().ContainSingle(resource => resource.DescriptorPath == output.DescriptorRelativePath && resource.ResourceIndex != null);
         _ = inventory.Assets.Should().NotContain(static asset => asset.Type == 4);
         var status = (await service.ReadAsync(workspace.ProjectContext, [texture], this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
@@ -60,18 +64,7 @@ public sealed class TextureCookTests
         _ = (await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
         _ = api.Imported.Should().BeEmpty();
 
-        var beforeInvalidImport = ReadOutputIdentities(workspace.Root);
-        workspace.WriteText("Invalid.otex.json", System.Text.Json.JsonSerializer.Serialize(new
-        {
-            source = Path.Combine(workspace.Root, "Content/Textures/Meter.tga"),
-            virtual_path = "/Other/Meter.otex",
-        }));
-        var invalidManifest = new ContentImportManifest(1, root, new("/Content"),
-            [new("invalid", "texture-descriptor", "Invalid.otex.json", [], Output: null, Name: "Invalid")]);
-        var invalid = await api.ImportAsync(new(Guid.NewGuid(), workspace.Root, Path.Combine(workspace.Root, ".invalid-native"), invalidManifest), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = invalid.Succeeded.Should().BeFalse();
-        _ = ReadOutputIdentities(workspace.Root).Should().BeEquivalentTo(beforeInvalidImport);
-
+        await this.AssertInvalidImportLeavesOutputsAsync(workspace, api, root).ConfigureAwait(false);
         var path = Path.Combine(root, output.DescriptorRelativePath!);
         var original = await File.ReadAllBytesAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false);
         var damaged = original.ToArray();
@@ -82,5 +75,23 @@ public sealed class TextureCookTests
         _ = repaired.CookedAssets.Should().ContainSingle(asset => asset.SourceAssetUri == texture);
         _ = (await File.ReadAllBytesAsync(Path.Combine(workspace.CookedRoot("Content"), output.DescriptorRelativePath!), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(original);
         _ = (await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
+    }
+
+    private async Task AssertInvalidImportLeavesOutputsAsync(CookWorkspace workspace, RecordingNativeApi api, string root)
+    {
+        var beforeInvalidImport = ReadOutputIdentities(workspace.Root);
+        workspace.WriteText("Invalid.otex.json", System.Text.Json.JsonSerializer.Serialize(new
+        {
+            source = Path.Combine(workspace.Root, "Content/Textures/Meter.tga"),
+            virtual_path = "/Other/Meter.otex",
+        }));
+        var invalidManifest = new ContentImportManifest(
+            1,
+            root,
+            new("/Content"),
+            [new("invalid", "texture-descriptor", "Invalid.otex.json", [], Output: null, Name: "Invalid")]);
+        var invalid = await api.ImportAsync(new(Guid.NewGuid(), workspace.Root, Path.Combine(workspace.Root, ".invalid-native"), invalidManifest), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = invalid.Succeeded.Should().BeFalse();
+        _ = ReadOutputIdentities(workspace.Root).Should().BeEquivalentTo(beforeInvalidImport);
     }
 }

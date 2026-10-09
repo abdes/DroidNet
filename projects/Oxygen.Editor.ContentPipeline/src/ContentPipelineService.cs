@@ -42,7 +42,6 @@ public sealed partial class ContentPipelineService(
     DroidNet.Storage.IAtomicFileStore files,
     Publication.CookPublicationService publication) : IContentPipelineService
 {
-
     private readonly INativeCompatibilityService nativeCompatibility = nativeCompatibility;
     private readonly Publication.CookPublicationService publication = publication ?? throw new ArgumentNullException(nameof(publication));
 
@@ -333,11 +332,64 @@ public sealed partial class ContentPipelineService(
                || string.Equals(relativePath, ".build", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static ContentImportManifest PruneReusableJobs(ContentCookScope scope, ContentImportManifest manifest, Guid sourceKey)
+    {
+        var skippedSources = scope.Inputs.GroupBy(static input => input.SourceRelativePath, StringComparer.Ordinal)
+            .Where(group => group.All(input => scope.ReusableSources.Contains(input.AssetUri)))
+            .Select(static group => group.Key).ToHashSet(StringComparer.Ordinal);
+        var keptJobs = manifest.Jobs.Where(job => !skippedSources.Contains(job.Source)).ToArray();
+        var keptIds = keptJobs.Select(static job => job.Id).ToHashSet(StringComparer.Ordinal);
+        return manifest with
+        {
+            SourceKey = sourceKey,
+            Jobs = keptJobs.Select(job => job with
+            {
+                DependsOn = job.DependsOn.Where(keptIds.Contains).ToArray(),
+                CookedContextRoots = job.Type is "scene-descriptor" or "geometry-descriptor" && scope.CookedContextRoots.Count > 0 ? scope.CookedContextRoots : null,
+            }).ToArray(),
+        };
+    }
+
+    private static ContentCookResult CreateFailedImport(Guid operationId, CookTargetKind targetKind, List<DiagnosticRecord> diagnostics)
+        => new(
+            operationId,
+            targetKind,
+            OperationStatus.Failed,
+            NormalizeDiagnostics(operationId, diagnostics),
+            CookedAssets: [],
+            Inspection: null,
+            Validation: null);
+
+    private static IEnumerable<DiagnosticRecord> MapSourceDiagnostics(ContentCookScope scope, IEnumerable<DiagnosticRecord> nativeDiagnostics)
+        => nativeDiagnostics.Select(issue =>
+        {
+            var input = scope.Inputs.FirstOrDefault(input => string.Equals(input.SourceAbsolutePath, issue.AffectedPath, StringComparison.OrdinalIgnoreCase));
+            return input is null ? issue : issue with
+            {
+                AffectedPath = Path.Combine(scope.Project.ProjectRoot, input.SourceRelativePath),
+                AffectedVirtualPath = input.AssetUri.AbsolutePath,
+            };
+        });
+
+    private static ContentCookResult WithAuxiliaryFiles(ContentCookResult validated, ContentCookScope scope, NativeImportResult importResult)
+    {
+        var resources = validated.NativeInventory?.Files.Where(static file => file.Value.Kind == Oxygen.Managed.Assets.Persistence.LooseCooked.V3.FileKind.Auxiliary)
+            .Select(static file => file.Key).ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>(StringComparer.Ordinal);
+        return validated with
+        {
+            MaterialSlotProvenance = importResult.MaterialSlotProvenance,
+            AuxiliaryFilesBySource = scope.Inputs.Where(input => importResult.OutputsBySource.ContainsKey(input.SourceRelativePath))
+                .ToImmutableDictionary(
+                    static input => input.AssetUri,
+                    input => importResult.OutputsBySource[input.SourceRelativePath].Where(resources.Contains).ToImmutableArray()),
+        };
+    }
+
     private Task<ContentCookResult> CookCurrentSceneCoreAsync(ContentCookOperation operation, Uri sceneAssetUri, CancellationToken cancellationToken)
         => this.CookCapturedScopesAsync(operation, () => [this.CreateSceneScope(operation.Project, sceneAssetUri) with { ScopeUri = sceneAssetUri }], CookTargetKind.CurrentScene, cancellationToken);
 
-    private Task<ContentCookResult> CookAssetCoreAsync(ContentCookOperation operation, Uri assetUri, CancellationToken cancellationToken, bool allowImportedSourceChanges = true)
-        => this.CookCapturedScopesAsync(operation, () => [this.CreateScope(operation.Project, [ResolveInput(operation.Project, assetUri, GetAssetKind(assetUri), ContentCookInputRole.Primary)], CookTargetKind.Asset) with { ScopeUri = assetUri, AllowImportedSourceChanges = allowImportedSourceChanges }], CookTargetKind.Asset, cancellationToken);
+    private Task<ContentCookResult> CookAssetCoreAsync(ContentCookOperation operation, Uri assetUri, CancellationToken cancellationToken, bool allowImportedSourceChanges = true, bool isAutomatic = false)
+        => this.CookCapturedScopesAsync(operation, () => [this.CreateScope(operation.Project, [ResolveInput(operation.Project, assetUri, GetAssetKind(assetUri), ContentCookInputRole.Primary)], CookTargetKind.Asset) with { ScopeUri = assetUri, AllowImportedSourceChanges = allowImportedSourceChanges, IsAutomatic = isAutomatic }], CookTargetKind.Asset, cancellationToken);
 
     private Task<ContentCookResult> CookFolderCoreAsync(ContentCookOperation operation, Uri folderUri, CancellationToken cancellationToken)
         => this.CookCapturedScopesAsync(operation, () => [this.CreateScope(operation.Project, ResolveFolderInputs(operation.Project, folderUri), CookTargetKind.Folder) with { ScopeUri = folderUri }], CookTargetKind.Folder, cancellationToken);
@@ -386,12 +438,20 @@ public sealed partial class ContentPipelineService(
             .DistinctBy(static input => input.AssetUri).ToArray();
         var prepared = scope with { Inputs = inputs };
         var manifest = this.manifestBuilder.BuildSceneManifests(prepared, descriptors);
-        return this.ExecuteManifestAsync(operationId, scope.TargetKind, prepared, manifest,
-            descriptors.SelectMany(static descriptor => descriptor.Diagnostics).ToArray(), cancellationToken);
+        return this.ExecuteManifestAsync(
+            operationId,
+            scope.TargetKind,
+            prepared,
+            manifest,
+            descriptors.SelectMany(static descriptor => descriptor.Diagnostics).ToArray(),
+            cancellationToken);
     }
 
-    private Task<ContentCookResult> CookResolvedInputsAsync(Guid operationId, ContentCookScope scope,
-        IReadOnlyList<DiagnosticRecord> diagnostics, CancellationToken cancellationToken)
+    private Task<ContentCookResult> CookResolvedInputsAsync(
+        Guid operationId,
+        ContentCookScope scope,
+        IReadOnlyList<DiagnosticRecord> diagnostics,
+        CancellationToken cancellationToken)
         => this.ExecuteManifestAsync(operationId, scope.TargetKind, scope, this.manifestBuilder.BuildManifest(scope), diagnostics, cancellationToken);
 
     private async Task<ContentCookResult> ExecuteManifestAsync(
@@ -402,71 +462,26 @@ public sealed partial class ContentPipelineService(
         IReadOnlyList<DiagnosticRecord> diagnostics,
         CancellationToken cancellationToken)
     {
-        var skippedSources = scope.Inputs.GroupBy(static input => input.SourceRelativePath, StringComparer.Ordinal)
-            .Where(group => group.All(input => scope.ReusableSources.Contains(input.AssetUri)))
-            .Select(static group => group.Key).ToHashSet(StringComparer.Ordinal);
-        var keptJobs = manifest.Jobs.Where(job => !skippedSources.Contains(job.Source)).ToArray();
-        var keptIds = keptJobs.Select(static job => job.Id).ToHashSet(StringComparer.Ordinal);
-        manifest = manifest with
-        {
-            SourceKey = scope.Output?.SourceKey ?? throw new InvalidOperationException("The cook has no generation owner."),
-            Jobs = keptJobs.Select(job => job with
-            {
-                DependsOn = job.DependsOn.Where(keptIds.Contains).ToArray(),
-                CookedContextRoots = job.Type is "scene-descriptor" or "geometry-descriptor" && scope.CookedContextRoots.Count > 0 ? scope.CookedContextRoots : null,
-            }).ToArray(),
-        };
+        var output = scope.Output ?? throw new InvalidOperationException("The cook has no generation owner.");
+        manifest = PruneReusableJobs(scope, manifest, output.SourceKey);
         scope = scope with { Inputs = scope.Inputs.Where(input => !scope.ReusableSources.Contains(input.AssetUri)).ToArray() };
         var manifestDiagnostics = this.manifestValidator.Validate(operationId, manifest);
         if (HasError(manifestDiagnostics))
         {
-            var allManifestDiagnostics = diagnostics.Concat(manifestDiagnostics).ToList();
-            return new ContentCookResult(
-                operationId,
-                targetKind,
-                OperationStatus.Failed,
-                NormalizeDiagnostics(operationId, allManifestDiagnostics),
-                CookedAssets: [],
-                Inspection: null,
-                Validation: null);
+            return CreateFailedImport(operationId, targetKind, diagnostics.Concat(manifestDiagnostics).ToList());
         }
 
-        await scope.Output.PrepareWriteAsync().ConfigureAwait(false);
+        await output.PrepareWriteAsync().ConfigureAwait(false);
         var importResult = await this.ImportManifestAsync(operationId, scope, manifest, cancellationToken)
             .ConfigureAwait(false);
-        var nativeDiagnostics = importResult.Diagnostics.Select(issue =>
-        {
-            var input = scope.Inputs.FirstOrDefault(input => string.Equals(input.SourceAbsolutePath, issue.AffectedPath, StringComparison.OrdinalIgnoreCase));
-            return input is null ? issue : issue with
-            {
-                AffectedPath = Path.Combine(scope.Project.ProjectRoot, input.SourceRelativePath),
-                AffectedVirtualPath = input.AssetUri.AbsolutePath,
-            };
-        });
-        var allDiagnostics = diagnostics.Concat(nativeDiagnostics).ToList();
+        var allDiagnostics = diagnostics.Concat(MapSourceDiagnostics(scope, importResult.Diagnostics)).ToList();
         if (!importResult.Succeeded)
         {
-            return new ContentCookResult(
-                operationId,
-                targetKind,
-                OperationStatus.Failed,
-                NormalizeDiagnostics(operationId, allDiagnostics),
-                CookedAssets: [],
-                Inspection: null,
-                Validation: null);
+            return CreateFailedImport(operationId, targetKind, allDiagnostics);
         }
 
         var validated = await this.ValidateImportedOutputAsync(operationId, targetKind, scope, manifest, allDiagnostics, importResult, cancellationToken).ConfigureAwait(false);
-        var resources = validated.NativeInventory?.Files.Where(static file => file.Value.Kind == Oxygen.Managed.Assets.Persistence.LooseCooked.V3.FileKind.Auxiliary)
-            .Select(static file => file.Key).ToHashSet(StringComparer.Ordinal) ?? [];
-        return validated with
-        {
-            MaterialSlotProvenance = importResult.MaterialSlotProvenance,
-            AuxiliaryFilesBySource = scope.Inputs.Where(input => importResult.OutputsBySource.ContainsKey(input.SourceRelativePath))
-                .ToImmutableDictionary(
-                    static input => input.AssetUri,
-                    input => importResult.OutputsBySource[input.SourceRelativePath].Where(resources.Contains).ToImmutableArray()),
-        };
+        return WithAuxiliaryFiles(validated, scope, importResult);
     }
 
     private async Task<ContentCookResult> ValidateImportedOutputAsync(Guid operationId, CookTargetKind targetKind, ContentCookScope scope, ContentImportManifest manifest, List<DiagnosticRecord> allDiagnostics, NativeImportResult import, CancellationToken cancellationToken)
@@ -475,23 +490,7 @@ public sealed partial class ContentPipelineService(
         CookedInventoryReport inventory;
         try
         {
-            var outputLease = await CookOutputReadLease.AcquireAsync(manifest.Output, cancellationToken).ConfigureAwait(false);
-            try
-            {
-                inventory = await outputLease.ReadInventoryAsync(this.engineContentPipelineApi, cancellationToken, scope.Artifacts).ConfigureAwait(false);
-                if (inventory.IsValid)
-                {
-                    (scope.Output ?? throw new InvalidOperationException("The cook has no generation owner.")).AcceptVerification(outputLease, inventory);
-                    outputLease = null;
-                }
-            }
-            finally
-            {
-                if (outputLease is not null)
-                {
-                    await outputLease.DisposeAsync().ConfigureAwait(false);
-                }
-            }
+            inventory = await this.ReadVerifiedInventoryAsync(scope, manifest.Output, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException or System.ComponentModel.Win32Exception)
         {
@@ -508,8 +507,11 @@ public sealed partial class ContentPipelineService(
             };
             allDiagnostics.Add(diagnostic);
             return new ContentCookResult(
-                operationId, targetKind, OperationStatus.Failed,
-                NormalizeDiagnostics(operationId, allDiagnostics), CookedAssets: [],
+                operationId,
+                targetKind,
+                OperationStatus.Failed,
+                NormalizeDiagnostics(operationId, allDiagnostics),
+                CookedAssets: [],
                 new CookInspectionResult(manifest.Output, Succeeded: false, SourceIdentity: null, [], [], [diagnostic]),
                 Validation: null);
         }
@@ -519,12 +521,40 @@ public sealed partial class ContentPipelineService(
         allDiagnostics.AddRange(validation.Diagnostics);
         var proof = inventory.IsValid ? new CookProvenance.Root(scope.Inputs[0].MountName, inventory.SourceKey, inventory.IndexSha256) : null;
         return new ContentCookResult(
-            operationId, targetKind, GetStatus(allDiagnostics, validation), NormalizeDiagnostics(operationId, allDiagnostics),
-            CreateCookedAssets(scope, inspection, inventory, import), inspection, validation)
+            operationId,
+            targetKind,
+            GetStatus(allDiagnostics, validation),
+            NormalizeDiagnostics(operationId, allDiagnostics),
+            CreateCookedAssets(scope, inspection, inventory, import),
+            inspection,
+            validation)
         {
             VerifiedRoot = proof,
             NativeInventory = inventory,
         };
+    }
+
+    private async Task<CookedInventoryReport> ReadVerifiedInventoryAsync(ContentCookScope scope, string output, CancellationToken cancellationToken)
+    {
+        var outputLease = await CookOutputReadLease.AcquireAsync(output, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var inventory = await outputLease.ReadInventoryAsync(this.engineContentPipelineApi, cancellationToken, scope.Artifacts).ConfigureAwait(false);
+            if (inventory.IsValid)
+            {
+                (scope.Output ?? throw new InvalidOperationException("The cook has no generation owner.")).AcceptVerification(outputLease, inventory);
+                outputLease = null;
+            }
+
+            return inventory;
+        }
+        finally
+        {
+            if (outputLease is not null)
+            {
+                await outputLease.DisposeAsync().ConfigureAwait(false);
+            }
+        }
     }
 
     private Task<NativeImportResult> ImportManifestAsync(Guid operationId, ContentCookScope scope, ContentImportManifest manifest, CancellationToken cancellationToken)

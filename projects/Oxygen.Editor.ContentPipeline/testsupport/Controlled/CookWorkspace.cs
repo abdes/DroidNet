@@ -70,9 +70,9 @@ internal sealed partial class CookWorkspace : IDisposable
             Guid.NewGuid(),
             DateTimeOffset.UtcNow,
             CookPublicationDocument.ConfigurationIdentity(this.ProjectContext),
-            [new(CookPublicationRootOwner.Project, mount, key, digest, null)],
+            [new(CookPublicationRootOwner.Project, mount, key, digest, LibraryPath: null)],
             [],
-            null);
+            CookInputs: null);
         var path = CookPublicationPaths.Document(this.Root, document.OperationId);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         using var gate = await CookOutputLease.AcquireWriteAsync(this.Root, token).ConfigureAwait(false);

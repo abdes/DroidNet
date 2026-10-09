@@ -34,7 +34,7 @@ public sealed partial class ContentPipelineService
                 OriginContext = expectedProject,
             },
             (operation, token) => ReferenceEquals(operation.Project, expectedProject)
-                ? this.CookAssetCoreAsync(operation, assetUri, token, allowImportedSourceChanges: false)
+                ? this.CookAssetCoreAsync(operation, assetUri, token, allowImportedSourceChanges: false, isAutomatic: true)
                 : throw new OperationCanceledException("The saved source's project is no longer active.", token),
             cancellationToken);
     }

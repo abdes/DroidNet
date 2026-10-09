@@ -63,6 +63,12 @@ public sealed record ContentCookScope(
     /// <summary>Gets a value indicating whether explicit user intent permits changed retained model inputs.</summary>
     internal bool AllowImportedSourceChanges { get; init; } = true;
 
+    /// <summary>
+    /// Gets a value indicating whether a save or preview queued this cook. Its source may have been moved or deleted
+    /// since then; that ends the request instead of failing it.
+    /// </summary>
+    internal bool IsAutomatic { get; init; }
+
     /// <summary>Gets ordered native lookup roots, including private roots for affected project mounts.</summary>
     internal IReadOnlyList<string> CookedContextRoots { get; init; } = [];
 

@@ -51,31 +51,7 @@ public sealed partial class ContentPipelineService
             var candidate = result.NativeInventory ?? throw new InvalidDataException("Cooked output omitted its native inventory.");
             if (inventories.TryGetValue(root.Mount, out var priorInventory))
             {
-                var oldAssets = priorInventory.Assets.ToDictionary(static asset => asset.VirtualPath, StringComparer.Ordinal);
-                foreach (var asset in candidate.Assets.Where(asset => !changed.Contains(asset.VirtualPath)))
-                {
-                    if (oldAssets.TryGetValue(asset.VirtualPath, out var old)
-                        && (asset.Key != old.Key
-                            || !string.Equals(asset.DescriptorPath, old.DescriptorPath, StringComparison.Ordinal)
-                            || candidate.Files[asset.DescriptorPath] != priorInventory.Files[old.DescriptorPath]))
-                    {
-                        throw new InvalidDataException($"Unrelated cooked descriptor changed during publication: {asset.VirtualPath}.");
-                    }
-                }
-
-                if (plan.ValidSharedRoots.Contains(root.Mount))
-                {
-                    foreach (var output in products.Values.SelectMany(static product => product.Outputs)
-                        .Where(output => string.Equals(output.RootMount, root.Mount, StringComparison.Ordinal) && !changed.Contains(output.Asset.VirtualPath)))
-                    {
-                        if (output.Asset.DescriptorRelativePath is not { } path
-                            || !priorInventory.Files.TryGetValue(path, out var expected)
-                            || !candidate.Files.TryGetValue(path, out var actual) || actual != expected)
-                        {
-                            throw new InvalidDataException($"Unrelated cooked output changed during publication: {output.Asset.VirtualPath}.");
-                        }
-                    }
-                }
+                EnsureUnrelatedOutputsUnchanged(plan, root, changed, candidate, priorInventory, products.Values);
             }
 
             if (invalidatedRoots.Remove(root.Mount))
@@ -90,35 +66,10 @@ public sealed partial class ContentPipelineService
             roots[root.Mount] = root;
             foreach (var source in result.CookedAssets.GroupBy(static asset => asset.SourceAssetUri))
             {
-                if (!plan.Fingerprints.TryGetValue(source.Key, out var fingerprint))
+                if (plan.Fingerprints.TryGetValue(source.Key, out var fingerprint))
                 {
-                    continue;
+                    products[source.Key] = CreateProduct(source, fingerprint, root, result, graph, snapshot, expectedInputs, expectedFiles, sourceInputs);
                 }
-
-                var dependencies = graph.Dependencies.TryGetValue(source.Key, out var discovered) ? discovered
-                    : ProceduralGeometryDescriptorService.IsGeneratedBasicShape(source.Key) ? [AssetUris.BuildGeneratedUri("Materials/Default")] : ImmutableArray<Uri>.Empty;
-                products[source.Key] = new(source.Key, fingerprint, dependencies, [.. source.Select(asset => new CookProvenance.Output(asset, root.Mount))])
-                {
-                    SourceInput = sourceInputs.GetValueOrDefault(source.Key),
-                    SourceFiles = graph.FileDependencies.TryGetValue(source.Key, out var sourceFiles)
-                        ? [.. sourceFiles.Select(path => expectedFiles[path])] : [],
-                    DeclaredOutputs = graph.SourceFacts.GetValueOrDefault(source.Key)?.Outputs ?? [],
-                    NativeReferences = graph.SourceFacts.GetValueOrDefault(source.Key)?.References ?? [],
-                    AuxiliaryFiles = result.AuxiliaryFilesBySource.GetValueOrDefault(source.Key, []),
-                    ReuseFingerprint = sourceInputs.TryGetValue(source.Key, out var sourceInput)
-                        ? CookIncrementalPlanner.Fingerprint(sourceInput, snapshot.BuildFingerprint, expectedInputs, graph) : fingerprint,
-                    CookedDependencies = graph.CookedDependencies.GetValueOrDefault(source.Key, []),
-                    ImportedSource = graph.ImportedSources.TryGetValue(source.Key, out var imported) ? imported with
-                    {
-                        ContentFingerprint = CookDependencyDiscovery.FingerprintImportedContent(graph.FileDependencies[source.Key].Select(path => expectedFiles[path])),
-                    } : null,
-                    Diagnostics =
-                    [
-                        .. result.Diagnostics.Where(diagnostic => diagnostic.Severity == Oxygen.Managed.Core.Diagnostics.DiagnosticSeverity.Warning
-                            && (diagnostic.AffectedVirtualPath is null || string.Equals(diagnostic.AffectedVirtualPath, source.Key.AbsolutePath, StringComparison.Ordinal)
-                                || source.Any(asset => string.Equals(asset.VirtualPath, diagnostic.AffectedVirtualPath, StringComparison.Ordinal)))),
-                    ],
-                };
             }
         }
 
@@ -126,6 +77,83 @@ public sealed partial class ContentPipelineService
             && output.Asset.DescriptorRelativePath is { } path && inventory.Files.ContainsKey(path)));
         return new(previous.ProjectId, [.. roots.Values.OrderBy(static root => root.Mount, StringComparer.Ordinal)], [.. retained.OrderBy(static product => product.SourceUri.AbsoluteUri, StringComparer.Ordinal)]);
     }
+
+    private static void EnsureUnrelatedOutputsUnchanged(
+        CookIncrementalPlan plan,
+        CookProvenance.Root root,
+        HashSet<string> changed,
+        Inspection.CookedInventoryReport candidate,
+        Inspection.CookedInventoryReport priorInventory,
+        IEnumerable<CookProvenance.Product> products)
+    {
+        var oldAssets = priorInventory.Assets.ToDictionary(static asset => asset.VirtualPath, StringComparer.Ordinal);
+        foreach (var asset in candidate.Assets.Where(asset => !changed.Contains(asset.VirtualPath)))
+        {
+            if (oldAssets.TryGetValue(asset.VirtualPath, out var old)
+                && (asset.Key != old.Key
+                    || !string.Equals(asset.DescriptorPath, old.DescriptorPath, StringComparison.Ordinal)
+                    || candidate.Files[asset.DescriptorPath] != priorInventory.Files[old.DescriptorPath]))
+            {
+                throw new InvalidDataException($"Unrelated cooked descriptor changed during publication: {asset.VirtualPath}.");
+            }
+        }
+
+        if (!plan.ValidSharedRoots.Contains(root.Mount))
+        {
+            return;
+        }
+
+        foreach (var output in products.SelectMany(static product => product.Outputs)
+            .Where(output => string.Equals(output.RootMount, root.Mount, StringComparison.Ordinal) && !changed.Contains(output.Asset.VirtualPath)))
+        {
+            if (output.Asset.DescriptorRelativePath is not { } path
+                || !priorInventory.Files.TryGetValue(path, out var expected)
+                || !candidate.Files.TryGetValue(path, out var actual) || actual != expected)
+            {
+                throw new InvalidDataException($"Unrelated cooked output changed during publication: {output.Asset.VirtualPath}.");
+            }
+        }
+    }
+
+    private static CookProvenance.Product CreateProduct(
+        IGrouping<Uri, ContentCookedAsset> source,
+        string fingerprint,
+        CookProvenance.Root root,
+        ContentCookResult result,
+        CookDependencyGraph graph,
+        CookInputSnapshot snapshot,
+        ImmutableArray<CookSnapshotInput> expectedInputs,
+        Dictionary<string, CookSnapshotInput> expectedFiles,
+        Dictionary<Uri, ContentCookInput> sourceInputs)
+    {
+        var dependencies = graph.Dependencies.TryGetValue(source.Key, out var discovered) ? discovered
+            : ProceduralGeometryDescriptorService.IsGeneratedBasicShape(source.Key) ? [AssetUris.BuildGeneratedUri("Materials/Default")] : ImmutableArray<Uri>.Empty;
+        return new(source.Key, fingerprint, dependencies, [.. source.Select(asset => new CookProvenance.Output(asset, root.Mount))])
+        {
+            SourceInput = sourceInputs.GetValueOrDefault(source.Key),
+            SourceFiles = graph.FileDependencies.TryGetValue(source.Key, out var sourceFiles)
+                ? [.. sourceFiles.Select(path => expectedFiles[path])] : [],
+            DeclaredOutputs = graph.SourceFacts.GetValueOrDefault(source.Key)?.Outputs ?? [],
+            NativeReferences = graph.SourceFacts.GetValueOrDefault(source.Key)?.References ?? [],
+            AuxiliaryFiles = result.AuxiliaryFilesBySource.GetValueOrDefault(source.Key, []),
+            ReuseFingerprint = sourceInputs.TryGetValue(source.Key, out var sourceInput)
+                ? CookIncrementalPlanner.Fingerprint(sourceInput, snapshot.BuildFingerprint, expectedInputs, graph) : fingerprint,
+            CookedDependencies = graph.CookedDependencies.GetValueOrDefault(source.Key, []),
+            ImportedSource = graph.ImportedSources.TryGetValue(source.Key, out var imported) ? imported with
+            {
+                ContentFingerprint = CookDependencyDiscovery.FingerprintImportedContent(graph.FileDependencies[source.Key].Select(path => expectedFiles[path])),
+            } : null,
+            Diagnostics =
+            [
+                .. result.Diagnostics.Where(diagnostic => diagnostic.Severity == Oxygen.Managed.Core.Diagnostics.DiagnosticSeverity.Warning
+                    && (diagnostic.AffectedVirtualPath is null || string.Equals(diagnostic.AffectedVirtualPath, source.Key.AbsolutePath, StringComparison.Ordinal)
+                        || source.Any(asset => string.Equals(asset.VirtualPath, diagnostic.AffectedVirtualPath, StringComparison.Ordinal)))),
+            ],
+        };
+    }
+
+    private static bool IsGeneratedSource(Uri uri)
+        => uri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase);
 
     private async Task<IReadOnlyList<ContentCookInput>> PrepareMissingBuiltinsAsync(
         ContentCookOperation operation,
@@ -175,7 +203,7 @@ public sealed partial class ContentPipelineService
         var mounts = operation.Project.AuthoringMounts.Where(static mount => !IsDerivedRootMount(mount))
             .Select(static mount => mount.Name).Concat(previous.Roots.Select(static root => root.Mount)).Distinct(StringComparer.Ordinal).ToArray();
         var inventories = await CookIncrementalPlanner.ReadInventoriesAsync(baseline, mounts, this.engineContentPipelineApi, cancellationToken, artifacts).ConfigureAwait(false);
-        var repair = CookRootRepair.Create(baseline, previous, mounts, inventories);
+        var repair = CookRootRepair.Create(baseline, previous, mounts, inventories, imports.IsRelocated);
         resolveScopes = this.ExpandRepairScopes(operation, resolveScopes, repair, imports, targetKind);
         var knownOutputs = imports.KnownOutputs.Concat(baseline.ProjectOutputPaths.Select(ToAssetUri)).Distinct().ToArray();
         var libraries = await CookedLibraryReadSet.AcquireAsync(operation.Project, cancellationToken, uri => imports.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency), knownOutputs).ConfigureAwait(false);
@@ -220,8 +248,19 @@ public sealed partial class ContentPipelineService
         }
     }
 
-    private async Task<ContentCookResult> ExecuteCapturedCookAsync(ContentCookOperation operation, CookPublicationReadLease baseline, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CookProvenance previous, CookInputSnapshot snapshot, CookDependencyGraph graph, CookedLibraryReadSet libraries,
-        ImmutableDictionary<string, Inspection.CookedInventoryReport> inventories, CookRootRepair repair, CancellationToken cancellationToken)
+    private async Task<ContentCookResult> ExecuteCapturedCookAsync(
+        ContentCookOperation operation,
+        CookPublicationReadLease baseline,
+        Func<IReadOnlyList<ContentCookScope>> resolveScopes,
+        CookTargetKind targetKind,
+        NativeArtifactLease artifacts,
+        CookProvenance previous,
+        CookInputSnapshot snapshot,
+        CookDependencyGraph graph,
+        CookedLibraryReadSet libraries,
+        ImmutableDictionary<string, Inspection.CookedInventoryReport> inventories,
+        CookRootRepair repair,
+        CancellationToken cancellationToken)
     {
         var plan = CookIncrementalPlanner.CreatePlan(snapshot.BuildFingerprint, snapshot.Inputs, graph, previous, inventories, repair.EmptyRoots);
         if (resolveScopes().Any(static scope => !scope.AllowImportedSourceChanges))
@@ -240,42 +279,32 @@ public sealed partial class ContentPipelineService
 
         if (plan.IsUpToDate)
         {
-            var missing = MissingImportedOutputs(operation.OperationId, graph, plan.ReusedAssets);
-            if (missing.Length != 0)
-            {
-                return new(operation.OperationId, targetKind, OperationStatus.Failed, missing, [], Inspection: null, Validation: null);
-            }
-
-            CookRunContext.Report(new(Message: "Already up to date."));
-            var unchanged = new ContentCookResult(operation.OperationId, targetKind, plan.Diagnostics.IsEmpty ? OperationStatus.Succeeded : OperationStatus.SucceededWithWarnings, NormalizeDiagnostics(operation.OperationId, plan.Diagnostics), [], Inspection: null, Validation: null)
-            {
-                IsUpToDate = true,
-                ReusedAssets = plan.ReusedAssets,
-                InputSnapshot = snapshot,
-                InputsAreCurrent = await this.InputsAreCurrentAsync(snapshot, graph, resolveScopes, cancellationToken).ConfigureAwait(false),
-            };
-            return await this.publication.PublishObservedBindingsAsync(operation, baseline, libraries, unchanged, cancellationToken).ConfigureAwait(false);
+            return await this.CompleteUpToDateAsync(operation, baseline, targetKind, libraries, snapshot, graph, plan, resolveScopes, cancellationToken).ConfigureAwait(false);
         }
 
+        return await this.CookDirtyInputsAsync(operation, baseline, resolveScopes, targetKind, artifacts, previous, snapshot, graph, libraries, inventories, repair, plan, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<ContentCookResult> CookDirtyInputsAsync(
+        ContentCookOperation operation,
+        CookPublicationReadLease baseline,
+        Func<IReadOnlyList<ContentCookScope>> resolveScopes,
+        CookTargetKind targetKind,
+        NativeArtifactLease artifacts,
+        CookProvenance previous,
+        CookInputSnapshot snapshot,
+        CookDependencyGraph graph,
+        CookedLibraryReadSet libraries,
+        ImmutableDictionary<string, Inspection.CookedInventoryReport> inventories,
+        CookRootRepair repair,
+        CookIncrementalPlan plan,
+        CancellationToken cancellationToken)
+    {
         var dirtyInputs = graph.Assets.Where(input => !plan.Reusable.ContainsKey(input.AssetUri)).ToList();
         var missingScenes = dirtyInputs.Where(input => input.Kind == ContentCookAssetKind.Scene && !graph.SceneDescriptors.ContainsKey(input.AssetUri)).ToArray();
         if (missingScenes.Length != 0)
         {
-            var prepared = await new CookSourceAnalyzer(operation, artifacts, this.engineContentPipelineApi, this.manifestBuilder,
-                this.sceneDescriptorGenerator, this.cookScopeProvider, cookDocuments)
-                .PrepareCapturedScenesAsync(missingScenes, snapshot, graph.GeneratedSources, cancellationToken).ConfigureAwait(false);
-            if (HasError(prepared.Diagnostics))
-            {
-                throw new CookInputDiscoveryException(prepared.Diagnostics);
-            }
-
-            graph = graph with
-            {
-                SceneDescriptors = graph.SceneDescriptors.SetItems(prepared.Sources.Select(static source => KeyValuePair.Create(source.Input.AssetUri, source.Scene!))),
-                NativeJobs = graph.NativeJobs.SetItems(prepared.Sources.Select(static source => KeyValuePair.Create(source.Input.AssetUri, source.Job!))),
-                GeneratedSources = [.. graph.GeneratedSources, .. prepared.GeneratedSources],
-                GeneratedInputs = [.. graph.GeneratedInputs, .. prepared.GeneratedInputs],
-            };
+            graph = await this.PrepareMissingScenesAsync(operation, artifacts, snapshot, graph, missingScenes, cancellationToken).ConfigureAwait(false);
         }
 
         var generated = await this.PrepareMissingBuiltinsAsync(operation, snapshot, graph, plan, dirtyInputs, artifacts, targetKind, cancellationToken).ConfigureAwait(false);
@@ -286,6 +315,25 @@ public sealed partial class ContentPipelineService
             GeneratedInputs = [.. graph.GeneratedInputs, .. await CookInputSnapshotCapture.CaptureGeneratedAsync(
                 generated.Where(input => !admittedGenerated.Contains(input.SourceAbsolutePath)), cancellationToken).ConfigureAwait(false)],
         };
+        return await this.CookStagedAsync(operation, baseline, resolveScopes, targetKind, artifacts, previous, snapshot, graph, libraries, inventories, repair, plan, dirtyInputs, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<ContentCookResult> CookStagedAsync(
+        ContentCookOperation operation,
+        CookPublicationReadLease baseline,
+        Func<IReadOnlyList<ContentCookScope>> resolveScopes,
+        CookTargetKind targetKind,
+        NativeArtifactLease artifacts,
+        CookProvenance previous,
+        CookInputSnapshot snapshot,
+        CookDependencyGraph graph,
+        CookedLibraryReadSet libraries,
+        ImmutableDictionary<string, Inspection.CookedInventoryReport> inventories,
+        CookRootRepair repair,
+        CookIncrementalPlan plan,
+        List<ContentCookInput> dirtyInputs,
+        CancellationToken cancellationToken)
+    {
         CookStagingArea? staging = null;
         CookReferenceRoots? references = null;
         try
@@ -318,12 +366,71 @@ public sealed partial class ContentPipelineService
         }
     }
 
-    private static bool IsGeneratedSource(Uri uri)
-        => uri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase);
+    private async Task<ContentCookResult> CompleteUpToDateAsync(
+        ContentCookOperation operation,
+        CookPublicationReadLease baseline,
+        CookTargetKind targetKind,
+        CookedLibraryReadSet libraries,
+        CookInputSnapshot snapshot,
+        CookDependencyGraph graph,
+        CookIncrementalPlan plan,
+        Func<IReadOnlyList<ContentCookScope>> resolveScopes,
+        CancellationToken cancellationToken)
+    {
+        var missing = MissingImportedOutputs(operation.OperationId, graph, plan.ReusedAssets);
+        if (missing.Length != 0)
+        {
+            return new(operation.OperationId, targetKind, OperationStatus.Failed, missing, [], Inspection: null, Validation: null);
+        }
+
+        CookRunContext.Report(new(Message: "Already up to date."));
+        var unchanged = new ContentCookResult(operation.OperationId, targetKind, plan.Diagnostics.IsEmpty ? OperationStatus.Succeeded : OperationStatus.SucceededWithWarnings, NormalizeDiagnostics(operation.OperationId, plan.Diagnostics), [], Inspection: null, Validation: null)
+        {
+            IsUpToDate = true,
+            ReusedAssets = plan.ReusedAssets,
+            InputSnapshot = snapshot,
+            InputsAreCurrent = await this.InputsAreCurrentAsync(snapshot, graph, resolveScopes, cancellationToken).ConfigureAwait(false),
+        };
+        return await this.publication.PublishObservedBindingsAsync(operation, baseline, libraries, unchanged, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<CookDependencyGraph> PrepareMissingScenesAsync(
+        ContentCookOperation operation,
+        NativeArtifactLease artifacts,
+        CookInputSnapshot snapshot,
+        CookDependencyGraph graph,
+        ContentCookInput[] missingScenes,
+        CancellationToken cancellationToken)
+    {
+        var prepared = await new CookSourceAnalyzer(
+                operation,
+                artifacts,
+                this.engineContentPipelineApi,
+                this.manifestBuilder,
+                this.sceneDescriptorGenerator,
+                this.cookScopeProvider,
+                cookDocuments)
+            .PrepareCapturedScenesAsync(missingScenes, snapshot, graph.GeneratedSources, cancellationToken).ConfigureAwait(false);
+        if (HasError(prepared.Diagnostics))
+        {
+            throw new CookInputDiscoveryException(prepared.Diagnostics);
+        }
+
+        return graph with
+        {
+            SceneDescriptors = graph.SceneDescriptors.SetItems(prepared.Sources.Select(static source => KeyValuePair.Create(source.Input.AssetUri, source.Scene!))),
+            NativeJobs = graph.NativeJobs.SetItems(prepared.Sources.Select(static source => KeyValuePair.Create(source.Input.AssetUri, source.Job!))),
+            GeneratedSources = [.. graph.GeneratedSources, .. prepared.GeneratedSources],
+            GeneratedInputs = [.. graph.GeneratedInputs, .. prepared.GeneratedInputs],
+        };
+    }
 
     private Func<IReadOnlyList<ContentCookScope>> ExpandRepairScopes(
         ContentCookOperation operation,
-        Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookRootRepair repair, Import.ImportedSourceIndex imports, CookTargetKind targetKind)
+        Func<IReadOnlyList<ContentCookScope>> resolveScopes,
+        CookRootRepair repair,
+        Import.ImportedSourceIndex imports,
+        CookTargetKind targetKind)
     {
         if (repair.Sources.IsEmpty)
         {
@@ -336,13 +443,17 @@ public sealed partial class ContentPipelineService
             var requested = resolveScopes();
             var included = requested.SelectMany(static scope => scope.Inputs).Select(static input => input.AssetUri).ToHashSet();
             var additional = repair.Sources.Where(uri => !IsGeneratedSource(uri) && !included.Contains(uri)).Select(uri =>
-                imports.ResolveScope(this.CreateScope(
+            {
+                var repairScope = this.CreateScope(
                     operation.Project,
-                    [CookInputResolver.Resolve(operation.Project, uri, ContentCookInputRole.Primary)], targetKind) with
+                    [CookInputResolver.Resolve(operation.Project, uri, ContentCookInputRole.Primary)],
+                    targetKind);
+                return imports.ResolveScope(repairScope with
                 {
                     ScopeUri = uri,
                     AllowImportedSourceChanges = requested.All(static scope => scope.AllowImportedSourceChanges),
-                }));
+                });
+            });
             return [.. requested, .. additional];
         };
     }

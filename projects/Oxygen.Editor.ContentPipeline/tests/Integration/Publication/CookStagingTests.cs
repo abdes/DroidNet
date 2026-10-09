@@ -34,7 +34,8 @@ public sealed class CookStagingTests
         await File.WriteAllTextAsync(unrelated, "keep", this.TestContext.CancellationToken).ConfigureAwait(false);
         var timestamp = new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc);
         File.SetLastWriteTimeUtc(unrelated, timestamp);
-        await using var staging = await project.StageAsync(["Content"], this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await project.StageAsync(["Content"], this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         var output = staging.Roots.Single().Path;
         await File.WriteAllTextAsync(Path.Combine(output, "changed.bin"), "new", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = (await File.ReadAllTextAsync(changed, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("old");
@@ -51,7 +52,8 @@ public sealed class CookStagingTests
     public async Task FirstCookDoesNotCreatePublishedOutputDuringPreparation()
     {
         using var project = new StagingProject();
-        await using var staging = await project.StageAsync(["Content"], this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await project.StageAsync(["Content"], this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         var root = staging.Roots.Single();
         _ = root.Before.Exists.Should().BeFalse();
         _ = Directory.Exists(root.Path).Should().BeTrue();
@@ -76,7 +78,8 @@ public sealed class CookStagingTests
         _ = pending.IsCompleted.Should().BeFalse();
         _ = Directory.Exists(Path.Combine(project.Root, ".build", "cook", project.Operation.OperationId.ToString("N"), "output")).Should().BeFalse();
         await gate.DisposeAsync().ConfigureAwait(false);
-        await using var staging = await pending.WaitAsync(cancellation.Token).ConfigureAwait(false);
+        var staging = await pending.WaitAsync(cancellation.Token).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         _ = staging.Roots.Should().ContainSingle();
         _ = File.Exists(CookPublicationPaths.Head(project.Root)).Should().BeFalse();
     }
@@ -87,7 +90,8 @@ public sealed class CookStagingTests
     public async Task ExistingStagingIsNotOverwritten()
     {
         using var project = new StagingProject();
-        await using var first = await project.StageAsync(["Content"], this.TestContext.CancellationToken).ConfigureAwait(false);
+        var first = await project.StageAsync(["Content"], this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var firstLifetime = first.ConfigureAwait(false);
         var marker = Path.Combine(first.Roots.Single().Path, "keep.bin");
         await File.WriteAllTextAsync(marker, "keep", this.TestContext.CancellationToken).ConfigureAwait(false);
         Func<Task> duplicate = () => project.StageAsync(["Content"], this.TestContext.CancellationToken);
@@ -126,7 +130,8 @@ public sealed class CookStagingTests
         _ = Directory.CreateDirectory(root);
         var path = Path.Combine(root, "asset.bin");
         await File.WriteAllTextAsync(path, "old", this.TestContext.CancellationToken).ConfigureAwait(false);
-        await using var staging = await project.StageAsync(["Content"], this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await project.StageAsync(["Content"], this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         var timestamp = File.GetLastWriteTimeUtc(path);
         await File.WriteAllTextAsync(path, "new", this.TestContext.CancellationToken).ConfigureAwait(false);
         File.SetLastWriteTimeUtc(path, timestamp);
@@ -184,8 +189,8 @@ public sealed class CookStagingTests
 
         public async Task<CookStagingArea> StageAsync(IEnumerable<string> mounts, CancellationToken token)
         {
-            var baseline = await this.CaptureBaselineAsync(token).ConfigureAwait(false);
-            return await CookStagingArea.CreateAsync(this.Operation, baseline, mounts, this.files, this.manager, token).ConfigureAwait(false);
+            var captured = await this.CaptureBaselineAsync(token).ConfigureAwait(false);
+            return await CookStagingArea.CreateAsync(this.Operation, captured, mounts, this.files, this.manager, token).ConfigureAwait(false);
         }
 
         public async Task<CookPublicationReadLease> CaptureBaselineAsync(CancellationToken token)
@@ -199,9 +204,15 @@ public sealed class CookStagingTests
                     NativeInventoryFixture.WriteIndex(this.PublishedRoot, [], this.sourceKey);
                     File.WriteAllBytes(Path.Combine(this.PublishedRoot, CookedGeneration.MarkerFileName), []);
                     var digest = NativeInventoryFixture.Read(this.PublishedRoot).IndexSha256;
-                    var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, this.Operation.Project.ProjectId,
-                        Guid.NewGuid(), DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(this.Operation.Project),
-                        [new(CookPublicationRootOwner.Project, "Content", this.sourceKey, digest, null)], [], null);
+                    var document = new CookPublicationDocument(
+                        CookPublicationDocument.CurrentVersion,
+                        this.Operation.Project.ProjectId,
+                        Guid.NewGuid(),
+                        DateTimeOffset.UtcNow,
+                        CookPublicationDocument.ConfigurationIdentity(this.Operation.Project),
+                        [new(CookPublicationRootOwner.Project, "Content", this.sourceKey, digest, LibraryPath: null)],
+                        [],
+                        CookInputs: null);
                     var path = CookPublicationPaths.Document(this.Root, document.OperationId);
                     Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                     var version = await this.files.WriteAsync(path, JsonSerializer.SerializeToUtf8Bytes(document, CookPublicationDocument.JsonOptions), FileVersion.Missing, token).ConfigureAwait(false);

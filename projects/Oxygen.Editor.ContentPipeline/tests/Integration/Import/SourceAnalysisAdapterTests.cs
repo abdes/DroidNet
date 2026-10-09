@@ -69,7 +69,7 @@ public sealed class SourceAnalysisAdapterTests
             _ = source.Reads.Should().ContainSingle(read => read.Offset == 0 && read.MaxBytes == 0 && string.Equals(read.Sha256, digest, StringComparison.Ordinal));
             var captured = Path.Combine(directory, job.Id + ".capture");
             await File.WriteAllBytesAsync(captured, bytes, cancellationToken).ConfigureAwait(false);
-            inputs.Add(new(source.Path, true, source.Metadata, new(captured, (ulong)bytes.LongLength, digest)));
+            inputs.Add(new(source.Path, Exists: true, source.Metadata, new(captured, (ulong)bytes.LongLength, digest)));
             _ = source.Path.Should().Be(Path.Combine(execution.InputRoot, job.Id + ".json"));
             File.Delete(source.Path);
         }

@@ -69,14 +69,15 @@ public sealed class CookPublicationWorkflowTests
         var operation = new ContentCookOperation(Guid.NewGuid(), workspace.ProjectContext, 1);
         using var owner = CookOutputLease.AcquireOperation(workspace.Root, operation.OperationId);
         using var baseline = await publication.AcquireReadAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
-        await using var staging = await CookStagingArea.CreateAsync(operation, baseline, ["Content"], workspace.Files, workspace.Manager, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await CookStagingArea.CreateAsync(operation, baseline, ["Content"], workspace.Files, workspace.Manager, this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         var path = staging.Roots.Single().Path;
         await File.WriteAllTextAsync(Path.Combine(path, "partial.bin"), "unpublished", this.TestContext.CancellationToken).ConfigureAwait(false);
         staging.RetainForPublication();
         _ = (await publication.MaintainAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeEmpty();
         _ = Directory.Exists(path).Should().BeTrue();
         await staging.DisposeAsync().ConfigureAwait(false);
-        owner.Dispose();
+        await owner.DisposeAsync().ConfigureAwait(false);
         _ = (await publication.MaintainAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeEmpty();
         _ = Directory.Exists(path).Should().BeFalse();
         _ = File.Exists(CookPublicationPaths.Head(workspace.Root)).Should().BeFalse();
@@ -147,27 +148,27 @@ public sealed class CookPublicationWorkflowTests
         var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         AssertCookSucceeded(await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
         var headPath = CookPublicationPaths.Head(workspace.Root);
-        var head = System.Text.Json.JsonSerializer.Deserialize<CookPublicationHead>(File.ReadAllBytes(headPath), CookPublicationDocument.JsonOptions)!;
+        var head = System.Text.Json.JsonSerializer.Deserialize<CookPublicationHead>(await File.ReadAllBytesAsync(headPath, this.TestContext.CancellationToken).ConfigureAwait(false), CookPublicationDocument.JsonOptions)!;
         var documentPath = CookPublicationPaths.Document(workspace.Root, head.PublicationId);
-        if (damage == "head")
+        if (string.Equals(damage, "head", StringComparison.Ordinal))
         {
-            File.WriteAllText(headPath, "invalid head");
+            await File.WriteAllTextAsync(headPath, "invalid head", this.TestContext.CancellationToken).ConfigureAwait(false);
         }
-        else if (damage == "missing-document")
+        else if (string.Equals(damage, "missing-document", StringComparison.Ordinal))
         {
             File.Delete(documentPath);
         }
         else
         {
-            File.AppendAllText(documentPath, " ");
+            await File.AppendAllTextAsync(documentPath, " ", this.TestContext.CancellationToken).ConfigureAwait(false);
         }
 
-        var before = File.ReadAllBytes(headPath);
+        var before = await File.ReadAllBytesAsync(headPath, this.TestContext.CancellationToken).ConfigureAwait(false);
         var imports = api.Imported.Count;
         var failed = await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = failed.Status.Should().Be(OperationStatus.Failed);
         _ = failed.IsPublished.Should().BeFalse();
-        _ = api.Imported.Count.Should().Be(imports);
-        _ = File.ReadAllBytes(headPath).Should().Equal(before);
+        _ = api.Imported.Should().HaveCount(imports);
+        _ = (await File.ReadAllBytesAsync(headPath, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(before);
     }
 }

@@ -50,7 +50,7 @@ public sealed class LibraryInspectionLifetimeTests
             }
             else
             {
-                Func<Task> work = () => service.InspectCookedOutputAsync(null, this.TestContext.CancellationToken, validate: true)
+                Func<Task> work = () => service.InspectCookedOutputAsync(scopeUri: null, this.TestContext.CancellationToken, validate: true)
                     .WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken);
                 var failure = await work.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
                 _ = openForWrite.Should().Throw<IOException>();

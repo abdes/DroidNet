@@ -14,6 +14,7 @@ internal sealed class ImportedSourceIndex
 {
     private readonly Dictionary<Uri, Uri> previousOwners = [];
     private readonly List<Entry> entries = [];
+    private string? projectRoot;
 
     /// <summary>Gets previously identified native outputs for project key lookup.</summary>
     public IReadOnlyCollection<Uri> KnownOutputs => this.previousOwners.Keys;
@@ -27,14 +28,6 @@ internal sealed class ImportedSourceIndex
     public static async Task<ImportedSourceIndex> ReadAsync(ProjectContext project, ICookDocumentRegistry documents, CookProvenance previous, CancellationToken cancellationToken)
     {
         var index = new ImportedSourceIndex();
-        foreach (var product in previous.Products.Where(static product => product.ImportedSource is not null))
-        {
-            foreach (var output in product.Outputs)
-            {
-                index.previousOwners.Add(output.Asset.CookedAssetUri, product.SourceUri);
-            }
-        }
-
         foreach (var mount in project.AuthoringMounts)
         {
             var root = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath));
@@ -73,7 +66,33 @@ internal sealed class ImportedSourceIndex
             }
         }
 
+        // A moved or deleted model, or an output its sidecar's group no longer covers, keeps no ownership:
+        // the relocation rewrote every reference to it, and the next cook retires it.
+        index.projectRoot = project.ProjectRoot;
+        foreach (var product in previous.Products.Where(static product => product.ImportedSource is not null))
+        {
+            if (Incremental.CookRootRepair.IsRetired(project.ProjectRoot, product))
+            {
+                continue;
+            }
+
+            foreach (var output in product.Outputs.Where(output => !index.IsOutsideCurrentGroup(product.SourceUri, output.Asset.CookedAssetUri)))
+            {
+                index.previousOwners.Add(output.Asset.CookedAssetUri, product.SourceUri);
+            }
+        }
+
         return index;
+    }
+
+    /// <summary>Tests whether an imported product's outputs left the group its saved settings now declare.</summary>
+    /// <param name="product">A prior cooked product.</param>
+    /// <returns>Whether the product must be rebuilt into its new group.</returns>
+    public bool IsRelocated(Incremental.CookProvenance.Product product)
+    {
+        ArgumentNullException.ThrowIfNull(product);
+        return product.ImportedSource is not null && this.projectRoot is { } root && !Incremental.CookRootRepair.IsRetired(root, product)
+            && product.Outputs.Any(output => this.IsOutsideCurrentGroup(product.SourceUri, output.Asset.CookedAssetUri));
     }
 
     /// <summary>Finds the source that must produce a native output; existence is checked after cooking.</summary>
@@ -161,6 +180,13 @@ internal sealed class ImportedSourceIndex
             ? scope with { Inputs = scope.Inputs.Concat(this.ResolveFolder(scope.Project, requested)).DistinctBy(static input => input.AssetUri).ToArray() }
             : this.ResolveOutput(scope.Project, requested, ContentCookInputRole.Primary) is { } source
             ? scope with { Inputs = [source], RequiredImportedOutputs = [requested] } : scope;
+    }
+
+    private bool IsOutsideCurrentGroup(Uri source, Uri output)
+    {
+        var prefixes = this.entries.Where(entry => entry.Source == source).Select(static entry => entry.Prefix).ToArray();
+        var path = Uri.UnescapeDataString(output.AbsolutePath);
+        return prefixes.Length != 0 && !prefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>One ownership lookup, including a named conflict without claiming an output exists.</summary>

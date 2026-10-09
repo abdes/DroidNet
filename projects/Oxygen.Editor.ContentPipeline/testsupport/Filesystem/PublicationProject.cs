@@ -47,17 +47,28 @@ internal sealed partial class PublicationProject : IDisposable
                 File.WriteAllText(Path.Combine(root, "keep.bin"), "keep:" + mount);
                 NativeInventoryFixture.WriteIndex(root, [], key);
                 File.WriteAllBytes(Path.Combine(root, CookedGeneration.MarkerFileName), []);
-                roots.Add(new(CookPublicationRootOwner.Project, mount, key, NativeInventoryFixture.Read(root).IndexSha256, null));
+                roots.Add(new(CookPublicationRootOwner.Project, mount, key, NativeInventoryFixture.Read(root).IndexSha256, LibraryPath: null));
             }
 
-            var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, this.Context.ProjectId, Guid.NewGuid(),
-                DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(this.Context), roots.ToImmutable(), [], null);
+            var document = new CookPublicationDocument(
+                CookPublicationDocument.CurrentVersion,
+                this.Context.ProjectId,
+                Guid.NewGuid(),
+                DateTimeOffset.UtcNow,
+                CookPublicationDocument.ConfigurationIdentity(this.Context),
+                roots.ToImmutable(),
+                [],
+                CookInputs: null);
             var bytes = JsonSerializer.SerializeToUtf8Bytes(document, CookPublicationDocument.JsonOptions);
             var path = CookPublicationPaths.Document(this.Root, document.OperationId);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllBytes(path, bytes);
-            this.originalHead = JsonSerializer.SerializeToUtf8Bytes(new CookPublicationHead(CookPublicationHead.CurrentVersion,
-                document.OperationId, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))), CookPublicationDocument.JsonOptions);
+            this.originalHead = JsonSerializer.SerializeToUtf8Bytes(
+                new CookPublicationHead(
+                    CookPublicationHead.CurrentVersion,
+                    document.OperationId,
+                    Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))),
+                CookPublicationDocument.JsonOptions);
             File.WriteAllBytes(CookPublicationPaths.Head(this.Root), this.originalHead);
         }
 
@@ -84,8 +95,14 @@ internal sealed partial class PublicationProject : IDisposable
             this.baseline = await CookPublicationReadLease.OpenUnderGateAsync(this.Context, this.Files, gate, cancellationToken).ConfigureAwait(false);
         }
 
-        var staging = await CookStagingArea.CreateAsync(this.Operation, this.baseline, ["Content", "Second"], this.Files, this.Manager,
-            cancellationToken, checkpoint: name => this.checkpoint(name)).ConfigureAwait(false);
+        var staging = await CookStagingArea.CreateAsync(
+            this.Operation,
+            this.baseline,
+            ["Content", "Second"],
+            this.Files,
+            this.Manager,
+            cancellationToken,
+            checkpoint: name => this.checkpoint(name)).ConfigureAwait(false);
         foreach (var root in staging.Roots)
         {
             await File.WriteAllTextAsync(Path.Combine(root.Path, "value.txt"), "new:" + root.Mount, cancellationToken).ConfigureAwait(false);
@@ -97,16 +114,33 @@ internal sealed partial class PublicationProject : IDisposable
         return staging;
     }
 
-    public async Task<CookPublicationTransaction> PrepareAsync(CookStagingArea staging, CancellationToken cancellationToken,
-        Func<string, Task>? checkpoint = null, CookSourceReplacement? sourceReplacement = null, ImmutableArray<CookProducedSourceFile> producedSourceFiles = default)
+    public async Task<CookPublicationTransaction> PrepareAsync(
+        CookStagingArea staging,
+        CancellationToken cancellationToken,
+        Func<string,
+        Task>? checkpoint = null,
+        CookSourceReplacement? sourceReplacement = null,
+        ImmutableArray<CookProducedSourceFile> producedSourceFiles = default)
     {
         this.checkpoint = checkpoint ?? (static _ => Task.CompletedTask);
         var replacements = staging.SealRoots();
-        var roots = staging.Baseline.Roots.Where(root => !replacements.Any(replacement => replacement.Name == root.Name)).Concat(replacements).ToImmutableArray();
-        var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, this.Context.ProjectId, this.Operation.OperationId,
-            DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(this.Context), roots, [], null);
-        await staging.Transaction.PrepareAsync(this.Operation, document, sourceReplacement,
-            producedSourceFiles.IsDefault ? [] : producedSourceFiles, projectChange: null, cancellationToken).ConfigureAwait(false);
+        var roots = staging.Baseline.Roots.Where(root => !replacements.Any(replacement => string.Equals(replacement.Name, root.Name, StringComparison.Ordinal))).Concat(replacements).ToImmutableArray();
+        var document = new CookPublicationDocument(
+            CookPublicationDocument.CurrentVersion,
+            this.Context.ProjectId,
+            this.Operation.OperationId,
+            DateTimeOffset.UtcNow,
+            CookPublicationDocument.ConfigurationIdentity(this.Context),
+            roots,
+            [],
+            CookInputs: null);
+        await staging.Transaction.PrepareAsync(
+            this.Operation,
+            document,
+            sourceReplacement,
+            producedSourceFiles.IsDefault ? [] : producedSourceFiles,
+            projectChange: null,
+            cancellationToken).ConfigureAwait(false);
         staging.RetainForPublication();
         return staging.Transaction;
     }
@@ -135,7 +169,7 @@ internal sealed partial class PublicationProject : IDisposable
         var document = JsonSerializer.Deserialize<CookPublicationDocument>(File.ReadAllBytes(CookPublicationPaths.Document(this.Root, head.PublicationId)), CookPublicationDocument.JsonOptions)!;
         foreach (var mount in new[] { "Content", "Second" })
         {
-            var root = document.Roots.Single(root => root.Name == mount);
+            var root = document.Roots.Single(root => string.Equals(root.Name, mount, StringComparison.Ordinal));
             _ = File.ReadAllText(Path.Combine(root.ResolvePath(this.Root), "value.txt")).Should().Be("new:" + mount);
             if (this.hadPrevious)
             {
@@ -145,7 +179,7 @@ internal sealed partial class PublicationProject : IDisposable
 
         if (this.hadPrevious)
         {
-            _ = document.Roots.Single(root => root.Name == "Unrelated").Should().Be(this.originalRoots.Single(root => root.Name == "Unrelated"));
+            _ = document.Roots.Single(root => string.Equals(root.Name, "Unrelated", StringComparison.Ordinal)).Should().Be(this.originalRoots.Single(root => string.Equals(root.Name, "Unrelated", StringComparison.Ordinal)));
         }
     }
 
