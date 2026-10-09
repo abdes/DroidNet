@@ -1264,6 +1264,33 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
     }
   }
 
+  float illuminance = environment_vm_->GetSkySphereIlluminanceLux();
+  if (ImGui::DragFloat("Sky Illuminance (lux)", &illuminance, 50.0F, 0.0F,
+        200000.0F, illuminance > 0.0F ? "%.0f lux" : "Off (raw image)",
+        ImGuiSliderFlags_Logarithmic)) {
+    environment_vm_->SetSkySphereIlluminanceLux(illuminance);
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+    ImGui::SetTooltip(
+      "Calibrates the sky to a physical brightness.\n"
+      "\n"
+      "Sets the illuminance the sky delivers on an upward-facing surface.\n"
+      "The image (or solid color) is scaled to deliver it, both for what\n"
+      "the view shows and for the light a Captured Scene sky light reads,\n"
+      "so the sky matches a physical sun.\n"
+      "\n"
+      "HDR images rarely carry real units: a typical one delivers a few\n"
+      "lux, while a daylight sun delivers 25,000 to 100,000 lux.\n"
+      "Uncalibrated, auto exposure meters the dim sky and burns sunlit\n"
+      "surfaces to white.\n"
+      "\n"
+      "Typical values: clear day 10,000-25,000; overcast 1,000-10,000;\n"
+      "sunset 100-1,000; night below 1. 0 uses the image's own values.\n"
+      "\n"
+      "Only a float (HDR) cubemap can be measured: an LDR one stays\n"
+      "uncalibrated and the renderer warns (sky.uncalibrated).");
+  }
+
   const float sky_intensity = environment_vm_->GetSkyIntensity();
   float sky_exposure_ev = SkySphereRadianceScaleToEv(sky_intensity);
   const char* exposure_label = sky_sphere_source == 0
@@ -1275,7 +1302,12 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
       SkySphereExposureEvToRadianceScale(sky_exposure_ev));
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
-    ImGui::SetTooltip("Radiance scale %.6g. EV +8 = 256, EV +10 = 1024.",
+    ImGui::SetTooltip(
+      "Display-only brightness adjustment, in exposure stops.\n"
+      "Radiance scale %.6g (EV +8 = 256, EV +10 = 1024).\n"
+      "It changes what the view shows, never the light the sky casts:\n"
+      "calibrate with Sky Illuminance, and scale lighting with the Sky\n"
+      "Light's intensity.",
       static_cast<double>(sky_intensity));
   }
 
@@ -1320,9 +1352,16 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
   ImGui::PushItemWidth(150);
 
   float intensity = environment_vm_->GetSkyLightIntensityMul();
-  if (ImGui::DragFloat(
-        "Intensity##SkyLight", &intensity, 0.01F, 0.0F, 20.0F, "%.2F")) {
+  if (ImGui::DragFloat("Intensity##SkyLight", &intensity, 0.01F, 0.0F,
+        100000.0F, "%.2F", ImGuiSliderFlags_Logarithmic)) {
     environment_vm_->SetSkyLightIntensityMul(intensity);
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+    ImGui::SetTooltip(
+      "Multiplies the sky light's diffuse and specular lighting.\n"
+      "1 lights with the sky's (calibrated) radiance as is. To match a\n"
+      "physical sun, calibrate the source with Sky Illuminance instead of\n"
+      "raising this.");
   }
 
   const std::array sources = { "Captured Scene", "Specified Cubemap" };
@@ -1336,6 +1375,25 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
     const auto key = environment_vm_->GetSkyLightCubemapResourceKey();
     ImGui::Text(
       "Cubemap ResourceKey: %llu", static_cast<unsigned long long>(key.get()));
+    float cubemap_lux = environment_vm_->GetSkyLightIlluminanceLux();
+    if (ImGui::DragFloat("Cubemap Illuminance (lux)", &cubemap_lux, 50.0F, 0.0F,
+          200000.0F, cubemap_lux > 0.0F ? "%.0f lux" : "Off (raw image)",
+          ImGuiSliderFlags_Logarithmic)) {
+      environment_vm_->SetSkyLightIlluminanceLux(cubemap_lux);
+    }
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+      ImGui::SetTooltip(
+        "Calibrates the specified cubemap to a physical brightness.\n"
+        "\n"
+        "Sets the illuminance the cubemap delivers on an upward-facing\n"
+        "surface; its radiance is scaled to deliver it before the sky\n"
+        "light's multipliers apply. A Captured Scene sky light uses the\n"
+        "Sky Sphere's calibration instead.\n"
+        "\n"
+        "Typical values: clear day 10,000-25,000; overcast 1,000-10,000.\n"
+        "0 uses the image's own values. Only a float (HDR) cubemap can be\n"
+        "measured and light the scene.");
+    }
   }
   DrawSkyLightFeedback();
   if (!ImGui::TreeNode("Advanced##SkyLight")) {

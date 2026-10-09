@@ -244,6 +244,10 @@ public:
   [[nodiscard]] virtual auto GetSkyIntensity() const -> float;
   virtual auto SetSkyIntensity(float value) -> void;
 
+  //! Upward illuminance (lux) the sky is calibrated to; 0 keeps it raw.
+  [[nodiscard]] virtual auto GetSkySphereIlluminanceLux() const -> float;
+  virtual auto SetSkySphereIlluminanceLux(float value) -> void;
+
   [[nodiscard]] virtual auto GetSkySphereRotationDeg() const -> float;
   virtual auto SetSkySphereRotationDeg(float value) -> void;
   [[nodiscard]] virtual auto GetSkySphereCubemapResourceKey() const
@@ -294,6 +298,11 @@ public:
 
   [[nodiscard]] virtual auto GetSkyLightIntensityMul() const -> float;
   virtual auto SetSkyLightIntensityMul(float value) -> void;
+
+  //! Upward illuminance (lux) the specified cubemap is calibrated to; 0 keeps
+  //! it raw.
+  [[nodiscard]] virtual auto GetSkyLightIlluminanceLux() const -> float;
+  virtual auto SetSkyLightIlluminanceLux(float value) -> void;
 
   [[nodiscard]] virtual auto GetSkyLightDiffuse() const -> float;
   virtual auto SetSkyLightDiffuse(float value) -> void;
@@ -697,12 +706,14 @@ private:
   int sky_sphere_source_ { 0 };
   glm::vec3 sky_sphere_solid_color_ { 0.2F, 0.3F, 0.5F };
   float sky_intensity_ { 1.0F };
+  float sky_sphere_illuminance_lux_ { 0.0F };
   float sky_sphere_rotation_deg_ { 0.0F };
   content::ResourceKey sky_sphere_cubemap_resource_key_ { 0U };
 
   // Skybox settings
   int skybox_layout_idx_ { 0 };
-  int skybox_output_format_idx_ { 0 };
+  // RGBA16F: HDR skyboxes keep their radiance and can light the scene.
+  int skybox_output_format_idx_ { 1 };
   int skybox_face_size_ { 512 };
   bool skybox_flip_y_ { false };
   bool skybox_tonemap_hdr_to_ldr_ { false };
@@ -726,6 +737,7 @@ private:
   content::ResourceKey sky_light_cubemap_resource_key_ { 0U };
   glm::vec3 sky_light_tint_ { 1.0F, 1.0F, 1.0F };
   float sky_light_intensity_mul_ { 1.0F };
+  float sky_light_illuminance_lux_ { 0.0F };
   float sky_light_diffuse_ { 1.0F };
   float sky_light_specular_ { 1.0F };
   float sky_light_source_cubemap_angle_radians_ { 0.0F };

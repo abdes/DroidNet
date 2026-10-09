@@ -1005,6 +1005,17 @@ auto EnvironmentVm::SetSkyIntensity(const float value) -> void
   service_->SetSkyIntensity(value);
 }
 
+auto EnvironmentVm::GetSkySphereIlluminanceLux() const -> float
+{
+  return service_->GetSkySphereIlluminanceLux();
+}
+
+auto EnvironmentVm::SetSkySphereIlluminanceLux(const float value) -> void
+{
+  PrepareForManualOverride();
+  service_->SetSkySphereIlluminanceLux(value);
+}
+
 auto EnvironmentVm::GetSkySphereRotationDeg() const -> float
 {
   return service_->GetSkySphereRotationDeg();
@@ -1213,6 +1224,17 @@ auto EnvironmentVm::SetSkyLightIntensityMul(const float value) -> void
 {
   PrepareForManualOverride();
   service_->SetSkyLightIntensityMul(value);
+}
+
+auto EnvironmentVm::GetSkyLightIlluminanceLux() const -> float
+{
+  return service_->GetSkyLightIlluminanceLux();
+}
+
+auto EnvironmentVm::SetSkyLightIlluminanceLux(const float value) -> void
+{
+  PrepareForManualOverride();
+  service_->SetSkyLightIlluminanceLux(value);
 }
 
 auto EnvironmentVm::GetSkyLightDiffuse() const -> float

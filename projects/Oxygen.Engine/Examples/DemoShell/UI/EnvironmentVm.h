@@ -136,6 +136,8 @@ public:
   auto SetSkySphereSolidColor(const glm::vec3& value) -> void;
   [[nodiscard]] auto GetSkyIntensity() const -> float;
   auto SetSkyIntensity(float value) -> void;
+  [[nodiscard]] auto GetSkySphereIlluminanceLux() const -> float;
+  auto SetSkySphereIlluminanceLux(float value) -> void;
   [[nodiscard]] auto GetSkySphereRotationDeg() const -> float;
   auto SetSkySphereRotationDeg(float value) -> void;
   [[nodiscard]] auto GetSkySphereCubemapResourceKey() const
@@ -178,6 +180,8 @@ public:
   auto SetSkyLightTint(const glm::vec3& value) -> void;
   [[nodiscard]] auto GetSkyLightIntensityMul() const -> float;
   auto SetSkyLightIntensityMul(float value) -> void;
+  [[nodiscard]] auto GetSkyLightIlluminanceLux() const -> float;
+  auto SetSkyLightIlluminanceLux(float value) -> void;
   [[nodiscard]] auto GetSkyLightDiffuse() const -> float;
   auto SetSkyLightDiffuse(float value) -> void;
   [[nodiscard]] auto GetSkyLightSpecular() const -> float;

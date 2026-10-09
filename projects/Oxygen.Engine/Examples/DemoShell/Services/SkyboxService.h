@@ -74,7 +74,7 @@ public:
   //! Options for skybox loading.
   struct LoadOptions {
     Layout layout { Layout::kEquirectangular };
-    OutputFormat output_format { OutputFormat::kRGBA8 };
+    OutputFormat output_format { OutputFormat::kRGBA16Float };
     int cube_face_size { 512 };
     bool flip_y { false };
 

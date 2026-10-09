@@ -330,6 +330,7 @@ namespace {
 
     target.SetSolidColorRgb(Vec3 { source.solid_color_rgb[0],
       source.solid_color_rgb[1], source.solid_color_rgb[2] });
+    target.SetIlluminanceLux(source.illuminance_lux);
     target.SetIntensity(source.intensity);
     target.SetRotationRadians(source.rotation_radians);
     target.SetTintRgb(
@@ -431,6 +432,7 @@ namespace {
       && cubemap.get() == 0U) {
       LOG_F(WARNING, "SkyLight uses a specified cubemap but binds no cubemap");
     }
+    target.SetIlluminanceLux(source.illuminance_lux);
     target.SetIntensityMul(source.intensity);
     target.SetTintRgb(
       Vec3 { source.tint_rgb[0], source.tint_rgb[1], source.tint_rgb[2] });
@@ -567,6 +569,13 @@ namespace {
     = "env.sky_sphere.intensity";
   constexpr std::string_view kSkySphereRotationKey
     = "env.sky_sphere.rotation_deg";
+  constexpr std::string_view kSkySphereIlluminanceKey
+    = "env.sky_sphere.illuminance_lux";
+  //! Upper bound for calibrated sky illuminance; a clear noon sky is ~25k lux.
+  constexpr float kMaxSkyIlluminanceLux = 200000.0F;
+  //! Upper bound for the sky light multiplier; calibration covers unit
+  //! conversion, so this only needs to reach artistic extremes.
+  constexpr float kMaxSkyLightIntensityMul = 100000.0F;
 
   constexpr std::string_view kSkyboxPathKey = "env.skybox.path";
   constexpr std::string_view kSkyboxLayoutKey = "env.skybox.layout";
@@ -583,6 +592,8 @@ namespace {
   constexpr std::string_view kSkyLightTintKey = "env.sky_light.tint";
   constexpr std::string_view kSkyLightIntensityMulKey
     = "env.sky_light.intensity_mul";
+  constexpr std::string_view kSkyLightIlluminanceKey
+    = "env.sky_light.illuminance_lux";
   constexpr std::string_view kSkyLightDiffuseKey = "env.sky_light.diffuse";
   constexpr std::string_view kSkyLightSpecularKey = "env.sky_light.specular";
 
@@ -900,6 +911,9 @@ auto EnvironmentSettingsService::SetRuntimeConfig(
     }
     if (!config_.startup_skybox_path.empty()) {
       skybox_path_ = config_.startup_skybox_path;
+      // The sky light reads this cubemap, so it must keep HDR radiance.
+      skybox_output_format_idx_
+        = static_cast<int>(SkyboxService::OutputFormat::kRGBA16Float);
       sky_atmo_enabled_ = false;
       sky_sphere_enabled_ = true;
       sky_sphere_source_ = 0;
@@ -1744,6 +1758,21 @@ auto EnvironmentSettingsService::SetSkyIntensity(const float value) -> void
   MarkDirty(ToMask(DirtyDomain::kSkySphere));
 }
 
+auto EnvironmentSettingsService::GetSkySphereIlluminanceLux() const -> float
+{
+  return sky_sphere_illuminance_lux_;
+}
+
+auto EnvironmentSettingsService::SetSkySphereIlluminanceLux(const float value)
+  -> void
+{
+  if (sky_sphere_illuminance_lux_ == value) {
+    return;
+  }
+  sky_sphere_illuminance_lux_ = value;
+  MarkDirty(ToMask(DirtyDomain::kSkySphere));
+}
+
 auto EnvironmentSettingsService::GetSkySphereRotationDeg() const -> float
 {
   return sky_sphere_rotation_deg_;
@@ -2004,6 +2033,21 @@ auto EnvironmentSettingsService::SetSkyLightIntensityMul(const float value)
     return;
   }
   sky_light_intensity_mul_ = value;
+  MarkDirty(ToMask(DirtyDomain::kSkyLight));
+}
+
+auto EnvironmentSettingsService::GetSkyLightIlluminanceLux() const -> float
+{
+  return sky_light_illuminance_lux_;
+}
+
+auto EnvironmentSettingsService::SetSkyLightIlluminanceLux(const float value)
+  -> void
+{
+  if (sky_light_illuminance_lux_ == value) {
+    return;
+  }
+  sky_light_illuminance_lux_ = value;
   MarkDirty(ToMask(DirtyDomain::kSkyLight));
 }
 
@@ -3562,8 +3606,12 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
       static_cast<scene::environment::SkySphereSource>(sky_sphere_source_));
     sky->SetSolidColorRgb(sky_sphere_solid_color_);
     sky->SetIntensity(sky_intensity_);
+    sky->SetIlluminanceLux(sky_sphere_illuminance_lux_);
     sky->SetRotationRadians(sky_sphere_rotation_deg_ * kDegToRad);
-    sky_sphere_cubemap_resource_key_ = sky->GetCubemapResource();
+    // Equip the loaded skybox, also after a source switch made since the load.
+    if (sky_sphere_cubemap_resource_key_.get() != 0U) {
+      sky->SetCubemapResource(sky_sphere_cubemap_resource_key_);
+    }
   }
 
   auto light = env->TryGetSystem<scene::environment::SkyLight>();
@@ -3578,6 +3626,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
       static_cast<scene::environment::SkyLightSource>(sky_light_source_));
     light->SetTintRgb(sky_light_tint_);
     light->SetIntensityMul(sky_light_intensity_mul_);
+    light->SetIlluminanceLux(sky_light_illuminance_lux_);
     light->SetDiffuseIntensity(sky_light_diffuse_);
     light->SetSpecularIntensity(sky_light_specular_);
     light->SetSourceCubemapAngleRadians(
@@ -3590,7 +3639,9 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     light->SetVolumetricScatteringIntensity(
       sky_light_volumetric_scattering_intensity_);
     light->SetAffectReflections(sky_light_affect_reflections_);
-    sky_light_cubemap_resource_key_ = light->GetCubemapResource();
+    if (sky_light_cubemap_resource_key_.get() != 0U) {
+      light->SetCubemapResource(sky_light_cubemap_resource_key_);
+    }
   }
 
   if (apply_skybox || apply_sky_sphere || apply_sky_light) {
@@ -3720,6 +3771,7 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     sky_sphere_source_ = static_cast<int>(sky->GetSource());
     sky_sphere_solid_color_ = sky->GetSolidColorRgb();
     sky_intensity_ = sky->GetIntensity();
+    sky_sphere_illuminance_lux_ = sky->GetIlluminanceLux();
     sky_sphere_rotation_deg_ = sky->GetRotationRadians() * kRadToDeg;
     sky_sphere_cubemap_resource_key_ = sky->GetCubemapResource();
   } else {
@@ -3733,6 +3785,7 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     sky_light_cubemap_resource_key_ = light->GetCubemapResource();
     sky_light_tint_ = light->GetTintRgb();
     sky_light_intensity_mul_ = light->GetIntensityMul();
+    sky_light_illuminance_lux_ = light->GetIlluminanceLux();
     sky_light_diffuse_ = light->GetDiffuseIntensity();
     sky_light_specular_ = light->GetSpecularIntensity();
     sky_light_source_cubemap_angle_radians_
@@ -4033,6 +4086,7 @@ auto EnvironmentSettingsService::ValidateAndClampState() -> void
   clamp_int(sky_sphere_source_, 0, 1);
   clamp_vec3_min(sky_sphere_solid_color_, 0.0F);
   clamp_float(sky_intensity_, 0.0F, kMaxSkySphereIntensity);
+  clamp_float(sky_sphere_illuminance_lux_, 0.0F, kMaxSkyIlluminanceLux);
   clamp_float(sky_sphere_rotation_deg_, -3600.0F, 3600.0F);
 
   clamp_int(skybox_layout_idx_, 0, 4);
@@ -4042,7 +4096,8 @@ auto EnvironmentSettingsService::ValidateAndClampState() -> void
 
   clamp_int(sky_light_source_, 0, 1);
   clamp_vec3_min(sky_light_tint_, 0.0F);
-  clamp_float(sky_light_intensity_mul_, 0.0F, 100.0F);
+  clamp_float(sky_light_intensity_mul_, 0.0F, kMaxSkyLightIntensityMul);
+  clamp_float(sky_light_illuminance_lux_, 0.0F, kMaxSkyIlluminanceLux);
   clamp_float(sky_light_diffuse_, 0.0F, 100.0F);
   clamp_float(sky_light_specular_, 0.0F, 100.0F);
   clamp_vec3_min(sky_light_lower_hemisphere_color_, 0.0F);
@@ -4310,6 +4365,8 @@ auto EnvironmentSettingsService::LoadSettings(const bool custom_only) -> void
     any_loaded |= load_int(kSkySphereSourceKey, sky_sphere_source_);
     any_loaded |= load_vec3(kSkySphereSolidColorKey, sky_sphere_solid_color_);
     any_loaded |= load_float(kSkySphereRotationKey, sky_sphere_rotation_deg_);
+    any_loaded
+      |= load_float(kSkySphereIlluminanceKey, sky_sphere_illuminance_lux_);
 
     const bool sky_intensity_loaded
       = load_float(kSkySphereIntensityKey, sky_intensity_);
@@ -4338,6 +4395,8 @@ auto EnvironmentSettingsService::LoadSettings(const bool custom_only) -> void
     any_loaded |= load_vec3(kSkyLightTintKey, sky_light_tint_);
     any_loaded
       |= load_float(kSkyLightIntensityMulKey, sky_light_intensity_mul_);
+    any_loaded
+      |= load_float(kSkyLightIlluminanceKey, sky_light_illuminance_lux_);
     any_loaded |= load_float(kSkyLightDiffuseKey, sky_light_diffuse_);
     any_loaded |= load_float(kSkyLightSpecularKey, sky_light_specular_);
 
@@ -4447,7 +4506,7 @@ auto EnvironmentSettingsService::LoadSettings(const bool custom_only) -> void
     // values on migration.
     sky_intensity_ = std::clamp(sky_intensity_, 0.0F, kMaxSkySphereIntensity);
     sky_light_intensity_mul_
-      = std::clamp(sky_light_intensity_mul_, 0.0F, 100.0F);
+      = std::clamp(sky_light_intensity_mul_, 0.0F, kMaxSkyLightIntensityMul);
     any_loaded = true;
     settings_persist_dirty_ = true;
   }
@@ -4599,6 +4658,7 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_vec3(kSkySphereSolidColorKey, sky_sphere_solid_color_);
   save_float(kSkySphereRotationKey, sky_sphere_rotation_deg_);
   save_float(kSkySphereIntensityKey, sky_intensity_);
+  save_float(kSkySphereIlluminanceKey, sky_sphere_illuminance_lux_);
 
   save_int(kSkyboxLayoutKey, skybox_layout_idx_);
   save_int(kSkyboxOutputFormatKey, skybox_output_format_idx_);
@@ -4615,6 +4675,7 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_int(kSkyLightSourceKey, sky_light_source_);
   save_vec3(kSkyLightTintKey, sky_light_tint_);
   save_float(kSkyLightIntensityMulKey, sky_light_intensity_mul_);
+  save_float(kSkyLightIlluminanceKey, sky_light_illuminance_lux_);
   save_float(kSkyLightDiffuseKey, sky_light_diffuse_);
   save_float(kSkyLightSpecularKey, sky_light_specular_);
   save_vec3(

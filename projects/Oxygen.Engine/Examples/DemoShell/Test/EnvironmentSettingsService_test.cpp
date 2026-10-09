@@ -1381,6 +1381,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   service_.SetSkyLightEnabled(true);
   service_.SetSkyLightSource(1);
   service_.SetSkyLightIntensityMul(1.5F);
+  service_.SetSkyLightIlluminanceLux(12000.0F);
   service_.SetSkyLightDiffuse(0.7F);
   service_.SetSkyLightSpecular(0.9F);
   service_.SetSkyLightLowerHemisphereColor({ 0.1F, 0.2F, 0.3F });
@@ -1417,6 +1418,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_EQ(sky_light->GetSource(),
     scene::environment::SkyLightSource::kSpecifiedCubemap);
   EXPECT_FLOAT_EQ(sky_light->GetIntensityMul(), 1.5F);
+  EXPECT_FLOAT_EQ(sky_light->GetIlluminanceLux(), 12000.0F);
   EXPECT_FLOAT_EQ(sky_light->GetDiffuseIntensity(), 0.7F);
   EXPECT_FLOAT_EQ(sky_light->GetSpecularIntensity(), 0.9F);
   EXPECT_EQ(sky_light->GetLowerHemisphereColor(), glm::vec3(0.1F, 0.2F, 0.3F));
