@@ -12,6 +12,7 @@
 #include <deque>
 #include <iterator>
 #include <memory>
+#include <tuple>
 #include <vector>
 
 #include <Oxygen/Core/FrameContext.h>
@@ -104,7 +105,16 @@ struct RendererPublicationProbe {
   static auto PublishGroundGridConstants(
     GroundGridPass& pass, const RenderContext& ctx) -> ShaderVisibleIndex
   {
-    return pass.UpdatePassConstants(ctx);
+    bool settling = false;
+    return pass.UpdatePassConstants(ctx, settling);
+  }
+  //! Publishes the grid constants and reports whether the grid is settling.
+  static auto IsGroundGridSettling(
+    GroundGridPass& pass, const RenderContext& ctx) -> bool
+  {
+    bool settling = false;
+    std::ignore = pass.UpdatePassConstants(ctx, settling);
+    return settling;
   }
   static auto PublishWireframeConstants(BasePassModule& pass, Graphics& gfx,
     const RenderContext& ctx, bool pre_exposed) -> ShaderVisibleIndex

@@ -2978,8 +2978,11 @@ auto SceneRenderer::RenderCurrentView(
 
   // Stage 20: Ground grid
   if (ground_grid_pass_ != nullptr && wants_scene_lighting && !wireframe_only) {
-    std::ignore = ground_grid_pass_->Record(
+    const auto grid = ground_grid_pass_->Record(
       ctx, recorder, scene_textures, ResolveViewOutputTarget(ctx));
+    if (grid.settling) {
+      view_render_status_[ctx.current_view.view_id].settling = true;
+    }
     RecordDiagnosticsPass(renderer_,
       DiagnosticsPassRecord {
         .name = "Vortex.Stage20.GroundGrid",

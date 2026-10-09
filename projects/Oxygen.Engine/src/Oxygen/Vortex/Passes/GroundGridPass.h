@@ -49,6 +49,8 @@ public:
     bool wrote_scene_color { false };
     bool sampled_scene_depth { false };
     std::uint32_t draw_count { 0U };
+    //! The grid is still easing toward the camera; render the view again.
+    bool settling { false };
   };
 
   OXGN_VRTX_API explicit GroundGridPass(Renderer& renderer);
@@ -72,12 +74,14 @@ private:
     bool first_frame { true };
   };
 
-  OXGN_VRTX_API auto UpdatePassConstants(const RenderContext& ctx)
-    -> ShaderVisibleIndex;
+  //! Publishes the view's constants; `settling` reports a grid still easing.
+  OXGN_VRTX_API auto UpdatePassConstants(
+    const RenderContext& ctx, bool& settling) -> ShaderVisibleIndex;
   [[nodiscard]] auto ComputeInvViewProj(const RenderContext& ctx) const
     -> glm::mat4;
+  //! Eases the grid offset toward the camera; true while not yet at rest.
   auto ComputeGridOffset(PassConstants& constants, const RenderContext& ctx)
-    -> void;
+    -> bool;
   auto FillConstants(PassConstants& constants) const -> void;
 
   Renderer& renderer_;

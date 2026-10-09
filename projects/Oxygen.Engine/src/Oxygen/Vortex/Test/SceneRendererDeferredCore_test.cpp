@@ -2694,6 +2694,41 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   }
 }
 
+//! After the camera crosses grid cells, the eased grid reports settling until
+//! it reaches rest, then stays at rest while the camera is still.
+NOLINT_TEST_F(SceneRendererDeferredCoreTest, GroundGridSettlesAfterCameraStops)
+{
+  auto context = RenderForView(first_view_id_, first_resolved_view_);
+  auto grid = oxygen::vortex::GroundGridPass(*renderer_);
+  context.delta_time = 1.0F / 60.0F;
+  context.current_view.view_id = ViewId { 700U };
+  auto frame = 200U;
+  const auto settling_at = [&](const float camera_x) -> bool {
+    auto params = ResolvedView::Params {};
+    params.view_config.viewport = ViewPort {
+      .width = 64.0F,
+      .height = 64.0F,
+    };
+    params.view_matrix = glm::translate(
+      glm::mat4 { 1.0F }, glm::vec3 { -camera_x, 0.0F, -5.0F });
+    params.proj_matrix = glm::mat4 { 1.0F };
+    const auto view = ResolvedView(params);
+    context.current_view.resolved_view = oxygen::observer_ptr { &view };
+    context.frame_sequence = oxygen::frame::SequenceNumber { ++frame };
+    context.frame_slot = oxygen::frame::Slot { frame % 3U };
+    return RendererPublicationProbe::IsGroundGridSettling(grid, context);
+  };
+
+  EXPECT_FALSE(settling_at(0.0F)) << "The first frame starts at rest";
+  EXPECT_TRUE(settling_at(3.5F)) << "Crossing cells starts easing";
+
+  auto frames_to_rest = 0;
+  while (settling_at(3.5F)) {
+    ASSERT_LT(++frames_to_rest, 60 * 10) << "The grid never came to rest";
+  }
+  EXPECT_FALSE(settling_at(3.5F));
+}
+
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   BasePassMeshProcessorHonorsVelocityPolicy)
 {

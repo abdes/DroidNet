@@ -55,6 +55,11 @@ namespace {
   constexpr double kMinSpacing = 1e-4;
   constexpr double kMinSmoothTime = 0.001;
   constexpr double kTeleportThreshold = 1000.0;
+  // Below this fraction of the grid spacing, in offset and in the distance the
+  // velocity covers over one smoothing time, the grid is at rest: the eased
+  // offset snaps to its target so the spring's tail does not keep the view
+  // rendering for invisible motion.
+  constexpr double kRestFraction = 1e-3;
   constexpr double kCritDampCoeff1 = 0.48;
   constexpr double kCritDampCoeff2 = 0.235;
 
@@ -327,7 +332,7 @@ auto GroundGridPass::Record(RenderContext& ctx,
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
       ctx.view_constants->GetGPUVirtualAddress());
   }
-  const auto pass_constants_index = UpdatePassConstants(ctx);
+  const auto pass_constants_index = UpdatePassConstants(ctx, state.settling);
   recorder.SetGraphicsRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);
@@ -348,8 +353,8 @@ auto GroundGridPass::Record(RenderContext& ctx,
   return state;
 }
 
-auto GroundGridPass::UpdatePassConstants(const RenderContext& ctx)
-  -> ShaderVisibleIndex
+auto GroundGridPass::UpdatePassConstants(
+  const RenderContext& ctx, bool& settling) -> ShaderVisibleIndex
 {
   if (!constants_publisher_) {
     auto gfx = renderer_.GetGraphics();
@@ -367,7 +372,7 @@ auto GroundGridPass::UpdatePassConstants(const RenderContext& ctx)
   PassConstants constants {};
   constants.inv_view_proj = ComputeInvViewProj(ctx);
   FillConstants(constants);
-  ComputeGridOffset(constants, ctx);
+  settling = ComputeGridOffset(constants, ctx);
   const auto slot
     = constants_publisher_->Publish(ctx.current_view.view_id, constants);
   CHECK_F(slot.IsValid(), "Ground grid constants publication failed");
@@ -389,10 +394,10 @@ auto GroundGridPass::ComputeInvViewProj(const RenderContext& ctx) const
 }
 
 auto GroundGridPass::ComputeGridOffset(
-  PassConstants& constants, const RenderContext& ctx) -> void
+  PassConstants& constants, const RenderContext& ctx) -> bool
 {
   if (ctx.current_view.resolved_view == nullptr) {
-    return;
+    return false;
   }
 
   const auto& config = renderer_.GetGroundGridConfig();
@@ -430,6 +435,7 @@ auto GroundGridPass::ComputeGridOffset(
     wrap(snap_to_spacing(camera_pos.y - origin.y)),
   };
   glm::dvec2 effective_grid_offset = snapped_grid_offset;
+  bool settling = false;
   auto& smooth_state = smooth_states_by_view_[ctx.current_view.view_id];
 
   if (config.smooth_motion) {
@@ -459,9 +465,15 @@ auto GroundGridPass::ComputeGridOffset(
       smooth_state.velocity = (smooth_state.velocity - omega * temp) * exp;
       smooth_state.grid_offset = target + (change + temp) * exp;
 
-      if (glm::length(change) > kTeleportThreshold) {
+      const double rest_distance = spacing * kRestFraction;
+      const bool at_rest
+        = glm::length(target - smooth_state.grid_offset) <= rest_distance
+        && glm::length(smooth_state.velocity) * smooth_time <= rest_distance;
+      if (glm::length(change) > kTeleportThreshold || at_rest) {
         smooth_state.grid_offset = snapped_grid_offset;
         smooth_state.velocity = glm::dvec2(0.0);
+      } else {
+        settling = true;
       }
 
       smooth_state.grid_offset.x = wrap(smooth_state.grid_offset.x);
@@ -476,6 +488,7 @@ auto GroundGridPass::ComputeGridOffset(
 
   constants.grid_offset_x = static_cast<float>(effective_grid_offset.x);
   constants.grid_offset_y = static_cast<float>(effective_grid_offset.y);
+  return settling;
 }
 
 auto GroundGridPass::FillConstants(PassConstants& constants) const -> void
