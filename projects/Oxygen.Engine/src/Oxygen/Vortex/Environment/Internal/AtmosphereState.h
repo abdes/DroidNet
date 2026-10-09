@@ -9,6 +9,9 @@
 #include <array>
 #include <cstdint>
 
+#include <glm/vec3.hpp>
+
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -19,8 +22,25 @@ class Scene;
 
 namespace oxygen::vortex::environment::internal {
 
+//! Sky Sphere inputs that a captured-scene sky light reads.
+/*!
+ Lighting captures the imported radiance: the cubemap texels or the solid
+ color, with the rotation applied. The Sky Sphere's intensity and tint scale the
+ display only, so they are not part of this model.
+*/
+struct SkySphereCaptureModel {
+  bool enabled { false };
+  bool solid_color { false };
+  content::ResourceKey cubemap_resource {};
+  glm::vec3 solid_color_rgb { 0.0F, 0.0F, 0.0F };
+  float rotation_radians { 0.0F };
+  //! Calibrated upward illuminance; zero keeps the imported radiance.
+  float illuminance_lux { 0.0F };
+};
+
 struct StableAtmosphereState {
   environment::EnvironmentViewProducts view_products {};
+  SkySphereCaptureModel sky_sphere {};
   std::array<scene::NodeHandle, environment::kAtmosphereLightSlotCount>
     capture_light_nodes {};
   std::uint64_t authored_hash { 0U };

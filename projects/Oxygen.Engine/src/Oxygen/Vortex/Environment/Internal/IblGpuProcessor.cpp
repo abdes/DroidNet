@@ -102,7 +102,7 @@ namespace {
     std::uint32_t processed_half_srv { kInvalidBindlessIndex };
     std::uint32_t specular_half_srv { kInvalidBindlessIndex };
     std::array<std::uint32_t, 3> group_origin {};
-    std::uint32_t padding {};
+    float source_scale { 1.0F };
   };
   constexpr auto kWorkRecordBytes = 96U;
   static_assert(sizeof(Work) == kWorkRecordBytes);
@@ -726,8 +726,9 @@ auto IblGpuProcessor::ProcessSky(const IblSkySource& source,
   const IblProcessSettings& settings, const std::uint32_t revision)
   -> std::expected<std::shared_ptr<const IblGpuProducts>, IblProcessError>
 {
-  return ProcessSource(
-    {}, {}, brdf, settings, revision, source.producer, &source);
+  const auto& cube = source.sky_sphere_cube;
+  return ProcessSource(cube.texture, {}, brdf, settings, revision,
+    source.producer, &source, cube.srv, cube.owner);
 }
 
 auto IblGpuProcessor::ProcessCubeView(
@@ -790,8 +791,9 @@ auto IblGpuProcessor::BeginSky(const IblSkySource& source,
   const IblProcessSettings& settings, const std::uint32_t revision)
   -> std::expected<std::shared_ptr<IblGpuJob>, IblProcessError>
 {
-  auto job
-    = PrepareSource({}, {}, brdf, settings, revision, source.producer, &source);
+  const auto& cube = source.sky_sphere_cube;
+  auto job = PrepareSource(cube.texture, {}, brdf, settings, revision,
+    source.producer, &source, cube.srv, cube.owner);
   if (!job) {
     return std::unexpected(job.error());
   }
@@ -1141,6 +1143,7 @@ auto IblGpuProcessor::PrepareSource(
       && (settings.dispatch_tile_size < 8U
         || !std::has_single_bit(settings.dispatch_tile_size)))
     || !std::isfinite(settings.source_rotation_radians)
+    || !std::isfinite(settings.source_scale) || settings.source_scale < 0.0F
     || !std::isfinite(settings.lower_hemisphere_blend_alpha)
     || settings.lower_hemisphere_blend_alpha < 0.0F
     || settings.lower_hemisphere_blend_alpha > 1.0F
@@ -1181,6 +1184,26 @@ auto IblGpuProcessor::PrepareSource(
     && (settings.source_rotation_radians != 0.0F
       || std::ranges::any_of(sky->origin,
         [](float value) -> bool { return !std::isfinite(value); }))) {
+    return std::unexpected(IblProcessError::kInvalidSource);
+  }
+  // A captured Sky Sphere replaces the atmosphere; a cubemap one is the cube
+  // source of this sky capture, and nothing else is.
+  const auto& sphere
+    = sky != nullptr ? sky->environment.sky_sphere : GpuSkySphereParams {};
+  const bool sky_sphere = sphere.enabled != 0U;
+  const bool sky_sphere_cube
+    = sky_sphere && sphere.source == kSkySphereSourceCubemap;
+  if (sky
+    && ((sky_sphere && atmosphere) || sky_sphere_cube != (source != nullptr)
+      || (sky_sphere_cube && (!resident_srv.IsValid() || !resident_owner))
+      || (sky_sphere
+        && (!std::isfinite(sphere.rotation_radians)
+          || !std::isfinite(sphere.intensity) || sphere.intensity < 0.0F
+          || std::ranges::any_of(
+            sphere.solid_color_rgb,
+            [](float value) -> bool {
+              return !std::isfinite(value) || value < 0.0F;
+            }))))) {
     return std::unexpected(IblProcessError::kInvalidSource);
   }
   if (atmosphere
@@ -1309,6 +1332,8 @@ auto IblGpuProcessor::PrepareSource(
         .view = sky->view,
         .origin = sky->origin,
       };
+      data.environment.sky_sphere.cubemap_slot
+        = sky_sphere_cube ? source_srv.get() : kInvalidBindlessIndex;
       data.environment.atmosphere.sky_view_lut_slot = kInvalidBindlessIndex;
       data.environment.atmosphere.distant_sky_light_lut_slot
         = kInvalidBindlessIndex;
@@ -1356,7 +1381,7 @@ auto IblGpuProcessor::PrepareSource(
       .partial_count = tiles,
       .revision = revision,
       .hemisphere_enabled = settings.lower_hemisphere_solid_color
-          && (!sky || atmosphere || capture_fog)
+          && (!sky || atmosphere || capture_fog || sky_sphere)
         ? 1U
         : 0U,
       .lower_hemisphere = { settings.lower_hemisphere_color.at(0),
@@ -1365,7 +1390,8 @@ auto IblGpuProcessor::PrepareSource(
       .source_rotation = settings.source_rotation_radians,
       .capture_srv = sky ? snapshot.srv.get() : kInvalidBindlessIndex,
       .processed_half_srv = processed_half.srv.get(),
-      .specular_half_srv = specular_half.srv.get(), };
+      .specular_half_srv = specular_half.srv.get(),
+      .source_scale = settings.source_scale, };
     work.push_back(base); // Prepare and range use record zero.
     base.output_uav = processed.uavs.at(0).get();
     work.push_back(base); // Normalize.

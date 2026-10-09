@@ -188,6 +188,11 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuSkyLightParams {
   std::array<std::uint32_t, 3> metadata_padding {};
 };
 
+//! `GpuSkySphereParams::source` values; mirror
+//! scene::environment::SkySphereSource.
+inline constexpr std::uint32_t kSkySphereSourceCubemap = 0U;
+inline constexpr std::uint32_t kSkySphereSourceSolidColor = 1U;
+
 struct alignas(packing::kShaderDataFieldAlignment) GpuSkySphereParams {
   std::array<float, 3> solid_color_rgb { 0.0F, 0.0F, 0.0F };
   float intensity { 1.0F };

@@ -74,10 +74,12 @@ CapturedSkySource::~CapturedSkySource() = default;
 auto CapturedSkySource::Process(RenderContext& ctx,
   const StableAtmosphereState& state, const GpuFogParams& fog,
   IblGpuProcessor& processor, const std::shared_ptr<const IblBrdfProduct>& brdf,
-  const IblProcessSettings& settings, const std::uint32_t revision)
+  const IblProcessSettings& settings, const std::uint32_t revision,
+  const IblCubeView& sky_sphere_cube, const float sky_sphere_scale)
   -> std::expected<std::shared_ptr<const IblGpuProducts>, IblProcessError>
 {
-  const auto source = Prepare(ctx, state, fog);
+  const auto source
+    = Prepare(ctx, state, fog, sky_sphere_cube, sky_sphere_scale);
   if (!source) {
     return std::unexpected(source.error());
   }
@@ -87,10 +89,12 @@ auto CapturedSkySource::Process(RenderContext& ctx,
 auto CapturedSkySource::Begin(RenderContext& ctx,
   const StableAtmosphereState& state, const GpuFogParams& fog,
   IblGpuProcessor& processor, const std::shared_ptr<const IblBrdfProduct>& brdf,
-  const IblProcessSettings& settings, const std::uint32_t revision)
+  const IblProcessSettings& settings, const std::uint32_t revision,
+  const IblCubeView& sky_sphere_cube, const float sky_sphere_scale)
   -> std::expected<std::shared_ptr<IblGpuJob>, IblProcessError>
 {
-  const auto source = Prepare(ctx, state, fog);
+  const auto source
+    = Prepare(ctx, state, fog, sky_sphere_cube, sky_sphere_scale);
   if (!source) {
     return std::unexpected(source.error());
   }
@@ -98,7 +102,8 @@ auto CapturedSkySource::Begin(RenderContext& ctx,
 }
 
 auto CapturedSkySource::Prepare(RenderContext& ctx,
-  const StableAtmosphereState& state, const GpuFogParams& fog)
+  const StableAtmosphereState& state, const GpuFogParams& fog,
+  const IblCubeView& sky_sphere_cube, const float sky_sphere_scale)
   -> std::expected<IblSkySource, IblProcessError>
 try {
   auto& p = *impl_;
@@ -131,6 +136,21 @@ try {
   source.view = BuildAtmosphereViewData(
     state, p.cache.GetState().internal_parameters, origin, true, true);
   if (!atmosphere.enabled) {
+    // The Sky Sphere's imported radiance, without its display intensity/tint.
+    const auto& sphere = state.sky_sphere;
+    if (sphere.enabled && (sphere.solid_color || sky_sphere_cube.texture)) {
+      auto& params = source.environment.sky_sphere;
+      params.enabled = 1U;
+      params.source = sphere.solid_color ? kSkySphereSourceSolidColor
+                                         : kSkySphereSourceCubemap;
+      params.solid_color_rgb = { sphere.solid_color_rgb.x,
+        sphere.solid_color_rgb.y, sphere.solid_color_rgb.z };
+      params.rotation_radians = sphere.rotation_radians;
+      params.intensity = sky_sphere_scale;
+      if (!sphere.solid_color) {
+        source.sky_sphere_cube = sky_sphere_cube;
+      }
+    }
     accepted = true;
     return source;
   }

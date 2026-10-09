@@ -19,9 +19,6 @@
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
 
-static const uint kSkySphereSourceCubemap = 0u;
-static const uint kSkySphereSourceSolidColor = 1u;
-
 static inline bool IsReverseZProjection()
 {
     return reverse_z != 0u;
@@ -53,16 +50,6 @@ static inline float3 ReconstructViewDirection(float2 uv)
     return distance_to_sample > 1.0e-4f
         ? view_vector / distance_to_sample
         : normalize(float3(uv - 0.5f, 1.0f));
-}
-
-static inline float3 RotateDirectionAroundOxygenUp(float3 direction, float radians)
-{
-    const float c = cos(radians);
-    const float s = sin(radians);
-    return float3(
-        c * direction.x - s * direction.y,
-        s * direction.x + c * direction.y,
-        direction.z);
 }
 
 static inline bool IsAtmosphereRenderedInMain(EnvironmentViewData environment_view)

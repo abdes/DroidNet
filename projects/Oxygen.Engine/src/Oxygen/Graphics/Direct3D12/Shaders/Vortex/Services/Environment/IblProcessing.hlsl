@@ -41,7 +41,7 @@ struct IblWork
     uint processed_half_srv;
     uint specular_half_srv;
     uint3 group_origin;
-    uint padding;
+    float source_scale;
 };
 
 struct IblSkySnapshot
@@ -52,15 +52,43 @@ struct IblSkySnapshot
     float padding;
 };
 
-static float3 CaptureSkyRadiance(uint snapshot_srv, float3 direction)
+// Reads a source cube at the mip whose texels match the output texels, so a
+// small bright source such as the sun is averaged in, not point-sampled.
+static float3 SampleSourceCube(uint cube_srv, float3 direction, uint output_size)
+{
+    TextureCube<float4> cube = ResourceDescriptorHeap[cube_srv];
+    uint width, height, levels;
+    cube.GetDimensions(0u, width, height, levels);
+    float lod = clamp(log2(float(width) / float(output_size)), 0.0, float(levels - 1u));
+    SamplerState linear_clamp = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+    return cube.SampleLevel(linear_clamp, CubemapSamplingDirFromOxygenWS(direction), lod).rgb;
+}
+
+// Imported Sky Sphere radiance: display intensity and tint do not light.
+static float3 CaptureSkySphereRadiance(GpuSkySphereParams sky_sphere,
+    uint cube_srv, float3 direction, uint output_size)
+{
+    // A capture snapshot's intensity is the illuminance calibration scale.
+    if (sky_sphere.source == kSkySphereSourceSolidColor)
+        return sky_sphere.solid_color_rgb * sky_sphere.intensity;
+    return SampleSourceCube(cube_srv,
+        RotateDirectionAroundOxygenUp(direction, sky_sphere.rotation_radians), output_size)
+        * sky_sphere.intensity;
+}
+
+static float3 CaptureSkyRadiance(uint snapshot_srv, uint cube_srv, float3 direction,
+    uint output_size)
 {
     StructuredBuffer<IblSkySnapshot> snapshots = ResourceDescriptorHeap[snapshot_srv];
     IblSkySnapshot source = snapshots[0];
-    // Dedicated unit-exposure sky LUT, shared fog integral, no analytic disks,
-    // prior IBL, display background, local fog or volumetric fog.
-    float3 atmosphere = SampleSkyViewRadiance(source.environment, source.view, direction).rgb;
+    // Dedicated unit-exposure sky LUT or the authored Sky Sphere, shared fog
+    // integral, no analytic disks, prior IBL, display-only background, local
+    // fog or volumetric fog.
+    float3 sky = source.environment.sky_sphere.enabled != 0u
+        ? CaptureSkySphereRadiance(source.environment.sky_sphere, cube_srv, direction, output_size)
+        : SampleSkyViewRadiance(source.environment, source.view, direction).rgb;
     float4 fog = EvaluateSkyHeightFog(source.environment, source.view, source.origin, direction, true);
-    return atmosphere * fog.a + fog.rgb;
+    return sky * fog.a + fog.rgb;
 }
 
 static IblWork Work()
@@ -109,7 +137,6 @@ static void PrepareSource(uint3 id, uint3 group, uint lane, bool captured_sky)
     group += w.group_origin;
     RWTexture2DArray<float4> output = ResourceDescriptorHeap[w.output_uav];
     RWStructuredBuffer<float4> partials = ResourceDescriptorHeap[w.partials_uav];
-    SamplerState linear_clamp = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
     float maximum = 0.0;
     float valid = 1.0;
     if (all(id.xy < w.output_size)) {
@@ -117,14 +144,11 @@ static void PrepareSource(uint3 id, uint3 group, uint lane, bool captured_sky)
         float3 world = OxygenDirFromCubemapSamplingDir(cube_direction);
         float3 radiance;
         if (captured_sky) {
-            radiance = CaptureSkyRadiance(w.capture_srv, world);
+            radiance = CaptureSkyRadiance(w.capture_srv, w.source_srv, world, w.output_size);
         } else {
-            TextureCube<float4> source = ResourceDescriptorHeap[w.source_srv];
-            float sine, cosine;
-            sincos(w.source_rotation, sine, cosine);
-            float3 rotated = float3(cosine * world.x - sine * world.y,
-                sine * world.x + cosine * world.y, world.z);
-            radiance = source.SampleLevel(linear_clamp, CubemapSamplingDirFromOxygenWS(rotated), 0.0).rgb;
+            radiance = SampleSourceCube(w.source_srv,
+                RotateDirectionAroundOxygenUp(world, w.source_rotation), w.output_size)
+                * w.source_scale;
         }
         if (w.hemisphere_enabled != 0u && world.z < 0.0)
             radiance = lerp(radiance, w.lower_hemisphere.rgb, w.lower_hemisphere.a);

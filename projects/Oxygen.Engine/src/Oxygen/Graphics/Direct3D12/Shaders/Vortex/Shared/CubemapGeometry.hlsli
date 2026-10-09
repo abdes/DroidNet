@@ -89,4 +89,14 @@ static inline float3 OxygenDirFromCubemapSamplingDir(float3 dir_cube)
     return float3(dir_cube.x, -dir_cube.z, dir_cube.y);
 }
 
+// Rotates an Oxygen world direction about +Z. Sky display and sky-light
+// capture share it so an authored cubemap rotation lights what it shows.
+static inline float3 RotateDirectionAroundOxygenUp(float3 direction, float radians)
+{
+    float s, c;
+    sincos(radians, s, c);
+    return float3(c * direction.x - s * direction.y,
+        s * direction.x + c * direction.y, direction.z);
+}
+
 #endif // OXYGEN_VORTEX_CUBEMAP_GEOMETRY_HLSLI

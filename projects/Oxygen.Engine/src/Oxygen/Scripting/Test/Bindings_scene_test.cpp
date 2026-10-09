@@ -315,10 +315,16 @@ function on_scene_mutation()
   if math.abs(fog:get_max_opacity() - 0.5) > 0.0001 then error("fog opacity") end
 
   local sky_light = env:ensure_sky_light()
-  sky_light:set({ source = "captured_scene", intensity_mul = 1.25 })
+  sky_light:set({ source = "captured_scene", intensity_mul = 1.25, illuminance_lux = 12000 })
   local sl = sky_light:get()
   if sl.source ~= "captured_scene" then error("sky_light source") end
   if math.abs(sl.intensity_mul - 1.25) > 0.0001 then error("sky_light intensity") end
+  if math.abs(sl.illuminance_lux - 12000) > 0.01 then error("sky_light illuminance") end
+
+  local sky_sphere = env:ensure_sky_sphere()
+  sky_sphere:set({ source = "solid_color", illuminance_lux = 15000 })
+  local ss = sky_sphere:get()
+  if math.abs(ss.illuminance_lux - 15000) > 0.01 then error("sky_sphere illuminance") end
 
   local sky = env:ensure_sky_atmosphere()
   sky:set({ planet_radius_meters = 7000000.0 })

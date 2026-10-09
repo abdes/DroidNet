@@ -97,8 +97,25 @@ source-key reuse and rendered diffuse/specular tests.
 
 ## 2. Capture source and coordinates
 
-CapturedScene contains authored atmosphere and capture-visible exponential height
-fog. It excludes ordinary geometry, emissive objects, gizmos, display-only
+CapturedScene contains the authored sky and capture-visible exponential height
+fog. The sky is the atmosphere when one is authored, otherwise an enabled Sky
+Sphere: its cubemap or solid color with its rotation. The choice is made on the
+scene, not per view, because one product serves every view. The capture takes
+the Sky Sphere's imported radiance; its intensity and tint scale only the
+display and never rebuild the capture, so only the SkyLight's multipliers scale
+lighting. Both the Sky Sphere and a specified cubemap carry an optional
+illuminance calibration in lux: the texture binder measures each float cube's
+upward illuminance from its CPU payload when it uploads, and the source
+radiance is scaled to deliver the authored value, for display and capture
+alike; zero keeps the imported radiance. RGBA32F, RGBA16F, R11G11B10F and
+RGB9E5 cubes are measured; a requested calibration that cannot be measured
+leaves the radiance raw and is reported every frame in the diagnostics ledger,
+as `sky.uncalibrated` for the display and `ibl.uncalibrated` for lighting, and
+logged once per cubemap. A cubemap Sky Sphere resolves through the shared
+texture binder like a specified cubemap, with the same float-format rule, and
+is processed at its own face size up to 256, sampled at the mip matching the
+output texels.
+CapturedScene excludes ordinary geometry, emissive objects, gizmos, display-only
 backgrounds, camera bars, exposure, bloom, grading and previous IBL. Local and
 volumetric fog are separate view-dependent products and remain outside capture.
 
@@ -162,8 +179,8 @@ hemisphere policy once before convolution: default solid black, blend 1, below
 world horizon. These black/solid/blend-1 defaults are already present in
 `Scene/Environment/SkyLight.h:189–191`; they are not new editor selections.
 Native specified-source yaw remains its independent existing
-setting; captured atmosphere uses its native world directions without an extra
-SkySphere rotation.
+setting; captured atmosphere uses its native world directions, and a captured
+Sky Sphere applies its own rotation exactly as the sky display does.
 
 ### 2.1 Height fog and visible sky
 

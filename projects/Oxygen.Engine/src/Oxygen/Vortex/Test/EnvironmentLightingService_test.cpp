@@ -4334,6 +4334,40 @@ NOLINT_TEST(
 }
 
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  CaptureSourceIdentityFollowsTheSkySphereOnlyWithoutAnAtmosphere)
+{
+  namespace internal = oxygen::vortex::environment::internal;
+  auto state = internal::StableAtmosphereState {};
+  state.sky_sphere.enabled = true;
+  state.sky_sphere.solid_color = true;
+  state.sky_sphere.solid_color_rgb = glm::vec3(1.0F);
+  const auto original = internal::HashSkyCaptureInputs(state);
+  for (const auto edit : { 0, 1, 2, 3 }) {
+    auto edited = state;
+    switch (edit) {
+    case 0:
+      edited.sky_sphere.solid_color_rgb.y = 0.5F;
+      break;
+    case 1:
+      edited.sky_sphere.rotation_radians = 1.0F;
+      break;
+    case 2:
+      edited.sky_sphere.solid_color = false;
+      break;
+    default:
+      edited.sky_sphere.cubemap_resource = oxygen::content::ResourceKey { 7U };
+      break;
+    }
+    EXPECT_NE(internal::HashSkyCaptureInputs(edited), original) << edit;
+  }
+  // An authored atmosphere replaces the Sky Sphere in the capture.
+  state.view_products.atmosphere.enabled = true;
+  const auto with_atmosphere = internal::HashSkyCaptureInputs(state);
+  state.sky_sphere.rotation_radians = 1.0F;
+  EXPECT_EQ(internal::HashSkyCaptureInputs(state), with_atmosphere);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   CaptureSourceIdentityExcludesSurfaceGainAndDisplayVisibility)
 {
   namespace internal = oxygen::vortex::environment::internal;

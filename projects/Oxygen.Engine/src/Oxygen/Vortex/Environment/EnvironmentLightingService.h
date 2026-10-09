@@ -13,6 +13,8 @@
 #include <unordered_map>
 
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
@@ -378,6 +380,9 @@ private:
   auto PrepareLocalFogForStage14(RenderContext& ctx,
     graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
     -> const environment::internal::LocalFogVolumeState::ViewProducts&;
+  //! Warns that a Sky Sphere cubemap asked for a calibration it cannot have.
+  auto ReportUncalibratedSkyCubemap(
+    content::ResourceKey cubemap, Format format, float target_lux) -> void;
   OXGN_VRTX_NDAPI auto BuildEnvironmentStaticData(const RenderContext& ctx,
     const environment::EnvironmentViewProducts& view_products)
     -> EnvironmentStaticData;
@@ -428,6 +433,7 @@ private:
     camera_aerial_perspective_pass_;
   std::unique_ptr<environment::VolumetricFogPass> volumetric_fog_pass_;
   std::shared_ptr<resources::TextureBinder> sky_texture_binder_;
+  content::ResourceKey logged_uncalibrated_sky_cubemap_ {};
   environment::VolumetricFogPass::RecordState pending_volumetric_fog_state_ {};
   environment::LocalFogVolumeTiledCullingPass::RecordState
     pending_local_fog_culling_state_ {};

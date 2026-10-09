@@ -548,7 +548,11 @@ struct SkyLightEnvironmentRecord {
 
   //! Cube texture binding in the scene's resource reference table.
   ResourceReferenceIndex cubemap = kNoResourceReference;
-  std::array<uint32_t, 3> cubemap_reserved {};
+  //! Illuminance, in lux, that the source delivers on an upward-facing
+  //! surface. The renderer scales the imported radiance to deliver it; zero
+  //! uses the radiance as imported. Former content wrote zero here.
+  float illuminance_lux = 0.0F;
+  std::array<uint32_t, 2> cubemap_reserved {};
 
   float intensity = 1.0F;
   float tint_rgb[3] = { 1.0F, 1.0F, 1.0F };
@@ -580,7 +584,11 @@ struct SkySphereEnvironmentRecord {
 
   //! Cube texture binding in the scene's resource reference table.
   ResourceReferenceIndex cubemap = kNoResourceReference;
-  std::array<uint32_t, 3> cubemap_reserved {};
+  //! Illuminance, in lux, that the source delivers on an upward-facing
+  //! surface. The renderer scales the imported radiance to deliver it; zero
+  //! uses the radiance as imported. Former content wrote zero here.
+  float illuminance_lux = 0.0F;
+  std::array<uint32_t, 2> cubemap_reserved {};
 
   float solid_color_rgb[3] = { 0.0F, 0.0F, 0.0F };
   float intensity = 1.0F;

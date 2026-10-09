@@ -191,6 +191,10 @@ struct GpuSkyLightParams
     uint3 metadata_padding;
 };
 
+// GpuSkySphereParams::source values.
+static const uint kSkySphereSourceCubemap = 0u;
+static const uint kSkySphereSourceSolidColor = 1u;
+
 // Mirrors oxygen::engine::GpuSkySphereParams (sizeof = 48)
 struct GpuSkySphereParams
 {

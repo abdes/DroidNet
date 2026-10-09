@@ -201,6 +201,13 @@ public:
   OXGN_VRTX_NDAPI auto IsResourceReady(
     const content::ResourceKey& key) const noexcept -> bool override;
 
+  //! Illuminance, in lux, that a loaded HDR cube delivers on an upward-facing
+  //! surface, measured once when it uploads (see `MeasureCubeIlluminance`).
+  //! Nothing until the texture is ready, or for a texture that is not a float
+  //! cube.
+  [[nodiscard]] OXGN_VRTX_API auto TryGetCubeIlluminance(
+    const content::ResourceKey& key) const noexcept -> std::optional<float>;
+
   [[nodiscard]] OXGN_VRTX_API auto GetPendingUploadCount() const noexcept
     -> std::size_t;
   //! Advances whenever any descriptor this binder serves is repointed, so a

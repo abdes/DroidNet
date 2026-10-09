@@ -15,6 +15,7 @@
 #include <fstream>
 #include <functional>
 #include <memory>
+#include <numbers>
 #include <span>
 #include <string>
 #include <vector>
@@ -46,6 +47,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
@@ -158,9 +160,12 @@ namespace {
     }
 
     auto Texture(unsigned size, bool cube,
-      const std::function<Pixel(unsigned, unsigned, unsigned)>& pixel)
-      -> content::ResourceKey
+      const std::function<Pixel(unsigned, unsigned, unsigned)>& pixel,
+      const Format format = Format::kRGBA32Float) -> content::ResourceKey
     {
+      // Only an LDR RGBA8 alternative is needed beside float texels.
+      const bool ldr = format == Format::kRGBA8UNorm;
+      const unsigned texel_bytes = ldr ? 4U : sizeof(Pixel);
       const auto faces = cube ? 6U : 1U;
       data::pak::core::TextureResourceDesc desc {};
       desc.texture_type = static_cast<std::uint8_t>(
@@ -168,25 +173,31 @@ namespace {
       desc.width = desc.height = size;
       desc.depth = desc.mip_levels = 1U;
       desc.array_layers = static_cast<std::uint16_t>(faces);
-      desc.format = static_cast<std::uint8_t>(Format::kRGBA32Float);
+      desc.format = static_cast<std::uint8_t>(format);
       desc.alignment = 256U;
       const auto key = owned_asset_loader_->MintSyntheticTextureKey();
       desc.content_hash = key.get();
-      const auto face_bytes = size * size * sizeof(Pixel);
+      const auto face_bytes = size * size * texel_bytes;
       std::vector<std::uint8_t> bytes(faces * face_bytes);
       std::vector<data::pak::render::SubresourceLayout> layouts;
       for (unsigned face = 0; face < faces; ++face) {
         for (unsigned y = 0; y < size; ++y) {
           for (unsigned x = 0; x < size; ++x) {
             const auto value = pixel(face, x, y);
-            std::memcpy(
-              bytes.data() + face * face_bytes + (y * size + x) * sizeof(Pixel),
-              value.data(), sizeof(Pixel));
+            auto* texel
+              = bytes.data() + face * face_bytes + (y * size + x) * texel_bytes;
+            if (ldr) {
+              for (unsigned c = 0; c < 4; ++c)
+                texel[c] = static_cast<std::uint8_t>(
+                  std::clamp(value[c], 0.0F, 1.0F) * 255.0F + 0.5F);
+            } else {
+              std::memcpy(texel, value.data(), sizeof(Pixel));
+            }
           }
         }
         layouts.push_back(
           { .offset_bytes = static_cast<std::uint32_t>(face * face_bytes),
-            .row_pitch_bytes = static_cast<std::uint32_t>(size * sizeof(Pixel)),
+            .row_pitch_bytes = static_cast<std::uint32_t>(size * texel_bytes),
             .size_bytes = static_cast<std::uint32_t>(face_bytes) });
       }
       auto payload
@@ -518,6 +529,123 @@ namespace {
     backend->ClearSubmissionFault();
     EXPECT_EQ(IblOwner().GetPublishedProducts(), nullptr);
     WaitForQueueIdle();
+  }
+
+  NOLINT_TEST_F(
+    IblDiagnosticsGpuTest, CapturedSceneLightsWithTheSkySphereImportedRadiance)
+  {
+    Sky().SetSource(scene::environment::SkyLightSource::kCapturedScene);
+    Sky().SetSpecularIntensity(0.0F);
+    Material(data::MaterialDomain::kOpaque, 1.0F, 0.0F, glm::vec3(1.0F));
+    auto& sphere
+      = scene->GetEnvironment()->AddSystem<scene::environment::SkySphere>();
+    sphere.SetEnabled(true);
+    sphere.SetSource(scene::environment::SkySphereSource::kSolidColor);
+    sphere.SetSolidColorRgb(glm::vec3(1.0F));
+    // Display-only scaling never reaches lighting.
+    sphere.SetIntensity(5.0F);
+    sphere.SetTintRgb(glm::vec3(0.5F));
+    renderer_->GetDiagnosticsService().SetEnabledFeatures(
+      DiagnosticsFeature::kFrameLedger);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
+    const auto solid = renderer_->InspectSkyLight(*scene);
+    EXPECT_TRUE(solid.usable);
+    EXPECT_FALSE(solid.empty_capture);
+    EXPECT_EQ(solid.gpu_validation, SkyLightGpuValidation::kValid);
+    EXPECT_NEAR(solid.average_brightness, 1.0F, 0.0001F);
+    EXPECT_NEAR(ReadFloatTexture(*probe->color).front()[0], 1.0F, 0.001F);
+
+    sphere.SetIntensity(0.25F);
+    sphere.SetTintRgb(glm::vec3(2.0F));
+    scene->NotifyEnvironmentAuthoringChange();
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
+    EXPECT_EQ(renderer_->InspectSkyLight(*scene).published_revision,
+      solid.published_revision);
+
+    sphere.SetSource(scene::environment::SkySphereSource::kCubemap);
+    sphere.SetCubemapResource(Texture(
+      16U, true, [](auto, auto, auto) { return Pixel { 2, 2, 2, 1 }; }));
+    scene->NotifyEnvironmentAuthoringChange();
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
+    const auto cube = renderer_->InspectSkyLight(*scene);
+    EXPECT_TRUE(cube.usable);
+    EXPECT_NE(cube.published_revision, solid.published_revision);
+    EXPECT_EQ(cube.gpu_validation, SkyLightGpuValidation::kValid);
+    EXPECT_NEAR(cube.average_brightness, 2.0F, 0.0001F);
+    EXPECT_NEAR(ReadFloatTexture(*probe->color).front()[0], 2.0F, 0.001F);
+
+    // The uniform cube delivers 2 pi lux upward; calibrating it to 4 pi lux
+    // doubles the radiance that lights the scene.
+    sphere.SetIlluminanceLux(4.0F * std::numbers::pi_v<float>);
+    scene->NotifyEnvironmentAuthoringChange();
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
+    const auto calibrated = renderer_->InspectSkyLight(*scene);
+    EXPECT_EQ(calibrated.gpu_validation, SkyLightGpuValidation::kValid);
+    EXPECT_NEAR(calibrated.average_brightness, 4.0F, 0.01F);
+    EXPECT_NEAR(ReadFloatTexture(*probe->color).front()[0], 4.0F, 0.01F);
+  }
+
+  NOLINT_TEST_F(
+    IblDiagnosticsGpuTest, SpecifiedCubemapIsCalibratedToItsIlluminance)
+  {
+    Sky().SetSpecularIntensity(0.0F);
+    Material(data::MaterialDomain::kOpaque, 1.0F, 0.0F, glm::vec3(1.0F));
+    Sky().SetCubemapResource(Texture(
+      16U, true, [](auto, auto, auto) { return Pixel { 2, 2, 2, 1 }; }));
+    // The uniform cube delivers 2 pi lux; a pi lux target halves it.
+    Sky().SetIlluminanceLux(std::numbers::pi_v<float>);
+    renderer_->GetDiagnosticsService().SetEnabledFeatures(
+      DiagnosticsFeature::kFrameLedger);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
+    const auto state = renderer_->InspectSkyLight(*scene);
+    EXPECT_TRUE(state.usable);
+    EXPECT_NEAR(state.average_brightness, 1.0F, 0.01F);
+    EXPECT_NEAR(ReadFloatTexture(*probe->color).front()[0], 1.0F, 0.01F);
+  }
+
+  NOLINT_TEST_F(
+    IblDiagnosticsGpuTest, UnmeasurableSkySphereCalibrationIsReported)
+  {
+    Sky().SetSource(scene::environment::SkyLightSource::kCapturedScene);
+    auto& sphere
+      = scene->GetEnvironment()->AddSystem<scene::environment::SkySphere>();
+    sphere.SetEnabled(true);
+    sphere.SetSource(scene::environment::SkySphereSource::kCubemap);
+    sphere.SetCubemapResource(Texture(
+      16U, true, [](auto, auto, auto) { return Pixel { 1, 1, 1, 1 }; },
+      Format::kRGBA8UNorm));
+    sphere.SetIlluminanceLux(10000.0F);
+    auto& diagnostics = renderer_->GetDiagnosticsService();
+    diagnostics.SetEnabledFeatures(DiagnosticsFeature::kFrameLedger);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
+    const auto ledger = diagnostics.GetLatestSnapshot();
+    EXPECT_TRUE(std::ranges::any_of(ledger.issues, [](const auto& issue) {
+      return issue.code == "sky.uncalibrated"
+        && issue.severity == DiagnosticsSeverity::kWarning;
+    }));
+    // LDR radiance never lights the scene, calibrated or not.
+    EXPECT_TRUE(std::ranges::any_of(ledger.issues,
+      [](const auto& issue) { return issue.code == "ibl.unavailable"; }));
+
+    sphere.SetIlluminanceLux(0.0F);
+    scene->NotifyEnvironmentAuthoringChange();
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
+    EXPECT_TRUE(std::ranges::none_of(diagnostics.GetLatestSnapshot().issues,
+      [](const auto& issue) { return issue.code == "sky.uncalibrated"; }));
+  }
+
+  NOLINT_TEST_F(IblDiagnosticsGpuTest, UnavailableSkyLightIsReportedEachFrame)
+  {
+    auto& diagnostics = renderer_->GetDiagnosticsService();
+    diagnostics.SetEnabledFeatures(DiagnosticsFeature::kFrameLedger);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
+    EXPECT_FALSE(renderer_->InspectSkyLight(*scene).usable);
+    const auto ledger = diagnostics.GetLatestSnapshot();
+    EXPECT_TRUE(std::ranges::any_of(ledger.issues, [](const auto& issue) {
+      return issue.code == "ibl.unavailable"
+        && issue.message.find("has no cubemap") != std::string::npos;
+    }));
   }
 
   NOLINT_TEST_F(IblDiagnosticsGpuTest, ReportsOnlyCompleteRequestedGpuTimings)

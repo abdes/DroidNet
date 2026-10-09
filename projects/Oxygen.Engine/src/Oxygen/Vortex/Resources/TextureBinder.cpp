@@ -55,6 +55,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Nexus/GenerationTracker.h>
+#include <Oxygen/Vortex/Resources/CubeIlluminance.h>
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
 #include <Oxygen/Vortex/Upload/Errors.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
@@ -567,6 +568,8 @@ public:
     -> std::optional<std::uint32_t>;
   [[nodiscard]] auto IsResourceReady(
     const content::ResourceKey& resource_key) const noexcept -> bool;
+  [[nodiscard]] auto TryGetCubeIlluminance(
+    const content::ResourceKey& key) const noexcept -> std::optional<float>;
   auto AcquireReadyTexture(const content::ResourceKey& key)
     -> std::shared_ptr<const ReadyTexture>;
   [[nodiscard]] auto HasResourceFailed(
@@ -611,6 +614,8 @@ private:
     bool evicted { false };
     bool eviction_pending { false };
     std::weak_ptr<const ReadyTexture> resident_lease;
+    //! Upward illuminance of a float cube, measured from its CPU payload.
+    std::optional<float> cube_illuminance;
 
     std::optional<vortex::upload::UploadTicket> pending_ticket;
     std::optional<graphics::TextureViewDescription> pending_view_desc;
@@ -792,6 +797,12 @@ auto TextureBinder::HasResourceFailed(
   return impl_->HasResourceFailed(key);
 }
 
+auto TextureBinder::TryGetCubeIlluminance(
+  const content::ResourceKey& key) const noexcept -> std::optional<float>
+{
+  return impl_->TryGetCubeIlluminance(key);
+}
+
 auto TextureBinder::TryGetMipLevels(
   const content::ResourceKey& key) const noexcept
   -> std::optional<std::uint32_t>
@@ -878,6 +889,15 @@ auto TextureBinder::Impl::IsResourceReady(
     return false;
   }
   return !entry.is_placeholder;
+}
+
+auto TextureBinder::Impl::TryGetCubeIlluminance(
+  const content::ResourceKey& key) const noexcept -> std::optional<float>
+{
+  if (!IsResourceReady(key)) {
+    return std::nullopt;
+  }
+  return texture_map_.at(key).cube_illuminance;
 }
 
 auto TextureBinder::Impl::HasResourceFailed(
@@ -1843,6 +1863,8 @@ auto TextureBinder::Impl::SubmitQueuedTextureUploads(
 
     const auto prepared_result
       = PrepareTexture2DUpload(*gfx_, *pending.resource, pending.key);
+    // The CPU payload is released after upload; measure while it is here.
+    entry.cube_illuminance = MeasureCubeIlluminance(*pending.resource);
     if (std::holds_alternative<PrepareTexture2DUploadFailure>(
           prepared_result)) {
       const auto& failure

@@ -66,6 +66,27 @@ public:
     return cubemap_resource_;
   }
 
+  //! Sets the illuminance, in lux, that the specified cubemap delivers on an
+  //! upward-facing surface. The renderer scales its radiance so its upper
+  //! hemisphere delivers this illuminance; intensity and the other multipliers
+  //! then adjust it. Zero uses the radiance as imported.
+  /*!
+   Imported HDR images rarely carry physical units: a typical one delivers a
+   few lux, while a daylight sun delivers tens of thousands. Calibrating the
+   source once keeps it consistent with physically lit scenes. A clear-day sky
+   delivers roughly 10,000 to 25,000 lux, an overcast one 1,000 to 10,000.
+  */
+  auto SetIlluminanceLux(const float lux) noexcept -> void
+  {
+    illuminance_lux_ = lux;
+  }
+
+  //! Gets the calibrated illuminance in lux; zero means uncalibrated.
+  [[nodiscard]] auto GetIlluminanceLux() const noexcept -> float
+  {
+    return illuminance_lux_;
+  }
+
   //! Sets the sky light intensity multiplier (unitless).
   //! 1.0 is the default (unity) intensity.
   auto SetIntensityMul(const float intensity_mul) noexcept -> void
@@ -169,6 +190,7 @@ public:
 private:
   SkyLightSource source_ = SkyLightSource::kCapturedScene;
   content::ResourceKey cubemap_resource_ {};
+  float illuminance_lux_ = 0.0F;
 
   float intensity_mul_ = 1.0F;
   Vec3 tint_rgb_ { 1.0F, 1.0F, 1.0F };

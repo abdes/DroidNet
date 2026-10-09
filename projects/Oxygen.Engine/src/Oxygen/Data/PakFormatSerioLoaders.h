@@ -651,6 +651,7 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(r.source));
 
   CHECK_RESULT(reader.ReadInto(r.cubemap));
+  CHECK_RESULT(reader.ReadInto(r.illuminance_lux));
   for (auto& v : r.cubemap_reserved) {
     CHECK_RESULT(reader.ReadInto(v));
   }
@@ -683,6 +684,7 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(r.source));
 
   CHECK_RESULT(reader.ReadInto(r.cubemap));
+  CHECK_RESULT(reader.ReadInto(r.illuminance_lux));
   for (auto& v : r.cubemap_reserved) {
     CHECK_RESULT(reader.ReadInto(v));
   }

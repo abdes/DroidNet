@@ -748,7 +748,7 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    lua_createtable(state, 0, 6); // NOLINT(*-magic-numbers)
+    lua_createtable(state, 0, 7); // NOLINT(*-magic-numbers)
     const char* source_name = system->GetSource()
         == scene::environment::SkyLightSource::kCapturedScene
       ? "captured_scene"
@@ -766,6 +766,8 @@ namespace {
     lua_setfield(state, -2, "diffuse_intensity");
     lua_pushnumber(state, system->GetSpecularIntensity());
     lua_setfield(state, -2, "specular_intensity");
+    lua_pushnumber(state, system->GetIlluminanceLux());
+    lua_setfield(state, -2, "illuminance_lux");
     return 1;
   }
 
@@ -816,6 +818,9 @@ namespace {
     if (TryGetNumberField(state, 2, "specular_intensity", fv)) {
       system->SetSpecularIntensity(fv);
     }
+    if (TryGetNumberField(state, 2, "illuminance_lux", fv)) {
+      system->SetIlluminanceLux(fv);
+    }
     lua_pushboolean(state, 1);
     return 1;
   }
@@ -828,7 +833,7 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    lua_createtable(state, 0, 7); // NOLINT(*-magic-numbers)
+    lua_createtable(state, 0, 8); // NOLINT(*-magic-numbers)
     const char* source_name
       = system->GetSource() == scene::environment::SkySphereSource::kCubemap
       ? "cubemap"
@@ -844,6 +849,8 @@ namespace {
     lua_setfield(state, -2, "intensity");
     lua_pushnumber(state, system->GetRotationRadians());
     lua_setfield(state, -2, "rotation_radians");
+    lua_pushnumber(state, system->GetIlluminanceLux());
+    lua_setfield(state, -2, "illuminance_lux");
     PushVec3(state, system->GetTintRgb());
     lua_setfield(state, -2, "tint_rgb");
     return 1;
@@ -891,6 +898,9 @@ namespace {
     }
     if (TryGetNumberField(state, 2, "rotation_radians", fv)) {
       system->SetRotationRadians(fv);
+    }
+    if (TryGetNumberField(state, 2, "illuminance_lux", fv)) {
+      system->SetIlluminanceLux(fv);
     }
     lua_getfield(state, 2, "tint_rgb");
     if (lua_isvector(state, -1) != 0) {

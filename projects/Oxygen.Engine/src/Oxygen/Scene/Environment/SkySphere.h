@@ -64,6 +64,28 @@ public:
     return cubemap_resource_;
   }
 
+  //! Sets the illuminance, in lux, that the sky delivers on an upward-facing
+  //! surface. The renderer scales the cubemap or solid color radiance so its
+  //! upper hemisphere delivers this illuminance, both for the view and for a
+  //! captured sky light; intensity and tint then adjust the view only. Zero
+  //! uses the radiance as imported.
+  /*!
+   Imported HDR images rarely carry physical units: a typical one delivers a
+   few lux, while a daylight sun delivers tens of thousands. Calibrating the
+   source once keeps it consistent with physically lit scenes. A clear-day sky
+   delivers roughly 10,000 to 25,000 lux, an overcast one 1,000 to 10,000.
+  */
+  auto SetIlluminanceLux(const float lux) noexcept -> void
+  {
+    illuminance_lux_ = lux;
+  }
+
+  //! Gets the calibrated illuminance in lux; zero means uncalibrated.
+  [[nodiscard]] auto GetIlluminanceLux() const noexcept -> float
+  {
+    return illuminance_lux_;
+  }
+
   //! Sets solid background color (linear RGB).
   auto SetSolidColorRgb(const Vec3& rgb) noexcept -> void
   {
@@ -114,6 +136,7 @@ public:
 private:
   SkySphereSource source_ = SkySphereSource::kCubemap;
   content::ResourceKey cubemap_resource_ {};
+  float illuminance_lux_ = 0.0F;
   Vec3 solid_color_rgb_ { 0.0F, 0.0F, 0.0F };
 
   float intensity_ = 1.0F;

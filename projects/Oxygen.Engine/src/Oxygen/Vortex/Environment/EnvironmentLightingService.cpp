@@ -9,8 +9,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <numbers>
 #include <tuple>
 
+#include <fmt/format.h>
 #include <glm/ext/vector_float3.hpp>
 
 #include <Oxygen/Base/Logging.h>
@@ -20,6 +22,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/View.h>
@@ -59,6 +62,7 @@
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Resources/CubeIlluminance.h>
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
 #include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
@@ -486,6 +490,28 @@ auto EnvironmentLightingService::BuildEnvironmentViewData(
     ctx.current_view.with_height_fog, ctx.current_view.is_reflection_capture);
 }
 
+auto EnvironmentLightingService::ReportUncalibratedSkyCubemap(
+  const content::ResourceKey cubemap, const Format format,
+  const float target_lux) -> void
+{
+  const auto message = fmt::format(
+    "Sky Sphere cubemap {} is {}, which cannot be measured: it is not "
+    "calibrated to {} lux and shows its raw radiance. Import it as a float "
+    "(HDR) cube to calibrate it.",
+    cubemap.get(), to_string(format), target_lux);
+  // The ledger reports it every frame; the log once per cubemap.
+  renderer_.GetDiagnosticsService().ReportIssue(
+    { .severity = DiagnosticsSeverity::kWarning,
+      .code = "sky.uncalibrated",
+      .message = message,
+      .pass_name = "Vortex.Environment.Sky",
+      .product_name = "SkySphere" });
+  if (logged_uncalibrated_sky_cubemap_ != cubemap) {
+    LOG_F(WARNING, "{}", message);
+    logged_uncalibrated_sky_cubemap_ = cubemap;
+  }
+}
+
 auto EnvironmentLightingService::BuildEnvironmentStaticData(
   const RenderContext& ctx,
   const environment::EnvironmentViewProducts& view_products)
@@ -773,8 +799,15 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
       data.sky_sphere.intensity = std::max(sky_sphere->GetIntensity(), 0.0F);
       data.sky_sphere.rotation_radians = sky_sphere->GetRotationRadians();
 
+      // Calibration scales the imported radiance to the authored upward
+      // illuminance; display intensity and tint then adjust the view only.
+      const auto target_lux = sky_sphere->GetIlluminanceLux();
       if (sky_sphere->GetSource()
         == oxygen::scene::environment::SkySphereSource::kSolidColor) {
+        const auto& rgb = sky_sphere->GetSolidColorRgb();
+        data.sky_sphere.intensity *= resources::CalibrationScale(target_lux,
+          std::numbers::pi_v<float>
+            * ((0.2126F * rgb.x) + (0.7152F * rgb.y) + (0.0722F * rgb.z)));
         data.sky_sphere.enabled = data.sky_sphere.intensity > 0.0F ? 1U : 0U;
       } else if (const auto cubemap = sky_sphere->GetCubemapResource();
         cubemap.get() != 0U) {
@@ -795,6 +828,13 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
                 data.sky_sphere.cubemap_max_mip = mip_levels.has_value()
                   ? std::max(*mip_levels, 1U) - 1U
                   : 0U;
+                const auto measured = binder->TryGetCubeIlluminance(cubemap);
+                data.sky_sphere.intensity *= resources::CalibrationScale(
+                  target_lux, measured.value_or(0.0F));
+                if (target_lux > 0.0F && !measured.has_value()) {
+                  ReportUncalibratedSkyCubemap(
+                    cubemap, texture->GetFormat(), target_lux);
+                }
               }
             }
           }

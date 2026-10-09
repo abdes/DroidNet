@@ -402,6 +402,7 @@ m_gtest_program(
     "Resources/TextureBinder_upload_test.cpp"
     "Resources/TextureBinder_eviction_test.cpp"
     "Resources/TextureBinder_failures_test.cpp"
+    "Resources/CubeIlluminance_test.cpp"
 )
 
 m_gtest_program(

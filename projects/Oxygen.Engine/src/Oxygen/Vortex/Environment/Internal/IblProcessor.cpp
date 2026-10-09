@@ -9,11 +9,13 @@
 #include <chrono>
 #include <cmath>
 #include <new>
+#include <numbers>
 #include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -27,6 +29,7 @@
 #include <Oxygen/Vortex/Environment/Passes/IblProbePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Resources/CubeIlluminance.h>
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
 
 namespace oxygen::vortex::environment::internal {
@@ -55,6 +58,40 @@ namespace {
     result.flags = kEnvironmentProbeStateFlagResourcesValid;
     return result;
   }
+
+  //! Why the sky light has no image-based lighting, for people reading logs.
+  constexpr auto UnavailableMessage(
+    const StaticSkyLightUnavailableReason reason) -> const char*
+  {
+    switch (reason) {
+    case StaticSkyLightUnavailableReason::kMissingCubemap:
+      return "the specified-cubemap source has no cubemap";
+    case StaticSkyLightUnavailableReason::kResourceResolveFailed:
+      return "its cubemap failed to load";
+    case StaticSkyLightUnavailableReason::kNotTextureCube:
+      return "its cubemap is not a six-face cube texture";
+    case StaticSkyLightUnavailableReason::kUnsupportedFormat:
+      return "its cubemap is not a float (HDR) format; LDR radiance cannot "
+             "light the scene";
+    case StaticSkyLightUnavailableReason::kProcessingFailed:
+      return "IBL processing failed";
+    case StaticSkyLightUnavailableReason::kNone:
+    case StaticSkyLightUnavailableReason::kGpuProductsPending:
+      break;
+    }
+    return "its cubemap is not resident yet";
+  }
+
+  //! Largest processed face for a cube source.
+  constexpr std::uint32_t kMaximumCubeFaceSize = 256U;
+
+  //! Folds a cube's binder content revision into the captured sky identity.
+  constexpr auto CombineRevision(
+    const std::uint64_t capture, const std::uint64_t content) -> std::uint64_t
+  {
+    return capture
+      ^ (content + 0x9E3779B97F4A7C15ULL + (capture << 6U) + (capture >> 2U));
+  }
 } // namespace
 
 struct IblProcessor::Cache {
@@ -81,6 +118,10 @@ struct IblProcessor::Cache {
     bool retry_immediate { false };
     std::unique_ptr<IblGpuValidation> validation;
     bool validation_allocation_failed { false };
+    StaticSkyLightUnavailableReason logged_reason {
+      StaticSkyLightUnavailableReason::kNone
+    };
+    content::ResourceKey logged_uncalibrated;
   };
   std::unordered_map<std::uint64_t, SceneCache> scenes;
   std::unique_ptr<IblBrdfResources> brdf;
@@ -319,6 +360,23 @@ try {
   auto next = EnvironmentProbeState {};
   next.probes.probe_revision = current.probes.probe_revision;
   const auto unavailable = [&](const StaticSkyLightUnavailableReason reason) {
+    // A pending upload resolves by itself; every other reason leaves the scene
+    // without image-based lighting until its author changes something.
+    if (reason != StaticSkyLightUnavailableReason::kGpuProductsPending) {
+      const auto message = std::string("Sky light has no image-based "
+                                       "lighting in scene ")
+        + std::to_string(lifetime) + ": " + UnavailableMessage(reason) + ".";
+      renderer_.GetDiagnosticsService().ReportIssue(
+        { .severity = DiagnosticsSeverity::kWarning,
+          .code = "ibl.unavailable",
+          .message = message,
+          .pass_name = "Vortex.Environment.IBL",
+          .product_name = "SkyLight" });
+      if (scene_cache.logged_reason != reason) {
+        LOG_F(WARNING, "{}", message);
+        scene_cache.logged_reason = reason;
+      }
+    }
     scene_cache.candidate.reset();
     scene_cache.retry_immediate = true;
     next.static_sky_light.status = StaticSkyLightProductStatus::kUnavailable;
@@ -369,11 +427,32 @@ try {
   // Until source resolution classifies this update, failure cannot reuse an
   // earlier source as the result of an authoring or structural replacement.
   scene_cache.retry_immediate = true;
+  const bool specified = light.source == kSkyLightSourceSpecifiedCubemap;
+  // Without an authored atmosphere a captured scene reads the Sky Sphere, as
+  // a scene-level choice: per-view backdrop overrides never change lighting.
+  const auto& sky_sphere = stable.sky_sphere;
+  const bool captured_sky_sphere = !specified
+    && !stable.view_products.atmosphere.enabled && sky_sphere.enabled
+    && (sky_sphere.solid_color || sky_sphere.cubemap_resource.get() != 0U);
+  const auto cube_resource = specified ? light.cubemap_resource
+    : captured_sky_sphere && !sky_sphere.solid_color
+    ? sky_sphere.cubemap_resource
+    : content::ResourceKey {};
+  const bool cube_source
+    = light.enabled && (specified || cube_resource.get() != 0U);
+  const auto capture_hash = light.enabled ? HashSkyCaptureInputs(stable) : 0U;
+  // A specified cubemap is identified by its content and calibration; a
+  // captured cube by the capture inputs, which include its calibration, and
+  // its content.
+  const auto cube_revision = [&](const std::uint64_t content) {
+    return CombineRevision(specified
+        ? std::uint64_t { std::bit_cast<std::uint32_t>(light.illuminance_lux) }
+        : capture_hash,
+      content);
+  };
   auto key = StaticSkyLightProductKey {
-    .source_cubemap = light.source == kSkyLightSourceSpecifiedCubemap
-      ? light.cubemap_resource
-      : content::ResourceKey {},
-    .source_revision = light.enabled ? HashSkyCaptureInputs(stable) : 0U,
+    .source_cubemap = cube_resource,
+    .source_revision = capture_hash,
     .output_face_size = 128U,
     .source_format_class = light.enabled ? light.source : 0xFFFFFFFFU,
     .source_rotation_radians
@@ -387,23 +466,24 @@ try {
   if (!light.enabled)
     key = { .output_face_size = 128U, .source_format_class = 0xFFFFFFFFU };
   scene_cache.desired_key = key;
-  if (light.source == kSkyLightSourceSpecifiedCubemap)
+  if (cube_source)
     scene_cache.desired_key.source_revision = 0U;
   struct ResidentOwner {
     std::shared_ptr<resources::TextureBinder> binder;
     std::shared_ptr<const resources::TextureBinder::ReadyTexture> texture;
   };
   std::shared_ptr<const resources::TextureBinder::ReadyTexture> resident;
-  if (light.enabled && light.source == kSkyLightSourceSpecifiedCubemap) {
-    if (light.cubemap_resource.get() == 0U)
+  std::optional<float> cube_measured_lux;
+  if (cube_source) {
+    if (cube_resource.get() == 0U)
       return unavailable(StaticSkyLightUnavailableReason::kMissingCubemap);
     if (!binder)
       return unavailable(
         StaticSkyLightUnavailableReason::kResourceResolveFailed);
-    const auto descriptor = binder->GetOrAllocate(light.cubemap_resource);
-    if (binder->IsResourceReady(light.cubemap_resource)) {
+    const auto descriptor = binder->GetOrAllocate(cube_resource);
+    if (binder->IsResourceReady(cube_resource)) {
       scene_cache.desired_key.source_revision
-        = binder->GetContentRevision(descriptor);
+        = cube_revision(binder->GetContentRevision(descriptor));
       if (scene_cache.published
         && scene_cache.key.source_cubemap == key.source_cubemap
         && scene_cache.key.source_format_class == key.source_format_class
@@ -417,13 +497,13 @@ try {
     if (scene_cache.published && !authoring && !resumed && !retry_immediate
       && scene_cache.key.source_cubemap == key.source_cubemap
       && scene_cache.key.source_format_class == key.source_format_class
-      && binder->IsResourceReady(light.cubemap_resource)
-      && binder->GetContentRevision(descriptor)
+      && binder->IsResourceReady(cube_resource)
+      && cube_revision(binder->GetContentRevision(descriptor))
         == scene_cache.key.source_revision)
       scene_cache.retry_immediate = false;
-    resident = binder->AcquireReadyTexture(light.cubemap_resource);
+    resident = binder->AcquireReadyTexture(cube_resource);
     if (!resident)
-      return unavailable(binder->HasResourceFailed(light.cubemap_resource)
+      return unavailable(binder->HasResourceFailed(cube_resource)
           ? StaticSkyLightUnavailableReason::kResourceResolveFailed
           : StaticSkyLightUnavailableReason::kGpuProductsPending);
     const auto& source_desc = resident->texture->GetDescriptor();
@@ -441,15 +521,58 @@ try {
     default:
       return unavailable(StaticSkyLightUnavailableReason::kUnsupportedFormat);
     }
-    key.source_revision = binder->GetContentRevision(resident->srv);
-    key.output_face_size = std::bit_floor(source_desc.width);
+    key.source_revision
+      = cube_revision(binder->GetContentRevision(resident->srv));
+    // Lighting needs no more than kMaximumCubeFaceSize; the source is read
+    // at the matching mip, so reducing the face averages rather than aliases.
+    key.output_face_size
+      = std::min(std::bit_floor(source_desc.width), kMaximumCubeFaceSize);
+    cube_measured_lux = binder->TryGetCubeIlluminance(cube_resource);
+    const auto target_lux
+      = specified ? light.illuminance_lux : sky_sphere.illuminance_lux;
+    if (target_lux > 0.0F && !cube_measured_lux) {
+      const auto message = std::string("Sky light cubemap ")
+        + std::to_string(cube_resource.get()) + " in scene "
+        + std::to_string(lifetime) + " is " + to_string(source_desc.format)
+        + ", which cannot be measured: it lights the scene uncalibrated.";
+      renderer_.GetDiagnosticsService().ReportIssue(
+        { .severity = DiagnosticsSeverity::kWarning,
+          .code = "ibl.uncalibrated",
+          .message = message,
+          .pass_name = "Vortex.Environment.IBL",
+          .product_name = "SkyLight" });
+      if (scene_cache.logged_uncalibrated != cube_resource) {
+        LOG_F(WARNING, "{}", message);
+        scene_cache.logged_uncalibrated = cube_resource;
+      }
+    }
   }
+  // Scales the source radiance to its calibrated illuminance. A solid color
+  // of luminance L delivers pi * L upward.
+  const auto measured_lux = !cube_source && captured_sky_sphere
+    ? std::numbers::pi_v<float>
+      * ((0.2126F * sky_sphere.solid_color_rgb.x)
+        + (0.7152F * sky_sphere.solid_color_rgb.y)
+        + (0.0722F * sky_sphere.solid_color_rgb.z))
+    : cube_measured_lux.value_or(0.0F);
+  const auto calibration = resources::CalibrationScale(
+    specified ? light.illuminance_lux : sky_sphere.illuminance_lux,
+    measured_lux);
   const bool changed = !scene_cache.published || scene_cache.key != key;
   scene_cache.desired_key = key;
+  // The lease keeps the binder's descriptor and texture alive for the job.
+  const auto resident_view = [&]() -> IblCubeView {
+    if (!resident)
+      return {};
+    return { .texture = resident->texture,
+      .srv = resident->srv,
+      .owner = std::make_shared<ResidentOwner>(
+        ResidentOwner { .binder = binder, .texture = resident }) };
+  };
   constexpr auto capture_fog_flags = kGpuFogFlagEnabled
     | kGpuFogFlagHeightFogEnabled | kGpuFogFlagVisibleInRealTimeSkyCaptures;
   const bool empty_capture = light.source == kSkyLightSourceCapturedScene
-    && !stable.view_products.atmosphere.enabled
+    && !stable.view_products.atmosphere.enabled && !captured_sky_sphere
     && ((fog.flags & capture_fog_flags) != capture_fog_flags
       || (fog.primary_density <= 0.0F && fog.secondary_density <= 0.0F)
       || fog.max_opacity <= 0.0F);
@@ -479,6 +602,7 @@ try {
     scene_cache.published_frame
       = immediate ? ctx.frame_sequence : scene_cache.candidate_frame;
     scene_cache.retry_immediate = false;
+    scene_cache.logged_reason = StaticSkyLightUnavailableReason::kNone;
     refreshed = true;
   };
   const auto processing_failed = [&]() {
@@ -514,6 +638,7 @@ try {
     const auto settings = IblProcessSettings {
       .face_size = key.output_face_size,
       .source_rotation_radians = key.source_rotation_radians,
+      .source_scale = specified ? calibration : 1.0F,
       .lower_hemisphere_solid_color = key.lower_hemisphere_solid_color,
       .lower_hemisphere_color = { key.lower_hemisphere_color.x,
         key.lower_hemisphere_color.y, key.lower_hemisphere_color.z },
@@ -525,24 +650,22 @@ try {
     if (immediate) {
       const auto result = !light.enabled
         ? scene_cache.processor->ProcessSky({}, *brdf, settings, revision)
-        : resident
+        : specified
         ? scene_cache.processor->ProcessCubeView(resident->texture,
-            resident->srv,
-            std::make_shared<ResidentOwner>(ResidentOwner { binder, resident }),
-            *brdf, settings, revision)
+            resident->srv, resident_view().owner, *brdf, settings, revision)
         : scene_cache.captured->Process(ctx, stable, fog,
-            *scene_cache.processor, *brdf, settings, revision);
+            *scene_cache.processor, *brdf, settings, revision, resident_view(),
+            calibration);
       if (!result)
         return processing_failed();
       publish(*result, key);
       cache.revision = revision;
     } else {
-      const auto job = resident
+      const auto job = specified
         ? scene_cache.processor->BeginCubeView(resident->texture, resident->srv,
-            std::make_shared<ResidentOwner>(ResidentOwner { binder, resident }),
-            *brdf, settings, revision)
+            resident_view().owner, *brdf, settings, revision)
         : scene_cache.captured->Begin(ctx, stable, fog, *scene_cache.processor,
-            *brdf, settings, revision);
+            *brdf, settings, revision, resident_view(), calibration);
       if (job) {
         scene_cache.candidate = *job;
         scene_cache.candidate_key = key;

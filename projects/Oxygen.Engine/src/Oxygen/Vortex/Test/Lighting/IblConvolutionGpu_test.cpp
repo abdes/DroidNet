@@ -1501,10 +1501,9 @@ namespace {
     fog.min_transmittance = 0.25F;
     fog.max_opacity = 0.75F;
     fog.fog_inscattering_luminance_rgb = { 1.0e8F, 2.0e6F, 8.0F };
-    // Display-only systems deliberately carry values that must never enter
-    // captured lighting. Atmosphere-off capture owns no LUT resources.
-    source.environment.sky_sphere.enabled = 1U;
-    source.environment.sky_sphere.solid_color_rgb = { 100.0F, 200.0F, 300.0F };
+    // A prior sky light must never enter captured lighting. Atmosphere-off
+    // capture owns no LUT resources; a captured Sky Sphere is set only by
+    // CapturedSkySource and is covered by the surface tests.
     source.environment.sky_light.enabled = 1U;
     unsigned revision = 200U;
     for (const bool main_pass : { false, true }) {

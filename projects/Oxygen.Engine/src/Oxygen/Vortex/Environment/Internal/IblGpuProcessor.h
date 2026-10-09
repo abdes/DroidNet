@@ -88,6 +88,9 @@ struct IblProcessSettings {
   static constexpr std::uint32_t kDefaultFaceSize = 128U;
   std::uint32_t face_size { kDefaultFaceSize };
   float source_rotation_radians { 0.0F };
+  //! Multiplies a cube source's radiance, e.g. its illuminance calibration.
+  //! A sky capture carries its own Sky Sphere scale in its snapshot.
+  float source_scale { 1.0F };
   bool lower_hemisphere_solid_color { true };
   std::array<float, 3> lower_hemisphere_color {};
   float lower_hemisphere_blend_alpha { 1.0F };
@@ -98,12 +101,24 @@ struct IblProcessSettings {
 //! Scene-global source. ProcessSky copies unit-exposure LUTs into its admitted
 //! slot before capture; subsequent source writes must follow that submission.
 //! A cross-queue producer supplies its receipt. Atmosphere-off needs no LUTs.
+//! Immutable resident cube texture, its SRV and the lease that keeps both.
+struct IblCubeView {
+  std::shared_ptr<const graphics::Texture> texture;
+  ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };
+  std::shared_ptr<const void> owner;
+};
+
 struct IblSkySource {
+  //! A captured Sky Sphere sets `environment.sky_sphere` with the atmosphere
+  //! disabled; a cubemap Sky Sphere also supplies `sky_sphere_cube`. Its
+  //! `intensity` carries the illuminance calibration scale, never the display
+  //! intensity.
   EnvironmentStaticData environment;
   EnvironmentViewData view;
   std::array<float, 3> origin {};
   std::shared_ptr<const graphics::Texture> sky_view;
   std::shared_ptr<const graphics::Buffer> distant_sky;
+  IblCubeView sky_sphere_cube;
   graphics::CompletionReceipt producer;
 };
 

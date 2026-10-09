@@ -879,6 +879,10 @@
         "cubemap_ref": {
           "$ref": "#/definitions/canonical_otex_path"
         },
+        "illuminance_lux": {
+          "type": "number",
+          "minimum": 0.0
+        },
         "intensity": {
           "type": "number",
           "minimum": 0.0
@@ -934,6 +938,10 @@
         },
         "solid_color_rgb": {
           "$ref": "#/definitions/vec3"
+        },
+        "illuminance_lux": {
+          "type": "number",
+          "minimum": 0.0
         },
         "intensity": {
           "type": "number",

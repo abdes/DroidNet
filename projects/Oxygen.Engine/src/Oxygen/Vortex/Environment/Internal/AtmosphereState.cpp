@@ -12,6 +12,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
@@ -185,6 +186,7 @@ namespace {
     model.enabled = sky_light->IsEnabled();
     model.source = static_cast<std::uint32_t>(sky_light->GetSource());
     model.cubemap_resource = sky_light->GetCubemapResource();
+    model.illuminance_lux = sky_light->GetIlluminanceLux();
     model.intensity_mul = sky_light->GetIntensityMul();
     model.tint_rgb = sky_light->GetTintRgb();
     model.diffuse_intensity = sky_light->GetDiffuseIntensity();
@@ -199,6 +201,28 @@ namespace {
     model.volumetric_scattering_intensity
       = sky_light->GetVolumetricScatteringIntensity();
     model.affect_reflections = sky_light->GetAffectReflections();
+    return model;
+  }
+
+  auto BuildSkySphereCaptureModel(
+    const scene::SceneEnvironment* environment_systems) -> SkySphereCaptureModel
+  {
+    auto model = SkySphereCaptureModel {};
+    if (environment_systems == nullptr) {
+      return model;
+    }
+    const auto sky_sphere
+      = environment_systems->TryGetSystem<scene::environment::SkySphere>();
+    if (sky_sphere == nullptr) {
+      return model;
+    }
+    model.enabled = sky_sphere->IsEnabled();
+    model.solid_color = sky_sphere->GetSource()
+      == scene::environment::SkySphereSource::kSolidColor;
+    model.cubemap_resource = sky_sphere->GetCubemapResource();
+    model.solid_color_rgb = sky_sphere->GetSolidColorRgb();
+    model.rotation_radians = sky_sphere->GetRotationRadians();
+    model.illuminance_lux = sky_sphere->GetIlluminanceLux();
     return model;
   }
 
@@ -332,6 +356,7 @@ namespace {
     seed = HashCombineU64(seed, static_cast<std::uint64_t>(model.enabled));
     seed = HashCombineU64(seed, model.source);
     seed = HashCombineU64(seed, model.cubemap_resource.get());
+    seed = HashCombineU64(seed, FloatBits(model.illuminance_lux));
     seed = HashCombineU64(seed, FloatBits(model.intensity_mul));
     seed = HashCombineU64(seed, FloatBits(model.tint_rgb.x));
     seed = HashCombineU64(seed, FloatBits(model.tint_rgb.y));
@@ -349,6 +374,21 @@ namespace {
       = HashCombineU64(seed, FloatBits(model.volumetric_scattering_intensity));
     seed = HashCombineU64(
       seed, static_cast<std::uint64_t>(model.affect_reflections));
+    return seed;
+  }
+
+  auto HashSkySphereCaptureModel(const SkySphereCaptureModel& model)
+    -> std::uint64_t
+  {
+    auto seed = std::uint64_t { 0U };
+    seed = HashCombineU64(seed, static_cast<std::uint64_t>(model.enabled));
+    seed = HashCombineU64(seed, static_cast<std::uint64_t>(model.solid_color));
+    seed = HashCombineU64(seed, model.cubemap_resource.get());
+    seed = HashCombineU64(seed, FloatBits(model.solid_color_rgb.x));
+    seed = HashCombineU64(seed, FloatBits(model.solid_color_rgb.y));
+    seed = HashCombineU64(seed, FloatBits(model.solid_color_rgb.z));
+    seed = HashCombineU64(seed, FloatBits(model.rotation_radians));
+    seed = HashCombineU64(seed, FloatBits(model.illuminance_lux));
     return seed;
   }
 
@@ -395,6 +435,10 @@ auto HashSkyCaptureInputs(const StableAtmosphereState& state) -> std::uint64_t
   fog.holdout = false;
   auto hash
     = HashCombineU64(HashAtmosphereModel(atmosphere), HashHeightFogModel(fog));
+  // An authored atmosphere replaces the Sky Sphere in the capture.
+  if (!atmosphere.enabled) {
+    hash = HashCombineU64(hash, HashSkySphereCaptureModel(state.sky_sphere));
+  }
   for (std::size_t index = 0;
     index < state.view_products.atmosphere_lights.size(); ++index) {
     const auto& light = state.view_products.atmosphere_lights[index];
@@ -425,6 +469,7 @@ auto AtmosphereState::Update(const scene::Scene& scene_ref,
   next.view_products.atmosphere = BuildAtmosphereModel(environment_systems);
   next.view_products.height_fog = BuildHeightFogModel(environment_systems);
   next.view_products.sky_light = BuildSkyLightModel(environment_systems);
+  next.sky_sphere = BuildSkySphereCaptureModel(environment_systems);
   next.view_products.volumetric_fog
     = BuildVolumetricFogModel(environment_systems);
   next.view_products.atmosphere_lights = light_state.atmosphere_lights;
@@ -443,8 +488,10 @@ auto AtmosphereState::Update(const scene::Scene& scene_ref,
     ? state_.atmosphere_revision
     : state_.atmosphere_revision + 1U;
 
-  const auto stable_hash
-    = HashCombineU64(next.authored_hash, light_state.authored_hash);
+  // Sky Sphere edits change only the captured sky, never the atmosphere LUTs.
+  const auto stable_hash = HashCombineU64(
+    HashCombineU64(next.authored_hash, light_state.authored_hash),
+    HashSkySphereCaptureModel(next.sky_sphere));
   next.stable_revision = stable_hash == stable_hash_
     ? state_.stable_revision
     : state_.stable_revision + 1U;

@@ -311,6 +311,8 @@ namespace {
     if (source.contains("cubemap_ref")) {
       prepared.cubemap = source.at("cubemap_ref").get<std::string>();
     }
+    record.illuminance_lux
+      = source.value("illuminance_lux", record.illuminance_lux);
     record.intensity = source.value("intensity", record.intensity);
     CopyFloatArray(source.at("tint_rgb"), record.tint_rgb);
     record.diffuse_intensity
@@ -347,6 +349,8 @@ namespace {
     if (source.contains("solid_color_rgb")) {
       CopyFloatArray(source.at("solid_color_rgb"), record.solid_color_rgb);
     }
+    record.illuminance_lux
+      = source.value("illuminance_lux", record.illuminance_lux);
     record.intensity = source.value("intensity", record.intensity);
     record.rotation_radians
       = source.value("rotation_radians", record.rotation_radians);
