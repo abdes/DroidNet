@@ -11,7 +11,7 @@ OXDAT_FORMAT_VERSION(kPakCatalogVersion, uint32_t, 2)
 OXDAT_FORMAT_VERSION(kLooseCookedIndexVersion, uint16_t, 3)
 OXDAT_ASSET_VERSION(kMaterialAssetVersion, kMaterial, material, 4)
 OXDAT_ASSET_VERSION(kGeometryAssetVersion, kGeometry, geometry, 3)
-OXDAT_ASSET_VERSION(kSceneAssetVersion, kScene, scene, 11)
+OXDAT_ASSET_VERSION(kSceneAssetVersion, kScene, scene, 12)
 OXDAT_ASSET_VERSION(kScriptAssetVersion, kScript, script, 2)
 OXDAT_ASSET_VERSION(kInputActionAssetVersion, kInputAction, input_action, 1)
 OXDAT_ASSET_VERSION(kInputMappingContextAssetVersion, kInputMappingContext,

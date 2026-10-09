@@ -335,6 +335,27 @@ namespace {
     return prepared;
   }
 
+  auto BuildSkySphereSystemRecord(const json& source) -> SceneSource::SkySphere
+  {
+    auto prepared = SceneSource::SkySphere {};
+    auto& record = prepared.record;
+    record.enabled = source.value("enabled", true) ? 1U : 0U;
+    record.source = source.value("source", record.source);
+    if (source.contains("cubemap_ref")) {
+      prepared.cubemap = source.at("cubemap_ref").get<std::string>();
+    }
+    if (source.contains("solid_color_rgb")) {
+      CopyFloatArray(source.at("solid_color_rgb"), record.solid_color_rgb);
+    }
+    record.intensity = source.value("intensity", record.intensity);
+    record.rotation_radians
+      = source.value("rotation_radians", record.rotation_radians);
+    if (source.contains("tint_rgb")) {
+      CopyFloatArray(source.at("tint_rgb"), record.tint_rgb);
+    }
+    return prepared;
+  }
+
   auto BuildPostProcessSystemRecord(SourceContext& context, const json& source)
     -> std::optional<SceneSource::PostProcess>
   {
@@ -943,6 +964,10 @@ namespace {
       if (environment.contains("sky_light")) {
         prepared.sky_light
           = BuildSkyLightSystemRecord(environment.at("sky_light"));
+      }
+      if (environment.contains("sky_sphere")) {
+        prepared.sky_sphere
+          = BuildSkySphereSystemRecord(environment.at("sky_sphere"));
       }
     }
 

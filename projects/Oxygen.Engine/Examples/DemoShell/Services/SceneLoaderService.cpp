@@ -2577,21 +2577,39 @@ auto SceneLoaderService::HydratePhysicsSidecar(
 auto SceneLoaderService::BuildEnvironment(const data::SceneAsset& asset)
   -> std::unique_ptr<scene::SceneEnvironment>
 {
-  auto metering_mask = content::ResourceKey {};
-  if (const auto post = asset.TryGetPostProcessVolumeEnvironment();
-    post && post->auto_exposure_metering_mask != data::kNoResourceReference) {
-    const auto key = loader_.MakeTextureResourceKeyForAsset(
-      asset, post->auto_exposure_metering_mask);
-    if (!key) {
-      throw std::runtime_error("Scene exposure mask binding failed: scene="
-        + data::to_string(asset.GetAssetKey()) + " texture_index="
-        + std::to_string(post->auto_exposure_metering_mask.get()));
+  const auto resolve
+    = [this, &asset](const data::ResourceReferenceIndex reference,
+        const char* what) -> content::ResourceKey {
+    if (reference == data::kNoResourceReference) {
+      return {};
     }
-    metering_mask = *key;
+    const auto key = loader_.MakeTextureResourceKeyForAsset(asset, reference);
+    if (!key) {
+      throw std::runtime_error(std::string("Scene ") + what
+        + " binding failed: scene=" + data::to_string(asset.GetAssetKey())
+        + " texture_reference=" + std::to_string(reference.get()));
+    }
+    return *key;
+  };
+  auto textures = EnvironmentTextureKeys {};
+  if (const auto post = asset.TryGetPostProcessVolumeEnvironment()) {
+    textures.metering_mask
+      = resolve(post->auto_exposure_metering_mask, "exposure mask");
+  }
+  if (const auto fog = asset.TryGetFogEnvironment()) {
+    textures.fog_cubemap
+      = resolve(fog->inscattering_color_cubemap, "fog cubemap");
+  }
+  if (const auto sky_light = asset.TryGetSkyLightEnvironment()) {
+    textures.sky_light_cubemap
+      = resolve(sky_light->cubemap, "sky light cubemap");
+  }
+  if (const auto sky_sphere = asset.TryGetSkySphereEnvironment()) {
+    textures.sky_sphere_cubemap
+      = resolve(sky_sphere->cubemap, "sky sphere cubemap");
   }
   auto environment = std::make_unique<scene::SceneEnvironment>();
-  EnvironmentSettingsService::HydrateEnvironment(
-    *environment, asset, metering_mask);
+  EnvironmentSettingsService::HydrateEnvironment(*environment, asset, textures);
   return environment;
 }
 

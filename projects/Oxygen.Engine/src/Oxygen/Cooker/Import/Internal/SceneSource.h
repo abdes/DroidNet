@@ -53,6 +53,11 @@ struct SceneSource final {
     std::optional<std::string> cubemap;
   };
 
+  struct SkySphere final {
+    data::pak::world::SkySphereEnvironmentRecord record {};
+    std::optional<std::string> cubemap;
+  };
+
   struct PostProcess final {
     data::pak::world::PostProcessVolumeEnvironmentRecord record {};
     std::vector<data::pak::world::ExposureCompensationKeyRecord> curve;
@@ -68,6 +73,7 @@ struct SceneSource final {
   std::optional<data::pak::world::BackgroundEnvironmentRecord> background;
   std::optional<Fog> fog;
   std::optional<SkyLight> sky_light;
+  std::optional<SkySphere> sky_sphere;
   std::optional<PostProcess> post_process;
 
   OXGN_COOK_NDAPI static auto FromDescriptor(std::string_view bytes,

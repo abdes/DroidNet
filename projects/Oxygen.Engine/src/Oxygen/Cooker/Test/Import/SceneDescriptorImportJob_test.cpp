@@ -248,9 +248,12 @@ namespace {
       report.diagnostics, "scene.descriptor.camera_node_index_out_of_range"));
   }
 
-  auto WriteMeteringMaskSidecar(const std::filesystem::path& root,
-    const Format format, const uint32_t index) -> void
+  //! Writes a cooked texture sidecar naming source texture `index`.
+  auto WriteTextureSidecar(const std::filesystem::path& root,
+    const std::string_view name, const Format format, const uint32_t index,
+    const TextureType type) -> void
   {
+    const bool cube = type == TextureType::kTextureCube;
     serio::MemoryStream stream;
     serio::Writer writer(stream);
     const auto packed = writer.ScopedAlignment(1);
@@ -261,18 +264,18 @@ namespace {
     ASSERT_TRUE(writer.Write(index));
     ASSERT_TRUE(writer.Write(data::pak::core::TextureResourceDesc {
       .data_offset = 0U,
-      .size_bytes = 4U,
-      .texture_type = static_cast<uint8_t>(TextureType::kTexture2D),
+      .size_bytes = cube ? 24U : 4U,
+      .texture_type = static_cast<uint8_t>(type),
       .compression_type = 0U,
       .width = 1U,
       .height = 1U,
       .depth = 1U,
-      .array_layers = 1U,
+      .array_layers = static_cast<uint16_t>(cube ? 6U : 1U),
       .mip_levels = 1U,
       .format = static_cast<uint8_t>(format),
       .alignment = 256U,
     }));
-    const auto path = root / "Textures/Meter.otex";
+    const auto path = root / "Textures" / name;
     std::filesystem::create_directories(path.parent_path());
     // NOLINTNEXTLINE(*-signed-bitwise)
     auto output = std::ofstream(path, std::ios::binary | std::ios::trunc);
@@ -281,6 +284,20 @@ namespace {
     output.write(reinterpret_cast<const char*>(bytes.data()),
       static_cast<std::streamsize>(bytes.size()));
     ASSERT_TRUE(output.good());
+  }
+
+  auto WriteMeteringMaskSidecar(const std::filesystem::path& root,
+    const Format format, const uint32_t index) -> void
+  {
+    WriteTextureSidecar(
+      root, "Meter.otex", format, index, TextureType::kTexture2D);
+  }
+
+  auto WriteCubemapSidecar(const std::filesystem::path& root,
+    const std::string_view name, const uint32_t index) -> void
+  {
+    WriteTextureSidecar(
+      root, name, Format::kRGBA16Float, index, TextureType::kTextureCube);
   }
 
   NOLINT_TEST_F(SceneDescriptorImportJobTest,
@@ -861,8 +878,9 @@ namespace {
     SceneDescriptorImportJobTest, SerializesV3EnvironmentAndLocalFogRecords)
   {
     const auto cooked_root = MakeTempCookedRoot("environment_and_local_fog");
-    WriteTextFile(cooked_root / "Textures" / "sky_probe.otex", "otex");
-    WriteTextFile(cooked_root / "Textures" / "fog_probe.otex", "otex");
+    WriteCubemapSidecar(cooked_root, "sky_probe.otex", 5U);
+    WriteCubemapSidecar(cooked_root, "fog_probe.otex", 6U);
+    WriteCubemapSidecar(cooked_root, "backdrop.otex", 7U);
 
     auto service = AsyncImportService(AsyncImportService::Config {
       .thread_pool_size = 2U,
@@ -932,6 +950,15 @@ namespace {
           "lower_hemisphere_blend_alpha": 0.35,
           "volumetric_scattering_intensity": 0.4,
           "affect_reflections": true
+        },
+        "sky_sphere": {
+          "enabled": true,
+          "source": 0,
+          "cubemap_ref": "/.cooked/Textures/backdrop.otex",
+          "solid_color_rgb": [0.1, 0.2, 0.3],
+          "intensity": 2.0,
+          "rotation_radians": 1.25,
+          "tint_rgb": [0.9, 0.8, 0.7]
         }
       },
       "local_fog_volumes": [
@@ -984,6 +1011,35 @@ namespace {
     EXPECT_EQ(sky_light->lower_hemisphere_is_solid_color, 0U);
     EXPECT_FLOAT_EQ(sky_light->lower_hemisphere_blend_alpha, 0.35F);
     EXPECT_FLOAT_EQ(sky_light->volumetric_scattering_intensity, 0.4F);
+
+    const auto sky_sphere = scene.TryGetSkySphereEnvironment();
+    if (!sky_sphere.has_value()) {
+      FAIL() << "Expected sky_sphere to contain a value";
+    }
+    EXPECT_EQ(sky_sphere->source, 0U);
+    EXPECT_FLOAT_EQ(sky_sphere->intensity, 2.0F);
+    EXPECT_FLOAT_EQ(sky_sphere->rotation_radians, 1.25F);
+    EXPECT_FLOAT_EQ(sky_sphere->tint_rgb[2], 0.7F);
+    EXPECT_FLOAT_EQ(sky_sphere->solid_color_rgb[1], 0.2F);
+
+    // Each cubemap binds its own source texture through the reference table.
+    const auto index = lc::LooseCookedIndex::LoadFromRoot(cooked_root);
+    const auto scene_key = index.FindAssetKeyByVirtualPath(
+      "/.cooked/Scenes/EnvironmentScene.oscene");
+    ASSERT_TRUE(scene_key.has_value());
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+    const auto references = index.FindAssetReferences(scene_key.value());
+    ASSERT_TRUE(references.has_value());
+    const auto texture_of
+      = [&](const data::ResourceReferenceIndex reference) -> uint32_t {
+      // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+      const auto resolved = references.value().ResolveResource(
+        reference, data::ResourceKind::kTexture);
+      return resolved && resolved->has_value() ? resolved->value().get() : 0U;
+    };
+    EXPECT_EQ(texture_of(fog->inscattering_color_cubemap), 6U);
+    EXPECT_EQ(texture_of(sky_light->cubemap), 5U);
+    EXPECT_EQ(texture_of(sky_sphere->cubemap), 7U);
 
     const auto local_fog
       = scene.GetComponents<oxygen::data::pak::world::LocalFogVolumeRecord>();

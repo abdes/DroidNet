@@ -313,19 +313,19 @@ namespace {
   }
 
   auto HydrateSkySphere(scene::environment::SkySphere& target,
-    const data::pak::world::SkySphereEnvironmentRecord& source) -> void
+    const data::pak::world::SkySphereEnvironmentRecord& source,
+    const content::ResourceKey cubemap) -> void
   {
     if (source.source
       == static_cast<std::uint32_t>(
         scene::environment::SkySphereSource::kSolidColor)) {
       target.SetSource(scene::environment::SkySphereSource::kSolidColor);
     } else {
-      LOG_F(WARNING,
-        "SkySphere cubemap source requested, but scene-authored cubemap "
-        "AssetKey resolution is not implemented in this example. Keeping "
-        "solid color; use the Environment panel Skybox Loader to bind a "
-        "cubemap at runtime.");
-      target.SetSource(scene::environment::SkySphereSource::kSolidColor);
+      target.SetSource(scene::environment::SkySphereSource::kCubemap);
+      target.SetCubemapResource(cubemap);
+      if (cubemap.get() == 0U) {
+        LOG_F(WARNING, "SkySphere uses a cubemap source but binds no cubemap");
+      }
     }
 
     target.SetSolidColorRgb(Vec3 { source.solid_color_rgb[0],
@@ -337,7 +337,8 @@ namespace {
   }
 
   auto HydrateFog(scene::environment::Fog& target,
-    const data::pak::world::FogEnvironmentRecord& source) -> void
+    const data::pak::world::FogEnvironmentRecord& source,
+    const content::ResourceKey cubemap) -> void
   {
     target.SetModel(static_cast<scene::environment::FogModel>(source.model));
     target.SetEnableHeightFog(source.enable_height_fog != 0U);
@@ -365,6 +366,7 @@ namespace {
       source.sky_atmosphere_ambient_contribution_color_scale[1],
       source.sky_atmosphere_ambient_contribution_color_scale[2],
     });
+    target.SetInscatteringColorCubemapResource(cubemap);
     target.SetInscatteringColorCubemapAngle(
       source.inscattering_color_cubemap_angle);
     target.SetInscatteringTextureTint({
@@ -418,16 +420,16 @@ namespace {
   }
 
   auto HydrateSkyLight(scene::environment::SkyLight& target,
-    const data::pak::world::SkyLightEnvironmentRecord& source) -> void
+    const data::pak::world::SkyLightEnvironmentRecord& source,
+    const content::ResourceKey cubemap) -> void
   {
     target.SetSource(
       static_cast<scene::environment::SkyLightSource>(source.source));
+    target.SetCubemapResource(cubemap);
     if (target.GetSource()
-      == scene::environment::SkyLightSource::kSpecifiedCubemap) {
-      LOG_F(1,
-        "SkyLight specifies a cubemap AssetKey, but this example does not yet "
-        "resolve it to a ResourceKey. Use the Environment panel Skybox Loader "
-        "to bind a cubemap at runtime.");
+        == scene::environment::SkyLightSource::kSpecifiedCubemap
+      && cubemap.get() == 0U) {
+      LOG_F(WARNING, "SkyLight uses a specified cubemap but binds no cubemap");
     }
     target.SetIntensityMul(source.intensity);
     target.SetTintRgb(
@@ -746,8 +748,8 @@ namespace {
 
  @param target Mutable runtime environment to populate.
  @param source_asset Asset containing environment records.
- @param metering_mask Resolved source-relative texture key; zero only for no
-mask.
+ @param textures Resolved source-relative texture keys; each is zero exactly
+ when its record binds no texture.
 
 ### Performance Characteristics
 
@@ -760,22 +762,42 @@ set.
 
  ```cpp
  auto env = std::make_unique<scene::SceneEnvironment>();
- EnvironmentSettingsService::HydrateEnvironment(*env, asset, metering_mask);
+ EnvironmentSettingsService::HydrateEnvironment(*env, asset, textures);
  ```
 
  @note SkyAtmosphere and SkySphere are treated as mutually exclusive.
 */
 void EnvironmentSettingsService::HydrateEnvironment(
   scene::SceneEnvironment& target, const data::SceneAsset& source_asset,
-  const content::ResourceKey metering_mask)
+  const EnvironmentTextureKeys& textures)
 {
+  const auto require_binding
+    = [](const bool authored, const content::ResourceKey key,
+        const char* message) {
+        if (authored != (key.get() != 0U)) {
+          throw std::invalid_argument(message);
+        }
+      };
   const auto post_record = source_asset.TryGetPostProcessVolumeEnvironment();
-  const bool has_authored_mask = post_record
-    && post_record->auto_exposure_metering_mask != data::kNoResourceReference;
-  if (has_authored_mask != (metering_mask.get() != 0U)) {
-    throw std::invalid_argument(
-      "Scene exposure mask requires a resolved source resource key");
-  }
+  require_binding(post_record
+      && post_record->auto_exposure_metering_mask != data::kNoResourceReference,
+    textures.metering_mask,
+    "Scene exposure mask requires a resolved source resource key");
+  const auto fog_binding = source_asset.TryGetFogEnvironment();
+  require_binding(fog_binding
+      && fog_binding->inscattering_color_cubemap != data::kNoResourceReference,
+    textures.fog_cubemap,
+    "Scene fog cubemap requires a resolved source resource key");
+  const auto sky_light_binding = source_asset.TryGetSkyLightEnvironment();
+  require_binding(sky_light_binding
+      && sky_light_binding->cubemap != data::kNoResourceReference,
+    textures.sky_light_cubemap,
+    "Scene sky light cubemap requires a resolved source resource key");
+  const auto sky_sphere_binding = source_asset.TryGetSkySphereEnvironment();
+  require_binding(sky_sphere_binding
+      && sky_sphere_binding->cubemap != data::kNoResourceReference,
+    textures.sky_sphere_cubemap,
+    "Scene sky sphere cubemap requires a resolved source resource key");
   if (const auto record = source_asset.TryGetBackgroundEnvironment();
     IsEnabled(record)) {
     auto& background = target.AddSystem<scene::environment::Background>();
@@ -801,21 +823,22 @@ void EnvironmentSettingsService::HydrateEnvironment(
     LOG_F(1, "Applied SkyAtmosphere environment");
   } else if (sky_sphere_enabled) {
     auto& sky_sphere = target.AddSystem<scene::environment::SkySphere>();
-    HydrateSkySphere(sky_sphere, *sky_sphere_record);
-    LOG_F(1, "Applied SkySphere environment (solid color source)");
+    HydrateSkySphere(
+      sky_sphere, *sky_sphere_record, textures.sky_sphere_cubemap);
+    LOG_F(1, "Applied SkySphere environment");
   }
 
   if (const auto fog_record = source_asset.TryGetFogEnvironment();
     IsEnabled(fog_record)) {
     auto& fog = target.AddSystem<scene::environment::Fog>();
-    HydrateFog(fog, *fog_record);
+    HydrateFog(fog, *fog_record, textures.fog_cubemap);
     LOG_F(1, "Applied Fog environment");
   }
 
   if (const auto sky_light_record = source_asset.TryGetSkyLightEnvironment();
     IsEnabled(sky_light_record)) {
     auto& sky_light = target.AddSystem<scene::environment::SkyLight>();
-    HydrateSkyLight(sky_light, *sky_light_record);
+    HydrateSkyLight(sky_light, *sky_light_record, textures.sky_light_cubemap);
     LOG_F(1, "Applied SkyLight environment");
   }
 
@@ -831,7 +854,7 @@ void EnvironmentSettingsService::HydrateEnvironment(
     pp_record && pp_record->enabled != 0U) {
     auto& pp = target.AddSystem<scene::environment::PostProcessVolume>();
     HydratePostProcessVolume(pp, *pp_record,
-      source_asset.GetPostProcessCompensationCurve(), metering_mask);
+      source_asset.GetPostProcessCompensationCurve(), textures.metering_mask);
     LOG_F(INFO,
       "Scene exposure applied: asset={} mode={} mask={} curve_keys={}",
       data::to_string(source_asset.GetAssetKey()),

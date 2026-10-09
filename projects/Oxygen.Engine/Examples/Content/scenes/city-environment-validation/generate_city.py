@@ -529,7 +529,7 @@ def scene_document() -> dict:
     mist = s.node("RiverMist_LocalFog", (0.0, RIVER.cy, 12.0), scale=(5000.0, 260.0, 40.0),
                   flags={"visible": "shown", "casts_shadows": "on", "receives_shadows": "on"})
     return {
-        "version": 11,
+        "version": 12,
         "name": SCENE_NAME,
         "nodes": s.nodes,
         "renderables": s.renderables,

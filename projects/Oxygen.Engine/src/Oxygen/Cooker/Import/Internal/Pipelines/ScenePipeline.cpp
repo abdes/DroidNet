@@ -432,29 +432,6 @@ namespace {
             {}));
         return outcome;
       }
-      using EnvironmentKind = data::pak::world::EnvironmentComponentType;
-      switch (static_cast<EnvironmentKind>(header.system_type)) {
-      case EnvironmentKind::kFog: {
-        data::pak::world::FogEnvironmentRecord record {};
-        std::memcpy(&record, system.record_bytes.data(), sizeof(record));
-        references.AddLogical(record.inscattering_color_cubemap_asset);
-        break;
-      }
-      case EnvironmentKind::kSkyLight: {
-        data::pak::world::SkyLightEnvironmentRecord record {};
-        std::memcpy(&record, system.record_bytes.data(), sizeof(record));
-        references.AddLogical(record.cubemap_asset);
-        break;
-      }
-      case EnvironmentKind::kSkySphere: {
-        data::pak::world::SkySphereEnvironmentRecord record {};
-        std::memcpy(&record, system.record_bytes.data(), sizeof(record));
-        references.AddLogical(record.cubemap_asset);
-        break;
-      }
-      default:
-        break;
-      }
       env_header.byte_size += header.record_size;
       ++env_header.systems_count;
     }

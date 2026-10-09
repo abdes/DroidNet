@@ -390,6 +390,10 @@ namespace {
         context.Reference(*source->sky_light->cubemap, Kind::kTexture,
           "environment.sky_light.cubemap_ref");
       }
+      if (source->sky_sphere && source->sky_sphere->cubemap) {
+        context.Reference(*source->sky_sphere->cubemap, Kind::kTexture,
+          "environment.sky_sphere.cubemap_ref");
+      }
       if (source->post_process && source->post_process->metering_mask) {
         context.Reference(*source->post_process->metering_mask, Kind::kTexture,
           "environment.post_process_volume.auto_exposure_metering_mask");

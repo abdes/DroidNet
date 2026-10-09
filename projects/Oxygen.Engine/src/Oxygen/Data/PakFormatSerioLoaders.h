@@ -600,7 +600,10 @@ inline auto Load(AnyReader& reader, data::pak::world::FogEnvironmentRecord& r)
   for (auto& v : r.sky_atmosphere_ambient_contribution_color_scale) {
     CHECK_RESULT(reader.ReadInto(v));
   }
-  CHECK_RESULT(reader.ReadInto(r.inscattering_color_cubemap_asset));
+  CHECK_RESULT(reader.ReadInto(r.inscattering_color_cubemap));
+  for (auto& v : r.inscattering_color_cubemap_reserved) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
   CHECK_RESULT(reader.ReadInto(r.inscattering_color_cubemap_angle));
   for (auto& v : r.inscattering_texture_tint) {
     CHECK_RESULT(reader.ReadInto(v));
@@ -647,7 +650,10 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(r.enabled));
   CHECK_RESULT(reader.ReadInto(r.source));
 
-  CHECK_RESULT(reader.ReadInto(r.cubemap_asset));
+  CHECK_RESULT(reader.ReadInto(r.cubemap));
+  for (auto& v : r.cubemap_reserved) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
 
   CHECK_RESULT(reader.ReadInto(r.intensity));
   for (auto& v : r.tint_rgb) {
@@ -676,7 +682,10 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(r.enabled));
   CHECK_RESULT(reader.ReadInto(r.source));
 
-  CHECK_RESULT(reader.ReadInto(r.cubemap_asset));
+  CHECK_RESULT(reader.ReadInto(r.cubemap));
+  for (auto& v : r.cubemap_reserved) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
 
   for (auto& v : r.solid_color_rgb) {
     CHECK_RESULT(reader.ReadInto(v));

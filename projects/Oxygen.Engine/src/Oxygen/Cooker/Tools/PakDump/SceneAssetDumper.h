@@ -604,8 +604,8 @@ public:
           asset_dump_helpers::FormatVec3(
             rec->sky_atmosphere_ambient_contribution_color_scale),
           10);
-        PrintUtils::Field("Inscattering Cubemap",
-          oxygen::data::to_string(rec->inscattering_color_cubemap_asset), 10);
+        PrintUtils::Field("Inscattering Cubemap Texture Reference",
+          rec->inscattering_color_cubemap.get(), 10);
         PrintUtils::Field(
           "Cubemap Angle", rec->inscattering_color_cubemap_angle, 10);
         PrintUtils::Field("Texture Tint",
@@ -660,8 +660,7 @@ public:
         }
 
         PrintUtils::Field("Source", static_cast<int>(rec->source), 10);
-        PrintUtils::Field(
-          "Cubemap Asset", oxygen::data::to_string(rec->cubemap_asset), 10);
+        PrintUtils::Field("Cubemap Texture Reference", rec->cubemap.get(), 10);
         PrintUtils::Field("Intensity", rec->intensity, 10);
         PrintUtils::Field(
           "Tint", asset_dump_helpers::FormatVec3(rec->tint_rgb), 10);
@@ -690,8 +689,7 @@ public:
         }
 
         PrintUtils::Field("Source", static_cast<int>(rec->source), 10);
-        PrintUtils::Field(
-          "Cubemap Asset", oxygen::data::to_string(rec->cubemap_asset), 10);
+        PrintUtils::Field("Cubemap Texture Reference", rec->cubemap.get(), 10);
         PrintUtils::Field("Solid Color",
           asset_dump_helpers::FormatVec3(rec->solid_color_rgb), 10);
         PrintUtils::Field("Intensity", rec->intensity, 10);

@@ -1830,12 +1830,13 @@ NOLINT_TEST_F(
   }
   const auto asset = data::SceneAsset(data::AssetKey {}, stream.Data());
   auto environment = scene::SceneEnvironment {};
-  EXPECT_THROW(EnvironmentSettingsService::HydrateEnvironment(
-                 environment, asset, content::ResourceKey {}),
+  EXPECT_THROW(
+    EnvironmentSettingsService::HydrateEnvironment(environment, asset, {}),
     std::invalid_argument);
   EXPECT_FALSE(environment.TryGetSystem<scene::environment::Background>());
   const auto mask = content::ResourceKey { 0x0001000000000004ULL };
-  EnvironmentSettingsService::HydrateEnvironment(environment, asset, mask);
+  EnvironmentSettingsService::HydrateEnvironment(
+    environment, asset, { .metering_mask = mask });
   const auto volume
     = environment.TryGetSystem<scene::environment::PostProcessVolume>();
   ASSERT_TRUE(volume);

@@ -502,7 +502,9 @@ struct FogEnvironmentRecord {
   float fog_inscattering_luminance[3] = { 0.0F, 0.0F, 0.0F };
   float sky_atmosphere_ambient_contribution_color_scale[3]
     = { 1.0F, 1.0F, 1.0F };
-  AssetKey inscattering_color_cubemap_asset;
+  //! Cube texture binding in the scene's resource reference table.
+  ResourceReferenceIndex inscattering_color_cubemap = kNoResourceReference;
+  std::array<uint32_t, 3> inscattering_color_cubemap_reserved {};
   float inscattering_color_cubemap_angle = 0.0F;
   float inscattering_texture_tint[3] = { 1.0F, 1.0F, 1.0F };
   float fully_directional_inscattering_color_distance = 0.0F;
@@ -544,7 +546,9 @@ struct SkyLightEnvironmentRecord {
 
   uint32_t source = 0; // SkyLightSource
 
-  AssetKey cubemap_asset;
+  //! Cube texture binding in the scene's resource reference table.
+  ResourceReferenceIndex cubemap = kNoResourceReference;
+  std::array<uint32_t, 3> cubemap_reserved {};
 
   float intensity = 1.0F;
   float tint_rgb[3] = { 1.0F, 1.0F, 1.0F };
@@ -574,7 +578,9 @@ struct SkySphereEnvironmentRecord {
 
   uint32_t source = 0; // SkySphereSource
 
-  AssetKey cubemap_asset;
+  //! Cube texture binding in the scene's resource reference table.
+  ResourceReferenceIndex cubemap = kNoResourceReference;
+  std::array<uint32_t, 3> cubemap_reserved {};
 
   float solid_color_rgb[3] = { 0.0F, 0.0F, 0.0F };
   float intensity = 1.0F;

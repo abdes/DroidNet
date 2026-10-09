@@ -229,56 +229,6 @@ namespace {
     return { bytes.begin(), bytes.end() };
   }
 
-  auto ResolveResourceDescriptorKey(SceneDescriptorExecutionContext& context,
-    std::string_view virtual_path, std::string object_path)
-    -> std::optional<data::AssetKey>
-  {
-    if (!internal::IsCanonicalVirtualPath(virtual_path)) {
-      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "scene.descriptor.reference_virtual_path_invalid",
-        "Reference virtual_path must be canonical", std::move(object_path));
-      return std::nullopt;
-    }
-
-    auto relpath = std::string {};
-    if (!internal::TryVirtualPathToRelPath(
-          context.request, virtual_path, relpath)) {
-      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "scene.descriptor.reference_virtual_path_unmounted",
-        "Reference virtual_path is outside mounted cooked roots",
-        std::move(object_path));
-      return std::nullopt;
-    }
-
-    auto file_matches = std::vector<std::filesystem::path> {};
-    for (auto it = context.mounts.rbegin(); it != context.mounts.rend(); ++it) {
-      const auto candidate = it->root / std::filesystem::path(relpath);
-      std::error_code ec;
-      if (std::filesystem::exists(candidate, ec)) {
-        file_matches.push_back(candidate);
-      }
-    }
-
-    if (file_matches.size() > 1U) {
-      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "scene.descriptor.reference_ambiguous",
-        "Reference virtual_path resolved to multiple mounted descriptors: "
-          + std::string(virtual_path),
-        std::move(object_path));
-      return std::nullopt;
-    }
-
-    if (file_matches.empty()) {
-      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "scene.descriptor.reference_missing",
-        "Reference virtual_path was not found: " + std::string(virtual_path),
-        std::move(object_path));
-      return std::nullopt;
-    }
-
-    return oxygen::data::AssetKey::FromVirtualPath(virtual_path);
-  }
-
   auto ResolveAssetReference(SceneDescriptorExecutionContext& context,
     std::string_view virtual_path, std::optional<data::AssetType> expected_type,
     bool require_asset_key, std::string object_path)
@@ -463,6 +413,125 @@ namespace {
     co_return true;
   }
 
+  //! What an environment record uses a texture for.
+  enum class EnvironmentTextureUse : uint8_t {
+    kMeteringMask,
+    kCubemap,
+  };
+
+  //! Source texture indices resolved for the scene's environment records.
+  struct EnvironmentTextureIndices final {
+    data::pak::core::ResourceIndexT metering_mask {
+      data::pak::core::kNoResourceIndex
+    };
+    data::pak::core::ResourceIndexT fog_cubemap {
+      data::pak::core::kNoResourceIndex
+    };
+    data::pak::core::ResourceIndexT sky_light_cubemap {
+      data::pak::core::kNoResourceIndex
+    };
+    data::pak::core::ResourceIndexT sky_sphere_cubemap {
+      data::pak::core::kNoResourceIndex
+    };
+  };
+
+  auto EnvironmentTextureLabel(const EnvironmentTextureUse use)
+    -> std::string_view
+  {
+    return use == EnvironmentTextureUse::kCubemap ? "Sky cubemap"
+                                                  : "Metering mask";
+  }
+
+  auto EnvironmentTextureDiagnosticPrefix(const EnvironmentTextureUse use)
+    -> std::string_view
+  {
+    return use == EnvironmentTextureUse::kCubemap ? "scene.descriptor.cubemap_"
+                                                  : "scene.descriptor.mask_";
+  }
+
+  //! Returns why `desc` cannot serve `use`, or nothing when it can.
+  auto EnvironmentTextureFormatError(
+    const data::pak::core::TextureResourceDesc& desc,
+    const EnvironmentTextureUse use) -> std::optional<std::string_view>
+  {
+    const auto format = static_cast<Format>(desc.format);
+    const bool known_format
+      = format != Format::kUnknown && format <= Format::kMaxFormat;
+    if (use == EnvironmentTextureUse::kCubemap) {
+      if (!known_format
+        || desc.texture_type != static_cast<uint8_t>(TextureType::kTextureCube)
+        || desc.width == 0U || desc.width != desc.height || desc.depth != 1U
+        || desc.array_layers != 6U) {
+        return "Sky cubemap requires a cube texture with six square faces";
+      }
+      return std::nullopt;
+    }
+    if (!known_format
+      || desc.texture_type != static_cast<uint8_t>(TextureType::kTexture2D)
+      || desc.width == 0U || desc.height == 0U || desc.depth != 1U
+      || desc.array_layers != 1U) {
+      return "Metering mask requires a valid linear 2D color texture";
+    }
+    const auto& info = graphics::detail::GetFormatInfo(format);
+    if (info.is_srgb || info.has_depth || info.has_stencil || !info.has_red
+      || info.kind == graphics::detail::FormatKind::kInteger) {
+      return "Metering mask requires a linear non-integer color format with a "
+             "red channel";
+    }
+    return std::nullopt;
+  }
+
+  //! Resolves a texture an environment record binds. A deleted texture leaves
+  //! the scene without it until fixed; other failures report an error and
+  //! return nothing.
+  auto ResolveEnvironmentTexture(observer_ptr<ImportSession> session,
+    observer_ptr<const ImportRequest> request,
+    observer_ptr<IAsyncFileReader> reader, std::string virtual_path,
+    std::string object_path, const EnvironmentTextureUse use)
+    -> co::Co<std::optional<data::pak::core::ResourceIndexT>>
+  {
+    const auto prefix = std::string(EnvironmentTextureDiagnosticPrefix(use));
+    const auto label = std::string(EnvironmentTextureLabel(use));
+    if (!reader) {
+      AddDiagnostic(*session, *request, ImportSeverity::kError,
+        prefix + "reader_unavailable",
+        "Texture descriptor reader is unavailable", object_path);
+      co_return std::nullopt;
+    }
+    const auto reference
+      = co_await internal::ResolveTextureReference(session, request, reader,
+        {
+          .virtual_path = std::move(virtual_path),
+          .object_path = object_path,
+          .diagnostic_prefix = "scene.descriptor.",
+          .allow_missing = true,
+        });
+    if (!reference) {
+      co_return std::nullopt;
+    }
+    if (reference->missing) {
+      co_return data::pak::core::kNoResourceIndex;
+    }
+    auto source_error = std::error_code {};
+    const bool local_source = std::filesystem::equivalent(
+      reference->cooked_root, session->CookedRoot(), source_error);
+    if (source_error || !local_source
+      || reference->index == data::pak::core::kNoResourceIndex) {
+      AddDiagnostic(*session, *request, ImportSeverity::kError,
+        prefix + "source_invalid",
+        label + " must reference a texture cooked into the scene's own source",
+        object_path);
+      co_return std::nullopt;
+    }
+    if (const auto error
+      = EnvironmentTextureFormatError(reference->descriptor, use)) {
+      AddDiagnostic(*session, *request, ImportSeverity::kError,
+        prefix + "format_invalid", std::string(*error), object_path);
+      co_return std::nullopt;
+    }
+    co_return reference->index;
+  }
+
   auto BuildPostProcessSystemRecord(SceneDescriptorExecutionContext& context,
     const internal::SceneSource::PostProcess& source,
     const data::ResourceReferenceIndex mask_index)
@@ -501,8 +570,7 @@ namespace {
   }
 
   auto LinkSceneDescriptor(SceneDescriptorExecutionContext& context,
-    internal::SceneSource source,
-    const data::pak::core::ResourceIndexT mask_index)
+    internal::SceneSource source, const EnvironmentTextureIndices& textures)
     -> std::optional<LinkedSceneDescriptor>
   {
     auto prepared = LinkedSceneDescriptor {
@@ -563,19 +631,20 @@ namespace {
       prepared.geometry_keys.push_back(renderable.geometry_key);
     }
 
+    AssetReferenceBuilder references;
+    const auto bind_texture
+      = [&references](const data::pak::core::ResourceIndexT index) {
+          return index == data::pak::core::kNoResourceIndex
+            ? data::kNoResourceReference
+            : references.AddResource(data::ResourceKind::kTexture, index);
+        };
     if (source.post_process.has_value()) {
-      AssetReferenceBuilder references;
-      const auto mask_reference
-        = mask_index == data::pak::core::kNoResourceIndex
-        ? data::kNoResourceReference
-        : references.AddResource(data::ResourceKind::kTexture, mask_index);
       auto system = BuildPostProcessSystemRecord(
-        context, *source.post_process, mask_reference);
+        context, *source.post_process, bind_texture(textures.metering_mask));
       if (!system.has_value()) {
         return std::nullopt;
       }
       prepared.environment_systems.push_back(std::move(*system));
-      prepared.environment_references = std::move(references).Build();
     }
     if (source.background.has_value()) {
       prepared.environment_systems.push_back({
@@ -592,37 +661,33 @@ namespace {
       });
     }
     if (source.fog.has_value()) {
-      auto& fog = *source.fog;
-      if (fog.cubemap.has_value()) {
-        const auto key = ResolveResourceDescriptorKey(context, *fog.cubemap,
-          "environment.fog.inscattering_color_cubemap_ref");
-        if (!key.has_value()) {
-          return std::nullopt;
-        }
-        fog.record.inscattering_color_cubemap_asset = *key;
-      }
+      auto& fog = source.fog->record;
+      fog.inscattering_color_cubemap = bind_texture(textures.fog_cubemap);
       prepared.environment_systems.push_back({
         .system_type = static_cast<uint32_t>(
           data::pak::world::EnvironmentComponentType::kFog),
-        .record_bytes = PackRecordBytes(fog.record),
+        .record_bytes = PackRecordBytes(fog),
       });
     }
     if (source.sky_light.has_value()) {
-      auto& sky = *source.sky_light;
-      if (sky.cubemap.has_value()) {
-        const auto key = ResolveResourceDescriptorKey(
-          context, *sky.cubemap, "environment.sky_light.cubemap_ref");
-        if (!key.has_value()) {
-          return std::nullopt;
-        }
-        sky.record.cubemap_asset = *key;
-      }
+      auto& sky = source.sky_light->record;
+      sky.cubemap = bind_texture(textures.sky_light_cubemap);
       prepared.environment_systems.push_back({
         .system_type = static_cast<uint32_t>(
           data::pak::world::EnvironmentComponentType::kSkyLight),
-        .record_bytes = PackRecordBytes(sky.record),
+        .record_bytes = PackRecordBytes(sky),
       });
     }
+    if (source.sky_sphere.has_value()) {
+      auto& sphere = source.sky_sphere->record;
+      sphere.cubemap = bind_texture(textures.sky_sphere_cubemap);
+      prepared.environment_systems.push_back({
+        .system_type = static_cast<uint32_t>(
+          data::pak::world::EnvironmentComponentType::kSkySphere),
+        .record_bytes = PackRecordBytes(sphere),
+      });
+    }
+    prepared.environment_references = std::move(references).Build();
     for (const auto& reference : source.references) {
       if (!ResolveAssetReference(context, reference.virtual_path,
             reference.type, false, reference.object_path)
@@ -700,71 +765,52 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  auto mask_index = data::pak::core::kNoResourceIndex;
+  auto textures = EnvironmentTextureIndices {};
+  // NOLINTBEGIN(*-avoid-capturing-lambda-coroutines,*-avoid-reference-coroutine-parameters)
+  // The lambda is awaited in place and its references outlive each call.
+  const auto resolve_texture
+    = [&](const std::optional<std::string>& path, std::string object_path,
+        const EnvironmentTextureUse use,
+        data::pak::core::ResourceIndexT& index) -> co::Co<bool> {
+    if (!path.has_value()) {
+      co_return true;
+    }
+    const auto resolved = co_await ResolveEnvironmentTexture(
+      observer_ptr { &session }, observer_ptr { &Request() }, CookedReader(),
+      *path, std::move(object_path), use);
+    if (!resolved.has_value()) {
+      co_return false;
+    }
+    index = *resolved;
+    co_return true;
+  };
   if (source->post_process.has_value()
-    && source->post_process->metering_mask.has_value()) {
-    const auto& path = *source->post_process->metering_mask;
-    const auto reader = CookedReader();
-    if (!reader) {
-      AddDiagnostic(session, Request(), ImportSeverity::kError,
-        "scene.descriptor.mask_reader_unavailable",
-        "Texture descriptor reader is unavailable",
-        "environment.post_process_volume.auto_exposure_metering_mask");
-      co_return co_await FinalizeWithTelemetry(session);
-    }
-    const auto reference = co_await internal::ResolveTextureReference(
-      observer_ptr { &session }, observer_ptr { &Request() }, reader,
-      {
-        .virtual_path = path,
-        .object_path
-        = "environment.post_process_volume.auto_exposure_metering_mask",
-        .diagnostic_prefix = "scene.descriptor.",
-        .allow_missing = true,
-      });
-    if (!reference) {
-      co_return co_await FinalizeWithTelemetry(session);
-    }
-    // A deleted metering mask leaves the scene without one until it is fixed.
-    if (!reference->missing) {
-      auto source_error = std::error_code {};
-      const bool local_source = std::filesystem::equivalent(
-        reference->cooked_root, session.CookedRoot(), source_error);
-      if (source_error || !local_source
-        || reference->index == data::pak::core::kNoResourceIndex) {
-        AddDiagnostic(session, Request(), ImportSeverity::kError,
-          "scene.descriptor.mask_source_invalid",
-          "Metering mask must reference a texture cooked into the scene's own "
-          "source",
-          "environment.post_process_volume.auto_exposure_metering_mask");
-        co_return co_await FinalizeWithTelemetry(session);
-      }
-      const auto& desc = reference->descriptor;
-      const auto format = static_cast<Format>(desc.format);
-      if (format == Format::kUnknown || format > Format::kMaxFormat
-        || desc.texture_type != static_cast<uint8_t>(TextureType::kTexture2D)
-        || desc.width == 0U || desc.height == 0U || desc.depth != 1U
-        || desc.array_layers != 1U) {
-        AddDiagnostic(session, Request(), ImportSeverity::kError,
-          "scene.descriptor.mask_format_invalid",
-          "Metering mask requires a valid linear 2D color texture",
-          "environment.post_process_volume.auto_exposure_metering_mask");
-        co_return co_await FinalizeWithTelemetry(session);
-      }
-      const auto& info = graphics::detail::GetFormatInfo(format);
-      if (info.is_srgb || info.has_depth || info.has_stencil || !info.has_red
-        || info.kind == graphics::detail::FormatKind::kInteger) {
-        AddDiagnostic(session, Request(), ImportSeverity::kError,
-          "scene.descriptor.mask_format_invalid",
-          "Metering mask requires a linear non-integer color format with a red "
-          "channel",
-          "environment.post_process_volume.auto_exposure_metering_mask");
-        co_return co_await FinalizeWithTelemetry(session);
-      }
-      mask_index = reference->index;
-    }
+    && !co_await resolve_texture(source->post_process->metering_mask,
+      "environment.post_process_volume.auto_exposure_metering_mask",
+      EnvironmentTextureUse::kMeteringMask, textures.metering_mask)) {
+    co_return co_await FinalizeWithTelemetry(session);
   }
+  if (source->fog.has_value()
+    && !co_await resolve_texture(source->fog->cubemap,
+      "environment.fog.inscattering_color_cubemap_ref",
+      EnvironmentTextureUse::kCubemap, textures.fog_cubemap)) {
+    co_return co_await FinalizeWithTelemetry(session);
+  }
+  if (source->sky_light.has_value()
+    && !co_await resolve_texture(source->sky_light->cubemap,
+      "environment.sky_light.cubemap_ref", EnvironmentTextureUse::kCubemap,
+      textures.sky_light_cubemap)) {
+    co_return co_await FinalizeWithTelemetry(session);
+  }
+  if (source->sky_sphere.has_value()
+    && !co_await resolve_texture(source->sky_sphere->cubemap,
+      "environment.sky_sphere.cubemap_ref", EnvironmentTextureUse::kCubemap,
+      textures.sky_sphere_cubemap)) {
+    co_return co_await FinalizeWithTelemetry(session);
+  }
+  // NOLINTEND(*-avoid-capturing-lambda-coroutines,*-avoid-reference-coroutine-parameters)
   auto prepared_opt
-    = LinkSceneDescriptor(context, std::move(*source), mask_index);
+    = LinkSceneDescriptor(context, std::move(*source), textures);
   if (!prepared_opt.has_value()) {
     ReportPhaseProgress(
       ImportPhase::kFailed, 1.0F, "Scene descriptor build failed");

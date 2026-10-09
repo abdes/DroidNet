@@ -9,7 +9,7 @@
     },
     "version": {
       "type": "integer",
-      "const": 11
+      "const": 12
     },
     "name": {
       "$ref": "#/definitions/identifier"
@@ -917,6 +917,36 @@
         }
       }
     },
+    "sky_sphere_environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "source"],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "integer",
+          "enum": [0, 1]
+        },
+        "cubemap_ref": {
+          "$ref": "#/definitions/canonical_otex_path"
+        },
+        "solid_color_rgb": {
+          "$ref": "#/definitions/vec3"
+        },
+        "intensity": {
+          "type": "number",
+          "minimum": 0.0
+        },
+        "rotation_radians": {
+          "type": "number"
+        },
+        "tint_rgb": {
+          "$ref": "#/definitions/vec3"
+        }
+      }
+    },
     "post_process_volume_environment": {
       "type": "object",
       "additionalProperties": false,
@@ -1106,6 +1136,9 @@
         },
         "sky_light": {
           "$ref": "#/definitions/sky_light_environment"
+        },
+        "sky_sphere": {
+          "$ref": "#/definitions/sky_sphere_environment"
         },
         "post_process_volume": {
           "$ref": "#/definitions/post_process_volume_environment"
