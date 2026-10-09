@@ -40,6 +40,27 @@ static inline bool IsFarBackgroundPixel(float scene_depth)
     return abs(scene_depth - ResolveFarDepthReference()) <= 1.0e-6f;
 }
 
+// Camera-relative view ray through a pixel. Clip depths 0.5 and 1 stay finite
+// under reverse-Z with an infinite far plane. Perspective rays start at the
+// camera; orthographic rays are parallel and start at the pixel's point on
+// the plane through the camera facing the view direction.
+static inline void LocalFogPixelRay(
+    float2 uv, out float3 origin, out float3 dir)
+{
+    const float3 a = ReconstructWorldPosition(
+        uv, 0.5f, inverse_view_projection_matrix) - camera_position;
+    const float3 b = ReconstructWorldPosition(
+        uv, 1.0f, inverse_view_projection_matrix) - camera_position;
+    const bool b_farther = dot(b, b) > dot(a, a);
+    dir = normalize(b_farther ? b - a : a - b);
+    origin = 0.0f.xxx;
+    if (is_orthographic != 0u)
+    {
+        const float3 nearer = b_farther ? a : b;
+        origin = nearer - dir * dot(nearer, dir);
+    }
+}
+
 [shader("vertex")]
 LocalFogTileVertexOutput VortexLocalFogVolumeComposeVS(
     uint vertex_id : SV_VertexID,
@@ -113,23 +134,16 @@ float4 VortexLocalFogVolumeComposePS(LocalFogTileVertexOutput input) : SV_Target
     const SceneTextureBindingData bindings
         = LoadSceneTextureBindings(bindless_view_frame_bindings_slot);
     const float raw_depth = SampleSceneDepth(input.uv, bindings);
-    float3 translated_world_position;
-    if (IsFarBackgroundPixel(raw_depth))
-    {
-        // The sky has no surface: trace the view ray past every volume, so a
-        // volume in front of the sky is composed like one in front of geometry.
-        // The far plane itself may be at infinity, so take the ray direction
-        // from a point between the planes.
-        const float3 mid_position = ReconstructWorldPosition(
-            input.uv, 0.5f, inverse_view_projection_matrix);
-        translated_world_position
-            = normalize(mid_position - camera_position) * kLocalFogSkyRayLengthMeters;
-    }
-    else
-    {
-        translated_world_position = ReconstructWorldPosition(
-            input.uv, raw_depth, inverse_view_projection_matrix) - camera_position;
-    }
+    float3 ray_origin;
+    float3 ray_dir;
+    LocalFogPixelRay(input.uv, ray_origin, ray_dir);
+    // The sky has no surface: trace the view ray past every volume, so a
+    // volume in front of the sky is composed like one in front of geometry.
+    const float3 translated_world_position = IsFarBackgroundPixel(raw_depth)
+        ? ray_origin + ray_dir * kLocalFogSkyRayLengthMeters
+        : ReconstructWorldPosition(
+              input.uv, raw_depth, inverse_view_projection_matrix)
+            - camera_position;
     const uint2 tile_coord = UnpackLocalFogTile(input.packed_tile);
 
     StructuredBuffer<LocalFogVolumeInstanceData> instances
@@ -139,6 +153,6 @@ float4 VortexLocalFogVolumeComposePS(LocalFogTileVertexOutput input) : SV_Target
     SamplerState linear_sampler = SamplerDescriptorHeap[0];
     const float4 fog = GetLocalFogVolumeContribution(
         instances, tile_data_texture, pass, tile_coord, linear_sampler,
-        camera_position, translated_world_position);
+        camera_position, ray_origin, translated_world_position);
     return float4(fog.rgb * GetPreExposure(), 1.0f - fog.a);
 }
