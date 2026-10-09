@@ -232,6 +232,10 @@ public sealed class ViewportHudTests
         source.ShowSelectionOutline = false;
         source.ShowIcons = false;
         source.CameraType = CameraType.Front;
+        source.FlySpeed = 12.5;
+        source.FieldOfViewDegrees = 60.0f;
+        source.NearViewPlane = 0.5f;
+        source.FarViewPlane = 5000.0f;
 
         var state = source.CaptureState();
         using var restored = CreateViewport(new Mock<IEngineService>(MockBehavior.Loose).Object);
@@ -248,7 +252,32 @@ public sealed class ViewportHudTests
             ShowCameraPreview: false,
             ShowStatistics: true,
             ShowSelectionOutline: false,
-            ShowIcons: false));
+            ShowIcons: false,
+            MovementSpeed: 12.5f,
+            FieldOfViewDegrees: 60.0f,
+            NearViewPlane: 0.5f,
+            FarViewPlane: 5000.0f));
+    }
+
+    [TestMethod]
+    public void RestoreState_ShouldFallBackToDefaultsForUnusableCameraSettings()
+    {
+        using var sut = CreateViewport(new Mock<IEngineService>(MockBehavior.Loose).Object);
+
+        sut.RestoreState(
+            new ViewportPaneState(CameraType.Perspective, CameraControlMode.OrbitTurntable, EditorCamera: null, SceneCameraId: null)
+            {
+                MovementSpeed = float.NaN,
+                FieldOfViewDegrees = 0.0f,
+                NearViewPlane = 10.0f,
+                FarViewPlane = 1.0f,
+            },
+            sceneCamera: null);
+
+        _ = sut.MovementSpeed.Should().Be(ViewportViewModel.DefaultMovementSpeed);
+        _ = sut.FieldOfViewDegrees.Should().Be(ViewportViewModel.DefaultFieldOfViewDegrees);
+        _ = sut.NearViewPlane.Should().Be(ViewportViewModel.DefaultNearViewPlane);
+        _ = sut.FarViewPlane.Should().Be(ViewportViewModel.DefaultFarViewPlane);
     }
 
     private static ViewportViewModel CreateViewport(IEngineService engine, IOperationResultPublisher? results = null)

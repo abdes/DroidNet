@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
+using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Diagnostics;
@@ -250,6 +251,10 @@ public sealed record SceneViewportState(
 /// <param name="ShowStatistics">Whether the pane shows the frame statistics readout.</param>
 /// <param name="ShowSelectionOutline">Whether the pane outlines the selected nodes.</param>
 /// <param name="ShowIcons">Whether the pane shows light and camera icons.</param>
+/// <param name="MovementSpeed">The editor camera fly speed, in meters per second.</param>
+/// <param name="FieldOfViewDegrees">The editor camera field of view, in degrees.</param>
+/// <param name="NearViewPlane">The editor camera near view plane, in meters.</param>
+/// <param name="FarViewPlane">The editor camera far view plane, in meters.</param>
 public sealed record ViewportPaneState(
     CameraType CameraType,
     CameraControlMode ControlMode,
@@ -260,7 +265,11 @@ public sealed record ViewportPaneState(
     bool ShowCameraPreview = true,
     bool ShowStatistics = false,
     bool ShowSelectionOutline = true,
-    bool ShowIcons = true);
+    bool ShowIcons = true,
+    float MovementSpeed = ViewportViewModel.DefaultMovementSpeed,
+    float FieldOfViewDegrees = ViewportViewModel.DefaultFieldOfViewDegrees,
+    float NearViewPlane = ViewportViewModel.DefaultNearViewPlane,
+    float FarViewPlane = ViewportViewModel.DefaultFarViewPlane);
 
 /// <summary>
 /// A pane's editor camera, stored as plain fields: the settings serializer does not write the

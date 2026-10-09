@@ -93,6 +93,18 @@ public partial class ViewportViewModel
         this.ShowIcons = state.ShowIcons;
         this.ShowCameraPreview = state.ShowCameraPreview;
         this.ShowStatistics = state.ShowStatistics;
+
+        // A value outside its field's range, kept by an older editor or edited by hand, falls
+        // back to its default.
+        this.MovementSpeed = state.MovementSpeed >= this.MovementSpeedField.Minimum && float.IsFinite(state.MovementSpeed)
+            ? state.MovementSpeed
+            : DefaultMovementSpeed;
+        this.FieldOfViewDegrees = state.FieldOfViewDegrees is > 0.0f and < 180.0f
+            ? state.FieldOfViewDegrees
+            : DefaultFieldOfViewDegrees;
+        var planesValid = state.NearViewPlane > 0.0f && float.IsFinite(state.FarViewPlane) && state.FarViewPlane > state.NearViewPlane;
+        this.NearViewPlane = planesValid ? state.NearViewPlane : DefaultNearViewPlane;
+        this.FarViewPlane = planesValid ? state.FarViewPlane : DefaultFarViewPlane;
     }
 
     /// <summary>Captures the state the pane keeps across sessions.</summary>
@@ -108,7 +120,11 @@ public partial class ViewportViewModel
             this.ShowCameraPreview,
             this.ShowStatistics,
             this.ShowSelectionOutline,
-            this.ShowIcons);
+            this.ShowIcons,
+            this.MovementSpeed,
+            this.FieldOfViewDegrees,
+            this.NearViewPlane,
+            this.FarViewPlane);
 
     private static CameraViewPreset ToPreset(CameraType type) => type switch
     {

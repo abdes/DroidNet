@@ -24,9 +24,17 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
 {
     private const string DegreeUnit = "°";
     private const string LockedCameraText = "Unlock the camera to move it.";
-    private const float DefaultFieldOfViewDegrees = 90.0f;
-    private const float DefaultNearViewPlane = 0.1f;
-    private const float DefaultFarViewPlane = 1000.0f;
+    /// <summary>The default fly speed, in meters per second; also the slowest.</summary>
+    internal const float DefaultMovementSpeed = 1.0f;
+
+    /// <summary>The default field of view, in degrees.</summary>
+    internal const float DefaultFieldOfViewDegrees = 90.0f;
+
+    /// <summary>The default near view plane, in meters.</summary>
+    internal const float DefaultNearViewPlane = 0.1f;
+
+    /// <summary>The default far view plane, in meters.</summary>
+    internal const float DefaultFarViewPlane = 1000.0f;
 
     private static readonly CameraControlMode[] PerspectiveModeValues =
     [
@@ -80,8 +88,8 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
         this.MovementSpeedField = this.CreateCameraNumberField(
-            value: 1.0f,
-            minimum: 1.0f,
+            value: DefaultMovementSpeed,
+            minimum: DefaultMovementSpeed,
             maximum: float.PositiveInfinity,
             unit: "m/s",
             propertyName: nameof(this.MovementSpeed));
@@ -1045,6 +1053,9 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     private void OnCameraNumberBoxValueChanged(string propertyName, float value)
     {
         this.OnPropertyChanged(propertyName);
+
+        // Fly speed and lens settings are kept with the pane across sessions.
+        this.RaiseStateChanged();
 
         if (string.Equals(propertyName, nameof(this.MovementSpeed), StringComparison.Ordinal))
         {
