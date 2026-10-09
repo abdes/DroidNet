@@ -153,6 +153,7 @@ public:
           observed.enabled = sphere->IsEnabled();
           observed.source = static_cast<int>(sphere->GetSource());
           observed.solid_color_rgb = sphere->GetSolidColorRgb();
+          observed.illuminance_lux = sphere->GetIlluminanceLux();
           observed.intensity = sphere->GetIntensity();
           observed.rotation_radians = sphere->GetRotationRadians();
           observed.tint_rgb = sphere->GetTintRgb();
@@ -163,6 +164,7 @@ public:
           auto& observed = result.sky.sky_light;
           observed.enabled = light->IsEnabled();
           observed.source = static_cast<int>(light->GetSource());
+          observed.illuminance_lux = light->GetIlluminanceLux();
           observed.intensity = light->GetIntensityMul();
           observed.tint_rgb = light->GetTintRgb();
           observed.diffuse_intensity = light->GetDiffuseIntensity();

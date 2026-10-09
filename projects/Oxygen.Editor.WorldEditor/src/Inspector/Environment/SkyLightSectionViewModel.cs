@@ -5,7 +5,6 @@
 using System.Numerics;
 using System.Reactive.Concurrency;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
@@ -21,7 +20,7 @@ public sealed partial class SkyLightSectionViewModel : ObservableObject, IDispos
     /// <param name="owner">The borrowed scene edit lifetime.</param>
     /// <param name="cubeTextures">The inspector's shared cube texture feed.</param>
     /// <param name="observerScheduler">The catalog notification scheduler.</param>
-    internal SkyLightSectionViewModel(SceneEnvironmentEditOwner owner, IObservable<IReadOnlyList<ContentBrowserAssetItem>>? cubeTextures, IScheduler observerScheduler)
+    internal SkyLightSectionViewModel(SceneEnvironmentEditOwner owner, IObservable<IReadOnlyList<CubeTextureAsset>>? cubeTextures, IScheduler observerScheduler)
     {
         this.EditOwner = owner;
         this.Cubemaps = new(cubeTextures, observerScheduler);
@@ -51,6 +50,10 @@ public sealed partial class SkyLightSectionViewModel : ObservableObject, IDispos
     /// <summary>Gets or sets the sky light brightness, in exposure stops over the sky's radiance.</summary>
     [ObservableProperty]
     public partial float IntensityEv { get; set; }
+
+    /// <summary>Gets or sets the illuminance, in lux, the specified cubemap is calibrated to deliver; 0 keeps it raw.</summary>
+    [ObservableProperty]
+    public partial float CubemapIlluminanceLux { get; set; }
 
     [ObservableProperty]
     public partial float TintR { get; set; }
@@ -115,6 +118,9 @@ public sealed partial class SkyLightSectionViewModel : ObservableObject, IDispos
     /// <summary>Gets intensity feedback.</summary>
     public InspectorFieldDiagnostic IntensityDiagnostic => this.Diagnostic(SceneSkyFields.SkyLightIntensity.Id);
 
+    /// <summary>Gets the cubemap illuminance diagnostic.</summary>
+    public InspectorFieldDiagnostic CubemapIlluminanceDiagnostic => this.Diagnostic(SceneSkyFields.SkyLightCubemapIlluminanceLux.Id);
+
     /// <summary>Gets tint feedback.</summary>
     public InspectorFieldDiagnostic TintDiagnostic => this.Diagnostic(SceneSkyFields.SkyLightTintRgb.Id);
 
@@ -153,6 +159,7 @@ public sealed partial class SkyLightSectionViewModel : ObservableObject, IDispos
         this.Cubemap = value.Cubemap;
         this.CubemapAngleDegrees = float.RadiansToDegrees(value.CubemapAngleRadians);
         this.IntensityEv = RadianceExposure.ToEv(value.Intensity);
+        this.CubemapIlluminanceLux = value.CubemapIlluminanceLux;
         this.TintR = value.TintRgb.X;
         this.TintG = value.TintRgb.Y;
         this.TintB = value.TintRgb.Z;
@@ -192,6 +199,8 @@ public sealed partial class SkyLightSectionViewModel : ObservableObject, IDispos
     partial void OnCubemapAngleDegreesChanged(float value) => this.EditOwner.Apply(SceneSkyFields.SkyLightCubemapAngleRadians, float.DegreesToRadians(value));
 
     partial void OnIntensityEvChanged(float value) => this.EditOwner.Apply(SceneSkyFields.SkyLightIntensity, RadianceExposure.ToScale(value));
+
+    partial void OnCubemapIlluminanceLuxChanged(float value) => this.EditOwner.Apply(SceneSkyFields.SkyLightCubemapIlluminanceLux, value);
 
     partial void OnTintRChanged(float value) => this.ApplyTint(new(value, this.TintG, this.TintB));
 

@@ -34,6 +34,7 @@ public sealed partial class BackdropSectionView
         registry.Field("SkySphereRotation", this.RotationCard);
         registry.Field("SolidColor", this.SolidColorCard);
         registry.Field("SolidColorLightsScene", this.SolidColorLightsSceneCard);
+        registry.Field("SkySphereIlluminance", this.IlluminanceCard);
         registry.Field("SkySphereIntensity", this.IntensityCard);
         registry.Field("SkySphereTint", this.TintCard);
     }

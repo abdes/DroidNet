@@ -125,23 +125,34 @@ public static class TextureSourceAssetImporter
     /// <summary>Gets whether a texture descriptor cooks a cube texture.</summary>
     /// <param name="descriptorPath">The texture descriptor file.</param>
     /// <returns><see langword="true"/> when its cube settings produce a cube texture.</returns>
-    public static bool IsCubeDescriptor(string descriptorPath)
+    public static bool IsCubeDescriptor(string descriptorPath) => ReadCubeDescriptor(descriptorPath) is not null;
+
+    /// <summary>Reads what a cube texture descriptor cooks.</summary>
+    /// <param name="descriptorPath">The texture descriptor file.</param>
+    /// <returns>The cube's storage, or <see langword="null"/> when the descriptor cooks no cube texture.</returns>
+    public static CubeDescriptorInfo? ReadCubeDescriptor(string descriptorPath)
     {
         try
         {
             using var stream = File.OpenRead(descriptorPath);
             using var document = JsonDocument.Parse(stream);
-            if (!document.RootElement.TryGetProperty("cube", out var cube) || cube.ValueKind != JsonValueKind.Object)
+            var root = document.RootElement;
+            if (!root.TryGetProperty("cube", out var cube) || cube.ValueKind != JsonValueKind.Object
+                || !(IsTrue(cube, "cubemap") || IsTrue(cube, "equirect_to_cube")
+                    || (cube.TryGetProperty("cube_layout", out var layout) && layout.ValueKind == JsonValueKind.String)))
             {
-                return false;
+                return null;
             }
 
-            return IsTrue(cube, "cubemap") || IsTrue(cube, "equirect_to_cube")
-                || (cube.TryGetProperty("cube_layout", out var layout) && layout.ValueKind == JsonValueKind.String);
+            var format = root.TryGetProperty("output", out var output) && output.ValueKind == JsonValueKind.Object
+                && output.TryGetProperty("format", out var value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
+            return new CubeDescriptorInfo(StoresRadiance: format is "rgba16f" or "rgba32f");
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
-            return false;
+            return null;
         }
 
         static bool IsTrue(JsonElement cube, string name)
@@ -199,6 +210,13 @@ public static class TextureSourceAssetImporter
 
     private sealed record OutputSettings([property: JsonPropertyName("format")] string Format);
 }
+
+/// <summary>What a cube texture descriptor cooks.</summary>
+/// <param name="StoresRadiance">
+/// Whether the cube keeps float (HDR) texels. Only such a cube can light a scene; an LDR cube is
+/// display-only.
+/// </param>
+public readonly record struct CubeDescriptorInfo(bool StoresRadiance);
 
 /// <summary>A user's reviewed image-to-texture import request.</summary>
 /// <param name="Project">The project whose authoring mount receives the texture.</param>

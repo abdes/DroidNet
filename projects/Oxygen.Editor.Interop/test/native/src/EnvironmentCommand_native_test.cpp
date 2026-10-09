@@ -643,11 +643,13 @@ auto RunSkyContracts() -> NativeStatus
     sky.sky_sphere.enabled = true;
     sky.sky_sphere.source = 1;
     sky.sky_sphere.solid_color_rgb = { 0.1F, 0.2F, 0.3F };
+    sky.sky_sphere.illuminance_lux = 12000.0F;
     sky.sky_sphere.intensity = 2.5F;
     sky.sky_sphere.rotation_radians = 0.75F;
     sky.sky_sphere.tint_rgb = { 0.9F, 0.8F, 0.7F };
     sky.sky_light.enabled = true;
     sky.sky_light.source = 0;
+    sky.sky_light.illuminance_lux = 9000.0F;
     sky.sky_light.intensity = 1.5F;
     sky.sky_light.tint_rgb = { 0.6F, 0.7F, 0.8F };
     sky.sky_light.diffuse_intensity = 0.5F;
@@ -668,12 +670,13 @@ auto RunSkyContracts() -> NativeStatus
       || sphere->GetSource() != env::SkySphereSource::kSolidColor
       || sphere->GetSolidColorRgb() != oxygen::Vec3(0.1F, 0.2F, 0.3F)
       || sphere->GetIntensity() != 2.5F || sphere->GetRotationRadians() != 0.75F
+      || sphere->GetIlluminanceLux() != 12000.0F
       || sphere->GetTintRgb() != oxygen::Vec3(0.9F, 0.8F, 0.7F)) {
       throw std::runtime_error("Authored sky sphere did not reach the scene");
     }
     if (!light || !light->IsEnabled()
       || light->GetSource() != env::SkyLightSource::kCapturedScene
-      || light->GetIntensityMul() != 1.5F
+      || light->GetIntensityMul() != 1.5F || light->GetIlluminanceLux() != 9000.0F
       || light->GetTintRgb() != oxygen::Vec3(0.6F, 0.7F, 0.8F)
       || light->GetDiffuseIntensity() != 0.5F
       || light->GetSpecularIntensity() != 0.25F

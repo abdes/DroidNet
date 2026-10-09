@@ -225,6 +225,7 @@ auto ApplySky(oxygen::scene::SceneEnvironment& environment,
   sphere->SetSource(static_cast<env::SkySphereSource>(sky.sky_sphere.source));
   sphere->SetCubemapResource(sky_sphere_cubemap);
   sphere->SetSolidColorRgb(sky.sky_sphere.solid_color_rgb);
+  sphere->SetIlluminanceLux(sky.sky_sphere.illuminance_lux);
   sphere->SetIntensity(sky.sky_sphere.intensity);
   sphere->SetRotationRadians(sky.sky_sphere.rotation_radians);
   sphere->SetTintRgb(sky.sky_sphere.tint_rgb);
@@ -234,6 +235,7 @@ auto ApplySky(oxygen::scene::SceneEnvironment& environment,
   light->SetEnabled(authored.enabled);
   light->SetSource(static_cast<env::SkyLightSource>(authored.source));
   light->SetCubemapResource(sky_light_cubemap);
+  light->SetIlluminanceLux(authored.illuminance_lux);
   light->SetIntensityMul(authored.intensity);
   light->SetTintRgb(authored.tint_rgb);
   light->SetDiffuseIntensity(authored.diffuse_intensity);

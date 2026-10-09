@@ -53,7 +53,15 @@ public sealed record SkySphereEnvironmentData
     /// <summary>Gets the linear color shown by the solid color source.</summary>
     public Vector3 SolidColorRgb { get; init; }
 
-    /// <summary>Gets the radiance multiplier.</summary>
+    /// <summary>
+    /// Gets the illuminance, in lux, the sky delivers on an upward-facing surface, or 0 to use the
+    /// cubemap or color as imported. The renderer scales the sky's radiance to deliver it, both for
+    /// the view and for a captured sky light; <see cref="Intensity"/> and <see cref="TintRgb"/> then
+    /// adjust the view only.
+    /// </summary>
+    public float IlluminanceLux { get; init; }
+
+    /// <summary>Gets the radiance multiplier of the view.</summary>
     public float Intensity { get; init; } = 1.0f;
 
     /// <summary>Gets the rotation of the cubemap around the up axis, in radians.</summary>
@@ -84,6 +92,12 @@ public sealed record SkyLightEnvironmentData
 
     /// <summary>Gets the authored cube texture descriptor URI used by the specified cubemap source, or null for none.</summary>
     public Uri? Cubemap { get; init; }
+
+    /// <summary>
+    /// Gets the illuminance, in lux, the specified cubemap delivers on an upward-facing surface, or 0
+    /// to use it as imported. Its radiance is scaled to deliver it before the multipliers apply.
+    /// </summary>
+    public float CubemapIlluminanceLux { get; init; }
 
     /// <summary>Gets the multiplier applied to both diffuse and specular contributions.</summary>
     public float Intensity { get; init; } = 1.0f;

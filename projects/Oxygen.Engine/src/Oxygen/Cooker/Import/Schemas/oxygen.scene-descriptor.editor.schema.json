@@ -322,6 +322,14 @@
           "x-editor-group": "Backdrop",
           "x-editor-renderer": "asset-picker"
         },
+        "illuminance_lux": {
+          "x-editor-label": "Illuminance",
+          "x-editor-group": "Backdrop",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 100,
+          "x-editor-unit": "lux",
+          "x-editor-tooltip": "Calibrates the sky to a physical brightness: the illuminance, in lux, it delivers on an upward-facing surface. The cubemap or color is scaled to deliver it, both for the view and for a captured sky light. Typical values: clear day 10,000 to 25,000; overcast 1,000 to 10,000. 0 uses the image's own values. Only a float (HDR) cubemap can be measured: an LDR one stays uncalibrated, and the renderer warns."
+        },
         "intensity": {
           "x-editor-label": "Intensity",
           "x-editor-group": "Backdrop",
@@ -367,6 +375,14 @@
           "x-editor-renderer": "numberbox",
           "x-editor-step": 1,
           "x-editor-unit": "°"
+        },
+        "illuminance_lux": {
+          "x-editor-label": "Illuminance",
+          "x-editor-group": "Sky Light",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 100,
+          "x-editor-unit": "lux",
+          "x-editor-tooltip": "Calibrates the specified cubemap to a physical brightness: the illuminance, in lux, it delivers on an upward-facing surface, before the multipliers apply. 0 uses the image's own values. Only a float (HDR) cubemap can be measured."
         },
         "intensity": {
           "x-editor-label": "Intensity",

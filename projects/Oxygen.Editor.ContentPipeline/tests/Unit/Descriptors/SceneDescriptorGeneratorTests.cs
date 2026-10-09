@@ -709,8 +709,8 @@ public sealed class SceneDescriptorGeneratorTests
         scene.SetEnvironment(new SceneEnvironmentData
         {
             AtmosphereEnabled = false,
-            SkySphere = new() { Enabled = true, Source = SkySphereSource.Cubemap, Cubemap = backdrop, Intensity = 512f, RotationRadians = 0.5f, TintRgb = new Vector3(0.9f, 0.8f, 0.7f), SolidColorRgb = new Vector3(1f, 2f, 3f) },
-            SkyLight = new() { Source = SkyLightSource.SpecifiedCubemap, Cubemap = light, SpecularIntensity = 0.25f, CubemapAngleRadians = -1f, LowerHemisphereIsSolidColor = false, AffectReflections = false },
+            SkySphere = new() { Enabled = true, Source = SkySphereSource.Cubemap, Cubemap = backdrop, IlluminanceLux = 15000f, Intensity = 512f, RotationRadians = 0.5f, TintRgb = new Vector3(0.9f, 0.8f, 0.7f), SolidColorRgb = new Vector3(1f, 2f, 3f) },
+            SkyLight = new() { Source = SkyLightSource.SpecifiedCubemap, Cubemap = light, CubemapIlluminanceLux = 8000f, SpecularIntensity = 0.25f, CubemapAngleRadians = -1f, LowerHemisphereIsSolidColor = false, AffectReflections = false },
         });
 
         var result = await generator.GenerateAsync(await RoundTripSavedSceneAsync(scene, workspace.Project).ConfigureAwait(false), scope, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -723,12 +723,14 @@ public sealed class SceneDescriptorGeneratorTests
             _ = sphere.GetProperty("enabled").GetBoolean().Should().BeTrue();
             _ = sphere.GetProperty("source").GetInt32().Should().Be(0);
             _ = sphere.GetProperty("cubemap_ref").GetString().Should().Be("/Content/Textures/Backdrop.otex");
+            _ = sphere.GetProperty("illuminance_lux").GetSingle().Should().Be(15000f);
             _ = sphere.GetProperty("intensity").GetSingle().Should().Be(512f);
             _ = sphere.GetProperty("rotation_radians").GetSingle().Should().Be(0.5f);
             _ = sphere.GetProperty("tint_rgb").EnumerateArray().Select(static value => value.GetSingle()).Should().Equal(0.9f, 0.8f, 0.7f);
             var sky = environment.GetProperty("sky_light");
             _ = sky.GetProperty("source").GetInt32().Should().Be(1);
             _ = sky.GetProperty("cubemap_ref").GetString().Should().Be("/Content/Textures/Light.otex");
+            _ = sky.GetProperty("illuminance_lux").GetSingle().Should().Be(8000f);
             _ = sky.GetProperty("specular_intensity").GetSingle().Should().Be(0.25f);
             _ = sky.GetProperty("source_cubemap_angle_radians").GetSingle().Should().Be(-1f);
             _ = sky.GetProperty("lower_hemisphere_is_solid_color").GetBoolean().Should().BeFalse();

@@ -123,6 +123,8 @@ namespace oxygen::interop::module {
     int source = 0; //!< SkySphereSource: 0 cubemap, 1 solid color.
     CubemapSource cubemap;
     Vec3 solid_color_rgb { 0.0F, 0.0F, 0.0F };
+    //! Calibrated upward illuminance in lux; zero keeps the imported radiance.
+    float illuminance_lux = 0.0F;
     float intensity = 1.0F;
     float rotation_radians = 0.0F;
     Vec3 tint_rgb { 1.0F, 1.0F, 1.0F };
@@ -133,6 +135,8 @@ namespace oxygen::interop::module {
     bool enabled = true;
     int source = 0; //!< SkyLightSource: 0 captured scene, 1 specified cubemap.
     CubemapSource cubemap;
+    //! Calibrated upward illuminance of the cubemap in lux; zero keeps it raw.
+    float illuminance_lux = 0.0F;
     float intensity = 1.0F;
     Vec3 tint_rgb { 1.0F, 1.0F, 1.0F };
     float diffuse_intensity = 1.0F;

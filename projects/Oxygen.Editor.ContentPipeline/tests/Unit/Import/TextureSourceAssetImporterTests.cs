@@ -104,6 +104,26 @@ public sealed class TextureSourceAssetImporterTests
         }
     }
 
+    [TestMethod]
+    [DataRow("""{ "output": { "format": "rgba16f" }, "cube": { "equirect_to_cube": true } }""", true, true)]
+    [DataRow("""{ "output": { "format": "rgba32f" }, "cube": { "cubemap": true, "cube_layout": "hcross" } }""", true, true)]
+    [DataRow("""{ "output": { "format": "rgba8_srgb" }, "cube": { "cubemap": true, "cube_layout": "hstrip" } }""", true, false)]
+    [DataRow("""{ "output": { "format": "rgba16f" } }""", false, false)]
+    public void ReadCubeDescriptorReportsWhetherTheCubeKeepsRadiance(string json, bool cube, bool storesRadiance)
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".otex.json");
+        File.WriteAllText(path, json);
+        try
+        {
+            _ = TextureSourceAssetImporter.ReadCubeDescriptor(path).Should().Be(cube ? new CubeDescriptorInfo(storesRadiance) : null);
+            _ = TextureSourceAssetImporter.IsCubeDescriptor(path).Should().Be(cube);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static ProjectContext CreateProject(string root) => new()
     {
         ProjectId = Guid.NewGuid(),

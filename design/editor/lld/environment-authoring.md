@@ -136,12 +136,14 @@ BackgroundColor load with an enabled Background of that color.
 | SkySphere.Source                       | Cubemap; enum            | Cubemap, SolidColor      | What the sphere shows                             |
 | SkySphere.Cubemap                      | none; cube texture asset | Absolute asset URI       | Backdrop radiance                                 |
 | SkySphere.SolidColorRgb                | (0,0,0); linear RGB      | Finite, >= 0             | Solid backdrop radiance                           |
+| SkySphere.IlluminanceLux               | 0; lux                   | Finite, >= 0             | Calibrates the sky; 0 keeps it as imported        |
 | SkySphere.Intensity                    | 1; multiplier            | Finite, >= 0             | Scales the shown radiance                         |
 | SkySphere.RotationRadians              | 0; radians               | Finite                   | Turns the cubemap around up                       |
 | SkySphere.TintRgb                      | (1,1,1); linear RGB      | Finite, >= 0             | Multiplies the shown radiance                     |
 | SkyLight.Enabled                       | true; bool               | Boolean                  | Image-based diffuse and specular lighting         |
 | SkyLight.Source                        | CapturedScene; enum      | CapturedScene, Cubemap   | Radiance captured from the sky, or a cube texture |
 | SkyLight.Cubemap                       | none; cube texture asset | Absolute asset URI       | Lighting radiance for the cubemap source          |
+| SkyLight.CubemapIlluminanceLux         | 0; lux                   | Finite, >= 0             | Calibrates the cubemap; 0 keeps it as imported    |
 | SkyLight.Intensity                     | 1; multiplier            | Finite, >= 0             | Scales diffuse and specular                       |
 | SkyLight.TintRgb                       | (1,1,1); linear RGB      | Finite, >= 0             | Multiplies the sky radiance                       |
 | SkyLight.DiffuseIntensity              | 1; multiplier            | Finite, >= 0             | Diffuse only                                      |
@@ -197,6 +199,36 @@ disclosure; and an Advanced disclosure with volumetric scattering and affect
 reflections. Capture sky already follows the backdrop, rotation included, so
 the cubemap rotation stays separate from the backdrop rotation, as in Unreal.
 
+Capture sky lights the scene with the backdrop's calibrated radiance. Display
+and lighting are decoupled, as in three.js and Filament: the Sky Sphere's
+intensity and tint scale only what the view shows, and only the Sky Light's own
+multipliers scale lighting. Editing them never rebuilds the capture. Without an
+atmosphere the capture reads the Sky Sphere, its cubemap or its solid color, so
+"Light the scene with this color" lights it; the display-only background never
+does. Lighting accepts only float radiance, so a cubemap that lights the scene,
+directly or through a captured backdrop, must be cooked as rgba16f or rgba32f.
+An LDR cube can still be shown.
+
+### Calibration
+
+Imported HDR images rarely carry physical units: a typical one delivers a few
+lux on an upward-facing surface, while a daylight sun delivers tens of
+thousands. Left raw, auto exposure meters the dim sky and burns sunlit surfaces
+to white, and the sky lights shadows with almost nothing. Illuminance, in lux,
+calibrates a source once, as Unity HDRP's lux intensity mode does. The
+renderer measures each float cube when it loads, by integrating its luminance
+against the cosine to world up over the upper hemisphere, and scales its
+radiance to deliver the authored illuminance. A solid color of luminance L
+delivers pi times L. The backdrop's Illuminance applies to the view and to
+Capture sky, so the two always agree; the Sky Light's cubemap Illuminance
+applies to the specified cubemap. Zero keeps the radiance as imported, which is
+what older scenes contain. Only float cubes can be measured: an LDR backdrop
+cube with an Illuminance stays raw, and the renderer reports it as
+`sky.uncalibrated` in the diagnostics ledger and the log. Intensity in EV then adjusts relative to the calibrated
+radiance: the backdrop's for the view only, the Sky Light's for lighting only.
+Tooltips give typical values: a clear-day sky delivers 10,000 to 25,000 lux, an
+overcast one 1,000 to 10,000.
+
 ### Units and pickers
 
 Oxygen renders with physical exposure, so both radiance multipliers,
@@ -211,6 +243,9 @@ settings produce a cube texture. Texture import offers a Cube shape. Its layout
 is detected from the image (2:1 panorama, 6:1 or 1:6 strip, 4:3 or 3:4 cross)
 or chosen, and a panorama takes a face size that is a multiple of 256. Cube
 textures default to the hdr_env intent, linear color space and rgba16f output.
+Choosing an LDR format for a cube warns that it can only be displayed, and the
+cubemap pickers mark such cubes "display only". Half floats clamp radiance
+above 65504; the cook reports how much was clamped, and rgba32f keeps it.
 
 ### Runtime, cooking and the display-only background
 

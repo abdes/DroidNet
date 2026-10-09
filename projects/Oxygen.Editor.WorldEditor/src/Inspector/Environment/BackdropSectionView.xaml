@@ -165,6 +165,20 @@
             </StackPanel>
             <StackPanel x:Name="ToneFields" Spacing="4">
                 <editorcontrols:InspectorNumberField
+                    x:Name="IlluminanceCard"
+                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                    EditSessionCompleted="NumberEditCompleted"
+                    EditSessionStarted="NumberEditStarted"
+                    ErrorText="{x:Bind ViewModel.IlluminanceDiagnostic.Message, Mode=OneWay}"
+                    FontSize="14"
+                    HasError="{x:Bind ViewModel.IlluminanceDiagnostic.HasError, Mode=OneWay}"
+                    Label="Illuminance"
+                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                    NumberValue="{x:Bind ViewModel.IlluminanceLux, Mode=TwoWay}"
+                    Qualifier="lux"
+                    Tag="SkySphereIlluminance"
+                    ToolTipService.ToolTip="Calibrates the sky to a physical brightness: the illuminance, in lux, it delivers on an upward-facing surface. The cubemap or color is scaled to deliver it, both for what the view shows and for the light a Sky Light set to Capture sky reads, so the sky matches a physical sun. HDR images rarely carry real units: a typical one delivers a few lux while a daylight sun delivers 25,000 to 100,000, so uncalibrated, auto exposure meters the dim sky and burns sunlit surfaces to white. Typical values: clear day 10,000 to 25,000; overcast 1,000 to 10,000; sunset 100 to 1,000; night below 1. 0 uses the image&apos;s own values. Only a float (HDR) cubemap can be measured: an LDR one stays uncalibrated, and the renderer warns." />
+                <editorcontrols:InspectorNumberField
                     x:Name="IntensityCard"
                     CardStyle="{StaticResource ScenePropertyCardStyle}"
                     EditSessionCompleted="NumberEditCompleted"
@@ -177,7 +191,7 @@
                     NumberValue="{x:Bind ViewModel.IntensityEv, Mode=TwoWay}"
                     Qualifier="EV"
                     Tag="SkySphereIntensity"
-                    ToolTipService.ToolTip="Brightness in exposure stops (EV). The radiance is multiplied by 2 to the power EV: EV 0 keeps the authored radiance, each +1 EV doubles it (EV +10 is 1024x) and each -1 EV halves it. The minimum, EV -16, is effectively off." />
+                    ToolTipService.ToolTip="Adjusts only what the view shows, in exposure stops (EV): the shown radiance is multiplied by 2 to the power EV, so EV 0 keeps the calibrated sky and each +1 EV doubles it. It never changes the light the sky casts; calibrate brightness with Illuminance. The minimum, EV -16, is effectively off." />
                 <fields:InspectorRgbField
                     x:Name="TintCard"
                     Blue="{x:Bind ViewModel.TintB, Mode=TwoWay}"

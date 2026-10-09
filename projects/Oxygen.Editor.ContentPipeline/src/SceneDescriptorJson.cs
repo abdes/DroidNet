@@ -201,6 +201,7 @@ internal sealed record NativeSkyLightEnvironment(
     [property: JsonPropertyName("enabled")] bool Enabled,
     [property: JsonPropertyName("source")] int Source,
     [property: JsonPropertyName("cubemap_ref")] string? CubemapRef,
+    [property: JsonPropertyName("illuminance_lux")] float IlluminanceLux,
     [property: JsonPropertyName("intensity")] float Intensity,
     [property: JsonPropertyName("tint_rgb")] float[] TintRgb,
     [property: JsonPropertyName("diffuse_intensity")] float DiffuseIntensity,
@@ -217,6 +218,7 @@ internal sealed record NativeSkySphereEnvironment(
     [property: JsonPropertyName("source")] int Source,
     [property: JsonPropertyName("cubemap_ref")] string? CubemapRef,
     [property: JsonPropertyName("solid_color_rgb")] float[] SolidColorRgb,
+    [property: JsonPropertyName("illuminance_lux")] float IlluminanceLux,
     [property: JsonPropertyName("intensity")] float Intensity,
     [property: JsonPropertyName("rotation_radians")] float RotationRadians,
     [property: JsonPropertyName("tint_rgb")] float[] TintRgb);

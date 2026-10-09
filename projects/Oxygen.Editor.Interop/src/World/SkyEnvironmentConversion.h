@@ -77,6 +77,7 @@ inline auto ToNativeSky(SkySphereEnvironmentManaged sphere,
   native_sphere.cubemap
     = detail::ToNativeCubemap(sphere.Cubemap, "A sky sphere cubemap");
   native_sphere.solid_color_rgb = detail::ToNativeVec3(sphere.SolidColorRgb);
+  native_sphere.illuminance_lux = sphere.IlluminanceLux;
   native_sphere.intensity = sphere.Intensity;
   native_sphere.rotation_radians = sphere.RotationRadians;
   native_sphere.tint_rgb = detail::ToNativeVec3(sphere.TintRgb);
@@ -86,6 +87,7 @@ inline auto ToNativeSky(SkySphereEnvironmentManaged sphere,
   native_light.source = light.Source;
   native_light.cubemap
     = detail::ToNativeCubemap(light.Cubemap, "A sky light cubemap");
+  native_light.illuminance_lux = light.CubemapIlluminanceLux;
   native_light.intensity = light.Intensity;
   native_light.tint_rgb = detail::ToNativeVec3(light.TintRgb);
   native_light.diffuse_intensity = light.DiffuseIntensity;
@@ -115,6 +117,7 @@ inline auto ToManagedSkySphere(
   result.Enabled = value.enabled;
   result.Source = value.source;
   result.SolidColorRgb = detail::ToManagedVec3(value.solid_color_rgb);
+  result.IlluminanceLux = value.illuminance_lux;
   result.Intensity = value.intensity;
   result.RotationRadians = value.rotation_radians;
   result.TintRgb = detail::ToManagedVec3(value.tint_rgb);
@@ -130,6 +133,7 @@ inline auto ToManagedSkyLight(
   SkyLightEnvironmentManaged result;
   result.Enabled = value.enabled;
   result.Source = value.source;
+  result.CubemapIlluminanceLux = value.illuminance_lux;
   result.Intensity = value.intensity;
   result.TintRgb = detail::ToManagedVec3(value.tint_rgb);
   result.DiffuseIntensity = value.diffuse_intensity;

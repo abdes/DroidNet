@@ -215,6 +215,11 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
         }
     }
 
+    /// <summary>Gets what the chosen format means for a cube texture, or an empty string.</summary>
+    public string FormatNote
+        => !this.isCube || this.format is "rgba16f" or "rgba32f" ? string.Empty
+            : "An LDR cube can only be displayed: a sky light needs rgba16f or rgba32f to light the scene.";
+
     /// <summary>Gets the inline validation failure.</summary>
     public string Error
     {

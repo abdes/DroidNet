@@ -22,6 +22,7 @@ public sealed class TextureImportDialogView : UserControl
     private readonly ComboBox intent;
     private readonly ComboBox colorSpace;
     private readonly ComboBox format;
+    private readonly TextBlock formatNote;
     private ContentDialog? dialog;
 
     /// <summary>Initializes the image import form for the reviewed request.</summary>
@@ -86,6 +87,8 @@ public sealed class TextureImportDialogView : UserControl
         var format = this.format;
         format.SelectionChanged += (_, _) => viewModel.Format = format.SelectedItem as string ?? string.Empty;
         content.Children.Add(format);
+        this.formatNote = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        content.Children.Add(this.formatNote);
 
         this.outputPath = new TextBlock { TextWrapping = TextWrapping.Wrap };
         this.errorText = new TextBlock { TextWrapping = TextWrapping.Wrap };
@@ -133,6 +136,8 @@ public sealed class TextureImportDialogView : UserControl
         this.cubeSettings.Visibility = this.viewModel.IsCube ? Visibility.Visible : Visibility.Collapsed;
         this.faceSize.Visibility = this.viewModel.IsPanorama ? Visibility.Visible : Visibility.Collapsed;
         this.detectedLayout.Text = this.viewModel.DetectedLayoutText;
+        this.formatNote.Text = this.viewModel.FormatNote;
+        this.formatNote.Visibility = this.viewModel.FormatNote.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
 
         // A shape change resets the defaults, which the combo boxes must show.
         this.intent.SelectedItem = this.viewModel.Intent;

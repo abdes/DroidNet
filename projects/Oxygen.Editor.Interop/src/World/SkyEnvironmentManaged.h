@@ -24,6 +24,8 @@ public value struct SkySphereEnvironmentManaged {
   int Source;
   CubemapReferenceManaged Cubemap;
   System::Numerics::Vector3 SolidColorRgb;
+  //! Calibrated upward illuminance in lux; zero keeps the imported radiance.
+  float IlluminanceLux;
   float Intensity;
   float RotationRadians;
   System::Numerics::Vector3 TintRgb;
@@ -35,6 +37,8 @@ public value struct SkyLightEnvironmentManaged {
   //! SkyLightSource: 0 captured scene, 1 specified cubemap.
   int Source;
   CubemapReferenceManaged Cubemap;
+  //! Calibrated upward illuminance of the cubemap in lux; zero keeps it raw.
+  float CubemapIlluminanceLux;
   float Intensity;
   System::Numerics::Vector3 TintRgb;
   float DiffuseIntensity;

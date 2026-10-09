@@ -661,6 +661,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             Enabled: authored.Enabled,
             Source: (int)authored.Source,
             CubemapRef: GetTexturePath(authored.ActiveCubemap),
+            IlluminanceLux: authored.CubemapIlluminanceLux,
             Intensity: authored.Intensity,
             TintRgb: ToArray(authored.TintRgb),
             DiffuseIntensity: authored.DiffuseIntensity,
@@ -678,6 +679,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             Source: (int)authored.Source,
             CubemapRef: GetTexturePath(authored.ActiveCubemap),
             SolidColorRgb: ToArray(authored.SolidColorRgb),
+            IlluminanceLux: authored.IlluminanceLux,
             Intensity: authored.Intensity,
             RotationRadians: authored.RotationRadians,
             TintRgb: ToArray(authored.TintRgb));

@@ -712,7 +712,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             _ => Enumerable.Empty<Oxygen.Editor.Controls.PropertiesExpander>(),
         }).ToArray();
         _ = sections.Select(section => section.Header).Should().Equal("Scene References", "Atmosphere Lights", "Backdrop", "Sky Atmosphere", "Sky Light", "Fog", "Exposure", "Tone Mapping", "Color Grading", "Bloom");
-        _ = sections.SelectMany(SceneCards).Should().HaveCount(96);
+        _ = sections.SelectMany(SceneCards).Should().HaveCount(98);
         _ = sections.Select(section => section.IsExpanded).Should().Equal(true, true, true, true, true, true, true, true, false, false);
         var sky = sections.Single(section => Equals(section.Header, "Sky Atmosphere"));
         var skyGroups = sky.Items.OfType<Expander>().ToArray();

@@ -35,6 +35,7 @@ public sealed partial class SkyLightSectionView
         registry.Field("SkyLightSource", this.SourceCard);
         registry.Field("SkyLightCubemap", this.CubemapCard);
         registry.Field("SkyLightCubemapAngle", this.CubemapAngleCard);
+        registry.Field("SkyLightCubemapIlluminance", this.CubemapIlluminanceCard);
         registry.Field("SkyLightIntensity", this.IntensityCard);
         registry.Field("SkyLightTint", this.TintCard);
         registry.Field("SkyLightDiffuse", this.DiffuseIntensityCard);

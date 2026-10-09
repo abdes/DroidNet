@@ -13,10 +13,10 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
 public sealed class InspectorSearchModelTests
 {
     [TestMethod]
-    public void Catalog_RegistersEveryScenePropertyAndAllNinetyOneCards()
+    public void Catalog_RegistersEveryScenePropertyAndAllNinetyThreeCards()
     {
         var model = EnvironmentFieldCatalog.Create();
-        _ = model.Fields.Should().HaveCount(91);
+        _ = model.Fields.Should().HaveCount(93);
         // The backdrop choice authors whether the atmosphere shows.
         _ = model.Fields.Values.Select(field => field.Property).Should().Contain(
             SceneDocumentCommandService.SceneEnvironment.ById.Keys.Where(static property => property != SceneDocumentCommandService.SceneEnvironment.AtmosphereEnabled.Id));
@@ -82,15 +82,19 @@ public sealed class InspectorSearchModelTests
         _ = model.IsGroupVisible("SkyAtmosphere").Should().BeFalse("the atmosphere is not the backdrop");
         _ = model.Fields["SkySphereCubemap"].IsVisible.Should().BeTrue();
         _ = model.Fields["SkySphereIntensity"].IsVisible.Should().BeTrue();
+        _ = model.Fields["SkySphereIlluminance"].IsVisible.Should().BeTrue("a cubemap backdrop is calibrated");
         _ = model.Fields["SolidColor"].IsVisible.Should().BeFalse();
         _ = model.Fields["SkyLightCubemap"].IsVisible.Should().BeFalse();
+        _ = model.Fields["SkyLightCubemapIlluminance"].IsVisible.Should().BeFalse();
 
         model.Update(string.Empty, InspectorPropertyScope.All, new(ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted, EnvironmentBackdrop.SolidColor, SolidColorLightsScene: false, SkyLightSource.SpecifiedCubemap));
 
         _ = model.Fields["SolidColor"].IsVisible.Should().BeTrue();
         _ = model.Fields["SkySphereIntensity"].IsVisible.Should().BeFalse("a display-only color has no sky sphere tone");
+        _ = model.Fields["SkySphereIlluminance"].IsVisible.Should().BeFalse("a display-only color lights nothing");
         _ = model.Fields["SkySphereCubemap"].IsVisible.Should().BeFalse();
         _ = model.Fields["SkyLightCubemap"].IsVisible.Should().BeTrue();
+        _ = model.Fields["SkyLightCubemapIlluminance"].IsVisible.Should().BeTrue();
     }
 
     [TestMethod]
@@ -138,7 +142,7 @@ public sealed class InspectorSearchModelTests
         _ = model.Fields.Values.Where(entry => entry.IsVisible).Should().HaveCount(27);
         _ = model.Fields.Values.Where(entry => entry.IsVisible).Should().OnlyContain(entry => entry.Scope == InspectorPropertyScope.PostProcessing);
         model.Update("environment", InspectorPropertyScope.All, new(ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.None));
-        _ = model.Fields.Values.Where(entry => entry.IsVisible).Should().HaveCount(64);
+        _ = model.Fields.Values.Where(entry => entry.IsVisible).Should().HaveCount(66);
     }
 
     [TestMethod]

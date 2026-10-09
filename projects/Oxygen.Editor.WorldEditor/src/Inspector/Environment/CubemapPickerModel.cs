@@ -22,7 +22,7 @@ namespace Oxygen.Editor.World.Inspector.Environment;
 /// </remarks>
 public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
 {
-    private readonly IObservable<IReadOnlyList<ContentBrowserAssetItem>>? cubeTextures;
+    private readonly IObservable<IReadOnlyList<CubeTextureAsset>>? cubeTextures;
     private readonly IScheduler observerScheduler;
     private IDisposable? assetSubscription;
     private bool disposed;
@@ -30,7 +30,7 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
     /// <summary>Initializes a new instance of the <see cref="CubemapPickerModel"/> class.</summary>
     /// <param name="cubeTextures">The shared <see cref="CubeTextures"/> feed, or null when no catalog is available.</param>
     /// <param name="observerScheduler">The scheduler that delivers catalog updates to the view.</param>
-    internal CubemapPickerModel(IObservable<IReadOnlyList<ContentBrowserAssetItem>>? cubeTextures, IScheduler observerScheduler)
+    internal CubemapPickerModel(IObservable<IReadOnlyList<CubeTextureAsset>>? cubeTextures, IScheduler observerScheduler)
     {
         this.cubeTextures = cubeTextures;
         this.observerScheduler = observerScheduler;
@@ -76,12 +76,14 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
     /// </summary>
     /// <param name="assetProvider">The shared content catalog, or null when none is available.</param>
     /// <returns>The shared feed, or null without a catalog.</returns>
-    internal static IObservable<IReadOnlyList<ContentBrowserAssetItem>>? CubeTextures(IContentBrowserAssetProvider? assetProvider)
+    internal static IObservable<IReadOnlyList<CubeTextureAsset>>? CubeTextures(IContentBrowserAssetProvider? assetProvider)
         => assetProvider?.Items
-            .Select(static assets => (IReadOnlyList<ContentBrowserAssetItem>)assets
-                .Where(static asset => asset.Kind == AssetKind.Texture && !asset.IsBuiltin
-                    && asset.DescriptorPath is { } descriptor && TextureSourceAssetImporter.IsCubeDescriptor(descriptor))
-                .OrderBy(static asset => asset.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .Select(static assets => (IReadOnlyList<CubeTextureAsset>)assets
+                .Where(static asset => asset.Kind == AssetKind.Texture && !asset.IsBuiltin && asset.DescriptorPath is not null)
+                .Select(static asset => (Asset: asset, Cube: TextureSourceAssetImporter.ReadCubeDescriptor(asset.DescriptorPath!)))
+                .Where(static entry => entry.Cube is not null)
+                .Select(static entry => new CubeTextureAsset(entry.Asset, entry.Cube!.Value.StoresRadiance))
+                .OrderBy(static entry => entry.Asset.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ToArray())
             .Replay(1)
             .RefCount();
@@ -99,14 +101,14 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
 
     partial void OnSearchTextChanged(string value) => this.OnPropertyChanged(nameof(this.FilteredRows));
 
-    private void UpdateRows(IReadOnlyList<ContentBrowserAssetItem> cubemaps)
+    private void UpdateRows(IReadOnlyList<CubeTextureAsset> cubemaps)
     {
         if (this.disposed)
         {
             return;
         }
 
-        var wanted = cubemaps.Select(static asset => asset.IdentityUri.AbsoluteUri).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var wanted = cubemaps.Select(static entry => entry.Asset.IdentityUri.AbsoluteUri).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var removed in this.Rows.Where(row => !wanted.Contains(row.Item.Uri.AbsoluteUri)).ToArray())
         {
             _ = this.Rows.Remove(removed);
@@ -114,8 +116,10 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
 
         for (var index = 0; index < cubemaps.Count; index++)
         {
-            var asset = cubemaps[index];
-            var item = new AssetPickerItem(asset.DisplayName, asset.IdentityUri, "Cube texture · " + asset.PrimaryBadge, asset.DisplayPath, AssetPickerGroup.Content, asset.IsSelectable, "");
+            var (asset, storesRadiance) = cubemaps[index];
+            // Lighting accepts only float radiance; an LDR cube can still be shown.
+            var kind = storesRadiance ? "Cube texture · " : "LDR cube texture, display only · ";
+            var item = new AssetPickerItem(asset.DisplayName, asset.IdentityUri, kind + asset.PrimaryBadge, asset.DisplayPath, AssetPickerGroup.Content, asset.IsSelectable, "");
             var row = this.Rows.FirstOrDefault(candidate => candidate.Item.Uri == asset.IdentityUri);
             if (row is null)
             {

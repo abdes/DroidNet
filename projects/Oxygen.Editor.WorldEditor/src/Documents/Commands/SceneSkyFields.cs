@@ -53,6 +53,9 @@ internal static class SceneSkyFields
     /// <summary>Gets the property for the sky sphere cubemap.</summary>
     internal static PropertyId<Uri?> SkySphereCubemap { get; } = Id<Uri?>("/sky_sphere/cubemap");
 
+    /// <summary>Gets the property for the illuminance, in lux, the sky is calibrated to deliver; 0 keeps it raw.</summary>
+    internal static PropertyId<float> SkySphereIlluminanceLux { get; } = Id<float>("/sky_sphere/illuminance_lux");
+
     /// <summary>Gets the property for the sky sphere radiance multiplier.</summary>
     internal static PropertyId<float> SkySphereIntensity { get; } = Id<float>("/sky_sphere/intensity");
 
@@ -70,6 +73,9 @@ internal static class SceneSkyFields
 
     /// <summary>Gets the property for the sky light cubemap.</summary>
     internal static PropertyId<Uri?> SkyLightCubemap { get; } = Id<Uri?>("/sky_light/cubemap");
+
+    /// <summary>Gets the property for the illuminance, in lux, the sky light cubemap is calibrated to deliver; 0 keeps it raw.</summary>
+    internal static PropertyId<float> SkyLightCubemapIlluminanceLux { get; } = Id<float>("/sky_light/cubemap_illuminance_lux");
 
     /// <summary>Gets the property for the sky light multiplier.</summary>
     internal static PropertyId<float> SkyLightIntensity { get; } = Id<float>("/sky_light/intensity");
@@ -138,6 +144,7 @@ internal static class SceneSkyFields
         descriptors.Add(Environment(SolidColor, SolidColorOf, WriteSolidColor, value => ValidateVector("Solid color", 0f, null, value), "color-rgb"));
 
         descriptors.Add(Sphere(SkySphereCubemap, static s => s.Cubemap, static (s, v) => s with { Cubemap = v }, static value => ValidateAssetUri("Sky sphere cubemap", value), "asset-picker"));
+        descriptors.Add(Sphere(SkySphereIlluminanceLux, static s => s.IlluminanceLux, static (s, v) => s with { IlluminanceLux = v }, static value => ValidateFloat("Sky illuminance", 0f, null, value), "numberbox"));
         descriptors.Add(Sphere(SkySphereIntensity, static s => s.Intensity, static (s, v) => s with { Intensity = v }, static value => ValidateFloat("Sky sphere intensity", 0f, null, value), "numberbox"));
         descriptors.Add(Sphere(SkySphereRotationRadians, static s => s.RotationRadians, static (s, v) => s with { RotationRadians = v }, static value => ValidateFloat("Sky sphere rotation", null, null, value), "numberbox"));
         descriptors.Add(Sphere(SkySphereTintRgb, static s => s.TintRgb, static (s, v) => s with { TintRgb = v }, static value => ValidateVector("Sky sphere tint", 0f, null, value), "color-rgb"));
@@ -152,6 +159,7 @@ internal static class SceneSkyFields
                 : ValidationResult.Fail(SceneDiagnosticCodes.EnvironmentSkyInvalid, "Sky light source is not valid."),
             "segmented"));
         descriptors.Add(Light(SkyLightCubemap, static s => s.Cubemap, static (s, v) => s with { Cubemap = v }, static value => ValidateAssetUri("Sky light cubemap", value), "asset-picker"));
+        descriptors.Add(Light(SkyLightCubemapIlluminanceLux, static s => s.CubemapIlluminanceLux, static (s, v) => s with { CubemapIlluminanceLux = v }, static value => ValidateFloat("Sky light cubemap illuminance", 0f, null, value), "numberbox"));
         descriptors.Add(Light(SkyLightIntensity, static s => s.Intensity, static (s, v) => s with { Intensity = v }, static value => ValidateFloat("Sky light intensity", 0f, null, value), "numberbox"));
         descriptors.Add(Light(SkyLightTintRgb, static s => s.TintRgb, static (s, v) => s with { TintRgb = v }, static value => ValidateVector("Sky light tint", 0f, null, value), "color-rgb"));
         descriptors.Add(Light(SkyLightDiffuseIntensity, static s => s.DiffuseIntensity, static (s, v) => s with { DiffuseIntensity = v }, static value => ValidateFloat("Sky light diffuse", 0f, null, value), "numberbox"));
@@ -173,6 +181,7 @@ internal static class SceneSkyFields
             Enum.IsDefined(value.Source) ? ValidationResult.Ok : ValidationResult.Fail(SceneDiagnosticCodes.EnvironmentSkyInvalid, "Sky sphere source is not valid."),
             ValidateAssetUri("Sky sphere cubemap", value.Cubemap),
             ValidateVector("Solid color", 0f, null, value.SolidColorRgb),
+            ValidateFloat("Sky illuminance", 0f, null, value.IlluminanceLux),
             ValidateFloat("Sky sphere intensity", 0f, null, value.Intensity),
             ValidateFloat("Sky sphere rotation", null, null, value.RotationRadians),
             ValidateVector("Sky sphere tint", 0f, null, value.TintRgb),
@@ -186,6 +195,7 @@ internal static class SceneSkyFields
         {
             Enum.IsDefined(value.Source) ? ValidationResult.Ok : ValidationResult.Fail(SceneDiagnosticCodes.EnvironmentSkyInvalid, "Sky light source is not valid."),
             ValidateAssetUri("Sky light cubemap", value.Cubemap),
+            ValidateFloat("Sky light cubemap illuminance", 0f, null, value.CubemapIlluminanceLux),
             ValidateFloat("Sky light intensity", 0f, null, value.Intensity),
             ValidateVector("Sky light tint", 0f, null, value.TintRgb),
             ValidateFloat("Sky light diffuse", 0f, null, value.DiffuseIntensity),
@@ -213,6 +223,7 @@ internal static class SceneSkyFields
         {
             "cubemap" => "cubemap_ref",
             "cubemap_angle_radians" => "source_cubemap_angle_radians",
+            "cubemap_illuminance_lux" => "illuminance_lux",
             _ => key,
         };
 

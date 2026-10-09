@@ -125,6 +125,20 @@
                     NumberValue="{x:Bind ViewModel.CubemapAngleDegrees, Mode=TwoWay}"
                     Qualifier="°"
                     Tag="SkyLightCubemapAngle" />
+                <editorcontrols:InspectorNumberField
+                    x:Name="CubemapIlluminanceCard"
+                    CardStyle="{StaticResource ScenePropertyCardStyle}"
+                    EditSessionCompleted="NumberEditCompleted"
+                    EditSessionStarted="NumberEditStarted"
+                    ErrorText="{x:Bind ViewModel.CubemapIlluminanceDiagnostic.Message, Mode=OneWay}"
+                    FontSize="14"
+                    HasError="{x:Bind ViewModel.CubemapIlluminanceDiagnostic.HasError, Mode=OneWay}"
+                    Label="Illuminance"
+                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                    NumberValue="{x:Bind ViewModel.CubemapIlluminanceLux, Mode=TwoWay}"
+                    Qualifier="lux"
+                    Tag="SkyLightCubemapIlluminance"
+                    ToolTipService.ToolTip="Calibrates the cubemap to a physical brightness: the illuminance, in lux, it delivers on an upward-facing surface. Its radiance is scaled to deliver it before Intensity, Tint, Diffuse and Specular apply. Typical values: clear day 10,000 to 25,000; overcast 1,000 to 10,000. 0 uses the image&apos;s own values. Capture sky uses the Backdrop&apos;s Illuminance instead. Only a float (HDR) cubemap can be measured and light the scene." />
             </StackPanel>
             <editorcontrols:InspectorNumberField
                 x:Name="IntensityCard"
@@ -139,7 +153,7 @@
                 NumberValue="{x:Bind ViewModel.IntensityEv, Mode=TwoWay}"
                 Qualifier="EV"
                 Tag="SkyLightIntensity"
-                ToolTipService.ToolTip="Brightness in exposure stops (EV). The radiance is multiplied by 2 to the power EV: EV 0 keeps the authored radiance, each +1 EV doubles it (EV +10 is 1024x) and each -1 EV halves it. The minimum, EV -16, is effectively off." />
+                ToolTipService.ToolTip="Scales the sky light&apos;s diffuse and specular lighting, in exposure stops (EV): EV 0 lights with the sky&apos;s calibrated radiance and each +1 EV doubles it. To match a physical sun, calibrate the source with Illuminance rather than raising this. The minimum, EV -16, is effectively off." />
             <fields:InspectorRgbField
                 x:Name="TintCard"
                 Blue="{x:Bind ViewModel.TintB, Mode=TwoWay}"

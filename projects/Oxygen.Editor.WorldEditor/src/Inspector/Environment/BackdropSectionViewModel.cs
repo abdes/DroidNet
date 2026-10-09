@@ -5,7 +5,6 @@
 using System.Numerics;
 using System.Reactive.Concurrency;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
@@ -24,7 +23,7 @@ public sealed partial class BackdropSectionViewModel : ObservableObject, IDispos
     /// <param name="owner">The borrowed scene edit lifetime.</param>
     /// <param name="cubeTextures">The inspector's shared cube texture feed.</param>
     /// <param name="observerScheduler">The catalog notification scheduler.</param>
-    internal BackdropSectionViewModel(SceneEnvironmentEditOwner owner, IObservable<IReadOnlyList<ContentBrowserAssetItem>>? cubeTextures, IScheduler observerScheduler)
+    internal BackdropSectionViewModel(SceneEnvironmentEditOwner owner, IObservable<IReadOnlyList<CubeTextureAsset>>? cubeTextures, IScheduler observerScheduler)
     {
         this.EditOwner = owner;
         this.Cubemaps = new(cubeTextures, observerScheduler);
@@ -62,7 +61,11 @@ public sealed partial class BackdropSectionViewModel : ObservableObject, IDispos
     [ObservableProperty]
     public partial float RotationDegrees { get; set; }
 
-    /// <summary>Gets or sets the sky sphere brightness, in exposure stops over its authored radiance.</summary>
+    /// <summary>Gets or sets the illuminance, in lux, the sky is calibrated to deliver; 0 keeps it raw.</summary>
+    [ObservableProperty]
+    public partial float IlluminanceLux { get; set; }
+
+    /// <summary>Gets or sets the sky sphere display brightness, in exposure stops over its calibrated radiance.</summary>
     [ObservableProperty]
     public partial float IntensityEv { get; set; }
 
@@ -117,6 +120,9 @@ public sealed partial class BackdropSectionViewModel : ObservableObject, IDispos
     /// <summary>Gets intensity feedback.</summary>
     public InspectorFieldDiagnostic IntensityDiagnostic => this.Diagnostic(SceneSkyFields.SkySphereIntensity.Id);
 
+    /// <summary>Gets the sky illuminance diagnostic.</summary>
+    public InspectorFieldDiagnostic IlluminanceDiagnostic => this.Diagnostic(SceneSkyFields.SkySphereIlluminanceLux.Id);
+
     /// <summary>Gets tint feedback.</summary>
     public InspectorFieldDiagnostic TintDiagnostic => this.Diagnostic(SceneSkyFields.SkySphereTintRgb.Id);
 
@@ -162,6 +168,7 @@ public sealed partial class BackdropSectionViewModel : ObservableObject, IDispos
         this.SolidColorB = color.Z;
         this.Cubemap = value.SkySphere.Cubemap;
         this.RotationDegrees = float.RadiansToDegrees(value.SkySphere.RotationRadians);
+        this.IlluminanceLux = value.SkySphere.IlluminanceLux;
         this.IntensityEv = RadianceExposure.ToEv(value.SkySphere.Intensity);
         this.TintR = value.SkySphere.TintRgb.X;
         this.TintG = value.SkySphere.TintRgb.Y;
@@ -198,6 +205,8 @@ public sealed partial class BackdropSectionViewModel : ObservableObject, IDispos
     }
 
     partial void OnRotationDegreesChanged(float value) => this.EditOwner.Apply(SceneSkyFields.SkySphereRotationRadians, float.DegreesToRadians(value));
+
+    partial void OnIlluminanceLuxChanged(float value) => this.EditOwner.Apply(SceneSkyFields.SkySphereIlluminanceLux, value);
 
     partial void OnIntensityEvChanged(float value) => this.EditOwner.Apply(SceneSkyFields.SkySphereIntensity, RadianceExposure.ToScale(value));
 
