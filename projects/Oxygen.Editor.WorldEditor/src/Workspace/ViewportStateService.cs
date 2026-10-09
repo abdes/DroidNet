@@ -107,7 +107,6 @@ public sealed partial class ViewportStateService(
             && scene.FocusedPane >= 0
             && panes.All(static pane => pane is not null
                 && Enum.IsDefined(pane.CameraType)
-                && Enum.IsDefined(pane.ControlMode)
                 && Enum.IsDefined(pane.ViewMode)
                 && pane.EditorCamera?.IsFinite() != false);
 

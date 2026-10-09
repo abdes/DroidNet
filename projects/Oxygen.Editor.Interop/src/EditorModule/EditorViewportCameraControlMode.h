@@ -9,16 +9,14 @@
 
 namespace oxygen::interop::module {
 
-  //! Editor viewport camera navigation modes.
+  //! Editor viewport camera orbit styles. Holding the right mouse button flies
+  //! the perspective camera in either style.
   enum class EditorViewportCameraControlMode {
     //! World-up orbit around the view focus point.
     kOrbitTurntable = 0,
 
     //! Free trackball orbit around the view focus point.
     kOrbitTrackball,
-
-    //! Right-mouse free-fly camera movement.
-    kFly,
   };
 
 } // namespace oxygen::interop::module

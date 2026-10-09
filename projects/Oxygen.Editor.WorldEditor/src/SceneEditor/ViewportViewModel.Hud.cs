@@ -18,9 +18,8 @@ namespace Oxygen.Editor.LevelEditor;
 /// </summary>
 public partial class ViewportViewModel
 {
-    private const string OrbitGestureHint = "Alt+drag orbit · Alt+middle-drag pan · Alt+right-drag dolly · wheel zoom";
-    private const string FlyGestureHint = "Right-drag look · WASD move · Q/E down/up · Shift faster";
-    private const string OrthographicGestureHint = "Alt+middle-drag pan · wheel zoom";
+    private const string PerspectiveGestureHint = "Alt+drag orbit · middle-drag pan · Alt+right-drag dolly · wheel zoom · right-drag + WASD fly";
+    private const string OrthographicGestureHint = "Middle-drag pan · wheel zoom";
 
     private static readonly (ViewportViewMode Mode, string Label, string? Description)[] ViewModeValues =
     [
@@ -87,7 +86,7 @@ public partial class ViewportViewModel
         ? $"Looking through {camera.Name} · pilot it to move it"
         : this.SceneCamera is null && this.CameraType != CameraType.Perspective
             ? OrthographicGestureHint
-            : this.CameraControlMode == CameraControlMode.Fly ? FlyGestureHint : OrbitGestureHint;
+            : PerspectiveGestureHint;
 
     /// <summary>
     /// Gets a value indicating whether the navigation hint shows: on the focused pane, until the

@@ -21,7 +21,9 @@ namespace oxygen::engine {
 
 namespace oxygen::interop::module {
 
-  //! Free-fly camera navigation (RMB + mouse look, WASD/QE move).
+  //! Free-fly perspective navigation in every orbit style: holding RMB looks
+  //! with the mouse and moves with WASD/QE; the arrow keys move without RMB.
+  //! The orbit focus point travels with the camera at its kept distance.
   class EditorViewportFlyFeature final : public IEditorViewportNavigationFeature {
   public:
     EditorViewportFlyFeature() = default;
@@ -45,6 +47,10 @@ namespace oxygen::interop::module {
     std::shared_ptr<oxygen::input::Action> d_action_;
     std::shared_ptr<oxygen::input::Action> q_action_;
     std::shared_ptr<oxygen::input::Action> e_action_;
+    std::shared_ptr<oxygen::input::Action> up_arrow_action_;
+    std::shared_ptr<oxygen::input::Action> down_arrow_action_;
+    std::shared_ptr<oxygen::input::Action> left_arrow_action_;
+    std::shared_ptr<oxygen::input::Action> right_arrow_action_;
     std::shared_ptr<oxygen::input::Action> shift_action_;
   };
 

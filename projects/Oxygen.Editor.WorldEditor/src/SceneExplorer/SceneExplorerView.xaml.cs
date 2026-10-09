@@ -83,6 +83,7 @@ public sealed partial class SceneExplorerView
         if (this.subscribedViewModel is { } model)
         {
             model.RenameRequested += this.ViewModel_RenameRequested;
+            model.FindRequested += this.ViewModel_FindRequested;
             model.ContextMenuInvalidated += this.ViewModel_ContextMenuInvalidated;
         }
     }
@@ -93,6 +94,7 @@ public sealed partial class SceneExplorerView
         if (this.subscribedViewModel is { } model)
         {
             model.RenameRequested -= this.ViewModel_RenameRequested;
+            model.FindRequested -= this.ViewModel_FindRequested;
             model.ContextMenuInvalidated -= this.ViewModel_ContextMenuInvalidated;
         }
 
@@ -201,6 +203,12 @@ public sealed partial class SceneExplorerView
         {
             _ = await this.ExplorerTree.BeginRenameAsync(item).ConfigureAwait(true);
         }
+    }
+
+    private void ViewModel_FindRequested(object? sender, EventArgs args)
+    {
+        this.CloseContextMenu();
+        _ = this.SearchBox.Focus(FocusState.Keyboard);
     }
 
     private bool ShouldConsumeWorkspaceAccelerator()

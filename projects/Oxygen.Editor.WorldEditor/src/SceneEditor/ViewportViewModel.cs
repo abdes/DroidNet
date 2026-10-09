@@ -32,7 +32,6 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     [
         CameraControlMode.OrbitTurntable,
         CameraControlMode.OrbitTrackball,
-        CameraControlMode.Fly,
     ];
 
     // Display order of the orthographic grid: three rows of opposite pairs read left to right.
@@ -111,7 +110,6 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         [
             new ViewportOption("Turntable", "Orbit with a level horizon", () => this.ApplyPerspectiveCameraModeAsync(CameraControlMode.OrbitTurntable)),
             new ViewportOption("Trackball", "Orbit freely, including roll", () => this.ApplyPerspectiveCameraModeAsync(CameraControlMode.OrbitTrackball)),
-            new ViewportOption("Fly", "Move through the scene", () => this.ApplyPerspectiveCameraModeAsync(CameraControlMode.Fly)),
         ];
         this.OrthographicViews = [.. OrthographicViewValues.Select(type => new ViewportOption(type.ToString(), description: null, () => this.ApplyOrthographicCameraPresetAsync(type)))];
         this.ViewModeGroups = BuildViewModeGroups(this.ApplyViewModeAsync);
@@ -248,12 +246,17 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     {
         CameraControlMode.OrbitTurntable => "Turntable",
         CameraControlMode.OrbitTrackball => "Trackball",
-        CameraControlMode.Fly => "Fly",
         _ => "Camera",
     };
 
     /// <summary>Gets a value indicating whether the pane shows the scene through its perspective editor camera.</summary>
     public bool IsPerspectiveView => this.SceneCamera is null && this.CameraType == CameraType.Perspective;
+
+    /// <summary>
+    /// Gets a value indicating whether holding the right button flies this pane's camera: its
+    /// perspective editor camera, or a scene camera it pilots. Orthographic views do not fly.
+    /// </summary>
+    public bool CanFly => this.SceneCamera is null ? this.CameraType == CameraType.Perspective : this.IsPilotingSceneCamera;
 
     /// <summary>Gets a value indicating whether the viewed scene camera can be piloted, or piloting stopped.</summary>
     public bool CanPilot => this.SceneCamera is { } camera && (this.IsPilotingSceneCamera || !this.IsLocked(camera.NodeId));
@@ -595,6 +598,24 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         => await this.ApplyCameraControlModeAsync(this.CameraControlMode).ConfigureAwait(true);
 
     /// <summary>
+    /// Scales the fly speed by wheel ticks while flying: each tick up is 25% faster, each tick down
+    /// as much slower, within the speed field's bounds. The pane shows the new speed.
+    /// </summary>
+    /// <param name="ticks">The wheel ticks, positive away from the user.</param>
+    internal void StepFlySpeed(float ticks)
+    {
+        const float StepFactor = 1.25f;
+
+        // The speed field itself is unbounded; the wheel stops at a speed that stays finite.
+        const float MaximumWheelSpeed = 10000.0f;
+        this.MovementSpeed = Math.Clamp(
+            this.MovementSpeed * MathF.Pow(StepFactor, ticks),
+            this.MovementSpeedField.Minimum,
+            Math.Min(this.MovementSpeedField.Maximum, MaximumWheelSpeed));
+        this.ShowNotice(string.Create(CultureInfo.InvariantCulture, $"Fly speed {this.MovementSpeed:0.#} m/s"));
+    }
+
+    /// <summary>
     /// Applies the current editor camera numeric settings to the native view, when available.
     /// </summary>
     /// <returns>A task that completes when the settings have been submitted.</returns>
@@ -689,14 +710,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     }
 
     private async Task ApplyOrthographicCameraPresetAsync(CameraType type)
-    {
-        if (this.CameraControlMode == CameraControlMode.Fly)
-        {
-            await this.ApplyCameraControlModeAsync(CameraControlMode.OrbitTurntable).ConfigureAwait(true);
-        }
-
-        await this.ApplyCameraPresetAsync(type).ConfigureAwait(true);
-    }
+        => await this.ApplyCameraPresetAsync(type).ConfigureAwait(true);
 
     private async Task ApplyCameraPresetAsync(CameraType type)
     {

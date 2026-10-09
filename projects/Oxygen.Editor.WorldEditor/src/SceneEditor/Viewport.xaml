@@ -397,7 +397,7 @@
                                     Style="{StaticResource FlyoutFieldLabelStyle}"
                                     Text="m/s" />
                             </Grid>
-                            <TextBlock Style="{StaticResource FlyoutHintStyle}" Text="Fly: right-drag to look, WASD to move, Q/E down and up, Shift for speed." />
+                            <TextBlock Style="{StaticResource FlyoutHintStyle}" Text="Hold the right button to fly: drag to look, WASD to move, Q/E down and up, Shift faster, wheel sets the speed." />
 
                             <StackPanel Visibility="{x:Bind ViewModel.IsPerspectiveView, Mode=OneWay}">
                                 <TextBlock Style="{StaticResource FlyoutSectionHeaderStyle}" Text="Lens" />

@@ -68,7 +68,7 @@ namespace oxygen::interop::module {
 
   auto EditorViewportPanFeature::Apply(scene::SceneNode camera_node,
     const input::InputSnapshot& input_snapshot,
-    EditorViewportCameraControlMode control_mode,
+    EditorViewportCameraControlMode /*control_mode*/,
     glm::vec3& focus_point,
     float& /*ortho_half_height*/,
     float /*movement_speed_units_per_second*/,
@@ -77,19 +77,14 @@ namespace oxygen::interop::module {
       return;
     }
 
-    if (control_mode == EditorViewportCameraControlMode::kFly) {
-      return;
-    }
-
     const PanParams params{};
 
     static std::unordered_map<scene::NodeHandle, PanState> pan_states;
     auto& state = GetOrInitPanState(pan_states, camera_node);
 
-    const bool alt_held = input_snapshot.IsActionOngoing("Editor.Modifier.Alt");
-    const bool mmb_held =
-      input_snapshot.IsActionOngoing("Editor.Mouse.MiddleButton");
-    const bool active = alt_held && mmb_held;
+    // A middle drag pans, with or without Alt.
+    const bool active
+      = input_snapshot.IsActionOngoing("Editor.Mouse.MiddleButton");
     if (!active) {
       state.was_active = false;
       return;

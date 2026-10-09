@@ -218,6 +218,55 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         }
     }
 
+    /// <summary>
+    /// Whether the engine's viewport navigation uses the key without the right button: the arrow
+    /// keys move the camera and Home resets the view. The pane consumes them so they never move
+    /// keyboard focus out of the pane.
+    /// </summary>
+    private static bool IsPaneNavigationKey(VirtualKey key)
+        => key is VirtualKey.Up or VirtualKey.Down or VirtualKey.Left or VirtualKey.Right or VirtualKey.Home;
+
+    private static bool IsKeyDown(VirtualKey key)
+        => InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
+
+    /// <summary>
+    /// Whether the right button flies the pane's camera: a flying camera, with Alt up since
+    /// Alt+right drag dollies.
+    /// </summary>
+    private static bool IsFlying(ViewportViewModel viewModel, bool rightButtonDown)
+        => rightButtonDown && viewModel.CanFly && !IsKeyDown(VirtualKey.Menu);
+
+    /// <summary>
+    /// Handles the pane's history and deletion keys: Delete, Ctrl+Z and Ctrl+Y (or Ctrl+Shift+Z)
+    /// run the Scene Explorer's commands. Tool, frame and duplicate keys are editor-wide and run
+    /// from the workspace.
+    /// </summary>
+    /// <returns><see langword="true"/> when the key was handled and must not reach the engine.</returns>
+    private static bool TryHandleEditKey(ViewportViewModel viewModel, KeyRoutedEventArgs e)
+    {
+        if (e.KeyStatus.RepeatCount > 1 || viewModel.IsGizmoDragging || IsKeyDown(VirtualKey.Menu))
+        {
+            return false;
+        }
+
+        var shift = IsKeyDown(VirtualKey.Shift);
+        ViewportEditCommand? command = IsKeyDown(VirtualKey.Control)
+            ? e.Key switch
+            {
+                VirtualKey.Z => shift ? ViewportEditCommand.Redo : ViewportEditCommand.Undo,
+                VirtualKey.Y when !shift => ViewportEditCommand.Redo,
+                _ => null,
+            }
+            : e.Key == VirtualKey.Delete ? ViewportEditCommand.Delete : null;
+        if (command is not { } edit)
+        {
+            return false;
+        }
+
+        _ = viewModel.RequestEditAsync(edit);
+        return true;
+    }
+
     private void DebugInputLog(string message)
     {
         if (!EnableInputDebugLogs)
@@ -954,110 +1003,27 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.MarqueeRectangle.Visibility = Visibility.Collapsed;
     }
 
-    /// <summary>Handles the pane's own keys: F frames the selection, Shift+F the whole scene, Escape cancels a marquee or clears the selection.</summary>
+    /// <summary>Handles Escape: it cancels a marquee or clears the selection.</summary>
     /// <returns><see langword="true"/> when the key was handled and must not reach the engine.</returns>
-    private bool TryHandleSelectionKey(ViewportViewModel viewModel, KeyRoutedEventArgs e)
+    private bool TryHandleEscapeKey(ViewportViewModel viewModel, KeyRoutedEventArgs e)
     {
-        if (e.Key == VirtualKey.Escape)
-        {
-            // Escape ends what is in progress first: the engine cancels a gizmo drag, then a
-            // marquee is dropped; with nothing in progress it clears the selection.
-            if (viewModel.IsGizmoDragging || e.KeyStatus.RepeatCount > 1)
-            {
-                return false;
-            }
-
-            if (this.selectionStart is not null)
-            {
-                this.CancelSelectionGesture();
-            }
-            else
-            {
-                viewModel.ClearSelection();
-            }
-
-            return true;
-        }
-
-        if (e.Key != VirtualKey.F || e.KeyStatus.RepeatCount > 1
-            || IsKeyDown(VirtualKey.Control) || IsKeyDown(VirtualKey.Menu))
+        // Escape ends what is in progress first: the engine cancels a gizmo drag, then a
+        // marquee is dropped; with nothing in progress it clears the selection.
+        if (e.Key != VirtualKey.Escape || viewModel.IsGizmoDragging || e.KeyStatus.RepeatCount > 1)
         {
             return false;
         }
 
-        _ = IsKeyDown(VirtualKey.Shift) ? viewModel.FrameAllAsync() : viewModel.FrameSelectionAsync();
+        if (this.selectionStart is not null)
+        {
+            this.CancelSelectionGesture();
+        }
+        else
+        {
+            viewModel.ClearSelection();
+        }
+
         return true;
-
-        static bool IsKeyDown(VirtualKey key)
-            => InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
-    }
-
-    /// <summary>
-    /// Handles the pane's editing keys: Q, W, E and R pick a tool and Space cycles them, unless the
-    /// right button flies the camera with WASD/QE; Delete, Ctrl+D, Ctrl+Z and Ctrl+Y edit the scene.
-    /// </summary>
-    /// <returns><see langword="true"/> when the key was handled and must not reach the engine.</returns>
-    private bool TryHandleToolKey(ViewportViewModel viewModel, KeyRoutedEventArgs e)
-    {
-        if (e.KeyStatus.RepeatCount > 1 || viewModel.IsGizmoDragging || IsKeyDown(VirtualKey.Menu))
-        {
-            return false;
-        }
-
-        var control = IsKeyDown(VirtualKey.Control);
-        var shift = IsKeyDown(VirtualKey.Shift);
-        if (control)
-        {
-            var command = e.Key switch
-            {
-                VirtualKey.D when !shift => ViewportEditCommand.Duplicate,
-                VirtualKey.Z => shift ? ViewportEditCommand.Redo : ViewportEditCommand.Undo,
-                VirtualKey.Y when !shift => ViewportEditCommand.Redo,
-                _ => (ViewportEditCommand?)null,
-            };
-            if (command is { } edit)
-            {
-                _ = viewModel.RequestEditAsync(edit);
-                return true;
-            }
-
-            return false;
-        }
-
-        if (e.Key == VirtualKey.Delete)
-        {
-            _ = viewModel.RequestEditAsync(ViewportEditCommand.Delete);
-            return true;
-        }
-
-        if (shift || this.isRightButtonDown || viewModel.TransformTools is not { } tools)
-        {
-            return false;
-        }
-
-        switch (e.Key)
-        {
-            case VirtualKey.Q:
-                tools.UseSelectToolCommand.Execute(parameter: null);
-                return true;
-            case VirtualKey.W:
-                tools.UseMoveToolCommand.Execute(parameter: null);
-                return true;
-            case VirtualKey.E:
-                tools.UseRotateToolCommand.Execute(parameter: null);
-                return true;
-            case VirtualKey.R:
-                tools.UseScaleToolCommand.Execute(parameter: null);
-                return true;
-            case VirtualKey.Space:
-                tools.CycleToolCommand.Execute(parameter: null);
-                return true;
-            default:
-                return false;
-        }
-
-        static bool IsKeyDown(VirtualKey key)
-            => InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
     }
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
@@ -1084,10 +1050,18 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             e.Handled = true;
         }
 
-        if (this.TryHandleSelectionKey(viewModel, e) || this.TryHandleToolKey(viewModel, e))
+        // While the right button flies, every key belongs to the flight, so WASD/QE never
+        // switch tools or run other shortcuts.
+        var flying = IsFlying(viewModel, this.isRightButtonDown);
+        if (!flying && (this.TryHandleEscapeKey(viewModel, e) || TryHandleEditKey(viewModel, e)))
         {
             e.Handled = true;
             return;
+        }
+
+        if (flying || IsPaneNavigationKey(e.Key))
+        {
+            e.Handled = true;
         }
 
         var translated = InputTranslation.TranslateKey((VirtualKey)e.Key);
@@ -1180,7 +1154,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.hasPointerPosition = true;
 
         this.BeginSelectionGesture(point, e.KeyModifiers);
-        this.isRightButtonDown = this.isRightButtonDown || point.Properties.PointerUpdateKind == PointerUpdateKind.RightButtonPressed;
+        this.isRightButtonDown = point.Properties.IsRightButtonPressed;
 
         var kind = point.Properties.PointerUpdateKind;
         if (!TryTranslateMouseButton(kind, out var button, out var pressed) || !pressed)
@@ -1233,10 +1207,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.hasPointerPosition = true;
 
         this.CompleteSelectionGesture(viewModel, point);
-        if (point.Properties.PointerUpdateKind == PointerUpdateKind.RightButtonReleased)
-        {
-            this.isRightButtonDown = false;
-        }
+        this.isRightButtonDown = point.Properties.IsRightButtonPressed;
 
         var kind = point.Properties.PointerUpdateKind;
         if (!TryTranslateMouseButton(kind, out var button, out var pressed))
@@ -1272,6 +1243,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.SyncAltKeyStateIfNeeded(viewModel, viewId);
 
         var point = e.GetCurrentPoint(this.SwapChainPanel);
+        this.isRightButtonDown = point.Properties.IsRightButtonPressed;
         this.UpdateSelectionGesture(point);
         var pos = new Vector2((float)point.Position.X, (float)point.Position.Y) * (float)(this.XamlRoot?.RasterizationScale ?? 1.0);
         var delta =this.hasPointerPosition ? (pos - this.lastPointerPosition) : Vector2.Zero;
@@ -1325,6 +1297,14 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         this.DebugWheelLog(
             string.Create(CultureInfo.InvariantCulture, $"rawDelta={rawDelta} ticks={ticks:0.00} pos=({pos.X:0.0},{pos.Y:0.0})"));
+
+        // While the right button flies, the wheel sets the fly speed instead of zooming.
+        if (IsFlying(viewModel, point.Properties.IsRightButtonPressed))
+        {
+            viewModel.StepFlySpeed(ticks);
+            e.Handled = true;
+            return;
+        }
 
         this.DebugInputLog(string.Create(CultureInfo.InvariantCulture, $"PointerWheelChanged: forwarding ticks={ticks:0.00}"));
         viewModel.ForwardInput(viewId, new RuntimeMouseWheelEvent(new Vector2(0.0f, (float)ticks), pos, DateTime.UtcNow));

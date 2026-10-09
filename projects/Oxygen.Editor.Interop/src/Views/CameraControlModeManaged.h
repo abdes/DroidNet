@@ -17,9 +17,6 @@ namespace Oxygen::Interop {
 
     /// <summary>Free trackball orbit around the viewport focus point.</summary>
     OrbitTrackball = 1,
-
-    /// <summary>Right-mouse free-fly camera movement.</summary>
-    Fly = 2,
   };
 
 } // namespace Oxygen::Interop

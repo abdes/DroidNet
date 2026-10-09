@@ -287,6 +287,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.messenger.Register<SceneLoadedMessage>(this, (r, m) => ((SceneEditorViewModel)r).OnSceneLoadedMessage(r, m));
         this.RegisterCameraMessages();
         this.RegisterSelectionMessages();
+        this.RegisterShortcutMessages();
         this.RegisterRelocationMessages();
     }
 

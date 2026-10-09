@@ -373,10 +373,15 @@ crash-prone mode does not qualify as supported.
 
 ### Navigation And Focus
 
-Preserve existing Turntable (default), Trackball and Fly modes. Alt+left drag
-orbits, Alt+middle drag pans, Alt+right drag dollies; wheel zooms; RMB mouse-look
-with WASD/QE moves in fly navigation; Home resets the view. These are the existing
-native EditorViewport navigation feature families. Focus/capture routes input
+The perspective camera orbits in the Turntable (default) or Trackball style.
+Alt+left drag orbits, a middle drag pans (with or without Alt), Alt+right drag
+dollies and the wheel zooms. Holding the right button flies in either style:
+the mouse looks, WASD moves, Q/E move down and up, Shift moves faster and the
+wheel sets the fly speed instead of zooming. WASD/QE move only while the right
+button is held, so the bare letters stay editor shortcuts; the arrow keys move
+the camera without it. Flying carries the orbit pivot along at its distance,
+so a later orbit turns around what the camera now faces. Home resets the view.
+These are the existing native EditorViewport navigation feature families. Focus/capture routes input
 only to the active viewport. Release capture and held keys on focus loss,
 document change, publication pause, cancellation and viewport destruction.
 Navigation never mutates authored camera components or adds scene undo entries,
@@ -458,11 +463,19 @@ views from the keyboard.
 ### Transform Tools
 
 The focused pane's left tool rail holds Select (Q), Move (W), Rotate (E) and
-Scale (R), then Frame (F); Space cycles the four tools. The keys apply unless
-RMB navigation holds them. Move is the default tool, so a selection shows its
-gizmo at once. With viewport focus, Delete, Ctrl+D (duplicate in place),
-Ctrl+Z and Ctrl+Y (or Ctrl+Shift+Z) run the Scene Explorer's commands for the
-document. Locked nodes, and the descendants of selected nodes, get no gizmo.
+Scale (R), then Frame (F). Move is the default tool, so a selection shows its
+gizmo at once. With viewport focus, Delete, Ctrl+Z and Ctrl+Y (or Ctrl+Shift+Z)
+run the Scene Explorer's commands for the document.
+
+Keys reach three layers in order. Text entry owns every key while it has
+focus. The focused pane then keeps its navigation keys: arrows, Home, End,
+Page Up and Down, Enter, Space and Escape. The workspace runs the editor-wide
+scene shortcuts for keys no pane handled, whichever pane has focus: Q, W, E
+and R pick the tool, F frames the selection and Shift+F the scene in the
+focused pane, Ctrl+D duplicates in place, F2 renames the selected node and
+Ctrl+F moves focus to the Scene Explorer's search box. The Explorer therefore
+has no type-ahead; its search box finds nodes. While the right button flies,
+the viewport consumes every key, so flying never switches tools. Locked nodes, and the descendants of selected nodes, get no gizmo.
 
 Provide World/Local space; default World. The pivot is the active
 (last-selected) node's origin and orientation for Local, and its world

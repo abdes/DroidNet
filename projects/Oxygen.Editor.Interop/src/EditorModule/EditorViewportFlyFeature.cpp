@@ -18,6 +18,7 @@
 #include <numbers>
 #include <unordered_map>
 
+#include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat4x4.hpp>
 
@@ -130,6 +131,14 @@ namespace oxygen::interop::module {
     d_action_ = std::make_shared<Action>("Editor.Fly.D", ActionValueType::kBool);
     q_action_ = std::make_shared<Action>("Editor.Fly.Q", ActionValueType::kBool);
     e_action_ = std::make_shared<Action>("Editor.Fly.E", ActionValueType::kBool);
+    up_arrow_action_
+      = std::make_shared<Action>("Editor.Fly.UpArrow", ActionValueType::kBool);
+    down_arrow_action_
+      = std::make_shared<Action>("Editor.Fly.DownArrow", ActionValueType::kBool);
+    left_arrow_action_
+      = std::make_shared<Action>("Editor.Fly.LeftArrow", ActionValueType::kBool);
+    right_arrow_action_ = std::make_shared<Action>(
+      "Editor.Fly.RightArrow", ActionValueType::kBool);
     shift_action_ =
       std::make_shared<Action>("Editor.Fly.Shift", ActionValueType::kBool);
 
@@ -139,6 +148,10 @@ namespace oxygen::interop::module {
     input_system.AddAction(d_action_);
     input_system.AddAction(q_action_);
     input_system.AddAction(e_action_);
+    input_system.AddAction(up_arrow_action_);
+    input_system.AddAction(down_arrow_action_);
+    input_system.AddAction(left_arrow_action_);
+    input_system.AddAction(right_arrow_action_);
     input_system.AddAction(shift_action_);
 
     const auto make_down = [] {
@@ -166,6 +179,10 @@ namespace oxygen::interop::module {
     add_key(d_action_, InputSlots::D);
     add_key(q_action_, InputSlots::Q);
     add_key(e_action_, InputSlots::E);
+    add_key(up_arrow_action_, InputSlots::UpArrow);
+    add_key(down_arrow_action_, InputSlots::DownArrow);
+    add_key(left_arrow_action_, InputSlots::LeftArrow);
+    add_key(right_arrow_action_, InputSlots::RightArrow);
 
     add_key(shift_action_, InputSlots::LeftShift);
     add_key(shift_action_, InputSlots::RightShift);
@@ -173,8 +190,8 @@ namespace oxygen::interop::module {
 
   auto EditorViewportFlyFeature::Apply(scene::SceneNode camera_node,
     const input::InputSnapshot& input_snapshot,
-    EditorViewportCameraControlMode control_mode,
-    glm::vec3& /*focus_point*/,
+    EditorViewportCameraControlMode /*control_mode*/,
+    glm::vec3& focus_point,
     float& /*ortho_half_height*/,
     float movement_speed_units_per_second,
     float dt_seconds) noexcept -> void {
@@ -186,17 +203,15 @@ namespace oxygen::interop::module {
       return;
     }
 
-    if (control_mode != EditorViewportCameraControlMode::kFly) {
-      return;
-    }
-
     if (dt_seconds <= 0.0f) {
       return;
     }
 
     const FlyParams params{};
 
-    // Fly is RMB (without Alt). Alt+RMB is reserved for dolly.
+    // Fly is RMB (without Alt) in every orbit style. Alt+RMB is reserved for
+    // dolly. WASD/QE move only while flying, so the bare letters stay editor
+    // shortcuts; the arrow keys move the camera without RMB.
     const bool rmb_held = input_snapshot.IsActionOngoing("Editor.Mouse.RightButton");
     const bool alt_held = input_snapshot.IsActionOngoing("Editor.Modifier.Alt");
     const bool look_active = rmb_held && !alt_held;
@@ -204,65 +219,80 @@ namespace oxygen::interop::module {
     static std::unordered_map<scene::NodeHandle, FlyState> fly_states;
     auto& state = GetOrInitFlyState(fly_states, camera_node);
 
+    // Outside a look, other navigation owns the orientation: follow it so a
+    // look starts from the current view.
     auto transform = camera_node.GetTransform();
-    if (!state.initialized || (look_active && !state.was_look_active)) {
+    if (!state.initialized || !look_active) {
       SyncStateFromTransform(state, transform, params);
-    }
-
-    if (!look_active) {
-      state.was_look_active = false;
-    }
-
-    const auto mouse_delta =
-      viewport::AccumulateAxis2DFromTransitionsOrZero(input_snapshot,
-        "Editor.Mouse.Delta");
-    const bool mouse_moved = (std::abs(mouse_delta.x) > 0.0f)
-      || (std::abs(mouse_delta.y) > 0.0f);
-
-    if (look_active && mouse_moved) {
-      state.yaw_radians += -mouse_delta.x * params.look_radians_per_pixel;
-      state.pitch_radians = ClampPitchRadians(params,
-        state.pitch_radians + (-mouse_delta.y * params.look_radians_per_pixel));
     }
     state.was_look_active = look_active;
 
-    const glm::quat applied_rot =
-      BuildOrientation(state.yaw_radians, state.pitch_radians, params.up);
-    (void)transform.SetLocalRotation(applied_rot);
+    bool rotated = false;
+    if (look_active) {
+      const auto mouse_delta =
+        viewport::AccumulateAxis2DFromTransitionsOrZero(input_snapshot,
+          "Editor.Mouse.Delta");
+      if ((std::abs(mouse_delta.x) > 0.0f) || (std::abs(mouse_delta.y) > 0.0f)) {
+        state.yaw_radians += -mouse_delta.x * params.look_radians_per_pixel;
+        state.pitch_radians = ClampPitchRadians(params,
+          state.pitch_radians + (-mouse_delta.y * params.look_radians_per_pixel));
+        rotated = true;
+      }
+    }
 
-    const bool w = input_snapshot.IsActionOngoing("Editor.Fly.W");
-    const bool a = input_snapshot.IsActionOngoing("Editor.Fly.A");
-    const bool s = input_snapshot.IsActionOngoing("Editor.Fly.S");
-    const bool d = input_snapshot.IsActionOngoing("Editor.Fly.D");
-    const bool q = input_snapshot.IsActionOngoing("Editor.Fly.Q");
-    const bool e = input_snapshot.IsActionOngoing("Editor.Fly.E");
+    const auto held = [&](const char* action) {
+      return input_snapshot.IsActionOngoing(action);
+    };
+    const bool fly_keys = look_active;
+    const float forward_axis
+      = BoolToAxis(fly_keys && held("Editor.Fly.W"), fly_keys && held("Editor.Fly.S"))
+      + BoolToAxis(held("Editor.Fly.UpArrow"), held("Editor.Fly.DownArrow"));
+    const float right_axis
+      = BoolToAxis(fly_keys && held("Editor.Fly.D"), fly_keys && held("Editor.Fly.A"))
+      + BoolToAxis(held("Editor.Fly.RightArrow"), held("Editor.Fly.LeftArrow"));
+    const float up_axis
+      = BoolToAxis(fly_keys && held("Editor.Fly.E"), fly_keys && held("Editor.Fly.Q"));
+    const bool moving = (std::abs(forward_axis) > 0.0f)
+      || (std::abs(right_axis) > 0.0f) || (std::abs(up_axis) > 0.0f);
 
-    const float forward_axis = BoolToAxis(w, s);
-    const float right_axis = BoolToAxis(d, a);
-    const float up_axis = BoolToAxis(e, q);
-
-    if ((std::abs(forward_axis) <= 0.0f) && (std::abs(right_axis) <= 0.0f)
-      && (std::abs(up_axis) <= 0.0f)) {
+    if (!rotated && !moving) {
       return;
     }
 
-    const bool fast = input_snapshot.IsActionOngoing("Editor.Fly.Shift");
-    const float base_speed = std::isfinite(movement_speed_units_per_second)
-      ? std::max(1.0f, movement_speed_units_per_second)
-      : params.base_speed_units_per_second;
-    const float speed = base_speed
-      * (fast ? params.fast_multiplier : 1.0f);
+    const glm::vec3 position
+      = transform.GetLocalPosition().value_or(glm::vec3 {});
+    const float focus_distance
+      = std::max(glm::length(focus_point - position), 0.1f);
+    // A look rebuilds a level orientation from yaw and pitch. Moving without
+    // looking keeps the camera's own rotation, which a trackball orbit may
+    // have rolled, so the keys move along what the view shows.
+    const glm::quat applied_rot = rotated
+      ? BuildOrientation(state.yaw_radians, state.pitch_radians, params.up)
+      : transform.GetLocalRotation().value_or(
+          glm::quat { 1.0f, 0.0f, 0.0f, 0.0f });
+    if (rotated) {
+      (void)transform.SetLocalRotation(applied_rot);
+    }
 
-    const glm::vec3 fly_right = applied_rot * glm::vec3(1.0f, 0.0f, 0.0f);
-    const glm::vec3 fly_forward = applied_rot * glm::vec3(0.0f, 0.0f, -1.0f);
+    glm::vec3 next_position = position;
+    if (moving) {
+      const float base_speed = std::isfinite(movement_speed_units_per_second)
+        ? std::max(1.0f, movement_speed_units_per_second)
+        : params.base_speed_units_per_second;
+      const float speed = base_speed
+        * (held("Editor.Fly.Shift") ? params.fast_multiplier : 1.0f);
+      const glm::vec3 fly_right = applied_rot * glm::vec3(1.0f, 0.0f, 0.0f);
+      const glm::vec3 fly_forward = applied_rot * glm::vec3(0.0f, 0.0f, -1.0f);
+      next_position += (fly_forward * forward_axis + fly_right * right_axis
+                         + params.up * up_axis)
+        * (speed * dt_seconds);
+      (void)transform.SetLocalPosition(next_position);
+    }
 
-    const glm::vec3 delta =
-      (fly_forward * forward_axis + fly_right * right_axis + params.up * up_axis)
-      * (speed * dt_seconds);
-
-    const glm::vec3 position =
-      transform.GetLocalPosition().value_or(glm::vec3{});
-    (void)transform.SetLocalPosition(position + delta);
+    // Keep the orbit pivot in front of the camera at its kept distance, so a
+    // later orbit turns around what the camera now looks at.
+    focus_point = next_position
+      + (applied_rot * glm::vec3(0.0f, 0.0f, -1.0f)) * focus_distance;
   }
 
 } // namespace oxygen::interop::module

@@ -51,6 +51,10 @@ public partial class DynamicTree
     public static readonly DependencyProperty RenameOnDoubleTapProperty = DependencyProperty.Register(
         nameof(RenameOnDoubleTap), typeof(bool), typeof(DynamicTree), new PropertyMetadata(defaultValue: true));
 
+    /// <summary>Identifies whether typed characters move focus to the next item whose label starts with them.</summary>
+    public static readonly DependencyProperty IsTypeAheadEnabledProperty = DependencyProperty.Register(
+        nameof(IsTypeAheadEnabled), typeof(bool), typeof(DynamicTree), new PropertyMetadata(defaultValue: true));
+
     /// <summary>Identifies the minimum height of each rendered item row.</summary>
     public static readonly DependencyProperty ItemRowHeightProperty = DependencyProperty.Register(
         nameof(ItemRowHeight), typeof(double), typeof(DynamicTree), new PropertyMetadata(32d, (d, _) => ((DynamicTree)d).UpdateItemLayoutForRealizedItems()));
@@ -169,6 +173,17 @@ public partial class DynamicTree
     {
         get => (TreeSelectionScope)this.GetValue(SelectionScopeProperty);
         set => this.SetValue(SelectionScopeProperty, value);
+    }
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether typed characters move focus to the next item whose
+    ///     label starts with them. When <see langword="false" />, unmodified character keys are left
+    ///     unhandled, so a host can bind them to its own commands.
+    /// </summary>
+    public bool IsTypeAheadEnabled
+    {
+        get => (bool)this.GetValue(IsTypeAheadEnabledProperty);
+        set => this.SetValue(IsTypeAheadEnabledProperty, value);
     }
 
     /// <summary>

@@ -202,12 +202,23 @@ public sealed class ViewportHudTests
         sut.NotifyNavigationInput(inputHeld: true);
         _ = sut.IsGestureHintVisible.Should().BeFalse();
 
-        sut.CameraControlMode = CameraControlMode.Fly;
+        sut.CameraControlMode = CameraControlMode.OrbitTrackball;
         _ = sut.IsGestureHintVisible.Should().BeTrue();
-        _ = sut.GestureHint.Should().StartWith("Right-drag look");
+        _ = sut.GestureHint.Should().EndWith("right-drag + WASD fly");
 
         sut.CameraType = CameraType.Top;
-        _ = sut.GestureHint.Should().Be("Alt+middle-drag pan · wheel zoom");
+        _ = sut.GestureHint.Should().Be("Middle-drag pan · wheel zoom");
+    }
+
+    [TestMethod]
+    public void RestoreState_ShouldRestoreTheFormerFlyModeAsTurntable()
+    {
+        using var sut = CreateViewport(new Mock<IEngineService>(MockBehavior.Loose).Object);
+        var formerFly = (CameraControlMode)2;
+
+        sut.RestoreState(new ViewportPaneState(CameraType.Perspective, formerFly, EditorCamera: null, SceneCameraId: null), sceneCamera: null);
+
+        _ = sut.CameraControlMode.Should().Be(CameraControlMode.OrbitTurntable);
     }
 
     [TestMethod]

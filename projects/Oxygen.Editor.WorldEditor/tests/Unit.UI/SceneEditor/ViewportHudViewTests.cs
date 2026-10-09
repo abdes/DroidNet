@@ -37,7 +37,7 @@ internal sealed class ViewportHudViewTests : DroidNet.Tests.VisualUserInterfaceT
             .Should().Equal("View camera", "View mode", "Show", "Move snap increment", "Rotate snap increment", "Scale snap increment");
 
         // Camera: three perspective modes and six orthographic directions.
-        await OpenAsync(dropDowns[0], content => _ = Texts(content).Should().Contain(["Turntable", "Trackball", "Fly", "Top", "Back", "Right", "Clipping"])).ConfigureAwait(true);
+        await OpenAsync(dropDowns[0], content => _ = Texts(content).Should().Contain(["Turntable", "Trackball", "Top", "Back", "Right", "Clipping"]).And.NotContain("Fly")).ConfigureAwait(true);
 
         // View mode: every mode, in its group.
         await OpenAsync(dropDowns[1], content => _ = Texts(content).Should().Contain(["Lit", "Lighting", "Buffer visualization", "Shadow mask"])).ConfigureAwait(true);

@@ -1738,7 +1738,7 @@ public partial class DynamicTree : Control
 
     private bool TryHandleTypeAhead(VirtualKey key)
     {
-        if (this.ViewModel is null)
+        if (this.ViewModel is null || !this.IsTypeAheadEnabled)
         {
             return false;
         }

@@ -21,14 +21,6 @@ namespace Oxygen.Editor.LevelEditor;
 /// </remarks>
 public sealed partial class TransformToolsViewModel : ObservableObject, IDisposable
 {
-    private static readonly RuntimeTransformTool[] ToolCycle =
-    [
-        RuntimeTransformTool.Select,
-        RuntimeTransformTool.Translate,
-        RuntimeTransformTool.Rotate,
-        RuntimeTransformTool.Scale,
-    ];
-
     private bool isDisposed;
 
     /// <summary>Initializes a new instance of the <see cref="TransformToolsViewModel"/> class.</summary>
@@ -181,10 +173,6 @@ public sealed partial class TransformToolsViewModel : ObservableObject, IDisposa
 
     [RelayCommand]
     private void UseScaleTool() => this.Tool = RuntimeTransformTool.Scale;
-
-    /// <summary>Moves to the next tool (Space): Select, Move, Rotate, Scale and around.</summary>
-    [RelayCommand]
-    private void CycleTool() => this.Tool = ToolCycle[(Array.IndexOf(ToolCycle, this.Tool) + 1) % ToolCycle.Length];
 
     [RelayCommand]
     private void ToggleSpace() => this.IsLocalSpace = !this.IsLocalSpace;

@@ -82,7 +82,8 @@ public partial class ViewportViewModel
     internal void RestoreState(ViewportPaneState state, SceneCameraChoice? sceneCamera)
     {
         this.CameraType = state.CameraType;
-        this.CameraControlMode = state.ControlMode;
+        // A mode this editor no longer offers, such as the former Fly, restores as Turntable.
+        this.CameraControlMode = Enum.IsDefined(state.ControlMode) ? state.ControlMode : CameraControlMode.OrbitTurntable;
         this.EditorCamera = state.EditorCamera?.ToRuntime();
         this.SceneCamera = sceneCamera;
         this.IsPilotingSceneCamera = false;

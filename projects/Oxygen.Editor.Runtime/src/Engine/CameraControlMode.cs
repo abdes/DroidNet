@@ -4,7 +4,10 @@
 
 namespace Oxygen.Editor.Runtime.Engine;
 
-/// <summary>Managed camera control mode options, converted at the native session boundary.</summary>
+/// <summary>
+/// Managed camera orbit styles, converted at the native session boundary. Holding the right mouse
+/// button flies the perspective camera in either style.
+/// </summary>
 public enum CameraControlMode
 {
     /// <summary>Orbit Turntable.</summary>
@@ -12,7 +15,4 @@ public enum CameraControlMode
 
     /// <summary>Orbit Trackball.</summary>
     OrbitTrackball = 1,
-
-    /// <summary>Fly.</summary>
-    Fly = 2,
 }

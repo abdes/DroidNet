@@ -96,16 +96,12 @@ namespace oxygen::interop::module {
 
   auto EditorViewportDollyFeature::Apply(scene::SceneNode camera_node,
     const input::InputSnapshot& input_snapshot,
-    EditorViewportCameraControlMode control_mode,
+    EditorViewportCameraControlMode /*control_mode*/,
     glm::vec3& focus_point,
     float& /*ortho_half_height*/,
     float /*movement_speed_units_per_second*/,
     float /*dt_seconds*/) noexcept -> void {
     if (!camera_node.IsAlive()) {
-      return;
-    }
-
-    if (control_mode == EditorViewportCameraControlMode::kFly) {
       return;
     }
 

@@ -201,8 +201,6 @@ namespace Oxygen::Interop {
       switch (mode) {
       case CameraControlModeManaged::OrbitTrackball:
         return NativeMode::kOrbitTrackball;
-      case CameraControlModeManaged::Fly:
-        return NativeMode::kFly;
       case CameraControlModeManaged::OrbitTurntable:
       default:
         return NativeMode::kOrbitTurntable;

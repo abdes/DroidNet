@@ -24,7 +24,7 @@ public sealed partial class ViewportCameraControlModeTests
     {
         using var sut = CreateViewportViewModel(new Mock<IEngineService>(MockBehavior.Strict).Object);
 
-        _ = sut.PerspectiveModes.Select(option => option.Label).Should().Equal("Turntable", "Trackball", "Fly");
+        _ = sut.PerspectiveModes.Select(option => option.Label).Should().Equal("Turntable", "Trackball");
         _ = sut.PerspectiveModes.Should().OnlyContain(option => option.HasDescription);
         _ = sut.OrthographicViews.Select(option => option.Label).Should().Equal("Top", "Bottom", "Front", "Back", "Left", "Right");
         _ = SelectedLabels(sut).Should().Equal("Turntable");
@@ -97,7 +97,7 @@ public sealed partial class ViewportCameraControlModeTests
     {
         var engine = new Mock<IEngineService>(MockBehavior.Loose);
         using var sut = CreateViewportViewModel(engine.Object);
-        sut.CameraControlMode = CameraControlMode.Fly;
+        sut.CameraControlMode = CameraControlMode.OrbitTrackball;
         sut.MovementSpeed = 7.0f;
         sut.FieldOfViewDegrees = 40.0f;
         sut.NearViewPlane = 2.0f;
@@ -109,7 +109,7 @@ public sealed partial class ViewportCameraControlModeTests
         _ = sut.NearViewPlane.Should().Be(0.1f);
         _ = sut.FarViewPlane.Should().Be(1000.0f);
         _ = sut.MovementSpeed.Should().Be(7.0f);
-        _ = sut.CameraControlMode.Should().Be(CameraControlMode.Fly);
+        _ = sut.CameraControlMode.Should().Be(CameraControlMode.OrbitTrackball);
     }
 
     [TestMethod]
@@ -120,21 +120,51 @@ public sealed partial class ViewportCameraControlModeTests
         _ = engine
             .Setup(service => service.SetViewCameraControlModeAsync(
                 It.Is<RuntimeViewId>(id => id.Value == viewId.Value),
-                CameraControlMode.Fly))
+                CameraControlMode.OrbitTrackball))
             .ReturnsAsync(value: true);
         using var sut = CreateViewportViewModel(engine.Object);
         sut.AssignedViewId = viewId;
-        sut.CameraControlMode = CameraControlMode.Fly;
+        sut.CameraControlMode = CameraControlMode.OrbitTrackball;
 
         await sut.ApplyCurrentCameraControlModeAsync().ConfigureAwait(false);
 
         engine.VerifyAll();
-        _ = sut.CameraControlModeLabel.Should().Be("Fly");
-        _ = SelectedLabels(sut).Should().Equal("Fly");
+        _ = sut.CameraControlModeLabel.Should().Be("Trackball");
+        _ = SelectedLabels(sut).Should().Equal("Trackball");
     }
 
     [TestMethod]
-    public async Task FlyOption_WhenNativeViewExists_ShouldApplyPerspectivePresetAndFlyMode()
+    public void StepFlySpeed_ScalesBy25PercentPerTickWithinTheFieldBounds()
+    {
+        using var sut = CreateViewportViewModel(new Mock<IEngineService>(MockBehavior.Loose).Object);
+        sut.MovementSpeed = 4.0f;
+
+        sut.StepFlySpeed(1.0f);
+        _ = sut.MovementSpeed.Should().BeApproximately(5.0f, 1e-4f);
+        sut.StepFlySpeed(-2.0f);
+        _ = sut.MovementSpeed.Should().BeApproximately(3.2f, 1e-4f);
+        sut.StepFlySpeed(-20.0f);
+        _ = sut.MovementSpeed.Should().Be(1.0f, "the speed field's minimum bounds the wheel");
+        sut.StepFlySpeed(1000.0f);
+        _ = sut.MovementSpeed.Should().Be(10000.0f, "the wheel keeps the speed finite");
+    }
+
+    [TestMethod]
+    public void CanFly_OnlyForAPerspectiveEditorCameraOrAPilotedSceneCamera()
+    {
+        using var sut = CreateViewportViewModel(new Mock<IEngineService>(MockBehavior.Loose).Object);
+        _ = sut.CanFly.Should().BeTrue();
+
+        sut.CameraType = CameraType.Top;
+        _ = sut.CanFly.Should().BeFalse("orthographic views do not fly");
+
+        sut.CameraType = CameraType.Perspective;
+        sut.SceneCamera = new SceneCameraChoice(Guid.NewGuid(), "Shot");
+        _ = sut.CanFly.Should().BeFalse("looking through a scene camera does not move it");
+    }
+
+    [TestMethod]
+    public async Task TrackballOption_WhenNativeViewExists_ShouldApplyPerspectivePresetAndTrackballMode()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         var viewId = new RuntimeViewId(45);
@@ -146,29 +176,24 @@ public sealed partial class ViewportCameraControlModeTests
         _ = engine
             .Setup(service => service.SetViewCameraControlModeAsync(
                 It.Is<RuntimeViewId>(id => id.Value == viewId.Value),
-                CameraControlMode.Fly))
+                CameraControlMode.OrbitTrackball))
             .ReturnsAsync(value: true);
         using var sut = CreateViewportViewModel(engine.Object);
         sut.AssignedViewId = viewId;
 
-        await Choose(sut.PerspectiveModes, "Fly").ConfigureAwait(false);
+        await Choose(sut.PerspectiveModes, "Trackball").ConfigureAwait(false);
 
         engine.VerifyAll();
         _ = sut.CameraType.Should().Be(CameraType.Perspective);
-        _ = sut.CameraControlMode.Should().Be(CameraControlMode.Fly);
-        _ = SelectedLabels(sut).Should().Equal("Fly");
+        _ = sut.CameraControlMode.Should().Be(CameraControlMode.OrbitTrackball);
+        _ = SelectedLabels(sut).Should().Equal("Trackball");
     }
 
     [TestMethod]
-    public async Task OrthographicOption_WhenCurrentModeIsFly_ShouldSwitchBackToOrbitMode()
+    public async Task OrthographicOption_KeepsTheOrbitStyle()
     {
         var engine = new Mock<IEngineService>(MockBehavior.Strict);
         var viewId = new RuntimeViewId(46);
-        _ = engine
-            .Setup(service => service.SetViewCameraControlModeAsync(
-                It.Is<RuntimeViewId>(id => id.Value == viewId.Value),
-                CameraControlMode.OrbitTurntable))
-            .ReturnsAsync(value: true);
         _ = engine
             .Setup(service => service.SetViewCameraPresetAsync(
                 It.Is<RuntimeViewId>(id => id.Value == viewId.Value),
@@ -176,13 +201,13 @@ public sealed partial class ViewportCameraControlModeTests
             .ReturnsAsync(value: true);
         using var sut = CreateViewportViewModel(engine.Object);
         sut.AssignedViewId = viewId;
-        sut.CameraControlMode = CameraControlMode.Fly;
+        sut.CameraControlMode = CameraControlMode.OrbitTrackball;
 
         await Choose(sut.OrthographicViews, "Top").ConfigureAwait(false);
 
         engine.VerifyAll();
         _ = sut.CameraType.Should().Be(CameraType.Top);
-        _ = sut.CameraControlMode.Should().Be(CameraControlMode.OrbitTurntable);
+        _ = sut.CameraControlMode.Should().Be(CameraControlMode.OrbitTrackball);
         _ = sut.IsPerspectiveView.Should().BeFalse();
         _ = SelectedLabels(sut).Should().Equal("Top");
     }

@@ -36,7 +36,7 @@ public sealed class ViewportStateServiceTests
         SceneViewLayout.FourQuad,
         FocusedPane: 2,
         [
-            new(CameraType.Perspective, CameraControlMode.Fly, ViewportCameraState.From(new RuntimeEditorCamera(new Vector3(1, 2, 3), Quaternion.CreateFromAxisAngle(Vector3.UnitZ, 0.5f), new Vector3(0, 0, 1), 10)), SceneCameraId: null),
+            new(CameraType.Perspective, CameraControlMode.OrbitTrackball, ViewportCameraState.From(new RuntimeEditorCamera(new Vector3(1, 2, 3), Quaternion.CreateFromAxisAngle(Vector3.UnitZ, 0.5f), new Vector3(0, 0, 1), 10)), SceneCameraId: null),
             new(CameraType.Top, CameraControlMode.OrbitTurntable, ViewportCameraState.From(new RuntimeEditorCamera(new Vector3(0, 0, 50), Quaternion.Identity, Vector3.Zero, 25)), SceneCameraId: null),
             new(CameraType.Perspective, CameraControlMode.OrbitTrackball, EditorCamera: null, Guid.Parse("c3000000-0000-0000-0000-000000000003")),
             new(CameraType.Front, CameraControlMode.OrbitTurntable, EditorCamera: null, SceneCameraId: null),

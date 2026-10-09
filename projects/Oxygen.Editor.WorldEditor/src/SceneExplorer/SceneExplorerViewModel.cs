@@ -193,6 +193,15 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                 _ = this.RunEditRequestAsync(message.Request);
             }
         });
+        messenger.Register<SceneShortcutMessage>(this, (_, message) =>
+        {
+            if (!this.isDisposed && !message.HasReceivedResponse && this.Scene is { } scene
+                && this.documentService.GetActiveDocumentId(this.windowId) == scene.AttachedObject.Id
+                && this.RunShortcut(message.Shortcut))
+            {
+                message.Reply(response: true);
+            }
+        });
         messenger.Register<SceneNodeAddedMessage>(this, this.OnSceneNodeAdded);
         messenger.Register<SceneNodeRemovedMessage>(this, this.OnSceneNodeRemoved);
         messenger.Register<ComponentAddedMessage>(this, this.OnComponentAdded);
@@ -220,6 +229,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// Fired when the ViewModel requests a rename operation in the View.
     /// </summary>
     internal event EventHandler<RenameRequestedEventArgs?>? RenameRequested;
+
+    /// <summary>Fired when the ViewModel asks the View to focus its search box (Ctrl+F).</summary>
+    internal event EventHandler? FindRequested;
 
     /// <summary>
     ///     Gets or sets a value indicating whether there are unlocked items in the current selection.
@@ -627,6 +639,21 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                 break;
             default:
                 break;
+        }
+    }
+
+    private bool RunShortcut(SceneShortcut shortcut)
+    {
+        switch (shortcut)
+        {
+            case SceneShortcut.Rename when this.RenameAction.CanExecute(parameter: null):
+                this.RenameAction.Execute(parameter: null);
+                return true;
+            case SceneShortcut.FindInExplorer when this.FindRequested is { } findRequested:
+                findRequested(this, EventArgs.Empty);
+                return true;
+            default:
+                return false;
         }
     }
 

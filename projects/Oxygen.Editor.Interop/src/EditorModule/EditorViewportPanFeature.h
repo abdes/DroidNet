@@ -21,7 +21,8 @@ namespace oxygen::engine {
 
 namespace oxygen::interop::module {
 
-  //! Pan the viewport camera and pivot together (Alt + MMB drag).
+  //! Pan the viewport camera and pivot together (middle drag, with or without
+  //! Alt).
   class EditorViewportPanFeature final : public IEditorViewportNavigationFeature {
   public:
     EditorViewportPanFeature() = default;

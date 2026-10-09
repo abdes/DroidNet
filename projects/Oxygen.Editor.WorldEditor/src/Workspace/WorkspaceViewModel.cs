@@ -22,6 +22,7 @@ using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Inspector.Geometry;
+using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Output;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.World.SceneExplorer;
@@ -208,6 +209,20 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         }
 
         return null;
+    }
+
+    /// <summary>Runs an editor-wide scene shortcut in the active scene editor or Scene Explorer.</summary>
+    /// <param name="shortcut">The shortcut.</param>
+    /// <returns><see langword="true"/> when a receiver ran it.</returns>
+    internal bool RunSceneShortcut(SceneShortcut shortcut)
+    {
+        if (this.messenger is not { } messenger)
+        {
+            return false;
+        }
+
+        var request = messenger.Send(new SceneShortcutMessage(shortcut));
+        return request.HasReceivedResponse && request.Response;
     }
 
     /// <inheritdoc />

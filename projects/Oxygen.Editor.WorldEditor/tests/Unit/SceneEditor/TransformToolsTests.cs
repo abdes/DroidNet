@@ -31,19 +31,19 @@ public sealed class TransformToolsTests
     private static readonly Guid NodeId = Guid.NewGuid();
 
     [TestMethod]
-    public void Tools_StartWithMoveAndCycleThroughAllFour()
+    public void Tools_StartWithMoveAndEachCommandPicksItsTool()
     {
         using var sut = new TransformToolsViewModel(new TransformToolSettingsService(settings: null));
         _ = sut.Tool.Should().Be(RuntimeTransformTool.Translate);
 
         var seen = new List<RuntimeTransformTool>();
-        for (var i = 0; i < 4; i++)
+        foreach (var command in new[] { sut.UseSelectToolCommand, sut.UseRotateToolCommand, sut.UseScaleToolCommand, sut.UseMoveToolCommand })
         {
-            sut.CycleToolCommand.Execute(parameter: null);
+            command.Execute(parameter: null);
             seen.Add(sut.Tool);
         }
 
-        _ = seen.Should().Equal(RuntimeTransformTool.Rotate, RuntimeTransformTool.Scale, RuntimeTransformTool.Select, RuntimeTransformTool.Translate);
+        _ = seen.Should().Equal(RuntimeTransformTool.Select, RuntimeTransformTool.Rotate, RuntimeTransformTool.Scale, RuntimeTransformTool.Translate);
     }
 
     [TestMethod]

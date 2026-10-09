@@ -40,6 +40,21 @@ public sealed partial class DynamicTreeTypeAheadTests : VisualUserInterfaceTests
         });
 
     [TestMethod]
+    [TestCategory("DynamicTree / UI / TypeAhead / Focus")]
+    public Task TypingLetter_WhenTypeAheadDisabled_IsLeftToTheHost_Async() => EnqueueAsync(
+        async () =>
+        {
+            var vm = this.viewModel!;
+            this.tree!.IsTypeAheadEnabled = false;
+
+            var handled = await this.tree.InvokeHandleKeyDownAsync(VirtualKey.B).ConfigureAwait(true);
+            _ = handled.Should().BeFalse("a host binds unhandled letters to its own commands");
+
+            _ = vm.TryGetFocusedItem(out var focused, out _).Should().BeTrue();
+            _ = focused!.Label.Should().Be("ALPHA");
+        });
+
+    [TestMethod]
     [TestCategory("DynamicTree / UI / TypeAhead / Buffer")]
     public Task Escape_WhenBufferHasText_ClearsBufferAndDoesNotChangeFocus_Async() => EnqueueAsync(
         async () =>
