@@ -42,6 +42,12 @@ struct GroundGridPassConstants
     float4 origin_color;
 };
 
+// Surfaces this close to the grid plane count as lying on it: the grid draws on
+// them instead of fighting them for depth. The height grows with distance, as
+// the gap between the grid's analytic depth and a rasterized floor's does.
+static const float kCoplanarHeightMin = 0.001;
+static const float kCoplanarHeightPerUnit = 0.0002;
+
 struct GroundGridPSOutput
 {
     float4 color : SV_TARGET0;
@@ -166,7 +172,18 @@ GroundGridPSOutput VortexGroundGridPS(VortexFullscreenTriangleOutput input)
     color *= horizon_scale;
 
     color.a = saturate(color.a);
+    // A floor at the plane height has the grid's depth up to precision, from
+    // different math, so the depth test would pick a winner per pixel. The
+    // grid's depth moves toward the camera to where the ray is the coplanar
+    // height above the plane: it draws steadily on such a floor and stays
+    // hidden by anything higher. Objects standing on the plane show the grid
+    // only within that height of their base, at any viewing angle.
+    const float coplanar_height = kCoplanarHeightMin + kCoplanarHeightPerUnit * t;
+    const float pull = min(coplanar_height / abs(denom), 0.99 * t);
+    const float3 depth_point = camera_position + ray_origin + ray_dir * (t - pull);
+    const float4 depth_clip = mul(projection_matrix, mul(view_matrix, float4(depth_point, 1.0)));
+
     output.color = color;
-    output.depth = ndc_depth;
+    output.depth = saturate(depth_clip.z / depth_clip.w);
     return output;
 }
