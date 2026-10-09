@@ -485,7 +485,7 @@ Rules:
   and a form that adds Cooked, Imported, Build or a local folder. Edits apply
   together; the project's own content cannot be renamed or unmounted, and
   project sources keep their names because asset paths start with them.
-- Tiles show a rendered thumbnail (ED-M08.9) or, until then, a material's
+- Tiles show a rendered thumbnail (ED-M08.10) or, until then, a material's
   base colour or the type glyph, with name, type and status; List and Details
   (sortable columns) show the same identity rows.
 - the command row keeps New, Import and Cook as labelled menus and the asset
@@ -747,7 +747,7 @@ deleting/breaking a descriptor, and confirming visible diagnostics.
 ## 15. Open Issues
 
 - Thumbnails are rendered by the production renderer offscreen and cached
-  locally by identity and content revision (ED-M08.9).
+  locally by identity and content revision (ED-M08.10).
 - ED-M06 does not claim authoritative runtime `Mounted`. It shows
   `Unknown`/`NotMounted` unless a later ED-M07 mount-refresh workflow supplies
   authoritative availability.

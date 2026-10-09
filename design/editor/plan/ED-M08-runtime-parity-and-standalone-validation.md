@@ -1,9 +1,9 @@
 # ED-M08 — Runtime parity and editor authoring workspace
 
 Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2 and M08.3–M08.8
-validated; rescoped on 2026-10-08; M08.9 is next**
+validated; rescoped on 2026-10-08; M08.9 added on 2026-10-09 and next**
 
-Current: **M08.9 Asset thumbnails and previews**. The
+Current: **M08.9 Viewport performance and per-frame editor work**. The
 [rescope](#retired-by-the-rescope) retires the development-only parity harness
 (former M08.3 and M08.5–M08.8) and the former M08.4 audit, and replaces them
 with what the editor still lacks as an authoring tool: viewport picking,
@@ -106,7 +106,7 @@ implementation must produce new evidence for captured sky and specular lighting.
 - One- to four-pane layouts with independent panes, focus routing, a camera
   preview inset and persisted per-pane state.
 
-### Remaining deliverables (M08.3–M08.10)
+### Remaining deliverables (M08.3–M08.11)
 
 | Slice  | User-visible outcome                                                                                   |
 | ------ | ------------------------------------------------------------------------------------------------------ |
@@ -116,8 +116,9 @@ implementation must produce new evidence for captured sky and specular lighting.
 | M08.6  | Light/camera icons, selected-helper visuals with editable range/cone handles, orientation triad.       |
 | M08.7  | Redesigned Content Browser: sources/results/details layout, three views, sort, working commands.       |
 | M08.8  | Rename, move, cut/copy/paste and delete that update every authored reference in one transaction.       |
-| M08.9  | Rendered thumbnails for materials, geometry, textures and scenes in browser, pickers, Material Editor. |
-| M08.10 | Drag-and-drop scene assembly, Browse to asset and the editor-to-runtime closeout walkthrough.          |
+| M08.9  | Smooth multi-pane viewports: one frame clock, panes render on demand, lean per-frame editor work.      |
+| M08.10 | Rendered thumbnails for materials, geometry, textures and scenes in browser, pickers, Material Editor. |
+| M08.11 | Drag-and-drop scene assembly, Browse to asset and the editor-to-runtime closeout walkthrough.          |
 
 ### Retired by the rescope
 
@@ -138,7 +139,7 @@ implementation must produce new evidence for captured sky and specular lighting.
   validated by M08.2 and the inspector refactoring plan. Defects found while
   using them are fixed as bugs in the slice that finds them.
 
-### Architecture decisions for M08.3–M08.10
+### Architecture decisions for M08.3–M08.11
 
 1. **WinUI draws chrome; Vortex draws anything anchored in 3D.** The HUD,
    flyouts, tool rail, readout chips, marquee rectangle and Content Browser are
@@ -165,6 +166,13 @@ implementation must produce new evidence for captured sky and specular lighting.
    them offscreen; they are keyed by asset identity and content revision,
    stored in the project's local cache, and never authored, cooked or required
    for browsing.
+6. **Panes render on demand; the user owns the frame clock.** A pane renders
+   when what it shows changes and for a short settle window afterwards; an
+   idle pane keeps its last image and costs no rendering, composition or
+   present. VSync and the frame-rate cap are engine-wide settings in the
+   scene editor's Settings flyout; the editor imposes no rate of its own, and
+   each frame has exactly one clock: the display with vsync on, the cap with
+   it off.
 
 Owners: WorldEditor `Viewport`, `ViewportViewModel`, `SceneEditorViewModel`
 and the scene document toolbar; ContentBrowser shell, panes and asset
@@ -181,8 +189,10 @@ contracts and rendered behavior pass before editor implementation relies on them
 From M08.3 on, every slice closes only after the user has reviewed the running
 editor UI; implementation pauses at that point for feedback. Order: M08.1 →
 M08.F1 → M08.2 → M08.V0 → M08.V1 → M08.V2 → M08.3 → M08.4 → M08.5 → M08.6 →
-M08.7 → M08.8 → M08.9 → M08.10. Viewport slices come first for immediate value;
-M08.7 and M08.8 are managed-only.
+M08.7 → M08.8 → M08.9 → M08.10 → M08.11. Viewport slices come first for
+immediate value; M08.7 and M08.8 are managed-only. M08.9 precedes thumbnails
+because previews render alongside the viewports and need the frame budget it
+recovers.
 
 ### M08.1 — Native canonical data, producers and primitives
 
@@ -907,7 +917,7 @@ library work waits for dock improvements.
    columns); tile-size slider in Tiles; Sort by any of those fields, ascending
    or descending. Ctrl/Shift multi-selection in every view, kept across view
    switches and re-sorts. Enter and double-click open. Previews are the
-   material base colour or the type glyph; rendered previews are M08.9.
+   material base colour or the type glyph; rendered previews are M08.10.
 3. **Commands.** New ▾ (Folder, Scene, Material); Import ▾ (Source model,
    Texture or image, Reimport, Show import source); Cook ▾ grouped as build
    scope (Cook selected, current folder, project), published output (Inspect,
@@ -1051,7 +1061,91 @@ populated folder and an import group with referrers in saved and open
 documents, the dirty-document rejection, Undo, and delete with and without
 referrers.
 
-### M08.9 — Asset thumbnails and previews
+### M08.9 — Viewport performance and per-frame editor work
+
+A code review of the multi-pane editor against the native MultiView example
+found the gap in how the editor drives the shared engine, not in Vortex
+shading or managed code: both run one `AsyncEngine` frame loop on the engine
+thread, and the managed layer does no per-frame work. In priority order:
+
+1. **One frame clock, owned by the user.** Each composition surface presents
+   with a fixed `Present(1, 0)` (`CompositionSwapChain::Present`), ignoring
+   the vsync setting that the windowed swap chain honours, while the engine
+   also paces to a 60 FPS deadline that only the editor imposes. The two
+   clocks beat against each other, and every pane adds a vsync-interval
+   present that can block the engine thread; the native example presents
+   once. Composition surfaces follow the engine's vsync setting. With vsync
+   on, each surface's swap chain has a frame-latency waitable object at
+   maximum latency 1 and the engine waits once for all of them at frame
+   start, so presents never block and the display is the clock. With vsync
+   off, surfaces present at interval 0 (DWM composition cannot tear) and the
+   frame-rate cap is the clock, or nothing when the cap is off. A cap below
+   the refresh rate with vsync on is the user's choice, and both apply.
+2. **Engine settings in the Settings flyout.** The scene editor's Settings
+   flyout holds the settings that apply to the whole embedded engine,
+   persisted with the project's preview preferences: VSync, on by default; a
+   frame-rate cap, off by default and 1–240 FPS (the engine maximum) when on;
+   idle panes, rendered on change by default or always rendered; and the
+   existing native log verbosity. The editor imposes no rate of its own:
+   `EngineConstants.DefaultTargetFps`, the preferences' `[1, max]` clamp and
+   the slider's 60 maximum go, and preferences saved earlier keep their log
+   verbosity but not their 60 FPS cap. Interop exposes vsync on
+   `EngineRunner` through the engine's `gfx.vsync` setting. Renderer tuning
+   variables (fog, occlusion, atmosphere) stay console diagnostics.
+3. **Panes render on demand.** `EditorModule::OnPublishViews` publishes every
+   visible pane every frame, so four panes render four full deferred
+   pipelines (and the camera inset at 30 % scale) while one is navigated. A
+   pane renders when its camera, extent, render options or view mode change;
+   on any scene, selection, helper or gizmo change; for a pending pick; and
+   when an asset it may show becomes resident. It keeps rendering for a
+   settle window afterwards, until auto exposure converges and for at most
+   one second. An idle pane is not rendered, composed or presented, and its
+   surface keeps the last image; with idle panes set to always render, every
+   visible pane renders each frame as today. Vortex gains a per-frame skip
+   for a published runtime view that keeps its view state, exposure history
+   and last output; Interop owns the policy. Withdrawing and republishing
+   instead would discard exposure history.
+4. **One compositing submission.** `Renderer::OnCompositing` acquires a
+   command recorder per target surface; it records every surface's
+   composition into one recorder per frame. The copy into each surface stays:
+   it is inherent to one swap chain per pane.
+5. **Lean per-frame editor work.** `ProcessResizeRequests` snapshots every
+   surface each frame to find resizes; the registry flags a pending resize
+   instead. The selection outline is rebuilt when selection changes, not per
+   frame; a pane reuses its overlay rather than allocating one per frame; and
+   a frame takes one view snapshot instead of copying the view list under the
+   manager's mutex in each phase. Publication policy, overlay building and
+   composition become separate parts of `EditorModule`, so the on-demand
+   rules live in one place.
+6. **Input path.** `RuntimeCommandDispatcher` calls the native input
+   transport while holding its run gate, so pointer moves contend with scene
+   and asset commands; the gate validates the target and the native call
+   runs outside it. Unheld navigation input (the wheel) allocates a debounce
+   cancellation source per event; one restartable timer replaces it.
+
+Implementation, in build order:
+
+| Step   | Projects                    | Delivers                                                                        |
+| ------ | --------------------------- | ------------------------------------------------------------------------------- |
+| M08.9a | Oxygen.Engine (D3D12)       | Composition presents follow vsync; latency waitables waited once per frame      |
+| M08.9b | Oxygen.Engine (Vortex)      | Per-frame skip of a published runtime view; one compositing recorder            |
+| M08.9c | Editor.Interop              | Vsync on `EngineRunner`; on-demand panes, settle window, per-frame cleanups     |
+| M08.9d | Editor.Runtime, WorldEditor | Engine settings flyout and preferences, no 60 FPS default, input path, debounce |
+
+Checks: native tests that a composition surface's sync interval follows the
+vsync setting, that a skipped view keeps its exposure state and last output,
+and that every surface composes from one recorder; Interop tests that an
+unchanged pane is not republished, that each trigger republishes it, that the
+settle window ends and that always-render publishes every pane; managed tests
+that the preferences round-trip vsync, cap off and on, and idle panes, that
+cap off reaches the engine as 0 and that earlier preferences drop their cap;
+dispatcher tests that the native input call runs outside the gate; user review
+of one- to four-pane layouts in the running editor with vsync on and off and
+the cap off and on, including navigation, an edit, selection and gizmo drag in
+one pane updating the others, picking in an idle pane, resize, and a reimport
+refreshing idle panes.
+
+### M08.10 — Asset thumbnails and previews
 
 1. **Native preview renderer.** Interop renders through Vortex into an
    offscreen target with a private preview scene: neutral studio lighting and
@@ -1077,7 +1171,7 @@ cook; the cache survives restart and regenerates when deleted; viewports stay
 interactive while previews render; device loss and project close cancel
 pending work cleanly.
 
-### M08.10 — Drag-and-drop scene assembly and closeout
+### M08.11 — Drag-and-drop scene assembly and closeout
 
 1. **Geometry into the scene.** Dragging a geometry asset over the viewport
    shows a placement preview at the surface under the cursor (pick depth,
@@ -1109,6 +1203,9 @@ walkthrough completes without manual file repair.
 | Selection outline            | Accent colour; active node brighter; occluded parts dimmed                                             |
 | Frame margin                 | 10% of the framed bounds                                                                               |
 | Overlays on a new pane       | Grid, icons and outline on; statistics off                                                             |
+| VSync                        | On; engine-wide, persisted with the project's preview preferences                                      |
+| Frame-rate cap               | Off; 1–240 FPS when on; engine-wide, persisted with the project's preview preferences                  |
+| Idle panes                   | Render on change; always render as an option; engine-wide                                              |
 | Thumbnail render size        | 256² at 100% scaling                                                                                   |
 | Content Browser default view | Tiles, sorted by name, details pane closed                                                             |
 
@@ -1135,8 +1232,10 @@ UI tests never drive the system mouse or need window focus.
 - [x] Scene helpers, editable light handles and orientation triad (M08.6).
 - [x] Content Browser layout, views and working commands (M08.7).
 - [x] Rename, move, cut/copy/paste and delete with reference updates (M08.8).
-- [ ] Rendered thumbnails in browser, pickers and Material Editor (M08.9).
+- [ ] Viewport frame clock, on-demand pane rendering and lean per-frame
+      editor work (M08.9).
+- [ ] Rendered thumbnails in browser, pickers and Material Editor (M08.10).
 - [ ] Drag-and-drop assembly and the closeout walkthrough, including the
-      RenderScene load of the editor-cooked project (M08.10).
+      RenderScene load of the editor-cooked project (M08.11).
 - [ ] Owning LLDs and API prose match the implemented contracts; post-V0.1
       annotations mark every deferred boundary.
