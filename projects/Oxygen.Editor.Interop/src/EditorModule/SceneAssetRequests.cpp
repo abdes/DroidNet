@@ -101,6 +101,12 @@ struct SceneAssetRequests::State {
     //! The sources whose textures are the accepted ones in `status`.
     EnvironmentTextureSources accepted_sources;
     EnvironmentTextureKeys loaded {};
+    //! The resources behind `loaded`, and behind the accepted keys. The scene
+    //! names textures by key only, and the asset loader evicts a texture,
+    //! including its GPU copy, once no one holds it; holding them here keeps
+    //! the applied textures resident.
+    std::array<Texture, kEnvironmentTextureSlotCount> loaded_textures;
+    std::array<Texture, kEnvironmentTextureSlotCount> accepted_textures;
     bool settled { true };
 
     [[nodiscard]] auto HasSources() const -> bool
@@ -475,6 +481,7 @@ void SceneAssetRequests::State::SettleEnvironment(
     for (std::size_t slot = 0; slot < kEnvironmentTextureSlotCount; ++slot) {
       request.status.at(slot).accepted = request.loaded.at(slot);
     }
+    request.accepted_textures = request.loaded_textures;
     request.accepted_sources = request.sources;
     if (request.on_success) {
       request.on_success(request.generation);
@@ -507,6 +514,7 @@ void SceneAssetRequests::SetEnvironmentTextures(scene::Scene& scene,
   request.on_failure = std::move(on_failure);
   request.on_success = std::move(on_success);
   request.loaded = {};
+  request.loaded_textures = {};
   request.settled = false;
   // A slot keeps its accepted texture while its source is unchanged, so an
   // edit to other environment settings applies without reloading textures.
@@ -519,6 +527,7 @@ void SceneAssetRequests::SetEnvironmentTextures(scene::Scene& scene,
     status.error.clear();
     if (reuse) {
       request.loaded.at(slot) = status.accepted;
+      request.loaded_textures.at(slot) = request.accepted_textures.at(slot);
     }
   }
   if (!request.IsPending()) {
@@ -635,6 +644,7 @@ auto SceneAssetRequests::Drain(scene::Scene& scene) -> bool
       status.pending = false;
       if (result.error.empty() && result.texture && result.key.get() != 0U) {
         request.loaded.at(result.slot) = result.key;
+        request.loaded_textures.at(result.slot) = std::move(result.texture);
         return;
       }
       status.error = result.error.empty() ? "texture load returned no resource"

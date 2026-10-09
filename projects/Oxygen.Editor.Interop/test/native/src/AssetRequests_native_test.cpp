@@ -1389,12 +1389,47 @@ void SkyCubemapsApplyTogetherOrNotAtAll()
     "a refresh did not reload both sky cubemaps");
 }
 
+// The scene names an applied cubemap by key only, and the asset loader evicts a
+// texture, GPU copy included, once nothing holds it. The request holds what it
+// applied until another revision replaces it.
+void AppliedSkyCubemapStaysResidentUntilReplaced()
+{
+  Fixture f;
+  const auto request = [&](const char* descriptor) {
+    auto sky = SkyParams {};
+    sky.sky_sphere.enabled = true;
+    if (descriptor != nullptr) {
+      sky.sky_sphere.cubemap.locator = oxygen::content::TextureResourceLocator {
+        .cooked_root = "C:/Cooked", .descriptor_relative_path = descriptor };
+    }
+    auto command = SetEnvironmentCommand(
+      SkyAtmosphereParams {}, PostProcessParams {}, FogParams {}, sky);
+    f.Execute(command);
+  };
+  auto applied = std::weak_ptr<const oxygen::data::TextureResource> {};
+  request("Backdrop.otex");
+  Require(f.texture_loads.size() == 1U, "the sky cubemap did not load");
+  {
+    auto texture = MakeMaskTexture();
+    applied = texture;
+    f.texture_loads.at(0)(oxygen::content::ResourceKey { 61U }, texture, {});
+  }
+  f.Drain();
+  Require(!applied.expired(), "the applied sky cubemap was not held");
+  request(nullptr);
+  f.Drain();
+  Require(applied.expired(), "a removed sky cubemap was still held");
+}
+
 auto RunScenario(int scenario) -> const char*
 {
   try {
     switch (scenario) {
     case 42:
       SkyCubemapsApplyTogetherOrNotAtAll();
+      break;
+    case 43:
+      AppliedSkyCubemapStaysResidentUntilReplaced();
       break;
     case 41:
       ExposureMaskFollowsOwnedGenerationsAndRollback();
@@ -1588,6 +1623,10 @@ public:
 
   [TestMethod] void SkyCubemapsApplyTogetherOrNotAtAll() {
     Check(42);
+  }
+
+  [TestMethod] void AppliedSkyCubemapStaysResidentUntilReplaced() {
+    Check(43);
   }
 
     [TestMethod] void LoadedMaterialRecoversAfterGeometryFailure()
