@@ -29,6 +29,11 @@ public sealed record SceneEnvironmentData
     public PostProcessEnvironmentData PostProcess { get; init; } = new();
 
     /// <summary>
+    /// Gets authored height fog and volumetric fog mirrored by the native scene descriptor.
+    /// </summary>
+    public FogEnvironmentData Fog { get; init; } = new();
+
+    /// <summary>
     /// Gets the background color used when atmosphere rendering is disabled.
     /// </summary>
     public Vector3 BackgroundColor { get; init; }

@@ -85,6 +85,8 @@ internal sealed partial class NativeRuntimeCommandTransport
             Contrast = state.Contrast,
             VignetteIntensity = state.VignetteIntensity,
             DisplayGamma = state.DisplayGamma,
+            FogExists = state.FogExists,
+            Fog = RuntimeTransportConversion.FromNative(state.Fog),
         };
     }
 }

@@ -71,12 +71,36 @@ must be fixed rather than removing its field silently.
 All metre values remain metres in source/native scene state; presentation in km
 is not a second storage unit. Preserve existing native enum/API names. Fixed
 engine coefficients and other fields outside this table do not automatically
-become editor sliders. An inapplicable fog-coupling field explains why it is
-inactive rather than implying that an unimplemented fog-authoring workflow exists.
+become editor sliders. Height Fog Contribution couples the atmosphere to the
+authored fog below.
 
 Canonical native defaults are grounded in Core/Types/Atmosphere.h,
 Scene/Environment/SkyAtmosphere.h and EnvironmentSystem.h. Height is 100 km and
 Aerial Start is 100 m; 80 km and 0 m are not the native creation defaults.
+
+### Fog
+
+`SceneEnvironmentData.Fog` mirrors the native `Fog` system: every field the
+renderer consumes, in native units, with native defaults except Enabled, which
+is off so scenes without authored fog render none. The Fog section shows
+Enabled, Height Fog, Density (σt, 1/m), Height Falloff (1/m), Height Offset
+(m), Max Opacity, Inscattering luminance and Sky Ambient scale, with
+disclosures for the second layer (density, falloff, offset), distances (start,
+end and cutoff; 0 is unlimited), the directional inscattering lobe
+(luminance, exponent, start), volumetric fog (enabled, scattering
+distribution, albedo, emissive, extinction scale, distance where 0 uses the
+camera far plane, start, near fade-in, sky light scattering and fog-colored
+light scattering) and rendering (main pass, holdout, reflection and sky
+capture visibility).
+
+Validation rejects non-finite values, negative densities, falloffs,
+distances, luminances and scales, Max Opacity and albedo outside 0–1,
+scattering distribution outside ±0.99 and a directional exponent outside
+(0, 1000]. The environment command applies fog with the atmosphere and post
+process in one scene mutation; editor panes request height and local fog from
+the scene as the runtime does. The cooked descriptor carries the full native
+`fog` record; the inscattering cubemap fields stay at native defaults because
+the renderer does not sample them.
 
 ## 4. Captured SkyLight and background
 

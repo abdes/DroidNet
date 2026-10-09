@@ -19,6 +19,7 @@
 #include <Commands/PropertyApplierRegistry.h>
 #include <Commands/SetPropertiesCommand.h>
 #include <Commands/NodePropertyApplier.h>
+#include <Commands/ObserveEnvironmentCommand.h>
 #include <Commands/SetEnvironmentCommand.h>
 #include <Commands/SetBackgroundColorCommand.h>
 #include <EditorModule/EditorCommand.h>
@@ -693,6 +694,85 @@ auto RunExposureEditContracts() -> NativeStatus
   }
 }
 
+auto RunAuthoredFogContracts() -> NativeStatus
+{
+  try {
+    auto scene = CreateTestScene("Fog edits");
+    auto context = BuildContext(*scene);
+    SkyAtmosphereParams atmosphere {};
+    atmosphere.enabled = false;
+    FogParams fog {};
+    fog.enabled = true;
+    fog.density = 0.03F;
+    fog.height_falloff = 0.1F;
+    fog.second_density = 0.01F;
+    fog.second_height_offset_meters = 25.0F;
+    fog.max_opacity = 0.8F;
+    fog.inscattering_luminance_rgb = { 0.2F, 0.3F, 0.4F };
+    fog.end_distance_meters = 900.0F;
+    fog.directional_inscattering_exponent = 8.0F;
+    fog.volumetric_fog_enabled = true;
+    fog.volumetric_albedo_rgb = { 0.5F, 0.6F, 0.7F };
+    fog.volumetric_distance_meters = 300.0F;
+    fog.override_light_colors_with_fog_inscattering = true;
+    fog.visible_in_reflection_captures = false;
+    SetEnvironmentCommand(atmosphere, PostProcessParams {}, fog)
+      .Execute(context);
+
+    const auto native = scene->GetEnvironment()
+      ->TryGetSystem<oxygen::scene::environment::Fog>();
+    if (!native || !native->IsEnabled() || !native->GetEnableHeightFog()
+      || native->GetExtinctionSigmaTPerMeter() != 0.03F
+      || native->GetHeightFalloffPerMeter() != 0.1F
+      || native->GetSecondFogDensity() != 0.01F
+      || native->GetSecondFogHeightOffset() != 25.0F
+      || native->GetMaxOpacity() != 0.8F
+      || native->GetFogInscatteringLuminance() != oxygen::Vec3(0.2F, 0.3F, 0.4F)
+      || native->GetEndDistanceMeters() != 900.0F
+      || native->GetDirectionalInscatteringExponent() != 8.0F
+      || !native->GetEnableVolumetricFog()
+      || native->GetVolumetricFogAlbedo() != oxygen::Vec3(0.5F, 0.6F, 0.7F)
+      || native->GetVolumetricFogDistance() != 300.0F
+      || !native->GetOverrideLightColorsWithFogInscatteringColors()
+      || native->GetVisibleInReflectionCaptures()) {
+      throw std::runtime_error("Authored fog did not reach the scene environment");
+    }
+
+    EnvironmentObservation observed {};
+    ObserveEnvironmentCommand(
+      [&observed](EnvironmentObservation value) { observed = std::move(value); })
+      .Execute(context);
+    if (!observed.fog_exists || !observed.fog.enabled
+      || observed.fog.density != 0.03F
+      || observed.fog.volumetric_albedo_rgb != oxygen::Vec3(0.5F, 0.6F, 0.7F)
+      || observed.fog.visible_in_reflection_captures) {
+      throw std::runtime_error("Fog observation does not report authored values");
+    }
+
+    auto invalid = fog;
+    invalid.density = std::numeric_limits<float>::quiet_NaN();
+    bool rejected = false;
+    try {
+      SetEnvironmentCommand(atmosphere, PostProcessParams {}, invalid)
+        .Execute(context);
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    if (!rejected || native->GetExtinctionSigmaTPerMeter() != 0.03F) {
+      throw std::runtime_error("Non-finite fog was not rejected atomically");
+    }
+
+    SetEnvironmentCommand(atmosphere, PostProcessParams {}, FogParams {})
+      .Execute(context);
+    if (native->IsEnabled() || native->GetEnableVolumetricFog()) {
+      throw std::runtime_error("Default fog parameters did not disable fog");
+    }
+    return {};
+  } catch (const std::exception& error) {
+    return NativeFailure(error.what());
+  }
+}
+
 } // namespace
 
 #pragma managed
@@ -719,6 +799,12 @@ namespace InteropTests {
 [TestClass]
 public ref class EnvironmentCommandCliTests {
 public:
+  [TestMethod]
+  void AuthoredFogReachesTheSceneAndRejectsNonFiniteValues()
+  {
+    AssertSucceeded(RunAuthoredFogContracts());
+  }
+
   [TestMethod]
   void ExposureEditsPreservePhysicalValuesAndRejectInvalidCandidates()
   {

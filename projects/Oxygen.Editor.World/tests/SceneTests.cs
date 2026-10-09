@@ -145,6 +145,35 @@ public class SceneTests
     }
 
     [TestMethod]
+    public async Task Fog_RoundTripsThroughSaveAndLoad()
+    {
+        var fog = new FogEnvironmentData
+        {
+            Enabled = true,
+            Density = 0.03f,
+            SecondDensity = 0.01f,
+            InscatteringLuminanceRgb = new Vector3(0.2f, 0.3f, 0.4f),
+            VolumetricFogEnabled = true,
+            VolumetricAlbedoRgb = new Vector3(0.5f, 0.6f, 0.7f),
+            VisibleInReflectionCaptures = false,
+        };
+        var scene = Scene.CreateAndHydrate(this.ExampleProject, new SceneData
+        {
+            Id = Guid.NewGuid(),
+            Name = "Fog Round Trip",
+            Environment = new SceneEnvironmentData { Fog = fog },
+        });
+        var serializer = new SceneSerializer(this.ExampleProject);
+        using var stream = new MemoryStream();
+
+        await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
+        stream.Position = 0;
+        var restored = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
+
+        _ = restored.Environment.Fog.Should().Be(fog);
+    }
+
+    [TestMethod]
     public async Task SceneReferences_RoundTripAndRemainOmittedWhenEmpty()
     {
         var references = new SceneReferencesData

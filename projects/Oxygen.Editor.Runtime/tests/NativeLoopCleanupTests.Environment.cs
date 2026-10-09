@@ -64,6 +64,40 @@ public sealed partial class NativeLoopCleanupTests
         Contrast = 1.1f,
         VignetteIntensity = 0.3f,
         DisplayGamma = 2.4f,
+        FogExists = true,
+        Fog = new()
+        {
+            Enabled = true,
+            Density = 0.03f,
+            HeightFalloff = 0.1f,
+            HeightOffsetMeters = 5f,
+            MaxOpacity = 0.8f,
+            InscatteringLuminanceRgb = new Vector3(0.2f, 0.3f, 0.4f),
+            SkyAmbientScaleRgb = new Vector3(0.9f, 0.8f, 0.7f),
+            SecondDensity = 0.01f,
+            SecondHeightFalloff = 0.05f,
+            SecondHeightOffsetMeters = 25f,
+            StartDistanceMeters = 10f,
+            EndDistanceMeters = 900f,
+            CutoffDistanceMeters = 5000f,
+            DirectionalInscatteringLuminanceRgb = new Vector3(1f, 0.9f, 0.8f),
+            DirectionalInscatteringExponent = 8f,
+            DirectionalInscatteringStartDistanceMeters = 50f,
+            VolumetricFogEnabled = true,
+            VolumetricScatteringDistribution = 0.4f,
+            VolumetricAlbedoRgb = new Vector3(0.5f, 0.6f, 0.7f),
+            VolumetricEmissiveRgb = new Vector3(0.01f, 0.02f, 0.03f),
+            VolumetricExtinctionScale = 2f,
+            VolumetricDistanceMeters = 300f,
+            VolumetricStartDistanceMeters = 1f,
+            VolumetricNearFadeInDistanceMeters = 3f,
+            VolumetricStaticLightingScatteringIntensity = 0.5f,
+            OverrideLightColorsWithFogInscattering = true,
+            RenderInMainPass = true,
+            Holdout = true,
+            VisibleInReflectionCaptures = false,
+            VisibleInRealTimeSkyCaptures = false,
+        },
     };
 
     private static RuntimeSetEnvironment EnvironmentRequest(RuntimeEnvironmentState state) => new(
@@ -106,7 +140,10 @@ public sealed partial class NativeLoopCleanupTests
         state.Saturation,
         state.Contrast,
         state.VignetteIntensity,
-        state.DisplayGamma);
+        state.DisplayGamma)
+    {
+        Fog = state.Fog,
+    };
 
     private async Task CheckNativeExposureMaskFailureAsync(RuntimeCommandDispatcher commands)
     {

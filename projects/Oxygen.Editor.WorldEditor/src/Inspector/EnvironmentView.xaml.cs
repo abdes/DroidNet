@@ -29,6 +29,7 @@ public sealed partial class EnvironmentView
         this.registry = new(this.search, (IValueConverter)this.Resources["InspectorDiagnosticVisibility"]);
         this.AtmosphereLightsView.Register(this.registry);
         this.SkyAtmosphereView.Register(this.registry);
+        this.FogView.Register(this.registry);
         this.BackgroundView.Register(this.registry);
         this.ExposureView.Register(this.registry);
         this.PostProcessingView.Register(this.registry);

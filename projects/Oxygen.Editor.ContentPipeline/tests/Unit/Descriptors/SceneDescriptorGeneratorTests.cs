@@ -393,6 +393,52 @@ public sealed class SceneDescriptorGeneratorTests
         _ = atmosphere.GetProperty("sun_disk_enabled").GetBoolean().Should().BeFalse();
     }
 
+    /// <summary>Emits authored fog with every field the native scene loader requires.</summary>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    public async Task GenerateAsyncShouldEmitAuthoredFog()
+    {
+        using var workspace = new DescriptorWorkspace();
+        var scope = CreateScope(workspace);
+        var scene = CreateScene(workspace.Project);
+        var node = new SceneNode(scene) { Name = "Cube" };
+        _ = node.AddComponent(new GeometryComponent
+        {
+            Name = "Geometry",
+            Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
+        });
+        scene.RootNodes.Add(node);
+        scene.SetEnvironment(new SceneEnvironmentData
+        {
+            Fog = new FogEnvironmentData
+            {
+                Enabled = true,
+                Density = 0.03f,
+                SecondDensity = 0.01f,
+                InscatteringLuminanceRgb = new Vector3(0.2f, 0.3f, 0.4f),
+                VolumetricFogEnabled = true,
+                VolumetricDistanceMeters = 300f,
+                VisibleInReflectionCaptures = false,
+            },
+        });
+
+        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.Diagnostics.Should().BeEmpty();
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
+        var fog = document.RootElement.GetProperty("environment").GetProperty("fog");
+        _ = fog.GetProperty("enabled").GetBoolean().Should().BeTrue();
+        _ = fog.GetProperty("extinction_sigma_t_per_m").GetSingle().Should().Be(0.03f);
+        _ = fog.GetProperty("second_fog_density").GetSingle().Should().Be(0.01f);
+        _ = fog.GetProperty("fog_inscattering_luminance").EnumerateArray().Select(static item => item.GetSingle()).Should().Equal(0.2f, 0.3f, 0.4f);
+        _ = fog.GetProperty("enable_volumetric_fog").GetBoolean().Should().BeTrue();
+        _ = fog.GetProperty("volumetric_fog_distance").GetSingle().Should().Be(300f);
+        _ = fog.GetProperty("visible_in_reflection_captures").GetBoolean().Should().BeFalse();
+        _ = fog.GetProperty("model").GetInt32().Should().Be(0);
+        _ = fog.EnumerateObject().Select(static property => property.Name).Should().HaveCount(38);
+    }
+
     /// <summary>Emits manual exposure without an unsupported-field warning.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]

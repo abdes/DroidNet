@@ -10,7 +10,7 @@ using Oxygen.Editor.WorldEditor.Documents.Commands;
 
 namespace Oxygen.Editor.World.Inspector.Presentation;
 
-/// <summary>Explicit presentation metadata for the 42 existing scene cards.</summary>
+/// <summary>Explicit presentation metadata for the 73 scene cards.</summary>
 internal static class EnvironmentFieldCatalog
 {
     /// <summary>Gets the ten nested source-field identities without consulting their views.</summary>
@@ -33,6 +33,37 @@ internal static class EnvironmentFieldCatalog
             Sky("AerialScatteringStrength", "/sky_atmosphere/aerial_scattering_strength", "Scattering strength", "AerialPerspective", "Aerial Strength"),
             Sky("AerialPerspectiveStartDepthMeters", "/sky_atmosphere/aerial_perspective_start_depth_meters", "Start distance", "AerialPerspective", "Aerial Start"),
             Sky("HeightFogContribution", "/sky_atmosphere/height_fog_contribution", "Height fog contribution", "AerialPerspective", "Height Fog"),
+            Fog("Enabled", "/fog/enabled", "Enabled", null, "enabled"),
+            Fog("HeightFogEnabled", "/fog/height_fog_enabled", "Height Fog", null, "enable_height_fog"),
+            Fog("Density", "/fog/density", "Density", null, "extinction_sigma_t_per_m 1/m"),
+            Fog("HeightFalloff", "/fog/height_falloff", "Height Falloff", null, "height_falloff_per_m 1/m"),
+            Fog("HeightOffsetMeters", "/fog/height_offset_meters", "Height Offset", null, "height_offset_m m"),
+            Fog("MaxOpacity", "/fog/max_opacity", "Max Opacity", null, "max_opacity"),
+            Fog("InscatteringLuminanceRgb", "/fog/inscattering_luminance_rgb", "Inscattering", null, "fog_inscattering_luminance Luminance RGB"),
+            Fog("SkyAmbientScaleRgb", "/fog/sky_ambient_scale_rgb", "Sky Ambient", null, "sky_atmosphere_ambient_contribution_color_scale RGB ×"),
+            Fog("SecondDensity", "/fog/second_density", "Density", "SecondLayer", "second_fog_density 1/m"),
+            Fog("SecondHeightFalloff", "/fog/second_height_falloff", "Height Falloff", "SecondLayer", "second_fog_height_falloff 1/m"),
+            Fog("SecondHeightOffsetMeters", "/fog/second_height_offset_meters", "Height Offset", "SecondLayer", "second_fog_height_offset m"),
+            Fog("StartDistanceMeters", "/fog/start_distance_meters", "Start", "Distances", "start_distance_m m"),
+            Fog("EndDistanceMeters", "/fog/end_distance_meters", "End", "Distances", "end_distance_m m"),
+            Fog("CutoffDistanceMeters", "/fog/cutoff_distance_meters", "Cutoff", "Distances", "fog_cutoff_distance_m m"),
+            Fog("DirectionalInscatteringLuminanceRgb", "/fog/directional_inscattering_luminance_rgb", "Luminance", "Directional", "directional_inscattering_luminance Luminance RGB"),
+            Fog("DirectionalInscatteringExponent", "/fog/directional_inscattering_exponent", "Exponent", "Directional", "directional_inscattering_exponent"),
+            Fog("DirectionalInscatteringStartDistanceMeters", "/fog/directional_inscattering_start_distance_meters", "Start", "Directional", "directional_inscattering_start_distance m"),
+            Fog("VolumetricFogEnabled", "/fog/volumetric_fog_enabled", "Enabled", "Volumetric", "enable_volumetric_fog"),
+            Fog("VolumetricScatteringDistribution", "/fog/volumetric_scattering_distribution", "Scattering Distribution", "Volumetric", "volumetric_fog_scattering_distribution"),
+            Fog("VolumetricAlbedoRgb", "/fog/volumetric_albedo_rgb", "Albedo", "Volumetric", "volumetric_fog_albedo Linear RGB"),
+            Fog("VolumetricEmissiveRgb", "/fog/volumetric_emissive_rgb", "Emissive", "Volumetric", "volumetric_fog_emissive Luminance RGB"),
+            Fog("VolumetricExtinctionScale", "/fog/volumetric_extinction_scale", "Extinction Scale", "Volumetric", "volumetric_fog_extinction_scale ×"),
+            Fog("VolumetricDistanceMeters", "/fog/volumetric_distance_meters", "Distance", "Volumetric", "volumetric_fog_distance m"),
+            Fog("VolumetricStartDistanceMeters", "/fog/volumetric_start_distance_meters", "Start", "Volumetric", "volumetric_fog_start_distance m"),
+            Fog("VolumetricNearFadeInDistanceMeters", "/fog/volumetric_near_fade_in_distance_meters", "Near Fade-in", "Volumetric", "volumetric_fog_near_fade_in_distance m"),
+            Fog("VolumetricStaticLightingScatteringIntensity", "/fog/volumetric_static_lighting_scattering_intensity", "Sky Light Scattering", "Volumetric", "volumetric_fog_static_lighting_scattering_intensity ×"),
+            Fog("OverrideLightColorsWithFogInscattering", "/fog/override_light_colors_with_fog_inscattering", "Use Fog Colors", "Volumetric", "override_light_colors_with_fog_inscattering_colors"),
+            Fog("RenderInMainPass", "/fog/render_in_main_pass", "Main Pass", "Rendering", "render_in_main_pass"),
+            Fog("Holdout", "/fog/holdout", "Holdout", "Rendering", "holdout"),
+            Fog("VisibleInReflectionCaptures", "/fog/visible_in_reflection_captures", "Reflection Captures", "Rendering", "visible_in_reflection_captures"),
+            Fog("VisibleInRealTimeSkyCaptures", "/fog/visible_in_real_time_sky_captures", "Sky Captures", "Rendering", "visible_in_real_time_sky_captures"),
             new("Sources", SceneDocumentCommandService.DirectionalLight.AtmosphereSlot.Id, InspectorPropertyScope.Environment, "AtmosphereLights", group: null, "Sources", "Atmosphere Lights Primary and secondary directional light sources.", $"Sun Binding Sun Reference atmosphere_light_slot azimuth elevation direction angular diameter disk luminance transmittance primary secondary SunAzimuth SunElevation AngularSizeRadians DiskScale {string.Join(' ', SourceFields.SelectMany(static entry => entry.Properties).Select(static property => property.JsonPointer))}"),
             Exposure("ExposureEnabled", "exposure_enabled", "Enabled"),
             Exposure("ExposureMode", "exposure_mode", "Mode", aliases: "Manual ManualCamera Auto"),
@@ -94,6 +125,17 @@ internal static class EnvironmentFieldCatalog
             group,
             label,
             "Sky Atmosphere Atmospheric sky and aerial perspective authored on the scene.",
+            $"{key} {aliases}");
+
+    private static InspectorFieldPresentation Fog(string key, string pointer, string label, string? group, string aliases)
+        => new(
+            key,
+            new PropertyId(SceneDocumentCommandService.SceneEnvironmentKind, pointer),
+            InspectorPropertyScope.Environment,
+            "Fog",
+            group,
+            label,
+            "Fog Exponential height fog and volumetric fog authored on the scene.",
             $"{key} {aliases}");
 
     private static InspectorFieldPresentation Exposure(

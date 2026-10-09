@@ -11,6 +11,7 @@
 #include <utility>
 
 #include <Commands/SetEnvironmentCommand.h>
+#include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
@@ -25,8 +26,10 @@ struct EnvironmentObservation {
   bool exists = false;
   bool atmosphere_exists = false;
   bool post_process_exists = false;
+  bool fog_exists = false;
   SkyAtmosphereParams atmosphere;
   PostProcessParams post_process;
+  FogParams fog;
   content::ResourceKey metering_mask {};
   bool metering_mask_pending { false };
   std::string metering_mask_error;
@@ -82,6 +85,40 @@ public:
           result.atmosphere.aerial_scattering_strength = sky->GetAerialScatteringStrength();
           result.atmosphere.aerial_perspective_start_depth_m = sky->GetAerialPerspectiveStartDepthMeters();
           result.atmosphere.height_fog_contribution = sky->GetHeightFogContribution();
+        }
+        if (const auto fog = environment->TryGetSystem<env::Fog>()) {
+          result.fog_exists = true;
+          result.fog.enabled = fog->IsEnabled();
+          result.fog.height_fog_enabled = fog->GetEnableHeightFog();
+          result.fog.density = fog->GetExtinctionSigmaTPerMeter();
+          result.fog.height_falloff = fog->GetHeightFalloffPerMeter();
+          result.fog.height_offset_meters = fog->GetHeightOffsetMeters();
+          result.fog.max_opacity = fog->GetMaxOpacity();
+          result.fog.inscattering_luminance_rgb = fog->GetFogInscatteringLuminance();
+          result.fog.sky_ambient_scale_rgb = fog->GetSkyAtmosphereAmbientContributionColorScale();
+          result.fog.second_density = fog->GetSecondFogDensity();
+          result.fog.second_height_falloff = fog->GetSecondFogHeightFalloff();
+          result.fog.second_height_offset_meters = fog->GetSecondFogHeightOffset();
+          result.fog.start_distance_meters = fog->GetStartDistanceMeters();
+          result.fog.end_distance_meters = fog->GetEndDistanceMeters();
+          result.fog.cutoff_distance_meters = fog->GetFogCutoffDistanceMeters();
+          result.fog.directional_inscattering_luminance_rgb = fog->GetDirectionalInscatteringLuminance();
+          result.fog.directional_inscattering_exponent = fog->GetDirectionalInscatteringExponent();
+          result.fog.directional_inscattering_start_distance_meters = fog->GetDirectionalInscatteringStartDistance();
+          result.fog.volumetric_fog_enabled = fog->GetEnableVolumetricFog();
+          result.fog.volumetric_scattering_distribution = fog->GetVolumetricFogScatteringDistribution();
+          result.fog.volumetric_albedo_rgb = fog->GetVolumetricFogAlbedo();
+          result.fog.volumetric_emissive_rgb = fog->GetVolumetricFogEmissive();
+          result.fog.volumetric_extinction_scale = fog->GetVolumetricFogExtinctionScale();
+          result.fog.volumetric_distance_meters = fog->GetVolumetricFogDistance();
+          result.fog.volumetric_start_distance_meters = fog->GetVolumetricFogStartDistance();
+          result.fog.volumetric_near_fade_in_distance_meters = fog->GetVolumetricFogNearFadeInDistance();
+          result.fog.volumetric_static_lighting_scattering_intensity = fog->GetVolumetricFogStaticLightingScatteringIntensity();
+          result.fog.override_light_colors_with_fog_inscattering = fog->GetOverrideLightColorsWithFogInscatteringColors();
+          result.fog.render_in_main_pass = fog->GetRenderInMainPass();
+          result.fog.holdout = fog->GetHoldout();
+          result.fog.visible_in_reflection_captures = fog->GetVisibleInReflectionCaptures();
+          result.fog.visible_in_real_time_sky_captures = fog->GetVisibleInRealTimeSkyCaptures();
         }
         if (const auto post = environment->TryGetSystem<env::PostProcessVolume>()) {
           result.post_process_exists = true;

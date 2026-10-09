@@ -223,7 +223,49 @@ auto ApplyPostProcess(oxygen::scene::SceneEnvironment& environment,
   post_process->SetDisplayGamma(params.display_gamma);
 }
 
-auto EnsureDisabledFog(oxygen::scene::SceneEnvironment& environment) -> void
+auto ValidateFog(const oxygen::interop::module::FogParams& params) -> void
+{
+  const auto finite = [](const oxygen::Vec3& value) {
+    return std::isfinite(value.x) && std::isfinite(value.y)
+      && std::isfinite(value.z);
+  };
+  for (const auto value : {
+         params.density,
+         params.height_falloff,
+         params.height_offset_meters,
+         params.max_opacity,
+         params.second_density,
+         params.second_height_falloff,
+         params.second_height_offset_meters,
+         params.start_distance_meters,
+         params.end_distance_meters,
+         params.cutoff_distance_meters,
+         params.directional_inscattering_exponent,
+         params.directional_inscattering_start_distance_meters,
+         params.volumetric_scattering_distribution,
+         params.volumetric_extinction_scale,
+         params.volumetric_distance_meters,
+         params.volumetric_start_distance_meters,
+         params.volumetric_near_fade_in_distance_meters,
+         params.volumetric_static_lighting_scattering_intensity }) {
+    if (!std::isfinite(value)) {
+      throw std::invalid_argument("Fog values must be finite");
+    }
+  }
+  for (const auto& value : {
+         params.inscattering_luminance_rgb,
+         params.sky_ambient_scale_rgb,
+         params.directional_inscattering_luminance_rgb,
+         params.volumetric_albedo_rgb,
+         params.volumetric_emissive_rgb }) {
+    if (!finite(value)) {
+      throw std::invalid_argument("Fog colors must be finite");
+    }
+  }
+}
+
+auto ApplyFog(oxygen::scene::SceneEnvironment& environment,
+  const oxygen::interop::module::FogParams& params) -> void
 {
   namespace env = oxygen::scene::environment;
 
@@ -232,12 +274,37 @@ auto EnsureDisabledFog(oxygen::scene::SceneEnvironment& environment) -> void
     return;
   }
 
-  fog->SetEnabled(false);
-  fog->SetEnableHeightFog(false);
-  fog->SetEnableVolumetricFog(false);
-  fog->SetRenderInMainPass(true);
-  fog->SetVisibleInReflectionCaptures(true);
-  fog->SetVisibleInRealTimeSkyCaptures(true);
+  fog->SetEnabled(params.enabled);
+  fog->SetEnableHeightFog(params.height_fog_enabled);
+  fog->SetExtinctionSigmaTPerMeter(params.density);
+  fog->SetHeightFalloffPerMeter(params.height_falloff);
+  fog->SetHeightOffsetMeters(params.height_offset_meters);
+  fog->SetMaxOpacity(params.max_opacity);
+  fog->SetFogInscatteringLuminance(params.inscattering_luminance_rgb);
+  fog->SetSkyAtmosphereAmbientContributionColorScale(params.sky_ambient_scale_rgb);
+  fog->SetSecondFogDensity(params.second_density);
+  fog->SetSecondFogHeightFalloff(params.second_height_falloff);
+  fog->SetSecondFogHeightOffset(params.second_height_offset_meters);
+  fog->SetStartDistanceMeters(params.start_distance_meters);
+  fog->SetEndDistanceMeters(params.end_distance_meters);
+  fog->SetFogCutoffDistanceMeters(params.cutoff_distance_meters);
+  fog->SetDirectionalInscatteringLuminance(params.directional_inscattering_luminance_rgb);
+  fog->SetDirectionalInscatteringExponent(params.directional_inscattering_exponent);
+  fog->SetDirectionalInscatteringStartDistance(params.directional_inscattering_start_distance_meters);
+  fog->SetEnableVolumetricFog(params.volumetric_fog_enabled);
+  fog->SetVolumetricFogScatteringDistribution(params.volumetric_scattering_distribution);
+  fog->SetVolumetricFogAlbedo(params.volumetric_albedo_rgb);
+  fog->SetVolumetricFogEmissive(params.volumetric_emissive_rgb);
+  fog->SetVolumetricFogExtinctionScale(params.volumetric_extinction_scale);
+  fog->SetVolumetricFogDistance(params.volumetric_distance_meters);
+  fog->SetVolumetricFogStartDistance(params.volumetric_start_distance_meters);
+  fog->SetVolumetricFogNearFadeInDistance(params.volumetric_near_fade_in_distance_meters);
+  fog->SetVolumetricFogStaticLightingScatteringIntensity(params.volumetric_static_lighting_scattering_intensity);
+  fog->SetOverrideLightColorsWithFogInscatteringColors(params.override_light_colors_with_fog_inscattering);
+  fog->SetRenderInMainPass(params.render_in_main_pass);
+  fog->SetHoldout(params.holdout);
+  fog->SetVisibleInReflectionCaptures(params.visible_in_reflection_captures);
+  fog->SetVisibleInRealTimeSkyCaptures(params.visible_in_real_time_sky_captures);
 }
 
 } // namespace
@@ -301,7 +368,9 @@ namespace oxygen::interop::module {
       return;
     }
 
+    ValidateFog(fog_);
     auto apply = [atmosphere_params = atmosphere_, post_process = post_process_,
+        fog_params = fog_,
         exposure = ResolvePostProcessExposure(post_process_)]
         (scene::Scene& scene, content::ResourceKey mask) mutable {
       auto* const environment = EnsureEnvironment(scene);
@@ -313,7 +382,7 @@ namespace oxygen::interop::module {
       exposure.metering_mask = mask;
       ApplySkyLight(*environment);
       ApplyPostProcess(*environment, post_process, exposure);
-      EnsureDisabledFog(*environment);
+      ApplyFog(*environment, fog_params);
       scene.Update(false);
       scene.NotifyEnvironmentAuthoringChange();
     };

@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using System.Numerics;
+using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -171,4 +172,10 @@ public sealed record RuntimeEnvironmentState
 
     /// <summary>Gets the observed DisplayGamma value.</summary>
     public float DisplayGamma { get; init; }
+
+    /// <summary>Gets a value indicating whether fog values are present, including disabled fog.</summary>
+    public bool FogExists { get; init; }
+
+    /// <summary>Gets the native height fog and volumetric fog values.</summary>
+    public FogEnvironmentData Fog { get; init; } = new();
 }

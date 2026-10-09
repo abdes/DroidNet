@@ -13,13 +13,13 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
 public sealed class InspectorSearchModelTests
 {
     [TestMethod]
-    public void Catalog_RegistersEveryExistingScenePropertyAndAllFortyTwoCards()
+    public void Catalog_RegistersEveryScenePropertyAndAllSeventyThreeCards()
     {
         var model = EnvironmentFieldCatalog.Create();
-        _ = model.Fields.Should().HaveCount(42);
+        _ = model.Fields.Should().HaveCount(73);
         _ = model.Fields.Values.Select(field => field.Property).Should().Contain(
             SceneDocumentCommandService.SceneEnvironment.ById.Keys);
-        _ = model.Fields.Values.Select(field => field.Key).Should().OnlyHaveUniqueItems();
+        _ = model.Fields.Values.Should().OnlyHaveUniqueItems(field => field.Key);
     }
 
     [TestMethod]
@@ -75,11 +75,11 @@ public sealed class InspectorSearchModelTests
     public void Search_RestoresStoredExpansionAfterQueryAndScopeChanges()
     {
         var model = EnvironmentFieldCatalog.Create();
-        model.RecordExpansion("PlanetGround", false);
-        model.RecordExpansion("Exposure", true);
+        model.RecordExpansion("PlanetGround", expanded: false);
+        model.RecordExpansion("Exposure", expanded: true);
         model.Update("ground_albedo", InspectorPropertyScope.All, ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted);
         _ = model.IsExpanded("PlanetGround").Should().BeTrue();
-        model.RecordExpansion("PlanetGround", true);
+        model.RecordExpansion("PlanetGround", expanded: true);
         model.Update("ground_albedo", InspectorPropertyScope.PostProcessing, ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted);
         _ = model.HasNoMatches.Should().BeTrue();
         model.Update(string.Empty, InspectorPropertyScope.All, ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.AcesFitted);
@@ -105,7 +105,7 @@ public sealed class InspectorSearchModelTests
         _ = model.Fields.Values.Where(entry => entry.IsVisible).Should().HaveCount(27);
         _ = model.Fields.Values.Where(entry => entry.IsVisible).Should().OnlyContain(entry => entry.Scope == InspectorPropertyScope.PostProcessing);
         model.Update("environment", InspectorPropertyScope.All, ExposureMode.Manual, MeteringMode.Average, ToneMappingMode.None);
-        _ = model.Fields.Values.Where(entry => entry.IsVisible).Should().HaveCount(15);
+        _ = model.Fields.Values.Where(entry => entry.IsVisible).Should().HaveCount(46);
     }
 
     [TestMethod]
@@ -113,7 +113,7 @@ public sealed class InspectorSearchModelTests
     {
         var fields = EnvironmentFieldCatalog.SourceFields;
         _ = fields.Should().HaveCount(10);
-        _ = fields.Select(entry => (entry.Role, entry.Key)).Should().OnlyHaveUniqueItems();
+        _ = fields.Should().OnlyHaveUniqueItems(entry => new { entry.Role, entry.Key });
         foreach (var role in new[] { AtmosphereLightSlot.Primary, AtmosphereLightSlot.Secondary })
         {
             var direction = fields.Where(entry => entry.Role == role && entry.Key.StartsWith("Sun", StringComparison.Ordinal)).ToArray();

@@ -15,6 +15,7 @@
 
 #include <Commands/ObserveEnvironmentCommand.h>
 #include <EditorModule/EditorModule.h>
+#include <World/FogEnvironmentConversion.h>
 #include <World/OxygenWorld.h>
 
 using namespace System::Threading::Tasks;
@@ -101,6 +102,8 @@ public:
     result.Contrast = value.post_process.contrast;
     result.VignetteIntensity = value.post_process.vignette_intensity;
     result.DisplayGamma = value.post_process.display_gamma;
+    result.FogExists = value.fog_exists;
+    result.Fog = ToManagedFog(value.fog);
     completion_->TrySetResult(result);
   }
 

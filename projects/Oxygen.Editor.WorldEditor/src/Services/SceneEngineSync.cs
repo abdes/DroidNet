@@ -710,7 +710,10 @@ public sealed partial class SceneEngineSync(
                 post.Saturation,
                 post.Contrast,
                 post.VignetteIntensity,
-                post.DisplayGamma);
+                post.DisplayGamma)
+        {
+            Fog = environment.Fog ?? new(),
+        };
     }
 
     private RuntimeTextureReference? CreateExposureMaskReference(Scene scene, Uri? mask)

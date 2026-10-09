@@ -73,6 +73,192 @@
     }
   },
   "definitions": {
+    "fog_environment": {
+      "properties": {
+        "enabled": {
+          "x-editor-label": "Enabled",
+          "x-editor-group": "Fog",
+          "x-editor-renderer": "toggle"
+        },
+        "enable_height_fog": {
+          "x-editor-label": "Height Fog",
+          "x-editor-group": "Fog",
+          "x-editor-renderer": "toggle"
+        },
+        "extinction_sigma_t_per_m": {
+          "x-editor-label": "Density",
+          "x-editor-group": "Fog",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01
+        },
+        "height_falloff_per_m": {
+          "x-editor-label": "Height Falloff",
+          "x-editor-group": "Fog",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01
+        },
+        "height_offset_m": {
+          "x-editor-label": "Height Offset",
+          "x-editor-group": "Fog",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01,
+          "x-editor-unit": "m"
+        },
+        "max_opacity": {
+          "x-editor-label": "Max Opacity",
+          "x-editor-group": "Fog",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01
+        },
+        "fog_inscattering_luminance": {
+          "x-editor-label": "Inscattering",
+          "x-editor-group": "Fog",
+          "x-editor-renderer": "color-rgb"
+        },
+        "sky_atmosphere_ambient_contribution_color_scale": {
+          "x-editor-label": "Sky Ambient",
+          "x-editor-group": "Fog",
+          "x-editor-renderer": "color-rgb"
+        },
+        "second_fog_density": {
+          "x-editor-label": "Density",
+          "x-editor-group": "Fog Second layer",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01
+        },
+        "second_fog_height_falloff": {
+          "x-editor-label": "Height Falloff",
+          "x-editor-group": "Fog Second layer",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01
+        },
+        "second_fog_height_offset": {
+          "x-editor-label": "Height Offset",
+          "x-editor-group": "Fog Second layer",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01,
+          "x-editor-unit": "m"
+        },
+        "start_distance_m": {
+          "x-editor-label": "Start",
+          "x-editor-group": "Fog Distances",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01,
+          "x-editor-unit": "m"
+        },
+        "end_distance_m": {
+          "x-editor-label": "End",
+          "x-editor-group": "Fog Distances",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01,
+          "x-editor-unit": "m"
+        },
+        "fog_cutoff_distance_m": {
+          "x-editor-label": "Cutoff",
+          "x-editor-group": "Fog Distances",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01,
+          "x-editor-unit": "m"
+        },
+        "directional_inscattering_luminance": {
+          "x-editor-label": "Luminance",
+          "x-editor-group": "Fog Directional inscattering",
+          "x-editor-renderer": "color-rgb"
+        },
+        "directional_inscattering_exponent": {
+          "x-editor-label": "Exponent",
+          "x-editor-group": "Fog Directional inscattering",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01
+        },
+        "directional_inscattering_start_distance": {
+          "x-editor-label": "Start",
+          "x-editor-group": "Fog Directional inscattering",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01,
+          "x-editor-unit": "m"
+        },
+        "enable_volumetric_fog": {
+          "x-editor-label": "Enabled",
+          "x-editor-group": "Volumetric Fog",
+          "x-editor-renderer": "toggle"
+        },
+        "volumetric_fog_scattering_distribution": {
+          "x-editor-label": "Scattering Distribution",
+          "x-editor-group": "Volumetric Fog",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01
+        },
+        "volumetric_fog_albedo": {
+          "x-editor-label": "Albedo",
+          "x-editor-group": "Volumetric Fog",
+          "x-editor-renderer": "color-rgb"
+        },
+        "volumetric_fog_emissive": {
+          "x-editor-label": "Emissive",
+          "x-editor-group": "Volumetric Fog",
+          "x-editor-renderer": "color-rgb"
+        },
+        "volumetric_fog_extinction_scale": {
+          "x-editor-label": "Extinction Scale",
+          "x-editor-group": "Volumetric Fog",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01
+        },
+        "volumetric_fog_distance": {
+          "x-editor-label": "Distance",
+          "x-editor-group": "Volumetric Fog",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01,
+          "x-editor-unit": "m"
+        },
+        "volumetric_fog_start_distance": {
+          "x-editor-label": "Start",
+          "x-editor-group": "Volumetric Fog",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01,
+          "x-editor-unit": "m"
+        },
+        "volumetric_fog_near_fade_in_distance": {
+          "x-editor-label": "Near Fade-in",
+          "x-editor-group": "Volumetric Fog",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01,
+          "x-editor-unit": "m"
+        },
+        "volumetric_fog_static_lighting_scattering_intensity": {
+          "x-editor-label": "Sky Light Scattering",
+          "x-editor-group": "Volumetric Fog",
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.01
+        },
+        "override_light_colors_with_fog_inscattering_colors": {
+          "x-editor-label": "Use Fog Colors",
+          "x-editor-group": "Volumetric Fog",
+          "x-editor-renderer": "toggle"
+        },
+        "render_in_main_pass": {
+          "x-editor-label": "Main Pass",
+          "x-editor-group": "Fog Rendering",
+          "x-editor-renderer": "toggle"
+        },
+        "holdout": {
+          "x-editor-label": "Holdout",
+          "x-editor-group": "Fog Rendering",
+          "x-editor-renderer": "toggle"
+        },
+        "visible_in_reflection_captures": {
+          "x-editor-label": "Reflection Captures",
+          "x-editor-group": "Fog Rendering",
+          "x-editor-renderer": "toggle"
+        },
+        "visible_in_real_time_sky_captures": {
+          "x-editor-label": "Sky Captures",
+          "x-editor-group": "Fog Rendering",
+          "x-editor-renderer": "toggle"
+        }
+      }
+    },
     "renderable": {
       "properties": {
         "geometry_ref": {

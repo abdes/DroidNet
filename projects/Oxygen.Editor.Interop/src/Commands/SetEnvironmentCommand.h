@@ -73,13 +73,50 @@ namespace oxygen::interop::module {
     float display_gamma = 2.2F;
   };
 
+  //! Authored height fog and volumetric fog. Defaults match the native Fog
+  //! system except `enabled`, which is off for scenes without authored fog.
+  struct FogParams {
+    bool enabled = false;
+    bool height_fog_enabled = true;
+    float density = 0.002F;
+    float height_falloff = 0.02F;
+    float height_offset_meters = 0.0F;
+    float max_opacity = 1.0F;
+    Vec3 inscattering_luminance_rgb { 0.0F, 0.0F, 0.0F };
+    Vec3 sky_ambient_scale_rgb { 1.0F, 1.0F, 1.0F };
+    float second_density = 0.0F;
+    float second_height_falloff = 0.0F;
+    float second_height_offset_meters = 0.0F;
+    float start_distance_meters = 0.0F;
+    float end_distance_meters = 0.0F;
+    float cutoff_distance_meters = 0.0F;
+    Vec3 directional_inscattering_luminance_rgb { 0.0F, 0.0F, 0.0F };
+    float directional_inscattering_exponent = 4.0F;
+    float directional_inscattering_start_distance_meters = 10000.0F;
+    bool volumetric_fog_enabled = false;
+    float volumetric_scattering_distribution = 0.0F;
+    Vec3 volumetric_albedo_rgb { 1.0F, 1.0F, 1.0F };
+    Vec3 volumetric_emissive_rgb { 0.0F, 0.0F, 0.0F };
+    float volumetric_extinction_scale = 1.0F;
+    float volumetric_distance_meters = 0.0F;
+    float volumetric_start_distance_meters = 0.0F;
+    float volumetric_near_fade_in_distance_meters = 0.0F;
+    float volumetric_static_lighting_scattering_intensity = 1.0F;
+    bool override_light_colors_with_fog_inscattering = false;
+    bool render_in_main_pass = true;
+    bool holdout = false;
+    bool visible_in_reflection_captures = true;
+    bool visible_in_real_time_sky_captures = true;
+  };
+
   class SetEnvironmentCommand final : public EditorCommand {
   public:
-    SetEnvironmentCommand(
-      SkyAtmosphereParams atmosphere, PostProcessParams post_process)
+    SetEnvironmentCommand(SkyAtmosphereParams atmosphere,
+      PostProcessParams post_process, FogParams fog = {})
       : EditorCommand(oxygen::core::PhaseId::kSceneMutation)
       , atmosphere_(atmosphere)
       , post_process_(std::move(post_process))
+      , fog_(fog)
     {
     }
 
@@ -94,6 +131,7 @@ namespace oxygen::interop::module {
   private:
     SkyAtmosphereParams atmosphere_;
     PostProcessParams post_process_;
+    FogParams fog_;
     SceneAssetRequests::FailureCallback failure_callback_;
     SceneAssetRequests::SuccessCallback success_callback_;
   };

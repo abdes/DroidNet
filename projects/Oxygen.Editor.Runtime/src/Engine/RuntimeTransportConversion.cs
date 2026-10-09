@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using Oxygen.Interop.Input;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Interop.World;
 
 namespace Oxygen.Editor.Runtime.Engine;
@@ -11,6 +12,84 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <summary>Pure conversions at the mixed-mode transport boundary.</summary>
 internal static class RuntimeTransportConversion
 {
+    /// <summary>Converts authored fog without changing its units.</summary>
+    /// <param name="value">The authored fog.</param>
+    /// <returns>The native transport value.</returns>
+    public static FogEnvironmentManaged ToNative(FogEnvironmentData value)
+        => new()
+        {
+            Enabled = value.Enabled,
+            HeightFogEnabled = value.HeightFogEnabled,
+            Density = value.Density,
+            HeightFalloff = value.HeightFalloff,
+            HeightOffsetMeters = value.HeightOffsetMeters,
+            MaxOpacity = value.MaxOpacity,
+            InscatteringLuminanceRgb = value.InscatteringLuminanceRgb,
+            SkyAmbientScaleRgb = value.SkyAmbientScaleRgb,
+            SecondDensity = value.SecondDensity,
+            SecondHeightFalloff = value.SecondHeightFalloff,
+            SecondHeightOffsetMeters = value.SecondHeightOffsetMeters,
+            StartDistanceMeters = value.StartDistanceMeters,
+            EndDistanceMeters = value.EndDistanceMeters,
+            CutoffDistanceMeters = value.CutoffDistanceMeters,
+            DirectionalInscatteringLuminanceRgb = value.DirectionalInscatteringLuminanceRgb,
+            DirectionalInscatteringExponent = value.DirectionalInscatteringExponent,
+            DirectionalInscatteringStartDistanceMeters = value.DirectionalInscatteringStartDistanceMeters,
+            VolumetricFogEnabled = value.VolumetricFogEnabled,
+            VolumetricScatteringDistribution = value.VolumetricScatteringDistribution,
+            VolumetricAlbedoRgb = value.VolumetricAlbedoRgb,
+            VolumetricEmissiveRgb = value.VolumetricEmissiveRgb,
+            VolumetricExtinctionScale = value.VolumetricExtinctionScale,
+            VolumetricDistanceMeters = value.VolumetricDistanceMeters,
+            VolumetricStartDistanceMeters = value.VolumetricStartDistanceMeters,
+            VolumetricNearFadeInDistanceMeters = value.VolumetricNearFadeInDistanceMeters,
+            VolumetricStaticLightingScatteringIntensity = value.VolumetricStaticLightingScatteringIntensity,
+            OverrideLightColorsWithFogInscattering = value.OverrideLightColorsWithFogInscattering,
+            RenderInMainPass = value.RenderInMainPass,
+            Holdout = value.Holdout,
+            VisibleInReflectionCaptures = value.VisibleInReflectionCaptures,
+            VisibleInRealTimeSkyCaptures = value.VisibleInRealTimeSkyCaptures,
+        };
+
+    /// <summary>Converts observed native fog without changing its units.</summary>
+    /// <param name="value">The native transport value.</param>
+    /// <returns>The observed fog.</returns>
+    public static FogEnvironmentData FromNative(FogEnvironmentManaged value)
+        => new()
+        {
+            Enabled = value.Enabled,
+            HeightFogEnabled = value.HeightFogEnabled,
+            Density = value.Density,
+            HeightFalloff = value.HeightFalloff,
+            HeightOffsetMeters = value.HeightOffsetMeters,
+            MaxOpacity = value.MaxOpacity,
+            InscatteringLuminanceRgb = value.InscatteringLuminanceRgb,
+            SkyAmbientScaleRgb = value.SkyAmbientScaleRgb,
+            SecondDensity = value.SecondDensity,
+            SecondHeightFalloff = value.SecondHeightFalloff,
+            SecondHeightOffsetMeters = value.SecondHeightOffsetMeters,
+            StartDistanceMeters = value.StartDistanceMeters,
+            EndDistanceMeters = value.EndDistanceMeters,
+            CutoffDistanceMeters = value.CutoffDistanceMeters,
+            DirectionalInscatteringLuminanceRgb = value.DirectionalInscatteringLuminanceRgb,
+            DirectionalInscatteringExponent = value.DirectionalInscatteringExponent,
+            DirectionalInscatteringStartDistanceMeters = value.DirectionalInscatteringStartDistanceMeters,
+            VolumetricFogEnabled = value.VolumetricFogEnabled,
+            VolumetricScatteringDistribution = value.VolumetricScatteringDistribution,
+            VolumetricAlbedoRgb = value.VolumetricAlbedoRgb,
+            VolumetricEmissiveRgb = value.VolumetricEmissiveRgb,
+            VolumetricExtinctionScale = value.VolumetricExtinctionScale,
+            VolumetricDistanceMeters = value.VolumetricDistanceMeters,
+            VolumetricStartDistanceMeters = value.VolumetricStartDistanceMeters,
+            VolumetricNearFadeInDistanceMeters = value.VolumetricNearFadeInDistanceMeters,
+            VolumetricStaticLightingScatteringIntensity = value.VolumetricStaticLightingScatteringIntensity,
+            OverrideLightColorsWithFogInscattering = value.OverrideLightColorsWithFogInscattering,
+            RenderInMainPass = value.RenderInMainPass,
+            Holdout = value.Holdout,
+            VisibleInReflectionCaptures = value.VisibleInReflectionCaptures,
+            VisibleInRealTimeSkyCaptures = value.VisibleInRealTimeSkyCaptures,
+        };
+
     /// <summary>Converts a managed payload without changing its identity or units.</summary>
     /// <param name="entries">The managed payload.</param>
     /// <returns>The native transport value.</returns>

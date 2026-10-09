@@ -84,7 +84,8 @@ namespace Oxygen::Interop::World {
     oxygen::interop::module::SetEnvironmentCommand*
       CreateSetEnvironment(
         oxygen::interop::module::SkyAtmosphereParams atmosphere,
-        oxygen::interop::module::PostProcessParams postProcess);
+        oxygen::interop::module::PostProcessParams postProcess,
+        oxygen::interop::module::FogParams fog);
 
     oxygen::interop::module::DetachGeometryCommand*
       CreateDetachGeometry(oxygen::scene::NodeHandle handle);

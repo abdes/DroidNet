@@ -1,0 +1,447 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.World.Inspector.Environment.FogSectionView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:fields="using:Oxygen.Editor.World.Inspector.Controls"
+    xmlns:ui="using:CommunityToolkit.WinUI">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Inspector/SceneInspectorStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <editorcontrols:PropertiesExpander
+        x:Name="FogSection"
+        HorizontalAlignment="Stretch"
+        HorizontalContentAlignment="Stretch"
+        Description="Exponential height fog and volumetric fog authored on the scene."
+        Header="Fog"
+        HeaderIcon="{ui:FontIcon Glyph='&#xE9CA;'}"
+        IsExpanded="True"
+        Tag="Environment">
+        <editorcontrols:PropertiesExpander.Items>
+            <editorcontrols:PropertyCard
+                x:Name="EnabledCard"
+                HorizontalContentAlignment="Stretch"
+                PropertyName="Enabled">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.Enabled, Mode=TwoWay}" Tag="Enabled" />
+            </editorcontrols:PropertyCard>
+            <editorcontrols:PropertyCard
+                x:Name="HeightFogEnabledCard"
+                HorizontalContentAlignment="Stretch"
+                PropertyName="Height Fog">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.HeightFogEnabled, Mode=TwoWay}" Tag="HeightFogEnabled" />
+            </editorcontrols:PropertyCard>
+            <editorcontrols:InspectorNumberField
+                x:Name="DensityCard"
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.DensityDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.DensityDiagnostic.HasError, Mode=OneWay}"
+                Label="Density"
+                Mask="~.#####"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.Density, Mode=TwoWay}"
+                Qualifier="1/m"
+                Tag="Density" />
+            <editorcontrols:InspectorNumberField
+                x:Name="HeightFalloffCard"
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.HeightFalloffDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.HeightFalloffDiagnostic.HasError, Mode=OneWay}"
+                Label="Height Falloff"
+                Mask="~.#####"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.HeightFalloff, Mode=TwoWay}"
+                Qualifier="1/m"
+                Tag="HeightFalloff" />
+            <editorcontrols:InspectorNumberField
+                x:Name="HeightOffsetMetersCard"
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.HeightOffsetMetersDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.HeightOffsetMetersDiagnostic.HasError, Mode=OneWay}"
+                Label="Height Offset"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.HeightOffsetMeters, Mode=TwoWay}"
+                Qualifier="m"
+                Tag="HeightOffsetMeters" />
+            <editorcontrols:InspectorNumberField
+                x:Name="MaxOpacityCard"
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.MaxOpacityDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.MaxOpacityDiagnostic.HasError, Mode=OneWay}"
+                Label="Max Opacity"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.MaxOpacity, Mode=TwoWay}"
+                Tag="MaxOpacity" />
+            <fields:InspectorRgbField
+                x:Name="InscatteringLuminanceRgbCard"
+                Blue="{x:Bind ViewModel.InscatteringLuminanceB, Mode=TwoWay}"
+                ChannelAutomationName="Inscattering, Luminance RGB"
+                DiagnosticSpacing="2"
+                EditSessionCompleted="VectorEditCompleted"
+                EditSessionStarted="VectorEditStarted"
+                ErrorText="{x:Bind ViewModel.InscatteringLuminanceDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                Green="{x:Bind ViewModel.InscatteringLuminanceG, Mode=TwoWay}"
+                HasError="{x:Bind ViewModel.InscatteringLuminanceDiagnostic.HasError, Mode=OneWay}"
+                Label="Inscattering"
+                Qualifier="Luminance RGB"
+                Red="{x:Bind ViewModel.InscatteringLuminanceR, Mode=TwoWay}"
+                Tag="InscatteringLuminanceRgb" />
+            <fields:InspectorRgbField
+                x:Name="SkyAmbientScaleRgbCard"
+                Blue="{x:Bind ViewModel.SkyAmbientScaleB, Mode=TwoWay}"
+                ChannelAutomationName="Sky Ambient, RGB ×"
+                DiagnosticSpacing="2"
+                EditSessionCompleted="VectorEditCompleted"
+                EditSessionStarted="VectorEditStarted"
+                ErrorText="{x:Bind ViewModel.SkyAmbientScaleDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                Green="{x:Bind ViewModel.SkyAmbientScaleG, Mode=TwoWay}"
+                HasError="{x:Bind ViewModel.SkyAmbientScaleDiagnostic.HasError, Mode=OneWay}"
+                IsMultiplier="True"
+                Label="Sky Ambient"
+                Qualifier="RGB ×"
+                Red="{x:Bind ViewModel.SkyAmbientScaleR, Mode=TwoWay}"
+                Tag="SkyAmbientScaleRgb" />
+            <Expander
+                x:Name="SecondLayerDisclosure"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.AutomationId="Scene.Fog.SecondLayer"
+                Header="Second layer"
+                IsExpanded="False"
+                Style="{StaticResource QuietDisclosure}">
+                <StackPanel Spacing="4">
+                    <editorcontrols:InspectorNumberField
+                        x:Name="SecondDensityCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.SecondDensityDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.SecondDensityDiagnostic.HasError, Mode=OneWay}"
+                        Label="Density"
+                        Mask="~.#####"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.SecondDensity, Mode=TwoWay}"
+                        Qualifier="1/m"
+                        Tag="SecondDensity" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="SecondHeightFalloffCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.SecondHeightFalloffDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.SecondHeightFalloffDiagnostic.HasError, Mode=OneWay}"
+                        Label="Height Falloff"
+                        Mask="~.#####"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.SecondHeightFalloff, Mode=TwoWay}"
+                        Qualifier="1/m"
+                        Tag="SecondHeightFalloff" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="SecondHeightOffsetMetersCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.SecondHeightOffsetMetersDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.SecondHeightOffsetMetersDiagnostic.HasError, Mode=OneWay}"
+                        Label="Height Offset"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.SecondHeightOffsetMeters, Mode=TwoWay}"
+                        Qualifier="m"
+                        Tag="SecondHeightOffsetMeters" />
+                </StackPanel>
+            </Expander>
+            <Expander
+                x:Name="DistancesDisclosure"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.AutomationId="Scene.Fog.Distances"
+                Header="Distances"
+                IsExpanded="False"
+                Style="{StaticResource QuietDisclosure}">
+                <StackPanel Spacing="4">
+                    <editorcontrols:InspectorNumberField
+                        x:Name="StartDistanceMetersCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.StartDistanceMetersDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.StartDistanceMetersDiagnostic.HasError, Mode=OneWay}"
+                        Label="Start"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.StartDistanceMeters, Mode=TwoWay}"
+                        Qualifier="m"
+                        Tag="StartDistanceMeters" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="EndDistanceMetersCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.EndDistanceMetersDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.EndDistanceMetersDiagnostic.HasError, Mode=OneWay}"
+                        Label="End"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.EndDistanceMeters, Mode=TwoWay}"
+                        Qualifier="m"
+                        Tag="EndDistanceMeters" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="CutoffDistanceMetersCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.CutoffDistanceMetersDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.CutoffDistanceMetersDiagnostic.HasError, Mode=OneWay}"
+                        Label="Cutoff"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.CutoffDistanceMeters, Mode=TwoWay}"
+                        Qualifier="m"
+                        Tag="CutoffDistanceMeters" />
+                </StackPanel>
+            </Expander>
+            <Expander
+                x:Name="DirectionalDisclosure"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.AutomationId="Scene.Fog.Directional"
+                Header="Directional inscattering"
+                IsExpanded="False"
+                Style="{StaticResource QuietDisclosure}">
+                <StackPanel Spacing="4">
+                    <fields:InspectorRgbField
+                        x:Name="DirectionalInscatteringLuminanceRgbCard"
+                        Blue="{x:Bind ViewModel.DirectionalInscatteringLuminanceB, Mode=TwoWay}"
+                        ChannelAutomationName="Luminance, Luminance RGB"
+                        DiagnosticSpacing="2"
+                        EditSessionCompleted="VectorEditCompleted"
+                        EditSessionStarted="VectorEditStarted"
+                        ErrorText="{x:Bind ViewModel.DirectionalInscatteringLuminanceDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        Green="{x:Bind ViewModel.DirectionalInscatteringLuminanceG, Mode=TwoWay}"
+                        HasError="{x:Bind ViewModel.DirectionalInscatteringLuminanceDiagnostic.HasError, Mode=OneWay}"
+                        Label="Luminance"
+                        Qualifier="Luminance RGB"
+                        Red="{x:Bind ViewModel.DirectionalInscatteringLuminanceR, Mode=TwoWay}"
+                        Tag="DirectionalInscatteringLuminanceRgb" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="DirectionalInscatteringExponentCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.DirectionalInscatteringExponentDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.DirectionalInscatteringExponentDiagnostic.HasError, Mode=OneWay}"
+                        Label="Exponent"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.DirectionalInscatteringExponent, Mode=TwoWay}"
+                        Tag="DirectionalInscatteringExponent" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="DirectionalInscatteringStartDistanceMetersCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.DirectionalInscatteringStartDistanceMetersDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.DirectionalInscatteringStartDistanceMetersDiagnostic.HasError, Mode=OneWay}"
+                        Label="Start"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.DirectionalInscatteringStartDistanceMeters, Mode=TwoWay}"
+                        Qualifier="m"
+                        Tag="DirectionalInscatteringStartDistanceMeters" />
+                </StackPanel>
+            </Expander>
+            <Expander
+                x:Name="VolumetricDisclosure"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.AutomationId="Scene.Fog.Volumetric"
+                Header="Volumetric fog"
+                IsExpanded="False"
+                Style="{StaticResource QuietDisclosure}">
+                <StackPanel Spacing="4">
+                    <editorcontrols:PropertyCard
+                        x:Name="VolumetricFogEnabledCard"
+                        HorizontalContentAlignment="Stretch"
+                        PropertyName="Enabled">
+                        <ToggleSwitch IsOn="{x:Bind ViewModel.VolumetricFogEnabled, Mode=TwoWay}" Tag="VolumetricFogEnabled" />
+                    </editorcontrols:PropertyCard>
+                    <editorcontrols:InspectorNumberField
+                        x:Name="VolumetricScatteringDistributionCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.VolumetricScatteringDistributionDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.VolumetricScatteringDistributionDiagnostic.HasError, Mode=OneWay}"
+                        Label="Scattering Distribution"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.VolumetricScatteringDistribution, Mode=TwoWay}"
+                        Tag="VolumetricScatteringDistribution" />
+                    <fields:InspectorRgbField
+                        x:Name="VolumetricAlbedoRgbCard"
+                        Blue="{x:Bind ViewModel.VolumetricAlbedoB, Mode=TwoWay}"
+                        ChannelAutomationName="Albedo, Linear RGB"
+                        ColorPicked="OnRgbColorPicked"
+                        ComponentMask="~.#"
+                        EditOwner="{x:Bind ViewModel.EditOwner, Mode=OneWay}"
+                        EditSessionCompleted="VectorEditCompleted"
+                        EditSessionStarted="VectorEditStarted"
+                        ErrorText="{x:Bind ViewModel.VolumetricAlbedoDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        Green="{x:Bind ViewModel.VolumetricAlbedoG, Mode=TwoWay}"
+                        HasError="{x:Bind ViewModel.VolumetricAlbedoDiagnostic.HasError, Mode=OneWay}"
+                        Label="Albedo"
+                        PickerAutomationName="Pick albedo color"
+                        Qualifier="Linear RGB"
+                        Red="{x:Bind ViewModel.VolumetricAlbedoR, Mode=TwoWay}"
+                        SwatchBorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                        SwatchCornerRadius="3"
+                        Tag="VolumetricAlbedoRgb" />
+                    <fields:InspectorRgbField
+                        x:Name="VolumetricEmissiveRgbCard"
+                        Blue="{x:Bind ViewModel.VolumetricEmissiveB, Mode=TwoWay}"
+                        ChannelAutomationName="Emissive, Luminance RGB"
+                        DiagnosticSpacing="2"
+                        EditSessionCompleted="VectorEditCompleted"
+                        EditSessionStarted="VectorEditStarted"
+                        ErrorText="{x:Bind ViewModel.VolumetricEmissiveDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        Green="{x:Bind ViewModel.VolumetricEmissiveG, Mode=TwoWay}"
+                        HasError="{x:Bind ViewModel.VolumetricEmissiveDiagnostic.HasError, Mode=OneWay}"
+                        Label="Emissive"
+                        Qualifier="Luminance RGB"
+                        Red="{x:Bind ViewModel.VolumetricEmissiveR, Mode=TwoWay}"
+                        Tag="VolumetricEmissiveRgb" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="VolumetricExtinctionScaleCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.VolumetricExtinctionScaleDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.VolumetricExtinctionScaleDiagnostic.HasError, Mode=OneWay}"
+                        Label="Extinction Scale"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.VolumetricExtinctionScale, Mode=TwoWay}"
+                        Qualifier="×"
+                        Tag="VolumetricExtinctionScale" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="VolumetricDistanceMetersCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.VolumetricDistanceMetersDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.VolumetricDistanceMetersDiagnostic.HasError, Mode=OneWay}"
+                        Label="Distance"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.VolumetricDistanceMeters, Mode=TwoWay}"
+                        Qualifier="m"
+                        Tag="VolumetricDistanceMeters" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="VolumetricStartDistanceMetersCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.VolumetricStartDistanceMetersDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.VolumetricStartDistanceMetersDiagnostic.HasError, Mode=OneWay}"
+                        Label="Start"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.VolumetricStartDistanceMeters, Mode=TwoWay}"
+                        Qualifier="m"
+                        Tag="VolumetricStartDistanceMeters" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="VolumetricNearFadeInDistanceMetersCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.VolumetricNearFadeInDistanceMetersDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.VolumetricNearFadeInDistanceMetersDiagnostic.HasError, Mode=OneWay}"
+                        Label="Near Fade-in"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.VolumetricNearFadeInDistanceMeters, Mode=TwoWay}"
+                        Qualifier="m"
+                        Tag="VolumetricNearFadeInDistanceMeters" />
+                    <editorcontrols:InspectorNumberField
+                        x:Name="VolumetricStaticLightingScatteringIntensityCard"
+                        CardStyle="{StaticResource ScenePropertyCardStyle}"
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        ErrorText="{x:Bind ViewModel.VolumetricStaticLightingScatteringIntensityDiagnostic.Message, Mode=OneWay}"
+                        FontSize="14"
+                        HasError="{x:Bind ViewModel.VolumetricStaticLightingScatteringIntensityDiagnostic.HasError, Mode=OneWay}"
+                        Label="Sky Light Scattering"
+                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                        NumberValue="{x:Bind ViewModel.VolumetricStaticLightingScatteringIntensity, Mode=TwoWay}"
+                        Qualifier="×"
+                        Tag="VolumetricStaticLightingScatteringIntensity" />
+                    <editorcontrols:PropertyCard
+                        x:Name="OverrideLightColorsWithFogInscatteringCard"
+                        HorizontalContentAlignment="Stretch"
+                        PropertyName="Use Fog Colors">
+                        <ToggleSwitch IsOn="{x:Bind ViewModel.OverrideLightColorsWithFogInscattering, Mode=TwoWay}" Tag="OverrideLightColorsWithFogInscattering" />
+                    </editorcontrols:PropertyCard>
+                </StackPanel>
+            </Expander>
+            <Expander
+                x:Name="RenderingDisclosure"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.AutomationId="Scene.Fog.Rendering"
+                Header="Rendering"
+                IsExpanded="False"
+                Style="{StaticResource QuietDisclosure}">
+                <StackPanel Spacing="4">
+                    <editorcontrols:PropertyCard
+                        x:Name="RenderInMainPassCard"
+                        HorizontalContentAlignment="Stretch"
+                        PropertyName="Main Pass">
+                        <ToggleSwitch IsOn="{x:Bind ViewModel.RenderInMainPass, Mode=TwoWay}" Tag="RenderInMainPass" />
+                    </editorcontrols:PropertyCard>
+                    <editorcontrols:PropertyCard
+                        x:Name="HoldoutCard"
+                        HorizontalContentAlignment="Stretch"
+                        PropertyName="Holdout">
+                        <ToggleSwitch IsOn="{x:Bind ViewModel.Holdout, Mode=TwoWay}" Tag="Holdout" />
+                    </editorcontrols:PropertyCard>
+                    <editorcontrols:PropertyCard
+                        x:Name="VisibleInReflectionCapturesCard"
+                        HorizontalContentAlignment="Stretch"
+                        PropertyName="Reflection Captures">
+                        <ToggleSwitch IsOn="{x:Bind ViewModel.VisibleInReflectionCaptures, Mode=TwoWay}" Tag="VisibleInReflectionCaptures" />
+                    </editorcontrols:PropertyCard>
+                    <editorcontrols:PropertyCard
+                        x:Name="VisibleInRealTimeSkyCapturesCard"
+                        HorizontalContentAlignment="Stretch"
+                        PropertyName="Sky Captures">
+                        <ToggleSwitch IsOn="{x:Bind ViewModel.VisibleInRealTimeSkyCaptures, Mode=TwoWay}" Tag="VisibleInRealTimeSkyCaptures" />
+                    </editorcontrols:PropertyCard>
+                </StackPanel>
+            </Expander>
+        </editorcontrols:PropertiesExpander.Items>
+    </editorcontrols:PropertiesExpander>
+</UserControl>

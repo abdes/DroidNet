@@ -31,6 +31,7 @@
 #include <Commands/ReparentSceneNodesCommand.h>
 #include <Commands/SetBackgroundColorCommand.h>
 #include <Commands/SetEnvironmentCommand.h>
+#include <World/FogEnvironmentConversion.h>
 #include <Commands/SetGeometryCommand.h>
 #include <Commands/SetLocalTransformCommand.h>
 #include <Commands/SetMaterialOverrideCommand.h>
@@ -784,7 +785,7 @@ namespace Oxygen::Interop::World {
     String ^ exposureMaskCookedRoot, String ^ exposureMaskDescriptorPath,
     String ^ exposureMaskProjectMount, float bloomIntensity,
     float bloomThreshold, float saturation, float contrast,
-    float vignetteIntensity, float displayGamma,
+    float vignetteIntensity, float displayGamma, FogEnvironmentManaged fog,
     Action<System::UInt64, String ^> ^ onFailure,
     Action<System::UInt64> ^ onSuccess)
   {
@@ -876,7 +877,8 @@ namespace Oxygen::Interop::World {
     post_process.display_gamma = displayGamma;
 
     auto cmd = std::unique_ptr<SetEnvironmentCommand>(
-      commandFactory_->CreateSetEnvironment(atmosphere, std::move(post_process)));
+      commandFactory_->CreateSetEnvironment(
+        atmosphere, std::move(post_process), ToNativeFog(fog)));
     cmd->SetFailureCallback(MakeAssetFailureCallback(onFailure));
     cmd->SetSuccessCallback(MakeAssetSuccessCallback(onSuccess));
     editor_module->get().Enqueue(std::move(cmd));

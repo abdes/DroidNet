@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Numerics;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
@@ -17,6 +18,41 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// </summary>
 internal sealed class SceneEnvironmentDescriptors
 {
+    private static readonly Dictionary<string, string> FogSchemaKeys = new(StringComparer.Ordinal)
+    {
+            ["/fog/enabled"] = "enabled",
+            ["/fog/height_fog_enabled"] = "enable_height_fog",
+            ["/fog/density"] = "extinction_sigma_t_per_m",
+            ["/fog/height_falloff"] = "height_falloff_per_m",
+            ["/fog/height_offset_meters"] = "height_offset_m",
+            ["/fog/max_opacity"] = "max_opacity",
+            ["/fog/inscattering_luminance_rgb"] = "fog_inscattering_luminance",
+            ["/fog/sky_ambient_scale_rgb"] = "sky_atmosphere_ambient_contribution_color_scale",
+            ["/fog/second_density"] = "second_fog_density",
+            ["/fog/second_height_falloff"] = "second_fog_height_falloff",
+            ["/fog/second_height_offset_meters"] = "second_fog_height_offset",
+            ["/fog/start_distance_meters"] = "start_distance_m",
+            ["/fog/end_distance_meters"] = "end_distance_m",
+            ["/fog/cutoff_distance_meters"] = "fog_cutoff_distance_m",
+            ["/fog/directional_inscattering_luminance_rgb"] = "directional_inscattering_luminance",
+            ["/fog/directional_inscattering_exponent"] = "directional_inscattering_exponent",
+            ["/fog/directional_inscattering_start_distance_meters"] = "directional_inscattering_start_distance",
+            ["/fog/volumetric_fog_enabled"] = "enable_volumetric_fog",
+            ["/fog/volumetric_scattering_distribution"] = "volumetric_fog_scattering_distribution",
+            ["/fog/volumetric_albedo_rgb"] = "volumetric_fog_albedo",
+            ["/fog/volumetric_emissive_rgb"] = "volumetric_fog_emissive",
+            ["/fog/volumetric_extinction_scale"] = "volumetric_fog_extinction_scale",
+            ["/fog/volumetric_distance_meters"] = "volumetric_fog_distance",
+            ["/fog/volumetric_start_distance_meters"] = "volumetric_fog_start_distance",
+            ["/fog/volumetric_near_fade_in_distance_meters"] = "volumetric_fog_near_fade_in_distance",
+            ["/fog/volumetric_static_lighting_scattering_intensity"] = "volumetric_fog_static_lighting_scattering_intensity",
+            ["/fog/override_light_colors_with_fog_inscattering"] = "override_light_colors_with_fog_inscattering_colors",
+            ["/fog/render_in_main_pass"] = "render_in_main_pass",
+            ["/fog/holdout"] = "holdout",
+            ["/fog/visible_in_reflection_captures"] = "visible_in_reflection_captures",
+            ["/fog/visible_in_real_time_sky_captures"] = "visible_in_real_time_sky_captures",
+    };
+
     private readonly List<PropertyDescriptor> all;
     private readonly PropertyDescriptor<bool> atmosphereEnabledDescriptor;
     private readonly PropertyDescriptor<Vector3> backgroundColorDescriptor;
@@ -244,6 +280,7 @@ internal sealed class SceneEnvironmentDescriptors
         AddExposureDescriptors(descriptors);
         AddPostProcessFloatDescriptors(descriptors);
         AddSkyAtmosphereDescriptors(descriptors);
+        AddFogDescriptors(descriptors);
         return new SceneEnvironmentDescriptors(descriptors);
     }
 
@@ -339,6 +376,41 @@ internal sealed class SceneEnvironmentDescriptors
         AddSkyFloat(descriptors, "/sky_atmosphere/aerial_perspective_start_depth_meters", "Aerial Start", static s => s.AerialPerspectiveStartDepthMeters, static (s, v) => s with { AerialPerspectiveStartDepthMeters = v });
         AddSkyFloat(descriptors, "/sky_atmosphere/height_fog_contribution", "Height Fog", static s => s.HeightFogContribution, static (s, v) => s with { HeightFogContribution = v });
         descriptors.Add(BoolDescriptor("/sky_atmosphere/sun_disk_enabled", "Sun Disk", static value => value.SkyAtmosphere.SunDiskEnabled, static (value, next) => value with { SkyAtmosphere = value.SkyAtmosphere with { SunDiskEnabled = next } }, "environment.sky_atmosphere.sun_disk_enabled"));
+    }
+
+    private static void AddFogDescriptors(List<PropertyDescriptor> descriptors)
+    {
+        AddFogBool(descriptors, SceneFogFields.Enabled, "Enabled", static f => f.Enabled, static (f, v) => f with { Enabled = v });
+        AddFogBool(descriptors, SceneFogFields.HeightFogEnabled, "Height Fog", static f => f.HeightFogEnabled, static (f, v) => f with { HeightFogEnabled = v });
+        AddFogFloat(descriptors, SceneFogFields.Density, "Density", static f => f.Density, static (f, v) => f with { Density = v }, 0.0f, null);
+        AddFogFloat(descriptors, SceneFogFields.HeightFalloff, "Height Falloff", static f => f.HeightFalloff, static (f, v) => f with { HeightFalloff = v }, 0.0f, null);
+        AddFogFloat(descriptors, SceneFogFields.HeightOffsetMeters, "Height Offset", static f => f.HeightOffsetMeters, static (f, v) => f with { HeightOffsetMeters = v }, null, null);
+        AddFogFloat(descriptors, SceneFogFields.MaxOpacity, "Max Opacity", static f => f.MaxOpacity, static (f, v) => f with { MaxOpacity = v }, 0.0f, 1.0f);
+        AddFogVector(descriptors, SceneFogFields.InscatteringLuminanceRgb, "Inscattering", static f => f.InscatteringLuminanceRgb, static (f, v) => f with { InscatteringLuminanceRgb = v }, 0.0f, null);
+        AddFogVector(descriptors, SceneFogFields.SkyAmbientScaleRgb, "Sky Ambient", static f => f.SkyAmbientScaleRgb, static (f, v) => f with { SkyAmbientScaleRgb = v }, 0.0f, null);
+        AddFogFloat(descriptors, SceneFogFields.SecondDensity, "Density", static f => f.SecondDensity, static (f, v) => f with { SecondDensity = v }, 0.0f, null);
+        AddFogFloat(descriptors, SceneFogFields.SecondHeightFalloff, "Height Falloff", static f => f.SecondHeightFalloff, static (f, v) => f with { SecondHeightFalloff = v }, 0.0f, null);
+        AddFogFloat(descriptors, SceneFogFields.SecondHeightOffsetMeters, "Height Offset", static f => f.SecondHeightOffsetMeters, static (f, v) => f with { SecondHeightOffsetMeters = v }, null, null);
+        AddFogFloat(descriptors, SceneFogFields.StartDistanceMeters, "Start", static f => f.StartDistanceMeters, static (f, v) => f with { StartDistanceMeters = v }, 0.0f, null);
+        AddFogFloat(descriptors, SceneFogFields.EndDistanceMeters, "End", static f => f.EndDistanceMeters, static (f, v) => f with { EndDistanceMeters = v }, 0.0f, null);
+        AddFogFloat(descriptors, SceneFogFields.CutoffDistanceMeters, "Cutoff", static f => f.CutoffDistanceMeters, static (f, v) => f with { CutoffDistanceMeters = v }, 0.0f, null);
+        AddFogVector(descriptors, SceneFogFields.DirectionalInscatteringLuminanceRgb, "Luminance", static f => f.DirectionalInscatteringLuminanceRgb, static (f, v) => f with { DirectionalInscatteringLuminanceRgb = v }, 0.0f, null);
+        AddFogFloat(descriptors, SceneFogFields.DirectionalInscatteringExponent, "Exponent", static f => f.DirectionalInscatteringExponent, static (f, v) => f with { DirectionalInscatteringExponent = v }, 0.000001f, 1000.0f);
+        AddFogFloat(descriptors, SceneFogFields.DirectionalInscatteringStartDistanceMeters, "Start", static f => f.DirectionalInscatteringStartDistanceMeters, static (f, v) => f with { DirectionalInscatteringStartDistanceMeters = v }, 0.0f, null);
+        AddFogBool(descriptors, SceneFogFields.VolumetricFogEnabled, "Enabled", static f => f.VolumetricFogEnabled, static (f, v) => f with { VolumetricFogEnabled = v });
+        AddFogFloat(descriptors, SceneFogFields.VolumetricScatteringDistribution, "Scattering Distribution", static f => f.VolumetricScatteringDistribution, static (f, v) => f with { VolumetricScatteringDistribution = v }, -0.99f, 0.99f);
+        AddFogVector(descriptors, SceneFogFields.VolumetricAlbedoRgb, "Albedo", static f => f.VolumetricAlbedoRgb, static (f, v) => f with { VolumetricAlbedoRgb = v }, 0.0f, 1.0f);
+        AddFogVector(descriptors, SceneFogFields.VolumetricEmissiveRgb, "Emissive", static f => f.VolumetricEmissiveRgb, static (f, v) => f with { VolumetricEmissiveRgb = v }, 0.0f, null);
+        AddFogFloat(descriptors, SceneFogFields.VolumetricExtinctionScale, "Extinction Scale", static f => f.VolumetricExtinctionScale, static (f, v) => f with { VolumetricExtinctionScale = v }, 0.0f, null);
+        AddFogFloat(descriptors, SceneFogFields.VolumetricDistanceMeters, "Distance", static f => f.VolumetricDistanceMeters, static (f, v) => f with { VolumetricDistanceMeters = v }, 0.0f, null);
+        AddFogFloat(descriptors, SceneFogFields.VolumetricStartDistanceMeters, "Start", static f => f.VolumetricStartDistanceMeters, static (f, v) => f with { VolumetricStartDistanceMeters = v }, 0.0f, null);
+        AddFogFloat(descriptors, SceneFogFields.VolumetricNearFadeInDistanceMeters, "Near Fade-in", static f => f.VolumetricNearFadeInDistanceMeters, static (f, v) => f with { VolumetricNearFadeInDistanceMeters = v }, 0.0f, null);
+        AddFogFloat(descriptors, SceneFogFields.VolumetricStaticLightingScatteringIntensity, "Sky Light Scattering", static f => f.VolumetricStaticLightingScatteringIntensity, static (f, v) => f with { VolumetricStaticLightingScatteringIntensity = v }, 0.0f, null);
+        AddFogBool(descriptors, SceneFogFields.OverrideLightColorsWithFogInscattering, "Use Fog Colors", static f => f.OverrideLightColorsWithFogInscattering, static (f, v) => f with { OverrideLightColorsWithFogInscattering = v });
+        AddFogBool(descriptors, SceneFogFields.RenderInMainPass, "Main Pass", static f => f.RenderInMainPass, static (f, v) => f with { RenderInMainPass = v });
+        AddFogBool(descriptors, SceneFogFields.Holdout, "Holdout", static f => f.Holdout, static (f, v) => f with { Holdout = v });
+        AddFogBool(descriptors, SceneFogFields.VisibleInReflectionCaptures, "Reflection Captures", static f => f.VisibleInReflectionCaptures, static (f, v) => f with { VisibleInReflectionCaptures = v });
+        AddFogBool(descriptors, SceneFogFields.VisibleInRealTimeSkyCaptures, "Sky Captures", static f => f.VisibleInRealTimeSkyCaptures, static (f, v) => f with { VisibleInRealTimeSkyCaptures = v });
     }
 
     private static SceneEnvironmentData GetValue(object target)
@@ -504,6 +576,7 @@ internal sealed class SceneEnvironmentDescriptors
             "/sky_atmosphere/aerial_perspective_start_depth_meters" => "#/definitions/sky_atmosphere_environment/aerial_perspective_start_depth_m",
             "/sky_atmosphere/height_fog_contribution" => "#/definitions/sky_atmosphere_environment/height_fog_contribution",
             "/sky_atmosphere/sun_disk_enabled" => "#/definitions/sky_atmosphere_environment/sun_disk_enabled",
+            _ when FogSchemaKeys.TryGetValue(pointer, out var fogKey) => $"#/definitions/fog_environment/{fogKey}",
             _ => throw new ArgumentOutOfRangeException(nameof(pointer), pointer, "Unknown scene environment property pointer."),
         };
 
@@ -591,6 +664,88 @@ internal sealed class SceneEnvironmentDescriptors
             SceneDiagnosticCodes.EnvironmentSkyAtmosphereInvalid,
             "Sky atmosphere values must be finite.",
             $"environment{pointer.Replace('/', '.')}"));
+
+    private static void AddFogBool(
+        List<PropertyDescriptor> descriptors,
+        PropertyId<bool> id,
+        string label,
+        Func<FogEnvironmentData, bool> read,
+        Func<FogEnvironmentData, bool, FogEnvironmentData> write)
+        => descriptors.Add(BoolDescriptor(
+            id.Id.JsonPointer,
+            label,
+            value => read(value.Fog),
+            (value, next) => value with { Fog = write(value.Fog, next) },
+            $"environment{id.Id.JsonPointer.Replace('/', '.')}"));
+
+    private static void AddFogFloat(
+        List<PropertyDescriptor> descriptors,
+        PropertyId<float> id,
+        string label,
+        Func<FogEnvironmentData, float> read,
+        Func<FogEnvironmentData, float, FogEnvironmentData> write,
+        float? minimum,
+        float? maximum)
+        => descriptors.Add(new PropertyDescriptor<float>(
+            id: id,
+            reader: target => read(GetValue(target).Fog),
+            writer: (target, value) => SetFog(target, write, value),
+            validator: value => ValidateFogValue(label, minimum, maximum, value),
+            annotation: Annotation(id.Id.JsonPointer, new EditorAnnotation { Group = "Environment", Label = label, Renderer = "numberbox", Step = 0.01 }),
+            engineCommandKey: $"environment{id.Id.JsonPointer.Replace('/', '.')}"));
+
+    private static void AddFogVector(
+        List<PropertyDescriptor> descriptors,
+        PropertyId<Vector3> id,
+        string label,
+        Func<FogEnvironmentData, Vector3> read,
+        Func<FogEnvironmentData, Vector3, FogEnvironmentData> write,
+        float? minimum,
+        float? maximum)
+        => descriptors.Add(new PropertyDescriptor<Vector3>(
+            id: id,
+            reader: target => read(GetValue(target).Fog),
+            writer: (target, value) => SetFog(target, write, value),
+            validator: value => ValidateFogVector(label, minimum, maximum, value),
+            annotation: Annotation(id.Id.JsonPointer, new EditorAnnotation { Group = "Environment", Label = label, Renderer = "vector3-box", Step = 0.01 }),
+            engineCommandKey: $"environment{id.Id.JsonPointer.Replace('/', '.')}"));
+
+    private static void SetFog<T>(object target, Func<FogEnvironmentData, T, FogEnvironmentData> write, T value)
+    {
+        var environment = GetValue(target);
+        SetValue(target, environment with { Fog = write(environment.Fog, value) });
+    }
+
+    private static ValidationResult ValidateFogVector(string label, float? minimum, float? maximum, Vector3 value)
+    {
+        var x = ValidateFogValue(label, minimum, maximum, value.X);
+        if (!x.IsValid)
+        {
+            return x;
+        }
+
+        var y = ValidateFogValue(label, minimum, maximum, value.Y);
+        return y.IsValid ? ValidateFogValue(label, minimum, maximum, value.Z) : y;
+    }
+
+    private static ValidationResult ValidateFogValue(string label, float? minimum, float? maximum, float value)
+    {
+        if (!float.IsFinite(value))
+        {
+            return ValidationResult.Fail(SceneDiagnosticCodes.EnvironmentFogInvalid, $"Fog {label} must be finite.");
+        }
+
+        return (minimum, maximum) switch
+        {
+            ({ } low, { } high) when value < low || value > high => ValidationResult.Fail(
+                SceneDiagnosticCodes.EnvironmentFogInvalid,
+                string.Create(CultureInfo.InvariantCulture, $"Fog {label} must be between {low} and {high}.")),
+            ({ } low, null) when value < low => ValidationResult.Fail(
+                SceneDiagnosticCodes.EnvironmentFogInvalid,
+                string.Create(CultureInfo.InvariantCulture, $"Fog {label} must be at least {low}.")),
+            _ => ValidationResult.Ok,
+        };
+    }
 
     private static bool IsFinite(Vector3 value)
         => float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);

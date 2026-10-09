@@ -13,9 +13,8 @@ using Oxygen.Editor.WorldEditor.Documents.Commands;
 namespace Oxygen.Editor.World.Inspector;
 
 /// <summary>Owns scene identity, shared edit lifetime and parent-owned section composition.</summary>
-public sealed class EnvironmentViewModel : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner
+public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner
 {
-    private readonly InspectorFieldDiagnostics diagnostics = new();
     private Scene? scene;
     private bool disposed;
 
@@ -32,9 +31,10 @@ public sealed class EnvironmentViewModel : ComponentPropertyEditor, IDisposable,
         Func<Guid, Task>? inspectSceneNode = null,
         IScheduler? observerScheduler = null)
     {
-        this.EditOwner = new(commandService, commandContextProvider, this.RefreshFromScene, this.diagnostics);
+        this.EditOwner = new(commandService, commandContextProvider, this.RefreshFromScene, this.ValidationFeedback);
         this.Background = new(this.EditOwner);
         this.SkyAtmosphere = new(this.EditOwner);
+        this.Fog = new(this.EditOwner);
         this.Exposure = new(this.EditOwner, assetProvider, observerScheduler ?? ImmediateScheduler.Instance);
         this.PostProcessing = new(this.EditOwner);
         this.AtmosphereLights = new(this.EditOwner, commandService, commandContextProvider, inspectSceneNode);
@@ -52,6 +52,9 @@ public sealed class EnvironmentViewModel : ComponentPropertyEditor, IDisposable,
 
     /// <summary>Gets the owned atmosphere section.</summary>
     public SkyAtmosphereSectionViewModel SkyAtmosphere { get; }
+
+    /// <summary>Gets the owned fog section.</summary>
+    public FogSectionViewModel Fog { get; }
 
     /// <summary>Gets the owned exposure section, including curve and texture policy.</summary>
     public ExposureSectionViewModel Exposure { get; }
@@ -75,7 +78,7 @@ public sealed class EnvironmentViewModel : ComponentPropertyEditor, IDisposable,
     public override string Header => "Environment";
 
     /// <inheritdoc />
-    public override string Description => "Scene atmosphere, sun, exposure, tone mapping, and background intent.";
+    public override string Description => "Scene atmosphere, sun, fog, exposure, tone mapping, and background intent.";
 
     /// <summary>Gets an unacknowledged diagnostic focus request.</summary>
     internal string? PendingFieldFocus { get; private set; }
@@ -84,7 +87,7 @@ public sealed class EnvironmentViewModel : ComponentPropertyEditor, IDisposable,
     internal Task PendingEdits => Task.WhenAll(this.EditOwner.Pending, this.AtmosphereLights.Pending, this.SceneReferences.Pending);
 
     /// <inheritdoc />
-    internal override InspectorFieldDiagnostics? ValidationFeedback => this.diagnostics;
+    internal override InspectorFieldDiagnostics? ValidationFeedback { get; } = new();
 
     /// <summary>Binds scene identity before allowing any section to submit authoring input.</summary>
     /// <param name="value">The scene, or null while node selection owns the inspector.</param>
@@ -188,6 +191,7 @@ public sealed class EnvironmentViewModel : ComponentPropertyEditor, IDisposable,
         {
             this.Background.Refresh(value.BackgroundColor);
             this.SkyAtmosphere.Refresh(value.AtmosphereEnabled, value.SkyAtmosphere ?? new());
+            this.Fog.Refresh(value.Fog ?? new());
             this.Exposure.Refresh(value.PostProcess ?? new());
             this.PostProcessing.Refresh(value.PostProcess ?? new());
         });

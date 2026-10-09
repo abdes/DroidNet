@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using System.Numerics;
+using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -88,4 +89,8 @@ public sealed record RuntimeSetEnvironment(
     float Saturation,
     float Contrast,
     float VignetteIntensity,
-    float DisplayGamma) : RuntimeWorldCommand;
+    float DisplayGamma) : RuntimeWorldCommand
+{
+    /// <summary>Gets the authored height fog and volumetric fog.</summary>
+    public FogEnvironmentData Fog { get; init; } = new();
+}

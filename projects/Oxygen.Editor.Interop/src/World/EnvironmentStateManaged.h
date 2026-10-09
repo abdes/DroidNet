@@ -7,6 +7,8 @@
 #pragma once
 #pragma managed(push, on)
 
+#include <World/FogEnvironmentManaged.h>
+
 namespace Oxygen::Interop::World {
 
 //! One compensation key with EV100 input and EV-stop output.
@@ -72,6 +74,8 @@ public value struct EnvironmentStateManaged {
   float Contrast;
   float VignetteIntensity;
   float DisplayGamma;
+  bool FogExists;
+  FogEnvironmentManaged Fog;
 };
 
 } // namespace Oxygen::Interop::World

@@ -624,8 +624,52 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                 LowerHemisphereBlendAlpha: 1.0f,
                 VolumetricScatteringIntensity: 1.0f,
                 AffectReflections: true),
+            CreateFog(environment.Fog ?? new()),
             CreatePostProcess(environment.PostProcess ?? new()),
             new NativeBackgroundEnvironment(Enabled: true, ToArray(environment.BackgroundColor)));
+
+    // The fog cubemap and its distances stay at native defaults: the renderer
+    // does not sample an inscattering cubemap.
+    private static NativeFogEnvironment CreateFog(FogEnvironmentData authored)
+        => new(
+            Enabled: authored.Enabled,
+            HeightFogEnabled: authored.HeightFogEnabled,
+            Density: authored.Density,
+            HeightFalloff: authored.HeightFalloff,
+            HeightOffsetMeters: authored.HeightOffsetMeters,
+            MaxOpacity: authored.MaxOpacity,
+            InscatteringLuminanceRgb: ToArray(authored.InscatteringLuminanceRgb),
+            SkyAmbientScaleRgb: ToArray(authored.SkyAmbientScaleRgb),
+            SecondDensity: authored.SecondDensity,
+            SecondHeightFalloff: authored.SecondHeightFalloff,
+            SecondHeightOffsetMeters: authored.SecondHeightOffsetMeters,
+            StartDistanceMeters: authored.StartDistanceMeters,
+            EndDistanceMeters: authored.EndDistanceMeters,
+            CutoffDistanceMeters: authored.CutoffDistanceMeters,
+            DirectionalInscatteringLuminanceRgb: ToArray(authored.DirectionalInscatteringLuminanceRgb),
+            DirectionalInscatteringExponent: authored.DirectionalInscatteringExponent,
+            DirectionalInscatteringStartDistanceMeters: authored.DirectionalInscatteringStartDistanceMeters,
+            VolumetricFogEnabled: authored.VolumetricFogEnabled,
+            VolumetricScatteringDistribution: authored.VolumetricScatteringDistribution,
+            VolumetricAlbedoRgb: ToArray(authored.VolumetricAlbedoRgb),
+            VolumetricEmissiveRgb: ToArray(authored.VolumetricEmissiveRgb),
+            VolumetricExtinctionScale: authored.VolumetricExtinctionScale,
+            VolumetricDistanceMeters: authored.VolumetricDistanceMeters,
+            VolumetricStartDistanceMeters: authored.VolumetricStartDistanceMeters,
+            VolumetricNearFadeInDistanceMeters: authored.VolumetricNearFadeInDistanceMeters,
+            VolumetricStaticLightingScatteringIntensity: authored.VolumetricStaticLightingScatteringIntensity,
+            OverrideLightColorsWithFogInscattering: authored.OverrideLightColorsWithFogInscattering,
+            RenderInMainPass: authored.RenderInMainPass,
+            Holdout: authored.Holdout,
+            VisibleInReflectionCaptures: authored.VisibleInReflectionCaptures,
+            VisibleInRealTimeSkyCaptures: authored.VisibleInRealTimeSkyCaptures,
+            Model: 0,
+            SingleScatteringAlbedoRgb: [1.0f, 1.0f, 1.0f],
+            AnisotropyG: 0.0f,
+            InscatteringColorCubemapAngle: 0.0f,
+            InscatteringTextureTint: [1.0f, 1.0f, 1.0f],
+            FullyDirectionalInscatteringColorDistance: 0.0f,
+            NonDirectionalInscatteringColorDistance: 0.0f);
 
     private static NativePostProcessEnvironment CreatePostProcess(PostProcessEnvironmentData authored)
         => new(

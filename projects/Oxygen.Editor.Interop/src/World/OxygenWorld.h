@@ -149,7 +149,7 @@ value struct CookedRootBindingManaged {
       String ^ exposureMaskCookedRoot, String ^ exposureMaskDescriptorPath,
       String ^ exposureMaskProjectMount, float bloomIntensity,
       float bloomThreshold, float saturation, float contrast,
-      float vignetteIntensity, float displayGamma,
+      float vignetteIntensity, float displayGamma, FogEnvironmentManaged fog,
       Action<System::UInt64, String ^> ^ onFailure,
       Action<System::UInt64> ^ onSuccess);
     void DetachGeometry(System::Guid nodeId);
