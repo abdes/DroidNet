@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <string_view>
 #include <variant>
@@ -20,6 +21,9 @@
 namespace oxygen::content::import::test {
 namespace {
   using internal::GeometrySource;
+
+  //! A sphere resolution far beyond any generator limit.
+  constexpr auto kHugeSegmentCount = 1'000'000;
 
   auto MakeDescriptor() -> nlohmann::json
   {
@@ -72,7 +76,52 @@ namespace {
     EXPECT_EQ(submesh.material, "/Content/Materials/stone.omat");
     EXPECT_EQ(submesh.bounds.min, lod.bounds.min);
     ASSERT_EQ(submesh.views.size(), 1U);
-    EXPECT_EQ(submesh.views.front(), "surface");
+    EXPECT_EQ(submesh.views.front().view_ref, "surface");
+    // A view without authored bounds takes its submesh bounds.
+    EXPECT_EQ(submesh.views.front().bounds.min, submesh.bounds.min);
+    EXPECT_EQ(submesh.views.front().bounds.max, submesh.bounds.max);
+  }
+
+  NOLINT_TEST(GeometrySourceTest, RetainsAuthoredViewBounds)
+  {
+    auto document = MakeDescriptor();
+    document.at("lods")
+      .at(0)
+      .at("submeshes")
+      .at(0)
+      .at("views")
+      .at(0)
+      .emplace(
+        "bounds", nlohmann::json::parse(R"({"min":[0,0,0],"max":[1,0.5,1]})"));
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    const auto source = GeometrySource::FromDescriptor(
+      document.dump(), "geometry.json", diagnostics);
+    if (!source.has_value()) {
+      FAIL() << "Expected source to contain a value";
+    }
+    const auto& view = source->lods.front().submeshes.front().views.front();
+    EXPECT_EQ(view.bounds.min, (std::array { 0.0F, 0.0F, 0.0F }));
+    EXPECT_EQ(view.bounds.max, (std::array { 1.0F, 0.5F, 1.0F }));
+  }
+
+  NOLINT_TEST(GeometrySourceTest, RejectsViewBoundsOutsideTheSubmesh)
+  {
+    auto document = MakeDescriptor();
+    document.at("lods")
+      .at(0)
+      .at("submeshes")
+      .at(0)
+      .at("views")
+      .at(0)
+      .emplace(
+        "bounds", nlohmann::json::parse(R"({"min":[0,0,0],"max":[2,1,1]})"));
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(GeometrySource::FromDescriptor(
+      document.dump(), "geometry.json", diagnostics));
+    EXPECT_TRUE(
+      std::ranges::any_of(diagnostics, [](const auto& diagnostic) -> auto {
+        return diagnostic.code == "geometry.descriptor.view_bounds_invalid";
+      }));
   }
 
   NOLINT_TEST(GeometrySourceTest, RetainsAllSkinningReferences)
@@ -81,12 +130,16 @@ namespace {
     auto& lod = document.at("lods").at(0);
     lod.at("mesh_type") = "skinned";
     lod.emplace("skinning",
-      nlohmann::json { { "joint_index_ref", "/Content/Buffers/joints.obuf" },
+      nlohmann::json {
+        { "joint_index_ref", "/Content/Buffers/joints.obuf" },
         { "joint_weight_ref", "/Content/Buffers/weights.obuf" },
         { "inverse_bind_ref", "/Content/Buffers/bind.obuf" },
         { "joint_remap_ref", "/Content/Buffers/remap.obuf" },
         { "skeleton_ref", "/Content/Skeletons/body.oskel" },
-        { "joint_count", 4 }, { "influences_per_vertex", 4 }, { "flags", 1 } });
+        { "joint_count", 4 },
+        { "influences_per_vertex", 4 },
+        { "flags", 1 },
+      });
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source = GeometrySource::FromDescriptor(
       document.dump(), "geometry.json", diagnostics);
@@ -116,11 +169,17 @@ namespace {
     lod.erase("buffers");
     lod.at("mesh_type") = "procedural";
     lod.emplace("procedural",
-      nlohmann::json { { "generator", "Sphere" },
+      nlohmann::json {
+        { "generator", "Sphere" },
         { "mesh_name", "LargeSphere" },
-        { "params",
-          { { "latitude_segments", 1000000 },
-            { "longitude_segments", 1000000 } } } });
+        {
+          "params",
+          {
+            { "latitude_segments", kHugeSegmentCount },
+            { "longitude_segments", kHugeSegmentCount },
+          },
+        },
+      });
     lod.at("submeshes").at(0).at("views").at(0).at("view_ref") = "__all__";
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source = GeometrySource::FromDescriptor(
@@ -144,9 +203,10 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
       document.dump(), "geometry.json", diagnostics));
-    EXPECT_TRUE(std::ranges::any_of(diagnostics, [](const auto& diagnostic) {
-      return diagnostic.code == "geometry.descriptor.slot_id_invalid";
-    }));
+    EXPECT_TRUE(
+      std::ranges::any_of(diagnostics, [](const auto& diagnostic) -> auto {
+        return diagnostic.code == "geometry.descriptor.slot_id_invalid";
+      }));
   }
 } // namespace
 } // namespace oxygen::content::import::test

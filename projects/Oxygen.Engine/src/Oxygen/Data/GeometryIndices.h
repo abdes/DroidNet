@@ -27,4 +27,9 @@ using SubmeshIndex
   = oxygen::NamedType<std::uint32_t, struct SubmeshIndexTag, oxygen::Comparable,
     oxygen::Hashable, oxygen::Printable, oxygen::DefaultInitialized>;
 
+//! Index of a mesh view within its submesh: one draw and one culling unit.
+using MeshViewIndex = oxygen::NamedType<std::uint32_t, struct MeshViewIndexTag,
+  oxygen::Comparable, oxygen::Hashable, oxygen::Printable,
+  oxygen::DefaultInitialized>;
+
 } // namespace oxygen::data

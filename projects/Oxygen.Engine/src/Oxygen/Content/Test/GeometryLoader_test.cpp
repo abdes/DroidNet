@@ -4,9 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
+#include <iterator>
+#include <memory>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -25,29 +27,48 @@ using oxygen::content::loaders::LoadGeometryAsset;
 
 namespace {
 
+using oxygen::data::pak::geometry::GeometryAssetDesc;
+using oxygen::data::pak::geometry::kGeometryAssetVersion;
+using oxygen::data::pak::geometry::MeshDesc;
+using oxygen::data::pak::geometry::MeshViewDesc;
+using oxygen::data::pak::geometry::SubMeshDesc;
+
+//! The procedural cube's vertex and index counts.
+constexpr uint32_t kCubeVertexCount = 24U;
+constexpr uint32_t kCubeIndexCount = 36U;
+//! A mesh type value no MeshType names.
+constexpr uint8_t kInvalidMeshType = 0xFFU;
+
+//! Descriptor fields a test can make invalid.
+struct GeometryOverrides {
+  decltype(oxygen::data::pak::core::AssetHeader::version) version
+    = kGeometryAssetVersion;
+  //! Maximum x of the mesh view; the submesh bounds are all zero.
+  float view_max_x = 0.0F;
+};
+
 class GeometryLoaderContractTest
   : public oxygen::content::testing::BinaryAssetLoaderFixtureBase {
 protected:
   template <typename T> auto WriteBlob(const T& value) -> void
   {
-    const auto bytes = std::span<const std::byte>(
-      reinterpret_cast<const std::byte*>(&value), sizeof(T));
+    const auto bytes = std::as_bytes(std::span<const T, 1>(&value, 1));
     const auto result = desc_writer_.WriteBlob(bytes);
     ASSERT_TRUE(result) << result.error().message();
   }
 
   auto WriteProceduralGeometry(const std::string_view recipe_name,
-    const std::span<const std::byte> parameters = {}) -> void
+    const std::span<const std::byte> parameters = {},
+    const GeometryOverrides& overrides = {}) -> void
   {
-    using namespace oxygen::data::pak::geometry;
     GeometryAssetDesc desc {};
     desc.header.asset_type
       = static_cast<uint8_t>(oxygen::data::AssetType::kGeometry);
-    desc.header.version = kGeometryAssetVersion;
+    desc.header.version = overrides.version;
     desc.lod_count = 1;
     MeshDesc mesh {};
     ASSERT_LT(recipe_name.size(), sizeof(mesh.name));
-    std::memcpy(mesh.name, recipe_name.data(), recipe_name.size());
+    std::ranges::copy(recipe_name, std::begin(mesh.name));
     mesh.mesh_type = static_cast<uint8_t>(oxygen::data::MeshType::kProcedural);
     mesh.submesh_count = 1;
     mesh.mesh_view_count = 1;
@@ -58,12 +79,13 @@ protected:
     submesh.material_asset_key
       = oxygen::data::AssetKey::FromVirtualPath("/Art/Materials/Shared.omat");
     submesh.mesh_view_count = 1;
-    const MeshViewDesc view {
+    MeshViewDesc view {
       .first_index = 0,
-      .index_count = 36,
+      .index_count = kCubeIndexCount,
       .first_vertex = 0,
-      .vertex_count = 24,
+      .vertex_count = kCubeVertexCount,
     };
+    view.bounding_box_max[0] = overrides.view_max_x;
     auto packed = desc_writer_.ScopedAlignment(1);
     WriteBlob(desc);
     WriteBlob(mesh);
@@ -79,14 +101,14 @@ protected:
 NOLINT_TEST_F(
   GeometryLoaderContractTest, LoadGeometryAssetUnsupportedMeshTypeThrows)
 {
-  oxygen::data::pak::geometry::GeometryAssetDesc desc {};
+  GeometryAssetDesc desc {};
   desc.header.asset_type
     = static_cast<uint8_t>(oxygen::data::AssetType::kGeometry);
-  desc.header.version = oxygen::data::pak::geometry::kGeometryAssetVersion;
+  desc.header.version = kGeometryAssetVersion;
   desc.lod_count = 1;
 
-  oxygen::data::pak::geometry::MeshDesc mesh {};
-  mesh.mesh_type = 0xFF;
+  MeshDesc mesh {};
+  mesh.mesh_type = kInvalidMeshType;
 
   {
     auto packed = desc_writer_.ScopedAlignment(1);
@@ -143,9 +165,42 @@ NOLINT_TEST_F(
     ASSERT_EQ(geometry->LodCount(), 1U);
     const auto& mesh = geometry->MeshAt(oxygen::data::LodIndex {});
     ASSERT_NE(mesh, nullptr);
-    EXPECT_EQ(mesh->VertexCount(), 24U);
-    EXPECT_EQ(mesh->IndexCount(), 36U);
+    EXPECT_EQ(mesh->VertexCount(), kCubeVertexCount);
+    EXPECT_EQ(mesh->IndexCount(), kCubeIndexCount);
     ASSERT_EQ(collector->AssetDependencies().size(), 1U);
+  }
+}
+
+//! Geometry cooked before mesh views carried bounds must be re-cooked.
+NOLINT_TEST_F(GeometryLoaderContractTest, PreviousGeometryVersionIsRejected)
+{
+  ASSERT_NO_FATAL_FAILURE(WriteProceduralGeometry("Cube/Mesh", {},
+    {
+      .version = kGeometryAssetVersion - 1U,
+    }));
+  auto [context, collector] = MakeDecodeLoaderContext();
+  try {
+    (void)LoadGeometryAsset(context);
+    FAIL() << "A previous geometry version must not load";
+  } catch (const std::runtime_error& error) {
+    EXPECT_NE(std::string(error.what()).find("recooking"), std::string::npos);
+  }
+}
+
+//! Mesh view bounds must lie inside their submesh bounds.
+NOLINT_TEST_F(GeometryLoaderContractTest, ViewBoundsOutsideSubmeshAreRejected)
+{
+  ASSERT_NO_FATAL_FAILURE(WriteProceduralGeometry("Cube/Mesh", {},
+    {
+      .view_max_x = 1.0F,
+    }));
+  auto [context, collector] = MakeDecodeLoaderContext();
+  try {
+    (void)LoadGeometryAsset(context);
+    FAIL() << "Mesh view bounds outside the submesh must not load";
+  } catch (const std::runtime_error& error) {
+    EXPECT_NE(std::string(error.what()).find("outside the submesh bounds"),
+      std::string::npos);
   }
 }
 
@@ -153,7 +208,6 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   GeometryLoaderContractTest, InspectDependenciesWithoutLoadingBuffers)
 {
-  using namespace oxygen::data::pak::geometry;
   const auto material
     = oxygen::data::AssetKey::FromVirtualPath("/Art/Materials/Shared.omat");
   GeometryAssetDesc desc {};

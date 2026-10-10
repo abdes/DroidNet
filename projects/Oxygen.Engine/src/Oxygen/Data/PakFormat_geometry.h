@@ -219,13 +219,19 @@ static_assert(sizeof(SubMeshDesc) == 124);
 
 //! Mesh view descriptor
 /*!
-  Describes a contiguous range of indices and vertices within a mesh, used for
-  rendering a portion of geometry (e.g., a primitive group or section).
+  Describes a contiguous range of indices and vertices within a mesh. Each view
+  is one draw and one occlusion culling unit, so it carries the local bounds of
+  its own triangles.
 
   ### Relationships
 
   - 1 MeshViewDesc : 1 range in index buffer, 1 range in vertex buffer
   - MeshViewDesc are grouped under SubMeshDesc
+
+  ### Notes
+
+  - `bounding_box_min`, `bounding_box_max`: local AABB of the view's triangles,
+    required to lie inside the owning submesh's bounds.
 
   @see MeshDesc, SubMeshDesc
 */
@@ -238,9 +244,11 @@ struct MeshViewDesc {
   BufferIndexT index_count = 0; // Number of indices
   BufferIndexT first_vertex = 0; // Start vertex in vertex buffer
   BufferIndexT vertex_count = 0; // Number of vertices
+  float bounding_box_min[3] = {}; // AABB min coordinates
+  float bounding_box_max[3] = {}; // AABB max coordinates
 };
 #pragma pack(pop)
-static_assert(sizeof(MeshViewDesc) == 16);
+static_assert(sizeof(MeshViewDesc) == 40);
 
 } // namespace oxygen::data::pak::geometry
 

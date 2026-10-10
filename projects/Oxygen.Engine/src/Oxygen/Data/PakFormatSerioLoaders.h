@@ -214,6 +214,12 @@ inline auto Load(AnyReader& reader, data::pak::geometry::MeshViewDesc& desc)
   CHECK_RESULT(reader.ReadInto(desc.index_count));
   CHECK_RESULT(reader.ReadInto(desc.first_vertex));
   CHECK_RESULT(reader.ReadInto(desc.vertex_count));
+  for (auto& value : desc.bounding_box_min) {
+    CHECK_RESULT(reader.ReadInto(value));
+  }
+  for (auto& value : desc.bounding_box_max) {
+    CHECK_RESULT(reader.ReadInto(value));
+  }
   return {};
 }
 

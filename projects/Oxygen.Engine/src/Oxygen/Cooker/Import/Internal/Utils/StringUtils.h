@@ -7,6 +7,7 @@
 #pragma once
 
 #include <algorithm>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -30,6 +31,13 @@ inline auto TruncateAndNullTerminate(
     --copy_len;
   }
   std::copy_n(s.data(), copy_len, dst);
+}
+
+//! Truncates UTF-8 into the fixed-size field `dst` and null-terminates it.
+inline auto TruncateAndNullTerminate(
+  const std::span<char> dst, const std::string_view s) -> void
+{
+  TruncateAndNullTerminate(dst.data(), dst.size(), s);
 }
 
 } // namespace oxygen::content::import::util

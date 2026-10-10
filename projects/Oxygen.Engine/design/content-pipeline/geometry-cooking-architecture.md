@@ -69,7 +69,7 @@ In scope:
    `ResourceIndexT` placeholders and material `AssetKey` fields; optionally
    hashes the full byte span.
 8. Loose-cooked descriptor emission (`.ogeo`) via `LooseCookedLayout`.
-9. Binary format: `GeometryAssetDesc` (256 bytes) +
+9. Binary format: `GeometryAssetDesc` (131 bytes) +
    `MeshDesc[lod_count]` (145 bytes each, variable tail) in
    `PakFormat_geometry.h`.
 10. Runtime loading via `LoadGeometryAsset` and `GeometryAsset`.
@@ -141,7 +141,7 @@ The following facts were confirmed during the documentation pass:
 | Route discriminant is request payload presence | `src/Oxygen/Cooker/Import/AsyncImportService.cpp` (`const bool is_geometry_descriptor_request = request.geometry_descriptor.has_value()`)                                                                                                          |
 | Manifest job type exists                       | `src/Oxygen/Cooker/Import/ImportManifest.cpp`: `if (job_type == "geometry-descriptor")`                                                                                                                                                            |
 | Schema is embedded                             | `src/Oxygen/Cooker/Import/Internal/ImportManifest_schema.h` (`kGeometryDescriptorSchema`)                                                                                                                                                          |
-| Binary format is locked                        | `src/Oxygen/Data/PakFormat_geometry.h` (`GeometryAssetDesc`, `static_assert(sizeof(...))==256`; `MeshDesc`, `static_assert(sizeof(...))==145`; `SubMeshDesc`, `static_assert(sizeof(...))==108`; `MeshViewDesc`, `static_assert(sizeof(...))==16`) |
+| Binary format is locked                        | `src/Oxygen/Data/PakFormat_geometry.h` (`GeometryAssetDesc`, `static_assert(sizeof(...))==131`; `MeshDesc`, `static_assert(sizeof(...))==145`; `SubMeshDesc`, `static_assert(sizeof(...))==124`; `MeshViewDesc`, `static_assert(sizeof(...))==40`) |
 | Loose cooked layout for geometry               | `src/Oxygen/Cooker/Loose/LooseCookedLayout.h` (`kGeometryDescriptorExtension = ".ogeo"`, `GeometryDescriptorRelPath()`, `GeometryVirtualPath()`)                                                                                                   |
 | Buffer sidecar reader exists                   | `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp` (`ResolvedBufferSidecar`, `ResolveBufferSidecarByVirtualPath`)                                                                                                            |
 | Material key resolver exists                   | `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp` (`ResolveMaterialKeyByVirtualPath`)                                                                                                                                       |
@@ -759,36 +759,35 @@ Serialization uses `serio::Writer` with `ScopedAlignment(1)`.
 
 ## 9. Binary Format
 
-### 9.1 `AssetHeader` (95 bytes, `PakFormat_core.h`)
+### 9.1 `AssetHeader` (103 bytes, `PakFormat_core.h`)
 
 ```cpp
 #pragma pack(push, 1)
 struct AssetHeader {
-  uint8_t  asset_type    = 0;    // AssetType::kGeometry
-  uint8_t  version       = 0;    // kGeometryAssetVersion (= 1)
-  uint8_t  variant_flags = 0;
-  char     name[64]      = {};   // null-terminated geometry name
-  uint64_t content_hash  = 0;    // populated by FinalizeDescriptorBytes
-  uint8_t  reserved[16]  = {};
+  uint8_t asset_type = 0;              // AssetType::kGeometry
+  char name[64] = {};                  // null-terminated geometry name
+  uint8_t version = 0;                 // kGeometryAssetVersion
+  uint8_t streaming_priority = 0;      // 0 = highest
+  ContentHashDigest content_hash = {}; // SHA-256, set by finalization
+  uint32_t variant_flags = 0;          // geometry attribute mask
 };
 #pragma pack(pop)
-static_assert(sizeof(AssetHeader) == 95);
+static_assert(sizeof(AssetHeader) == 103);
 ```
 
-### 9.2 `GeometryAssetDesc` (256 bytes, `PakFormat_geometry.h`)
+### 9.2 `GeometryAssetDesc` (131 bytes, `PakFormat_geometry.h`)
 
 ```cpp
 #pragma pack(push, 1)
 struct GeometryAssetDesc {
-  AssetHeader header;             // 95 bytes; asset_type = kGeometry
-  uint32_t lod_count = 0;        // Number of MeshDesc entries following
+  AssetHeader header;             // 103 bytes; asset_type = kGeometry
+  uint32_t lod_count = 0;         // Number of MeshDesc entries following
   float bounding_box_min[3] = {}; // AABB min (pre-computed by tooling)
   float bounding_box_max[3] = {}; // AABB max (pre-computed by tooling)
-  uint8_t reserved[133] = {};
 };
 // Followed by: MeshDesc meshes[lod_count];
 #pragma pack(pop)
-static_assert(sizeof(GeometryAssetDesc) == 256);
+static_assert(sizeof(GeometryAssetDesc) == 131);
 ```
 
 ### 9.3 `MeshDesc` (145 bytes + optional tail, `PakFormat_geometry.h`)
@@ -801,10 +800,10 @@ struct MeshDesc {
   uint32_t submesh_count     = 0;   // number of SubMeshDesc following
   uint32_t mesh_view_count   = 0;   // total MeshViewDesc in all submeshes
   union {
-    StandardMeshInfo  standard;  // 32 bytes
-    SkinnedMeshInfo   skinned;   // 72 bytes
-    ProceduralMeshInfo procedural; // 4 bytes
-  } info {};                        // union size = max(32, 72, 4) = 72 bytes
+    StandardMeshInfo   standard;
+    SkinnedMeshInfo    skinned;
+    ProceduralMeshInfo procedural;
+  } info {};                        // every arm is 72 bytes
 };
 // Followed by:
 //   [procedural only] uint8_t param_blob[info.procedural.params_size];
@@ -813,26 +812,31 @@ struct MeshDesc {
 static_assert(sizeof(MeshDesc) == 145);
 ```
 
-`StandardMeshInfo` (32 bytes): `vertex_buffer` + `index_buffer` + `bounding_box_min[3]` + `bounding_box_max[3]`.
+Each union arm is padded to 72 bytes:
 
-`SkinnedMeshInfo` (72 bytes): 6 × `ResourceIndexT` fields + `AssetKey skeleton_asset_key` + `joint_count` (uint16) + `influences_per_vertex` (uint16) + `flags` (uint32) + `bounding_box_min[3]` + `bounding_box_max[3]`.
+- `StandardMeshInfo`: `vertex_buffer` + `index_buffer` + `bounding_box_min[3]`
+  - `bounding_box_max[3]`, then reserved bytes.
+- `SkinnedMeshInfo`: 6 × `ResourceReferenceIndex` + `AssetKey
+skeleton_asset_key` + `joint_count` (uint16) + `influences_per_vertex`
+  (uint16) + `flags` (uint32) + `bounding_box_min[3]` + `bounding_box_max[3]`.
+- `ProceduralMeshInfo`: `params_size` (uint32), the size of the parameter blob
+  immediately following `MeshDesc`, then reserved bytes.
 
-`ProceduralMeshInfo` (4 bytes): `params_size` (uint32) — size of the parameter blob in bytes immediately following `MeshDesc`.
-
-### 9.4 `SubMeshDesc` (108 bytes, `PakFormat_geometry.h`)
+### 9.4 `SubMeshDesc` (124 bytes, `PakFormat_geometry.h`)
 
 ```cpp
 #pragma pack(push, 1)
 struct SubMeshDesc {
-  char     name[64]            = {};  // null-terminated submesh name
-  AssetKey material_asset_key  = {};  // material asset key (embedded at cook)
-  uint32_t mesh_view_count     = 0;   // number of MeshViewDesc following
-  float    bounding_box_min[3] = {};
-  float    bounding_box_max[3] = {};
+  char           name[64]            = {}; // null-terminated submesh name
+  AssetKey       material_asset_key;       // material (embedded at cook)
+  MaterialSlotId slot_id;                  // semantic slot identity
+  uint32_t       mesh_view_count     = 0;  // number of MeshViewDesc following
+  float          bounding_box_min[3] = {};
+  float          bounding_box_max[3] = {};
 };
 // Followed by: MeshViewDesc mesh_views[mesh_view_count];
 #pragma pack(pop)
-static_assert(sizeof(SubMeshDesc) == 108);
+static_assert(sizeof(SubMeshDesc) == 124);
 ```
 
 ### 9.5 `MeshViewDesc` (40 bytes, `PakFormat_geometry.h`)
@@ -869,10 +873,10 @@ The view bounds must lie inside the submesh bounds. Adding them increments
 ### 9.6 Full `.ogeo` File Layout
 
 ```text
-GeometryAssetDesc                       256 bytes
+GeometryAssetDesc                       131 bytes
   MeshDesc[0]                           145 bytes
     [if procedural] param_blob          params_size bytes
-    SubMeshDesc[0]                      108 bytes
+    SubMeshDesc[0]                      124 bytes
       MeshViewDesc[0]                   40 bytes
       MeshViewDesc[...]
     SubMeshDesc[...]

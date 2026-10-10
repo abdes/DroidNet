@@ -4,7 +4,7 @@ Status: `in_progress`
 
 | Field     | Summary                                                                                                                  |
 | --------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Outcome   | S2 validated. Design approved 2026-10-10.                                                                                |
+| Outcome   | S2 validated; S1 landed, owner re-cook pending. Design approved 2026-10-10.                                              |
 | Remaining | S1–S7 below; tracked as [VX-OCC-04](../../OPEN_ITEMS.md#p2--engineering-follow-ups).                                     |
 | Evidence  | Per-slice evidence in the [slice table](#slices); gates in [occlusion.md §8](../../lld/occlusion.md#8-validation-gates). |
 
@@ -78,15 +78,15 @@ If a build reports a missing `impl-*.ninja`, reconfigure the tree with
 
 ## Slices
 
-| ID  | Deliverable                                                  | Depends | State       | Commit      |
-| --- | ------------------------------------------------------------ | ------- | ----------- | ----------- |
-| S1  | Geometry v4: mesh-view bounds, cooker split, `MeshViewIndex` | —       | `planned`   |             |
-| S2  | Tiled HZB build and occlusion pyramid                        | —       | `validated` | see git log |
-| S3  | Culling records, history keys and slot allocator             | S1      | `planned`   |             |
-| S4  | GPU indirect lists for camera passes, occlusion off          | S3      | `planned`   |             |
-| S5  | Camera two-phase occlusion; old tester removed               | S2, S4  | `planned`   |             |
-| S6  | Shadow-view lists and two-phase occlusion                    | S5      | `planned`   |             |
-| S7  | Default on, capture gate, closeout                           | S6      | `planned`   |             |
+| ID  | Deliverable                                                  | Depends | State         | Commit                |
+| --- | ------------------------------------------------------------ | ------- | ------------- | --------------------- |
+| S1  | Geometry v4: mesh-view bounds, cooker split, `MeshViewIndex` | —       | `in_progress` | owner re-cook pending |
+| S2  | Tiled HZB build and occlusion pyramid                        | —       | `validated`   | see git log           |
+| S3  | Culling records, history keys and slot allocator             | S1      | `planned`     |                       |
+| S4  | GPU indirect lists for camera passes, occlusion off          | S3      | `planned`     |                       |
+| S5  | Camera two-phase occlusion; old tester removed               | S2, S4  | `planned`     |                       |
+| S6  | Shadow-view lists and two-phase occlusion                    | S5      | `planned`     |                       |
+| S7  | Default on, capture gate, closeout                           | S6      | `planned`     |                       |
 
 S1 and S2 are independent; either may go first.
 
@@ -95,7 +95,7 @@ S1 and S2 are independent; either may go first.
 Design: [geometry §9.5](../../../content-pipeline/geometry-cooking-architecture.md#95-meshviewdesc-40-bytes-pakformat_geometryh),
 [split](../../../../src/Oxygen/Cooker/Docs/Import/geometry_work_pipeline_v2.md#mesh-build-performed-by-meshbuildpipeline).
 
-- [ ] **Data.**
+- [x] **Data.**
   - Add `MeshViewIndex` to `Data/GeometryIndices.h`.
   - `Data/PakFormat_geometry.h`: `MeshViewDesc` grows to 40 bytes with local
     bounds.
@@ -104,14 +104,14 @@ Design: [geometry §9.5](../../../content-pipeline/geometry-cooking-architecture
   - `Data/GeometryAsset.h/.cpp`: `MeshView` bounds accessor; views addressed
     by `MeshViewIndex`.
   - `Data/ProceduralMeshes.cpp`: views take the submesh bounds.
-- [ ] **Loader.** `Content/Loaders/GeometryLoader.h` reads the view bounds and
+- [x] **Loader.** `Content/Loaders/GeometryLoader.h` reads the view bounds and
       rejects bounds outside the submesh bounds. Version 3 fails with the existing
       re-cook diagnostic.
-- [ ] **Model imports.** `Cooker/Import/Internal/Pipelines/MeshBuildPipeline.cpp`:
+- [x] **Model imports.** `Cooker/Import/Internal/Pipelines/MeshBuildPipeline.cpp`:
   - Morton-ordered split of static submeshes above 4096 triangles.
   - Tight view bounds.
   - Skinned and morphed submeshes stay one view.
-- [ ] **Descriptor imports.**
+- [x] **Descriptor imports.**
   - `Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json`: optional
     `submesh_view.bounds`.
   - `Cooker/Import/Internal/GeometrySource.cpp`,
@@ -119,27 +119,29 @@ Design: [geometry §9.5](../../../content-pipeline/geometry-cooking-architecture
     from JSON, else the submesh bounds.
   - `Cooker/Import/Internal/Pipelines/GeometryPipeline.cpp`: forwards the
     40-byte views.
-- [ ] **Other `MeshViewDesc` readers.**
+- [x] **Other `MeshViewDesc` readers.**
   - `Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp`
   - `Cooker/Tools/PakDump/GeometryAssetDumper.h`
   - `Cooker/Tools/Inspector/GeometryMetadata.cpp`
-- [ ] **Fixtures that write descriptors.**
+- [x] **Fixtures that write descriptors.**
   - `Cooker/Test/Fixtures/DescriptorFixtures.h`
   - `Cooker/Test/Import/{PhysicsPhase3Closure,SceneDescriptorImportJob,InspectorGeometryMetadata}_test.cpp`
   - `Content/Test/{GeometryLoader,AssetLoader_generation}_test.cpp`
   - `Vortex/Test/ScenePrep/ScenePrepHelpers.h`
   - `Vortex/Test/Fixtures/GeometryUploaderTest.cpp`
   - `SceneSync/Test/RuntimeMotionProducerModule_test.cpp`
-- [ ] **New tests.**
+  - All pass unchanged: their zero view bounds lie inside their submesh
+    bounds.
+- [x] **New tests.**
   - The split is deterministic, runs hold at most 4096 triangles, index and
     vertex ranges are contiguous, and bounds are tight.
   - Skinned meshes are not split.
   - Version 3 is rejected with the re-cook diagnostic.
   - A JSON view without bounds takes the submesh bounds.
   - Bounds outside the submesh are rejected.
-- [ ] **Verify.** All `Oxygen.Data.*`, `Oxygen.Content.*` and `Oxygen.Cooker.*`
+- [x] **Verify.** All `Oxygen.Data.*`, `Oxygen.Content.*` and `Oxygen.Cooker.*`
       suites pass, plus `Oxygen.Scene.*` and the Vortex CPU suites that load
-      geometry.
+      geometry. The FBX and glTF import suites are run by the owner only.
 - [ ] **Owner.** Re-cook editor projects and local content; confirm the editor
       loads them.
 

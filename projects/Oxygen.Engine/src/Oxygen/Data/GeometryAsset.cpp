@@ -26,10 +26,10 @@
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MaterialSlotInventory.h>
-#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Data/Vertex.h>
@@ -75,9 +75,12 @@ void ReferencedBufferStorage::InitializeIndexInfo() const noexcept
   }
   // Validate size alignment
   auto bytes = index_buffer_resource->GetData().size();
-  auto es = cached_index_type == IndexType::kUInt16
-    ? 2
-    : (cached_index_type == IndexType::kUInt32 ? 4 : 1);
+  auto es = 1;
+  if (cached_index_type == IndexType::kUInt16) {
+    es = 2;
+  } else if (cached_index_type == IndexType::kUInt32) {
+    es = 4;
+  }
   if (cached_index_type != IndexType::kNone && bytes % es != 0) {
     LOG_F(ERROR, "Index buffer byte size not multiple of element size");
     cached_index_type = IndexType::kNone;
@@ -88,7 +91,7 @@ void ReferencedBufferStorage::InitializeIndexInfo() const noexcept
 
 MeshView::MeshView(const Mesh& mesh, pak::geometry::MeshViewDesc desc) noexcept
   : mesh_(mesh)
-  , desc_(std::move(desc))
+  , desc_(desc)
 {
   // Enforce design constraints
   CHECK_F(desc_.vertex_count > 0, "MeshView must have at least one vertex");
@@ -251,6 +254,10 @@ auto SubMesh::ComputeBounds() -> void
     if (!has_vertices) {
       bbox_min_ = bbox_max_ = glm::vec3(0.0F);
     }
+    // Views built without cooked bounds are bounded conservatively.
+    for (auto& mesh_view : mesh_views_) {
+      mesh_view.SetBounds(bbox_min_, bbox_max_);
+    }
   }
 
   // Step 2: Always compute bounding sphere from bounding box
@@ -266,7 +273,7 @@ oxygen::data::GeometryAsset::GeometryAsset(AssetKey asset_key,
   pak::geometry::GeometryAssetDesc desc,
   std::vector<std::shared_ptr<Mesh>> lod_meshes, SourceOrigin source_origin)
   : Asset(asset_key, source_origin)
-  , desc_(std::move(desc))
+  , desc_(desc)
   , lod_meshes_(std::move(lod_meshes))
 {
   material_slots_.geometry_asset_key = asset_key;
@@ -298,10 +305,12 @@ oxygen::data::GeometryAsset::GeometryAsset(AssetKey asset_key,
           .bindings = {},
         });
       }
-      const auto key = submesh.Descriptor()
-        ? submesh.Descriptor()->material_asset_key
-        : (submesh.Material() ? submesh.Material()->GetAssetKey()
-                              : AssetKey {});
+      auto key = AssetKey {};
+      if (submesh.Descriptor()) {
+        key = submesh.Descriptor()->material_asset_key;
+      } else if (submesh.Material()) {
+        key = submesh.Material()->GetAssetKey();
+      }
       material_slots_.slots.at(location->second)
         .bindings.push_back(MaterialSlotBinding {
           .lod_index = LodIndex { static_cast<uint32_t>(lod) },
@@ -392,7 +401,7 @@ auto MeshBuilder::Build() -> std::unique_ptr<Mesh>
     }
 
     for (const auto& view_desc : spec.mesh_views) {
-      submesh.AddMeshViewInternal(std::move(view_desc));
+      submesh.AddMeshViewInternal(view_desc);
     }
     // Compute bounds (descriptor-provided or computed from mesh views) before
     // adding

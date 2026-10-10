@@ -109,7 +109,31 @@ public:
     return desc_.vertex_count;
   }
 
+  //! Minimum corner of the local bounds of this view's triangles.
+  [[nodiscard]] auto BoundingBoxMin() const noexcept -> glm::vec3
+  {
+    return { desc_.bounding_box_min[0], desc_.bounding_box_min[1],
+      desc_.bounding_box_min[2] };
+  }
+
+  //! Maximum corner of the local bounds of this view's triangles.
+  [[nodiscard]] auto BoundingBoxMax() const noexcept -> glm::vec3
+  {
+    return { desc_.bounding_box_max[0], desc_.bounding_box_max[1],
+      desc_.bounding_box_max[2] };
+  }
+
 private:
+  friend class SubMesh;
+
+  auto SetBounds(const glm::vec3& min, const glm::vec3& max) noexcept -> void
+  {
+    for (glm::length_t axis = 0; axis < 3; ++axis) {
+      desc_.bounding_box_min[axis] = min[axis];
+      desc_.bounding_box_max[axis] = max[axis];
+    }
+  }
+
   std::reference_wrapper<const Mesh> mesh_;
 
   pak::geometry::MeshViewDesc desc_ {};
@@ -183,6 +207,15 @@ public:
   {
     return mesh_views_;
   }
+
+  //! Returns the mesh view at `view`, or nullptr if out of range.
+  [[nodiscard]] auto MeshViewAt(const MeshViewIndex view) const noexcept
+    -> const MeshView*
+  {
+    return view.get() < mesh_views_.size() ? &mesh_views_.at(view.get())
+                                           : nullptr;
+  }
+
   [[nodiscard]] auto Material() const noexcept
     -> std::shared_ptr<const MaterialAsset>
   {
@@ -215,7 +248,7 @@ protected:
   // Only for MeshBuilder: set mesh views after construction
   void AddMeshViewInternal(pak::geometry::MeshViewDesc view_desc)
   {
-    mesh_views_.emplace_back(mesh_.get(), std::move(view_desc));
+    mesh_views_.emplace_back(mesh_.get(), view_desc);
   }
 
   // Only for SubMeshBuilder: set PAK descriptor for bounding optimization
@@ -229,8 +262,10 @@ private:
   //! Computes bounding box and sphere - handles both PAK and procedural cases.
   /*!
    Computes bounding data using the most appropriate method:
-   - If PAK descriptor exists: uses pre-computed bounding box
-   - If no descriptor: computes bounding box from mesh view vertices
+   - If PAK descriptor exists: uses pre-computed bounding box, and the views
+     keep their cooked bounds
+   - If no descriptor: computes bounding box from mesh view vertices, and every
+     view takes the submesh bounds
    - Always computes bounding sphere from the resulting bounding box
 
    Data members are the single source of truth for bounding information.

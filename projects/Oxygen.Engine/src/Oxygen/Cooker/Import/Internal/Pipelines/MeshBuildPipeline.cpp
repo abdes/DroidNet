@@ -46,6 +46,7 @@
 #include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/MeshType.h>
@@ -79,6 +80,8 @@ namespace {
     uint32_t source_slot = 0;
     data::AssetKey material_key;
     std::vector<uint32_t> indices;
+    //! Triangles per mesh view, in index order; empty means one view.
+    std::vector<uint32_t> view_triangle_counts;
   };
 
   struct LodBuildData {
@@ -135,6 +138,48 @@ namespace {
     bounds.max.at(2) = (std::max)(bounds.max.at(2), p.z);
   }
 
+  //! Shortest accumulated normal that still normalizes reliably.
+  constexpr auto kMinNormalLength = 1e-8F;
+  //! Shortest tangent-frame vector treated as valid.
+  constexpr auto kMinTangentLength = 1e-6F;
+
+  //! Spreads the low 10 bits of `value` to every third bit.
+  [[nodiscard]] constexpr auto SpreadMortonBits(uint32_t value) -> uint32_t
+  {
+    // Standard 3D Morton bit-interleave masks, widest shift first.
+    constexpr auto kLow10Bits = 0x3FFU;
+    constexpr auto kShift16Mask = 0x030000FFU;
+    constexpr auto kShift8Mask = 0x0300F00FU;
+    constexpr auto kShift4Mask = 0x030C30C3U;
+    constexpr auto kShift2Mask = 0x09249249U;
+    value &= kLow10Bits;
+    value = (value | (value << 16U)) & kShift16Mask;
+    value = (value | (value << 8U)) & kShift8Mask;
+    value = (value | (value << 4U)) & kShift4Mask;
+    value = (value | (value << 2U)) & kShift2Mask;
+    return value;
+  }
+
+  //! 30-bit Morton code of `point`, quantized to 10 bits per axis in `bounds`.
+  [[nodiscard]] auto MortonCode(const glm::vec3& point, const Bounds3& bounds)
+    -> uint32_t
+  {
+    constexpr auto kAxisCells = 1024.0F;
+    constexpr auto kLastCell = 1023U;
+    const auto coordinates = std::array { point.x, point.y, point.z };
+    auto code = 0U;
+    for (uint32_t axis = 0U; axis < 3U; ++axis) {
+      const auto min = bounds.min.at(axis);
+      const auto extent = bounds.max.at(axis) - min;
+      const auto t
+        = extent > 0.0F ? (coordinates.at(axis) - min) / extent : 0.0F;
+      const auto cell = static_cast<uint32_t>(
+        std::clamp(t * kAxisCells, 0.0F, static_cast<float>(kLastCell)));
+      code |= SpreadMortonBits(cell) << axis;
+    }
+    return code;
+  }
+
   [[nodiscard]] auto MakeEmptyBounds() -> Bounds3
   {
     return Bounds3 {
@@ -181,6 +226,7 @@ namespace {
         .source_slot = range.source_slot,
         .material_key = material_key,
         .indices = {},
+        .view_triangle_counts = {},
       });
     }
 
@@ -229,7 +275,7 @@ namespace {
     for (size_t i = 0; i < vertices.size(); ++i) {
       auto n = normals.at(i);
       const auto len = glm::length(n);
-      if (len > 1e-8F) {
+      if (len > kMinNormalLength) {
         n /= len;
       } else {
         n = glm::vec3(0.0F, 1.0F, 0.0F);
@@ -260,7 +306,7 @@ namespace {
       if (t_invalid || b_invalid) {
         glm::vec3 n = v.normal;
         if (!std::isfinite(n.x) || !std::isfinite(n.y) || !std::isfinite(n.z)
-          || glm::length(n) < 1e-6F) {
+          || glm::length(n) < kMinTangentLength) {
           n = glm::vec3(0.0F, 0.0F, 1.0F);
         } else {
           n = glm::normalize(n);
@@ -306,10 +352,10 @@ namespace {
         "Mesh name truncated to fit descriptor limit", source_id, mesh_name));
     }
     util::TruncateAndNullTerminate(
-      asset_desc.header.name, std::size(asset_desc.header.name), mesh_name);
+      std::span(asset_desc.header.name), mesh_name);
     asset_desc.lod_count = static_cast<uint32_t>(lods.size());
-    std::copy_n(bounds.min.data(), 3, asset_desc.bounding_box_min);
-    std::copy_n(bounds.max.data(), 3, asset_desc.bounding_box_max);
+    std::ranges::copy(bounds.min, std::begin(asset_desc.bounding_box_min));
+    std::ranges::copy(bounds.max, std::begin(asset_desc.bounding_box_max));
 
     serio::MemoryStream stream;
     serio::Writer writer(stream);
@@ -344,8 +390,7 @@ namespace {
         diagnostics.push_back(MakeWarningDiagnostic("mesh.lod_name_truncated",
           "LOD name truncated to fit descriptor limit", source_id, path));
       }
-      util::TruncateAndNullTerminate(
-        mesh_desc.name, std::size(mesh_desc.name), name_view);
+      util::TruncateAndNullTerminate(std::span(mesh_desc.name), name_view);
       mesh_desc.mesh_type = static_cast<uint8_t>(lod.mesh_type);
       mesh_desc.submesh_count = static_cast<uint32_t>(lod.submeshes.size());
       mesh_desc.mesh_view_count = static_cast<uint32_t>(lod.views.size());
@@ -361,17 +406,17 @@ namespace {
         mesh_desc.info.skinned.influences_per_vertex
           = lod.influences_per_vertex;
         mesh_desc.info.skinned.flags = 0;
-        std::copy_n(
-          lod.bounds.min.data(), 3, mesh_desc.info.skinned.bounding_box_min);
-        std::copy_n(
-          lod.bounds.max.data(), 3, mesh_desc.info.skinned.bounding_box_max);
+        std::ranges::copy(
+          lod.bounds.min, std::begin(mesh_desc.info.skinned.bounding_box_min));
+        std::ranges::copy(
+          lod.bounds.max, std::begin(mesh_desc.info.skinned.bounding_box_max));
       } else {
         mesh_desc.info.standard.vertex_buffer = data::kNoResourceReference;
         mesh_desc.info.standard.index_buffer = data::kNoResourceReference;
-        std::copy_n(
-          lod.bounds.min.data(), 3, mesh_desc.info.standard.bounding_box_min);
-        std::copy_n(
-          lod.bounds.max.data(), 3, mesh_desc.info.standard.bounding_box_max);
+        std::ranges::copy(
+          lod.bounds.min, std::begin(mesh_desc.info.standard.bounding_box_min));
+        std::ranges::copy(
+          lod.bounds.max, std::begin(mesh_desc.info.standard.bounding_box_max));
       }
 
       const auto mesh_result = writer.WriteBlob(
@@ -389,9 +434,12 @@ namespace {
         return {};
       }
 
+      size_t view_cursor = 0;
       for (size_t i = 0; i < lod.submeshes.size(); ++i) {
         const auto& sm = lod.submeshes.at(i);
-        const auto& view = lod.views.at(i);
+        const auto submesh_views
+          = std::span(lod.views).subspan(view_cursor, sm.mesh_view_count);
+        view_cursor += sm.mesh_view_count;
 
         const auto pos = writer.Position();
         if (!pos) {
@@ -424,8 +472,7 @@ namespace {
           return {};
         }
 
-        const auto view_result = writer.WriteBlob(
-          std::as_bytes(std::span<const MeshViewDesc, 1>(&view, 1)));
+        const auto view_result = writer.WriteBlob(std::as_bytes(submesh_views));
         if (!view_result.has_value()) {
           diagnostics.push_back(MakeErrorDiagnostic("mesh.serialize_failed",
             "Failed to serialize mesh view descriptor", source_id, mesh_name));
@@ -628,6 +675,78 @@ namespace {
     }
   }
 
+  //! Splits static submeshes above `kMaxMeshViewTriangles` into mesh views.
+  /*!
+   A large bucket's triangles are stably ordered by the Morton code of their
+   centroids within the bucket bounds, then cut into runs of at most
+   `kMaxMeshViewTriangles`. Vertices are expanded one per index, so when any
+   bucket splits the vertices are laid out again in bucket and run order: each
+   view then owns one contiguous index range and one contiguous vertex range.
+   Buckets, slots and material ranges are unchanged.
+  */
+  auto SplitBucketsIntoViews(std::vector<data::Vertex>& vertices,
+    std::vector<SubmeshBucket>& buckets) -> void
+  {
+    constexpr auto kMaxTriangles = MeshBuildPipeline::kMaxMeshViewTriangles;
+    bool any_split = false;
+    for (auto& bucket : buckets) {
+      const auto triangle_count
+        = static_cast<uint32_t>(bucket.indices.size() / 3U);
+      if (triangle_count <= kMaxTriangles) {
+        continue;
+      }
+      any_split = true;
+
+      auto bounds = MakeEmptyBounds();
+      for (const auto vi : bucket.indices) {
+        ExpandBounds(bounds, vertices.at(vi).position);
+      }
+      auto order = std::vector<std::pair<uint32_t, uint32_t>> {};
+      order.reserve(triangle_count);
+      for (uint32_t triangle = 0U; triangle < triangle_count; ++triangle) {
+        const auto first = static_cast<size_t>(triangle) * 3U;
+        const auto centroid
+          = (vertices.at(bucket.indices.at(first)).position
+              + vertices.at(bucket.indices.at(first + 1U)).position
+              + vertices.at(bucket.indices.at(first + 2U)).position)
+          / 3.0F;
+        order.emplace_back(MortonCode(centroid, bounds), triangle);
+      }
+      std::ranges::stable_sort(
+        order, {}, &std::pair<uint32_t, uint32_t>::first);
+
+      auto ordered = std::vector<uint32_t> {};
+      ordered.reserve(bucket.indices.size());
+      for (const auto& [code, triangle] : order) {
+        static_cast<void>(code);
+        const auto first = static_cast<size_t>(triangle) * 3U;
+        ordered.push_back(bucket.indices.at(first));
+        ordered.push_back(bucket.indices.at(first + 1U));
+        ordered.push_back(bucket.indices.at(first + 2U));
+      }
+      bucket.indices = std::move(ordered);
+
+      for (auto remaining = triangle_count; remaining > 0U;) {
+        const auto run = (std::min)(remaining, kMaxTriangles);
+        bucket.view_triangle_counts.push_back(run);
+        remaining -= run;
+      }
+    }
+    if (!any_split) {
+      return;
+    }
+
+    auto laid_out = std::vector<data::Vertex> {};
+    laid_out.reserve(vertices.size());
+    for (auto& bucket : buckets) {
+      for (auto& vi : bucket.indices) {
+        laid_out.push_back(vertices.at(vi));
+        vi = static_cast<uint32_t>(laid_out.size() - 1U);
+      }
+    }
+    vertices = std::move(laid_out);
+  }
+
   auto BuildSubmeshDescriptors(const std::vector<data::Vertex>& vertices,
     const std::vector<SubmeshBucket>& buckets,
     const MaterialSlotGeometryProvenance& allocation,
@@ -660,16 +779,17 @@ namespace {
     MeshViewDesc::BufferIndexT index_cursor = 0;
     for (const auto& bucket : buckets) {
       Bounds3 submesh_bounds = MakeEmptyBounds();
-      uint32_t min_vertex = std::numeric_limits<uint32_t>::max();
-      uint32_t max_vertex = 0;
       for (const auto vi : bucket.indices) {
         if (vi >= vertices.size()) {
           continue;
         }
         ExpandBounds(submesh_bounds, vertices.at(vi).position);
         ExpandBounds(mesh_bounds, vertices.at(vi).position);
-        min_vertex = (std::min)(min_vertex, vi);
-        max_vertex = (std::max)(max_vertex, vi);
+      }
+      auto view_triangle_counts = bucket.view_triangle_counts;
+      if (view_triangle_counts.empty()) {
+        view_triangle_counts.push_back(
+          static_cast<uint32_t>(bucket.indices.size() / 3U));
       }
 
       const auto named = slot_names.find(bucket.source_slot);
@@ -678,37 +798,64 @@ namespace {
         : "Slot " + std::to_string(bucket.source_slot);
 
       SubMeshDesc submesh {};
-      util::TruncateAndNullTerminate(
-        submesh.name, std::size(submesh.name), name);
+      util::TruncateAndNullTerminate(std::span(submesh.name), name);
       submesh.material_asset_key = bucket.material_key;
       submesh.slot_id = allocation.allocations.at(bucket.source_slot);
-      submesh.mesh_view_count = 1;
-      std::copy_n(submesh_bounds.min.data(), 3, submesh.bounding_box_min);
-      std::copy_n(submesh_bounds.max.data(), 3, submesh.bounding_box_max);
+      submesh.mesh_view_count
+        = static_cast<uint32_t>(view_triangle_counts.size());
+      std::ranges::copy(
+        submesh_bounds.min, std::begin(submesh.bounding_box_min));
+      std::ranges::copy(
+        submesh_bounds.max, std::begin(submesh.bounding_box_max));
       submeshes.push_back(submesh);
       submesh_slots.push_back(bucket.scene_material_index);
 
-      const auto first_index = index_cursor;
-      const auto index_count
-        = static_cast<MeshViewDesc::BufferIndexT>(bucket.indices.size());
-      index_cursor += index_count;
+      const auto bucket_indices = std::span(bucket.indices);
+      size_t run_offset = 0;
+      for (const auto triangle_count : view_triangle_counts) {
+        const auto run = bucket_indices.subspan(run_offset,
+          (std::min)(static_cast<size_t>(triangle_count) * 3U,
+            bucket_indices.size() - run_offset));
+        run_offset += run.size();
 
-      const auto vertex_count
-        = (min_vertex <= max_vertex) ? (max_vertex - min_vertex + 1) : 0;
-      if (vertex_count == 0) {
-        min_vertex = 0;
-      }
+        Bounds3 view_bounds = MakeEmptyBounds();
+        uint32_t min_vertex = std::numeric_limits<uint32_t>::max();
+        uint32_t max_vertex = 0;
+        for (const auto vi : run) {
+          if (vi >= vertices.size()) {
+            continue;
+          }
+          ExpandBounds(view_bounds, vertices.at(vi).position);
+          min_vertex = (std::min)(min_vertex, vi);
+          max_vertex = (std::max)(max_vertex, vi);
+        }
 
-      views.push_back(MeshViewDesc {
-        .first_index = first_index,
-        .index_count = index_count,
-        .first_vertex = min_vertex,
-        .vertex_count = static_cast<MeshViewDesc::BufferIndexT>(vertex_count),
-      });
+        const auto first_index = index_cursor;
+        const auto index_count
+          = static_cast<MeshViewDesc::BufferIndexT>(run.size());
+        index_cursor += index_count;
 
-      for (const auto vi : bucket.indices) {
-        const auto adjusted = (min_vertex > 0) ? (vi - min_vertex) : vi;
-        merged_indices.push_back(adjusted);
+        const auto vertex_count
+          = (min_vertex <= max_vertex) ? (max_vertex - min_vertex + 1) : 0;
+        if (vertex_count == 0) {
+          min_vertex = 0;
+          view_bounds = submesh_bounds;
+        }
+
+        auto view = MeshViewDesc {
+          .first_index = first_index,
+          .index_count = index_count,
+          .first_vertex = min_vertex,
+          .vertex_count = static_cast<MeshViewDesc::BufferIndexT>(vertex_count),
+        };
+        std::ranges::copy(view_bounds.min, std::begin(view.bounding_box_min));
+        std::ranges::copy(view_bounds.max, std::begin(view.bounding_box_max));
+        views.push_back(view);
+
+        for (const auto vi : run) {
+          const auto adjusted = (min_vertex > 0) ? (vi - min_vertex) : vi;
+          merged_indices.push_back(adjusted);
+        }
       }
     }
 
@@ -801,11 +948,9 @@ namespace {
       = normal_policy == GeometryAttributePolicy::kGenerateMissing
       || normal_policy == GeometryAttributePolicy::kAlwaysRecalculate;
 
-    if (normal_policy == GeometryAttributePolicy::kNone) {
-      // Keep defaults; mask will not include normals.
-    } else if (normal_policy == GeometryAttributePolicy::kAlwaysRecalculate) {
-      ComputeNormalsFromTriangles(lod.vertices, buckets);
-    } else if (!has_normals && should_generate_normals) {
+    // kNone keeps the defaults; the mask will not include normals.
+    if (normal_policy == GeometryAttributePolicy::kAlwaysRecalculate
+      || (!has_normals && should_generate_normals)) {
       ComputeNormalsFromTriangles(lod.vertices, buckets);
     }
 
@@ -899,6 +1044,10 @@ namespace {
           }
         }
       }
+    }
+
+    if (lod.mesh_type == data::MeshType::kStandard) {
+      SplitBucketsIntoViews(lod.vertices, buckets);
     }
 
     const auto computed_bounds = BuildSubmeshDescriptors(lod.vertices, buckets,
@@ -1019,11 +1168,13 @@ namespace {
     return lod;
   }
 
+  // Moving the payload strings and vectors can only fail on allocation.
+  // NOLINTNEXTLINE(bugprone-exception-escape)
   struct GeometryBuildOutcome {
     std::string source_id;
     const void* source_key = nullptr;
-    std::optional<MeshBuildPipeline::CookedGeometryPayload> cooked {};
-    std::vector<ImportDiagnostic> diagnostics {};
+    std::optional<MeshBuildPipeline::CookedGeometryPayload> cooked;
+    std::vector<ImportDiagnostic> diagnostics;
     bool canceled = false;
     bool success = false;
   };
@@ -1200,7 +1351,7 @@ namespace {
     return cooked_payload;
   }
 
-  [[nodiscard]] auto BuildGeometryOutcome(WorkItem item,
+  [[nodiscard]] auto BuildGeometryOutcome(const WorkItem& item,
     const uint64_t max_data_blob_bytes, const bool with_content_hashing,
     const co::ThreadPool::CancelToken& canceled) -> GeometryBuildOutcome
   {
@@ -1208,6 +1359,8 @@ namespace {
     auto out = GeometryBuildOutcome {
       .source_id = item.source_id,
       .source_key = item.source_key,
+      .cooked = std::nullopt,
+      .diagnostics = {},
     };
 
     if (IsCanceled(item.stop_token, canceled)) {
@@ -1287,6 +1440,8 @@ MeshBuildPipeline::MeshBuildPipeline(
 {
 }
 
+// Only the debug log can throw (formatting), and it never does for counts.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 MeshBuildPipeline::~MeshBuildPipeline()
 {
   if (started_) {
@@ -1305,6 +1460,8 @@ auto MeshBuildPipeline::Start(co::Nursery& nursery) -> void
 
   const auto worker_count = std::max(1U, config_.worker_count);
   for (uint32_t i = 0; i < worker_count; ++i) {
+    // The pipeline outlives the nursery that runs its workers.
+    // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
     nursery.Start([this] -> co::Co<> { co_await Worker(); });
   }
 }
@@ -1406,12 +1563,14 @@ auto MeshBuildPipeline::Worker() -> co::Co<>
     auto on_finished = std::move(item.on_finished);
     const auto cook_start = std::chrono::steady_clock::now();
     auto build_outcome = co_await thread_pool_.Run(
+      // The build reports failures as diagnostics; only allocation can throw.
+      // NOLINTNEXTLINE(bugprone-exception-escape)
       [item = std::move(item),
         max_data_blob_bytes = config_.max_data_blob_bytes,
         with_content_hashing = config_.with_content_hashing](
         co::ThreadPool::CancelToken canceled) mutable -> GeometryBuildOutcome {
         return BuildGeometryOutcome(
-          std::move(item), max_data_blob_bytes, with_content_hashing, canceled);
+          item, max_data_blob_bytes, with_content_hashing, canceled);
       });
 
     if (build_outcome.canceled) {

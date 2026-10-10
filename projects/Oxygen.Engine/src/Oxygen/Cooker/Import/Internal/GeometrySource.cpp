@@ -200,6 +200,20 @@ namespace {
     return bounds;
   }
 
+  //! True when `inner` is ordered and lies inside `outer`.
+  auto BoundsContain(const GeometrySource::Bounds& outer,
+    const GeometrySource::Bounds& inner) -> bool
+  {
+    for (size_t axis = 0; axis < inner.min.size(); ++axis) {
+      if (!(inner.min.at(axis) <= inner.max.at(axis))
+        || !(inner.min.at(axis) >= outer.min.at(axis))
+        || !(inner.max.at(axis) <= outer.max.at(axis))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   auto ReadSource(const json& document,
     const std::filesystem::path& source_path,
     std::vector<ImportDiagnostic>& diagnostics) -> std::optional<GeometrySource>
@@ -294,14 +308,29 @@ namespace {
         const auto& views = submesh_doc.at("views");
         submesh.views.reserve(views.size());
         for (size_t view_index = 0; view_index < views.size(); ++view_index) {
-          auto view = views.at(view_index).at("view_ref").get<std::string>();
+          const auto& view_doc = views.at(view_index);
+          const auto view_path
+            = submesh_path + ".views[" + std::to_string(view_index) + "]";
+          auto view = GeometrySource::View {
+            .view_ref = view_doc.at("view_ref").get<std::string>(),
+            .bounds = view_doc.contains("bounds")
+              ? ReadBounds(view_doc.at("bounds"))
+              : submesh.bounds,
+          };
           if (std::holds_alternative<GeometrySource::Procedural>(lod.mesh)
-            && view != kImplicitBufferViewName) {
+            && view.view_ref != kImplicitBufferViewName) {
             AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
               "geometry.procedural.view_ref_invalid",
               "Procedural submesh view_ref must be '__all__'",
-              submesh_path + ".views[" + std::to_string(view_index)
-                + "].view_ref");
+              view_path + ".view_ref");
+            return std::nullopt;
+          }
+          if (!BoundsContain(submesh.bounds, view.bounds)) {
+            AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
+              "geometry.descriptor.view_bounds_invalid",
+              "Mesh view bounds must be ordered and lie inside the submesh "
+              "bounds",
+              view_path + ".bounds");
             return std::nullopt;
           }
           submesh.views.push_back(std::move(view));

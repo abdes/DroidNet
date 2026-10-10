@@ -8,9 +8,14 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <utility>
 #include <vector>
 
 // GTest
+#include <Oxygen/Data/GeometryIndices.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Testing/GTest.h>
 
 // Project
@@ -45,6 +50,9 @@ protected:
     mesh_ = std::make_unique<TestMesh>(
       oxygen::data::LodIndex {}, vertices, indices);
   }
+  [[nodiscard]] auto GetMesh() const -> const TestMesh& { return *mesh_; }
+
+private:
   std::unique_ptr<TestMesh> mesh_;
 };
 
@@ -57,6 +65,9 @@ protected:
     mesh_ = std::make_unique<TestMesh>(
       oxygen::data::LodIndex {}, vertices, indices);
   }
+  [[nodiscard]] auto GetMesh() const -> const TestMesh& { return *mesh_; }
+
+private:
   std::unique_ptr<TestMesh> mesh_;
 };
 
@@ -72,54 +83,60 @@ NOLINT_TEST_F(MeshViewBasicTest, ConstructAndAccess)
 {
   // Arrange
   std::vector<Vertex> vertices = {
-    { .position = { 0, 0, 0 },
+    {
+      .position = { 0, 0, 0 },
       .normal = { 0, 1, 0 },
       .texcoord = { 0, 0 },
       .tangent = { 1, 0, 0 },
       .bitangent = {},
-      .color = {} },
-    { .position = { 1, 0, 0 },
+      .color = {},
+    },
+    {
+      .position = { 1, 0, 0 },
       .normal = { 0, 1, 0 },
       .texcoord = { 1, 0 },
       .tangent = { 1, 0, 0 },
       .bitangent = {},
-      .color = {} },
-    { .position = { 0, 1, 0 },
+      .color = {},
+    },
+    {
+      .position = { 0, 1, 0 },
       .normal = { 0, 1, 0 },
       .texcoord = { 0, 1 },
       .tangent = { 1, 0, 0 },
       .bitangent = {},
-      .color = {} },
-    { .position = { 1, 1, 0 },
+      .color = {},
+    },
+    {
+      .position = { 1, 1, 0 },
       .normal = { 0, 1, 0 },
       .texcoord = { 1, 1 },
       .tangent = { 1, 0, 0 },
       .bitangent = {},
-      .color = {} },
+      .color = {},
+    },
   };
   std::vector<std::uint32_t> indices { 0, 1, 2, 2, 3, 0 };
   SetupMesh(vertices, indices);
 
   // Act
-  MeshView view(*mesh_,
+  MeshView view(GetMesh(),
     oxygen::data::pak::geometry::MeshViewDesc {
       .first_index = 0,
-      .index_count = 6,
+      .index_count = static_cast<std::uint32_t>(indices.size()),
       .first_vertex = 0,
       .vertex_count = 4,
     });
 
   // Assert
   EXPECT_THAT(view.Vertices(), SizeIs(4));
-  EXPECT_EQ(view.IndexBuffer().Count(), 6u);
+  EXPECT_EQ(view.IndexBuffer().Count(), 6U);
   // Verify all vertex attributes (operator== performs epsilon-based compare).
   EXPECT_THAT(view.Vertices(), ::testing::ElementsAreArray(vertices));
   {
     auto view_indices = view.IndexBuffer().AsU32();
     ASSERT_EQ(view_indices.size(), indices.size());
-    for (size_t i = 0; i < indices.size(); ++i) {
-      EXPECT_EQ(view_indices[i], indices[i]);
-    }
+    EXPECT_THAT(view_indices, ::testing::ElementsAreArray(indices));
   }
 }
 
@@ -129,48 +146,58 @@ NOLINT_TEST(MeshViewBasicRealMeshTest, RealMesh_ViewValidity)
   // Arrange
   auto material = oxygen::data::MaterialAsset::CreateDefault();
   std::vector<Vertex> vertices = {
-    { .position = { 0, 0, 0 },
+    {
+      .position = { 0, 0, 0 },
       .normal = { 0, 1, 0 },
       .texcoord = { 0, 0 },
       .tangent = { 1, 0, 0 },
       .bitangent = {},
-      .color = {} },
-    { .position = { 1, 0, 0 },
+      .color = {},
+    },
+    {
+      .position = { 1, 0, 0 },
       .normal = { 0, 1, 0 },
       .texcoord = { 1, 0 },
       .tangent = { 1, 0, 0 },
       .bitangent = {},
-      .color = {} },
-    { .position = { 0, 1, 0 },
+      .color = {},
+    },
+    {
+      .position = { 0, 1, 0 },
       .normal = { 0, 1, 0 },
       .texcoord = { 0, 1 },
       .tangent = { 1, 0, 0 },
       .bitangent = {},
-      .color = {} },
+      .color = {},
+    },
   };
   std::vector<std::uint32_t> indices { 0, 1, 2 };
   auto mesh = oxygen::data::MeshBuilder(oxygen::data::LodIndex {}, "triangle")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("main", material)
-                .WithMeshView({ .first_index = 0,
+                .WithMeshView({
+                  .first_index = 0,
                   .index_count = 3,
                   .first_vertex = 0,
-                  .vertex_count = 3 })
+                  .vertex_count = 3,
+                })
                 .EndSubMesh()
                 .Build();
   ASSERT_NE(mesh, nullptr);
 
   // Act
   MeshView mesh_view(*mesh,
-    oxygen::data::pak::geometry::MeshViewDesc { .first_index = 0,
+    oxygen::data::pak::geometry::MeshViewDesc {
+      .first_index = 0,
       .index_count = 3,
       .first_vertex = 0,
-      .vertex_count = 3 });
+      .vertex_count = 3,
+    });
 
   // Assert
   EXPECT_THAT(mesh_view.Vertices(), SizeIs(3));
-  EXPECT_EQ(mesh_view.IndexBuffer().Count(), 3u);
+  EXPECT_EQ(mesh_view.IndexBuffer().Count(), 3U);
   EXPECT_THAT(
     mesh_view.Vertices(), ::testing::ElementsAreArray(mesh->Vertices()));
   EXPECT_EQ(
@@ -183,34 +210,42 @@ NOLINT_TEST_F(MeshViewDeathTest, OutOfBoundsCreation_Death)
   // Arrange
   auto material = oxygen::data::MaterialAsset::CreateDefault();
   std::vector<Vertex> vertices = {
-    { .position = { 0, 0, 0 },
+    {
+      .position = { 0, 0, 0 },
       .normal = { 0, 1, 0 },
       .texcoord = { 0, 0 },
       .tangent = { 1, 0, 0 },
       .bitangent = {},
-      .color = {} },
-    { .position = { 1, 0, 0 },
+      .color = {},
+    },
+    {
+      .position = { 1, 0, 0 },
       .normal = { 0, 1, 0 },
       .texcoord = { 1, 0 },
       .tangent = { 1, 0, 0 },
       .bitangent = {},
-      .color = {} },
-    { .position = { 0, 1, 0 },
+      .color = {},
+    },
+    {
+      .position = { 0, 1, 0 },
       .normal = { 0, 1, 0 },
       .texcoord = { 0, 1 },
       .tangent = { 1, 0, 0 },
       .bitangent = {},
-      .color = {} },
+      .color = {},
+    },
   };
   std::vector<std::uint32_t> indices { 0, 1, 2 };
   auto mesh = oxygen::data::MeshBuilder(oxygen::data::LodIndex {}, "triangle")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("main", material)
-                .WithMeshView({ .first_index = 0,
+                .WithMeshView({
+                  .first_index = 0,
                   .index_count = 3,
                   .first_vertex = 0,
-                  .vertex_count = 3 })
+                  .vertex_count = 3,
+                })
                 .EndSubMesh()
                 .Build();
   ASSERT_NE(mesh, nullptr);
@@ -257,7 +292,7 @@ NOLINT_TEST_F(MeshViewDeathTest, Empty)
   // (Construction within EXPECT_DEATH)
 
   // Assert
-  EXPECT_DEATH(MeshView mesh_view(*mesh_,
+  EXPECT_DEATH(MeshView mesh_view(GetMesh(),
                  oxygen::data::pak::geometry::MeshViewDesc {
                    .first_index = 0,
                    .index_count = 0,
@@ -275,7 +310,7 @@ NOLINT_TEST_F(MeshViewBasicTest, CopyMove)
   std::vector<std::uint32_t> indices { 0, 1 };
   SetupMesh(vertices, indices);
 
-  MeshView mesh_view1(*mesh_,
+  MeshView mesh_view1(GetMesh(),
     oxygen::data::pak::geometry::MeshViewDesc {
       .first_index = 0,
       .index_count = 2,
@@ -285,13 +320,13 @@ NOLINT_TEST_F(MeshViewBasicTest, CopyMove)
 
   // Act
   MeshView mesh_view2 = mesh_view1;
-  MeshView mesh_view3 = std::move(mesh_view1);
+  MeshView mesh_view3 = mesh_view1;
 
   // Assert
   EXPECT_THAT(mesh_view2.Vertices(), SizeIs(2));
-  EXPECT_EQ(mesh_view2.IndexBuffer().Count(), 2u);
+  EXPECT_EQ(mesh_view2.IndexBuffer().Count(), 2U);
   EXPECT_THAT(mesh_view3.Vertices(), SizeIs(2));
-  EXPECT_EQ(mesh_view3.IndexBuffer().Count(), 2u);
+  EXPECT_EQ(mesh_view3.IndexBuffer().Count(), 2U);
 }
 
 //! (6) Death: zero index_count but positive vertex_count should fail
@@ -306,7 +341,7 @@ NOLINT_TEST_F(MeshViewDeathTest, ZeroIndexCountPositiveVertexCount_Death)
   // (Construction under EXPECT_DEATH)
 
   // Assert
-  EXPECT_DEATH((MeshView { *mesh_,
+  EXPECT_DEATH((MeshView { GetMesh(),
                  oxygen::data::pak::geometry::MeshViewDesc {
                    .first_index = 0,
                    .index_count = 0, // invalid
@@ -328,7 +363,7 @@ NOLINT_TEST_F(MeshViewDeathTest, ZeroVertexCountPositiveIndexCount_Death)
   // (Construction under EXPECT_DEATH)
 
   // Assert
-  EXPECT_DEATH((MeshView { *mesh_,
+  EXPECT_DEATH((MeshView { GetMesh(),
                  oxygen::data::pak::geometry::MeshViewDesc {
                    .first_index = 0,
                    .index_count = 3, // valid
@@ -347,7 +382,7 @@ NOLINT_TEST_F(MeshViewDeathTest, EdgeOutOfRange_LastIndexPastEnd_Death)
   SetupMesh(vertices, indices);
 
   // Sanity: a valid slice touching the end should succeed
-  NOLINT_EXPECT_NO_THROW((MeshView { *mesh_,
+  NOLINT_EXPECT_NO_THROW((MeshView { GetMesh(),
     oxygen::data::pak::geometry::MeshViewDesc {
       .first_index = 0,
       .index_count = static_cast<uint32_t>(indices.size()),
@@ -360,7 +395,7 @@ NOLINT_TEST_F(MeshViewDeathTest, EdgeOutOfRange_LastIndexPastEnd_Death)
 
   // Assert: one past end should death
   EXPECT_DEATH(
-    (MeshView { *mesh_,
+    (MeshView { GetMesh(),
       oxygen::data::pak::geometry::MeshViewDesc {
         .first_index = 1, // shift by 1
         .index_count = static_cast<uint32_t>(indices.size()), // now overflows
@@ -418,16 +453,18 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_WidenedIterationMatches)
   MeshBuilder builder;
   auto mesh = builder.WithBufferResources(vbuf, ibuf)
                 .BeginSubMesh("m", material)
-                .WithMeshView({ .first_index = 0,
+                .WithMeshView({
+                  .first_index = 0,
                   .index_count = static_cast<uint32_t>(u16_indices.size()),
                   .first_vertex = 0,
-                  .vertex_count = static_cast<uint32_t>(vertices.size()) })
+                  .vertex_count = static_cast<uint32_t>(vertices.size()),
+                })
                 .EndSubMesh()
                 .Build();
   ASSERT_NE(mesh, nullptr);
   ASSERT_EQ(mesh->IndexCount(), u16_indices.size());
 
-  auto view = mesh->SubMeshes()[0].MeshViews()[0];
+  auto view = mesh->SubMeshes().front().MeshViews().front();
 
   // Act
   std::vector<uint32_t> widened;
@@ -437,9 +474,7 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_WidenedIterationMatches)
 
   // Assert
   ASSERT_EQ(widened.size(), u16_indices.size());
-  for (size_t i = 0; i < u16_indices.size(); ++i) {
-    EXPECT_EQ(widened[i], static_cast<uint32_t>(u16_indices[i]));
-  }
+  EXPECT_THAT(widened, ::testing::ElementsAreArray(u16_indices));
 }
 
 //! (11) Referenced storage: 16-bit index buffer detection caches kUInt16.
@@ -480,10 +515,12 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_IndexTypeCached)
   auto mesh = MeshBuilder()
                 .WithBufferResources(vbuf, ibuf)
                 .BeginSubMesh("sm", material)
-                .WithMeshView({ .first_index = 0,
+                .WithMeshView({
+                  .first_index = 0,
                   .index_count = 3,
                   .first_vertex = 0,
-                  .vertex_count = 3 })
+                  .vertex_count = 3,
+                })
                 .EndSubMesh()
                 .Build();
   ASSERT_NE(mesh, nullptr);
@@ -522,20 +559,22 @@ NOLINT_TEST_F(MeshViewBasicTest, VertexOnlyMesh_IndexBufferEmpty)
   auto mesh = MeshBuilder()
                 .WithBufferResources(vbuf, nullptr)
                 .BeginSubMesh("sm", material)
-                .WithMeshView({ .first_index = 0,
+                .WithMeshView({
+                  .first_index = 0,
                   .index_count = 1, // placeholder to satisfy invariant
                   .first_vertex = 0,
-                  .vertex_count = static_cast<uint32_t>(vertices.size()) })
+                  .vertex_count = static_cast<uint32_t>(vertices.size()),
+                })
                 .EndSubMesh()
                 .Build();
   ASSERT_NE(mesh, nullptr);
-  auto view = mesh->SubMeshes()[0].MeshViews()[0];
+  auto view = mesh->SubMeshes().front().MeshViews().front();
 
   // Act
   auto ib = view.IndexBuffer();
 
   // Assert
-  EXPECT_EQ(ib.Count(), 0u);
+  EXPECT_EQ(ib.Count(), 0U);
   EXPECT_EQ(ib.type, oxygen::data::detail::IndexType::kNone);
 }
 
@@ -564,17 +603,19 @@ NOLINT_TEST(MeshBasicTest, VertexOnlyMesh_IsIndexedFalse)
   auto mesh = MeshBuilder()
                 .WithBufferResources(vbuf, nullptr)
                 .BeginSubMesh("sm", material)
-                .WithMeshView({ .first_index = 0,
+                .WithMeshView({
+                  .first_index = 0,
                   .index_count = 1,
                   .first_vertex = 0,
-                  .vertex_count = static_cast<uint32_t>(vertices.size()) })
+                  .vertex_count = static_cast<uint32_t>(vertices.size()),
+                })
                 .EndSubMesh()
                 .Build();
   ASSERT_NE(mesh, nullptr);
 
   // Act & Assert
   EXPECT_FALSE(mesh->IsIndexed());
-  EXPECT_EQ(mesh->IndexCount(), 0u);
+  EXPECT_EQ(mesh->IndexCount(), 0U);
 }
 
 //! (14) Zero-copy guarantee: MeshView vertex span shares underlying storage.
@@ -584,14 +625,16 @@ NOLINT_TEST_F(MeshViewBasicTest, VerticesSpanSharesUnderlyingStorage)
   std::vector<Vertex> vertices = { Vertex {}, Vertex {}, Vertex {} };
   std::vector<uint32_t> indices = { 0, 1, 2 };
   SetupMesh(vertices, indices);
-  MeshView view(*mesh_,
-    oxygen::data::pak::geometry::MeshViewDesc { .first_index = 0,
+  MeshView view(GetMesh(),
+    oxygen::data::pak::geometry::MeshViewDesc {
+      .first_index = 0,
       .index_count = 3,
       .first_vertex = 0,
-      .vertex_count = 3 });
+      .vertex_count = 3,
+    });
 
   // Act
-  const Vertex* mesh_ptr = mesh_->Vertices().data();
+  const Vertex* mesh_ptr = GetMesh().Vertices().data();
   const Vertex* view_ptr = view.Vertices().data();
 
   // Assert
@@ -636,10 +679,12 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, IndexBufferView_NoCopySizeMatches)
   auto mesh = MeshBuilder()
                 .WithBufferResources(vbuf, ibuf)
                 .BeginSubMesh("sm", material)
-                .WithMeshView({ .first_index = 0,
+                .WithMeshView({
+                  .first_index = 0,
                   .index_count = static_cast<uint32_t>(indices.size()),
                   .first_vertex = 0,
-                  .vertex_count = static_cast<uint32_t>(vertices.size()) })
+                  .vertex_count = static_cast<uint32_t>(vertices.size()),
+                })
                 .EndSubMesh()
                 .Build();
   ASSERT_NE(mesh, nullptr);
@@ -666,14 +711,16 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, ThirtyTwoBitIndices_WidenedMatchesAsU32)
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("s", material)
-                .WithMeshView({ .first_index = 0,
+                .WithMeshView({
+                  .first_index = 0,
                   .index_count = static_cast<uint32_t>(indices.size()),
                   .first_vertex = 0,
-                  .vertex_count = static_cast<uint32_t>(vertices.size()) })
+                  .vertex_count = static_cast<uint32_t>(vertices.size()),
+                })
                 .EndSubMesh()
                 .Build();
   ASSERT_NE(mesh, nullptr);
-  auto view = mesh->SubMeshes()[0].MeshViews()[0];
+  auto view = mesh->SubMeshes().front().MeshViews().front();
 
   // Act
   std::vector<uint32_t> widened;
@@ -685,9 +732,57 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, ThirtyTwoBitIndices_WidenedMatchesAsU32)
 
   // Assert
   ASSERT_EQ(widened.size(), direct.size());
-  for (size_t i = 0; i < direct.size(); ++i) {
-    EXPECT_EQ(widened[i], direct[i]);
+  EXPECT_THAT(widened, ::testing::ElementsAreArray(direct));
+}
+
+//! Views built without a cooked submesh descriptor take the submesh bounds, and
+//! are addressed by MeshViewIndex.
+NOLINT_TEST(MeshViewBoundsTest, BuilderViewsTakeSubmeshBounds)
+{
+  // Arrange
+  auto vertices = std::vector<Vertex>(4);
+  vertices.at(0).position = { -1.0F, 0.0F, 0.0F };
+  vertices.at(1).position = { 1.0F, 0.0F, 0.0F };
+  vertices.at(2).position = { 0.0F, 2.0F, 0.0F };
+  constexpr auto kDepth = 3.0F;
+  vertices.at(3).position = { 0.0F, 0.0F, kDepth };
+  const auto indices = std::vector<std::uint32_t> { 0, 1, 2, 0, 2, 3 };
+  using oxygen::data::pak::geometry::MeshViewDesc;
+
+  // Act
+  const auto mesh
+    = oxygen::data::MeshBuilder(oxygen::data::LodIndex {}, "m")
+        .WithVertices(vertices)
+        .WithIndices(indices)
+        .BeginSubMesh("s", oxygen::data::MaterialAsset::CreateDefault())
+        .WithMeshView(MeshViewDesc {
+          .first_index = 0,
+          .index_count = 3,
+          .first_vertex = 0,
+          .vertex_count = 3,
+        })
+        .WithMeshView(MeshViewDesc {
+          .first_index = 3,
+          .index_count = 3,
+          .first_vertex = 0,
+          .vertex_count = 4,
+        })
+        .EndSubMesh()
+        .Build();
+
+  // Assert
+  const auto& submesh = mesh->SubMeshes().front();
+  ASSERT_EQ(submesh.MeshViews().size(), 2U);
+  for (const auto& view : submesh.MeshViews()) {
+    EXPECT_EQ(view.BoundingBoxMin(), submesh.BoundingBoxMin());
+    EXPECT_EQ(view.BoundingBoxMax(), submesh.BoundingBoxMax());
   }
+  EXPECT_EQ(submesh.BoundingBoxMin(), glm::vec3(-1.0F, 0.0F, 0.0F));
+  EXPECT_EQ(submesh.BoundingBoxMax(), glm::vec3(1.0F, 2.0F, kDepth));
+  const auto* second = submesh.MeshViewAt(oxygen::data::MeshViewIndex { 1U });
+  ASSERT_NE(second, nullptr);
+  EXPECT_EQ(second->FirstIndex(), 3U);
+  EXPECT_EQ(submesh.MeshViewAt(oxygen::data::MeshViewIndex { 2U }), nullptr);
 }
 
 } // namespace

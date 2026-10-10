@@ -43,6 +43,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/MaterialSlotId.h>
@@ -59,6 +60,8 @@ namespace {
 
   namespace lc = oxygen::content::lc;
 
+  // Copying the sidecar strings and maps can only fail on allocation.
+  // NOLINTNEXTLINE(bugprone-exception-escape)
   struct ResolvedBufferSidecar final {
     data::pak::core::ResourceIndexT resource_index
       = data::pak::core::kNoResourceIndex;
@@ -71,9 +74,10 @@ namespace {
     std::optional<lc::Inspection> inspection;
   };
 
+  //! Borrowed for the duration of one job execution, which owns both.
   struct GeometryExecutionContext final {
-    ImportSession& session;
-    const ImportRequest& request;
+    ImportSession& session; // NOLINT(*-avoid-const-or-ref-data-members)
+    const ImportRequest& request; // NOLINT(*-avoid-const-or-ref-data-members)
     observer_ptr<IAsyncFileReader> reader;
     std::vector<MountedInspection> mounts;
     std::unordered_map<std::string, ResolvedBufferSidecar> buffer_cache;
@@ -130,15 +134,15 @@ namespace {
   }
 
   auto ValidateAndCopyName(ImportSession& session, const ImportRequest& request,
-    const std::string_view source_name, char* dest, const size_t dest_size,
+    const std::string_view source_name, const std::span<char> dest,
     std::string_view code, std::string_view message, std::string object_path)
     -> void
   {
-    if (source_name.size() >= dest_size) {
+    if (source_name.size() >= dest.size()) {
       AddDiagnostic(session, request, ImportSeverity::kWarning,
         std::string(code), std::string(message), std::move(object_path));
     }
-    util::TruncateAndNullTerminate(dest, dest_size, source_name);
+    util::TruncateAndNullTerminate(dest, source_name);
   }
 
   template <typename T>
@@ -188,6 +192,8 @@ namespace {
     }
   }
 
+  // The caller awaits each resolution inline while it owns `context`.
+  // NOLINTNEXTLINE(*-avoid-reference-coroutine-parameters)
   auto ResolveBufferSidecarByVirtualPath(GeometryExecutionContext& context,
     std::string_view virtual_path, std::string object_path)
     -> co::Co<std::optional<ResolvedBufferSidecar>>
@@ -513,9 +519,12 @@ namespace {
     std::vector<MeshBufferBindings> lod_bindings;
   };
 
+  // The caller awaits the link inline while it owns `context` and `source`.
+  // NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
   auto LinkGeometryDescriptor(
     GeometryExecutionContext& context, const internal::GeometrySource& source)
     -> co::Co<std::optional<LinkedGeometryDescriptor>>
+  // NOLINTEND(*-avoid-reference-coroutine-parameters)
   {
     auto prepared = LinkedGeometryDescriptor {};
     prepared.geometry_name = source.name;
@@ -532,11 +541,11 @@ namespace {
     asset_desc.header.version = data::pak::geometry::kGeometryAssetVersion;
     asset_desc.header.variant_flags = 0;
     asset_desc.lod_count = static_cast<uint32_t>(lod_count);
-    std::copy_n(root_bounds.min.data(), 3, asset_desc.bounding_box_min);
-    std::copy_n(root_bounds.max.data(), 3, asset_desc.bounding_box_max);
+    std::ranges::copy(root_bounds.min, std::begin(asset_desc.bounding_box_min));
+    std::ranges::copy(root_bounds.max, std::begin(asset_desc.bounding_box_max));
     ValidateAndCopyName(context.session, context.request,
-      prepared.geometry_name, asset_desc.header.name,
-      std::size(asset_desc.header.name), "geometry.descriptor.name_truncated",
+      prepared.geometry_name, std::span(asset_desc.header.name),
+      "geometry.descriptor.name_truncated",
       "Geometry name truncated to fit descriptor limit", "name");
 
     if (!WritePod(writer, asset_desc)) {
@@ -554,8 +563,7 @@ namespace {
       const auto& lod_bounds = lod.bounds;
       auto mesh_desc = data::pak::geometry::MeshDesc {};
       ValidateAndCopyName(context.session, context.request, lod.name,
-        mesh_desc.name, std::size(mesh_desc.name),
-        "geometry.descriptor.lod_name_truncated",
+        std::span(mesh_desc.name), "geometry.descriptor.lod_name_truncated",
         "LOD name truncated to fit descriptor limit", lod_path + ".name");
 
       auto mesh_bindings = MeshBufferBindings {};
@@ -654,18 +662,18 @@ namespace {
             }
             mesh_desc.info.skinned.skeleton_asset_key = *skeleton_key;
           }
-          std::copy_n(
-            lod_bounds.min.data(), 3, mesh_desc.info.skinned.bounding_box_min);
-          std::copy_n(
-            lod_bounds.max.data(), 3, mesh_desc.info.skinned.bounding_box_max);
+          std::ranges::copy(lod_bounds.min,
+            std::begin(mesh_desc.info.skinned.bounding_box_min));
+          std::ranges::copy(lod_bounds.max,
+            std::begin(mesh_desc.info.skinned.bounding_box_max));
         } else {
           mesh_desc.mesh_type = static_cast<uint8_t>(data::MeshType::kStandard);
           mesh_desc.info.standard.vertex_buffer = data::kNoResourceReference;
           mesh_desc.info.standard.index_buffer = data::kNoResourceReference;
-          std::copy_n(
-            lod_bounds.min.data(), 3, mesh_desc.info.standard.bounding_box_min);
-          std::copy_n(
-            lod_bounds.max.data(), 3, mesh_desc.info.standard.bounding_box_max);
+          std::ranges::copy(lod_bounds.min,
+            std::begin(mesh_desc.info.standard.bounding_box_min));
+          std::ranges::copy(lod_bounds.max,
+            std::begin(mesh_desc.info.standard.bounding_box_max));
         }
       } else {
         mesh_desc.mesh_type = static_cast<uint8_t>(data::MeshType::kProcedural);
@@ -674,8 +682,7 @@ namespace {
         const auto& procedural_name = procedural.name;
         procedural_blob = procedural.parameters;
         ValidateAndCopyName(context.session, context.request, procedural_name,
-          mesh_desc.name, std::size(mesh_desc.name),
-          "geometry.procedural.name_truncated",
+          std::span(mesh_desc.name), "geometry.procedural.name_truncated",
           "Procedural mesh name truncated to fit descriptor limit",
           lod_path + ".procedural.mesh_name");
 
@@ -729,7 +736,7 @@ namespace {
         co_return std::nullopt;
       }
 
-      if ((mesh_desc.IsProcedural()) && (!procedural_blob.empty())) {
+      if (mesh_desc.IsProcedural() && (!procedural_blob.empty())) {
         if (!writer.WriteBlob(std::as_bytes(std::span<const std::byte>(
               procedural_blob.data(), procedural_blob.size())))) {
           AddDiagnostic(context.session, context.request,
@@ -748,7 +755,7 @@ namespace {
         submesh_desc.slot_id = submesh.slot_id;
         const auto& submesh_name = submesh.name;
         ValidateAndCopyName(context.session, context.request, submesh_name,
-          submesh_desc.name, std::size(submesh_desc.name),
+          std::span(submesh_desc.name),
           "geometry.descriptor.submesh_name_truncated",
           "Submesh name truncated to fit descriptor limit",
           submesh_path + ".name");
@@ -765,10 +772,10 @@ namespace {
 
         const auto& submesh_bounds = submesh.bounds;
 
-        std::copy_n(
-          submesh_bounds.min.data(), 3, submesh_desc.bounding_box_min);
-        std::copy_n(
-          submesh_bounds.max.data(), 3, submesh_desc.bounding_box_max);
+        std::ranges::copy(
+          submesh_bounds.min, std::begin(submesh_desc.bounding_box_min));
+        std::ranges::copy(
+          submesh_bounds.max, std::begin(submesh_desc.bounding_box_max));
 
         if (!WritePod(writer, submesh_desc)) {
           AddDiagnostic(context.session, context.request,
@@ -778,7 +785,7 @@ namespace {
         }
 
         for (size_t view_i = 0; view_i < submesh.views.size(); ++view_i) {
-          const auto& view_ref = submesh.views.at(view_i);
+          const auto& view = submesh.views.at(view_i);
           const auto view_path
             = submesh_path + ".views[" + std::to_string(view_i) + "]";
           auto view_desc = data::pak::geometry::MeshViewDesc {};
@@ -794,10 +801,14 @@ namespace {
             }
 
             if (!ResolveMeshViewPair(context, *resolved_vb, *resolved_ib,
-                  view_ref, view_path, view_desc)) {
+                  view.view_ref, view_path, view_desc)) {
               co_return std::nullopt;
             }
           }
+          std::ranges::copy(
+            view.bounds.min, std::begin(view_desc.bounding_box_min));
+          std::ranges::copy(
+            view.bounds.max, std::begin(view_desc.bounding_box_max));
 
           if (!WritePod(writer, view_desc)) {
             AddDiagnostic(context.session, context.request,
@@ -825,8 +836,11 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   const auto job_start = std::chrono::steady_clock::now();
   auto telemetry = ImportTelemetry {};
+  // Awaited inline below, while the job owns `session` and this closure.
+  // NOLINTBEGIN(*-avoid-reference-coroutine-parameters,*-avoid-capturing-lambda-coroutines)
   const auto FinalizeWithTelemetry
     = [&](ImportSession& session) -> co::Co<ImportReport> {
+    // NOLINTEND(*-avoid-reference-coroutine-parameters,*-avoid-capturing-lambda-coroutines)
     const auto finalize_start = std::chrono::steady_clock::now();
     auto report = co_await FinalizeSession(session);
     const auto finalize_end = std::chrono::steady_clock::now();
@@ -960,6 +974,8 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   co_return report;
 }
 
+// The job awaits finalization inline while it owns `session`.
+// NOLINTNEXTLINE(*-avoid-reference-coroutine-parameters)
 auto GeometryDescriptorImportJob::FinalizeSession(ImportSession& session)
   -> co::Co<ImportReport>
 {

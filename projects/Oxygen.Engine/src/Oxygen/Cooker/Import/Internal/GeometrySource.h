@@ -53,12 +53,19 @@ struct GeometrySource final {
     std::vector<std::byte> parameters;
   };
 
+  //! One mesh view: a buffer view selector and its local bounds.
+  struct View final {
+    std::string view_ref;
+    //! The authored bounds, else the submesh bounds.
+    Bounds bounds;
+  };
+
   struct Submesh final {
     std::string name;
     data::MaterialSlotId slot_id {};
     std::string material;
     Bounds bounds;
-    std::vector<std::string> views;
+    std::vector<View> views;
   };
 
   struct Lod final {

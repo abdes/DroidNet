@@ -11,12 +11,12 @@
 #include <cstring>
 #include <iostream>
 
+#include "AssetDumpHelpers.h"
+#include "AssetDumper.h"
+
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
-
-#include "AssetDumpHelpers.h"
-#include "AssetDumper.h"
 
 namespace oxygen::content::pakdump {
 
@@ -217,7 +217,13 @@ public:
           std::cout << " first_index=" << view_desc.first_index;
           std::cout << ", index_count=" << view_desc.index_count;
           std::cout << ", first_vertex=" << view_desc.first_vertex;
-          std::cout << ", vertex_count=" << view_desc.vertex_count << "\n";
+          std::cout << ", vertex_count=" << view_desc.vertex_count;
+          std::cout << ", bounds=(" << view_desc.bounding_box_min[0] << ", "
+                    << view_desc.bounding_box_min[1] << ", "
+                    << view_desc.bounding_box_min[2] << ")-("
+                    << view_desc.bounding_box_max[0] << ", "
+                    << view_desc.bounding_box_max[1] << ", "
+                    << view_desc.bounding_box_max[2] << ")\n";
 
           offset += sizeof(MeshViewDesc);
         }

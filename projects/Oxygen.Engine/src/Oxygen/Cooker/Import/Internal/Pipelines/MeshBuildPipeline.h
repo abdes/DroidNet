@@ -114,6 +114,9 @@ class MeshBuildPipeline final : public Object {
   OXYGEN_TYPED(MeshBuildPipeline)
 public:
   static constexpr PlanItemKind kItemKind = PlanItemKind::kMeshBuild;
+  //! Most triangles in one mesh view of a static submesh; larger submeshes
+  //! are split into spatially coherent views.
+  static constexpr uint32_t kMaxMeshViewTriangles = 4096U;
   //! Configuration for the pipeline.
   struct Config {
     size_t queue_capacity = 32;

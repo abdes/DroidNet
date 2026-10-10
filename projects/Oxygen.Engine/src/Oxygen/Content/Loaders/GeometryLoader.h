@@ -302,8 +302,30 @@ namespace detail {
     LOG_F(2, "vertex count  : {}", mesh_view_desc.vertex_count);
     LOG_F(2, "first index   : {}", mesh_view_desc.first_index);
     LOG_F(2, "index count   : {}", mesh_view_desc.index_count);
+    LOG_F(2, "bounding box  : ({}, {}, {}) - ({}, {}, {})",
+      mesh_view_desc.bounding_box_min[0], mesh_view_desc.bounding_box_min[1],
+      mesh_view_desc.bounding_box_min[2], mesh_view_desc.bounding_box_max[0],
+      mesh_view_desc.bounding_box_max[1], mesh_view_desc.bounding_box_max[2]);
 
     return mesh_view_desc;
+  }
+
+  //! Rejects view bounds that are inverted or leave the submesh bounds.
+  inline auto ValidateMeshViewBounds(
+    const data::pak::geometry::SubMeshDesc& submesh,
+    const data::pak::geometry::MeshViewDesc& view, const uint32_t submesh_index,
+    const std::size_t view_index) -> void
+  {
+    for (std::size_t axis = 0; axis < 3; ++axis) {
+      const auto min = view.bounding_box_min[axis];
+      const auto max = view.bounding_box_max[axis];
+      if (!(min <= max) || !(min >= submesh.bounding_box_min[axis])
+        || !(max <= submesh.bounding_box_max[axis])) {
+        throw std::runtime_error(fmt::format(
+          "submesh {} mesh view {} bounds are outside the submesh bounds",
+          submesh_index, view_index));
+      }
+    }
   }
 
   inline auto LoadSubMeshDesc(serio::AnyReader& desc_reader)
@@ -453,6 +475,9 @@ inline auto LoadMesh(LoaderContext context, const data::LodIndex lod)
       throw std::runtime_error(
         fmt::format("submesh {} has {} mesh views, expected {}", i,
           mesh_views.size(), sm_desc.mesh_view_count));
+    }
+    for (std::size_t view = 0; view < mesh_views.size(); ++view) {
+      detail::ValidateMeshViewBounds(sm_desc, mesh_views[view], i, view);
     }
     total_read_views += sm_desc.mesh_view_count;
 

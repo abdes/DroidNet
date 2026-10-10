@@ -717,6 +717,10 @@
         },
         "view_ref": {
           "$ref": "#/definitions/view_selector"
+        },
+        "bounds": {
+          "$ref": "#/definitions/bounds3",
+          "description": "Local bounds of the view's triangles, inside the submesh bounds. Defaults to the submesh bounds."
         }
       },
       "required": ["view_ref"]
