@@ -439,7 +439,6 @@ set(
   "SceneRenderer/Stages/Occlusion/Internal/HistorySlotAllocator.cpp"
   "SceneRenderer/Stages/Occlusion/Internal/IndirectListBuilder.cpp"
   "SceneRenderer/Stages/Occlusion/OcclusionModule.cpp"
-  "SceneRenderer/Stages/Occlusion/Types/OcclusionStats.cpp"
   "SceneRenderer/Stages/Translucency/TranslucencyMeshProcessor.cpp"
   "SceneRenderer/Stages/Translucency/TranslucencyModule.cpp"
   "SceneRenderer/Stages/InitViews/InitViewsModule.cpp"

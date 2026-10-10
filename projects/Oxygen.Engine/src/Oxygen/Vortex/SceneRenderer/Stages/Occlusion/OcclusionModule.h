@@ -7,9 +7,11 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionConfig.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/OcclusionStats.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -24,6 +26,21 @@ struct RenderContext;
 class Renderer;
 class SceneTextures;
 
+//! Two-phase GPU occlusion culling of camera views.
+/*!
+ Per frame and view:
+
+ 1. `BuildPhase1` culls every draw against the frustum and publishes the
+    view's visibility in `ctx.current_view.draw_visibility`. With occlusion
+    on, only last frame's visible draws are drawn in phase 1.
+ 2. The depth prepass draws phase 1; the occlusion pyramid is built from it.
+ 3. `BuildPhase2` tests the rest against the pyramid, completes the
+    visibility and writes the view's history.
+
+ Each view keeps its own history slots, history and counters. A history
+ reset (camera cut, projection or view rect change, new view) makes phase 1
+ draw every draw in the frustum for one frame.
+*/
 class OcclusionModule {
 public:
   OXGN_VRTX_API explicit OcclusionModule(
@@ -37,24 +54,34 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto GetConfig() const noexcept
     -> const OcclusionConfig&;
 
-  //! Tests the current view's draws against its furthest HZB and publishes
-  //! the results of the view's own earlier test, matched to this frame's draws
-  //! by draw source. Results never cross views.
-  OXGN_VRTX_API void Execute(RenderContext& ctx,
-    graphics::CommandRecorder& recorder, SceneTextures& scene_textures);
+  //! Records phase 1 of the current view and publishes its visibility.
+  /*!
+   Without a prepared frame or resolved view, the published visibility is
+   invalid and every pass keeps all of its candidates.
+  */
+  OXGN_VRTX_API void BuildPhase1(RenderContext& ctx,
+    graphics::CommandRecorder& recorder, const SceneTextures& scene_textures);
 
-  //! Forgets a removed view's pending test and readback.
+  //! Whether the current view needs the occlusion pyramid and phase 2.
+  [[nodiscard]] OXGN_VRTX_API auto NeedsPhase2(const RenderContext& ctx) const
+    -> bool;
+
+  //! Records phase 2 of the current view against `pyramid`, built from its
+  //! phase 1 depth. Without a pyramid every draw in the frustum is visible.
+  OXGN_VRTX_API void BuildPhase2(RenderContext& ctx,
+    graphics::CommandRecorder& recorder,
+    const std::optional<ScreenHzbModule::OcclusionPyramid>& pyramid);
+
+  //! Forgets a removed view's history and counters.
   OXGN_VRTX_API void RemoveViewState(ViewId view_id);
 
-  [[nodiscard]] OXGN_VRTX_API auto GetCurrentResults() const noexcept
-    -> const OcclusionFrameResults&;
-  [[nodiscard]] OXGN_VRTX_API auto GetStats() const noexcept
-    -> const OcclusionStats&;
+  //! The latest counters read back for a view, frames late.
+  [[nodiscard]] OXGN_VRTX_API auto GetStats(ViewId view_id) const
+    -> std::optional<OcclusionStats>;
 
 private:
   struct Impl;
 
-  Renderer& renderer_;
   OcclusionConfig config_ {};
   std::unique_ptr<Impl> impl_;
 };

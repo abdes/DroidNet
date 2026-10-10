@@ -561,6 +561,8 @@ if(WIN32)
       "Occlusion/HzbPyramid_test.cpp"
       "Occlusion/IndirectDrawReference_test.cpp"
       "Occlusion/IndirectLists_test.cpp"
+      "Occlusion/OcclusionGpuTest.h"
+      "Occlusion/TwoPhaseOcclusion_test.cpp"
     DEPS
       oxygen-vortex-exposure-test-support
   )

@@ -7,80 +7,43 @@
 #pragma once
 
 #include <cstdint>
-#include <span>
-#include <string_view>
 
-#include <Oxygen/Vortex/api_export.h>
+#include <Oxygen/Core/Types/Frame.h>
 
 namespace oxygen::vortex {
 
-enum class OcclusionFallbackReason : std::uint8_t {
-  kNone,
-  kStageDisabled,
-  kNoPreparedFrame,
-  kNoDraws,
-  kNoCurrentFurthestHzb,
-  kNoPreviousResults,
-  kReadbackUnavailable,
-  kCapacityOverflow,
-};
+//! One culling view's occlusion counters for one frame, counted on the GPU.
+/*!
+ Diagnostics only: they are read back asynchronously, frames late, and
+ rendering never reads them.
 
-struct OcclusionFrameResults {
-  std::span<const std::uint8_t> visible_by_draw;
+ ABI: one `uint` per counter, in this order, mirrored by the `OCCLUSION_STAT_*`
+ indices of `OcclusionCull.hlsl`.
+*/
+struct OcclusionCounters {
   std::uint32_t draw_count { 0U };
-  bool valid { false };
-  OcclusionFallbackReason fallback_reason {
-    OcclusionFallbackReason::kStageDisabled,
-  };
-
-  [[nodiscard]] constexpr auto IsDrawVisible(
-    const std::uint32_t draw_index) const noexcept -> bool
-  {
-    return !valid || draw_index >= visible_by_draw.size()
-      || visible_by_draw[draw_index] != 0U;
-  }
-};
-
-struct OcclusionStats {
-  std::uint32_t draw_count { 0U };
-  std::uint32_t candidate_count { 0U };
-  std::uint32_t submitted_count { 0U };
-  std::uint32_t visible_count { 0U };
+  std::uint32_t in_frustum_count { 0U };
+  //! Inside the clip volume but covering no pixel center.
+  std::uint32_t coverage_culled_count { 0U };
+  std::uint32_t history_slot_count { 0U };
+  std::uint32_t phase1_drawn_count { 0U };
+  std::uint32_t phase2_drawn_count { 0U };
+  //! In the frustum and behind the phase 1 depth.
   std::uint32_t occluded_count { 0U };
-  std::uint32_t overflow_visible_count { 0U };
-  OcclusionFallbackReason fallback_reason {
-    OcclusionFallbackReason::kStageDisabled,
-  };
-  bool current_furthest_hzb_available { false };
-  bool previous_results_valid { false };
-  bool results_valid { false };
+  //! Translucent draws among the occluded ones.
+  std::uint32_t translucent_culled_count { 0U };
+
+  auto operator==(const OcclusionCounters&) const -> bool = default;
 };
+static_assert(sizeof(OcclusionCounters) == 32U); // NOLINT(*-magic-numbers)
 
-[[nodiscard]] constexpr auto to_string(
-  const OcclusionFallbackReason reason) noexcept -> std::string_view
-{
-  switch (reason) {
-  case OcclusionFallbackReason::kNone:
-    return "None";
-  case OcclusionFallbackReason::kStageDisabled:
-    return "StageDisabled";
-  case OcclusionFallbackReason::kNoPreparedFrame:
-    return "NoPreparedFrame";
-  case OcclusionFallbackReason::kNoDraws:
-    return "NoDraws";
-  case OcclusionFallbackReason::kNoCurrentFurthestHzb:
-    return "NoCurrentFurthestHzb";
-  case OcclusionFallbackReason::kNoPreviousResults:
-    return "NoPreviousResults";
-  case OcclusionFallbackReason::kReadbackUnavailable:
-    return "ReadbackUnavailable";
-  case OcclusionFallbackReason::kCapacityOverflow:
-    return "CapacityOverflow";
-  }
-  return "__Unknown__";
-}
-
-[[nodiscard]] OXGN_VRTX_API auto MakeInvalidOcclusionFrameResults(
-  OcclusionFallbackReason reason) noexcept -> OcclusionFrameResults;
+//! The latest counters read back for a culling view.
+struct OcclusionStats {
+  OcclusionCounters counters {};
+  //! The frame the counters were recorded in.
+  frame::SequenceNumber frame_sequence { 0U };
+  //! Occlusion was on for that frame; phase 2 ran.
+  bool occlusion_enabled { false };
+};
 
 } // namespace oxygen::vortex

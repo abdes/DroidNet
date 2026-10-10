@@ -9,6 +9,7 @@
 #include <memory>
 
 #include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/DrawVisibility.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::graphics {
@@ -46,7 +47,12 @@ public:
   DepthPrepassModule(DepthPrepassModule&&) = delete;
   auto operator=(DepthPrepassModule&&) -> DepthPrepassModule& = delete;
 
-  OXGN_VRTX_API void Execute(RenderContext& ctx,
+  //! Clears the scene depth and draws the current view's phase 1 draws.
+  OXGN_VRTX_API void ExecutePhase1(RenderContext& ctx,
+    graphics::CommandRecorder& recorder, SceneTextures& scene_textures);
+  //! Draws the phase 2 draws, when occlusion ran phase 2, and publishes the
+  //! complete depth.
+  OXGN_VRTX_API void ExecutePhase2(RenderContext& ctx,
     graphics::CommandRecorder& recorder, SceneTextures& scene_textures);
   OXGN_VRTX_API void SetConfig(const DepthPrepassConfig& config);
 
@@ -54,8 +60,13 @@ public:
     -> DepthPrePassCompleteness;
   [[nodiscard]] OXGN_VRTX_API auto HasValidDepthProduct() const -> bool;
   [[nodiscard]] OXGN_VRTX_API auto HasPublishedDepthProducts() const -> bool;
+  //! Phase 1 drew into the scene depth and phase 2 has not run yet.
+  [[nodiscard]] OXGN_VRTX_API auto HasPendingPhase2() const -> bool;
 
 private:
+  void DrawList(const RenderContext& ctx, graphics::CommandRecorder& recorder,
+    SceneTextures& scene_textures, DrawVisibilityPredicate predicate);
+
   Renderer& renderer_;
   DepthPrepassConfig config_ {};
   DepthPrePassCompleteness completeness_ {
@@ -63,6 +74,10 @@ private:
   };
   bool has_valid_depth_product_ { false };
   bool has_published_depth_products_ { false };
+  //! Phase 1 state that phase 2 continues.
+  bool phase1_recorded_ { false };
+  bool has_current_view_payload_ { false };
+  bool writes_velocity_ { false };
   std::unique_ptr<DepthPrepassMeshProcessor> mesh_processor_;
   std::unique_ptr<occlusion::internal::IndirectListBuilder> list_builder_;
   std::shared_ptr<graphics::Framebuffer> depth_framebuffer_;

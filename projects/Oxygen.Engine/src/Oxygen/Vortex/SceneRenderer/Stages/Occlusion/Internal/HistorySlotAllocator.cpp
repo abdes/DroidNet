@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Hash.h>
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/HistorySlotAllocator.h>
@@ -91,6 +92,7 @@ auto HistorySlotAllocator::Reset() -> void
 auto HistorySlotAllocator::AllocateSlot() -> std::uint32_t
 {
   if (free_slots_.empty()) {
+    CHECK_LT_F(capacity_, kFreshHistorySlotBit, "history slots exhausted");
     return capacity_++;
   }
   const auto slot = free_slots_.back();

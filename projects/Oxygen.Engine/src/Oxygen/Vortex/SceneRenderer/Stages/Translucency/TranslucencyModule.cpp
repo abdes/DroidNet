@@ -396,15 +396,15 @@ auto TranslucencyModule::Execute(RenderContext& ctx,
     recorder.RequireResourceState(
       status, graphics::ResourceStates::kUnorderedAccess);
   }
-  // Translucent draws are not occluded yet; the list keeps every draw in the
-  // frustum, in back-to-front order.
+  // The list keeps the translucent draws in the frustum that the occlusion
+  // test found visible, in back-to-front order.
   const auto draw_list
     = list_builder_->Build(recorder, ctx.frame_sequence, ctx.frame_slot,
       occlusion::internal::MakeIndirectDrawCandidates(
         ctx.current_view.prepared_frame->GetDrawMetadata(),
         mesh_processor_->GetDrawCommands()),
       ctx.current_view.draw_visibility,
-      DrawVisibilityPredicate { DrawVisibilityBit::kInFrustum });
+      DrawVisibilityPredicate { DrawVisibilityBit::kVisible });
   recorder.FlushBarriers();
   recorder.BindFrameBuffer(*framebuffer_);
   SetViewportAndScissor(recorder, ctx, scene_textures);

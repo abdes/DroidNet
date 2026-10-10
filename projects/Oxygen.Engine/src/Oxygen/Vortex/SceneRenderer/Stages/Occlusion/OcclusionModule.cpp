@@ -5,50 +5,48 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
+#include <bit>
 #include <cstdint>
 #include <cstring>
-#include <functional>
-#include <iterator>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <ranges>
 #include <span>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Base/Hash.h>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/ext/vector_int4.hpp>
+
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/ReadbackTypes.h>
-#include <Oxygen/Graphics/Common/ResourceRegistry.h>
-#include <Oxygen/Graphics/Common/Shaders.h>
-#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
-#include <Oxygen/Profiling/GpuEventScope.h>
-#include <Oxygen/Profiling/ProfileScope.h>
-#include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Vortex/Internal/StructuredGpuBuffer.h>
+#include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/DrawCullPass.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/HistorySlotAllocator.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionConfig.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionModule.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/DrawVisibility.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/OcclusionStats.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
@@ -56,116 +54,42 @@ namespace oxygen::vortex {
 
 namespace {
 
-  namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
+  using occlusion::internal::DrawCullInputs;
+  using occlusion::internal::DrawCullPass;
+  using occlusion::internal::HistorySlotAllocator;
+  using vortex::internal::StructuredGpuBuffer;
 
-  constexpr std::uint32_t kThreadGroupSize = 64U;
+  constexpr auto kDebugName = "Vortex.Stage3.Occlusion";
+  constexpr auto kSlotStride
+    = static_cast<std::uint32_t>(sizeof(std::uint32_t));
+  constexpr auto kCounterCount = static_cast<std::uint32_t>(
+    sizeof(OcclusionCounters) / sizeof(std::uint32_t));
 
-  struct GpuOcclusionCandidate {
-    std::array<float, 4> sphere_world {};
-    std::uint32_t draw_index { 0U };
-    std::uint32_t _pad0 { 0U };
-    std::uint32_t _pad1 { 0U };
-    std::uint32_t _pad2 { 0U };
+  //! What a view's history is valid for: the unjittered projection and the
+  //! rasterized rect. A change resets the history.
+  struct HistoryKey {
+    glm::mat4 projection { 1.0F };
+    //! Viewport origin and size.
+    glm::vec4 viewport { 0.0F };
+    //! Scissor left, top, right, bottom.
+    glm::ivec4 scissors { 0 };
+
+    auto operator==(const HistoryKey&) const -> bool = default;
   };
-  static_assert(sizeof(GpuOcclusionCandidate) == 32U);
 
-  struct GpuOcclusionPassConstants {
-    ShaderVisibleIndex candidates_srv { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex result_uav { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex screen_hzb_frame_slot { kInvalidShaderVisibleIndex };
-    std::uint32_t candidate_count { 0U };
-  };
-  static_assert(sizeof(GpuOcclusionPassConstants) == 16U);
-
-  auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
-    -> graphics::ResourceViewType
+  auto MakeHistoryKey(const glm::mat4& projection, const ViewPort& viewport,
+    const Scissors& scissors) -> HistoryKey
   {
-    using graphics::ResourceViewType;
-    switch (type) {
-    case bindless_d3d12::RangeType::SRV:
-      return ResourceViewType::kRawBuffer_SRV;
-    case bindless_d3d12::RangeType::Sampler:
-      return ResourceViewType::kSampler;
-    case bindless_d3d12::RangeType::UAV:
-      return ResourceViewType::kRawBuffer_UAV;
-    default:
-      return ResourceViewType::kNone;
-    }
+    return HistoryKey {
+      .projection = projection,
+      .viewport = glm::vec4 { viewport.top_left_x, viewport.top_left_y,
+        viewport.width, viewport.height },
+      .scissors = glm::ivec4 { scissors.left, scissors.top, scissors.right,
+        scissors.bottom },
+    };
   }
 
-  auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
-  {
-    std::vector<graphics::RootBindingItem> bindings;
-    bindings.reserve(bindless_d3d12::kRootParamTableCount);
-
-    for (std::uint32_t index = 0; index < bindless_d3d12::kRootParamTableCount;
-      ++index) {
-      const auto& desc = bindless_d3d12::kRootParamTable.at(index);
-      graphics::RootBindingDesc binding {};
-      binding.binding_slot_desc.register_index = desc.shader_register;
-      binding.binding_slot_desc.register_space = desc.register_space;
-      binding.visibility = graphics::ShaderStageFlags::kAll;
-
-      switch (desc.kind) {
-      case bindless_d3d12::RootParamKind::DescriptorTable: {
-        graphics::DescriptorTableBinding table {};
-        if (desc.ranges_count > 0U && desc.ranges.data() != nullptr) {
-          const auto& range = desc.ranges.front();
-          table.view_type = RangeTypeToViewType(
-            static_cast<bindless_d3d12::RangeType>(range.range_type));
-          table.base_index = range.base_register;
-          table.count
-            = range.num_descriptors == std::numeric_limits<std::uint32_t>::max()
-            ? std::numeric_limits<std::uint32_t>::max()
-            : range.num_descriptors;
-        }
-        binding.data = table;
-        break;
-      }
-      case bindless_d3d12::RootParamKind::CBV:
-        binding.data = graphics::DirectBufferBinding {};
-        break;
-      case bindless_d3d12::RootParamKind::RootConstants:
-        binding.data
-          = graphics::PushConstantsBinding { .size = desc.constants_count };
-        break;
-      }
-
-      bindings.emplace_back(binding);
-    }
-
-    return bindings;
-  }
-
-  auto BuildPipelineDesc() -> graphics::ComputePipelineDesc
-  {
-    auto root_bindings = BuildVortexRootBindings();
-    return graphics::ComputePipelineDesc::Builder()
-      .SetComputeShader({
-        .stage = ShaderType::kCompute,
-        .source_path = "Vortex/Stages/Occlusion/OcclusionTest.hlsl",
-        .entry_point = "VortexOcclusionTestCS",
-      })
-      .SetRootBindings(std::span<const graphics::RootBindingItem>(
-        root_bindings.data(), root_bindings.size()))
-      .SetDebugName("Vortex.Stage5.OcclusionTest")
-      .Build();
-  }
-
-  template <typename Resource>
-  auto RegisterResourceIfNeeded(
-    Graphics& gfx, const std::shared_ptr<Resource>& resource) -> void
-  {
-    if (!resource) {
-      return;
-    }
-    auto& registry = gfx.GetResourceRegistry();
-    if (!registry.Contains(*resource)) {
-      registry.Register(resource);
-    }
-  }
-
-  auto TrackBufferFromKnownOrInitial(
+  auto TrackFromKnownOrCommon(
     graphics::CommandRecorder& recorder, const graphics::Buffer& buffer) -> void
   {
     if (recorder.IsResourceTracked(buffer)
@@ -176,424 +100,174 @@ namespace {
       buffer, graphics::ResourceStates::kCommon, true);
   }
 
-  auto MakeStructuredViewDesc(const graphics::ResourceViewType view_type,
-    const std::uint64_t size_bytes, const std::uint32_t stride)
-    -> graphics::BufferViewDescription
-  {
-    return graphics::BufferViewDescription {
-      .view_type = view_type,
-      .visibility = graphics::DescriptorVisibility::kShaderVisible,
-      .range = { 0U, size_bytes },
-      .stride = stride,
-    };
-  }
-
-  //! A draw's identity across frames. Draw indices follow each frame's sort
-  //! order, so a result read back frames later is matched by its source.
-  struct DrawSourceKey {
-    scene::NodeHandle node;
-    data::SubmeshIndex submesh_index;
-
-    auto operator==(const DrawSourceKey&) const -> bool = default;
-  };
-
-  struct DrawSourceKeyHash {
-    auto operator()(const DrawSourceKey& key) const noexcept -> std::size_t
-    {
-      auto seed = std::hash<scene::NodeHandle> {}(key.node);
-      HashCombine(seed, key.submesh_index);
-      return seed;
-    }
-  };
-
-  //! Marks a source that produced more than one draw this frame; its result
-  //! cannot be attributed and the draws stay visible.
-  constexpr auto kAmbiguousDraw = std::numeric_limits<std::uint32_t>::max();
-
-  auto ToKey(const PreparedSceneFrame::DrawSource& source) noexcept
-    -> DrawSourceKey
-  {
-    return DrawSourceKey {
-      .node = source.node,
-      .submesh_index = source.submesh_index,
-    };
-  }
-
-  auto PreparedDrawCount(const PreparedSceneFrame& prepared_scene) noexcept
-    -> std::uint32_t
-  {
-    return static_cast<std::uint32_t>(prepared_scene.GetDrawMetadata().size());
-  }
-
 } // namespace
 
 struct OcclusionModule::Impl {
-  std::vector<std::uint8_t> visibility_storage;
-  std::vector<GpuOcclusionCandidate> candidate_storage;
-  //! The draw source of each candidate, in candidate order.
-  std::vector<DrawSourceKey> candidate_sources;
-  std::unordered_map<DrawSourceKey, std::uint32_t, DrawSourceKeyHash>
-    draw_index_by_source;
-  std::shared_ptr<graphics::Buffer> result_buffer;
-  ShaderVisibleIndex result_buffer_uav { kInvalidShaderVisibleIndex };
-  std::uint32_t result_buffer_capacity { 0U };
-  std::unique_ptr<upload::TransientStructuredBuffer> candidate_buffer;
-  std::unique_ptr<upload::TransientStructuredBuffer> pass_constants_buffer;
-
-  //! A view's submitted test: results return frames later and belong only to
-  //! that view and to the draw sources that were submitted.
+  //! One camera view's culling state.
   struct ViewState {
-    std::shared_ptr<graphics::GpuBufferReadback> readback;
-    std::vector<DrawSourceKey> pending_sources;
+    HistorySlotAllocator slots;
+    //! One `uint` per slot; replaced, with its contents copied, on growth.
+    std::unique_ptr<StructuredGpuBuffer> history;
+    StructuredGpuBuffer counters {
+      std::string { kDebugName } + ".Counters",
+      kSlotStride,
+    };
+    std::shared_ptr<graphics::GpuBufferReadback> counters_readback;
+    //! The frame and setting of the counters in flight.
+    frame::SequenceNumber counters_frame { 0U };
+    bool counters_occlusion_enabled { false };
+    std::optional<OcclusionStats> stats;
+    std::optional<HistoryKey> history_key;
+    //! The last phase 2 wrote the history for `history_key`.
+    bool history_written { false };
+
+    //! This frame's phase 1, kept for phase 2.
+    DrawCullInputs inputs {};
+    DrawVisibilityProducts phase1 {};
+    bool counting { false };
   };
-  std::unordered_map<ViewId, ViewState> view_states;
-  std::optional<graphics::ComputePipelineDesc> pipeline_desc;
-  std::weak_ptr<Graphics> gfx_weak;
-  OcclusionFrameResults current_results
-    = MakeInvalidOcclusionFrameResults(OcclusionFallbackReason::kStageDisabled);
-  OcclusionStats stats {};
 
-  OXYGEN_MAKE_NON_COPYABLE(Impl)
-  OXYGEN_MAKE_NON_MOVABLE(Impl)
-
-  explicit Impl(Renderer& renderer)
+  explicit Impl(Renderer& renderer_in)
+    : renderer(&renderer_in)
+    , cull(renderer_in, kDebugName)
   {
-    auto gfx = renderer.GetGraphics();
-    if (gfx == nullptr) {
-      return;
-    }
-    gfx_weak = gfx;
-    candidate_buffer = std::make_unique<upload::TransientStructuredBuffer>(
-      observer_ptr { gfx.get() }, renderer.GetStagingProvider(),
-      static_cast<std::uint32_t>(sizeof(GpuOcclusionCandidate)),
-      observer_ptr { &renderer.GetInlineTransfersCoordinator() },
-      "Vortex.Stage5.Occlusion.Candidates");
-    pass_constants_buffer = std::make_unique<upload::TransientStructuredBuffer>(
-      observer_ptr { gfx.get() }, renderer.GetStagingProvider(),
-      static_cast<std::uint32_t>(sizeof(GpuOcclusionPassConstants)),
-      observer_ptr { &renderer.GetInlineTransfersCoordinator() },
-      "Vortex.Stage5.Occlusion.PassConstants");
   }
 
-  ~Impl()
+  observer_ptr<Renderer> renderer;
+  DrawCullPass cull;
+  std::optional<upload::TransientStructuredBuffer> slot_words;
+  std::unordered_map<ViewId, ViewState> views;
+  std::vector<std::uint32_t> slot_word_storage;
+
+  //! Uploads this frame's slot word per draw; invalid when the upload fails.
+  auto UploadSlotWords(const RenderContext& ctx,
+    const std::span<const HistorySlotAllocator::Assignment> assignments,
+    const std::uint32_t draw_count) -> ShaderVisibleIndex
   {
-    if (auto gfx = gfx_weak.lock();
-      gfx != nullptr && result_buffer != nullptr) {
-      auto& registry = gfx->GetResourceRegistry();
-      if (registry.Contains(*result_buffer)) {
-        registry.UnRegisterResource(*result_buffer);
-      }
-      gfx->RegisterDeferredRelease(std::move(result_buffer));
+    if (!slot_words.has_value()) {
+      auto gfx = renderer->GetGraphics();
+      slot_words.emplace(observer_ptr { gfx.get() },
+        renderer->GetStagingProvider(), kSlotStride,
+        observer_ptr { &renderer->GetInlineTransfersCoordinator() },
+        std::string { kDebugName } + ".HistorySlots");
     }
+    slot_word_storage.assign(draw_count, occlusion::internal::kNoHistorySlot);
+    for (const auto& [word, assignment] :
+      std::views::zip(slot_word_storage, assignments)) {
+      word = assignment.ToSlotWord();
+    }
+    slot_words->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
+    const auto allocation = slot_words->Allocate(draw_count);
+    if (!allocation.has_value()
+      || !allocation->TryWriteRange(
+        std::span<const std::uint32_t>(slot_word_storage))) {
+      LOG_F(ERROR, "{}: failed to upload the history slots", kDebugName);
+      return kInvalidShaderVisibleIndex;
+    }
+    return allocation->srv;
   }
 
-  auto PublishInvalid(RenderContext& ctx, OcclusionFallbackReason reason)
-    -> void
-  {
-    visibility_storage.clear();
-    current_results = MakeInvalidOcclusionFrameResults(reason);
-    stats = OcclusionStats { .fallback_reason = reason };
-    ctx.current_view.occlusion_results
-      = observer_ptr<const OcclusionFrameResults> { &current_results };
-  }
-
-  auto PublishCurrent(RenderContext& ctx, std::uint32_t draw_count,
-    OcclusionFallbackReason reason, const bool previous_results_valid,
-    const bool hzb_available) -> void
-  {
-    current_results = OcclusionFrameResults {
-      .visible_by_draw = std::span<const std::uint8_t> { visibility_storage },
-      .draw_count = draw_count,
-      .valid = true,
-      .fallback_reason = reason,
-    };
-    const auto visible_count = static_cast<std::uint32_t>(
-      std::ranges::count(visibility_storage, std::uint8_t { 1U }));
-    stats = OcclusionStats {
-      .draw_count = draw_count,
-      .visible_count = visible_count,
-      .occluded_count = draw_count - visible_count,
-      .fallback_reason = reason,
-      .current_furthest_hzb_available = hzb_available,
-      .previous_results_valid = previous_results_valid,
-      .results_valid = true,
-    };
-    ctx.current_view.occlusion_results
-      = observer_ptr<const OcclusionFrameResults> { &current_results };
-  }
-
-  auto PublishAllVisible(RenderContext& ctx, std::uint32_t draw_count,
-    OcclusionFallbackReason reason) -> void
-  {
-    visibility_storage.assign(draw_count, 1U);
-    PublishCurrent(ctx, draw_count, reason, false,
-      ctx.current_view.screen_hzb_available
-        && ctx.current_view.screen_hzb_furthest_texture.get() != nullptr);
-    stats.candidate_count = draw_count;
-  }
-
-  auto EnsureResultBuffer(Graphics& gfx, const std::uint32_t capacity) -> bool
-  {
-    if (capacity == 0U) {
-      return false;
-    }
-    if (result_buffer != nullptr && result_buffer_capacity >= capacity
-      && result_buffer_uav.IsValid()) {
-      return true;
-    }
-
-    auto& registry = gfx.GetResourceRegistry();
-    if (result_buffer && registry.Contains(*result_buffer)) {
-      registry.UnRegisterResource(*result_buffer);
-      gfx.RegisterDeferredRelease(std::move(result_buffer));
-    }
-    result_buffer_uav = kInvalidShaderVisibleIndex;
-    result_buffer_capacity = 0U;
-
-    const auto size_bytes
-      = static_cast<std::uint64_t>(capacity) * sizeof(std::uint32_t);
-    result_buffer = gfx.CreateBuffer(graphics::BufferDesc {
-      .size_bytes = size_bytes,
-      .usage = graphics::BufferUsage::kStorage,
-      .memory = graphics::BufferMemory::kDeviceLocal,
-      .debug_name = "Vortex.Stage5.Occlusion.Results",
-    });
-    if (!result_buffer) {
-      return false;
-    }
-    RegisterResourceIfNeeded(gfx, result_buffer);
-
-    auto& allocator = gfx.GetDescriptorAllocator();
-    auto uav_handle
-      = allocator.AllocateRaw(graphics::ResourceViewType::kStructuredBuffer_UAV,
-        graphics::DescriptorVisibility::kShaderVisible);
-    if (!uav_handle.IsValid()) {
-      return false;
-    }
-    result_buffer_uav = allocator.GetShaderVisibleIndex(uav_handle);
-    const auto view = registry.RegisterView(*result_buffer,
-      std::move(uav_handle),
-      MakeStructuredViewDesc(graphics::ResourceViewType::kStructuredBuffer_UAV,
-        size_bytes, sizeof(std::uint32_t)));
-    if (!view->IsValid()) {
-      result_buffer_uav = kInvalidShaderVisibleIndex;
-      return false;
-    }
-
-    result_buffer_capacity = capacity;
-    return true;
-  }
-
-  static auto EnsureReadback(Graphics& gfx, ViewState& view) -> bool
-  {
-    if (view.readback != nullptr) {
-      return true;
-    }
-    auto manager = gfx.GetReadbackManager();
-    if (manager == nullptr) {
-      return false;
-    }
-    view.readback
-      = manager->CreateBufferReadback("Vortex.Stage5.Occlusion.Results");
-    return view.readback != nullptr;
-  }
-
-  //! Maps this frame's draw sources to their draw indices.
-  auto IndexDrawSources(const PreparedSceneFrame& prepared_frame,
-    const std::uint32_t draw_count) -> void
-  {
-    draw_index_by_source.clear();
-    const auto sources = prepared_frame.draw_sources.first(
-      (std::min)(prepared_frame.draw_sources.size(),
-        static_cast<std::size_t>(draw_count)));
-    draw_index_by_source.reserve(sources.size());
-    for (const auto [draw_index, source] : std::views::enumerate(sources)) {
-      const auto [entry, inserted] = draw_index_by_source.try_emplace(
-        ToKey(source), static_cast<std::uint32_t>(draw_index));
-      if (!inserted) {
-        entry->second = kAmbiguousDraw;
-      }
-    }
-  }
-
-  auto TryConsumeReadback(ViewState& view,
-    const PreparedSceneFrame& prepared_frame, const std::uint32_t draw_count)
+  //! Grows the view's history to the slot capacity, copying its contents.
+  auto EnsureHistory(graphics::CommandRecorder& recorder, ViewState& view) const
     -> bool
   {
-    if (view.readback == nullptr || view.pending_sources.empty()) {
+    const auto capacity = view.slots.Capacity();
+    if (view.history != nullptr && view.history->GetCapacity() >= capacity) {
+      return true;
+    }
+    auto gfx = renderer->GetGraphics();
+    auto grown = std::make_unique<StructuredGpuBuffer>(
+      std::string { kDebugName } + ".History", kSlotStride);
+    if (!grown->Ensure(gfx, std::bit_ceil((std::max)(capacity, 64U)))) {
       return false;
     }
-
-    const auto ready = view.readback->IsReady();
-    if (!ready.has_value()) {
-      view.readback->Reset();
-      view.pending_sources.clear();
-      return false;
+    if (view.history != nullptr) {
+      const auto& source = *view.history->GetBuffer();
+      auto& target = *grown->GetBuffer();
+      TrackFromKnownOrCommon(recorder, source);
+      TrackFromKnownOrCommon(recorder, target);
+      recorder.RequireResourceState(
+        source, graphics::ResourceStates::kCopySource);
+      recorder.RequireResourceState(
+        target, graphics::ResourceStates::kCopyDest);
+      recorder.FlushBarriers();
+      recorder.CopyBuffer(target, 0U, source, 0U,
+        static_cast<std::size_t>(view.history->GetCapacity()) * kSlotStride);
     }
-    if (!*ready) {
-      return false;
-    }
-
-    {
-      auto mapped = view.readback->TryMap();
-      if (!mapped.has_value()) {
-        view.readback->Reset();
-        view.pending_sources.clear();
-        return false;
-      }
-
-      IndexDrawSources(prepared_frame, draw_count);
-      const auto bytes = mapped->Bytes();
-      const auto result_count
-        = static_cast<std::uint32_t>(bytes.size() / sizeof(std::uint32_t));
-      const auto consume_count = (std::min)(result_count,
-        static_cast<std::uint32_t>(view.pending_sources.size()));
-      for (const auto [i, source] : std::views::enumerate(
-             view.pending_sources | std::views::take(consume_count))) {
-        const auto found = draw_index_by_source.find(source);
-        if (found == draw_index_by_source.end()
-          || found->second == kAmbiguousDraw) {
-          continue;
-        }
-        auto word = std::uint32_t { 0U };
-        std::memcpy(&word,
-          bytes.subspan(static_cast<std::size_t>(i) * sizeof(word)).data(),
-          sizeof(word));
-        visibility_storage.at(found->second) = word != 0U ? 1U : 0U;
-      }
-    }
-
-    view.readback->Reset();
-    view.pending_sources.clear();
+    view.history = std::move(grown);
     return true;
   }
 
-  auto BuildCandidates(const PreparedSceneFrame& prepared_frame,
-    const std::uint32_t draw_count, const OcclusionConfig& config)
-    -> std::uint32_t
+  //! Takes the counters of an earlier frame when their readback is done.
+  static auto CollectCounters(ViewState& view) -> void
   {
-    candidate_storage.clear();
-    candidate_sources.clear();
-    const auto capacity = (std::min)(draw_count, config.max_candidate_count);
-    candidate_storage.reserve(capacity);
-    candidate_sources.reserve(capacity);
-    // A draw without a source cannot be matched to its result on a later
-    // frame, so it is never submitted and stays visible.
-    const auto drawn = std::views::zip(
-      prepared_frame.draw_bounding_spheres, prepared_frame.draw_sources);
-    for (const auto [draw_index, draw] :
-      std::views::enumerate(drawn | std::views::take(capacity))) {
-      const auto& [sphere, source] = draw;
-      if (sphere.w <= config.tiny_object_radius_threshold) {
-        continue;
-      }
-      candidate_storage.push_back(GpuOcclusionCandidate {
-        .sphere_world = { sphere.x, sphere.y, sphere.z, sphere.w },
-        .draw_index = static_cast<std::uint32_t>(draw_index),
-      });
-      candidate_sources.push_back(ToKey(source));
+    if (view.counters_readback == nullptr) {
+      return;
     }
-    return static_cast<std::uint32_t>(candidate_storage.size());
+    const auto ready = view.counters_readback->IsReady();
+    if (!ready.has_value()) {
+      view.counters_readback->Reset();
+      return;
+    }
+    if (!*ready) {
+      return;
+    }
+    if (const auto mapped = view.counters_readback->TryMap(); mapped.has_value()
+      && mapped->Bytes().size() >= sizeof(OcclusionCounters)) {
+      auto counters = OcclusionCounters {};
+      std::memcpy(&counters, mapped->Bytes().data(), sizeof(counters));
+      view.stats = OcclusionStats {
+        .counters = counters,
+        .frame_sequence = view.counters_frame,
+        .occlusion_enabled = view.counters_occlusion_enabled,
+      };
+    }
+    view.counters_readback->Reset();
   }
 
-  auto RecordCurrent(RenderContext& ctx, graphics::CommandRecorder& recorder,
-    Graphics& gfx, ViewState& view, const std::uint32_t draw_count,
-    const std::uint32_t candidate_count) -> bool
+  //! Whether this frame can count: the previous readback has been taken.
+  auto PrepareCounters(ViewState& view) const -> bool
   {
-    if (candidate_count == 0U || result_buffer == nullptr
-      || !result_buffer_uav.IsValid() || candidate_buffer == nullptr
-      || pass_constants_buffer == nullptr) {
+    CollectCounters(view);
+    if (view.counters_readback != nullptr
+      && view.counters_readback->GetState() != graphics::ReadbackState::kIdle) {
       return false;
     }
-    if (ctx.frame_slot == frame::kInvalidSlot) {
-      return false;
-    }
-    if (view.readback != nullptr
-      && view.readback->GetState() == graphics::ReadbackState::kPending) {
-      return false;
-    }
-    if (view.readback != nullptr
-      && view.readback->GetState() != graphics::ReadbackState::kIdle) {
-      view.readback->Reset();
-    }
-
-    candidate_buffer->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
-    pass_constants_buffer->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
-    const auto candidates_alloc = candidate_buffer->Allocate(candidate_count);
-    if (!candidates_alloc.has_value()
-      || !candidates_alloc->TryWriteRange(
-        std::span<const GpuOcclusionCandidate> {
-          candidate_storage.data(), candidate_count })) {
-      return false;
-    }
-
-    const auto pass_constants = GpuOcclusionPassConstants {
-      .candidates_srv = candidates_alloc->srv,
-      .result_uav = result_buffer_uav,
-      .screen_hzb_frame_slot = ctx.current_view.screen_hzb_frame_slot,
-      .candidate_count = candidate_count,
-    };
-    const auto constants_alloc = pass_constants_buffer->Allocate(1U);
-    if (!constants_alloc.has_value()
-      || !constants_alloc->TryWriteObject(pass_constants)) {
-      return false;
-    }
-
-    if (!pipeline_desc.has_value()) {
-      pipeline_desc = BuildPipelineDesc();
-    }
-
-    TrackBufferFromKnownOrInitial(recorder, *result_buffer);
-    recorder.RequireResourceState(
-      *result_buffer, graphics::ResourceStates::kUnorderedAccess);
-    recorder.FlushBarriers();
-
-    recorder.SetPipelineState(*pipeline_desc);
-    if (ctx.view_constants != nullptr) {
-      recorder.SetComputeRootConstantBufferView(
-        static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
-        ctx.view_constants->GetGPUVirtualAddress());
-    }
-    recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
-      0U);
-    recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
-      constants_alloc->srv.get(), 1U);
-
-    graphics::GpuEventScope pass_scope(recorder, "Vortex.Stage5.OcclusionTest",
-      profiling::ProfileGranularity::kDiagnostic,
-      profiling::ProfileCategory::kPass);
-    recorder.Dispatch(
-      (candidate_count + (kThreadGroupSize - 1U)) / kThreadGroupSize, 1U, 1U);
-
-    auto enqueued = false;
-    if (EnsureReadback(gfx, view)) {
-      const auto readback_size
-        = static_cast<std::uint64_t>(candidate_count) * sizeof(std::uint32_t);
-      const auto ticket = view.readback->EnqueueCopy(
-        recorder, *result_buffer, graphics::BufferRange { 0U, readback_size });
-      if (ticket.has_value()) {
-        enqueued = true;
-        view.pending_sources.assign(candidate_sources.begin(),
-          std::next(candidate_sources.begin(), candidate_count));
-      } else {
-        LOG_F(WARNING, "occlusion_readback_enqueue_failed");
+    auto gfx = renderer->GetGraphics();
+    if (view.counters_readback == nullptr) {
+      auto manager = gfx->GetReadbackManager();
+      if (manager == nullptr) {
+        return false;
       }
+      view.counters_readback = manager->CreateBufferReadback(
+        std::string { kDebugName } + ".Counters");
     }
+    return view.counters_readback != nullptr
+      && view.counters.Ensure(gfx, kCounterCount);
+  }
 
-    recorder.RequireResourceState(
-      *result_buffer, graphics::ResourceStates::kCommon);
-    stats.submitted_count = candidate_count;
-    stats.overflow_visible_count
-      = draw_count > candidate_count ? draw_count - candidate_count : 0U;
-    return enqueued;
+  //! Reads back the counters of the phases recorded this frame.
+  static auto EnqueueCounters(graphics::CommandRecorder& recorder,
+    ViewState& view, const RenderContext& ctx) -> void
+  {
+    if (!view.counting) {
+      return;
+    }
+    view.counting = false;
+    const auto ticket = view.counters_readback->EnqueueCopy(recorder,
+      *view.counters.GetBuffer(),
+      graphics::BufferRange { 0U, sizeof(OcclusionCounters) });
+    if (!ticket.has_value()) {
+      LOG_F(WARNING, "{}: counter readback failed", kDebugName);
+      return;
+    }
+    view.counters_frame = ctx.frame_sequence;
+    view.counters_occlusion_enabled = view.inputs.occlusion_enabled;
   }
 };
 
 OcclusionModule::OcclusionModule(Renderer& renderer, OcclusionConfig config)
-  : renderer_(renderer)
-  , config_(config)
+  : config_(config)
   , impl_(std::make_unique<Impl>(renderer))
 {
 }
@@ -610,86 +284,129 @@ auto OcclusionModule::GetConfig() const noexcept -> const OcclusionConfig&
   return config_;
 }
 
-void OcclusionModule::Execute(RenderContext& ctx,
-  graphics::CommandRecorder& recorder, SceneTextures& scene_textures)
+void OcclusionModule::BuildPhase1(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
 {
-  (void)scene_textures;
-
-  if (!config_.enabled) {
-    impl_->PublishInvalid(ctx, OcclusionFallbackReason::kStageDisabled);
-    return;
-  }
-
+  ctx.current_view.draw_visibility = {};
   const auto* prepared_frame = ctx.current_view.prepared_frame.get();
-  if (prepared_frame == nullptr) {
-    impl_->PublishInvalid(ctx, OcclusionFallbackReason::kNoPreparedFrame);
+  const auto* resolved_view = ctx.current_view.resolved_view.get();
+  if (prepared_frame == nullptr || resolved_view == nullptr
+    || impl_->renderer->GetGraphics() == nullptr) {
     return;
   }
 
-  const auto draw_count = PreparedDrawCount(*prepared_frame);
-  if (draw_count == 0U) {
-    impl_->PublishAllVisible(
-      ctx, draw_count, OcclusionFallbackReason::kNoDraws);
+  auto& view = impl_->views[ctx.current_view.view_id];
+  const auto extent = scene_textures.GetExtent();
+  const auto clamped = vortex::internal::ResolveClampedViewportState(
+    resolved_view->Viewport(), resolved_view->Scissor(), extent.x, extent.y);
+  view.inputs = DrawCullInputs {
+    .frame_sequence = ctx.frame_sequence,
+    .frame_slot = ctx.frame_slot,
+    .prepared_frame = ctx.current_view.prepared_frame,
+    .view_matrix = resolved_view->ViewMatrix(),
+    .projection_matrix = resolved_view->ProjectionMatrix(),
+    .viewport = clamped.viewport,
+    .scissors = clamped.scissors,
+    // The box test assumes reversed-Z depth.
+    .occlusion_enabled = config_.enabled && resolved_view->ReverseZ(),
+    .depth_bias = config_.depth_bias,
+  };
+
+  const auto key = MakeHistoryKey(resolved_view->StableProjectionMatrix(),
+    clamped.viewport, clamped.scissors);
+  const auto history_valid = view.history_written && view.history_key == key
+    && !ctx.current_view.history_discontinuity;
+  view.history_key = key;
+  view.history_written = false;
+
+  if (view.inputs.occlusion_enabled) {
+    const auto draw_count
+      = static_cast<std::uint32_t>(prepared_frame->GetDrawMetadata().size());
+    const auto assignments = view.slots.Update(prepared_frame->draw_sources);
+    const auto slots_srv = impl_->UploadSlotWords(ctx, assignments, draw_count);
+    if (slots_srv.IsValid() && impl_->EnsureHistory(recorder, view)) {
+      view.inputs.history = occlusion::internal::DrawCullHistory {
+        .slots_srv = slots_srv,
+        .history = observer_ptr<const graphics::Buffer> {
+          view.history->GetBuffer(),
+        },
+        .history_uav = view.history->GetUav(),
+        .valid = history_valid,
+        .stats = nullptr,
+        .stats_uav = kInvalidShaderVisibleIndex,
+      };
+    } else {
+      // Without history the view culls by frustum only this frame.
+      view.inputs.occlusion_enabled = false;
+    }
+  }
+
+  view.counting = impl_->PrepareCounters(view);
+  if (view.counting) {
+    view.inputs.history.stats = observer_ptr<const graphics::Buffer> {
+      view.counters.GetBuffer(),
+    };
+    view.inputs.history.stats_uav = view.counters.GetUav();
+  }
+
+  view.phase1 = impl_->cull.RunPhase1(recorder, view.inputs);
+  ctx.current_view.draw_visibility = view.phase1;
+  if (!view.phase1.IsValid()) {
+    view.counting = false;
     return;
   }
+  if (!view.inputs.occlusion_enabled) {
+    Impl::EnqueueCounters(recorder, view, ctx);
+  }
+}
 
-  if (!ctx.current_view.screen_hzb_available
-    || ctx.current_view.screen_hzb_furthest_texture.get() == nullptr) {
-    impl_->PublishAllVisible(
-      ctx, draw_count, OcclusionFallbackReason::kNoCurrentFurthestHzb);
+auto OcclusionModule::NeedsPhase2(const RenderContext& ctx) const -> bool
+{
+  const auto found = impl_->views.find(ctx.current_view.view_id);
+  return found != impl_->views.end()
+    && found->second.inputs.frame_sequence == ctx.frame_sequence
+    && found->second.inputs.occlusion_enabled && found->second.phase1.IsValid();
+}
+
+void OcclusionModule::BuildPhase2(RenderContext& ctx,
+  graphics::CommandRecorder& recorder,
+  const std::optional<ScreenHzbModule::OcclusionPyramid>& pyramid)
+{
+  if (!NeedsPhase2(ctx)) {
     return;
   }
-
-  auto& view = impl_->view_states[ctx.current_view.view_id];
-  impl_->visibility_storage.assign(draw_count, 1U);
-  const auto previous_results_valid
-    = impl_->TryConsumeReadback(view, *prepared_frame, draw_count);
-  const auto fallback_reason = previous_results_valid
-    ? OcclusionFallbackReason::kNone
-    : OcclusionFallbackReason::kNoPreviousResults;
-  impl_->PublishCurrent(
-    ctx, draw_count, fallback_reason, previous_results_valid, true);
-
-  auto gfx = renderer_.GetGraphics();
-  if (gfx == nullptr) {
-    impl_->stats.fallback_reason
-      = OcclusionFallbackReason::kReadbackUnavailable;
-    return;
+  auto& view = impl_->views.at(ctx.current_view.view_id);
+  auto binding = std::optional<occlusion::internal::OcclusionPyramidBinding> {};
+  if (pyramid.has_value()) {
+    binding = occlusion::internal::OcclusionPyramidBinding {
+      .texture = observer_ptr { pyramid->texture.get() },
+      .srv = pyramid->srv,
+      .origin_x = pyramid->source.origin_x,
+      .origin_y = pyramid->source.origin_y,
+      .width = pyramid->source.width,
+      .height = pyramid->source.height,
+    };
   }
-
-  const auto candidate_count
-    = impl_->BuildCandidates(*prepared_frame, draw_count, config_);
-  impl_->stats.candidate_count = candidate_count;
-  if (!impl_->EnsureResultBuffer(*gfx, config_.max_candidate_count)) {
-    impl_->stats.fallback_reason
-      = OcclusionFallbackReason::kReadbackUnavailable;
-    return;
-  }
-
-  const auto readback_enqueued = impl_->RecordCurrent(
-    ctx, recorder, *gfx, view, draw_count, candidate_count);
-  if (!readback_enqueued && !previous_results_valid) {
-    impl_->stats.fallback_reason
-      = OcclusionFallbackReason::kReadbackUnavailable;
-    impl_->current_results.fallback_reason
-      = OcclusionFallbackReason::kReadbackUnavailable;
-  }
+  const auto products
+    = impl_->cull.RunPhase2(recorder, view.inputs, view.phase1, binding);
+  ctx.current_view.draw_visibility = products;
+  view.history_written = products.phase2;
+  Impl::EnqueueCounters(recorder, view, ctx);
 }
 
 void OcclusionModule::RemoveViewState(const ViewId view_id)
 {
-  impl_->view_states.erase(view_id);
+  impl_->views.erase(view_id);
 }
 
-auto OcclusionModule::GetCurrentResults() const noexcept
-  -> const OcclusionFrameResults&
+auto OcclusionModule::GetStats(const ViewId view_id) const
+  -> std::optional<OcclusionStats>
 {
-  return impl_->current_results;
-}
-
-auto OcclusionModule::GetStats() const noexcept -> const OcclusionStats&
-{
-  return impl_->stats;
+  const auto found = impl_->views.find(view_id);
+  if (found == impl_->views.end()) {
+    return std::nullopt;
+  }
+  return found->second.stats;
 }
 
 } // namespace oxygen::vortex

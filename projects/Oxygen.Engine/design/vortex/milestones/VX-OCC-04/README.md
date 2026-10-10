@@ -4,7 +4,7 @@ Status: `in_progress`
 
 | Field     | Summary                                                                                                                  |
 | --------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Outcome   | S1-S3 validated. Design approved 2026-10-10.                                                                             |
+| Outcome   | S1-S5 validated. Design approved 2026-10-10.                                                                             |
 | Remaining | S1–S7 below; tracked as [VX-OCC-04](../../OPEN_ITEMS.md#p2--engineering-follow-ups).                                     |
 | Evidence  | Per-slice evidence in the [slice table](#slices); gates in [occlusion.md §8](../../lld/occlusion.md#8-validation-gates). |
 
@@ -84,7 +84,7 @@ If a build reports a missing `impl-*.ninja`, reconfigure the tree with
 | S2  | Tiled HZB build and occlusion pyramid                        | —       | `validated` | see git log |
 | S3  | Culling records, history keys and slot allocator             | S1      | `validated` | see git log |
 | S4  | GPU indirect lists for camera passes, occlusion off          | S3      | `validated` | see git log |
-| S5  | Camera two-phase occlusion; old tester removed               | S2, S4  | `planned`   |             |
+| S5  | Camera two-phase occlusion; old tester removed               | S2, S4  | `validated` | see git log |
 | S6  | Shadow-view lists and two-phase occlusion                    | S5      | `planned`   |             |
 | S7  | Default on, capture gate, closeout                           | S6      | `planned`   |             |
 
@@ -274,16 +274,17 @@ Design: [occlusion.md §3](../../lld/occlusion.md#3-indirect-lists), §4.1
 Design: [occlusion.md §4](../../lld/occlusion.md#4-two-phase-algorithm),
 [§6](../../lld/occlusion.md#6-policies), [§7](../../lld/occlusion.md#7-diagnostics).
 
-- [ ] **Module.** Rewrite `Vortex/SceneRenderer/Stages/Occlusion/OcclusionModule.{h,cpp}`:
+- [x] **Module.** Rewrite `Vortex/SceneRenderer/Stages/Occlusion/OcclusionModule.{h,cpp}`:
   - `BuildPhase1` and `BuildPhase2`, per-view state, history reset
   - GPU stats buffer read asynchronously
   - `OcclusionConfig.h` loses `max_candidate_count`
-- [ ] **Box test.** `OcclusionCull.hlsl` gains phase 2: the §4.5 box test
+- [x] **Box test.** `OcclusionCull.hlsl` gains phase 2: the §4.5 box test
       against the occlusion pyramid, and the history write.
-- [ ] **Frame order.** `Vortex/SceneRenderer/SceneRenderer.cpp`
-      (`RenderCurrentView`): phase 1, phase 1 depth, occlusion pyramid, phase 2,
-      phase 2 depth, `PartialDepth`, then Stage 5 Screen HZB. Pass markers per §7.
-- [ ] **Remove the old tester:**
+- [x] **Frame order.** `Vortex/SceneRenderer/SceneRenderer.cpp`
+      (`RenderDepthPrepass`): phase 1, phase 1 depth, occlusion pyramid, phase
+      2, phase 2 depth, `PartialDepth`, then Stage 5 Screen HZB. Pass markers
+      per §7.
+- [x] **Remove the old tester:**
   - its readback, candidate and result buffers
   - `Types/OcclusionFrameResults` and `Types/OcclusionStats.h` (replaced by the
     new stats)
@@ -291,15 +292,29 @@ Design: [occlusion.md §4](../../lld/occlusion.md#4-two-phase-algorithm),
     (`BasePassMeshProcessor.cpp`)
   - `vtx.occlusion.max_candidate_count` in `Vortex/Renderer.cpp`
   - the old `OcclusionTest.hlsl`
-- [ ] **Diagnostics.** `Vortex.OcclusionFrameResults` facts move to the new
+- [x] **Diagnostics.** `Vortex.OcclusionFrameResults` facts move to the new
       counters (capture manifest).
-- [ ] **New GPU tests.** [occlusion.md §8](../../lld/occlusion.md#8-validation-gates)
-      gates 3, 4 (with occlusion on), 6 and 7.
-- [ ] **Verify.** `Oxygen.Vortex.OcclusionModule.Tests`, the occlusion GPU
+- [x] **New GPU tests.** [occlusion.md §8](../../lld/occlusion.md#8-validation-gates)
+      gates 3, 4 (with occlusion on), 6 and 7, in
+      `Occlusion/TwoPhaseOcclusion_test.cpp`.
+- [x] **Verify.** `Oxygen.Vortex.OcclusionModule.Tests`, the occlusion GPU
       tests, `Oxygen.Vortex.SceneRendererDeferredCore.Tests` and
       `Oxygen.Vortex.SceneRendererPublication.Tests`. D3D12 debug layer clean for
       the occlusion path.
-- [ ] **Docs.** ARCHITECTURE stage table rows 3 and 5.
+  - CPU suites pass, with `RendererCapability`, `DrawMetadataEmitter` and
+    `ShadowService`; the owner ran `Oxygen.Vortex.Occlusion.Tests` (GPU).
+- [x] **Docs.** ARCHITECTURE stage table rows 3 and 5.
+- [x] Notes from implementation:
+  - History slots are per culling view, so they moved out of `DrawCullRecord`
+    into a per-view slot-word upload ([occlusion.md §2.2](../../lld/occlusion.md#22-visibility-history)).
+  - The box test projects with the rasterizer's jittered matrix, so its
+    rectangle matches the phase 1 depth texels; the reset key uses the
+    unjittered projection.
+  - Translucent draws use phase 2's `kVisible`, tested against phase 1 depth;
+    no separate Screen HZB dispatch ([occlusion.md §5](../../lld/occlusion.md#5-consumers)).
+  - Occlusion runs only for views with the depth prepass and reversed-Z depth.
+    `DrawCullPass` stays the kernel wrapper; `ContactShadowCasterDepthPass`
+    runs its phase 1 frustum-only.
 
 ## S6 — Shadow Views
 

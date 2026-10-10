@@ -50,7 +50,6 @@ namespace postprocess {
 }
 
 struct CompositionView;
-struct OcclusionFrameResults;
 class Renderer;
 class RenderPass;
 class SceneRenderer;
@@ -204,8 +203,8 @@ struct RenderContext {
     bool screen_hzb_available { false };
     bool screen_hzb_has_previous { false };
     ShaderVisibleIndex lighting_frame_slot { kInvalidShaderVisibleIndex };
-    observer_ptr<const OcclusionFrameResults> occlusion_results;
-    //! This view's per-draw visibility from the cull pass, for list builds.
+    //! This view's per-draw visibility from occlusion culling, for list
+    //! builds.
     DrawVisibilityProducts draw_visibility {};
     bool is_reflection_capture { false };
     bool with_atmosphere { false };

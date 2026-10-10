@@ -793,8 +793,6 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto
   GetAerialPerspectiveLutSampleCountMaxPerSlice() const noexcept -> float;
   [[nodiscard]] OXGN_VRTX_API auto GetOcclusionEnabled() const noexcept -> bool;
-  [[nodiscard]] OXGN_VRTX_API auto
-  GetOcclusionMaxCandidateCount() const noexcept -> std::uint32_t;
   OXGN_VRTX_NDAPI auto GetStagingProvider() -> upload::StagingProvider&;
   OXGN_VRTX_NDAPI auto GetLightingStagingProvider() -> upload::StagingProvider&;
   [[nodiscard]] auto GetLightingAllocationBudget() const noexcept

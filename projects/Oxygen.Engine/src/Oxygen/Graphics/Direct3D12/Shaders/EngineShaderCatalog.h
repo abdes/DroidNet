@@ -276,14 +276,11 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
       EntryPoint { .type=kCompute, .name="VortexScreenHzbBuildCS" } }
   },
   ShaderFileSpec {
-    .path="Vortex/Stages/Occlusion/OcclusionTest.hlsl",
-    .entries=std::array {
-      EntryPoint { .type=kCompute, .name="VortexOcclusionTestCS" } }
-  },
-  ShaderFileSpec {
     .path="Vortex/Stages/Occlusion/OcclusionCull.hlsl",
     .entries=std::array {
-      EntryPoint { .type=kCompute, .name="VortexOcclusionCullCS" } }
+      EntryPoint { .type=kCompute, .name="VortexOcclusionStatsClearCS" },
+      EntryPoint { .type=kCompute, .name="VortexOcclusionPhase1CS" },
+      EntryPoint { .type=kCompute, .name="VortexOcclusionPhase2CS" } }
   },
   ShaderFileSpec {
     .path="Vortex/Stages/Occlusion/ListCompaction.hlsl",

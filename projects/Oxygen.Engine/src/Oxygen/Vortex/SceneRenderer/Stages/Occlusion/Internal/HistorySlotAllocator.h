@@ -8,15 +8,23 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
-#include <Oxygen/Vortex/Types/DrawCullRecord.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::vortex::occlusion::internal {
+
+//! The draw has no visibility history slot.
+inline constexpr std::uint32_t kNoHistorySlot
+  = std::numeric_limits<std::uint32_t>::max();
+
+//! Marks a slot word whose slot is new this frame. Mirrored by
+//! `OCCLUSION_CULL_FRESH_HISTORY_SLOT` in `OcclusionCull.hlsl`.
+inline constexpr std::uint32_t kFreshHistorySlotBit = 1U << 31U;
 
 //! Maps draws to stable visibility-history slots for one culling view.
 /*!
@@ -31,7 +39,8 @@ namespace oxygen::vortex::occlusion::internal {
  4. gives no slot to a key that produced more than one draw this frame.
 
  Slots are dense from 0, so `Capacity()` sizes the GPU history buffer. The
- capacity only grows, and growth never moves an existing slot.
+ capacity only grows, and growth never moves an existing slot. Slots stay
+ below `kFreshHistorySlotBit`.
 */
 class HistorySlotAllocator {
 public:
@@ -42,6 +51,16 @@ public:
     bool fresh { false };
 
     auto operator==(const Assignment&) const -> bool = default;
+
+    //! The word the cull kernels read: the slot, with `kFreshHistorySlotBit`
+    //! when fresh, or `kNoHistorySlot`.
+    [[nodiscard]] constexpr auto ToSlotWord() const noexcept -> std::uint32_t
+    {
+      if (slot == kNoHistorySlot) {
+        return kNoHistorySlot;
+      }
+      return fresh ? (slot | kFreshHistorySlotBit) : slot;
+    }
   };
 
   //! Assigns one slot per draw, in the order of `draws`.

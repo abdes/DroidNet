@@ -12,13 +12,12 @@
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/HistorySlotAllocator.h>
-#include <Oxygen/Vortex/Types/DrawCullRecord.h>
 
 namespace {
 
-using oxygen::vortex::kNoHistorySlot;
 using oxygen::vortex::PreparedSceneFrame;
 using oxygen::vortex::occlusion::internal::HistorySlotAllocator;
+using oxygen::vortex::occlusion::internal::kNoHistorySlot;
 using Assignment = HistorySlotAllocator::Assignment;
 using Draws = std::vector<PreparedSceneFrame::DrawSource>;
 

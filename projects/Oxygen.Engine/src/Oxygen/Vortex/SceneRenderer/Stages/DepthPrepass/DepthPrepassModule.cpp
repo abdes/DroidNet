@@ -181,10 +181,11 @@ DepthPrepassModule::DepthPrepassModule(
 
 DepthPrepassModule::~DepthPrepassModule() = default;
 
-void DepthPrepassModule::Execute(RenderContext& ctx,
+void DepthPrepassModule::ExecutePhase1(RenderContext& ctx,
   graphics::CommandRecorder& recorder, SceneTextures& scene_textures)
 {
   auto empty_prepared_frame = PreparedSceneFrame {};
+  phase1_recorded_ = false;
   has_published_depth_products_ = false;
   has_valid_depth_product_ = false;
   completeness_ = DepthPrePassCompleteness::kIncomplete;
@@ -193,17 +194,17 @@ void DepthPrepassModule::Execute(RenderContext& ctx,
     return;
   }
 
-  const auto has_current_view_payload = mesh_processor_ != nullptr
+  has_current_view_payload_ = mesh_processor_ != nullptr
     && ctx.current_view.prepared_frame != nullptr
     && ctx.current_view.prepared_frame->IsValid();
-  const auto writes_velocity
+  writes_velocity_
     = config_.write_velocity && scene_textures.GetVelocity() != nullptr;
   if (ctx.view_constants == nullptr) {
     return;
   }
 
   if (mesh_processor_ != nullptr) {
-    mesh_processor_->BuildDrawCommands(has_current_view_payload
+    mesh_processor_->BuildDrawCommands(has_current_view_payload_
         ? *ctx.current_view.prepared_frame
         : empty_prepared_frame,
       ctx.current_view.resolved_view.get(),
@@ -215,36 +216,79 @@ void DepthPrepassModule::Execute(RenderContext& ctx,
     return;
   }
 
-  graphics::GpuEventScope stage_scope(recorder, "Vortex.Stage3.DepthPrepass",
-    profiling::ProfileGranularity::kTelemetry,
-    profiling::ProfileCategory::kPass);
-
-  const auto reverse_z = ctx.current_view.resolved_view == nullptr
-    || ctx.current_view.resolved_view->ReverseZ();
-  BeginDepthPrepassResourceTracking(recorder, scene_textures, writes_velocity);
-
   auto& framebuffer
-    = writes_velocity ? depth_velocity_framebuffer_ : depth_framebuffer_;
-  if (NeedsFramebufferRebuild(framebuffer, scene_textures, writes_velocity)) {
+    = writes_velocity_ ? depth_velocity_framebuffer_ : depth_framebuffer_;
+  if (NeedsFramebufferRebuild(framebuffer, scene_textures, writes_velocity_)) {
     framebuffer = gfx->CreateFramebuffer(
-      BuildDepthPrepassFramebuffer(scene_textures, writes_velocity));
+      BuildDepthPrepassFramebuffer(scene_textures, writes_velocity_));
   }
 
-  const auto& prepared_frame = has_current_view_payload
+  graphics::GpuEventScope stage_scope(recorder,
+    "Vortex.Stage3.DepthPrepass.Phase1",
+    profiling::ProfileGranularity::kTelemetry,
+    profiling::ProfileCategory::kPass);
+  const auto reverse_z = ctx.current_view.resolved_view == nullptr
+    || ctx.current_view.resolved_view->ReverseZ();
+  BeginDepthPrepassResourceTracking(recorder, scene_textures, writes_velocity_);
+  recorder.FlushBarriers();
+  recorder.ClearFramebuffer(
+    *framebuffer, std::nullopt, reverse_z ? 0.0F : 1.0F, 0U);
+  DrawList(ctx, recorder, scene_textures,
+    DrawVisibilityPredicate { DrawVisibilityBit::kPhase1Drawn });
+  phase1_recorded_ = true;
+}
+
+void DepthPrepassModule::ExecutePhase2(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, SceneTextures& scene_textures)
+{
+  if (!phase1_recorded_) {
+    return;
+  }
+  phase1_recorded_ = false;
+
+  graphics::GpuEventScope stage_scope(recorder,
+    "Vortex.Stage3.DepthPrepass.Phase2",
+    profiling::ProfileGranularity::kTelemetry,
+    profiling::ProfileCategory::kPass);
+  if (ctx.current_view.draw_visibility.phase2) {
+    BeginDepthPrepassResourceTracking(
+      recorder, scene_textures, writes_velocity_);
+    DrawList(ctx, recorder, scene_textures,
+      DrawVisibilityPredicate { DrawVisibilityBit::kPhase2Drawn });
+  }
+
+  CopySceneDepthToPartialDepth(recorder, scene_textures);
+  TransitionDepthPrepassOutputs(recorder, scene_textures, writes_velocity_);
+
+  has_valid_depth_product_ = true;
+  completeness_ = has_current_view_payload_
+    ? DepthPrePassCompleteness::kComplete
+    : DepthPrePassCompleteness::kIncomplete;
+  has_published_depth_products_
+    = completeness_ == DepthPrePassCompleteness::kComplete;
+}
+
+void DepthPrepassModule::DrawList(const RenderContext& ctx,
+  graphics::CommandRecorder& recorder, SceneTextures& scene_textures,
+  const DrawVisibilityPredicate predicate)
+{
+  auto empty_prepared_frame = PreparedSceneFrame {};
+  const auto& prepared_frame = has_current_view_payload_
     ? *ctx.current_view.prepared_frame
     : empty_prepared_frame;
   const auto draw_list
     = list_builder_->Build(recorder, ctx.frame_sequence, ctx.frame_slot,
       occlusion::internal::MakeIndirectDrawCandidates(
         prepared_frame.GetDrawMetadata(), mesh_processor_->GetDrawCommands()),
-      ctx.current_view.draw_visibility,
-      DrawVisibilityPredicate { DrawVisibilityBit::kPhase1Drawn });
+      ctx.current_view.draw_visibility, predicate);
 
+  const auto& framebuffer
+    = writes_velocity_ ? depth_velocity_framebuffer_ : depth_framebuffer_;
   recorder.FlushBarriers();
-  recorder.ClearFramebuffer(
-    *framebuffer, std::nullopt, reverse_z ? 0.0F : 1.0F, 0U);
   recorder.BindFrameBuffer(*framebuffer);
   SetViewportAndScissor(recorder, ctx, scene_textures);
+  const auto reverse_z = ctx.current_view.resolved_view == nullptr
+    || ctx.current_view.resolved_view->ReverseZ();
   const auto root_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants);
   const auto view_constants_param
@@ -254,24 +298,14 @@ void DepthPrepassModule::Execute(RenderContext& ctx,
     [&](const internal::MeshRasterState& raster_state) -> void {
       recorder.SetPipelineState(internal::BuildMeshDepthPipeline(
         scene_textures.GetSceneDepth().GetDescriptor(),
-        writes_velocity ? scene_textures.GetVelocity()->GetDescriptor().format
-                        : Format::kUnknown,
+        writes_velocity_ ? scene_textures.GetVelocity()->GetDescriptor().format
+                         : Format::kUnknown,
         raster_state, reverse_z));
       recorder.SetGraphicsRootConstantBufferView(
         view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
       recorder.SetGraphicsRoot32BitConstant(
         root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
     });
-
-  CopySceneDepthToPartialDepth(recorder, scene_textures);
-  TransitionDepthPrepassOutputs(recorder, scene_textures, writes_velocity);
-
-  has_valid_depth_product_ = true;
-  completeness_ = has_current_view_payload
-    ? DepthPrePassCompleteness::kComplete
-    : DepthPrePassCompleteness::kIncomplete;
-  has_published_depth_products_
-    = completeness_ == DepthPrePassCompleteness::kComplete;
 }
 
 void DepthPrepassModule::SetConfig(const DepthPrepassConfig& config)
@@ -292,6 +326,11 @@ auto DepthPrepassModule::HasValidDepthProduct() const -> bool
 auto DepthPrepassModule::HasPublishedDepthProducts() const -> bool
 {
   return has_published_depth_products_;
+}
+
+auto DepthPrepassModule::HasPendingPhase2() const -> bool
+{
+  return phase1_recorded_;
 }
 
 } // namespace oxygen::vortex

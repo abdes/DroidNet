@@ -104,7 +104,7 @@ order, beside the existing metadata:
 ```cpp
 struct DrawCullRecord {        // 32 bytes, std430-compatible
   glm::vec3 box_center;        // local space, or world (kWorldSpaceBox)
-  std::uint32_t history_slot;  // kNoHistorySlot when none
+  std::uint32_t _pad0;
   glm::vec3 box_extent;        // half size, >= 0
   std::uint32_t flags;         // DrawCullFlags
 };
@@ -130,6 +130,10 @@ The record is published through `DrawFrameBindings` (`cull_records_slot`) so
 every list builder reads it the same way. The bounding sphere remains for
 other consumers.
 
+The record carries no history slot: one prepared frame serves several culling
+views (the camera and its shadow views), and each view assigns its own slots
+(§2.2).
+
 ### 2.2 Visibility History
 
 History is advisory: it decides which phase draws a draw, never whether it is
@@ -151,11 +155,13 @@ history. `MeshViewIndex` is a new strong index beside the other two in
 shadow). Each frame it:
 
 1. Maps every draw's key to a slot. A key seen last frame keeps its slot.
-2. Gives a new key a fresh slot and flags it `kFreshHistory`. Its history reads
-   as not visible.
+2. Gives a new key a fresh slot. Its history reads as not visible.
 3. Frees the slots of keys absent this frame.
 4. Gives no slot to a key that produced more than one draw this frame. Those
    draws are tested in phase 2 every frame.
+
+The view uploads one slot word per draw, in draw order: the slot, with bit 31
+set when the slot is fresh, or `0xFFFFFFFF` without a slot.
 
 The GPU history buffer is one `uint` per slot: 1 if the draw was visible after
 the last phase 2. It grows with the slot capacity. Growth copies the existing
@@ -245,8 +251,8 @@ differences in §6.4.
 box        = OrientedBox(record, world_matrix)
 in_frustum = kAlwaysVisible
              || (FrustumIntersects(view, box) && CoversPixelCenter(view, box))
-prev       = history_valid && record.history_slot valid
-             && !kFreshHistory && history[record.history_slot]
+slot       = view_slot_words[draw]                          (§2.2)
+prev       = history_valid && slot valid && !fresh(slot) && history[slot]
 phase1     = in_frustum && (prev || history_reset || !occlusion_enabled)
 ```
 
@@ -265,9 +271,9 @@ masked.
 Each of these resets a culling view's history:
 
 - `history_discontinuity`, which covers a camera cut
-- a projection or view-rect change
+- an unjittered projection or view-rect change
 - view recreation
-- history buffer loss
+- a frame whose phase 2 did not run, such as one with occlusion off
 
 After a reset every in-frustum draw is phase 1 for one frame. That frame
 renders like occlusion disabled, front-to-back, and seeds the history.
@@ -306,21 +312,25 @@ and is drawn now.
 
 `OccludedByHzb` is conservative at every step:
 
-1. Project the 8 oriented-box corners with the unjittered view-projection.
-2. If any corner has `w <= near_epsilon`, the box crosses the near plane:
+1. Project the 8 oriented-box corners with the view-projection the
+   rasterizer used, jitter included, so the rectangle matches the phase 1
+   depth texels.
+2. If any corner has `w <= near_epsilon` or `z >= w`, the box crosses the
+   near plane: visible.
+3. Take the pixel centers inside the projected rectangle and the view rect.
+   If any lies outside the pyramid's source rect, there is no depth for it:
    visible.
-3. Compute the screen rectangle from the projected corners, clamped to the
-   view rect.
 4. Take the box's nearest device depth as the maximum corner depth
    (reversed-Z).
-5. Choose the mip where the rectangle spans at most 2 x 2 texels:
-   - `mip = ceil(log2(max(size_texels)))`
-   - Increment once if the texel-aligned footprint still spans 3.
-6. Load the 2 x 2 furthest texels covering the rectangle. Use `Load`, not
+5. Map the pixel range to mip-0 texels (texel `t` reduces pixels `2t` and
+   `2t + 1`) and climb mips until the range spans at most 2 x 2 texels. The
+   last mip is at most 2 texels wide, so the climb always ends.
+6. Load those texels, at most 2 x 2, and keep the furthest. Use `Load`, not
    filtered sampling.
-7. Convert both depths to linear view depth. The box is occluded when its
-   nearest view depth exceeds the furthest occluder view depth by more than
-   `occlusion_depth_bias` × occluder depth.
+7. Convert both depths to linear view depth with the projection's z and w
+   rows. The box is occluded when its nearest view depth exceeds the furthest
+   occluder view depth by more than `depth_bias` × occluder depth.
+   Comparisons with NaN or infinite depths never cull.
 
 This fixes the three test defects of the previous shader:
 
@@ -341,17 +351,22 @@ declared `precise`.
 
 ## 5. Consumers
 
-| Consumer                          | List predicate                                | Notes                                                                       |
-| --------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------- |
-| Depth prepass phase 1 / phase 2   | `kPhase1Drawn` / `kPhase2Drawn`               | Opaque then masked segments.                                                |
-| Base pass (all modes)             | `kPhase1Drawn \| kPhase2Drawn`                | Deferred, forward, radiance replay and wireframe all draw the same set.     |
-| Base pass velocity auxiliary pass | final set and the draw's velocity-aux flag    | Subset of the base pass set.                                                |
-| Contact-shadow caster depth       | final set                                     | Reuses the depth list candidates.                                           |
-| Translucency                      | in frustum and not occluded by the Screen HZB | Single phase against complete depth; keeps back-to-front order; no history. |
-| Shadow depth phase 1 / phase 2    | caster and the shadow view's phase bit        | Shadow-view culling only (§6.4).                                            |
+| Consumer                          | List predicate                             | Notes                                                                   |
+| --------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------- |
+| Depth prepass phase 1 / phase 2   | `kPhase1Drawn` / `kPhase2Drawn`            | Opaque then masked segments.                                            |
+| Base pass (all modes)             | `kPhase1Drawn \| kPhase2Drawn`             | Deferred, forward, radiance replay and wireframe all draw the same set. |
+| Base pass velocity auxiliary pass | final set and the draw's velocity-aux flag | Subset of the base pass set.                                            |
+| Contact-shadow caster depth       | final set                                  | Reuses the depth list candidates.                                       |
+| Translucency                      | `kVisible`                                 | Phase 2's test against phase 1 depth; keeps back-to-front order.        |
+| Shadow depth phase 1 / phase 2    | caster and the shadow view's phase bit     | Shadow-view culling only (§6.4).                                        |
 
 No consumer reads visibility on the CPU. A pass never draws a draw the depth
 prepass skipped, and the prepass never draws one the base pass skips.
+
+Translucent draws are tested by phase 2 like every other draw. Phase 1 depth
+is a subset of complete depth, so a draw it occludes is occluded by complete
+depth too; testing against the Screen HZB instead would cull a little more for
+another dispatch.
 
 ## 6. Policies
 
@@ -359,6 +374,8 @@ prepass skipped, and the prepass never draws one the base pass skips.
 
 `vtx.occlusion.enable` turns the occlusion test on or off for camera and
 shadow views, and defaults to `false` until the validation gates (§8) pass.
+A camera view culls by occlusion only when it runs the depth prepass, whose
+phase 1 depth phase 2 tests against, and uses reversed-Z depth.
 
 With occlusion off:
 
@@ -444,13 +461,16 @@ The stats are read back asynchronously for `DiagnosticsService` and capture
 manifests (`Vortex.OcclusionFrameResults`). They are diagnostics only:
 rendering never reads them back.
 
-Pass markers:
+Pass markers, inside `Vortex.Stage3.DepthPrepass`:
 
-- `Vortex.Stage3.OcclusionPhase1`
-- `Vortex.Stage3.OcclusionPyramid`
-- `Vortex.Stage3.OcclusionPhase2`
-- `Vortex.Shadow.<View>.OcclusionPhase1` / `Phase2`
-- `Vortex.ListBuild.<Pass>`
+- `Vortex.Stage3.Occlusion.Phase1`
+- `Vortex.Stage3.DepthPrepass.Phase1`
+- `Vortex.Occlusion.PyramidBuild`
+- `Vortex.Stage3.Occlusion.Phase2`
+- `Vortex.Stage3.DepthPrepass.Phase2`
+- `Vortex.Shadow.<View>.Occlusion.Phase1` / `Phase2`
+- `<Pass>.Lists`, one per list build, such as
+  `Vortex.Stage9.BasePass.Lists`
 
 ## 8. Validation Gates
 
@@ -466,7 +486,9 @@ Pass markers:
    - cull records carry mesh-view local bounds; instanced batches carry world
      AABBs
 3. GPU tests, one test process at a time:
-   - a box behind an occluder is culled in the frame it becomes hidden
+   - a hidden box without visible history is culled in the frame it is
+     tested; one drawn last frame is drawn in phase 1 once more and culled
+     the next frame
    - an occluder moved away reveals its occludee in the same frame
    - a box straddling the near plane is drawn
    - a rotated thin mesh near an occluder edge is kept or culled per its

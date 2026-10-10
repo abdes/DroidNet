@@ -184,8 +184,6 @@ namespace {
   constexpr auto kCVarVortexAerialPerspectiveLutSampleCountMaxPerSlice
     = "vtx.sky_atmosphere.aerial_perspective_lut.sample_count_max_per_slice";
   constexpr auto kCVarVortexOcclusionEnabled = "vtx.occlusion.enable";
-  constexpr auto kCVarVortexOcclusionMaxCandidateCount
-    = "vtx.occlusion.max_candidate_count";
 
   //! Default and accepted range of a numeric tuning variable. The console
   //! definition and the getter that clamps its value share one instance.
@@ -234,13 +232,6 @@ namespace {
     .fallback = 2.0,
     .min = 1.0,
     .max = 64.0,
-  };
-  constexpr std::int64_t kOcclusionCandidateLimit
-    = std::int64_t { 256 } * std::int64_t { 256 };
-  constexpr CVarRange<std::int64_t> kOcclusionMaxCandidateRange {
-    .fallback = kOcclusionCandidateLimit,
-    .min = 1,
-    .max = kOcclusionCandidateLimit,
   };
 
   constexpr auto kRendererStagingAlignment
@@ -1412,20 +1403,11 @@ auto Renderer::RegisterConsoleBindings(
 
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarVortexOcclusionEnabled),
-    .help = "Enable Screen HZB occlusion testing and consumer culling",
+    .help = "Enable two-phase GPU occlusion culling",
     .default_value = false,
     .flags = console::CVarFlags::kArchive,
     .min_value = std::nullopt,
     .max_value = std::nullopt,
-  });
-
-  (void)console->RegisterCVar(console::CVarDefinition {
-    .name = std::string(kCVarVortexOcclusionMaxCandidateCount),
-    .help = "Maximum prepared draws submitted to the HZB occlusion tester",
-    .default_value = kOcclusionMaxCandidateRange.fallback,
-    .flags = console::CVarFlags::kArchive,
-    .min_value = static_cast<double>(kOcclusionMaxCandidateRange.min),
-    .max_value = static_cast<double>(kOcclusionMaxCandidateRange.max),
   });
 }
 
@@ -3461,19 +3443,6 @@ auto Renderer::GetOcclusionEnabled() const noexcept -> bool
     }
   }
   return false;
-}
-
-auto Renderer::GetOcclusionMaxCandidateCount() const noexcept -> std::uint32_t
-{
-  if (console_ != nullptr) {
-    auto value = kOcclusionMaxCandidateRange.fallback;
-    if (console_->TryGetCVarValue<int64_t>(
-          kCVarVortexOcclusionMaxCandidateCount, value)) {
-      return static_cast<std::uint32_t>(std::clamp<std::int64_t>(value,
-        kOcclusionMaxCandidateRange.min, kOcclusionMaxCandidateRange.max));
-    }
-  }
-  return static_cast<std::uint32_t>(kOcclusionMaxCandidateRange.fallback);
 }
 
 auto Renderer::GetLightingStagingProvider() -> upload::StagingProvider&

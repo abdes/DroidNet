@@ -80,9 +80,6 @@ class EnvironmentLightingService;
 class IndirectLightingService;
 class ScreenHzbModule;
 class OcclusionModule;
-namespace occlusion::internal {
-  class DrawCullPass;
-} // namespace occlusion::internal
 class TranslucencyModule;
 namespace testing {
   struct RendererPublicationProbe;
@@ -261,10 +258,11 @@ private:
   OXGN_VRTX_NDAPI auto BuildSceneTextureLeaseKey(const RenderContext& ctx) const
     -> SceneTextureLeaseKey;
   OXGN_VRTX_API void BindPreparedView(RenderContext& ctx);
-  //! Culls the current view's draws on the GPU for its indirect lists.
-  auto CullCurrentViewDraws(RenderContext& ctx,
-    graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
-    -> void;
+  //! Stage 3: occlusion phase 1 and its depth, the occlusion pyramid, then
+  //! phase 2 and its depth. Publishes the view's draw visibility.
+  auto RenderDepthPrepass(RenderContext& ctx,
+    graphics::CommandRecorder& recorder, SceneTextures& scene_textures,
+    bool wants_depth_prepass) -> void;
   OXGN_VRTX_API auto RenderCurrentView(
     RenderContext& ctx, graphics::CommandRecorder& recorder) -> bool;
   OXGN_VRTX_API auto EnsureArtifactTexture(RenderContext& ctx,
@@ -322,7 +320,6 @@ private:
   std::unique_ptr<DepthPrepassModule> depth_prepass_;
   std::unique_ptr<ScreenHzbModule> screen_hzb_;
   std::unique_ptr<OcclusionModule> occlusion_;
-  std::unique_ptr<occlusion::internal::DrawCullPass> draw_cull_;
   std::unique_ptr<BasePassModule> base_pass_;
   std::unique_ptr<TranslucencyModule> translucency_;
   std::unique_ptr<LightingService> lighting_;

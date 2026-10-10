@@ -87,7 +87,6 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.h>
-#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/OcclusionStats.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyModule.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
@@ -1049,11 +1048,13 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     .mode = oxygen::vortex::DepthPrePassMode::kOpaqueAndMasked,
     .write_velocity = true,
   });
-  depth_prepass.Execute(context,
-    *graphics_->AcquireCommandRecorder(
+  {
+    auto recorder = graphics_->AcquireCommandRecorder(
       graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
-      "Test stage"),
-    scene_textures);
+      "Test stage");
+    depth_prepass.ExecutePhase1(context, *recorder, scene_textures);
+    depth_prepass.ExecutePhase2(context, *recorder, scene_textures);
+  }
 
   // The draw is one GPU-compacted indirect command with a GPU count.
   EXPECT_TRUE(graphics_->draw_log_.draws.empty());
@@ -2769,84 +2770,6 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest, GroundGridSettlesAfterCameraStops)
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
-  BasePassMeshProcessorHonorsVelocityPolicy)
-{
-  auto graphics = std::make_shared<FakeGraphics>();
-  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
-  const auto renderer = MakeRenderer(graphics);
-  auto mesh_processor = oxygen::vortex::BasePassMeshProcessor(*renderer);
-
-  auto render_items
-    = std::vector<oxygen::vortex::sceneprep::RenderItemData>(1U);
-  render_items.front().main_view_visible = true;
-
-  auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
-  prepared_frame.render_items
-    = std::span<const oxygen::vortex::sceneprep::RenderItemData>(
-      render_items.data(), render_items.size());
-
-  mesh_processor.BuildDrawCommands(
-    prepared_frame, ShadingMode::kDeferred, false);
-  auto draw_commands = mesh_processor.GetDrawCommands();
-  ASSERT_EQ(draw_commands.size(), 1U);
-  EXPECT_FALSE(draw_commands.front().writes_velocity);
-
-  mesh_processor.BuildDrawCommands(
-    prepared_frame, ShadingMode::kDeferred, true);
-  draw_commands = mesh_processor.GetDrawCommands();
-  ASSERT_EQ(draw_commands.size(), 1U);
-  EXPECT_TRUE(draw_commands.front().writes_velocity);
-}
-
-NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
-  BasePassMeshProcessorSkipsOccludedPreparedDraws)
-{
-  auto graphics = std::make_shared<FakeGraphics>();
-  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
-  const auto renderer = MakeRenderer(graphics);
-  auto mesh_processor = oxygen::vortex::BasePassMeshProcessor(*renderer);
-
-  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 3> {};
-  for (auto& metadata : draw_metadata) {
-    metadata.vertex_count = 3U;
-    metadata.instance_count = 1U;
-    metadata.flags = oxygen::vortex::PassMask {
-      oxygen::vortex::PassMaskBit::kOpaque,
-    };
-  }
-
-  auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
-  prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draw_metadata));
-
-  auto visibility = std::array<std::uint8_t, 3> {
-    1U,
-    0U,
-    1U,
-  };
-  const auto occlusion_results = oxygen::vortex::OcclusionFrameResults {
-    .visible_by_draw = std::span<const std::uint8_t> { visibility, },
-    .draw_count = static_cast<std::uint32_t>(visibility.size()),
-    .valid = true,
-    .fallback_reason = oxygen::vortex::OcclusionFallbackReason::kNone,
-  };
-
-  mesh_processor.BuildDrawCommands(
-    prepared_frame, ShadingMode::kDeferred, false, &occlusion_results);
-
-  const auto draw_commands = mesh_processor.GetDrawCommands();
-  ASSERT_EQ(draw_commands.size(), 2U);
-  EXPECT_THAT(DrawIndices(draw_commands), ::testing::ElementsAre(0U, 2U));
-  EXPECT_EQ(mesh_processor.GetOcclusionCulledDrawCount(), 1U);
-
-  const auto invalid_results = oxygen::vortex::MakeInvalidOcclusionFrameResults(
-    oxygen::vortex::OcclusionFallbackReason::kNoPreviousResults);
-  mesh_processor.BuildDrawCommands(
-    prepared_frame, ShadingMode::kDeferred, false, &invalid_results);
-  EXPECT_EQ(mesh_processor.GetDrawCommands().size(), 3U);
-  EXPECT_EQ(mesh_processor.GetOcclusionCulledDrawCount(), 0U);
-}
-
-NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   DepthPrepassMeshProcessorRefinesOpaqueDrawsFrontToBackForPerspectiveViews)
 {
   auto graphics = std::make_shared<FakeGraphics>();
@@ -3646,11 +3569,13 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
         .mode = oxygen::vortex::DepthPrePassMode::kOpaqueAndMasked,
         .write_velocity = write_velocity,
       });
-      depth_pass.Execute(context,
-        *graphics_->AcquireCommandRecorder(
+      {
+        auto recorder = graphics_->AcquireCommandRecorder(
           graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
-          "Test stage"),
-        scene_textures);
+          "Test stage");
+        depth_pass.ExecutePhase1(context, *recorder, scene_textures);
+        depth_pass.ExecutePhase2(context, *recorder, scene_textures);
+      }
       oxygen::vortex::testing::ExpectRasterStateIndirectDraws(
         graphics_->indirect_log_.draws, "Vortex.DepthPrepass.");
     }

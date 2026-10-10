@@ -11,19 +11,18 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
-#include <glm/ext/vector_float4.hpp>
-
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
-#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -40,9 +39,9 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/HistorySlotAllocator.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionConfig.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionModule.h>
-#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/OcclusionStats.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
 
@@ -50,9 +49,10 @@ namespace {
 
 using oxygen::Graphics;
 using oxygen::RendererConfig;
+using oxygen::ResolvedView;
+using oxygen::ViewId;
 using oxygen::graphics::QueueRole;
 using oxygen::vortex::OcclusionConfig;
-using oxygen::vortex::OcclusionFallbackReason;
 using oxygen::vortex::OcclusionModule;
 using oxygen::vortex::PreparedSceneFrame;
 using oxygen::vortex::RenderContext;
@@ -60,6 +60,9 @@ using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
 using oxygen::vortex::SceneTextures;
 using oxygen::vortex::SceneTexturesConfig;
+using oxygen::vortex::occlusion::internal::HistorySlotAllocator;
+using oxygen::vortex::occlusion::internal::kFreshHistorySlotBit;
+using oxygen::vortex::occlusion::internal::kNoHistorySlot;
 using oxygen::vortex::testing::FakeGraphics;
 
 using oxygen::graphics::GpuBufferReadback;
@@ -270,57 +273,53 @@ struct OcclusionModuleFixture {
   }
 };
 
-auto MakePreparedFrame(std::vector<oxygen::vortex::DrawMetadata>& metadata)
-  -> PreparedSceneFrame
+//! A prepared frame of `draw_count` draws with published bindless slots.
+struct TestScene {
+  std::vector<oxygen::vortex::DrawMetadata> metadata;
+  std::vector<PreparedSceneFrame::DrawSource> sources;
+  PreparedSceneFrame frame;
+
+  explicit TestScene(const std::uint32_t draw_count)
+    : metadata(draw_count)
+  {
+    for (std::uint32_t draw = 0U; draw < draw_count; ++draw) {
+      sources.push_back(PreparedSceneFrame::DrawSource {
+        .node = oxygen::scene::NodeHandle { draw, 1U },
+        .lod_index = oxygen::data::LodIndex {},
+        .submesh_index = oxygen::data::SubmeshIndex {},
+        .mesh_view_index = oxygen::data::MeshViewIndex {},
+      });
+    }
+    frame.draw_metadata_bytes = std::as_bytes(std::span { metadata });
+    frame.draw_sources = sources;
+    frame.bindless_draw_metadata_slot = oxygen::ShaderVisibleIndex { 1U };
+    frame.bindless_draw_cull_records_slot = oxygen::ShaderVisibleIndex { 2U };
+    frame.bindless_worlds_slot = oxygen::ShaderVisibleIndex { 3U };
+  }
+};
+
+auto MakeView(const bool reverse_z) -> ResolvedView
 {
-  auto frame = PreparedSceneFrame {};
-  frame.draw_metadata_bytes = std::as_bytes(std::span {
-    metadata,
-  });
-  return frame;
+  auto params = ResolvedView::Params {};
+  params.view_config.viewport = { .width = 16.0F, .height = 16.0F };
+  params.view_config.scissor = { .right = 16, .bottom = 16 };
+  params.view_config.reverse_z = reverse_z;
+  return ResolvedView { params };
 }
 
-auto MakePreparedFrame(std::vector<oxygen::vortex::DrawMetadata>& metadata,
-  std::vector<glm::vec4>& bounds) -> PreparedSceneFrame
-{
-  auto frame = MakePreparedFrame(metadata);
-  frame.draw_bounding_spheres = std::span<const glm::vec4> {
-    bounds,
-  };
-  return frame;
-}
-
-auto MakePreparedFrame(std::vector<oxygen::vortex::DrawMetadata>& metadata,
-  std::vector<glm::vec4>& bounds,
-  std::vector<PreparedSceneFrame::DrawSource>& sources) -> PreparedSceneFrame
-{
-  auto frame = MakePreparedFrame(metadata, bounds);
-  frame.draw_sources = std::span<const PreparedSceneFrame::DrawSource> {
-    sources,
-  };
-  return frame;
-}
-
-auto DrawOf(const std::uint32_t node_index) -> PreparedSceneFrame::DrawSource
-{
-  return PreparedSceneFrame::DrawSource {
-    .node = oxygen::scene::NodeHandle { node_index, 1U },
-    .submesh_index = oxygen::data::SubmeshIndex {},
-  };
-}
-
-//! Drives frames of one module against a current furthest HZB.
+//! Drives frames of one module through both phases.
 struct OcclusionFrameDriver {
   // Outlives the graphics, which shuts readbacks down when it stops.
   FakeReadbackManager readbacks;
   OcclusionModuleFixture fixture;
-  std::shared_ptr<oxygen::graphics::Texture> hzb_texture;
   OcclusionModule module {
     *fixture.renderer,
     OcclusionConfig {
       .enabled = true,
     },
   };
+  ResolvedView view { MakeView(true) };
+  TestScene scene { 3U };
   std::uint64_t frame_sequence { 0U };
 
   OcclusionFrameDriver()
@@ -329,101 +328,40 @@ struct OcclusionFrameDriver {
       = oxygen::observer_ptr<oxygen::graphics::ReadbackManager> {
           &readbacks,
         };
-    hzb_texture
-      = fixture.graphics->CreateTexture(oxygen::graphics::TextureDesc {
-        .width = 8U,
-        .height = 8U,
-        .format = oxygen::Format::kR32Float,
-        .texture_type = oxygen::TextureType::kTexture2D,
-        .debug_name = "OcclusionModuleTest.Hzb",
-        .is_shader_resource = true,
-        .clear_value = {},
-      });
   }
 
-  //! Renders one frame of a view and returns its published visibility.
-  auto Render(const oxygen::ViewId view,
-    std::vector<PreparedSceneFrame::DrawSource> sources) -> std::vector<bool>
+  //! Records phase 1 and, when needed, phase 2 without a pyramid.
+  auto Render(const ViewId view_id) -> RenderContext
   {
-    auto metadata = std::vector<oxygen::vortex::DrawMetadata>(sources.size());
-    auto bounds = std::vector<glm::vec4>(
-      sources.size(), glm::vec4 { 0.0F, 0.0F, 5.0F, 1.0F });
-    auto prepared_frame = MakePreparedFrame(metadata, bounds, sources);
     auto ctx = RenderContext {};
     ctx.frame_sequence = oxygen::frame::SequenceNumber { ++frame_sequence };
     ctx.frame_slot = oxygen::frame::Slot { 0U };
-    ctx.current_view.view_id = view;
+    ctx.current_view.view_id = view_id;
     ctx.current_view.prepared_frame
-      = oxygen::observer_ptr<const PreparedSceneFrame> { &prepared_frame };
-    ctx.current_view.screen_hzb_available = true;
-    ctx.current_view.screen_hzb_furthest_texture
-      = oxygen::observer_ptr<const oxygen::graphics::Texture> {
-          hzb_texture.get(),
-        };
-    ctx.current_view.screen_hzb_frame_slot = oxygen::ShaderVisibleIndex {
-      123U,
-    };
-
-    module.Execute(ctx,
-      *fixture.graphics->AcquireCommandRecorder(
-        fixture.graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
-        "Test stage"),
-      *fixture.scene_textures);
-
-    const auto& results = module.GetCurrentResults();
-    auto visible = std::vector<bool> {};
-    visible.reserve(sources.size());
-    for (std::uint32_t draw = 0U; draw < sources.size(); ++draw) {
-      visible.push_back(results.IsDrawVisible(draw));
+      = oxygen::observer_ptr<const PreparedSceneFrame> { &scene.frame };
+    ctx.current_view.resolved_view
+      = oxygen::observer_ptr<const ResolvedView> { &view };
+    auto recorder = fixture.graphics->AcquireCommandRecorder(
+      fixture.graphics->QueueKeyFor(QueueRole::kGraphics), "Test stage");
+    module.BuildPhase1(ctx, *recorder, *fixture.scene_textures);
+    if (module.NeedsPhase2(ctx)) {
+      module.BuildPhase2(ctx, *recorder, std::nullopt);
     }
-    return visible;
+    return ctx;
+  }
+
+  [[nodiscard]] auto DispatchedEntryPoints() const -> std::vector<std::string>
+  {
+    auto entry_points = std::vector<std::string> {};
+    for (const auto& bind : fixture.graphics->compute_pipeline_log_.binds) {
+      entry_points.push_back(bind.desc.ComputeShader().entry_point);
+    }
+    return entry_points;
   }
 };
 
-NOLINT_TEST(OcclusionTypesTest, FallbackReasonStringsAreStable)
-{
-  EXPECT_EQ(oxygen::vortex::to_string(OcclusionFallbackReason::kNone), "None");
-  EXPECT_EQ(
-    oxygen::vortex::to_string(OcclusionFallbackReason::kNoCurrentFurthestHzb),
-    "NoCurrentFurthestHzb");
-  EXPECT_EQ(
-    oxygen::vortex::to_string(OcclusionFallbackReason::kCapacityOverflow),
-    "CapacityOverflow");
-}
-
-NOLINT_TEST(OcclusionTypesTest, InvalidResultsAreConservativelyVisible)
-{
-  const auto results = oxygen::vortex::MakeInvalidOcclusionFrameResults(
-    OcclusionFallbackReason::kStageDisabled);
-
-  EXPECT_FALSE(results.valid);
-  EXPECT_TRUE(results.IsDrawVisible(0U));
-  EXPECT_TRUE(results.IsDrawVisible(99U));
-  EXPECT_EQ(results.fallback_reason, OcclusionFallbackReason::kStageDisabled);
-}
-
-NOLINT_TEST(OcclusionModuleTest, DisabledStagePublishesInvalidVisibleFallback)
-{
-  auto fixture = OcclusionModuleFixture {};
-  auto module = OcclusionModule {
-    *fixture.renderer,
-  };
-  auto ctx = RenderContext {};
-
-  module.Execute(ctx,
-    *fixture.graphics->AcquireCommandRecorder(
-      fixture.graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
-      "Test stage"),
-    *fixture.scene_textures);
-
-  ASSERT_NE(ctx.current_view.occlusion_results.get(), nullptr);
-  EXPECT_FALSE(ctx.current_view.occlusion_results->valid);
-  EXPECT_TRUE(ctx.current_view.occlusion_results->IsDrawVisible(7U));
-  EXPECT_EQ(
-    module.GetStats().fallback_reason, OcclusionFallbackReason::kStageDisabled);
-}
-
-NOLINT_TEST(OcclusionModuleTest, EnabledStageWithoutPreparedFrameStaysInvalid)
+//! Without a prepared frame nothing is culled and no list filters.
+NOLINT_TEST(OcclusionModuleTest, ViewWithoutPreparedFramePublishesNoVisibility)
 {
   auto fixture = OcclusionModuleFixture {};
   auto module = OcclusionModule {
@@ -433,201 +371,92 @@ NOLINT_TEST(OcclusionModuleTest, EnabledStageWithoutPreparedFrameStaysInvalid)
     },
   };
   auto ctx = RenderContext {};
+  auto recorder = fixture.graphics->AcquireCommandRecorder(
+    fixture.graphics->QueueKeyFor(QueueRole::kGraphics), "Test stage");
 
-  module.Execute(ctx,
-    *fixture.graphics->AcquireCommandRecorder(
-      fixture.graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
-      "Test stage"),
-    *fixture.scene_textures);
+  module.BuildPhase1(ctx, *recorder, *fixture.scene_textures);
 
-  ASSERT_NE(ctx.current_view.occlusion_results.get(), nullptr);
-  EXPECT_FALSE(ctx.current_view.occlusion_results->valid);
-  EXPECT_EQ(module.GetStats().fallback_reason,
-    OcclusionFallbackReason::kNoPreparedFrame);
+  EXPECT_FALSE(ctx.current_view.draw_visibility.IsValid());
+  EXPECT_FALSE(module.NeedsPhase2(ctx));
+  EXPECT_TRUE(fixture.graphics->dispatch_log_.dispatches.empty());
 }
 
-NOLINT_TEST(OcclusionModuleTest, MissingCurrentFurthestHzbPublishesAllVisible)
-{
-  auto fixture = OcclusionModuleFixture {};
-  auto module = OcclusionModule {
-    *fixture.renderer,
-    OcclusionConfig {
-      .enabled = true,
-    },
-  };
-  auto metadata = std::vector<oxygen::vortex::DrawMetadata>(3U);
-  auto prepared_frame = MakePreparedFrame(metadata);
-  auto ctx = RenderContext {};
-  ctx.current_view.prepared_frame
-    = oxygen::observer_ptr<const PreparedSceneFrame> {
-        &prepared_frame,
-      };
-
-  module.Execute(ctx,
-    *fixture.graphics->AcquireCommandRecorder(
-      fixture.graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
-      "Test stage"),
-    *fixture.scene_textures);
-
-  const auto& results = module.GetCurrentResults();
-  EXPECT_TRUE(results.valid);
-  EXPECT_EQ(results.draw_count, 3U);
-  EXPECT_EQ(results.visible_by_draw.size(), 3U);
-  EXPECT_TRUE(results.IsDrawVisible(0U));
-  EXPECT_TRUE(results.IsDrawVisible(2U));
-  EXPECT_TRUE(results.IsDrawVisible(3U));
-  EXPECT_EQ(
-    results.fallback_reason, OcclusionFallbackReason::kNoCurrentFurthestHzb);
-  EXPECT_EQ(module.GetStats().visible_count, 3U);
-  EXPECT_EQ(module.GetStats().occluded_count, 0U);
-  EXPECT_FALSE(module.GetStats().current_furthest_hzb_available);
-  ASSERT_NE(ctx.current_view.occlusion_results.get(), nullptr);
-  EXPECT_EQ(ctx.current_view.occlusion_results.get(), &results);
-}
-
-NOLINT_TEST(OcclusionModuleTest,
-  CurrentHzbSubmitsGpuTestWhilePublishingConservativeFallback)
-{
-  auto fixture = OcclusionModuleFixture {};
-  auto module = OcclusionModule {
-    *fixture.renderer,
-    OcclusionConfig {
-      .enabled = true,
-    },
-  };
-  auto metadata = std::vector<oxygen::vortex::DrawMetadata>(3U);
-  auto sources = std::vector<PreparedSceneFrame::DrawSource> {
-    DrawOf(1U),
-    DrawOf(2U),
-    DrawOf(3U),
-  };
-  auto bounds = std::vector<glm::vec4> {
-    {
-      0.0F,
-      0.0F,
-      5.0F,
-      1.0F,
-    },
-    {
-      2.0F,
-      0.0F,
-      8.0F,
-      1.0F,
-    },
-    {
-      -2.0F,
-      0.0F,
-      8.0F,
-      1.0F,
-    },
-  };
-  auto prepared_frame = MakePreparedFrame(metadata, bounds, sources);
-  auto hzb_texture
-    = fixture.graphics->CreateTexture(oxygen::graphics::TextureDesc {
-      .width = 8U,
-      .height = 8U,
-      .format = oxygen::Format::kR32Float,
-      .texture_type = oxygen::TextureType::kTexture2D,
-      .debug_name = "OcclusionModuleTest.Hzb",
-      .is_shader_resource = true,
-      .clear_value = {},
-    });
-
-  auto ctx = RenderContext {};
-  ctx.frame_sequence = oxygen::frame::SequenceNumber {
-    1U,
-  };
-  ctx.frame_slot = oxygen::frame::Slot {
-    0U,
-  };
-  ctx.current_view.prepared_frame
-    = oxygen::observer_ptr<const PreparedSceneFrame> {
-        &prepared_frame,
-      };
-  ctx.current_view.screen_hzb_available = true;
-  ctx.current_view.screen_hzb_furthest_texture
-    = oxygen::observer_ptr<const oxygen::graphics::Texture> {
-        hzb_texture.get(),
-      };
-  ctx.current_view.screen_hzb_frame_slot = oxygen::ShaderVisibleIndex {
-    123U,
-  };
-
-  module.Execute(ctx,
-    *fixture.graphics->AcquireCommandRecorder(
-      fixture.graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
-      "Test stage"),
-    *fixture.scene_textures);
-
-  const auto& results = module.GetCurrentResults();
-  EXPECT_TRUE(results.valid);
-  EXPECT_TRUE(results.IsDrawVisible(0U));
-  EXPECT_EQ(
-    results.fallback_reason, OcclusionFallbackReason::kReadbackUnavailable);
-  EXPECT_EQ(module.GetStats().candidate_count, 3U);
-  EXPECT_EQ(module.GetStats().submitted_count, 3U);
-  ASSERT_EQ(fixture.graphics->dispatch_log_.dispatches.size(), 1U);
-  EXPECT_EQ(
-    fixture.graphics->dispatch_log_.dispatches.front().thread_group_count_x,
-    1U);
-  ASSERT_FALSE(fixture.graphics->compute_pipeline_log_.binds.empty());
-  EXPECT_EQ(fixture.graphics->compute_pipeline_log_.binds.front()
-              .desc.ComputeShader()
-              .source_path,
-    "Vortex/Stages/Occlusion/OcclusionTest.hlsl");
-}
-
-//! Draw indices follow each frame's sort order: a result read back after the
-//! order changed must reach the draw that was tested, not the one now at its
-//! index. A huge floor swapped with an occluded draw would otherwise vanish.
-NOLINT_TEST(OcclusionModuleTest, ReadBackResultsFollowTheDrawSource)
+//! Occlusion on records phase 1 and phase 2 and leaves the visibility final.
+NOLINT_TEST(OcclusionModuleTest, EnabledViewRecordsBothPhases)
 {
   auto driver = OcclusionFrameDriver {};
-  const auto view = oxygen::ViewId { 1U };
-  const auto floor = DrawOf(1U);
-  const auto hidden = DrawOf(2U);
 
-  (void)driver.Render(view, { floor, hidden });
-  ASSERT_EQ(driver.readbacks.buffer_readbacks.size(), 1U);
-  driver.readbacks.buffer_readbacks.front()->Complete({ 1U, 0U });
+  const auto ctx = driver.Render(ViewId { 1U });
 
-  const auto visible = driver.Render(view, { hidden, floor });
-
-  EXPECT_FALSE(visible.front());
-  EXPECT_TRUE(visible.back());
+  EXPECT_TRUE(ctx.current_view.draw_visibility.IsValid());
+  EXPECT_TRUE(ctx.current_view.draw_visibility.phase2);
+  EXPECT_EQ(ctx.current_view.draw_visibility.draw_count, 3U);
+  EXPECT_EQ(driver.DispatchedEntryPoints(),
+    (std::vector<std::string> { "VortexOcclusionStatsClearCS",
+      "VortexOcclusionPhase1CS", "VortexOcclusionPhase2CS" }));
 }
 
-//! A view's results never reach another view, such as a camera preview
-//! composed over the pane.
-NOLINT_TEST(OcclusionModuleTest, ReadBackResultsStayWithTheirView)
+//! Occlusion off, or a view without reversed-Z depth, culls by frustum in
+//! phase 1 only.
+NOLINT_TEST(OcclusionModuleTest, FrustumOnlyViewsSkipPhase2)
 {
-  auto driver = OcclusionFrameDriver {};
-  const auto pane = oxygen::ViewId { 1U };
-  const auto preview = oxygen::ViewId { 2U };
-  const auto floor = DrawOf(1U);
+  for (const bool enabled : { false, true }) {
+    SCOPED_TRACE(enabled);
+    auto driver = OcclusionFrameDriver {};
+    driver.module.SetConfig(OcclusionConfig { .enabled = enabled });
+    driver.view = MakeView(!enabled);
 
-  (void)driver.Render(preview, { floor });
-  ASSERT_EQ(driver.readbacks.buffer_readbacks.size(), 1U);
-  driver.readbacks.buffer_readbacks.front()->Complete({ 0U });
+    const auto ctx = driver.Render(ViewId { 1U });
 
-  EXPECT_TRUE(driver.Render(pane, { floor }).front());
-  EXPECT_FALSE(driver.Render(preview, { floor }).front());
+    EXPECT_TRUE(ctx.current_view.draw_visibility.IsValid());
+    EXPECT_FALSE(ctx.current_view.draw_visibility.phase2);
+    EXPECT_FALSE(driver.module.NeedsPhase2(ctx));
+    EXPECT_EQ(driver.DispatchedEntryPoints(),
+      (std::vector<std::string> {
+        "VortexOcclusionStatsClearCS", "VortexOcclusionPhase1CS" }));
+  }
 }
 
-//! A removed view's pending results are never applied to a later view that
-//! reuses its id.
-NOLINT_TEST(OcclusionModuleTest, RemovedViewForgetsItsPendingResults)
+//! Counters read back frames later reach the view they were counted for,
+//! with the frame they describe; a removed view forgets them.
+NOLINT_TEST(OcclusionModuleTest, CountersReachTheirViewFramesLater)
 {
   auto driver = OcclusionFrameDriver {};
-  const auto view = oxygen::ViewId { 1U };
-  const auto floor = DrawOf(1U);
+  const auto pane = ViewId { 1U };
+  const auto preview = ViewId { 2U };
 
-  (void)driver.Render(view, { floor });
-  ASSERT_EQ(driver.readbacks.buffer_readbacks.size(), 1U);
-  driver.readbacks.buffer_readbacks.front()->Complete({ 0U });
-  driver.module.RemoveViewState(view);
+  (void)driver.Render(pane);
+  (void)driver.Render(preview);
+  ASSERT_EQ(driver.readbacks.buffer_readbacks.size(), 2U);
+  driver.readbacks.buffer_readbacks.front()->Complete(
+    { 3U, 3U, 0U, 3U, 3U, 0U, 0U, 0U });
+  EXPECT_FALSE(driver.module.GetStats(pane).has_value());
 
-  EXPECT_TRUE(driver.Render(view, { floor }).front());
+  (void)driver.Render(pane);
+
+  const auto stats = driver.module.GetStats(pane);
+  if (!stats.has_value()) {
+    FAIL() << "Expected read-back counters";
+  }
+  EXPECT_EQ(stats.value().frame_sequence, oxygen::frame::SequenceNumber { 1U });
+  EXPECT_TRUE(stats.value().occlusion_enabled);
+  EXPECT_EQ(stats.value().counters.draw_count, 3U);
+  EXPECT_EQ(stats.value().counters.phase1_drawn_count, 3U);
+  EXPECT_FALSE(driver.module.GetStats(preview).has_value());
+
+  driver.module.RemoveViewState(pane);
+  EXPECT_FALSE(driver.module.GetStats(pane).has_value());
+}
+
+//! The slot word marks fresh slots and keeps "no slot" distinct.
+NOLINT_TEST(OcclusionModuleTest, SlotWordsEncodeFreshSlots)
+{
+  using Assignment = HistorySlotAllocator::Assignment;
+  EXPECT_EQ((Assignment { .slot = 5U, .fresh = false }).ToSlotWord(), 5U);
+  EXPECT_EQ((Assignment { .slot = 5U, .fresh = true }).ToSlotWord(),
+    5U | kFreshHistorySlotBit);
+  EXPECT_EQ((Assignment { .slot = kNoHistorySlot, .fresh = true }).ToSlotWord(),
+    kNoHistorySlot);
 }
 
 } // namespace

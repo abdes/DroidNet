@@ -15,15 +15,12 @@ static const uint DRAW_CULL_SHADOW_CASTER = 1u << 3u;
 static const uint DRAW_CULL_MAIN_VIEW_VISIBLE = 1u << 4u;
 static const uint DRAW_CULL_WORLD_SPACE_BOX = 1u << 5u;
 static const uint DRAW_CULL_ALWAYS_VISIBLE = 1u << 6u;
-static const uint DRAW_CULL_FRESH_HISTORY = 1u << 7u;
-
-static const uint DRAW_CULL_NO_HISTORY_SLOT = 0xFFFFFFFFu;
 
 // ABI: must match sizeof(oxygen::vortex::DrawCullRecord) == 32
 struct DrawCullRecord
 {
     float3 box_center;
-    uint history_slot;
+    uint _pad0;
     float3 box_extent;
     uint flags;
 };

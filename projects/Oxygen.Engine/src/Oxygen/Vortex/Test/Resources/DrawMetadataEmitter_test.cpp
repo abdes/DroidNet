@@ -1629,7 +1629,6 @@ NOLINT_TEST_F(DrawCullRecordTest, RecordsCarryMeshViewLocalBounds)
     const auto upper = sources.at(draw).mesh_view_index.get() == 0U;
     EXPECT_EQ(record.box_center, glm::vec3(0.0F, upper ? 0.5F : -0.5F, 0.0F));
     EXPECT_EQ(record.box_extent, glm::vec3(1.0F, 0.5F, 0.0F));
-    EXPECT_EQ(record.history_slot, oxygen::vortex::kNoHistorySlot);
     EXPECT_EQ(record.flags,
       ToUnderlying(DrawCullFlagBits::kOpaque)
         | ToUnderlying(DrawCullFlagBits::kShadowCaster)

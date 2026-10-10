@@ -83,12 +83,15 @@ private:
 //! One view's per-draw visibility for this frame, one `uint` per draw.
 /*!
  The buffer is in the shader-resource state. An invalid product means the
- view was not culled; lists then keep every candidate.
+ view was not culled; lists then keep every candidate. Until phase 2 has run,
+ `kPhase2Drawn` is clear for every draw.
 */
 struct DrawVisibilityProducts {
   observer_ptr<const graphics::Buffer> buffer;
   ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };
   std::uint32_t draw_count { 0U };
+  //! Phase 2 has written its bits; the visibility is final.
+  bool phase2 { false };
 
   [[nodiscard]] auto IsValid() const noexcept -> bool
   {

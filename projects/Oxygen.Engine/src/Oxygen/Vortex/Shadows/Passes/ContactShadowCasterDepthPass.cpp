@@ -161,12 +161,13 @@ auto ContactShadowCasterDepthPass::Record(const PreparedViewShadowInput& input,
     }
     const auto clipped = vortex::internal::ResolveClampedViewportState(
       viewport, view.Scissor(), desc.width, desc.height);
-    const auto visibility = draw_cull_->Run(*recorder,
+    const auto visibility = draw_cull_->RunPhase1(*recorder,
       occlusion::internal::DrawCullInputs {
         .frame_sequence = sequence_,
         .frame_slot = slot_,
         .prepared_frame = input.prepared_scene,
-        .view_projection = view.ProjectionMatrix() * view.ViewMatrix(),
+        .view_matrix = view.ViewMatrix(),
+        .projection_matrix = view.ProjectionMatrix(),
         .viewport = clipped.viewport,
         .scissors = clipped.scissors,
       });

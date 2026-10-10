@@ -65,7 +65,6 @@ struct BasePassExecutionResult {
   bool wrote_velocity_target { false };
   bool wrote_scene_color { false };
   std::uint32_t draw_count { 0U };
-  std::uint32_t occlusion_culled_draw_count { 0U };
 };
 
 class BasePassModule {

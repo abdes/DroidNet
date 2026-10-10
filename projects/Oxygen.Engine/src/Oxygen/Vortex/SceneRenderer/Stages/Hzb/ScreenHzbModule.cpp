@@ -124,34 +124,6 @@ namespace {
     };
   }
 
-  //! The view's source rect in the scene depth: its viewport, else all of it.
-  auto ResolveSourceRect(const RenderContext& ctx,
-    const graphics::Texture& scene_depth) -> HzbPyramidBuilder::Source
-  {
-    const auto scene_depth_width = scene_depth.GetDescriptor().width;
-    const auto scene_depth_height = scene_depth.GetDescriptor().height;
-    auto source = HzbPyramidBuilder::Source {
-      .depth = observer_ptr { &scene_depth },
-      .width = scene_depth_width,
-      .height = scene_depth_height,
-    };
-    if (const auto* resolved_view = ctx.current_view.resolved_view.get();
-      resolved_view != nullptr && resolved_view->Viewport().IsValid()) {
-      const auto viewport = resolved_view->Viewport();
-      source.origin_x = (std::min)(scene_depth_width - 1U,
-        static_cast<std::uint32_t>(
-          std::floor((std::max)(viewport.top_left_x, 0.0F))));
-      source.origin_y = (std::min)(scene_depth_height - 1U,
-        static_cast<std::uint32_t>(
-          std::floor((std::max)(viewport.top_left_y, 0.0F))));
-      source.width = (std::min)(scene_depth_width - source.origin_x,
-        (std::max)(1U, static_cast<std::uint32_t>(std::ceil(viewport.width))));
-      source.height = (std::min)(scene_depth_height - source.origin_y,
-        (std::max)(1U, static_cast<std::uint32_t>(std::ceil(viewport.height))));
-    }
-    return source;
-  }
-
 } // namespace
 
 struct ScreenHzbModule::Impl {
@@ -444,6 +416,33 @@ void ScreenHzbModule::RemoveViewState(const ViewId view_id)
   }
 }
 
+auto ScreenHzbModule::ResolveViewDepthSource(const RenderContext& ctx,
+  const graphics::Texture& scene_depth) -> HzbPyramidBuilder::Source
+{
+  const auto scene_depth_width = scene_depth.GetDescriptor().width;
+  const auto scene_depth_height = scene_depth.GetDescriptor().height;
+  auto source = HzbPyramidBuilder::Source {
+    .depth = observer_ptr { &scene_depth },
+    .width = scene_depth_width,
+    .height = scene_depth_height,
+  };
+  if (const auto* resolved_view = ctx.current_view.resolved_view.get();
+    resolved_view != nullptr && resolved_view->Viewport().IsValid()) {
+    const auto viewport = resolved_view->Viewport();
+    source.origin_x = (std::min)(scene_depth_width - 1U,
+      static_cast<std::uint32_t>(
+        std::floor((std::max)(viewport.top_left_x, 0.0F))));
+    source.origin_y = (std::min)(scene_depth_height - 1U,
+      static_cast<std::uint32_t>(
+        std::floor((std::max)(viewport.top_left_y, 0.0F))));
+    source.width = (std::min)(scene_depth_width - source.origin_x,
+      (std::max)(1U, static_cast<std::uint32_t>(std::ceil(viewport.width))));
+    source.height = (std::min)(scene_depth_height - source.origin_y,
+      (std::max)(1U, static_cast<std::uint32_t>(std::ceil(viewport.height))));
+  }
+  return source;
+}
+
 auto ScreenHzbModule::BuildOcclusionPyramid(RenderContext& ctx,
   graphics::CommandRecorder& recorder, const HzbPyramidBuilder::Source& source)
   -> std::optional<OcclusionPyramid>
@@ -471,6 +470,13 @@ auto ScreenHzbModule::BuildOcclusionPyramid(RenderContext& ctx,
     .width = desc.width,
     .height = desc.height,
     .mip_count = desc.mip_levels,
+    .source = HzbPyramidBuilder::Source {
+      .depth = nullptr,
+      .origin_x = source.origin_x,
+      .origin_y = source.origin_y,
+      .width = source.width,
+      .height = source.height,
+    },
   };
 }
 
@@ -518,7 +524,7 @@ void ScreenHzbModule::Execute(RenderContext& ctx,
     = ctx.current_view.screen_hzb_request.current_closest;
   const auto build_furthest
     = ctx.current_view.screen_hzb_request.current_furthest;
-  const auto source = ResolveSourceRect(ctx, scene_depth);
+  const auto source = ResolveViewDepthSource(ctx, scene_depth);
 
   auto& state = impl_->EnsureHistoryResources(
     view_id, source, build_closest, build_furthest);

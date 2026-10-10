@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -13,12 +15,17 @@
 #include <string_view>
 #include <vector>
 
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/gtc/matrix_access.hpp>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
@@ -41,18 +48,44 @@ namespace {
 
   constexpr std::uint32_t kThreadGroupSize = 64U;
 
-  auto BuildPipelineDesc(const std::string& debug_name)
+  // Mirror the OCCLUSION_CULL_* flags of OcclusionCull.hlsl.
+  constexpr std::uint32_t kOcclusionEnabledFlag = 1U << 0U;
+  constexpr std::uint32_t kHistoryValidFlag = 1U << 1U;
+  constexpr std::uint32_t kPyramidValidFlag = 1U << 2U;
+
+  enum class Kernel : std::uint8_t {
+    kStatsClear,
+    kPhase1,
+    kPhase2,
+  };
+  constexpr std::size_t kKernelCount = 3U;
+
+  auto EntryPoint(const Kernel kernel) -> std::string_view
+  {
+    switch (kernel) {
+    case Kernel::kStatsClear:
+      return "VortexOcclusionStatsClearCS";
+    case Kernel::kPhase1:
+      return "VortexOcclusionPhase1CS";
+    case Kernel::kPhase2:
+      return "VortexOcclusionPhase2CS";
+    }
+    return {};
+  }
+
+  auto BuildPipelineDesc(const Kernel kernel, const std::string& debug_name)
     -> graphics::ComputePipelineDesc
   {
     const auto root_bindings = vortex::internal::BuildVortexRootBindings();
+    const auto entry_point = EntryPoint(kernel);
     return graphics::ComputePipelineDesc::Builder()
       .SetComputeShader({
         .stage = ShaderType::kCompute,
         .source_path = "Vortex/Stages/Occlusion/OcclusionCull.hlsl",
-        .entry_point = "VortexOcclusionCullCS",
+        .entry_point = std::string { entry_point },
       })
       .SetRootBindings(std::span(root_bindings))
-      .SetDebugName(debug_name)
+      .SetDebugName(debug_name + "." + std::string { entry_point })
       .Build();
   }
 
@@ -67,13 +100,26 @@ namespace {
       buffer, graphics::ResourceStates::kCommon, true);
   }
 
+  //! Projection terms P[2][2], P[3][2], P[2][3], P[3][3] (column, row) that
+  //! turn device depth back into view depth.
+  auto DepthTerms(const glm::mat4& projection) -> glm::vec4
+  {
+    const auto z_column = glm::column(projection, 2);
+    const auto w_column = glm::column(projection, 3);
+    return glm::vec4 { z_column.z, w_column.z, z_column.w, w_column.w };
+  }
+
   auto MakePassConstants(const DrawCullInputs& inputs,
     const ShaderVisibleIndex visibility_uav, const std::uint32_t draw_count)
     -> OcclusionCullPassConstants
   {
     const auto& frame = *inputs.prepared_frame;
+    const auto& projection = inputs.projection_matrix;
+    auto flags = std::uint32_t { 0U };
+    flags |= inputs.occlusion_enabled ? kOcclusionEnabledFlag : 0U;
+    flags |= inputs.history.valid ? kHistoryValidFlag : 0U;
     return OcclusionCullPassConstants {
-      .view_projection = inputs.view_projection,
+      .view_projection = projection * inputs.view_matrix,
       .viewport
       = glm::vec4 { inputs.viewport.top_left_x, inputs.viewport.top_left_y,
         inputs.viewport.width, inputs.viewport.height },
@@ -81,12 +127,23 @@ namespace {
         static_cast<float>(inputs.scissors.top),
         static_cast<float>(inputs.scissors.right),
         static_cast<float>(inputs.scissors.bottom) },
+      .depth_terms = DepthTerms(projection),
       .draw_metadata_srv = frame.bindless_draw_metadata_slot,
       .cull_records_srv = frame.bindless_draw_cull_records_slot,
       .worlds_srv = frame.bindless_worlds_slot,
       .visibility_uav = visibility_uav,
+      .history_slots_srv = inputs.history.slots_srv,
+      .history_uav = inputs.history.history_uav,
+      .stats_uav = inputs.history.stats_uav,
       .draw_count = draw_count,
+      .flags = flags,
+      .depth_bias = inputs.depth_bias,
     };
+  }
+
+  auto GroupCount(const std::uint32_t draw_count) -> std::uint32_t
+  {
+    return (draw_count + kThreadGroupSize - 1U) / kThreadGroupSize;
   }
 
 } // namespace
@@ -101,12 +158,23 @@ struct DrawCullPass::Impl {
   observer_ptr<Renderer> renderer;
   std::string debug_name;
   std::optional<upload::TransientStructuredBuffer> pass_constants;
-  std::optional<graphics::ComputePipelineDesc> pipeline_desc;
-  //! One visibility buffer per `Run` of the current frame.
+  //! One pipeline per `Kernel`.
+  std::array<std::optional<graphics::ComputePipelineDesc>, kKernelCount>
+    pipelines;
+  //! One visibility buffer per phase 1 of the current frame.
   std::vector<std::unique_ptr<vortex::internal::StructuredGpuBuffer>>
     visibility_buffers;
   std::optional<frame::SequenceNumber> frame;
   std::size_t next_buffer { 0U };
+
+  auto Pipeline(const Kernel kernel) -> const graphics::ComputePipelineDesc&
+  {
+    auto& pipeline = pipelines.at(static_cast<std::size_t>(kernel));
+    if (!pipeline.has_value()) {
+      pipeline = BuildPipelineDesc(kernel, debug_name);
+    }
+    return *pipeline;
+  }
 
   auto AcquireVisibilityBuffer(const frame::SequenceNumber sequence)
     -> vortex::internal::StructuredGpuBuffer&
@@ -123,6 +191,80 @@ struct DrawCullPass::Impl {
     }
     return *visibility_buffers.at(next_buffer++);
   }
+
+  //! The visibility buffer of a phase 1 recorded this frame.
+  [[nodiscard]] auto FindVisibilityBuffer(
+    const DrawVisibilityProducts& products) const
+    -> vortex::internal::StructuredGpuBuffer*
+  {
+    const auto used = std::span(visibility_buffers).first(next_buffer);
+    const auto found
+      = std::ranges::find_if(used, [&](const auto& buffer) -> bool {
+          return buffer->GetBuffer() == products.buffer.get();
+        });
+    return found == used.end() ? nullptr : found->get();
+  }
+
+  //! Publishes one phase's constants; nothing when the upload fails.
+  auto PublishConstants(
+    const DrawCullInputs& inputs, const OcclusionCullPassConstants& constants)
+    -> std::optional<ShaderVisibleIndex>
+  {
+    if (!pass_constants.has_value()) {
+      auto gfx = renderer->GetGraphics();
+      pass_constants.emplace(observer_ptr { gfx.get() },
+        renderer->GetStagingProvider(),
+        static_cast<std::uint32_t>(sizeof(OcclusionCullPassConstants)),
+        observer_ptr { &renderer->GetInlineTransfersCoordinator() },
+        debug_name + ".PassConstants");
+    }
+    pass_constants->OnFrameStart(inputs.frame_sequence, inputs.frame_slot);
+    const auto allocation = pass_constants->Allocate(1U);
+    if (!allocation.has_value() || !allocation->TryWriteObject(constants)) {
+      LOG_F(ERROR, "{}: failed to publish the pass constants", debug_name);
+      return std::nullopt;
+    }
+    return allocation->srv;
+  }
+
+  auto Dispatch(graphics::CommandRecorder& recorder, const Kernel kernel,
+    const ShaderVisibleIndex constants_srv, const std::uint32_t group_count)
+    -> void
+  {
+    recorder.SetPipelineState(Pipeline(kernel));
+    const auto root_constants
+      = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants);
+    recorder.SetComputeRoot32BitConstant(root_constants, 0U, 0U);
+    recorder.SetComputeRoot32BitConstant(
+      root_constants, constants_srv.get(), 1U);
+    recorder.Dispatch(group_count, 1U, 1U);
+  }
+
+  //! Puts the history and stats buffers in UAV state, with UAV barriers
+  //! between the dispatches that share them.
+  static auto BeginHistoryAccess(
+    graphics::CommandRecorder& recorder, const DrawCullHistory& history) -> void
+  {
+    for (const auto* buffer : { history.history.get(), history.stats.get() }) {
+      if (buffer == nullptr) {
+        continue;
+      }
+      TrackFromKnownOrCommon(recorder, *buffer);
+      recorder.EnableAutoMemoryBarriers(*buffer);
+      recorder.RequireResourceState(
+        *buffer, graphics::ResourceStates::kUnorderedAccess);
+    }
+  }
+
+  static auto EndHistoryAccess(
+    graphics::CommandRecorder& recorder, const DrawCullHistory& history) -> void
+  {
+    for (const auto* buffer : { history.history.get(), history.stats.get() }) {
+      if (buffer != nullptr) {
+        recorder.DisableAutoMemoryBarriers(*buffer);
+      }
+    }
+  }
 };
 
 DrawCullPass::DrawCullPass(
@@ -133,7 +275,7 @@ DrawCullPass::DrawCullPass(
 
 DrawCullPass::~DrawCullPass() = default;
 
-auto DrawCullPass::Run(graphics::CommandRecorder& recorder,
+auto DrawCullPass::RunPhase1(graphics::CommandRecorder& recorder,
   const DrawCullInputs& inputs) -> DrawVisibilityProducts
 {
   if (inputs.prepared_frame == nullptr
@@ -156,44 +298,31 @@ auto DrawCullPass::Run(graphics::CommandRecorder& recorder,
   if (!visibility.Ensure(gfx, draw_count)) {
     return {};
   }
-
-  if (!impl_->pass_constants.has_value()) {
-    impl_->pass_constants.emplace(observer_ptr { gfx.get() },
-      impl_->renderer->GetStagingProvider(),
-      static_cast<std::uint32_t>(sizeof(OcclusionCullPassConstants)),
-      observer_ptr { &impl_->renderer->GetInlineTransfersCoordinator() },
-      impl_->debug_name + ".PassConstants");
-  }
-  impl_->pass_constants->OnFrameStart(inputs.frame_sequence, inputs.frame_slot);
-  const auto constants = impl_->pass_constants->Allocate(1U);
-  if (!constants.has_value()
-    || !constants->TryWriteObject(
-      MakePassConstants(inputs, visibility.GetUav(), draw_count))) {
-    LOG_F(ERROR, "{}: failed to publish the pass constants", impl_->debug_name);
+  const auto constants = impl_->PublishConstants(
+    inputs, MakePassConstants(inputs, visibility.GetUav(), draw_count));
+  if (!constants.has_value()) {
     return {};
   }
 
-  if (!impl_->pipeline_desc.has_value()) {
-    impl_->pipeline_desc = BuildPipelineDesc(impl_->debug_name);
-  }
-
-  graphics::GpuEventScope scope(recorder, impl_->debug_name,
+  graphics::GpuEventScope scope(recorder, impl_->debug_name + ".Phase1",
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   auto& buffer = *visibility.GetBuffer();
   TrackFromKnownOrCommon(recorder, buffer);
   recorder.RequireResourceState(
     buffer, graphics::ResourceStates::kUnorderedAccess);
+  Impl::BeginHistoryAccess(recorder, inputs.history);
   recorder.FlushBarriers();
 
-  recorder.SetPipelineState(*impl_->pipeline_desc);
-  const auto root_constants
-    = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants);
-  recorder.SetComputeRoot32BitConstant(root_constants, 0U, 0U);
-  recorder.SetComputeRoot32BitConstant(
-    root_constants, constants->srv.get(), 1U);
-  recorder.Dispatch(
-    (draw_count + kThreadGroupSize - 1U) / kThreadGroupSize, 1U, 1U);
+  if (inputs.history.stats != nullptr) {
+    impl_->Dispatch(recorder, Kernel::kStatsClear, *constants, 1U);
+    recorder.RequireResourceState(
+      *inputs.history.stats, graphics::ResourceStates::kUnorderedAccess);
+    recorder.FlushBarriers();
+  }
+  impl_->Dispatch(
+    recorder, Kernel::kPhase1, *constants, GroupCount(draw_count));
+  Impl::EndHistoryAccess(recorder, inputs.history);
 
   recorder.RequireResourceState(
     buffer, graphics::ResourceStates::kShaderResource);
@@ -201,7 +330,59 @@ auto DrawCullPass::Run(graphics::CommandRecorder& recorder,
     .buffer = observer_ptr<const graphics::Buffer> { &buffer },
     .srv = visibility.GetSrv(),
     .draw_count = draw_count,
+    .phase2 = false,
   };
+}
+
+auto DrawCullPass::RunPhase2(graphics::CommandRecorder& recorder,
+  const DrawCullInputs& inputs, const DrawVisibilityProducts& phase1,
+  const std::optional<OcclusionPyramidBinding>& pyramid)
+  -> DrawVisibilityProducts
+{
+  auto* visibility
+    = phase1.IsValid() ? impl_->FindVisibilityBuffer(phase1) : nullptr;
+  if (visibility == nullptr) {
+    return phase1;
+  }
+  auto constants_value
+    = MakePassConstants(inputs, visibility->GetUav(), phase1.draw_count);
+  if (pyramid.has_value() && pyramid->srv.IsValid()) {
+    constants_value.flags |= kPyramidValidFlag;
+    constants_value.pyramid_srv = pyramid->srv;
+    constants_value.pyramid_source = glm::uvec4 {
+      pyramid->origin_x,
+      pyramid->origin_y,
+      pyramid->width,
+      pyramid->height,
+    };
+  }
+  const auto constants = impl_->PublishConstants(inputs, constants_value);
+  if (!constants.has_value()) {
+    return phase1;
+  }
+
+  graphics::GpuEventScope scope(recorder, impl_->debug_name + ".Phase2",
+    profiling::ProfileGranularity::kTelemetry,
+    profiling::ProfileCategory::kPass);
+  auto& buffer = *visibility->GetBuffer();
+  recorder.RequireResourceState(
+    buffer, graphics::ResourceStates::kUnorderedAccess);
+  if (pyramid.has_value() && pyramid->srv.IsValid()
+    && pyramid->texture != nullptr) {
+    recorder.RequireResourceState(
+      *pyramid->texture, graphics::ResourceStates::kShaderResource);
+  }
+  Impl::BeginHistoryAccess(recorder, inputs.history);
+  recorder.FlushBarriers();
+  impl_->Dispatch(
+    recorder, Kernel::kPhase2, *constants, GroupCount(phase1.draw_count));
+  Impl::EndHistoryAccess(recorder, inputs.history);
+
+  recorder.RequireResourceState(
+    buffer, graphics::ResourceStates::kShaderResource);
+  auto products = phase1;
+  products.phase2 = true;
+  return products;
 }
 
 } // namespace oxygen::vortex::occlusion::internal

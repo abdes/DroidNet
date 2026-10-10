@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <ranges>
 #include <span>
 #include <vector>
 
@@ -13,7 +14,6 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassMeshProcessor.h>
-#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/OcclusionStats.h>
 #include <Oxygen/Vortex/Types/AcceptedDrawView.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
@@ -30,7 +30,8 @@ namespace {
     auto geometry_lod_index = data::LodIndex {};
 
     if (draw_index < prepared_scene.render_items.size()) {
-      const auto& render_item = prepared_scene.render_items[draw_index];
+      const auto& render_item
+        = prepared_scene.render_items.subspan(draw_index).front();
       if (render_item.material_handle.IsValid()) {
         material_handle = render_item.material_handle.get();
       }
@@ -54,24 +55,11 @@ namespace {
     });
   }
 
-  auto IsOcclusionVisible(const OcclusionFrameResults* occlusion_results,
-    const std::uint32_t draw_index) noexcept -> bool
-  {
-    return occlusion_results == nullptr
-      || occlusion_results->IsDrawVisible(draw_index);
-  }
-
   auto AppendRenderItemCommand(std::vector<BasePassDrawCommand>& draw_commands,
-    const PreparedSceneFrame& prepared_scene, const std::uint32_t draw_index,
-    const bool write_velocity, const OcclusionFrameResults* occlusion_results,
-    std::uint32_t& occlusion_culled_draw_count) -> void
+    const sceneprep::RenderItemData& render_item,
+    const std::uint32_t draw_index, const bool write_velocity) -> void
   {
-    const auto& render_item = prepared_scene.render_items[draw_index];
     if (!render_item.main_view_visible) {
-      return;
-    }
-    if (!IsOcclusionVisible(occlusion_results, draw_index)) {
-      ++occlusion_culled_draw_count;
       return;
     }
 
@@ -119,11 +107,10 @@ BasePassMeshProcessor::~BasePassMeshProcessor() = default;
 
 void BasePassMeshProcessor::BuildDrawCommands(
   const PreparedSceneFrame& prepared_scene, const ShadingMode mode,
-  const bool write_velocity, const OcclusionFrameResults* occlusion_results)
+  const bool write_velocity)
 {
   (void)renderer_;
   draw_commands_.clear();
-  occlusion_culled_draw_count_ = 0U;
 
   if (mode != ShadingMode::kDeferred && mode != ShadingMode::kForward) {
     return;
@@ -137,10 +124,6 @@ void BasePassMeshProcessor::BuildDrawCommands(
     };
     for (const auto [metadata, draw_index] :
       AcceptedDrawView(prepared_scene, accept_mask)) {
-      if (!IsOcclusionVisible(occlusion_results, draw_index)) {
-        ++occlusion_culled_draw_count_;
-        continue;
-      }
       AppendMetadataCommand(
         draw_commands_, prepared_scene, *metadata, draw_index, write_velocity);
     }
@@ -148,10 +131,10 @@ void BasePassMeshProcessor::BuildDrawCommands(
     return;
   }
 
-  for (std::uint32_t draw_index = 0U;
-    draw_index < prepared_scene.render_items.size(); ++draw_index) {
-    AppendRenderItemCommand(draw_commands_, prepared_scene, draw_index,
-      write_velocity, occlusion_results, occlusion_culled_draw_count_);
+  for (const auto& [draw_index, render_item] :
+    std::views::enumerate(prepared_scene.render_items)) {
+    AppendRenderItemCommand(draw_commands_, render_item,
+      static_cast<std::uint32_t>(draw_index), write_velocity);
   }
 
   SortDrawCommands(draw_commands_);
@@ -161,12 +144,6 @@ auto BasePassMeshProcessor::GetDrawCommands() const
   -> std::span<const BasePassDrawCommand>
 {
   return draw_commands_;
-}
-
-auto BasePassMeshProcessor::GetOcclusionCulledDrawCount() const noexcept
-  -> std::uint32_t
-{
-  return occlusion_culled_draw_count_;
 }
 
 } // namespace oxygen::vortex

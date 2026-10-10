@@ -180,7 +180,6 @@ auto MakeBoxRecord(const glm::vec3& min, const glm::vec3& max,
 {
   return oxygen::vortex::DrawCullRecord {
     .box_center = 0.5F * (min + max),
-    .history_slot = oxygen::vortex::kNoHistorySlot,
     .box_extent = 0.5F * (max - min),
     .flags = flags,
   };

@@ -44,6 +44,8 @@ public:
     std::uint32_t width { 0U };
     std::uint32_t height { 0U };
     std::uint32_t mip_count { 0U };
+    //! The depth rect it reduces; its depth pointer is not retained.
+    HzbPyramidBuilder::Source source {};
   };
 
   OXGN_VRTX_API explicit ScreenHzbModule(
@@ -57,6 +59,10 @@ public:
 
   OXGN_VRTX_API void Execute(RenderContext& ctx,
     graphics::CommandRecorder& recorder, SceneTextures& scene_textures);
+  //! The current view's rect of `scene_depth`: its viewport, else all of it.
+  [[nodiscard]] OXGN_VRTX_API static auto ResolveViewDepthSource(
+    const RenderContext& ctx, const graphics::Texture& scene_depth)
+    -> HzbPyramidBuilder::Source;
   //! Records the occlusion pyramid of the current view of `ctx` from `source`.
   /*!
    The pyramid lives in the view's state, outside the HZB history, and is

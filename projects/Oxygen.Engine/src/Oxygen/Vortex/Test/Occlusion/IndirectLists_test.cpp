@@ -7,12 +7,9 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <limits>
-#include <memory>
 #include <ranges>
 #include <span>
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -23,33 +20,23 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
-#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/ReadbackManager.h>
-#include <Oxygen/Graphics/Common/ResourceRegistry.h>
-#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/DrawCullPass.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/IndirectListBuilder.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/DrawVisibility.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
+#include <Oxygen/Vortex/Test/Occlusion/OcclusionGpuTest.h>
 #include <Oxygen/Vortex/Types/DrawCullRecord.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
 
 namespace {
 
-using oxygen::ShaderVisibleIndex;
 using oxygen::graphics::Buffer;
 using oxygen::graphics::CommandRecorder;
-using oxygen::graphics::ResourceStates;
 using oxygen::vortex::DrawCullFlagBits;
 using oxygen::vortex::DrawCullRecord;
 using oxygen::vortex::DrawMetadata;
@@ -132,110 +119,8 @@ auto ExpectedSegmentCommands(
 }
 
 class IndirectListsGpuTest
-  : public oxygen::vortex::testing::exposure::ExposureGpuTest {
+  : public oxygen::vortex::testing::occlusion::OcclusionGpuTest {
 protected:
-  //! Starts a new frame, so each build gets fresh transient uploads.
-  auto NextFrame() -> void
-  {
-    ctx_.frame_sequence = oxygen::frame::SequenceNumber { ++sequence_ };
-  }
-
-  //! A device-local structured buffer holding `values`, with an SRV.
-  template <typename T>
-  auto MakeDeviceBuffer(
-    const std::span<const T> values, const std::string& name)
-    -> std::pair<std::shared_ptr<Buffer>, ShaderVisibleIndex>
-  {
-    const auto size = values.size_bytes();
-    auto buffer = CreateRegisteredBuffer({
-      .size_bytes = size,
-      .usage = oxygen::graphics::BufferUsage::kStorage,
-      .memory = oxygen::graphics::BufferMemory::kDeviceLocal,
-      .debug_name = name,
-    });
-    auto staging = CreateRegisteredBuffer({
-      .size_bytes = size,
-      .usage = oxygen::graphics::BufferUsage::kNone,
-      .memory = oxygen::graphics::BufferMemory::kUpload,
-      .debug_name = name + ".Staging",
-    });
-    CHECK_F(buffer != nullptr && staging != nullptr);
-    staging->Update(values.data(), size, 0U);
-    {
-      auto recorder = AcquireRecorder(name + " upload");
-      recorder->BeginTrackingResourceState(
-        *buffer, ResourceStates::kCommon, true);
-      recorder->BeginTrackingResourceState(
-        *staging, ResourceStates::kGenericRead, false);
-      recorder->RequireResourceState(*buffer, ResourceStates::kCopyDest);
-      recorder->FlushBarriers();
-      recorder->CopyBuffer(*buffer, 0U, *staging, 0U, size);
-      recorder->RequireResourceStateFinal(
-        *buffer, ResourceStates::kShaderResource);
-    }
-    WaitForQueueIdle();
-    return { buffer, RegisterSrv(*buffer, sizeof(T)) };
-  }
-
-  //! An upload-heap structured buffer holding `values`, with an SRV.
-  template <typename T>
-  auto MakeUploadBuffer(
-    const std::span<const T> values, const std::string& name)
-    -> std::pair<std::shared_ptr<Buffer>, ShaderVisibleIndex>
-  {
-    auto buffer = CreateRegisteredBuffer({
-      .size_bytes = values.size_bytes(),
-      .usage = oxygen::graphics::BufferUsage::kNone,
-      .memory = oxygen::graphics::BufferMemory::kUpload,
-      .debug_name = name,
-    });
-    CHECK_F(buffer != nullptr);
-    buffer->Update(values.data(), values.size_bytes(), 0U);
-    return { buffer, RegisterSrv(*buffer, sizeof(T)) };
-  }
-
-  auto RegisterSrv(const Buffer& buffer, const std::size_t stride)
-    -> ShaderVisibleIndex
-  {
-    auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
-    auto handle = allocator.AllocateBindless(
-      oxygen::bindless::generated::kGlobalSrvDomain,
-      oxygen::graphics::ResourceViewType::kStructuredBuffer_SRV);
-    CHECK_F(handle.IsValid());
-    const auto index = allocator.GetShaderVisibleIndex(handle);
-    Backend().GetResourceRegistry().RegisterView(buffer, std::move(handle),
-      oxygen::graphics::BufferViewDescription {
-        .view_type = oxygen::graphics::ResourceViewType::kStructuredBuffer_SRV,
-        .range = { 0U, buffer.GetSize() },
-        .stride = static_cast<std::uint32_t>(stride),
-      });
-    return index;
-  }
-
-  //! Reads `count` words of a buffer the last recorder left in a known state.
-  auto ReadUints(const Buffer& buffer, const std::uint64_t offset_bytes,
-    const std::size_t count) -> std::vector<std::uint32_t>
-  {
-    auto readback
-      = GetReadbackManager()->CreateBufferReadback("Indirect list readback");
-    CHECK_F(readback != nullptr);
-    {
-      auto recorder = AcquireRecorder("Indirect list readback");
-      CHECK_F(recorder->AdoptKnownResourceState(buffer));
-      CHECK_F(readback
-          ->EnqueueCopy(
-            *recorder, buffer, { offset_bytes, count * sizeof(std::uint32_t) })
-          .has_value());
-    }
-    const auto mapped = readback->MapNow();
-    CHECK_F(mapped.has_value());
-    auto words = std::vector<std::uint32_t>(count);
-    CHECK_F(mapped->Bytes().size() >= count * sizeof(std::uint32_t));
-    std::memcpy(
-      words.data(), mapped->Bytes().data(), count * sizeof(std::uint32_t));
-    return words;
-  }
-
   //! Builds a list on the GPU and waits for it.
   auto BuildList(IndirectListBuilder& builder,
     const std::span<const IndirectDrawCandidate> candidates,
@@ -291,8 +176,6 @@ protected:
     }
     EXPECT_EQ(covered, candidates.size());
   }
-
-  std::uint64_t sequence_ { 1000U };
 };
 
 //! With every draw kept, the GPU lists are the CPU draw sets in CPU order, for
@@ -393,7 +276,6 @@ protected:
     const auto max = glm::vec3 { Ndc(rect.y), -Ndc(rect.z), 0.6F };
     return DrawCullRecord {
       .box_center = (min + max) * 0.5F,
-      .history_slot = oxygen::vortex::kNoHistorySlot,
       .box_extent = (max - min) * 0.5F,
       .flags = flags,
     };
@@ -429,7 +311,7 @@ protected:
     NextFrame();
     const auto products = SubmitCommands(
       "Cull test", [&](CommandRecorder& recorder) -> DrawVisibilityProducts {
-        return pass.Run(recorder,
+        return pass.RunPhase1(recorder,
           DrawCullInputs {
             .frame_sequence = ctx_.frame_sequence,
             .frame_slot = ctx_.frame_slot,
@@ -437,7 +319,7 @@ protected:
             = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
                 &frame,
               },
-            .view_projection = view_projection,
+            .projection_matrix = view_projection,
             .viewport = {
               .top_left_x = 0.0F,
               .top_left_y = 0.0F,
@@ -493,8 +375,7 @@ NOLINT_TEST_F(DrawCullGpuTest, CullsBoxesThatCoverNoPixelCenter)
       .transform=0U, .expected=kDrawn, },
     Case { .name="behind the far plane",
       .record=DrawCullRecord { .box_center = { 0.0F, 0.0F, -0.5F },
-        .history_slot = oxygen::vortex::kNoHistorySlot,
-        .box_extent = { 0.2F, 0.2F, 0.1F },
+          .box_extent = { 0.2F, 0.2F, 0.1F },
         .flags = 0U, },
       .transform=0U, .expected=0U, },
     Case { .name="moved into view by its world matrix",
@@ -541,14 +422,12 @@ NOLINT_TEST_F(DrawCullGpuTest, BoxCrossingTheNearPlaneIsDrawn)
     // Straddles the camera, centered off to the side.
     DrawCullRecord {
       .box_center = { 0.5F, 0.0F, 0.0F },
-      .history_slot = oxygen::vortex::kNoHistorySlot,
       .box_extent = { 0.2F, 0.2F, 1.0F },
       .flags = 0U,
     },
     // Fully behind the camera.
     DrawCullRecord {
       .box_center = { 0.0F, 0.0F, 5.0F },
-      .history_slot = oxygen::vortex::kNoHistorySlot,
       .box_extent = { 0.2F, 0.2F, 1.0F },
       .flags = 0U,
     },

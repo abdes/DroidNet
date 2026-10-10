@@ -96,7 +96,6 @@
 #include <Oxygen/Vortex/IndirectLighting/IndirectLightingService.h>
 #include <Oxygen/Vortex/Internal/PerViewScope.h>
 #include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
-#include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Passes/GroundGridPass.h>
@@ -470,25 +469,29 @@ namespace {
     return "bindless:" + std::to_string(slot);
   }
 
-  auto OcclusionStatsDescriptor(const OcclusionStats& stats) -> std::string
+  //! The latest counters read back for a view, or "pending" before the first.
+  auto OcclusionStatsDescriptor(const std::optional<OcclusionStats>& stats)
+    -> std::string
   {
-    return "draws=" + std::to_string(stats.draw_count)
-      + " candidates=" + std::to_string(stats.candidate_count)
-      + " submitted=" + std::to_string(stats.submitted_count)
-      + " visible=" + std::to_string(stats.visible_count)
-      + " occluded=" + std::to_string(stats.occluded_count)
-      + " overflow_visible=" + std::to_string(stats.overflow_visible_count)
-      + " fallback=" + std::string { to_string(stats.fallback_reason) }
-    + " hzb=" + (stats.current_furthest_hzb_available ? "1" : "0")
-      + " prev=" + (stats.previous_results_valid ? "1" : "0")
-      + " valid=" + (stats.results_valid ? "1" : "0");
+    if (!stats.has_value()) {
+      return "pending";
+    }
+    const auto& counters = stats->counters;
+    return "frame=" + std::to_string(stats->frame_sequence.get())
+      + " occlusion=" + (stats->occlusion_enabled ? "1" : "0")
+      + " draws=" + std::to_string(counters.draw_count)
+      + " in_frustum=" + std::to_string(counters.in_frustum_count)
+      + " coverage_culled=" + std::to_string(counters.coverage_culled_count)
+      + " history_slots=" + std::to_string(counters.history_slot_count)
+      + " phase1=" + std::to_string(counters.phase1_drawn_count)
+      + " phase2=" + std::to_string(counters.phase2_drawn_count) + " occluded="
+      + std::to_string(counters.occluded_count) + " translucent_culled="
+      + std::to_string(counters.translucent_culled_count);
   }
 
-  auto BasePassDrawDescriptor(const std::uint32_t draw_count,
-    const std::uint32_t occlusion_culled_draw_count) -> std::string
+  auto BasePassDrawDescriptor(const std::uint32_t draw_count) -> std::string
   {
-    return "draws=" + std::to_string(draw_count)
-      + " occlusion_culled=" + std::to_string(occlusion_culled_draw_count);
+    return "draws=" + std::to_string(draw_count);
   }
 
   auto TranslucencySkipReasonName(const TranslucencySkipReason reason)
@@ -1376,8 +1379,6 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)
     && renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
     occlusion_ = std::make_unique<OcclusionModule>(renderer_);
-    draw_cull_ = std::make_unique<occlusion::internal::DrawCullPass>(
-      renderer_, "Vortex.Stage3.DrawCull");
   }
   if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)
     && renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
@@ -1982,28 +1983,51 @@ auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
   }
 }
 
-auto SceneRenderer::CullCurrentViewDraws(RenderContext& ctx,
-  graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
-  -> void
+auto SceneRenderer::RenderDepthPrepass(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, SceneTextures& scene_textures,
+  const bool wants_depth_prepass) -> void
 {
+  const auto prepass = depth_prepass_ != nullptr && wants_depth_prepass
+    && ctx.current_view.depth_prepass_mode != DepthPrePassMode::kDisabled;
+  graphics::GpuEventScope stage_scope(recorder, "Vortex.Stage3.DepthPrepass",
+    profiling::ProfileGranularity::kTelemetry,
+    profiling::ProfileCategory::kPass);
   ctx.current_view.draw_visibility = {};
-  if (draw_cull_ == nullptr || ctx.current_view.prepared_frame == nullptr
-    || ctx.current_view.resolved_view == nullptr) {
+  if (occlusion_ != nullptr) {
+    // Phase 2 tests against phase 1 depth, so occlusion needs the prepass.
+    occlusion_->SetConfig(OcclusionConfig {
+      .enabled = prepass && renderer_.GetOcclusionEnabled(),
+    });
+    occlusion_->BuildPhase1(ctx, recorder, scene_textures);
+  }
+  if (!prepass) {
+    ctx.current_view.depth_prepass_completeness
+      = DepthPrePassCompleteness::kDisabled;
+    ctx.current_view.scene_depth_product_valid = false;
     return;
   }
-  const auto& view = *ctx.current_view.resolved_view;
-  const auto extent = scene_textures.GetExtent();
-  const auto clamped = internal::ResolveClampedViewportState(
-    view.Viewport(), view.Scissor(), extent.x, extent.y);
-  ctx.current_view.draw_visibility = draw_cull_->Run(recorder,
-    occlusion::internal::DrawCullInputs {
-      .frame_sequence = ctx.frame_sequence,
-      .frame_slot = ctx.frame_slot,
-      .prepared_frame = ctx.current_view.prepared_frame,
-      .view_projection = view.ProjectionMatrix() * view.ViewMatrix(),
-      .viewport = clamped.viewport,
-      .scissors = clamped.scissors,
-    });
+
+  depth_prepass_->SetConfig(DepthPrepassConfig {
+    .mode = ctx.current_view.depth_prepass_mode,
+    .write_velocity = scene_textures.GetVelocity() != nullptr,
+  });
+  depth_prepass_->ExecutePhase1(ctx, recorder, scene_textures);
+  if (occlusion_ != nullptr && occlusion_->NeedsPhase2(ctx)) {
+    // Without phase 1 depth there is nothing to test against; phase 2 then
+    // keeps every draw in the frustum.
+    auto pyramid = std::optional<ScreenHzbModule::OcclusionPyramid> {};
+    if (screen_hzb_ != nullptr && depth_prepass_->HasPendingPhase2()) {
+      pyramid = screen_hzb_->BuildOcclusionPyramid(ctx, recorder,
+        ScreenHzbModule::ResolveViewDepthSource(
+          ctx, scene_textures.GetSceneDepth()));
+    }
+    occlusion_->BuildPhase2(ctx, recorder, pyramid);
+  }
+  depth_prepass_->ExecutePhase2(ctx, recorder, scene_textures);
+  ctx.current_view.depth_prepass_completeness
+    = depth_prepass_->GetCompleteness();
+  ctx.current_view.scene_depth_product_valid
+    = depth_prepass_->HasValidDepthProduct();
 }
 
 auto SceneRenderer::RenderCurrentView(
@@ -2173,23 +2197,29 @@ auto SceneRenderer::RenderCurrentView(
       published_view_frame_bindings_.lighting_frame_slot);
   }
 
-  CullCurrentViewDraws(ctx, recorder, scene_textures);
-
-  // Stage 3: Depth prepass + early velocity
-  if (depth_prepass_ != nullptr && wants_depth_prepass) {
-    depth_prepass_->SetConfig(DepthPrepassConfig {
-      .mode = ctx.current_view.depth_prepass_mode,
-      .write_velocity = scene_textures.GetVelocity() != nullptr,
-    });
-    depth_prepass_->Execute(ctx, recorder, scene_textures);
-    ctx.current_view.depth_prepass_completeness
-      = depth_prepass_->GetCompleteness();
-    ctx.current_view.scene_depth_product_valid
-      = depth_prepass_->HasValidDepthProduct();
-  } else {
-    ctx.current_view.depth_prepass_completeness
-      = DepthPrePassCompleteness::kDisabled;
-    ctx.current_view.scene_depth_product_valid = false;
+  // Stage 3: Occlusion phases + depth prepass + early velocity
+  RenderDepthPrepass(ctx, recorder, scene_textures, wants_depth_prepass);
+  if (occlusion_ != nullptr) {
+    const auto stats = occlusion_->GetStats(ctx.current_view.view_id);
+    RecordDiagnosticsPass(renderer_,
+      DiagnosticsPassRecord {
+        .name = "Vortex.Stage3.Occlusion",
+        .kind = DiagnosticsPassKind::kCompute,
+        .executed = ctx.current_view.draw_visibility.IsValid(),
+        .inputs = { "Vortex.PreparedSceneFrame" },
+        .outputs = { "Vortex.OcclusionFrameResults" },
+        .missing_inputs = {},
+        .gpu_duration_ms = {},
+      });
+    RecordDiagnosticsProduct(renderer_,
+      DiagnosticsProductRecord {
+        .name = "Vortex.OcclusionFrameResults",
+        .producer_pass = "Vortex.Stage3.Occlusion",
+        .resource_name = {},
+        .descriptor = OcclusionStatsDescriptor(stats),
+        .published = stats.has_value(),
+        .valid = ctx.current_view.draw_visibility.IsValid(),
+      });
   }
   RecordDiagnosticsPass(renderer_,
     DiagnosticsPassRecord {
@@ -2238,7 +2268,6 @@ auto SceneRenderer::RenderCurrentView(
   ctx.current_view.screen_hzb_mip_count = 0U;
   ctx.current_view.screen_hzb_available = false;
   ctx.current_view.screen_hzb_has_previous = false;
-  ctx.current_view.occlusion_results.reset(nullptr);
   if (screen_hzb_ != nullptr && ctx.current_view.CanBuildScreenHzb()) {
     screen_hzb_->Execute(ctx, recorder, scene_textures);
     const auto& screen_hzb_output = screen_hzb_->GetCurrentOutput();
@@ -2297,34 +2326,6 @@ auto SceneRenderer::RenderCurrentView(
   RecordDiagnosticsViewProduct(renderer_, "Vortex.ScreenHzb",
     "Vortex.Stage5.ScreenHzbBuild",
     published_view_frame_bindings_.screen_hzb_frame_slot);
-
-  if (occlusion_ != nullptr && wants_scene_lighting) {
-    occlusion_->SetConfig(OcclusionConfig {
-      .enabled = renderer_.GetOcclusionEnabled(),
-      .max_candidate_count = renderer_.GetOcclusionMaxCandidateCount(),
-    });
-    occlusion_->Execute(ctx, recorder, scene_textures);
-    const auto& occlusion_stats = occlusion_->GetStats();
-    RecordDiagnosticsPass(renderer_,
-      DiagnosticsPassRecord {
-        .name = "Vortex.Stage5.Occlusion",
-        .kind = DiagnosticsPassKind::kCpuOnly,
-        .executed = occlusion_stats.results_valid,
-        .inputs = { "PreparedSceneFrame", "Vortex.ScreenHzb" },
-        .outputs = { "Vortex.OcclusionFrameResults" },
-        .missing_inputs = {},
-        .gpu_duration_ms = {},
-      });
-    RecordDiagnosticsProduct(renderer_,
-      DiagnosticsProductRecord {
-        .name = "Vortex.OcclusionFrameResults",
-        .producer_pass = "Vortex.Stage5.Occlusion",
-        .resource_name = {},
-        .descriptor = OcclusionStatsDescriptor(occlusion_stats),
-        .published = ctx.current_view.occlusion_results.get() != nullptr,
-        .valid = occlusion_stats.results_valid,
-      });
-  }
 
   // Stage 6: Forward light data / light grid
 
@@ -2453,7 +2454,6 @@ auto SceneRenderer::RenderCurrentView(
   auto base_pass_published = false;
   auto base_pass_wrote_scene_color = false;
   auto base_pass_draw_count = std::uint32_t { 0U };
-  auto base_pass_occlusion_culled_draw_count = std::uint32_t { 0U };
   if (base_pass_ != nullptr && wants_scene_lighting) {
     base_pass_->SetConfig(BasePassConfig {
       .write_velocity = scene_textures.GetVelocity() != nullptr,
@@ -2466,8 +2466,6 @@ auto SceneRenderer::RenderCurrentView(
     base_pass_published = base_pass_result.published_base_pass_products;
     base_pass_wrote_scene_color = base_pass_result.wrote_scene_color;
     base_pass_draw_count = base_pass_result.draw_count;
-    base_pass_occlusion_culled_draw_count
-      = base_pass_result.occlusion_culled_draw_count;
     if (base_pass_result.wrote_scene_color && !wireframe_only) {
       ctx.current_view.scene_depth_product_valid = true;
     }
@@ -2499,7 +2497,7 @@ auto SceneRenderer::RenderCurrentView(
       .name = "Vortex.Stage9.BasePass",
       .kind = DiagnosticsPassKind::kGraphics,
       .executed = base_pass_wrote_scene_color,
-      .inputs = ctx.current_view.occlusion_results.get() != nullptr
+      .inputs = ctx.current_view.draw_visibility.IsValid()
         ? std::initializer_list<std::string> { "Vortex.PreparedSceneFrame",
             "Vortex.OcclusionFrameResults", }
         : std::initializer_list<std::string> { "Vortex.PreparedSceneFrame" },
@@ -2513,8 +2511,7 @@ auto SceneRenderer::RenderCurrentView(
         .name = "Vortex.BasePassDrawCommands",
         .producer_pass = "Vortex.Stage9.BasePass",
         .resource_name = {},
-        .descriptor = BasePassDrawDescriptor(
-          base_pass_draw_count, base_pass_occlusion_culled_draw_count),
+        .descriptor = BasePassDrawDescriptor(base_pass_draw_count),
         .published = true,
         .valid = true,
       });
