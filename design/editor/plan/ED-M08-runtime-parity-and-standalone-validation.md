@@ -2,7 +2,7 @@
 
 Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2 and M08.3–M08.9
 validated; rescoped on 2026-10-08; M08.10 added on 2026-10-09, M08.10a–d
-delivered on 2026-10-09 and M08.10e next**
+delivered on 2026-10-09, M08.10e on 2026-10-10 and M08.10f next**
 
 Current: **M08.10 Engine capability parity in the editor**. The
 [rescope](#retired-by-the-rescope) retires the development-only parity harness
@@ -1263,7 +1263,9 @@ stands behind them. This slice removes those lock-outs.
    `Renderer::SetGroundGridConfig`: enabled, spacing, major lines every N,
    line, major and axis thickness, fade start and power, horizon boost,
    origin, smooth motion and its time, and the minor, major, axis and origin
-   colors. The pane-level grid toggle stays.
+   colors. The pane-level grid toggle stays. They are an application-scoped
+   setting restored with the preview preferences, with a reset to the engine
+   defaults ([settings LLD](../lld/settings-architecture.md#54-ground-grid-preferences)).
 5. **Eye adaptation in editor panes.** Auto exposure in the runtime adapts
    gradually: when the view moves from a dark area to a bright one, the
    exposure eases toward the new level at the authored speeds (EV per second
@@ -1316,8 +1318,9 @@ Implementation, in build order:
 | M08.10a   | Delivered on 2026-10-09: exclusions grounded in engine facts.                                                  |
 | M08.10b   | Delivered on 2026-10-09: height and volumetric fog; local fog volume component, viewport icon and composition. |
 | M08.10c–d | Validated on 2026-10-09 by owner review in the running editor: backdrop, Sky Sphere, Sky Light, calibration.   |
-| M08.10e   | Next: ground grid settings.                                                                                    |
-| M08.10f–i | Open.                                                                                                          |
+| M08.10e   | Delivered on 2026-10-10: per-user ground grid settings in the Settings flyout, applied to every pane.          |
+| M08.10f   | Next: per-pane view state and exposure-adaptation settling.                                                    |
+| M08.10g–i | Open.                                                                                                          |
 
 Checks: each authored capability survives save, reopen and cook, and the
 cooked project renders it in RenderScene as in the editor; the grid
