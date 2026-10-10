@@ -916,6 +916,12 @@ auto DeferredLightPass::Record(RenderContext& ctx,
 
   recorder.RequireResourceState(
     scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
+  // Every light shader samples SceneDepth, and local lights also depth-test
+  // against it through a read-only depth attachment.
+  const auto scene_depth_read_state = graphics::ResourceStates::kDepthRead
+    | graphics::ResourceStates::kShaderResource;
+  recorder.RequireResourceState(
+    scene_textures.GetSceneDepth(), scene_depth_read_state);
 
   // Counting sort avoids temporary allocations and repeated PSO switches for
   // interleaved point/spot lists. Constants keep the original draw index, so
@@ -954,7 +960,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       "draws");
     if (bound_framebuffer != local_framebuffer_.get()) {
       recorder.RequireResourceState(
-        scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
+        scene_textures.GetSceneDepth(), scene_depth_read_state);
     }
     bind_framebuffer(*local_framebuffer_);
     bind_pipeline(draw);
