@@ -48,6 +48,13 @@ projects/Oxygen.Engine/Examples/LightBench/Test/Data/auto-full-scene.json -text 
 # Other
 *.exe filter=lfs diff=lfs merge=lfs -text
 
+# Cooker test models: binary assets and large ASCII models. Small ASCII
+# FBX/glTF fixtures stay plain text; a new ASCII model over 1 MB gets its own
+# line here.
+projects/Oxygen.Engine/src/Oxygen/Cooker/Tools/ImportTool/Testing/Models/*.hdr filter=lfs diff=lfs merge=lfs -text
+projects/Oxygen.Engine/src/Oxygen/Cooker/Tools/ImportTool/Testing/Models/dino-a.fbx filter=lfs diff=lfs merge=lfs -text
+projects/Oxygen.Engine/src/Oxygen/Cooker/**/Models/*.glb filter=lfs diff=lfs merge=lfs -text
+
 # Verify
 *.verified.cs text eol=lf working-tree-encoding=UTF-8
 *.verified.txt text eol=lf working-tree-encoding=UTF-8
