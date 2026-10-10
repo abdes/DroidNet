@@ -2,7 +2,7 @@
 
 **Phase:** 5C - Remaining Services
 **Deliverable:** D.16
-**Status:** `planned`
+**Status:** `validated`
 
 ## Summary
 
@@ -553,7 +553,7 @@ Documents updated with the implementation:
 
 - VX-OCC-01 (shadow reuse of camera visibility) is resolved by §6.4: no reuse.
 - VX-OCC-02 (AABB candidates) is resolved by §2.1.
-- VX-OCC-04 tracks this implementation.
+- [VX-OCC-04](../milestones/VX-OCC-04/README.md) delivered this design.
 - VX-OCC-05 and VX-OCC-06 track §10.
 - VX-CULL-01 (CPU per-submesh culling stability) is unaffected.
 

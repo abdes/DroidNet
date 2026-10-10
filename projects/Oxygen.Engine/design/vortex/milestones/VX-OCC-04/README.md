@@ -1,11 +1,11 @@
 # VX-OCC-04 — Two-phase GPU occlusion
 
-Status: `in_progress`
+Status: `validated`
 
 | Field     | Summary                                                                                                                  |
 | --------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Outcome   | S1-S5 validated. Design approved 2026-10-10.                                                                             |
-| Remaining | S1–S7 below; tracked as [VX-OCC-04](../../OPEN_ITEMS.md#p2--engineering-follow-ups).                                     |
+| Outcome   | Two-phase GPU occlusion for camera and shadow views, enabled by default.                                                 |
+| Remaining | None in the recorded scope.                                                                                              |
 | Evidence  | Per-slice evidence in the [slice table](#slices); gates in [occlusion.md §8](../../lld/occlusion.md#8-validation-gates). |
 
 The designs own every algorithm, format and gate:
@@ -86,7 +86,7 @@ If a build reports a missing `impl-*.ninja`, reconfigure the tree with
 | S4  | GPU indirect lists for camera passes, occlusion off          | S3      | `validated` | see git log |
 | S5  | Camera two-phase occlusion; old tester removed               | S2, S4  | `validated` | see git log |
 | S6  | Shadow-view lists and two-phase occlusion                    | S5      | `validated` | see git log |
-| S7  | Default on, capture gate, closeout                           | S6      | `planned`   |             |
+| S7  | Default on, capture gate, closeout                           | S6      | `validated` | see git log |
 
 S1 and S2 are independent; either may go first.
 
@@ -375,10 +375,10 @@ Design: [occlusion.md §6.4](../../lld/occlusion.md#64-shadow-views).
 - [x] **Gates.** [occlusion.md §8](../../lld/occlusion.md#8-validation-gates)
       gate 6 (chunked mesh) and gate 9 (capture: fewer base-pass and shadow draws,
       image identical to occlusion off).
-- [ ] **Status.**
+- [x] **Status.**
   - [occlusion.md](../../lld/occlusion.md) status and §6.1 reflect the
     delivered default.
   - The VX-OCC-04 row leaves [OPEN_ITEMS](../../OPEN_ITEMS.md).
   - This README becomes `validated`.
   - Regenerate STATUS with `CheckDocumentation.py --write-status`.
-- [ ] **Owner.** Editor acceptance with occlusion on.
+- [x] **Owner.** Editor acceptance with occlusion on.
