@@ -41,6 +41,14 @@ public interface ISceneEngineSync
     /// <returns>The loaded scene, or null if it is still loading or has closed.</returns>
     public Scene? GetDocumentScene(SceneDocumentMetadata metadata);
 
+    /// <summary>Gets a value indicating whether a scene's current snapshot is already synchronized into the engine.</summary>
+    /// <param name="scene">The registered authoring scene.</param>
+    /// <returns>
+    ///     <see langword="true"/> when <see cref="SceneSynchronized"/> was already raised for the scene's current
+    ///     projection, so a consumer created afterwards can act on it without waiting for another notification.
+    /// </returns>
+    public bool IsSceneSynchronized(Scene scene);
+
     /// <summary>Invalidates queued work and runtime delivery for one document instance.</summary>
     /// <param name="metadata">The closing document instance.</param>
     public void CloseDocument(SceneDocumentMetadata metadata);

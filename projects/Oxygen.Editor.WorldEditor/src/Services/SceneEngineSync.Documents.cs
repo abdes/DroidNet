@@ -78,6 +78,16 @@ public sealed partial class SceneEngineSync
     }
 
     /// <inheritdoc/>
+    public bool IsSceneSynchronized(Scene scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        lock (this.documentGate)
+        {
+            return this.IsSceneProjectionCurrent(scene) && ReferenceEquals(this.requestedScene, scene);
+        }
+    }
+
+    /// <inheritdoc/>
     public void CloseDocument(SceneDocumentMetadata metadata)
     {
         ArgumentNullException.ThrowIfNull(metadata);

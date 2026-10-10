@@ -115,11 +115,18 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.CurrentLayout = SceneViewLayout.OnePane;
 
         // Initially defer creating viewports/layout until the scene has been
-        // synchronized into the engine. SceneLoadedMessage will trigger the
-        // actual layout restoration. This avoids creating engine views before
-        // the scene exists (prevents "frame context has no scene").
+        // synchronized into the engine. SceneLoadedMessage, or the sync service's
+        // own notification for this document, triggers the actual layout
+        // restoration. This avoids creating engine views before the scene exists
+        // (prevents "frame context has no scene").
         this.RegisterMessages();
         this.RefreshCookInputRegistration();
+        sceneEngineSync.SceneSynchronized += this.OnSceneSynchronized;
+        if (this.scene is { } loaded && sceneEngineSync.IsSceneSynchronized(loaded))
+        {
+            // The scene finished synchronizing before this editor existed.
+            this.OnSceneReady(loaded);
+        }
     }
 
     /// <summary>
@@ -247,6 +254,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
                 SceneAuthoringGate.Retire(this.scene);
             }
 
+            this.sceneEngineSync.SceneSynchronized -= this.OnSceneSynchronized;
             this.sceneEngineSync.CloseDocument(this.Metadata);
             this.LogUnregisteringFromMessages(this.Metadata.DocumentId);
 
@@ -436,19 +444,39 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
         if (this.Metadata != null && msg.Scene.Id == this.Metadata.DocumentId)
         {
-            this.scene = msg.Scene;
-            this.sceneReady = false;
-            this.LogSceneLoadedReceived(this.CurrentLayout);
-
-            // Build the panes now that the scene is ready, as the user left them.
-            _ = this.RestoreViewportsAsync();
-            if (this.SelectionService is { } selection)
-            {
-                this.UpdateSelectionOutline(selection.GetContext(this.Metadata.DocumentId));
-            }
-
-            this.UpdateTransformGizmo();
+            this.OnSceneReady(msg.Scene);
         }
+    }
+
+    /// <summary>
+    ///     Builds the panes when the sync service reports this document's scene synchronized and no restoration
+    ///     is under way. The relayed <see cref="SceneLoadedMessage"/> is dropped while another document is active,
+    ///     for example while tabs change during a scene switch, which would leave this editor without panes.
+    /// </summary>
+    private void OnSceneSynchronized(object? sender, SceneSynchronizationCompletedEventArgs args)
+    {
+        _ = sender;
+        if (!this.isDisposed && ReferenceEquals(args.Metadata, this.Metadata) && !this.sceneReady
+            && !this.viewportRestorePending)
+        {
+            this.OnSceneReady(args.Scene);
+        }
+    }
+
+    private void OnSceneReady(Oxygen.Editor.World.Scene readyScene)
+    {
+        this.scene = readyScene;
+        this.sceneReady = false;
+        this.LogSceneLoadedReceived(this.CurrentLayout);
+
+        // Build the panes now that the scene is ready, as the user left them.
+        _ = this.RestoreViewportsAsync();
+        if (this.SelectionService is { } selection)
+        {
+            this.UpdateSelectionOutline(selection.GetContext(this.Metadata.DocumentId));
+        }
+
+        this.UpdateTransformGizmo();
     }
 
     private SceneDocumentCommandContext CreateCommandContext()

@@ -102,7 +102,7 @@ public sealed partial class SceneEditorConflictTests
     {
         private readonly Container container = new();
 
-        public Fixture(bool active, Oxygen.Editor.World.Workspace.PreviewSettingsService? previewSettings = null, Action? commitInput = null)
+        public Fixture(bool active, Oxygen.Editor.World.Workspace.PreviewSettingsService? previewSettings = null, Action? commitInput = null, bool synchronized = false)
         {
             this.container.RegisterInstance<IProjectManagerService>(Mock.Of<IProjectManagerService>());
             this.Scene = new Scene(Mock.Of<IProject>()) { Name = "Main" };
@@ -110,6 +110,7 @@ public sealed partial class SceneEditorConflictTests
             this.Metadata = new(this.Scene.Id) { IsDirty = true };
             this.Sync = new();
             _ = this.Sync.Setup(value => value.GetDocumentScene(this.Metadata)).Returns(this.Scene);
+            _ = this.Sync.Setup(value => value.IsSceneSynchronized(this.Scene)).Returns(synchronized);
             this.Commands = new();
             _ = this.Commands.Setup(value => value.CompleteEditSessionsAsync(It.IsAny<SceneDocumentCommandContext>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
             _ = this.Commands.Setup(value => value.SaveSceneAsync(It.IsAny<SceneDocumentCommandContext>())).ReturnsAsync(new SceneCommandResult(Succeeded: false) { IsConflict = true });

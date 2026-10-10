@@ -26,6 +26,7 @@ public partial class SceneEditorViewModel
 {
     private SceneCameraChoice? selectedCamera;
     private long viewportRestoreGeneration;
+    private bool viewportRestorePending;
 
     /// <summary>
     /// Gets the pane shown alone while maximized, or <see langword="null"/> when the layout shows
@@ -85,10 +86,23 @@ public partial class SceneEditorViewModel
     private async Task RestoreViewportsAsync()
     {
         var generation = ++this.viewportRestoreGeneration;
+        this.viewportRestorePending = true;
         this.selectedCamera = this.GetSelectedCamera();
-        var stored = this.Viewports.Count == 0 && this.ViewportStates is { } states && this.ActiveProject is { } project
-            ? await states.RestoreAsync(project, this.Metadata.DocumentId).ConfigureAwait(true)
-            : null;
+        SceneViewportState? stored;
+        try
+        {
+            stored = this.Viewports.Count == 0 && this.ViewportStates is { } states && this.ActiveProject is { } project
+                ? await states.RestoreAsync(project, this.Metadata.DocumentId).ConfigureAwait(true)
+                : null;
+        }
+        finally
+        {
+            if (generation == this.viewportRestoreGeneration)
+            {
+                this.viewportRestorePending = false;
+            }
+        }
+
         if (generation != this.viewportRestoreGeneration || this.isDisposed)
         {
             return;
