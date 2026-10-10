@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -14,6 +15,7 @@
 
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Types/ActiveMesh.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 #include <Oxygen/Scene/Types/Strong.h>
@@ -31,6 +33,7 @@ namespace oxygen::scene::detail {
 // provides a minimal compatibility path for legacy Mesh attachment.
 class RenderableComponent final : public Component {
   OXYGEN_COMPONENT(RenderableComponent)
+  OXYGEN_COMPONENT_REQUIRES(TransformComponent)
 
 public:
   using LodPolicy
@@ -141,6 +144,14 @@ public:
     return copy;
   }
 
+protected:
+  //! Takes the node's world transform when it is already resolved, so bounds
+  //! are right for geometry attached to a placed node. A dirty transform
+  //! reaches the renderable through the next scene update.
+  OXGN_SCN_API auto UpdateDependencies(
+    const std::function<Component&(TypeId)>& get_component) noexcept
+    -> void override;
+
 private:
   [[nodiscard]] auto ResolveEffectiveLod(std::size_t lod_count) const noexcept
     -> std::optional<std::size_t>;
@@ -149,13 +160,18 @@ private:
     Vec3 mesh_bbox_max { 0.0F, 0.0F, 0.0F };
     Vec4 mesh_sphere { 0.0F, 0.0F, 0.0F, 0.0F };
     std::vector<std::pair<Vec3, Vec3>> submesh_aabbs; // local
+    //! World AABB per submesh, computed on demand and reset when the world
+    //! transform or LOD changes. Sized with the local bounds, so reading it
+    //! never allocates.
+    mutable std::vector<std::optional<std::pair<Vec3, Vec3>>>
+      submesh_world_aabbs;
   };
 
-  void RebuildLocalBoundsCache() noexcept;
+  void RebuildLocalBoundsCache();
   void RecomputeWorldBoundingSphere() const noexcept;
   void InvalidateWorldAabbCache() const noexcept;
   void RebuildSubmeshStateCache(
-    const data::GeometryAsset* previous_geometry = nullptr) noexcept;
+    const data::GeometryAsset* previous_geometry = nullptr);
 
   // Preferred data
   std::shared_ptr<const data::GeometryAsset> geometry_asset_;
@@ -176,11 +192,6 @@ private:
   // World transform state and derived bounds
   Mat4 world_matrix_ { 1.0F };
   mutable Vec4 world_bounding_sphere_ { 0.0F, 0.0F, 0.0F, 0.0F };
-
-  // On-demand world AABB cache for current LOD (invalidated on transform/LOD)
-  mutable std::optional<std::size_t> aabb_cache_lod_;
-  mutable std::vector<std::optional<std::pair<Vec3, Vec3>>>
-    submesh_world_aabb_cache_;
 
   // Policy parameters live inside the variant
 

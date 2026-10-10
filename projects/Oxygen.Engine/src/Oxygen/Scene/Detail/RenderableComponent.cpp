@@ -5,8 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
+#include <functional>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -22,10 +24,12 @@
 #include <glm/gtc/matrix_access.hpp>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Span.h>
+#include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
+#include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Types/ActiveMesh.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 #include <Oxygen/Scene/Types/Strong.h>
@@ -54,7 +58,7 @@ void RenderableComponent::SetLodPolicy(FixedPolicy p)
     const auto lc = geometry_asset_->LodCount();
     p.index = (lc == 0) ? 0U : p.Clamp(lc);
   }
-  policy_ = std::move(p);
+  policy_ = p;
   current_lod_.reset();
   InvalidateWorldAabbCache();
   RecomputeWorldBoundingSphere();
@@ -132,7 +136,7 @@ auto RenderableComponent::GetActiveMesh() const noexcept
     return std::nullopt;
   }
 
-  return ActiveMesh { mesh_ptr, lod };
+  return ActiveMesh { .mesh = mesh_ptr, .lod = lod };
 }
 
 auto RenderableComponent::GetActiveLodIndex() const noexcept
@@ -185,7 +189,7 @@ void RenderableComponent::SetGeometry(
   InvalidateWorldAabbCache();
 }
 
-void RenderableComponent::RebuildLocalBoundsCache() noexcept
+void RenderableComponent::RebuildLocalBoundsCache()
 {
   lod_bounds_.clear();
   if (!geometry_asset_) {
@@ -211,11 +215,12 @@ void RenderableComponent::RebuildLocalBoundsCache() noexcept
     for (const auto& sm : submeshes) {
       lb.submesh_aabbs.emplace_back(sm.BoundingBoxMin(), sm.BoundingBoxMax());
     }
+    lb.submesh_world_aabbs.resize(submeshes.size());
   }
 }
 
 void RenderableComponent::RebuildSubmeshStateCache(
-  const data::GeometryAsset* previous_geometry) noexcept
+  const data::GeometryAsset* previous_geometry)
 {
   auto previous_materials = std::move(slot_materials_);
   slot_materials_.clear();
@@ -259,7 +264,7 @@ static inline auto MaxScaleFromMatrix(const glm::mat4& m) noexcept -> float
   const auto sx = glm::length(glm::vec3(glm::column(m, 0)));
   const auto sy = glm::length(glm::vec3(glm::column(m, 1)));
   const auto sz = glm::length(glm::vec3(glm::column(m, 2)));
-  return (std::max)((std::max)(sx, sy), sz);
+  return (std::max)({ sx, sy, sz });
 }
 
 static inline auto TransformPoint(
@@ -345,8 +350,9 @@ void RenderableComponent::RecomputeWorldBoundingSphere() const noexcept
 
 void RenderableComponent::InvalidateWorldAabbCache() const noexcept
 {
-  aabb_cache_lod_.reset();
-  submesh_world_aabb_cache_.clear();
+  for (const auto& lb : lod_bounds_) {
+    std::ranges::fill(lb.submesh_world_aabbs, std::nullopt);
+  }
 }
 
 auto RenderableComponent::GetWorldSubMeshBoundingBox(
@@ -363,48 +369,40 @@ auto RenderableComponent::GetWorldSubMeshBoundingBox(
   }
 
   const auto lod = active->lod;
-  if (!aabb_cache_lod_.has_value() || *aabb_cache_lod_ != lod) {
-    // Rebuild cache for this LOD
-    submesh_world_aabb_cache_.clear();
-    const auto count = lod_bounds_.size() > lod
-      ? lod_bounds_.at(lod).submesh_aabbs.size()
-      : 0U;
-    submesh_world_aabb_cache_.resize(count);
-    aabb_cache_lod_ = lod;
+  if (lod >= lod_bounds_.size()) {
+    return std::nullopt;
   }
-
-  if (submesh_index >= submesh_world_aabb_cache_.size()) {
+  const auto& lb
+    = *std::next(lod_bounds_.begin(), static_cast<std::ptrdiff_t>(lod));
+  if (submesh_index >= lb.submesh_aabbs.size()
+    || submesh_index >= lb.submesh_world_aabbs.size()) {
     return std::nullopt;
   }
 
-  auto& slot = submesh_world_aabb_cache_.at(submesh_index);
+  const auto offset = static_cast<std::ptrdiff_t>(submesh_index);
+  auto& slot = *std::next(lb.submesh_world_aabbs.begin(), offset);
   if (slot.has_value()) {
     return slot; // cached
   }
 
   // Compute world AABB by transforming 8 corners of local AABB
-  if (lod >= lod_bounds_.size()
-    || submesh_index >= lod_bounds_.at(lod).submesh_aabbs.size()) {
-    return std::nullopt;
-  }
-
-  const auto [bmin, bmax] = lod_bounds_.at(lod).submesh_aabbs.at(submesh_index);
-  const glm::vec3 corners[8] = {
-    { bmin.x, bmin.y, bmin.z },
-    { bmax.x, bmin.y, bmin.z },
-    { bmin.x, bmax.y, bmin.z },
-    { bmin.x, bmin.y, bmax.z },
-    { bmax.x, bmax.y, bmin.z },
-    { bmax.x, bmin.y, bmax.z },
-    { bmin.x, bmax.y, bmax.z },
-    { bmax.x, bmax.y, bmax.z },
+  const auto [bmin, bmax] = *std::next(lb.submesh_aabbs.begin(), offset);
+  const auto corners = std::array<glm::vec3, 8> {
+    glm::vec3 { bmin.x, bmin.y, bmin.z },
+    glm::vec3 { bmax.x, bmin.y, bmin.z },
+    glm::vec3 { bmin.x, bmax.y, bmin.z },
+    glm::vec3 { bmin.x, bmin.y, bmax.z },
+    glm::vec3 { bmax.x, bmax.y, bmin.z },
+    glm::vec3 { bmax.x, bmin.y, bmax.z },
+    glm::vec3 { bmin.x, bmax.y, bmax.z },
+    glm::vec3 { bmax.x, bmax.y, bmax.z },
   };
 
   glm::vec3 wmin { std::numeric_limits<float>::infinity() };
   glm::vec3 wmax { -std::numeric_limits<float>::infinity() };
 
-  for (const auto& c : corners) {
-    const auto wc = TransformPoint(world_matrix_, c);
+  for (const auto& corner : corners) {
+    const auto wc = TransformPoint(world_matrix_, corner);
     wmin = glm::min(wmin, wc);
     wmax = glm::max(wmax, wc);
   }
@@ -473,12 +471,12 @@ auto RenderableComponent::SetMaterialOverride(const data::MaterialSlotId slot,
   }
   const auto index
     = static_cast<std::size_t>(std::distance(slots.begin(), declaration));
-  slot_materials_.at(index) = material;
   for (const auto& binding : declaration->bindings) {
     submesh_state_.at(binding.lod_index)
       .at(binding.submesh_index)
       .override_material = material;
   }
+  slot_materials_.at(index) = std::move(material);
   return true;
 }
 
@@ -559,7 +557,9 @@ auto RenderableComponent::ResolveSubmeshMaterial(
     if (mesh_ptr) {
       const auto submeshes = mesh_ptr->SubMeshes();
       if (submesh_index < submeshes.size()) {
-        auto mat = oxygen::base::CheckedAt(submeshes, submesh_index).Material();
+        auto mat = std::next(
+          submeshes.begin(), static_cast<std::ptrdiff_t>(submesh_index))
+                     ->Material();
         if (mat) {
           had_asset = true;
           return mat;
@@ -637,14 +637,25 @@ void RenderableComponent::OnWorldTransformUpdated(const glm::mat4& world)
   InvalidateWorldAabbCache();
 }
 
+auto RenderableComponent::UpdateDependencies(
+  const std::function<Component&(TypeId)>& get_component) noexcept -> void
+{
+  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+  const auto& transform = static_cast<const TransformComponent&>(
+    get_component(TransformComponent::ClassTypeId()));
+  if (!transform.IsDirty()) {
+    OnWorldTransformUpdated(transform.GetWorldMatrix());
+  }
+}
+
 auto RenderableComponent::ResolveEffectiveLod(
   std::size_t lod_count) const noexcept -> std::optional<std::size_t>
 {
   if (lod_count == 0) {
     return std::nullopt;
   }
-  if (std::holds_alternative<FixedPolicy>(policy_)) {
-    return std::get<FixedPolicy>(policy_).Clamp(lod_count);
+  if (const auto* fixed = std::get_if<FixedPolicy>(&policy_)) {
+    return fixed->Clamp(lod_count);
   }
   if (!current_lod_.has_value()) {
     return std::nullopt;

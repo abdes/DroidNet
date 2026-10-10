@@ -279,9 +279,10 @@ NOLINT_TEST_F(MeshResolverTest, ScreenSpaceErrorPolicy_FarLowSSE_SelectsCoarse)
   };
   Node().GetRenderable().SetLodPolicy(sp);
 
-  // Far camera -> small sse -> coarser LOD
+  // Far camera -> small sse -> coarser LOD. The node is scaled by 3, so its
+  // world radius is 3 * sqrt(3): at 1000 units the SSE is about 2.6.
   const auto center = glm::vec3(glm::column(WorldMatrix(), 3));
-  ConfigureView(center + glm::vec3(100.0F, 0.0F, 0.0F), /*height*/ 1000.0F);
+  ConfigureView(center + glm::vec3(1000.0F, 0.0F, 0.0F), /*height*/ 1000.0F);
 
   // Act
   MeshResolver(Context(), State(), Proto());
