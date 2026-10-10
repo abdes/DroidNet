@@ -417,12 +417,14 @@ void ScreenHzbModule::RemoveViewState(const ViewId view_id)
 }
 
 auto ScreenHzbModule::ResolveViewDepthSource(const RenderContext& ctx,
-  const graphics::Texture& scene_depth) -> HzbPyramidBuilder::Source
+  const graphics::Texture& scene_depth) const -> HzbPyramidBuilder::Source
 {
   const auto scene_depth_width = scene_depth.GetDescriptor().width;
   const auto scene_depth_height = scene_depth.GetDescriptor().height;
   auto source = HzbPyramidBuilder::Source {
     .depth = observer_ptr { &scene_depth },
+    .depth_srv = internal::EnsureTextureView(*impl_->renderer.GetGraphics(),
+      scene_depth, internal::ArraySliceSrvDesc(scene_depth, 0U)),
     .width = scene_depth_width,
     .height = scene_depth_height,
   };
@@ -478,6 +480,7 @@ auto ScreenHzbModule::BuildOcclusionPyramid(RenderContext& ctx,
     .mip_count = desc.mip_levels,
     .source = HzbPyramidBuilder::Source {
       .depth = nullptr,
+      .depth_srv = source.depth_srv,
       .array_slice = source.array_slice,
       .origin_x = source.origin_x,
       .origin_y = source.origin_y,

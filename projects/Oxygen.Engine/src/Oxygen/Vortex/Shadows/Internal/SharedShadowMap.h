@@ -65,6 +65,8 @@ struct SharedShadowBacking final {
   graphics::RegistrationOwner registration;
   ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };
   std::vector<graphics::NativeView> dsvs;
+  //! Per-layer SRVs, which build the shadow view's occlusion pyramid.
+  std::vector<ShaderVisibleIndex> layer_srvs;
   std::vector<QueueUse> queues;
   std::optional<graphics::CompletionReceipt> latest_exclusive;
   uint32_t resolution { 0 };

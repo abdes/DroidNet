@@ -59,9 +59,10 @@ public:
 
   OXGN_VRTX_API void Execute(RenderContext& ctx,
     graphics::CommandRecorder& recorder, SceneTextures& scene_textures);
-  //! The current view's rect of `scene_depth`: its viewport, else all of it.
-  [[nodiscard]] OXGN_VRTX_API static auto ResolveViewDepthSource(
-    const RenderContext& ctx, const graphics::Texture& scene_depth)
+  //! The current view's rect of `scene_depth`, its viewport else all of it,
+  //! with the depth SRV.
+  [[nodiscard]] OXGN_VRTX_API auto ResolveViewDepthSource(
+    const RenderContext& ctx, const graphics::Texture& scene_depth) const
     -> HzbPyramidBuilder::Source;
   //! Records the occlusion pyramid of the current view of `ctx` from `source`.
   /*!

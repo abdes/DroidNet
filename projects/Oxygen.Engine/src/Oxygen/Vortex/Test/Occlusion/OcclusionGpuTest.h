@@ -25,8 +25,10 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Vortex/Internal/TextureViews.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 
 namespace oxygen::vortex::testing::occlusion {
@@ -38,6 +40,13 @@ protected:
   auto NextFrame() -> void
   {
     ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+  }
+
+  //! The SRV of mip 0 of `depth`, as an HZB build source.
+  auto DepthSrv(const graphics::Texture& depth) const -> ShaderVisibleIndex
+  {
+    return vortex::internal::EnsureTextureView(*renderer_->GetGraphics(), depth,
+      vortex::internal::ArraySliceSrvDesc(depth, 0U));
   }
 
   //! A device-local structured buffer holding `values`, with an SRV.

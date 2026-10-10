@@ -30,6 +30,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Internal/TextureViews.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/HzbPyramidBuilder.h>
@@ -164,11 +165,14 @@ protected:
       source.width, source.height, "HZB test pyramid"));
   }
 
-  static auto Rect(const Texture& texture, const SourceCase& source)
+  auto Rect(const Texture& texture, const SourceCase& source) const
     -> HzbPyramidBuilder::Source
   {
     return HzbPyramidBuilder::Source {
       .depth = oxygen::observer_ptr { &texture },
+      .depth_srv
+      = oxygen::vortex::internal::EnsureTextureView(*renderer_->GetGraphics(),
+        texture, oxygen::vortex::internal::ArraySliceSrvDesc(texture, 0U)),
       .origin_x = source.origin_x,
       .origin_y = source.origin_y,
       .width = source.width,

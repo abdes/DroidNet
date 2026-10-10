@@ -57,6 +57,7 @@
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
+#include <Oxygen/Vortex/Internal/TextureViews.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/HzbPyramidBuilder.h>
@@ -521,10 +522,18 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
         ? local_map->slot->backing->dsvs.at(slice.target_slice)
         : EnsureDepthStencilViewForCascade(
             *gfx, views->dsvs, *shadow_surface, slice.target_slice);
+      // A local map is a managed registration: its owner made the views.
+      const auto depth_srv = !occlusion ? kInvalidShaderVisibleIndex
+        : local_map
+        ? local_map->slot->backing->layer_srvs.at(slice.target_slice)
+        : vortex::internal::EnsureTextureView(*gfx, *shadow_surface,
+            vortex::internal::ArraySliceSrvDesc(
+              *shadow_surface, slice.target_slice));
       const auto target = SliceTarget {
         .surface
         = observer_ptr<const graphics::Texture> { shadow_surface.get() },
         .dsv = dsv,
+        .depth_srv = depth_srv,
         .pass_constants = pass_constants,
       };
 
@@ -665,6 +674,7 @@ auto ShadowDepthPass::RecordSliceDraws(graphics::CommandRecorder& recorder,
       recorder,
       HzbPyramidBuilder::Source {
         .depth = observer_ptr<const graphics::Texture> { &surface },
+        .depth_srv = target.depth_srv,
         .array_slice = slice.target_slice,
         .origin_x = 0U,
         .origin_y = 0U,

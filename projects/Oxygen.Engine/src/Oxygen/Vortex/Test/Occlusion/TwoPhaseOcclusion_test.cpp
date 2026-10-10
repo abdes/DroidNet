@@ -308,6 +308,7 @@ protected:
         const auto pyramid = hzb_->BuildOcclusionPyramid(ctx_, recorder,
           HzbPyramidBuilder::Source {
             .depth = oxygen::observer_ptr { &depth },
+            .depth_srv = DepthSrv(depth),
             .width = kExtent,
             .height = kExtent,
           });
@@ -369,6 +370,7 @@ protected:
           recorder,
           HzbPyramidBuilder::Source {
             .depth = oxygen::observer_ptr { &depth },
+            .depth_srv = DepthSrv(depth),
             .array_slice = 0U,
             .origin_x = 0U,
             .origin_y = 0U,

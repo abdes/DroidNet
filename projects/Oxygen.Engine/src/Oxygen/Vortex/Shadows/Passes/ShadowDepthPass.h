@@ -103,6 +103,8 @@ namespace shadows {
     struct SliceTarget {
       observer_ptr<const graphics::Texture> surface;
       graphics::NativeView dsv;
+      //! The slice's SRV for the occlusion pyramid; invalid without occlusion.
+      ShaderVisibleIndex depth_srv { kInvalidShaderVisibleIndex };
       ShaderVisibleIndex pass_constants { kInvalidShaderVisibleIndex };
     };
 

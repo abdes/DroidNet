@@ -13,6 +13,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Texture.h>
@@ -46,6 +47,10 @@ public:
   //! `depth`.
   struct Source {
     observer_ptr<const graphics::Texture> depth;
+    //! The owner's SRV of `array_slice`, mip 0, as a one-slice 2D array; see
+    //! `internal::ArraySliceSrvDesc`. The builder never registers views on
+    //! the source, which may be a managed registration.
+    ShaderVisibleIndex depth_srv { kInvalidShaderVisibleIndex };
     //! The slice of an array or cube texture; 0 for a plain 2D texture.
     std::uint32_t array_slice { 0U };
     std::uint32_t origin_x { 0U };

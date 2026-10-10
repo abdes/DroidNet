@@ -2033,7 +2033,7 @@ auto SceneRenderer::RenderDepthPrepass(RenderContext& ctx,
     auto pyramid = std::optional<ScreenHzbModule::OcclusionPyramid> {};
     if (screen_hzb_ != nullptr && depth_prepass_->HasPendingPhase2()) {
       pyramid = screen_hzb_->BuildOcclusionPyramid(ctx, recorder,
-        ScreenHzbModule::ResolveViewDepthSource(
+        screen_hzb_->ResolveViewDepthSource(
           ctx, scene_textures.GetSceneDepth()));
     }
     occlusion_->BuildPhase2(ctx, recorder, pyramid);

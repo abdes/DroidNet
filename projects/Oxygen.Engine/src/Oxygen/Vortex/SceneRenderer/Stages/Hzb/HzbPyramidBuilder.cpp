@@ -202,8 +202,7 @@ auto HzbPyramidBuilder::Build(const BuildFrame& frame,
   CHECK_LE_F(mip_count, kMaxMipCount, "HZB source rect is too large");
 
   auto constants = HzbBuildPassConstants {
-    .source_depth_srv = internal::EnsureTextureView(*gfx, *source.depth,
-      internal::ArraySliceSrvDesc(*source.depth, source.array_slice)),
+    .source_depth_srv = source.depth_srv,
     .source_origin_x = source.origin_x,
     .source_origin_y = source.origin_y,
     .source_width = source.width,
@@ -215,8 +214,7 @@ auto HzbPyramidBuilder::Build(const BuildFrame& frame,
   constants.closest_mip_uavs.fill(kInvalidShaderVisibleIndex);
   constants.furthest_mip_uavs.fill(kInvalidShaderVisibleIndex);
   if (!constants.source_depth_srv.IsValid()) {
-    LOG_F(
-      ERROR, "{}: failed to resolve the source depth SRV", impl_->debug_name);
+    LOG_F(ERROR, "{}: the source depth has no SRV", impl_->debug_name);
     return false;
   }
 

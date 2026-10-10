@@ -441,6 +441,7 @@ auto ConventionalShadowTargetAllocator::CreateLocalBacking(
   backing->cube = cube;
   backing->map_capacity = desc.array_size / faces;
   backing->dsvs.resize(desc.array_size);
+  backing->layer_srvs.resize(desc.array_size, kInvalidShaderVisibleIndex);
   backing->queues.reserve(4);
   observed_backings_.push_back(
     { .backing = backing, .texture = backing->texture });
@@ -458,6 +459,22 @@ auto ConventionalShadowTargetAllocator::EnsureSlotViews(
   const auto faces = slot.backing->cube ? 6U : 1U;
   for (uint32_t face = 0; face < faces; ++face) {
     const auto layer = (slot.offset * faces) + face;
+    if (!slot.backing->layer_srvs.at(layer).IsValid()) {
+      const auto srv = registry.AcquireManagedView<graphics::Texture>(*lease,
+        graphics::TextureViewDescription {
+          .view_type = graphics::ResourceViewType::kTexture_SRV,
+          .visibility = graphics::DescriptorVisibility::kShaderVisible,
+          .format = Format::kR32Float,
+          .dimension = TextureType::kTexture2DArray,
+          .sub_resources = { .base_mip_level = 0,
+            .num_mip_levels = 1,
+            .base_array_slice = layer,
+            .num_array_slices = 1, }, });
+      if (!srv) {
+        throw std::runtime_error("Local shadow layer SRV creation failed");
+      }
+      slot.backing->layer_srvs.at(layer) = srv->shader_visible_index;
+    }
     if (slot.backing->dsvs.at(layer)->IsValid()) {
       continue;
     }
