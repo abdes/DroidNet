@@ -1310,6 +1310,12 @@ namespace {
       && HasPublishedGBufferBindings(bindings);
   }
 
+  //! Logs why a scene view stops recording; the view is not rendered.
+  void LogViewRejection(const ViewId view_id, const std::string_view reason)
+  {
+    LOG_F(ERROR, "View {} not rendered: {}", view_id.get(), reason);
+  }
+
 } // namespace
 
 SceneRenderer::ExtractArtifact::ExtractArtifact() = default;
@@ -1690,6 +1696,7 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
             return input.valid && input.input.required
               && !auxiliary_products.contains(input.input.id);
           })) {
+      LogViewRejection(entry.view_id, "a required auxiliary input is missing");
       continue;
     }
     internal::PerViewScope view_scope { ctx, view_index };
@@ -1731,6 +1738,7 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
         gfx_.QueueKeyFor(graphics::QueueRole::kGraphics), "Vortex View",
         graphics::SubmissionPolicy::kExplicit);
       if (!recording) {
+        LogViewRejection(entry.view_id, "no command recorder");
         continue;
       }
       auto& recorder = *recording;
@@ -1743,6 +1751,8 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
         });
       if (!renderer_.PublishCurrentViewPreSceneFrameBindings(
             ctx, recorder, *this)) {
+        LogViewRejection(
+          entry.view_id, "pre-scene frame bindings were not published");
         continue;
       }
       renderer_.DispatchViewExtensionsOnPreRenderViewGpu(ctx, recorder);
@@ -1798,6 +1808,7 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
       renderer_.DispatchViewExtensionsOnPostRenderViewGpu(ctx, recorder);
       result.failure = ViewRenderFailure::kSubmission;
       if (!recording.Submit()) {
+        LogViewRejection(entry.view_id, "submission failed");
         ResetPerViewSceneProducts();
         continue;
       }
@@ -1941,6 +1952,7 @@ auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
       gfx_.QueueKeyFor(graphics::QueueRole::kGraphics), "Vortex View",
       graphics::SubmissionPolicy::kExplicit);
     if (!recording) {
+      LogViewRejection(ctx.current_view.view_id, "no command recorder");
       return false;
     }
     auto& recorder = *recording;
@@ -1954,6 +1966,8 @@ auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
     if (post_process_ && !ctx.current_view.frame_exposure
       && !renderer_.PublishCurrentViewPreSceneFrameBindings(
         ctx, recorder, *this)) {
+      LogViewRejection(ctx.current_view.view_id,
+        "pre-scene frame bindings were not published");
       return false;
     }
     if (!RenderCurrentView(ctx, recorder)) {
@@ -1962,6 +1976,7 @@ auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
     }
     result.failure = ViewRenderFailure::kSubmission;
     if (!recording.Submit()) {
+      LogViewRejection(ctx.current_view.view_id, "submission failed");
       ResetPerViewSceneProducts();
       return false;
     }
@@ -2171,6 +2186,8 @@ auto SceneRenderer::RenderCurrentView(
     const auto* lighting_bindings
       = lighting_->InspectForwardLightBindings(ctx.current_view.view_id);
     if (lighting_bindings == nullptr) {
+      LogViewRejection(
+        ctx.current_view.view_id, "forward light bindings are missing");
       return false;
     }
     published_view_frame_bindings_.lighting_view_generation
@@ -2367,6 +2384,9 @@ auto SceneRenderer::RenderCurrentView(
       if (const auto* failure
         = shadows_->InspectPreparationFailure(ctx.current_view.view_id)) {
         ReportLightingFailure(*failure, ctx.current_view.view_id);
+      } else {
+        LogViewRejection(
+          ctx.current_view.view_id, "shadow frame bindings are missing");
       }
       return false;
     }
@@ -2379,6 +2399,7 @@ auto SceneRenderer::RenderCurrentView(
       const auto* shadow_data
         = shadows_->InspectShadowData(ctx.current_view.view_id);
       if (shadow_data == nullptr) {
+        LogViewRejection(ctx.current_view.view_id, "shadow data is missing");
         return false;
       }
       const auto publication = lighting_->PublishShadowReferences(
@@ -2417,6 +2438,8 @@ auto SceneRenderer::RenderCurrentView(
   // This recording consumes lighting in base, deferred and translucent passes.
   if (lighting_ && ctx.current_view.lighting_frame_slot.IsValid()
     && !lighting_->AttachResources(ctx.current_view.view_id, recorder)) {
+    LogViewRejection(
+      ctx.current_view.view_id, "lighting resources could not be attached");
     return false;
   }
   if (reported_lighting_failures_.erase(ctx.current_view.view_id) != 0U) {
@@ -2550,6 +2573,7 @@ auto SceneRenderer::RenderCurrentView(
     : false;
   if (!rendered_debug_visualization && wants_scene_lighting
     && !RenderDeferredLighting(ctx, recorder, scene_textures)) {
+    LogViewRejection(ctx.current_view.view_id, "deferred lighting failed");
     return false;
   }
   const auto deferred_lighting_executed = rendered_debug_visualization
