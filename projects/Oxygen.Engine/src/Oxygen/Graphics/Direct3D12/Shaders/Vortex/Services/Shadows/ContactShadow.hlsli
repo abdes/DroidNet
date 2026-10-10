@@ -27,32 +27,16 @@ static float ContactLinearDepth(float device_depth, float4x4 projection)
         / (device_depth * projection[3][2] - projection[2][2]);
 }
 
-// Rasterized device depth is interpolated, not exact: allow 8 ULPs of 1.0.
-static const float kDeviceDepthError = 8.0f / 8388608.0f;
-
-// The linear depth a stored device depth can be off by. The error is absolute
-// in device depth, so in linear depth it grows with d(linear)/d(device), which
-// for a perspective projection is about depth^2 / near: tens of metres from a
-// near plane of a few centimetres it reaches centimetres.
-static float ContactDepthResolution(float device_depth, float4x4 projection)
-{
-    const float denominator =
-        device_depth * projection[3][2] - projection[2][2];
-    const float slope = (projection[2][3] * projection[3][2]
-        - projection[3][3] * projection[2][2]) / (denominator * denominator);
-    return abs(slope) * kDeviceDepthError;
-}
-
 // Marches 16 steps of a 0.25 m ray toward the light over the contact depth.
 // A sample hits when it has passed behind the stored surface by less than
 // twice the per-step advance, so occluders between samples are not skipped.
-// Point-sampled depth of the receiver's own neighbouring pixels differs from
-// the ray by up to half a pixel of depth slope. Reconstructed along the ray,
-// such a point lies within half a pixel times sin(view-normal angle) of the
-// receiver plane; samples that close to it are the receiver, not occluders.
-// Depth-buffer error moves both the stored point and the reconstructed receiver
-// along their eye rays; where the view looks along the normal the slope bound
-// vanishes and that error alone decides, so it widens the bound too.
+// Point-sampled depth of the receiver's own neighbouring pixels is the depth at
+// a pixel centre, up to half a pixel beside the sample's ray. Reconstructed at
+// that depth along the ray, such a point is displaced within the plane of
+// constant view depth, so it lies within half a pixel times the sine of the
+// angle between the normal and the view axis of the receiver plane; samples
+// that close to it are the receiver, not occluders. The eye ray's own angle
+// does not bound it: off-axis, a surface seen head-on can be steep to the axis.
 static float TraceContactShadow(VortexShadowFrameBindings bindings,
     float4x4 view, float4x4 projection, bool reversed_depth,
     float3 world_position, float3 geometric_normal, float3 direction_to_light)
@@ -78,8 +62,8 @@ static float TraceContactShadow(VortexShadowFrameBindings bindings,
     const bool perspective = projection[3][3] == 0.0f;
     const float pixel_scale =
         2.0f / (abs(projection[1][1]) * bindings.contact_content_extent_px.y);
-    const float3 view_ray = perspective ? normalize(surface) : float3(0.0f, 0.0f, -1.0f);
-    const float view_sine = sqrt(saturate(1.0f - dot(normal, view_ray) * dot(normal, view_ray)));
+    // Sine of the angle between the normal and the view axis.
+    const float axis_sine = sqrt(saturate(1.0f - normal.z * normal.z));
 
     [loop] for (uint i = 0u; i < kSteps; ++i) {
         const float distance = kStepLength * float(i + 1u);
@@ -99,16 +83,9 @@ static float TraceContactShadow(VortexShadowFrameBindings bindings,
         const float3 stored_point = perspective
             ? sample_position * (stored_depth / sample_depth)
             : float3(sample_position.xy, -stored_depth);
-        // Plane distance per unit of linear depth along the sample's eye ray.
-        const float3 sample_ray = perspective
-            ? normalize(sample_position) : float3(0.0f, 0.0f, -1.0f);
-        const float depth_to_plane =
-            abs(dot(normal, sample_ray)) / max(abs(sample_ray.z), 1.0e-4f);
-        // One pixel of margin over the half-pixel bound, and the depth error
-        // of both the stored sample and the receiver.
+        // One pixel of margin over the half-pixel bound.
         const float footprint = pixel_scale * (perspective ? stored_depth : 1.0f)
-            * view_sine + kSurfaceOffset
-            + 2.0f * ContactDepthResolution(stored, projection) * depth_to_plane;
+            * axis_sine + kSurfaceOffset;
         if (abs(dot(normal, stored_point - surface)) <= footprint) continue;
         const float2 edge_pixels = min(uv, 1.0f - uv)
             * bindings.contact_content_extent_px;

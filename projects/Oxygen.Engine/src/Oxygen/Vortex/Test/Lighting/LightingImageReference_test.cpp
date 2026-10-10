@@ -775,6 +775,80 @@ namespace {
     RecordProperty("contact_self_shadow_images", cases);
   }
 
+  //! Off the view axis, a receiver seen head-on is still steep to the axis:
+  //! its own point-sampled depth lies up to half a pixel times the sine of
+  //! the normal-to-axis angle off its plane, not the normal-to-eye-ray angle.
+  //! In a wide view, receivers well off-axis and facing the eye must not
+  //! contact-shadow themselves.
+  NOLINT_TEST_F(
+    GrazingDirectionalShadowTest, ContactShadowsSpareOffAxisReceivers)
+  {
+    auto lens = camera.GetCameraAs<scene::PerspectiveCamera>();
+    if (!lens.has_value()) {
+      FAIL() << "Expected a perspective camera";
+    }
+    lens->get().SetFieldOfView(glm::radians(130.0F));
+    unsigned cases = 0;
+    for (const float off_axis_deg : { 35.0F, 55.0F }) {
+      for (const float distance : { 2.0F, 10.0F }) {
+        for (const float grazing_deg : { 65.0F, 80.0F }) {
+          SCOPED_TRACE(off_axis_deg);
+          SCOPED_TRACE(distance);
+          SCOPED_TRACE(grazing_deg);
+          // The receiver plane (local z = -1, normal +Z) faces the camera
+          // along the eye ray `off_axis_deg` from the view axis (-Z).
+          const float off_axis = glm::radians(off_axis_deg);
+          const glm::vec3 eye { std::sin(off_axis), 0.0F, -std::cos(off_axis) };
+          const glm::vec3 normal = -eye;
+          const float scale = 0.3F * distance;
+          mesh_node.GetTransform().SetLocalScale(glm::vec3 { scale });
+          mesh_node.GetTransform().SetLocalRotation(
+            glm::angleAxis(-off_axis, glm::vec3 { 0.0F, 1.0F, 0.0F }));
+          mesh_node.GetTransform().SetLocalPosition(
+            (eye * distance) + (normal * scale));
+          const float grazing = glm::radians(grazing_deg);
+          const glm::vec3 to_source
+            = glm::normalize((normal * std::cos(grazing))
+              + (glm::vec3 { 0.0F, 1.0F, 0.0F } * std::sin(grazing)));
+          sun.GetTransform().SetLocalRotation(
+            glm::rotation(space::move::Forward, -to_source));
+
+          std::vector<exposure::Pixel> without_contact;
+          for (const bool contact : { false, true }) {
+            ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>(
+              [contact](auto& light) -> auto {
+                light.Common().casts_shadows = true;
+                light.Common().shadow.contact_shadows = contact;
+              }));
+            ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
+            auto pixels = ReadFloatTexture(*probe->color);
+            ASSERT_EQ(pixels.size(), std::size_t { kSize } * kSize);
+            if (!contact) {
+              without_contact = std::move(pixels);
+              continue;
+            }
+            unsigned covered = 0;
+            unsigned darkened = 0;
+            for (std::size_t i = 0; i < pixels.size(); ++i) {
+              const float reference = without_contact.at(i).at(0);
+              if (reference <= 1.0e-6F) {
+                continue;
+              }
+              ++covered;
+              darkened += pixels.at(i).at(0) < 0.98F * reference ? 1U : 0U;
+            }
+            ASSERT_GT(covered, kSize * kSize / 32U);
+            EXPECT_EQ(darkened, 0U)
+              << darkened << " of " << covered
+              << " receiver pixels contact-shadow themselves";
+          }
+          ++cases;
+        }
+      }
+    }
+    RecordProperty("contact_off_axis_images", cases);
+  }
+
   //! A thin gap is what contact shadows exist for: a blocker 1 cm above the
   //! receiver shadows it through the contact trace even with cascades unable
   //! to resolve the gap.
