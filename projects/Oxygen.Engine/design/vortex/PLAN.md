@@ -14,6 +14,8 @@ See [STATUS.md](STATUS.md) for progress and [OPEN_ITEMS.md](OPEN_ITEMS.md) for p
   remaining rendering parity and editor integration, reusing delivered captured-sky
   IBL; the editor plan owns its schedule, including the M08.F1 format cutover.
 - [VX-IBL-01 captured sky lighting](milestones/VX-IBL-01/README.md): atmosphere/height-fog diffuse and specular IBL, immediate authoring and budgeted runtime updates; [S7](milestones/VX-IBL-01/README.md#s7--reusable-infrastructure) promotes reusable infrastructure.
+- [VX-OCC-04 two-phase GPU occlusion](milestones/VX-OCC-04/README.md): same-frame
+  GPU culling for camera and shadow views through indirect lists.
 - [Material sidedness correction](milestones/material-sidedness/README.md).
 - [RenderScene preview sun](milestones/preview-sun/README.md).
 - [Future capabilities](milestones/VTX-FUTURE/README.md).
