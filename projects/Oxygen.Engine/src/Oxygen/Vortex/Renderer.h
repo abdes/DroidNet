@@ -793,6 +793,10 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto
   GetAerialPerspectiveLutSampleCountMaxPerSlice() const noexcept -> float;
   [[nodiscard]] OXGN_VRTX_API auto GetOcclusionEnabled() const noexcept -> bool;
+  //! Whether lights that request contact shadows get them
+  //! (`vtx.shadows.contact.enable`).
+  [[nodiscard]] OXGN_VRTX_API auto GetContactShadowsEnabled() const noexcept
+    -> bool;
   OXGN_VRTX_NDAPI auto GetStagingProvider() -> upload::StagingProvider&;
   OXGN_VRTX_NDAPI auto GetLightingStagingProvider() -> upload::StagingProvider&;
   [[nodiscard]] auto GetLightingAllocationBudget() const noexcept

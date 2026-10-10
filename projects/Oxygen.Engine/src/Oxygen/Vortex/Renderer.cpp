@@ -184,6 +184,8 @@ namespace {
   constexpr auto kCVarVortexAerialPerspectiveLutSampleCountMaxPerSlice
     = "vtx.sky_atmosphere.aerial_perspective_lut.sample_count_max_per_slice";
   constexpr auto kCVarVortexOcclusionEnabled = "vtx.occlusion.enable";
+  constexpr auto kCVarVortexContactShadowsEnabled
+    = "vtx.shadows.contact.enable";
 
   //! Default and accepted range of a numeric tuning variable. The console
   //! definition and the getter that clamps its value share one instance.
@@ -1405,6 +1407,15 @@ auto Renderer::RegisterConsoleBindings(
     .name = std::string(kCVarVortexOcclusionEnabled),
     .help = "Enable two-phase GPU occlusion culling",
     .default_value = false,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexContactShadowsEnabled),
+    .help = "Enable screen-space contact shadows for lights that request them",
+    .default_value = true,
     .flags = console::CVarFlags::kArchive,
     .min_value = std::nullopt,
     .max_value = std::nullopt,
@@ -3443,6 +3454,18 @@ auto Renderer::GetOcclusionEnabled() const noexcept -> bool
     }
   }
   return false;
+}
+
+auto Renderer::GetContactShadowsEnabled() const noexcept -> bool
+{
+  if (console_ != nullptr) {
+    bool value = true;
+    if (console_->TryGetCVarValue<bool>(
+          kCVarVortexContactShadowsEnabled, value)) {
+      return value;
+    }
+  }
+  return true;
 }
 
 auto Renderer::GetLightingStagingProvider() -> upload::StagingProvider&

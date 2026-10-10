@@ -27,6 +27,22 @@ static float ContactLinearDepth(float device_depth, float4x4 projection)
         / (device_depth * projection[3][2] - projection[2][2]);
 }
 
+// Rasterized device depth is interpolated, not exact: allow 8 ULPs of 1.0.
+static const float kDeviceDepthError = 8.0f / 8388608.0f;
+
+// The linear depth a stored device depth can be off by. The error is absolute
+// in device depth, so in linear depth it grows with d(linear)/d(device), which
+// for a perspective projection is about depth^2 / near: tens of metres from a
+// near plane of a few centimetres it reaches centimetres.
+static float ContactDepthResolution(float device_depth, float4x4 projection)
+{
+    const float denominator =
+        device_depth * projection[3][2] - projection[2][2];
+    const float slope = (projection[2][3] * projection[3][2]
+        - projection[3][3] * projection[2][2]) / (denominator * denominator);
+    return abs(slope) * kDeviceDepthError;
+}
+
 // Marches 16 steps of a 0.25 m ray toward the light over the contact depth.
 // A sample hits when it has passed behind the stored surface by less than
 // twice the per-step advance, so occluders between samples are not skipped.
@@ -34,6 +50,9 @@ static float ContactLinearDepth(float device_depth, float4x4 projection)
 // the ray by up to half a pixel of depth slope. Reconstructed along the ray,
 // such a point lies within half a pixel times sin(view-normal angle) of the
 // receiver plane; samples that close to it are the receiver, not occluders.
+// Depth-buffer error moves both the stored point and the reconstructed receiver
+// along their eye rays; where the view looks along the normal the slope bound
+// vanishes and that error alone decides, so it widens the bound too.
 static float TraceContactShadow(VortexShadowFrameBindings bindings,
     float4x4 view, float4x4 projection, bool reversed_depth,
     float3 world_position, float3 geometric_normal, float3 direction_to_light)
@@ -80,9 +99,16 @@ static float TraceContactShadow(VortexShadowFrameBindings bindings,
         const float3 stored_point = perspective
             ? sample_position * (stored_depth / sample_depth)
             : float3(sample_position.xy, -stored_depth);
-        // One pixel of margin over the half-pixel bound.
+        // Plane distance per unit of linear depth along the sample's eye ray.
+        const float3 sample_ray = perspective
+            ? normalize(sample_position) : float3(0.0f, 0.0f, -1.0f);
+        const float depth_to_plane =
+            abs(dot(normal, sample_ray)) / max(abs(sample_ray.z), 1.0e-4f);
+        // One pixel of margin over the half-pixel bound, and the depth error
+        // of both the stored sample and the receiver.
         const float footprint = pixel_scale * (perspective ? stored_depth : 1.0f)
-            * view_sine + kSurfaceOffset;
+            * view_sine + kSurfaceOffset
+            + 2.0f * ContactDepthResolution(stored, projection) * depth_to_plane;
         if (abs(dot(normal, stored_point - surface)) <= footprint) continue;
         const float2 edge_pixels = min(uv, 1.0f - uv)
             * bindings.contact_content_extent_px;

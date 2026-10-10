@@ -437,7 +437,8 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
         }
       }
       auto contact_surface = std::shared_ptr<graphics::Texture> {};
-      const bool needs_contact = inputs.frame_light_set != nullptr
+      const bool needs_contact = renderer_.GetContactShadowsEnabled()
+        && inputs.frame_light_set != nullptr
         && shadows::internal::NeedsContactShadows(
           *inputs.frame_light_set, view_input.resolved_view.get());
       if (needs_contact) {
