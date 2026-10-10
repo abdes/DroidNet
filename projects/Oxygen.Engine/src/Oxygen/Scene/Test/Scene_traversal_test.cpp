@@ -10,15 +10,14 @@
 #include <string>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
+#include "./Scene_traversal_test.h"
 
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneTraversal.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
-
-#include "./Scene_traversal_test.h"
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::scene::AcceptAllFilter;
 using oxygen::scene::ConstVisitedNode;
@@ -484,10 +483,32 @@ NOLINT_TEST_F(SceneTraversalBuiltinFilterTest, VisibleFilter)
   const auto result = GetTraversal().Traverse(
     CreateTrackingVisitor(), TraversalOrder::kPreOrder, VisibleFilter {});
 
-  // Assert: Only visible_root should be visited; invisible_node rejects
-  // subtree
-  ExpectTraversalResult(result, 1, 1, true);
+  // Assert: Only visible_root is visited. The filter judges each node on its
+  // own effective visibility, so the invisible node and its invisible child
+  // are both rejected.
+  ExpectTraversalResult(result, 1, 2, true);
   EXPECT_THAT(visit_order_, testing::ElementsAre("visible_root"));
+}
+
+//! Tests that an invisible parent does not hide an explicitly visible child
+//! from VisibleFilter.
+NOLINT_TEST_F(SceneTraversalBuiltinFilterTest,
+  VisibleFilterVisitsVisibleChildOfHiddenParent)
+{
+  // Arrange
+  const auto flags = SceneNode::Flags {}.SetFlag(
+    SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(true));
+  auto shown_child
+    = scene_->CreateChildNode(invisible_node_, "shown_child", flags);
+  ASSERT_TRUE(shown_child.has_value());
+
+  // Act
+  const auto result = GetTraversal().Traverse(
+    CreateTrackingVisitor(), TraversalOrder::kPreOrder, VisibleFilter {});
+
+  // Assert
+  ExpectTraversalResult(result, 2, 2, true);
+  ExpectContainsExactlyNodes({ "visible_root", "shown_child" });
 }
 
 //! Tests that only nodes with dirty transforms are visited when using
@@ -676,9 +697,9 @@ NOLINT_TEST_F(SceneTraversalComplexTest, CombinedFilterAndVisitorControl)
   const auto result = GetTraversal().Traverse(CreateSubtreeSkippingVisitor("A"),
     TraversalOrder::kPreOrder, VisibleFilter {});
 
-  // Assert: Should visit root, A (but skip its subtree), B, F
-  // C and its subtree should be filtered out by VisibleFilter
-  ExpectTraversalResult(result, 4, 1, true);
+  // Assert: Should visit root, A (but skip its subtree), B, F. C and its
+  // descendants inherit invisibility, so VisibleFilter rejects all five.
+  ExpectTraversalResult(result, 4, 5, true);
   ExpectContainsExactlyNodes({ "root", "A", "B", "F" });
 }
 
