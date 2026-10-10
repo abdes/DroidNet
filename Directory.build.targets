@@ -120,4 +120,26 @@
         </PropertyGroup>
     </Target>
 
+    <!--
+      Visual Studio's fast up-to-date check knows the files a project copies
+      from its direct references, not the ones ResolveAssemblyReference copies
+      from deeper ones, such as the C++/CLI Interop reached through
+      Oxygen.Editor.Runtime. A rebuilt Interop then leaves the editor app "up to
+      date" next to a stale copy. Declare every copy-local file built by this
+      repository as a copied output, so the check compares it with its source.
+    -->
+    <Target Name="DeclareRepositoryCopyLocalUpToDateItems"
+            BeforeTargets="CollectUpToDateCheckBuiltDesignTime"
+            DependsOnTargets="ResolveAssemblyReferences"
+            Condition="'$(MSBuildProjectExtension)' == '.csproj' and '$(UseArtifactsOutput)' == 'true'">
+        <PropertyGroup>
+            <_RepositoryArtifactsBin>$([MSBuild]::NormalizeDirectory($(ArtifactsPath), 'bin'))</_RepositoryArtifactsBin>
+        </PropertyGroup>
+        <ItemGroup>
+            <_RepositoryCopyLocal Include="@(ReferenceCopyLocalPaths)"
+                                  Condition="$([System.String]::new('%(FullPath)').StartsWith('$(_RepositoryArtifactsBin)', StringComparison.OrdinalIgnoreCase))" />
+            <UpToDateCheckBuilt Include="@(_RepositoryCopyLocal->'$(OutDir)%(DestinationSubDirectory)%(Filename)%(Extension)')"
+                                Original="%(_RepositoryCopyLocal.FullPath)" />
+        </ItemGroup>
+    </Target>
 </Project>
