@@ -78,15 +78,15 @@ If a build reports a missing `impl-*.ninja`, reconfigure the tree with
 
 ## Slices
 
-| ID  | Deliverable                                                  | Depends | State         | Commit      |
-| --- | ------------------------------------------------------------ | ------- | ------------- | ----------- |
-| S1  | Geometry v4: mesh-view bounds, cooker split, `MeshViewIndex` | —       | `validated`   | see git log |
-| S2  | Tiled HZB build and occlusion pyramid                        | —       | `validated`   | see git log |
-| S3  | Culling records, history keys and slot allocator             | S1      | `validated`   | see git log |
-| S4  | GPU indirect lists for camera passes, occlusion off          | S3      | `in_progress` |             |
-| S5  | Camera two-phase occlusion; old tester removed               | S2, S4  | `planned`     |             |
-| S6  | Shadow-view lists and two-phase occlusion                    | S5      | `planned`     |             |
-| S7  | Default on, capture gate, closeout                           | S6      | `planned`     |             |
+| ID  | Deliverable                                                  | Depends | State       | Commit      |
+| --- | ------------------------------------------------------------ | ------- | ----------- | ----------- |
+| S1  | Geometry v4: mesh-view bounds, cooker split, `MeshViewIndex` | —       | `validated` | see git log |
+| S2  | Tiled HZB build and occlusion pyramid                        | —       | `validated` | see git log |
+| S3  | Culling records, history keys and slot allocator             | S1      | `validated` | see git log |
+| S4  | GPU indirect lists for camera passes, occlusion off          | S3      | `validated` | see git log |
+| S5  | Camera two-phase occlusion; old tester removed               | S2, S4  | `planned`   |             |
+| S6  | Shadow-view lists and two-phase occlusion                    | S5      | `planned`   |             |
+| S7  | Default on, capture gate, closeout                           | S6      | `planned`   |             |
 
 S1 and S2 are independent; either may go first.
 
@@ -227,10 +227,11 @@ Design: [occlusion.md §3](../../lld/occlusion.md#3-indirect-lists), §4.1
       scan levels, scatter, count.
 - [x] **List builder.**
       `Vortex/SceneRenderer/Stages/Occlusion/Internal/IndirectListBuilder.{h,cpp}`:
-  - per pass and bucket: candidate upload, args and count buffers, and the
-    command signature (one root constant plus a draw)
-  - issue through `CommandRecorder::ExecuteIndirect` with push constants and
-    the count buffer
+  - per pass and run: candidate upload, args and count buffers; commands are
+    plain `D3D12_DRAW_ARGUMENTS` records with the draw index in
+    `StartInstanceLocation`
+  - issue through `CommandRecorder::ExecuteIndirect` with the plain draw
+    signature and the count buffer
 - [x] **Consumers move to lists, keeping their CPU sorts:**
   - `Stages/DepthPrepass/DepthPrepassModule.cpp` and `DepthPrepassMeshProcessor.cpp`
   - `Stages/BasePass/BasePassModule.cpp`: deferred, forward, radiance replay,
@@ -244,7 +245,7 @@ Design: [occlusion.md §3](../../lld/occlusion.md#3-indirect-lists), §4.1
   - two runs produce identical lists
   - translucent lists keep back-to-front order
   - a coverage-culled draw renders no pixels
-- [ ] **Verify.** `Oxygen.Vortex.Exposure.Tests` and
+- [x] **Verify.** `Oxygen.Vortex.Exposure.Tests` and
       `Oxygen.Vortex.LightingImageReference.Tests` pass unchanged, run one at a
       time; plus the CPU suites of the touched modules.
 - [x] Notes from implementation:
@@ -258,10 +259,15 @@ Design: [occlusion.md §3](../../lld/occlusion.md#3-indirect-lists), §4.1
     (`DrawCullGpuTest`), not by rasterizing the culled draw.
   - `ForwardMesh_VS.hlsl` ignores material WPO while the prepass applies it;
     forward-mode depth equality for WPO materials is a pre-existing gap.
+  - Mesh draws carry their draw index in `StartInstanceLocation`, read as
+    `SV_StartInstanceLocation`; shaders compile as Shader Model 6.8
+    ([ARCHITECTURE §10.3](../../ARCHITECTURE.md#103-oxygen-invariants-vortex-must-preserve)).
+    A command signature that sets a root constant hangs the Radeon RX 9070 XT
+    driver, and the plain draw signature is the standard D3D12 form anyway.
 - [x] **Docs.** [depth-prepass.md](../../lld/depth-prepass.md),
       [base-pass.md](../../lld/base-pass.md),
       [translucency.md](../../lld/translucency.md) switch to indirect lists.
-- [ ] **Owner.** Visual check of the editor before commit.
+- [x] **Owner.** Visual check of the editor before commit.
 
 ## S5 — Camera Two-Phase Occlusion
 
