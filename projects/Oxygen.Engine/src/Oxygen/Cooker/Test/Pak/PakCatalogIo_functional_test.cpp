@@ -7,6 +7,7 @@
 // Covers: Pak/PakCatalogIo.cpp
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 
@@ -14,6 +15,9 @@
 
 #include <Oxygen/Cooker/Pak/PakCatalogIo.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
+#include <Oxygen/Cooker/Test/Support/TestValues.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -50,9 +54,13 @@ auto MakeCatalog() -> data::PakCatalog
     },
   };
   catalog.deleted = { MakeAssetKey(0xC0U) };
-  catalog.bases = { { .source_key = MakeSourceKey(0x51U),
-    .content_version = 1U,
-    .catalog_digest = MakeDigest(0x61U) } };
+  catalog.bases = {
+    {
+      .source_key = MakeSourceKey(0x51U),
+      .content_version = 1U,
+      .catalog_digest = MakeDigest(0x61U),
+    },
+  };
   catalog.catalog_digest = catalog.ComputeDigest().value();
   return catalog;
 }
@@ -67,12 +75,12 @@ auto ExpectCatalogEqual(
   EXPECT_EQ(lhs.bases, rhs.bases);
   ASSERT_EQ(lhs.entries.size(), rhs.entries.size());
   for (size_t i = 0; i < lhs.entries.size(); ++i) {
-    EXPECT_EQ(lhs.entries[i].asset_key, rhs.entries[i].asset_key);
-    EXPECT_EQ(lhs.entries[i].asset_type, rhs.entries[i].asset_type);
+    EXPECT_EQ(lhs.entries.at(i).asset_key, rhs.entries.at(i).asset_key);
+    EXPECT_EQ(lhs.entries.at(i).asset_type, rhs.entries.at(i).asset_type);
     EXPECT_EQ(
-      lhs.entries[i].descriptor_digest, rhs.entries[i].descriptor_digest);
-    EXPECT_EQ(lhs.entries[i].transitive_resource_digest,
-      rhs.entries[i].transitive_resource_digest);
+      lhs.entries.at(i).descriptor_digest, rhs.entries.at(i).descriptor_digest);
+    EXPECT_EQ(lhs.entries.at(i).transitive_resource_digest,
+      rhs.entries.at(i).transitive_resource_digest);
   }
 }
 
@@ -83,10 +91,10 @@ NOLINT_TEST(PakCatalogIoTest, ReadAndWriteRoundTripCatalogFile)
 
   const auto catalog = MakeCatalog();
   const auto write_result = pak::PakCatalogIo::Write(path, catalog);
-  ASSERT_TRUE(write_result.has_value());
+  ASSERT_HAS_VALUE(write_result);
 
   const auto read_result = pak::PakCatalogIo::Read(path);
-  ASSERT_TRUE(read_result.has_value());
+  ASSERT_HAS_VALUE(read_result);
   ExpectCatalogEqual(read_result.value(),
     pak::PakCatalogIo::Parse(pak::PakCatalogIo::ToCanonicalJsonString(catalog))
       .value());

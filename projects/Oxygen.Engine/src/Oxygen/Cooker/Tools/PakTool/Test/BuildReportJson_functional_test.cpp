@@ -6,22 +6,30 @@
 
 // Covers: Tools/PakTool/BuildReportJson.cpp
 
-#include <array>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 
+#include "RequestSnapshot.h"
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
-#include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Cooker/Pak/PakBuildPhase.h>
+#include <Oxygen/Cooker/Pak/PakBuildReport.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
+#include <Oxygen/Cooker/Pak/PakBuildResult.h>
 #include <Oxygen/Cooker/Test/Support/FileIo.h>
 #include <Oxygen/Cooker/Test/Support/JsonSchema.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
 #include <Oxygen/Cooker/Tools/PakTool/BuildReportJson.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/PakCatalog.h>
+#include <Oxygen/Data/PatchManifest.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {

@@ -194,15 +194,21 @@ auto GeometryAsset(const GeometryFixture& fixture) -> AssetSpec
   }
   auto references = AssetReferences::Create(
     {
-      { .kind = oxygen::data::ResourceKind::kBuffer,
-        .index = oxygen::ResourceIndexT { 1U } },
-      { .kind = oxygen::data::ResourceKind::kBuffer,
-        .index = oxygen::ResourceIndexT { 2U } },
+      {
+        .kind = oxygen::data::ResourceKind::kBuffer,
+        .index = oxygen::ResourceIndexT { 1U },
+      },
+      {
+        .kind = oxygen::data::ResourceKind::kBuffer,
+        .index = oxygen::ResourceIndexT { 2U },
+      },
     },
     {
-      { .key = material,
+      {
+        .key = material,
         .kind = oxygen::data::KeyReferenceKind::kAsset,
-        .expected_type = oxygen::data::AssetType::kMaterial },
+        .expected_type = oxygen::data::AssetType::kMaterial,
+      },
     });
   return DescriptorAsset(kGeometryPath, oxygen::data::AssetType::kGeometry,
     "Geometry/Inspection.ogeo", std::move(bytes),
@@ -301,12 +307,16 @@ auto WriteOverrideScene(const std::filesystem::path& root,
   AppendRecord(bytes, environment);
   auto references = AssetReferences::Create({},
     {
-      { .key = renderable.geometry_key,
+      {
+        .key = renderable.geometry_key,
         .kind = oxygen::data::KeyReferenceKind::kAsset,
-        .expected_type = oxygen::data::AssetType::kGeometry },
-      { .key = assignment.material_key,
+        .expected_type = oxygen::data::AssetType::kGeometry,
+      },
+      {
+        .key = assignment.material_key,
         .kind = oxygen::data::KeyReferenceKind::kAsset,
-        .expected_type = oxygen::data::AssetType::kMaterial },
+        .expected_type = oxygen::data::AssetType::kMaterial,
+      },
     });
   const auto assets = std::array {
     GeometryAsset({}),

@@ -16,9 +16,9 @@
 #include <fstream>
 #include <ios>
 #include <iterator>
-#include <latch>
 #include <limits>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -36,18 +36,18 @@
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
+#include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/Import/Naming.h>
+#include <Oxygen/Cooker/Test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/Test/Support/ModelImportTestBase.h>
 #include <Oxygen/Cooker/Test/Support/TestPaths.h>
 #include <Oxygen/Cooker/Test/Support/TestValues.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
@@ -121,6 +121,7 @@ auto GeometryFor(const CookedImport& imported, const data::AssetKey& key)
 }
 
 using oxygen::cooker::test::ExpectVec3Near;
+using oxygen::cooker::test::SubmitAndWait;
 
 class MeshTransformBakeTest : public test::ModelImportTestBase {
 protected:
@@ -146,35 +147,27 @@ protected:
       .thread_pool_size = 2,
       .max_in_flight_jobs = 1,
     });
-    ImportReport report;
-    std::latch finished(1);
-    const auto job = service.SubmitImport(std::move(request),
-      [&](ImportJobId, const ImportReport& completed) -> void {
-        report = completed;
-        finished.count_down();
-      });
-    EXPECT_TRUE(job.has_value());
-    if (!job) {
+    const auto report = SubmitAndWait(service, std::move(request));
+    service.Stop();
+    if (!report.has_value()) {
       return result;
     }
-    finished.wait();
-    service.Stop();
-    if (report.success && !report.material_slot_provenance_json.empty()) {
+    if (report->success && !report->material_slot_provenance_json.empty()) {
       source_provenance_
-        = MaterialSlotProvenance::Parse(report.material_slot_provenance_json);
+        = MaterialSlotProvenance::Parse(report->material_slot_provenance_json);
     }
-    result.diagnostics = report.diagnostics;
-    EXPECT_TRUE(report.success);
-    if (!report.success) {
-      for (const auto& diagnostic : report.diagnostics) {
+    result.diagnostics = report->diagnostics;
+    EXPECT_TRUE(report->success);
+    if (!report->success) {
+      for (const auto& diagnostic : report->diagnostics) {
         ADD_FAILURE() << diagnostic.code << ": " << diagnostic.message;
       }
       return result;
     }
-    const auto scene = LoadSceneReadback(report);
+    const auto scene = LoadSceneReadback(*report);
     result.scene.nodes = scene.nodes;
     result.scene.renderables = scene.renderables;
-    const auto inspection = LoadInspection(report.cooked_root);
+    const auto inspection = LoadInspection(report->cooked_root);
     const auto read_bytes
       = [](const std::filesystem::path& path) -> std::vector<std::byte> {
       std::ifstream stream(path, std::ios::binary | std::ios::ate);
@@ -185,9 +178,9 @@ protected:
       return bytes;
     };
     const auto table = read_bytes(
-      report.cooked_root / LooseCookedLayout {}.BuffersTableRelPath());
+      report->cooked_root / LooseCookedLayout {}.BuffersTableRelPath());
     const auto buffers = read_bytes(
-      report.cooked_root / LooseCookedLayout {}.BuffersDataRelPath());
+      report->cooked_root / LooseCookedLayout {}.BuffersDataRelPath());
     const auto read_buffer =
       [&](const data::pak::core::ResourceIndexT index) -> CookedBufferPayload {
       data::pak::core::BufferResourceDesc descriptor;
@@ -206,23 +199,24 @@ protected:
       MeshBuildPipeline::CookedGeometryPayload geometry;
       geometry.geometry_key = asset.key;
       geometry.descriptor_bytes
-        = read_bytes(report.cooked_root / asset.descriptor_relpath);
+        = read_bytes(report->cooked_root / asset.descriptor_relpath);
       data::pak::geometry::MeshDesc descriptor;
       std::memcpy(&descriptor,
         geometry.descriptor_bytes.data()
           + sizeof(data::pak::geometry::GeometryAssetDesc),
         sizeof(descriptor));
       MeshBuildPipeline::CookedMeshPayload mesh;
-      const auto resolve_buffer
-        = [&](const data::ResourceReferenceIndex reference) {
-            const auto resolved = asset.references.ResolveResource(
-              reference, data::ResourceKind::kBuffer);
-            if (!resolved || !resolved->has_value()) {
-              throw std::runtime_error(
-                "Imported geometry has an invalid buffer reference");
-            }
-            return read_buffer(**resolved);
-          };
+      const auto resolve_buffer =
+        [&](
+          const data::ResourceReferenceIndex reference) -> CookedBufferPayload {
+        const auto resolved = asset.references.ResolveResource(
+          reference, data::ResourceKind::kBuffer);
+        if (!resolved || !resolved->has_value()) {
+          throw std::runtime_error(
+            "Imported geometry has an invalid buffer reference");
+        }
+        return read_buffer(**resolved);
+      };
       mesh.vertex_buffer
         = resolve_buffer(descriptor.info.standard.vertex_buffer);
       mesh.index_buffer = resolve_buffer(descriptor.info.standard.index_buffer);
@@ -419,15 +413,21 @@ NOLINT_TEST_F(MeshTransformBakeTest, GltfRetainsAnimatedAndMorphNodeTransforms)
           { "type", "VEC3" },
         });
       auto animation = nlohmann::json {
-        { "samplers",
+        {
+          "samplers",
           nlohmann::json::array({
             { { "input", 1 }, { "output", 2 } },
-          }) },
-        { "channels",
+          }),
+        },
+        {
+          "channels",
           nlohmann::json::array({
-            { { "sampler", 0 },
-              { "target", { { "node", 0 }, { "path", "translation" } } } },
-          }) },
+            {
+              { "sampler", 0 },
+              { "target", { { "node", 0 }, { "path", "translation" } } },
+            },
+          }),
+        },
       };
       document.update({
         { "animations", nlohmann::json::array({ std::move(animation) }) },

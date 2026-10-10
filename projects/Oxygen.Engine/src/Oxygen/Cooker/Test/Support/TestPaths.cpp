@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <filesystem>
 #include <stdexcept>
-#include <string>
+#include <string_view>
 
 #include <Oxygen/Cooker/Test/Support/TestPaths.h>
 

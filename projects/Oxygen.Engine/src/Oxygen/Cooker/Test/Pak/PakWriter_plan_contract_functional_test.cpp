@@ -19,6 +19,7 @@
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/Pak/PakWriter.h>
 #include <Oxygen/Cooker/Test/Support/FileIo.h>
+#include <Oxygen/Cooker/Test/Support/TestValues.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -109,16 +110,20 @@ NOLINT_TEST_P(
   auto plan_data = pak::PakPlan::Data {};
   auto diagnostic_code = std::string_view {};
   if (GetParam() == PayloadKind::kResource) {
-    plan_data = CanonicalPlan({ .content_version = kContentVersion,
+    plan_data = CanonicalPlan({
+      .content_version = kContentVersion,
       .texture_region_size = 4U,
       .tables_offset = 512U,
-      .footer_offset = 512U });
+      .footer_offset = 512U,
+    });
     plan_data.resources = { paktest::MakeTexturePlacement(256U, 4U) };
     diagnostic_code = "pak.write.resource_source_count_mismatch";
   } else {
-    plan_data = CanonicalPlan({ .content_version = kContentVersion,
+    plan_data = CanonicalPlan({
+      .content_version = kContentVersion,
       .directory_offset = 512U,
-      .footer_offset = 640U });
+      .footer_offset = 640U,
+    });
     paktest::AddGeometryAsset(
       plan_data, MakeAssetKey(0x2AU), 384U, kPayloadSize);
     diagnostic_code = "pak.write.asset_source_count_mismatch";
@@ -144,12 +149,14 @@ NOLINT_TEST_P(PakWriterPlanContractPayloadKindTest,
   auto plan_data = pak::PakPlan::Data {};
   auto diagnostic_code = std::string_view {};
   if (GetParam() == PayloadKind::kResource) {
-    plan_data = CanonicalPlan({ .content_version = kContentVersion,
+    plan_data = CanonicalPlan({
+      .content_version = kContentVersion,
       .texture_region_size = kPayloadSize,
       .tables_offset = 512U,
       .footer_offset = 896U,
       .texture_count = 1U,
-      .texture_table_size = sizeof(core::TextureResourceDesc) });
+      .texture_table_size = sizeof(core::TextureResourceDesc),
+    });
     plan_data.resources = { paktest::MakeTexturePlacement(256U, kPayloadSize) };
     plan_data.resource_payload_sources = {
       pak::PakPayloadSourceSlicePlan {
@@ -173,9 +180,11 @@ NOLINT_TEST_P(PakWriterPlanContractPayloadKindTest,
     };
     diagnostic_code = "pak.write.resource_store_failed";
   } else {
-    plan_data = CanonicalPlan({ .content_version = kContentVersion,
+    plan_data = CanonicalPlan({
+      .content_version = kContentVersion,
       .directory_offset = 768U,
-      .footer_offset = 1024U });
+      .footer_offset = 1024U,
+    });
     paktest::AddGeometryAsset(
       plan_data, MakeAssetKey(0x4CU), 512U, kPayloadSize);
     plan_data.asset_payload_sources = {

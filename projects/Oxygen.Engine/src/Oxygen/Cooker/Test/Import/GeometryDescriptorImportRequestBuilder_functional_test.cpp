@@ -75,10 +75,10 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
 
   const auto request = BuildGeometryDescriptorRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value())
+  ASSERT_HAS_VALUE(request)
     << "Expected request to contain a value" << errors.str();
   EXPECT_TRUE(errors.str().empty());
-  ASSERT_TRUE(request->cooked_root.has_value())
+  ASSERT_HAS_VALUE(request->cooked_root)
     << "Expected request->cooked_root to contain a value";
   EXPECT_TRUE(request->cooked_root->is_absolute());
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
@@ -86,7 +86,7 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
     request->job_name, std::optional<std::string> { "manifest-geometry" });
   EXPECT_EQ(request->options.with_content_hashing,
     EffectiveContentHashingEnabled(false));
-  ASSERT_TRUE(request->geometry_descriptor.has_value())
+  ASSERT_HAS_VALUE(request->geometry_descriptor)
     << "Expected request->geometry_descriptor to contain a value";
 
   const auto normalized

@@ -72,7 +72,8 @@ namespace {
     OXYGEN_MAKE_NON_COPYABLE(CancelNamingStrategy)
     OXYGEN_MAKE_NON_MOVABLE(CancelNamingStrategy)
 
-    auto Rename(std::string_view, const NamingContext&) const
+    [[nodiscard]] auto Rename(std::string_view /*authored_name*/,
+      const NamingContext& /*context*/) const
       -> std::optional<std::string> override
     {
       cancellation_.request_stop();

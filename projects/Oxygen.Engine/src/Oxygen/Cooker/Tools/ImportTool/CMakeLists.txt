@@ -112,7 +112,12 @@ target_link_libraries(
 )
 
 add_custom_target(${META_MODULE_NAME} DEPENDS ${META_MODULE_TARGET})
-arrange_target_files_for_ide(${META_MODULE_TARGET})
+arrange_target_files_for_ide(
+  oxygen-cooker-importtool-core
+  EXCLUDE_PATTERNS
+    "main\\.cpp"
+)
+arrange_target_files_for_ide(${META_MODULE_TARGET} EXCLUDE_PATTERNS ".*")
 set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES

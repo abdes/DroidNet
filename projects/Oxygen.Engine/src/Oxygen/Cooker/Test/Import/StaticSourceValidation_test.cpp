@@ -36,10 +36,16 @@ NOLINT_TEST(StaticSourceValidationTest, DisabledFbxCoreMapsAreNotSelected)
     ASSERT_NE(slot.primary, nullptr);
     ASSERT_NE(slot.fallback, nullptr);
   }
-  const auto primary_maps = std::array { &material.pbr.base_color,
-    &material.pbr.normal_map, &material.pbr.emission_color };
-  const auto fallback_maps = std::array { &material.fbx.diffuse_color,
-    &material.fbx.normal_map, &material.fbx.emission_color };
+  const auto primary_maps = std::array {
+    &material.pbr.base_color,
+    &material.pbr.normal_map,
+    &material.pbr.emission_color,
+  };
+  const auto fallback_maps = std::array {
+    &material.fbx.diffuse_color,
+    &material.fbx.normal_map,
+    &material.fbx.emission_color,
+  };
   const auto slots
     = std::array { mapped.base_color, mapped.normal, mapped.emissive };
   for (size_t index = 0; index < slots.size(); ++index) {
@@ -68,10 +74,10 @@ NOLINT_TEST(StaticSourceValidationTest, ActiveUnmappedFbxChannelsAreRejected)
   material.pbr.opacity.texture_enabled = true;
   auto* material_pointer = &material;
   auto source = ufbx_scene {};
-  source.materials = { &material_pointer, 1 };
+  source.materials = { .data = &material_pointer, .count = 1 };
   auto diagnostics = std::vector<ImportDiagnostic> {};
   EXPECT_FALSE(ValidateStaticSource(source, "opacity.fbx", diagnostics));
-  EXPECT_TRUE(std::ranges::any_of(diagnostics, [](const auto& issue) {
+  EXPECT_TRUE(std::ranges::any_of(diagnostics, [](const auto& issue) -> auto {
     return issue.code == "import.static.unsupported"
       && issue.object_path
       == "/Materials/0/pbr/" + std::to_string(UFBX_MATERIAL_PBR_OPACITY);
@@ -81,25 +87,25 @@ NOLINT_TEST(StaticSourceValidationTest, ActiveUnmappedFbxChannelsAreRejected)
 NOLINT_TEST(StaticSourceValidationTest, FbxInstanceMaterialMustUseEmittedUvSet)
 {
   auto texture = ufbx_texture {};
-  texture.uv_set = { "Second", 6 };
+  texture.uv_set = { .data = "Second", .length = 6 };
   auto material = ufbx_material {};
   material.pbr.base_color.texture = &texture;
   material.pbr.base_color.texture_enabled = true;
   auto* material_pointer = &material;
   auto uv_set = ufbx_uv_set {};
-  uv_set.name = { "First", 5 };
+  uv_set.name = { .data = "First", .length = 5 };
   auto mesh = ufbx_mesh {};
-  mesh.uv_sets = { &uv_set, 1 };
+  mesh.uv_sets = { .data = &uv_set, .count = 1 };
   auto node = ufbx_node {};
   node.mesh = &mesh;
-  node.materials = { &material_pointer, 1 };
+  node.materials = { .data = &material_pointer, .count = 1 };
   auto* node_pointer = &node;
   auto source = ufbx_scene {};
-  source.materials = { &material_pointer, 1 };
-  source.nodes = { &node_pointer, 1 };
+  source.materials = { .data = &material_pointer, .count = 1 };
+  source.nodes = { .data = &node_pointer, .count = 1 };
   auto diagnostics = std::vector<ImportDiagnostic> {};
   EXPECT_FALSE(ValidateStaticSource(source, "uv.fbx", diagnostics));
-  EXPECT_TRUE(std::ranges::any_of(diagnostics, [](const auto& issue) {
+  EXPECT_TRUE(std::ranges::any_of(diagnostics, [](const auto& issue) -> auto {
     return issue.object_path == "/Nodes/0" && issue.message.contains("Second");
   }));
 }
@@ -166,7 +172,7 @@ NOLINT_TEST(StaticSourceValidationTest, RejectsUnemittedTextureChannels)
 {
   auto texture = cgltf_texture {};
   auto material = cgltf_material {};
-  material.has_clearcoat = true;
+  material.has_clearcoat = 1;
   material.clearcoat.clearcoat_texture.texture = &texture;
   auto source = cgltf_data {};
   source.materials = &material;
@@ -182,7 +188,7 @@ NOLINT_TEST(StaticSourceValidationTest, RejectsConflictingTextureUvMappings)
 {
   auto texture = cgltf_texture {};
   auto material = cgltf_material {};
-  material.has_pbr_metallic_roughness = true;
+  material.has_pbr_metallic_roughness = 1;
   material.pbr_metallic_roughness.base_color_texture.texture = &texture;
   material.normal_texture.texture = &texture;
   material.normal_texture.texcoord = 1;

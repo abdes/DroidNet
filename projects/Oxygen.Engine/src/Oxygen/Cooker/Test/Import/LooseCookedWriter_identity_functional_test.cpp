@@ -15,10 +15,7 @@
 #include <Oxygen/Cooker/Test/Pak/PakTestSupport.h>
 #include <Oxygen/Cooker/Test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
-#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Testing/GTest.h>
 
 // NOLINTBEGIN(*-magic-numbers)

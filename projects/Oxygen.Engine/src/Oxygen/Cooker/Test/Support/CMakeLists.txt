@@ -20,6 +20,8 @@ add_library(
   "Diagnostics.h"
   "FileIo.cpp"
   "FileIo.h"
+  "ImportHarness.cpp"
+  "ImportHarness.h"
   "JsonSchema.cpp"
   "JsonSchema.h"
   "ModelImportTestBase.cpp"

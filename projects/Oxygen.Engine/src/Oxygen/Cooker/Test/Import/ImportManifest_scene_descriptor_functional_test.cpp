@@ -50,13 +50,13 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
     ]})");
   auto errors = std::ostringstream {};
   const auto manifest = ImportManifest::Load(path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value())
+  ASSERT_HAS_VALUE(manifest)
     << "Expected manifest to contain a value" << errors.str();
   const auto inherited = manifest->jobs.at(0).BuildRequest(errors);
   const auto overridden = manifest->jobs.at(1).BuildRequest(errors);
-  ASSERT_TRUE(inherited.has_value())
+  ASSERT_HAS_VALUE(inherited)
     << "Expected inherited to contain a value" << errors.str();
-  ASSERT_TRUE(overridden.has_value())
+  ASSERT_HAS_VALUE(overridden)
     << "Expected overridden to contain a value" << errors.str();
   ASSERT_EQ(inherited->cooked_context_roots.size(), 1U);
   EXPECT_EQ(inherited->cooked_context_roots.at(0), root / "Libraries/Low");
@@ -141,19 +141,19 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value())
+  ASSERT_HAS_VALUE(manifest)
     << "Expected manifest to contain a value" << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   auto request_errors = std::ostringstream {};
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value())
+  ASSERT_HAS_VALUE(request)
     << "Expected request to contain a value" << request_errors.str();
-  ASSERT_TRUE(request->cooked_root.has_value())
+  ASSERT_HAS_VALUE(request->cooked_root)
     << "Expected request->cooked_root to contain a value";
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name, std::optional<std::string> { "demo-scene-job" });
-  ASSERT_TRUE(request->scene_descriptor.has_value())
+  ASSERT_HAS_VALUE(request->scene_descriptor)
     << "Expected request->scene_descriptor to contain a value";
 
   EXPECT_EQ(request->options.with_content_hashing,
@@ -202,7 +202,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value())
+  ASSERT_HAS_VALUE(manifest)
     << "Expected manifest to contain a value" << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
   EXPECT_EQ(manifest->jobs.at(1).id, "scene.demo");
@@ -211,9 +211,9 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
 
   auto request_errors = std::ostringstream {};
   const auto request = manifest->jobs.at(1).BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value())
+  ASSERT_HAS_VALUE(request)
     << "Expected request to contain a value" << request_errors.str();
-  ASSERT_TRUE(request->orchestration.has_value())
+  ASSERT_HAS_VALUE(request->orchestration)
     << "Expected request->orchestration to contain a value";
   EXPECT_EQ(request->orchestration->job_id, "scene.demo");
   ASSERT_EQ(request->orchestration->depends_on.size(), 1U);

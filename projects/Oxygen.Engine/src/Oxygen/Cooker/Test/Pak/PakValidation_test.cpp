@@ -6,7 +6,6 @@
 
 // Covers: Pak/PakValidation.cpp, Pak/PakPlanPolicy.cpp
 
-#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <span>
@@ -18,11 +17,13 @@
 
 #include "PakTestSupport.h"
 
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
+#include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/Pak/PakPlanPolicy.h>
 #include <Oxygen/Cooker/Pak/PakValidation.h>
 #include <Oxygen/Cooker/Test/Support/Diagnostics.h>
-#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -71,8 +72,10 @@ protected:
   {
     auto request
       = paktest::MakeFullRequest(std::filesystem::path("domain_validation.pak"),
-        { .content_version = kContentVersion,
-          .source_key = paktest::MakeSourceKey(kSourceKeySeed) });
+        {
+          .content_version = kContentVersion,
+          .source_key = paktest::MakeSourceKey(kSourceKeySeed),
+        });
 
     const auto build_result = pak::PakPlanBuilder {}.Build(request);
     EXPECT_FALSE(paktest::HasError(build_result.diagnostics));
@@ -83,7 +86,7 @@ protected:
 
     return BaselinePlanInput {
       .request = std::move(request),
-      .plan = std::move(*build_result.plan),
+      .plan = *build_result.plan,
     };
   }
 };
@@ -105,12 +108,12 @@ NOLINT_TEST_F(PakDomainValidationTest, RejectsOverlappingSections)
   auto data = ClonePlanData(baseline.plan);
   ASSERT_GE(data.regions.size(), 2U);
 
-  data.regions[0].offset = kRegionBaseOffset;
-  data.regions[0].size_bytes = kRegionSize;
-  data.regions[0].alignment = 1U;
-  data.regions[1].offset = kOverlapOffset;
-  data.regions[1].size_bytes = kRegionSize;
-  data.regions[1].alignment = 1U;
+  data.regions.at(0).offset = kRegionBaseOffset;
+  data.regions.at(0).size_bytes = kRegionSize;
+  data.regions.at(0).alignment = 1U;
+  data.regions.at(1).offset = kOverlapOffset;
+  data.regions.at(1).size_bytes = kRegionSize;
+  data.regions.at(1).alignment = 1U;
 
   const auto policy = pak::DerivePakPlanPolicy(baseline.request);
   const auto result = pak::PakValidation::Validate(

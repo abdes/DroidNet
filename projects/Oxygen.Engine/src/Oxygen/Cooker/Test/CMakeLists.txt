@@ -74,11 +74,13 @@ oxygen_cooker_test(
     "Import/TexturePackingPolicy_test.cpp"
     "Import/TextureSourceAssembly_test.cpp"
 )
-# TODO(CT-3.8): replaced by the OBJECT library
+# Stateless internals are linked into the test only in shared builds, where
+# the cooker DLL does not export them. In static builds the static cooker
+# library already provides the symbols.
 target_sources(
   Oxygen.Cooker.Import.Unit.Tests
   PRIVATE
-    "../Import/Internal/MaterialSlotAllocation.cpp"
+    $<$<BOOL:${BUILD_SHARED_LIBS}>:$<TARGET_OBJECTS:oxygen-cooker-test-visible-internals>>
 )
 # The source-validation fixtures construct ufbx values passed into Cooker.
 # Match Cooker's private vendor ABI without exposing it to engine consumers.
@@ -127,6 +129,7 @@ oxygen_cooker_test(
     "Import/LooseCookedWriter_identity_functional_test.cpp"
     "Import/LooseCookedWriter_path_validation_functional_test.cpp"
     "Import/LooseCookedWriter_update_functional_test.cpp"
+    "Import/LooseCookedWriterTestSupport.h"
     "Import/MaterialDescriptorImportRequestBuilder_functional_test.cpp"
     "Import/MeshTransformBake_functional_test.cpp"
     "Import/ModelGeometrySource_functional_test.cpp"
@@ -144,11 +147,10 @@ oxygen_cooker_test(
     $<$<BOOL:${WIN32}>:Import/WindowsFileReader_functional_test.cpp>
     $<$<BOOL:${WIN32}>:Import/WindowsFileWriter_functional_test.cpp>
 )
-# TODO(CT-3.8): replaced by the OBJECT library
 target_sources(
   Oxygen.Cooker.Import.Functional.Tests
   PRIVATE
-    "../Import/Internal/ImportSourceSnapshot.cpp"
+    $<$<BOOL:${BUILD_SHARED_LIBS}>:$<TARGET_OBJECTS:oxygen-cooker-test-visible-internals>>
 )
 
 oxygen_cooker_test(
@@ -165,11 +167,13 @@ oxygen_cooker_test(
     "Import/Jobs/GeometryDescriptorImportJob_buffers_functional_test.cpp"
     "Import/Jobs/GeometryDescriptorImportJob_functional_test.cpp"
     "Import/Jobs/GeometryDescriptorImportJob_procedural_functional_test.cpp"
+    "Import/Jobs/GeometryDescriptorImportJobTestSupport.h"
     "Import/Jobs/MaterialDescriptorImportJob_functional_test.cpp"
     "Import/Jobs/PhysicsMaterialDescriptorImportJob_functional_test.cpp"
     "Import/Jobs/PhysicsSidecarImportJob_functional_test.cpp"
     "Import/Jobs/SceneDescriptorImportJob_functional_test.cpp"
     "Import/Jobs/ScriptAssetImportJob_functional_test.cpp"
+    "Import/Jobs/ScriptImportTestSupport.h"
     "Import/Jobs/ScriptingSidecarImportJob_binding_functional_test.cpp"
     "Import/Jobs/ScriptingSidecarImportJob_context_functional_test.cpp"
     "Import/Jobs/ScriptingSidecarImportJob_params_functional_test.cpp"

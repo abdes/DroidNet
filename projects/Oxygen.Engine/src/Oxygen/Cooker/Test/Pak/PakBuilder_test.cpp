@@ -6,7 +6,7 @@
 
 // Covers: Pak/PakBuilder.cpp
 
-#include <Oxygen/Cooker/Pak/PakBuilder.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {

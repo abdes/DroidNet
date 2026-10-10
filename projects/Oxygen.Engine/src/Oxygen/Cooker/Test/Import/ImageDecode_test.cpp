@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <span>
@@ -28,54 +29,54 @@ using oxygen::content::import::DecodeImageRgba8FromMemory;
   std::vector<std::byte> bytes;
   bytes.reserve(70);
 
-  const auto push_u16 = [&](const uint16_t v) {
-    bytes.push_back(std::byte { static_cast<uint8_t>(v & 0xFFu) });
-    bytes.push_back(std::byte { static_cast<uint8_t>((v >> 8) & 0xFFu) });
+  const auto push_u16 = [&](const uint16_t v) -> void {
+    bytes.push_back(std::byte { static_cast<uint8_t>(v & 0xFFU) });
+    bytes.push_back(std::byte { static_cast<uint8_t>((v >> 8) & 0xFFU) });
   };
-  const auto push_u32 = [&](const uint32_t v) {
-    bytes.push_back(std::byte { static_cast<uint8_t>(v & 0xFFu) });
-    bytes.push_back(std::byte { static_cast<uint8_t>((v >> 8) & 0xFFu) });
-    bytes.push_back(std::byte { static_cast<uint8_t>((v >> 16) & 0xFFu) });
-    bytes.push_back(std::byte { static_cast<uint8_t>((v >> 24) & 0xFFu) });
+  const auto push_u32 = [&](const uint32_t v) -> void {
+    bytes.push_back(std::byte { static_cast<uint8_t>(v & 0xFFU) });
+    bytes.push_back(std::byte { static_cast<uint8_t>((v >> 8) & 0xFFU) });
+    bytes.push_back(std::byte { static_cast<uint8_t>((v >> 16) & 0xFFU) });
+    bytes.push_back(std::byte { static_cast<uint8_t>((v >> 24) & 0xFFU) });
   };
   const auto push_i32
-    = [&](const int32_t v) { push_u32(static_cast<uint32_t>(v)); };
-  const auto push_bgra
-    = [&](const uint8_t b, const uint8_t g, const uint8_t r, const uint8_t a) {
-        bytes.push_back(std::byte { b });
-        bytes.push_back(std::byte { g });
-        bytes.push_back(std::byte { r });
-        bytes.push_back(std::byte { a });
-      };
+    = [&](const int32_t v) -> void { push_u32(static_cast<uint32_t>(v)); };
+  const auto push_bgra = [&](const uint8_t b, const uint8_t g, const uint8_t r,
+                           const uint8_t a) -> void {
+    bytes.push_back(std::byte { b });
+    bytes.push_back(std::byte { g });
+    bytes.push_back(std::byte { r });
+    bytes.push_back(std::byte { a });
+  };
 
-  constexpr uint32_t kFileSize = 14u + 40u + 16u;
-  constexpr uint32_t kDataOffset = 14u + 40u;
+  constexpr uint32_t kFileSize = 14U + 40U + 16U;
+  constexpr uint32_t kDataOffset = 14U + 40U;
 
   // BITMAPFILEHEADER
-  push_u16(0x4D42u);
+  push_u16(0x4D42U);
   push_u32(kFileSize);
-  push_u16(0u);
-  push_u16(0u);
+  push_u16(0U);
+  push_u16(0U);
   push_u32(kDataOffset);
 
   // BITMAPINFOHEADER
-  push_u32(40u);
+  push_u32(40U);
   push_i32(2);
   push_i32(2);
-  push_u16(1u);
-  push_u16(32u);
-  push_u32(0u);
-  push_u32(16u);
+  push_u16(1U);
+  push_u16(32U);
+  push_u32(0U);
+  push_u32(16U);
   push_i32(0);
   push_i32(0);
-  push_u32(0u);
-  push_u32(0u);
+  push_u32(0U);
+  push_u32(0U);
 
   // Pixel data (BGRA), bottom-up rows.
-  push_bgra(255u, 0u, 0u, 255u);
-  push_bgra(255u, 255u, 255u, 255u);
-  push_bgra(0u, 0u, 255u, 255u);
-  push_bgra(0u, 255u, 0u, 255u);
+  push_bgra(255U, 0U, 0U, 255U);
+  push_bgra(255U, 255U, 255U, 255U);
+  push_bgra(0U, 0U, 255U, 255U);
+  push_bgra(0U, 255U, 0U, 255U);
 
   return bytes;
 }
@@ -88,18 +89,24 @@ NOLINT_TEST(ImageDecodeTest, DecodeFromMemoryDecodesBmp)
     std::span<const std::byte>(bmp.data(), bmp.size()));
 
   ASSERT_TRUE(result.Succeeded());
-  ASSERT_TRUE(result.image.has_value());
-  EXPECT_EQ(result.image->width, 2u);
-  EXPECT_EQ(result.image->height, 2u);
-  EXPECT_EQ(result.image->pixels.size(), 16u);
+  ASSERT_HAS_VALUE(result.image);
+  EXPECT_EQ(result.image->width, 2U);
+  EXPECT_EQ(result.image->height, 2U);
+  EXPECT_EQ(result.image->pixels.size(), 16U);
 }
 
 NOLINT_TEST(ImageDecodeTest, DecodeFromMemoryInvalidBytesFails)
 {
-  const std::array<std::byte, 8> bytes
-    = { std::byte { 0x00 }, std::byte { 0x01 }, std::byte { 0x02 },
-        std::byte { 0x03 }, std::byte { 0x04 }, std::byte { 0x05 },
-        std::byte { 0x06 }, std::byte { 0x07 } };
+  const std::array<std::byte, 8> bytes = {
+    std::byte { 0x00 },
+    std::byte { 0x01 },
+    std::byte { 0x02 },
+    std::byte { 0x03 },
+    std::byte { 0x04 },
+    std::byte { 0x05 },
+    std::byte { 0x06 },
+    std::byte { 0x07 },
+  };
 
   const auto result = DecodeImageRgba8FromMemory(
     std::span<const std::byte>(bytes.data(), bytes.size()));
@@ -121,19 +128,32 @@ using oxygen::content::import::IsHdrSignature;
 
 NOLINT_TEST(ImageDecodeTest, IsExrSignatureDetectsValidMagic)
 {
-  const std::array<std::byte, 8> exr_magic
-    = { std::byte { 0x76 }, std::byte { 0x2F }, std::byte { 0x31 },
-        std::byte { 0x01 }, std::byte { 0x00 }, std::byte { 0x00 },
-        std::byte { 0x00 }, std::byte { 0x00 } };
+  const std::array<std::byte, 8> exr_magic = {
+    std::byte { 0x76 },
+    std::byte { 0x2F },
+    std::byte { 0x31 },
+    std::byte { 0x01 },
+    std::byte { 0x00 },
+    std::byte { 0x00 },
+    std::byte { 0x00 },
+    std::byte { 0x00 },
+  };
 
   EXPECT_TRUE(IsExrSignature(exr_magic));
 }
 
 NOLINT_TEST(ImageDecodeTest, IsExrSignatureRejectsNonExr)
 {
-  const std::array<std::byte, 8> non_exr = { std::byte { 0x89 },
-    std::byte { 'P' }, std::byte { 'N' }, std::byte { 'G' }, std::byte { 0x00 },
-    std::byte { 0x00 }, std::byte { 0x00 }, std::byte { 0x00 } };
+  const std::array<std::byte, 8> non_exr = {
+    std::byte { 0x89 },
+    std::byte { 'P' },
+    std::byte { 'N' },
+    std::byte { 'G' },
+    std::byte { 0x00 },
+    std::byte { 0x00 },
+    std::byte { 0x00 },
+    std::byte { 0x00 },
+  };
 
   EXPECT_FALSE(IsExrSignature(non_exr));
 }
@@ -174,8 +194,12 @@ NOLINT_TEST(ImageDecodeTest, IsHdrSignatureRejectsNonHdr)
 
 NOLINT_TEST(ImageDecodeTest, IsHdrFormatRecognizesExrExtension)
 {
-  const std::array<std::byte, 4> random_data = { std::byte { 0x00 },
-    std::byte { 0x01 }, std::byte { 0x02 }, std::byte { 0x03 } };
+  const std::array<std::byte, 4> random_data = {
+    std::byte { 0x00 },
+    std::byte { 0x01 },
+    std::byte { 0x02 },
+    std::byte { 0x03 },
+  };
 
   EXPECT_TRUE(IsHdrFormat(random_data, ".exr"));
   EXPECT_TRUE(IsHdrFormat(random_data, ".EXR"));
@@ -183,8 +207,12 @@ NOLINT_TEST(ImageDecodeTest, IsHdrFormatRecognizesExrExtension)
 
 NOLINT_TEST(ImageDecodeTest, IsHdrFormatRecognizesHdrExtension)
 {
-  const std::array<std::byte, 4> random_data = { std::byte { 0x00 },
-    std::byte { 0x01 }, std::byte { 0x02 }, std::byte { 0x03 } };
+  const std::array<std::byte, 4> random_data = {
+    std::byte { 0x00 },
+    std::byte { 0x01 },
+    std::byte { 0x02 },
+    std::byte { 0x03 },
+  };
 
   EXPECT_TRUE(IsHdrFormat(random_data, ".hdr"));
   EXPECT_TRUE(IsHdrFormat(random_data, ".HDR"));
@@ -202,10 +230,10 @@ NOLINT_TEST(ImageDecodeTest, DecodeToScratchImageLdrBmpProducesRgba8)
 
   auto result = DecodeToScratchImage(bmp, options);
 
-  ASSERT_TRUE(result.has_value())
-    << "Decode failed with error: " << static_cast<int>(result.error());
-  EXPECT_EQ(result->Meta().width, 2u);
-  EXPECT_EQ(result->Meta().height, 2u);
+  ASSERT_HAS_VALUE(result) << "Decode failed with error: "
+                           << static_cast<int>(result.error());
+  EXPECT_EQ(result->Meta().width, 2U);
+  EXPECT_EQ(result->Meta().height, 2U);
   EXPECT_EQ(result->Meta().format, Format::kRGBA8UNorm);
 }
 
@@ -220,8 +248,8 @@ NOLINT_TEST(ImageDecodeTest, DecodeToScratchImageFlipsY)
     = DecodeToScratchImage(bmp, DecodeOptions { .force_rgba = true });
   auto flipped_result = DecodeToScratchImage(bmp, options);
 
-  ASSERT_TRUE(normal_result.has_value());
-  ASSERT_TRUE(flipped_result.has_value());
+  ASSERT_HAS_VALUE(normal_result);
+  ASSERT_HAS_VALUE(flipped_result);
 
   // Get top-left pixel from both images
   auto normal_view = normal_result->GetImage(0, 0);
@@ -231,7 +259,7 @@ NOLINT_TEST(ImageDecodeTest, DecodeToScratchImageFlipsY)
   const auto* normal_top = normal_view.pixels.data();
   const auto row_pitch = normal_view.row_pitch_bytes;
   const auto* flipped_bottom = flipped_view.pixels.data()
-    + static_cast<size_t>(normal_result->Meta().height - 1) * row_pitch;
+    + (static_cast<size_t>(normal_result->Meta().height - 1) * row_pitch);
 
   EXPECT_EQ(std::memcmp(normal_top, flipped_bottom, row_pitch), 0);
 }
@@ -248,10 +276,16 @@ NOLINT_TEST(ImageDecodeTest, DecodeToScratchImageEmptyInputFails)
 
 NOLINT_TEST(ImageDecodeTest, DecodeToScratchImageCorruptDataFails)
 {
-  const std::array<std::byte, 8> garbage
-    = { std::byte { 0x12 }, std::byte { 0x34 }, std::byte { 0x56 },
-        std::byte { 0x78 }, std::byte { 0x9A }, std::byte { 0xBC },
-        std::byte { 0xDE }, std::byte { 0xF0 } };
+  const std::array<std::byte, 8> garbage = {
+    std::byte { 0x12 },
+    std::byte { 0x34 },
+    std::byte { 0x56 },
+    std::byte { 0x78 },
+    std::byte { 0x9A },
+    std::byte { 0xBC },
+    std::byte { 0xDE },
+    std::byte { 0xF0 },
+  };
   DecodeOptions options {};
 
   auto result = DecodeToScratchImage(garbage, options);

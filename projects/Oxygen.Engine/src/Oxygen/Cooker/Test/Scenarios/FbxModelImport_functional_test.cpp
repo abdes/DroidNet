@@ -6,11 +6,13 @@
 
 // Covers: Import/AsyncImportService.cpp, Import/Internal/fbx/FbxAdapter.cpp
 
-#include <algorithm>
+#include <cstddef>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -60,11 +62,13 @@ NOLINT_TEST_F(AsyncFbxImporterFullTest, ImportsTexturedFbxScene)
   request.options.naming_strategy = std::make_shared<NormalizeNamingStrategy>();
   request.options.import_content = ImportContentFlags::kAll;
 
-  constexpr size_t kExpectedMaterials = 1u;
-  constexpr size_t kExpectedGeometry = 1u;
-  constexpr size_t kExpectedScenes = 1u;
-  constexpr size_t kExpectedNodesMin = 1u;
-  constexpr size_t kExpectedTextureFiles = 1u;
+  constexpr size_t kExpectedMaterials = 1U;
+  constexpr size_t kExpectedGeometry = 1U;
+  constexpr size_t kExpectedScenes = 1U;
+  constexpr size_t kExpectedNodesMin = 1U;
+  // The texture table always starts with the fallback texture at index 0, so
+  // the one checker texture is entry 1.
+  constexpr size_t kExpectedTextureFiles = 2U;
 
   const auto run_result = RunImport(std::move(request));
 
@@ -84,7 +88,7 @@ NOLINT_TEST_F(AsyncFbxImporterFullTest, ImportsTexturedFbxScene)
   ASSERT_FALSE(scene.renderables.empty());
   for (const auto& renderable : scene.renderables) {
     ASSERT_LT(renderable.node_index, scene.nodes.size());
-    const auto node_flags = scene.nodes[renderable.node_index].node_flags;
+    const auto node_flags = scene.nodes.at(renderable.node_index).node_flags;
     EXPECT_NE(node_flags & world::kSceneNodeFlag_CastsShadows, 0U);
     EXPECT_NE(node_flags & world::kSceneNodeFlag_ReceivesShadows, 0U);
   }

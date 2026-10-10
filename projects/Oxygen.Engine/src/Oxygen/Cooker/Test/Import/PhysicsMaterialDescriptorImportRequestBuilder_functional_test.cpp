@@ -12,6 +12,7 @@
 #include <string>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/PhysicsMaterialDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/PhysicsMaterialDescriptorImportSettings.h>
@@ -65,16 +66,16 @@ NOLINT_TEST(PhysicsMaterialDescriptorImportRequestBuilderTest,
 
   const auto request = BuildPhysicsMaterialDescriptorRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_TRUE(errors.str().empty());
-  ASSERT_TRUE(request->cooked_root.has_value());
+  ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_TRUE(request->cooked_root->is_absolute());
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name,
     std::optional<std::string> { "manifest-physics-material" });
   // Release must hash authored content even when the descriptor opts out.
   EXPECT_EQ(request->options.with_content_hashing, kContentHashingDefault);
-  ASSERT_TRUE(request->physics_material_descriptor.has_value());
+  ASSERT_HAS_VALUE(request->physics_material_descriptor);
 
   const auto normalized = json::parse(
     request->physics_material_descriptor->normalized_descriptor_json);

@@ -130,7 +130,7 @@ NOLINT_TEST(BuiltinGeometryCatalogTest, MountAndAuthoringCategoriesArePreserved)
     EXPECT_EQ(entry.at("canonical_name"), entry.at("name"));
     const auto identity = oxygen::data::ResolveBuiltinGeometryIdentity(
       entry.at("asset_uri").get<std::string>());
-    ASSERT_TRUE(identity.has_value()) << "Expected identity to contain a value";
+    ASSERT_HAS_VALUE(identity) << "Expected identity to contain a value";
     using Category = oxygen::data::BuiltinGeometryAuthoringCategory;
     switch (identity->authoring_category) {
     case Category::kStandard:

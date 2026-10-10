@@ -9,6 +9,8 @@
 #include <array>
 #include <filesystem>
 
+#include "PakToolOptions.h"
+
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Cooker/Tools/PakTool/CliBuilder.h>
@@ -60,17 +62,17 @@ NOLINT_TEST(PakToolCliTest, BuildCommandParsesCommonAndFullBuildOptions)
 
   EXPECT_EQ(context.active_command->PathAsString(), "build");
   ASSERT_EQ(options.request.sources.size(), 3U);
-  EXPECT_EQ(options.request.sources[0].kind,
+  EXPECT_EQ(options.request.sources.at(0).kind,
+    oxygen::data::CookedSourceKind::kLooseCooked);
+  EXPECT_EQ(options.request.sources.at(0).path,
+    std::filesystem::path("C:/Cooked/Base"));
+  EXPECT_EQ(options.request.sources.at(1).kind,
     oxygen::data::CookedSourceKind::kLooseCooked);
   EXPECT_EQ(
-    options.request.sources[0].path, std::filesystem::path("C:/Cooked/Base"));
-  EXPECT_EQ(options.request.sources[1].kind,
-    oxygen::data::CookedSourceKind::kLooseCooked);
+    options.request.sources.at(1).path, std::filesystem::path("C:/Cooked/Dlc"));
   EXPECT_EQ(
-    options.request.sources[1].path, std::filesystem::path("C:/Cooked/Dlc"));
-  EXPECT_EQ(
-    options.request.sources[2].kind, oxygen::data::CookedSourceKind::kPak);
-  EXPECT_EQ(options.request.sources[2].path,
+    options.request.sources.at(2).kind, oxygen::data::CookedSourceKind::kPak);
+  EXPECT_EQ(options.request.sources.at(2).path,
     std::filesystem::path("C:/Cooked/base.pak"));
   EXPECT_EQ(
     options.request.output_pak, std::filesystem::path("C:/Build/game.pak"));
@@ -123,22 +125,22 @@ NOLINT_TEST(PakToolCliTest, PatchCommandPreservesBaseCatalogOrder)
 
   EXPECT_EQ(context.active_command->PathAsString(), "patch");
   ASSERT_EQ(options.patch.base_paks.size(), 2U);
-  EXPECT_EQ(options.patch.base_paks[0],
+  EXPECT_EQ(options.patch.base_paks.at(0),
     std::filesystem::path("C:/Build/base_1.pakcatalog.json"));
-  EXPECT_EQ(options.patch.base_paks[1],
+  EXPECT_EQ(options.patch.base_paks.at(1),
     std::filesystem::path("C:/Build/base_2.pakcatalog.json"));
   EXPECT_EQ(options.patch.manifest_output,
     std::filesystem::path("C:/Build/game_patch.manifest.json"));
   EXPECT_TRUE(options.output.quiet);
   EXPECT_TRUE(options.output.no_color);
   ASSERT_EQ(options.request.sources.size(), 2U);
-  EXPECT_EQ(options.request.sources[0].kind,
+  EXPECT_EQ(options.request.sources.at(0).kind,
     oxygen::data::CookedSourceKind::kLooseCooked);
+  EXPECT_EQ(options.request.sources.at(0).path,
+    std::filesystem::path("C:/Cooked/Patch"));
   EXPECT_EQ(
-    options.request.sources[0].path, std::filesystem::path("C:/Cooked/Patch"));
-  EXPECT_EQ(
-    options.request.sources[1].kind, oxygen::data::CookedSourceKind::kPak);
-  EXPECT_EQ(options.request.sources[1].path,
+    options.request.sources.at(1).kind, oxygen::data::CookedSourceKind::kPak);
+  EXPECT_EQ(options.request.sources.at(1).path,
     std::filesystem::path("C:/Cooked/base_patch_input.pak"));
 }
 

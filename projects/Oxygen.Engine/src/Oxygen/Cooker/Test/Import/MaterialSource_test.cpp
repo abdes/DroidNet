@@ -6,7 +6,6 @@
 
 // Covers: Import/Internal/MaterialSource.cpp
 
-#include <algorithm>
 #include <filesystem>
 #include <limits>
 #include <string>
@@ -33,19 +32,26 @@ namespace {
     for (const auto& slot : MaterialSource::TextureSlots()) {
       textures.emplace(slot.name,
         nlohmann::json {
-          { "virtual_path",
-            "/Content/Textures/" + std::string(slot.name) + ".otex" },
+          {
+            "virtual_path",
+            "/Content/Textures/" + std::string(slot.name) + ".otex",
+          },
           { "uv_set", 1 },
-          { "uv_transform",
-            { { "scale", { 2.0F, 3.0F } }, { "offset", { 0.1F, 0.2F } },
-              { "rotation_radians", 0.5F } } },
+          {
+            "uv_transform",
+            {
+              { "scale", { 2.0F, 3.0F } },
+              { "offset", { 0.1F, 0.2F } },
+              { "rotation_radians", 0.5F },
+            },
+          },
         });
     }
     document.emplace("textures", std::move(textures));
     std::vector<ImportDiagnostic> diagnostics;
     const auto source = MaterialSource::FromDescriptor(
       document.dump(), "source.omat.json", "", diagnostics);
-    ASSERT_TRUE(source.has_value()) << "Expected source to contain a value";
+    ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     EXPECT_TRUE(diagnostics.empty());
     EXPECT_EQ(MaterialSource::TextureSlots().size(), 12U);
     for (const auto& slot : MaterialSource::TextureSlots()) {
@@ -66,19 +72,19 @@ namespace {
     const auto named = MaterialSource::FromDescriptor(
       R"({"name":"Authored","content_hashing":false})", "Fallback.omat.json",
       "Override", diagnostics);
-    ASSERT_TRUE(named.has_value()) << "Expected named to contain a value";
+    ASSERT_HAS_VALUE(named) << "Expected named to contain a value";
     EXPECT_EQ(named->name, "Override");
     EXPECT_EQ(named->storage_name, "Override");
-    ASSERT_TRUE(named->content_hashing.has_value())
+    ASSERT_HAS_VALUE(named->content_hashing)
       << "Expected named->content_hashing to contain a value";
     EXPECT_FALSE(named->content_hashing.value());
     const auto authored = MaterialSource::FromDescriptor(
       R"({"name":"Authored"})", "Fallback.omat.json", "", diagnostics);
-    ASSERT_TRUE(authored.has_value()) << "Expected authored to contain a value";
+    ASSERT_HAS_VALUE(authored) << "Expected authored to contain a value";
     EXPECT_EQ(authored->name, "Authored");
     const auto fallback = MaterialSource::FromDescriptor(
       "{}", "Fallback.omat.json", "", diagnostics);
-    ASSERT_TRUE(fallback.has_value()) << "Expected fallback to contain a value";
+    ASSERT_HAS_VALUE(fallback) << "Expected fallback to contain a value";
     EXPECT_EQ(fallback->name, "Fallback.omat");
     EXPECT_FALSE(fallback->content_hashing.has_value());
   }
@@ -130,5 +136,5 @@ namespace {
     EXPECT_TRUE(
       HasDiagnosticCode(diagnostics, "material.emissive_factor_range"));
   }
-}
-}
+} // namespace
+} // namespace oxygen::content::import::test

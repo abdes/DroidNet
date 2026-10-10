@@ -31,6 +31,7 @@
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/Test/Support/FileIo.h>
+#include <Oxygen/Cooker/Test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Cooker/Test/Support/TestPaths.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -46,6 +47,7 @@ namespace lc = oxygen::content::lc;
 using oxygen::cooker::test::HasDiagnosticCode;
 using oxygen::cooker::test::ReadBytes;
 using oxygen::cooker::test::ScopedTempDir;
+using oxygen::cooker::test::SubmitAndWait;
 using oxygen::cooker::test::WriteText;
 using oxygen::data::AssetType;
 
@@ -53,7 +55,7 @@ inline auto CountSeverity(const std::vector<ImportDiagnostic>& diagnostics,
   const ImportSeverity severity) -> uint32_t
 {
   return static_cast<uint32_t>(std::ranges::count_if(
-    diagnostics, [severity](const ImportDiagnostic& diagnostic) {
+    diagnostics, [severity](const ImportDiagnostic& diagnostic) -> bool {
       return diagnostic.severity == severity;
     }));
 }
@@ -126,23 +128,6 @@ inline auto CanonicalSceneVirtualPath(std::string_view scene_name)
   return ImportRequest {}.loose_cooked_layout.SceneVirtualPath(scene_name);
 }
 
-inline auto SubmitAndWait(AsyncImportService& service, ImportRequest request)
-  -> ImportReport
-{
-  ImportReport report {};
-  std::latch done(1);
-
-  const auto submitted = service.SubmitImport(std::move(request),
-    [&report, &done](const auto /*job_id*/, const ImportReport& completed) {
-      report = completed;
-      done.count_down();
-    });
-  EXPECT_TRUE(submitted.has_value());
-  done.wait();
-
-  return report;
-}
-
 struct CallbackCapture final {
   ImportReport report {};
   std::vector<ImportPhase> phases;
@@ -159,13 +144,13 @@ inline auto SubmitAndCaptureCallbacks(AsyncImportService& service,
   const auto submitted = service.SubmitImport(
     std::move(request),
     [&capture, &callback_mutex, &done](
-      const auto /*job_id*/, const ImportReport& completed) {
+      const auto /*job_id*/, const ImportReport& completed) -> auto {
       std::scoped_lock lock(callback_mutex);
       ++capture.completion_calls;
       capture.report = completed;
       done.count_down();
     },
-    [&capture, &callback_mutex](const ProgressEvent& progress) {
+    [&capture, &callback_mutex](const ProgressEvent& progress) -> void {
       std::scoped_lock lock(callback_mutex);
       capture.phases.push_back(progress.header.phase);
     });
@@ -204,7 +189,7 @@ private:
 };
 
 struct AssetRef final {
-  data::AssetKey key {};
+  data::AssetKey key;
   std::string virtual_path;
   std::string descriptor_relpath;
   data::AssetReferences references;
@@ -375,11 +360,14 @@ protected:
   [[nodiscard]] auto Submit(ImportRequest request) -> ImportReport
   {
     auto report = SubmitAndWait(Service(), std::move(request));
-    if (report.success && !report.material_slot_provenance_json.empty()) {
-      source_provenance_
-        = MaterialSlotProvenance::Parse(report.material_slot_provenance_json);
+    if (!report.has_value()) {
+      return ImportReport {};
     }
-    return report;
+    if (report->success && !report->material_slot_provenance_json.empty()) {
+      source_provenance_
+        = MaterialSlotProvenance::Parse(report->material_slot_provenance_json);
+    }
+    return *report;
   }
 
   [[nodiscard]] auto MakeSceneRequest(const std::filesystem::path& source_path,

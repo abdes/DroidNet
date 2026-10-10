@@ -6,6 +6,7 @@
 
 // Covers: Import/Internal/Pipelines/TexturePipeline.cpp
 
+#include <cstddef>
 #include <memory>
 #include <span>
 #include <stop_token>
@@ -15,9 +16,9 @@
 
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
+#include <Oxygen/Cooker/Import/TextureImportDesc.h>
 #include <Oxygen/Cooker/Test/Support/PipelineHarness.h>
 #include <Oxygen/OxCo/ThreadPool.h>
-#include <Oxygen/OxCo/asio.h>
 #include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
@@ -59,7 +60,7 @@ auto MakeWorkItem(std::string source_id, std::string texture_id,
     = TexturePipeline::OutputFormatPolicy::kPreserveSource,
     .failure_policy = failure_policy,
     .source = std::move(source),
-    .stop_token = stop_token,
+    .stop_token = std::move(stop_token),
   };
 }
 
@@ -87,7 +88,7 @@ NOLINT_TEST_F(TexturePipelineTest, CollectWithPlaceholderPolicyReportsFailure)
   EXPECT_TRUE(result.used_placeholder);
   EXPECT_FALSE(result.cooked.has_value());
   ASSERT_EQ(result.diagnostics.size(), 1U);
-  EXPECT_EQ(result.diagnostics[0].code, "texture.cook_failed");
+  EXPECT_EQ(result.diagnostics.at(0).code, "texture.cook_failed");
 }
 
 NOLINT_TEST_F(TexturePipelineTest, CollectWithStrictPolicyEmitsDiagnostic)
@@ -105,7 +106,7 @@ NOLINT_TEST_F(TexturePipelineTest, CollectWithStrictPolicyEmitsDiagnostic)
   EXPECT_FALSE(result.used_placeholder);
   EXPECT_FALSE(result.cooked.has_value());
   ASSERT_EQ(result.diagnostics.size(), 1U);
-  EXPECT_EQ(result.diagnostics[0].code, "texture.cook_failed");
+  EXPECT_EQ(result.diagnostics.at(0).code, "texture.cook_failed");
 }
 
 NOLINT_TEST_F(TexturePipelineTest, CollectWhenCancelledReturnsFailedResult)

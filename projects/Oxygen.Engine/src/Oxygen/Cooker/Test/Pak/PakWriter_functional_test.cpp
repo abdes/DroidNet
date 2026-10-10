@@ -10,6 +10,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
+#include <ios>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -20,10 +22,16 @@
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/Pak/PakWriter.h>
 #include <Oxygen/Cooker/Test/Support/DescriptorFixtures.h>
-#include <Oxygen/Data/PakFormatSerioLoaders.h>
+#include <Oxygen/Cooker/Test/Support/FileIo.h>
+#include <Oxygen/Cooker/Test/Support/TestValues.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/PakFormatSerioLoaders.h> // IWYU pragma: keep
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Serio/FileStream.h>
@@ -82,7 +90,7 @@ NOLINT_TEST_F(PakWriterTest, CrcEnabledWritesValidPakAndPatchesFooterCrc)
 
   const auto plan_result = PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(plan_result.diagnostics));
-  ASSERT_TRUE(plan_result.plan.has_value());
+  ASSERT_HAS_VALUE(plan_result.plan);
 
   const auto write_result = PakWriter {}.Write(request, *plan_result.plan);
   ASSERT_FALSE(HasError(write_result.diagnostics));
@@ -159,13 +167,13 @@ NOLINT_TEST_F(
 
   const auto request = paktest::MakeFullRequest(output_path,
     { .sources = { CookedSource {
-        .kind = CookedSourceKind::kLooseCooked, .path = source } },
+        .kind = CookedSourceKind::kLooseCooked, .path = source, }, },
       .content_version = 1U,
-      .embed_browse_index = true });
+      .embed_browse_index = true, });
 
   const auto plan_result = PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(plan_result.diagnostics));
-  ASSERT_TRUE(plan_result.plan.has_value());
+  ASSERT_HAS_VALUE(plan_result.plan);
 
   const auto write_result = PakWriter {}.Write(request, *plan_result.plan);
   ASSERT_FALSE(HasError(write_result.diagnostics));
@@ -189,22 +197,19 @@ NOLINT_TEST_F(
       EXPECT_EQ(static_cast<data::AssetType>(entry.asset_type),
         data::AssetType::kInputAction);
       EXPECT_EQ(payload.size(), action_desc_bytes.size());
-      EXPECT_TRUE(std::equal(payload.begin(), payload.end(),
-        action_desc_bytes.begin(), action_desc_bytes.end()));
+      EXPECT_TRUE(std::ranges::equal(payload, action_desc_bytes));
       saw_input_action = true;
     } else if (entry.asset_key == context_key) {
       EXPECT_EQ(static_cast<data::AssetType>(entry.asset_type),
         data::AssetType::kInputMappingContext);
       EXPECT_EQ(payload.size(), context_desc_bytes.size());
-      EXPECT_TRUE(std::equal(payload.begin(), payload.end(),
-        context_desc_bytes.begin(), context_desc_bytes.end()));
+      EXPECT_TRUE(std::ranges::equal(payload, context_desc_bytes));
       saw_input_mapping_context = true;
     } else if (entry.asset_key == scene_key) {
       EXPECT_EQ(static_cast<data::AssetType>(entry.asset_type),
         data::AssetType::kScene);
       EXPECT_EQ(payload.size(), scene_desc_bytes.size());
-      EXPECT_TRUE(std::equal(payload.begin(), payload.end(),
-        scene_desc_bytes.begin(), scene_desc_bytes.end()));
+      EXPECT_TRUE(std::ranges::equal(payload, scene_desc_bytes));
       saw_scene = true;
     } else {
       FAIL() << "Unexpected asset key in directory";
@@ -252,9 +257,13 @@ NOLINT_TEST_F(
       .descriptor_payload
       = { physics_desc_bytes.begin(), physics_desc_bytes.end() },
       .references = data::AssetReferences::Create({},
-        { { .key = scene_key,
-          .kind = data::KeyReferenceKind::kLogical,
-          .expected_type = data::AssetType::kScene } })
+        {
+          {
+            .key = scene_key,
+            .kind = data::KeyReferenceKind::kLogical,
+            .expected_type = data::AssetType::kScene,
+          },
+        })
         .value(),
     },
     paktest::AssetSpec {
@@ -274,13 +283,13 @@ NOLINT_TEST_F(
 
   const auto request = paktest::MakeFullRequest(output_path,
     { .sources = { CookedSource {
-        .kind = CookedSourceKind::kLooseCooked, .path = source } },
+        .kind = CookedSourceKind::kLooseCooked, .path = source, }, },
       .content_version = 1U,
-      .embed_browse_index = true });
+      .embed_browse_index = true, });
 
   const auto plan_result = PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(plan_result.diagnostics));
-  ASSERT_TRUE(plan_result.plan.has_value());
+  ASSERT_HAS_VALUE(plan_result.plan);
 
   const auto write_result = PakWriter {}.Write(request, *plan_result.plan);
   ASSERT_FALSE(HasError(write_result.diagnostics));
@@ -291,7 +300,7 @@ NOLINT_TEST_F(
   ASSERT_EQ(directory.size(), assets.size());
 
   const auto found = pak_file.FindEntry(physics_key);
-  ASSERT_TRUE(found.has_value());
+  ASSERT_HAS_VALUE(found);
   const auto& entry = *found;
   EXPECT_EQ(entry.asset_key, physics_key);
   EXPECT_EQ(static_cast<data::AssetType>(entry.asset_type),
@@ -304,8 +313,7 @@ NOLINT_TEST_F(
   const auto payload = std::span<const std::byte>(
     pak_bytes.data() + descriptor_offset, descriptor_size);
   ASSERT_EQ(payload.size(), physics_desc_bytes.size());
-  EXPECT_TRUE(std::equal(payload.begin(), payload.end(),
-    physics_desc_bytes.begin(), physics_desc_bytes.end()));
+  EXPECT_TRUE(std::ranges::equal(payload, physics_desc_bytes));
 }
 
 NOLINT_TEST_F(PakWriterTest, DeterministicModeProducesBitExactOutputs)
@@ -319,7 +327,7 @@ NOLINT_TEST_F(PakWriterTest, DeterministicModeProducesBitExactOutputs)
 
   const auto plan_result = PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(plan_result.diagnostics));
-  ASSERT_TRUE(plan_result.plan.has_value());
+  ASSERT_HAS_VALUE(plan_result.plan);
 
   const auto first = PakWriter {}.Write(request, *plan_result.plan);
   ASSERT_FALSE(HasError(first.diagnostics));

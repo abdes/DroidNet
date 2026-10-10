@@ -51,12 +51,14 @@ namespace {
     size_t reads = 0;
     bool drained = false;
 
-    auto ReadFile(const std::filesystem::path&, ReadOptions)
+    auto ReadFile(
+      const std::filesystem::path& /*path*/, ReadOptions /*options*/)
       -> co::Co<Result<std::vector<std::byte>, FileErrorInfo>> override
     {
       ++reads;
       if (reads == 2U) {
-        const auto drain = ScopeGuard([this] noexcept { drained = true; });
+        const auto drain
+          = ScopeGuard([this] noexcept -> void { drained = true; });
         cancellation.request_stop();
         co_await pending_;
       }
@@ -66,13 +68,13 @@ namespace {
       co_return Ok(std::move(bytes));
     }
 
-    auto Exists(const std::filesystem::path&)
+    auto Exists(const std::filesystem::path& /*path*/)
       -> co::Co<Result<bool, FileErrorInfo>> override
     {
       co_return Ok(true);
     }
 
-    auto GetFileInfo(const std::filesystem::path&)
+    auto GetFileInfo(const std::filesystem::path& /*path*/)
       -> co::Co<Result<FileInfo, FileErrorInfo>> override
     {
       co_return Ok(FileInfo {});
@@ -244,7 +246,7 @@ namespace {
     EXPECT_EQ(result.outputs.size(), 2U);
     EXPECT_EQ(result.references.size(), 2U);
     EXPECT_FALSE(
-      std::ranges::any_of(result.references, [](const auto& reference) {
+      std::ranges::any_of(result.references, [](const auto& reference) -> auto {
         return reference.virtual_path == "/.cooked/Buffers/local.obuf";
       }));
     const auto buffer = std::ranges::find(result.observations,
@@ -278,7 +280,7 @@ namespace {
   {
     const auto models = oxygen::cooker::test::AssetsDir() / "Models";
     auto manifest = ImportManifest {};
-    for (const auto type : { "gltf", "fbx" }) {
+    for (const auto* const type : { "gltf", "fbx" }) {
       auto job = ImportManifestJob {};
       job.id = type;
       job.job_type = type;
@@ -293,10 +295,13 @@ namespace {
     ASSERT_TRUE(report.complete) << report.ToJson();
     ASSERT_EQ(report.jobs.size(), 2U);
     for (const auto& job : report.jobs) {
-      for (const auto kind : { ImportDependencyKind::kMaterial,
-             ImportDependencyKind::kGeometry, ImportDependencyKind::kScene }) {
+      for (const auto kind : {
+             ImportDependencyKind::kMaterial,
+             ImportDependencyKind::kGeometry,
+             ImportDependencyKind::kScene,
+           }) {
         EXPECT_TRUE(std::ranges::any_of(job.outputs,
-          [kind](const auto& output) { return output.kind == kind; }));
+          [kind](const auto& output) -> auto { return output.kind == kind; }));
       }
       ASSERT_EQ(job.observations.size(), 1U);
       EXPECT_FALSE(job.observations.front().reads.empty());
@@ -317,8 +322,8 @@ namespace {
     const auto& result = report.jobs.front();
     ASSERT_EQ(result.observations.size(), 1U);
     EXPECT_FALSE(result.observations.front().exists);
-    EXPECT_TRUE(
-      std::ranges::any_of(result.diagnostics, [](const auto& diagnostic) {
+    EXPECT_TRUE(std::ranges::any_of(
+      result.diagnostics, [](const auto& diagnostic) -> auto {
         return diagnostic.code == "analysis.source_missing";
       }));
   }
@@ -336,7 +341,7 @@ namespace {
     EXPECT_FALSE(report.complete);
     ASSERT_EQ(report.jobs.size(), 1U);
     EXPECT_TRUE(std::ranges::any_of(
-      report.jobs.front().diagnostics, [](const auto& diagnostic) {
+      report.jobs.front().diagnostics, [](const auto& diagnostic) -> auto {
         return diagnostic.code == "analysis.source_not_file";
       }));
   }
@@ -378,7 +383,7 @@ namespace {
   NOLINT_TEST_F(
     ImportSourceAnalysisTest, ImplicitCubemapRecordsFacesAndRejectedSuffixes)
   {
-    for (const auto suffix :
+    for (const auto* const suffix :
       { "posx", "negx", "posy", "negy", "posz", "negz" }) {
       static_cast<void>(
         Write(std::string("sky_") + suffix + ".png", "metadata only"));

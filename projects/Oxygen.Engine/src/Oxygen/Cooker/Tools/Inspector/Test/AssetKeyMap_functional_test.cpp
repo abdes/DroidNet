@@ -6,11 +6,13 @@
 
 // Covers: Tools/Inspector/AssetKeyMap.cpp
 
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <string>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Cooker/Test/Pak/PakTestSupport.h>
@@ -33,8 +35,10 @@ protected:
       std::ofstream input(Path("request.json"));
       input << request.dump();
     }
-    return RunAssetKeyMap(
-      { Path("request.json").string(), Path("report.json").string() });
+    return RunAssetKeyMap({
+      .input = Path("request.json").string(),
+      .output = Path("report.json").string(),
+    });
   }
 
   auto Read() -> json
@@ -74,13 +78,21 @@ NOLINT_TEST_F(
 
 NOLINT_TEST_F(InspectorAssetKeyMapTest, InvalidRequestsPreserveExistingReport)
 {
-  const auto valid = json { { "schema", "oxygen.asset-key-request.v1" },
-    { "virtual_paths", { "/Content/Materials/A.omat" } } };
+  const auto valid = json {
+    { "schema", "oxygen.asset-key-request.v1" },
+    { "virtual_paths", { "/Content/Materials/A.omat" } },
+  };
   ASSERT_EQ(Run(valid), 0);
   const auto original = Read();
-  for (const auto& path :
-    { "relative/A.omat", "/Content/../A.omat", "/Content/./A.omat",
-      "/Content//A.omat", "/Content\\A.omat", "/Content/..", "/Content/." }) {
+  for (const auto& path : {
+         "relative/A.omat",
+         "/Content/../A.omat",
+         "/Content/./A.omat",
+         "/Content//A.omat",
+         "/Content\\A.omat",
+         "/Content/..",
+         "/Content/.",
+       }) {
     SCOPED_TRACE(path);
     auto invalid = valid;
     invalid["virtual_paths"] = json::array({ path });

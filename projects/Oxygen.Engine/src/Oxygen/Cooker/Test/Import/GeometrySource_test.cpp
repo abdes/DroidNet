@@ -54,10 +54,10 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source = GeometrySource::FromDescriptor(
       MakeDescriptor().dump(), "authored/geometry.json", diagnostics);
-    ASSERT_TRUE(source.has_value()) << "Expected source to contain a value";
+    ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     EXPECT_TRUE(diagnostics.empty());
     EXPECT_EQ(source->name, "Geometry.v2");
-    ASSERT_TRUE(source->content_hashing.has_value())
+    ASSERT_HAS_VALUE(source->content_hashing)
       << "Expected source->content_hashing to contain a value";
     EXPECT_FALSE(*source->content_hashing);
     ASSERT_EQ(source->buffers.size(), 1U);
@@ -142,7 +142,7 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source = GeometrySource::FromDescriptor(
       document.dump(), "geometry.json", diagnostics);
-    ASSERT_TRUE(source.has_value()) << "Expected source to contain a value";
+    ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     ASSERT_EQ(source->lods.size(), 1U);
     const auto* skin
       = std::get_if<GeometrySource::Skinned>(&source->lods.front().mesh);
@@ -181,7 +181,7 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source = GeometrySource::FromDescriptor(
       document.dump(), "geometry.json", diagnostics);
-    ASSERT_TRUE(source.has_value()) << "Expected source to contain a value";
+    ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     ASSERT_EQ(source->lods.size(), 1U);
     const auto* procedural
       = std::get_if<GeometrySource::Procedural>(&source->lods.front().mesh);

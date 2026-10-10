@@ -7,9 +7,9 @@
 // Covers: Import/Schemas/oxygen.material-descriptor.schema.json
 
 #include <string>
-#include <vector>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Test/Support/JsonSchema.h>
 #include <Oxygen/Testing/GTest.h>
@@ -82,7 +82,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, MaterialDescriptorSchemaCaseTest,
         "defines": "USE_FOG=1"
       }
     ]
-  }))",
+  })",
       true,
       "",
     },

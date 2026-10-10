@@ -370,7 +370,7 @@ NOLINT_TEST_F(
       },
     },
     {});
-  ASSERT_TRUE(references.has_value());
+  ASSERT_HAS_VALUE(references);
   auto [context, collector] = CreateDecodeLoaderContext();
   context.asset_references = oxygen::observer_ptr(&*references);
   auto asset = LoadMaterialAsset(std::move(context));
@@ -506,7 +506,7 @@ NOLINT_TEST_F(
       },
     },
     {});
-  ASSERT_TRUE(references.has_value());
+  ASSERT_HAS_VALUE(references);
   auto [context, collector] = CreateDecodeLoaderContext();
   context.asset_references = oxygen::observer_ptr(&*references);
   (void)LoadMaterialAsset(std::move(context));
@@ -544,7 +544,7 @@ NOLINT_TEST_F(
       },
     },
     {});
-  ASSERT_TRUE(references.has_value());
+  ASSERT_HAS_VALUE(references);
 
   // Act
   auto [context, collector] = CreateDecodeLoaderContext();

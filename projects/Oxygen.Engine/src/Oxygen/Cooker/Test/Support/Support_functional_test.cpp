@@ -8,14 +8,19 @@
 // Test/Support/TestPaths.cpp, Test/Support/JsonSchema.cpp
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <filesystem>
 #include <optional>
 #include <stdexcept>
 
-#include <nlohmann/json.hpp>
+#include <gtest/gtest-spi.h>
+#include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Test/Support/FileIo.h>
+#include <Oxygen/Cooker/Test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/Test/Support/JsonSchema.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Cooker/Test/Support/TestPaths.h>
@@ -47,8 +52,12 @@ class FileIoTest : public TempDirTest { };
 
 NOLINT_TEST_F(FileIoTest, BytesRoundTripThroughNestedPath)
 {
-  const auto bytes = std::array { std::byte { 0 }, std::byte { 0xFF },
-    std::byte { 0x0A }, std::byte { 0x0D } };
+  const auto bytes = std::array {
+    std::byte { 0 },
+    std::byte { 0xFF },
+    std::byte { 0x0A },
+    std::byte { 0x0D },
+  };
   const auto path = TempPath("nested/dir/data.bin");
   WriteBytes(path, bytes);
   EXPECT_THAT(ReadBytes(path), ::testing::ElementsAreArray(bytes));
@@ -86,6 +95,25 @@ NOLINT_TEST(JsonSchemaTest, ReportsViolationWithPointer)
     ::testing::IsEmpty());
   EXPECT_THAT(ValidateJson(schema, nlohmann::json::parse(R"({"n":"x"})")),
     ::testing::ElementsAre(::testing::StartsWith("/n: ")));
+}
+
+class ImportHarnessTest : public ImportServiceTest { };
+
+NOLINT_TEST_F(ImportHarnessTest, SubmitAndWaitReturnsNulloptOnRejectedSubmit)
+{
+  auto& service = Service();
+  service.Stop();
+
+  // SubmitAndWait records a non-fatal failure on a rejected submit; expect it
+  // and verify the bounded nullopt return does not hang.
+  auto report = std::optional<oxygen::content::import::ImportReport> {};
+  EXPECT_NONFATAL_FAILURE(
+    {
+      report = SubmitAndWait(service, oxygen::content::import::ImportRequest {},
+        std::chrono::seconds { 2 });
+    },
+    "Import submission was rejected");
+  EXPECT_FALSE(report.has_value());
 }
 
 } // namespace

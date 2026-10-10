@@ -4,9 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// Covers: Pak/PakPlanBuilder.cpp, Pak/PakWriter.cpp
-
-// Covers: Pak/PakBuilder.cpp, Pak/PakPlanBuilder.cpp
+// Covers: Pak/PakBuilder.cpp, Pak/PakPlanBuilder.cpp, Pak/PakWriter.cpp
 
 #include <algorithm>
 #include <array>
@@ -33,7 +31,9 @@
 #include <Oxygen/Cooker/Pak/PakWriter.h>
 #include <Oxygen/Cooker/Test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/Test/Support/Diagnostics.h>
+#include <Oxygen/Cooker/Test/Support/TestValues.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -113,21 +113,26 @@ NOLINT_TEST_F(
     .source_key = MakeSourceKey(1U),
   };
   const auto original = pak::PakPlanBuilder {}.Build(request);
-  ASSERT_TRUE(original.plan.has_value());
+  ASSERT_HAS_VALUE(original.plan);
   ASSERT_FALSE(
     HasError(pak::PakWriter {}.Write(request, *original.plan).diagnostics));
   {
     std::fstream archive(
       request.output_pak_path, std::ios::binary | std::ios::in | std::ios::out);
-    const auto offset = CheckedAt(original.plan->Assets(), 0U).offset
+    const auto offset
+      = oxygen::base::CheckedAt(original.plan->Assets(), 0U).offset
       + offsetof(core::AssetHeader, name);
     archive.seekp(static_cast<std::streamoff>(offset));
     archive.put('X');
     archive.flush();
     ASSERT_TRUE(archive.good());
   }
-  request.sources = { { .kind = data::CookedSourceKind::kPak,
-    .path = request.output_pak_path } };
+  request.sources = {
+    {
+      .kind = data::CookedSourceKind::kPak,
+      .path = request.output_pak_path,
+    },
+  };
   request.output_pak_path = Root() / "repacked.pak";
   request.source_key = MakeSourceKey(2U);
   const auto rejected = pak::PakPlanBuilder {}.Build(request);
@@ -169,7 +174,7 @@ NOLINT_TEST_F(PakRepackTest, RepackPreservesSceneBindings)
       EXPECT_NE(diagnostic.severity, pak::PakDiagnosticSeverity::kError)
         << diagnostic.message;
     }
-    ASSERT_TRUE(planned.plan.has_value());
+    ASSERT_HAS_VALUE(planned.plan);
     ASSERT_FALSE(
       HasError(pak::PakWriter {}.Write(repack, *planned.plan).diagnostics));
     auto archive = oxygen::content::PakFile(repack.output_pak_path);
@@ -177,18 +182,18 @@ NOLINT_TEST_F(PakRepackTest, RepackPreservesSceneBindings)
     for (const auto seed : { uint8_t { 1U }, uint8_t { 2U } }) {
       const auto entry
         = archive.FindEntry(MakeAssetKey(static_cast<uint8_t>(seed * 10U)));
-      ASSERT_TRUE(entry.has_value());
+      ASSERT_HAS_VALUE(entry);
       auto descriptor_reader = archive.CreateReader(*entry);
       const auto bytes = descriptor_reader.ReadBlob(entry->desc_size);
-      ASSERT_TRUE(bytes.has_value());
+      ASSERT_HAS_VALUE(bytes);
       const auto scene = data::SceneAsset(entry->asset_key, *bytes);
       ExpectDescriptorHash(*bytes);
       const auto sidecar_entry = archive.FindEntry(MakeAssetKey(seed));
-      ASSERT_TRUE(sidecar_entry.has_value());
+      ASSERT_HAS_VALUE(sidecar_entry);
       auto sidecar_reader = archive.CreateReader(*sidecar_entry);
       const auto sidecar_bytes
         = sidecar_reader.ReadBlob(sidecar_entry->desc_size);
-      ASSERT_TRUE(sidecar_bytes.has_value());
+      ASSERT_HAS_VALUE(sidecar_bytes);
       const auto sidecar = data::PhysicsSceneAsset(
         sidecar_entry->asset_key, std::span<const std::byte>(*sidecar_bytes));
       EXPECT_EQ(sidecar.GetTargetSceneKey(), entry->asset_key);
@@ -196,7 +201,7 @@ NOLINT_TEST_F(PakRepackTest, RepackPreservesSceneBindings)
         oxygen::base::ComputeSha256(*bytes)));
       ExpectDescriptorHash(*sidecar_bytes);
       const auto post_process = scene.TryGetPostProcessVolumeEnvironment();
-      ASSERT_TRUE(post_process.has_value());
+      ASSERT_HAS_VALUE(post_process);
       const auto expected_index = seed == 1U ? 1U
         : mode == pak::BuildMode::kFull      ? 3U
                                              : 2U;
@@ -206,12 +211,12 @@ NOLINT_TEST_F(PakRepackTest, RepackPreservesSceneBindings)
       const auto texture_binding = scene_references.ResolveResource(
         post_process->auto_exposure_metering_mask,
         data::ResourceKind::kTexture);
-      ASSERT_TRUE(texture_binding.has_value());
-      ASSERT_TRUE(texture_binding->has_value());
+      ASSERT_HAS_VALUE(texture_binding);
+      ASSERT_HAS_VALUE(*texture_binding);
       EXPECT_EQ((**texture_binding).get(), expected_index);
       const auto texture_offset
         = archive.TexturesTable().GetResourceOffset(**texture_binding);
-      ASSERT_TRUE(texture_offset.has_value());
+      ASSERT_HAS_VALUE(texture_offset);
       serio::FileStream<> stream(repack.output_pak_path, std::ios::in);
       serio::Reader reader(stream);
       ASSERT_TRUE(reader.Seek(*texture_offset));
@@ -219,16 +224,16 @@ NOLINT_TEST_F(PakRepackTest, RepackPreservesSceneBindings)
       ASSERT_TRUE(serio::Load(reader, texture));
       ASSERT_TRUE(reader.Seek(texture.data_offset));
       const auto payload = reader.ReadBlob(texture.size_bytes);
-      ASSERT_TRUE(payload.has_value());
+      ASSERT_HAS_VALUE(payload);
       EXPECT_EQ(
         *payload, std::vector<std::byte>(4U, static_cast<std::byte>(seed)));
       const auto material_entry
         = archive.FindEntry(MakeAssetKey(static_cast<uint8_t>(seed + 10U)));
-      ASSERT_TRUE(material_entry.has_value());
+      ASSERT_HAS_VALUE(material_entry);
       auto material_reader = archive.CreateReader(*material_entry);
       auto material = render::MaterialAssetDesc {};
       const auto material_payload = material_reader.ReadBlob(sizeof(material));
-      ASSERT_TRUE(material_payload.has_value());
+      ASSERT_HAS_VALUE(material_payload);
       ExpectDescriptorHash(*material_payload);
       std::memcpy(&material, material_payload->data(), sizeof(material));
       EXPECT_EQ(material.base_color_texture.get(), 0U);
@@ -236,8 +241,8 @@ NOLINT_TEST_F(PakRepackTest, RepackPreservesSceneBindings)
         = archive.ReadAssetReferences(material_entry->asset_key);
       const auto material_binding = material_references.ResolveResource(
         material.base_color_texture, data::ResourceKind::kTexture);
-      ASSERT_TRUE(material_binding.has_value());
-      ASSERT_TRUE(material_binding->has_value());
+      ASSERT_HAS_VALUE(material_binding);
+      ASSERT_HAS_VALUE(*material_binding);
       EXPECT_EQ((**material_binding).get(), expected_index);
     }
   }
@@ -263,10 +268,10 @@ NOLINT_TEST_F(PakRepackTest, ScriptBindingsSurviveSourceMergeAndPakRepacking)
     archive.ValidateCrc32Integrity();
     for (const auto seed : { uint8_t { 1U }, uint8_t { 2U } }) {
       const auto entry = archive.FindEntry(MakeAssetKey(seed));
-      ASSERT_TRUE(entry.has_value());
+      ASSERT_HAS_VALUE(entry);
       auto reader = archive.CreateReader(*entry);
       const auto bytes = reader.ReadBlob(entry->desc_size);
-      ASSERT_TRUE(bytes.has_value());
+      ASSERT_HAS_VALUE(bytes);
       EXPECT_EQ(*bytes, BuildSceneDescriptorWithScriptingSlots(seed));
       const auto scene = data::SceneAsset(entry->asset_key, *bytes);
       const auto bindings
@@ -294,7 +299,7 @@ NOLINT_TEST_F(PakRepackTest, ScriptBindingsSurviveSourceMergeAndPakRepacking)
     const auto planned = pak::PakPlanBuilder {}.Build(build_request);
     ASSERT_FALSE(HasError(planned.diagnostics))
       << cooktest::DiagnosticSummary(planned.diagnostics);
-    ASSERT_TRUE(planned.plan.has_value());
+    ASSERT_HAS_VALUE(planned.plan);
     const auto written = pak::PakWriter {}.Write(build_request, *planned.plan);
     ASSERT_FALSE(HasError(written.diagnostics))
       << cooktest::DiagnosticSummary(written.diagnostics);
@@ -365,8 +370,10 @@ NOLINT_TEST_F(PakRepackTest, BufferAndScriptReferencesSurvivePakRepacking)
         .descriptor_payload = geometry_bytes,
         .references = data::AssetReferences::Create(
           {
-            { .kind = data::ResourceKind::kBuffer,
-              .index = oxygen::ResourceIndexT { 1U } },
+            {
+              .kind = data::ResourceKind::kBuffer,
+              .index = oxygen::ResourceIndexT { 1U },
+            },
           },
           {})
           .value(),
@@ -381,8 +388,10 @@ NOLINT_TEST_F(PakRepackTest, BufferAndScriptReferencesSurvivePakRepacking)
         .descriptor_payload = { script_bytes.begin(), script_bytes.end() },
         .references = data::AssetReferences::Create(
           {
-            { .kind = data::ResourceKind::kScript,
-              .index = oxygen::ResourceIndexT { 1U } },
+            {
+              .kind = data::ResourceKind::kScript,
+              .index = oxygen::ResourceIndexT { 1U },
+            },
           },
           {})
           .value(),
@@ -461,8 +470,8 @@ NOLINT_TEST_F(PakRepackTest, BufferAndScriptReferencesSurvivePakRepacking)
         = archive.ReadAssetReferences(entry->asset_key);
       const auto buffer_binding = geometry_references.ResolveResource(
         mesh.info.standard.vertex_buffer, data::ResourceKind::kBuffer);
-      ASSERT_TRUE(buffer_binding.has_value());
-      ASSERT_TRUE(buffer_binding->has_value());
+      ASSERT_HAS_VALUE(buffer_binding);
+      ASSERT_HAS_VALUE(*buffer_binding);
       EXPECT_EQ((**buffer_binding).get(), expected);
       constexpr uint8_t kScriptKeyOffset = 10U;
       const auto script_entry = archive.FindEntry(
@@ -479,8 +488,8 @@ NOLINT_TEST_F(PakRepackTest, BufferAndScriptReferencesSurvivePakRepacking)
         = archive.ReadAssetReferences(script_entry->asset_key);
       const auto script_binding = script_references.ResolveResource(
         script_desc.bytecode_resource_index, data::ResourceKind::kScript);
-      ASSERT_TRUE(script_binding.has_value());
-      ASSERT_TRUE(script_binding->has_value());
+      ASSERT_HAS_VALUE(script_binding);
+      ASSERT_HAS_VALUE(*script_binding);
       EXPECT_EQ((**script_binding).get(), expected);
       oxygen::serio::FileStream<> stream(request.output_pak_path, std::ios::in);
       oxygen::serio::Reader payload_reader(stream);

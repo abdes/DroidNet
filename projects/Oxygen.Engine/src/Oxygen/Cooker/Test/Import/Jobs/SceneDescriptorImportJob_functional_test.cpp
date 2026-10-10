@@ -6,16 +6,13 @@
 
 // Covers: Import/Internal/Jobs/SceneDescriptorImportJob.cpp
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <exception>
 #include <filesystem>
-#include <fstream>
 #include <ios>
-#include <latch>
 #include <limits>
 #include <optional>
 #include <span>
@@ -27,12 +24,8 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
-#include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
-#include <Oxygen/Cooker/Import/AsyncImportService.h>
-#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
@@ -40,7 +33,7 @@
 #include <Oxygen/Cooker/Test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/Test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/Test/Support/FileIo.h>
-#include <Oxygen/Cooker/Test/Support/TempDir.h>
+#include <Oxygen/Cooker/Test/Support/ImportHarness.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -63,8 +56,8 @@ namespace oxygen::content::import::test {
 
 namespace {
 
+  using oxygen::cooker::test::ImportServiceTest;
   using oxygen::cooker::test::ReadBytes;
-  using oxygen::cooker::test::ScopedTempDir;
   using oxygen::cooker::test::WriteBytes;
   using oxygen::cooker::test::WriteText;
 
@@ -108,35 +101,7 @@ namespace {
 
   using oxygen::cooker::test::HasDiagnosticCode;
 
-  auto SubmitAndWait(AsyncImportService& service, ImportRequest request)
-    -> ImportReport
-  {
-    auto report = ImportReport {};
-    std::latch done(1);
-    const auto submitted = service.SubmitImport(
-      std::move(request),
-      [&report, &done](
-        const ImportJobId /*job_id*/, const ImportReport& completed) -> void {
-        report = completed;
-        done.count_down();
-      },
-      nullptr);
-    if (!submitted.has_value()) {
-      report.success = false;
-      report.diagnostics.push_back({
-        .severity = ImportSeverity::kError,
-        .code = "test.submit_failed",
-        .message = "Failed to submit scene descriptor import job",
-        .source_path = {},
-        .object_path = {},
-      });
-      return report;
-    }
-    done.wait();
-    return report;
-  }
-
-  class SceneDescriptorImportJobTest : public testing::Test {
+  class SceneDescriptorImportJobTest : public ImportServiceTest {
   protected:
     auto MakeRequest(const std::filesystem::path& cooked_root,
       const std::string& descriptor_json,
@@ -158,21 +123,19 @@ namespace {
 
   NOLINT_TEST_F(SceneDescriptorImportJobTest, EmptyScenePreservesEnvironment)
   {
-    const ScopedTempDir temp;
-    const auto root = temp.Path() / "empty_scene_environment";
+
+    const auto root = TempDir() / "empty_scene_environment";
     std::filesystem::create_directories(root);
-    auto service = AsyncImportService {};
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
-    const auto report = SubmitAndWait(service, MakeRequest(root, R"({
+    const auto report = Import(MakeRequest(root, R"({
       "name":"EmptyScene", "nodes":[],
       "environment": {
         "background": {"color_rgb":[0.1,0.2,0.3]},
         "post_process_volume": {"manual_exposure_ev":9.5}
       }
     })"));
-    ASSERT_TRUE(report.success);
-    ASSERT_EQ(report.scenes_written, 1U);
+    ASSERT_HAS_VALUE(report);
+    ASSERT_TRUE(report->success);
+    ASSERT_EQ(report->scenes_written, 1U);
     const auto bytes = ReadBytes(root / "Scenes/EmptyScene.oscene");
     const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
     EXPECT_TRUE(scene.GetNodes().empty());
@@ -197,20 +160,18 @@ namespace {
 
   NOLINT_TEST_F(SceneDescriptorImportJobTest, EmptySceneRejectsDanglingCamera)
   {
-    const ScopedTempDir temp;
-    const auto root = temp.Path() / "empty_scene_invalid_camera";
+
+    const auto root = TempDir() / "empty_scene_invalid_camera";
     std::filesystem::create_directories(root);
-    auto service = AsyncImportService {};
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
-    const auto report = SubmitAndWait(service, MakeRequest(root, R"({
+    const auto report = Import(MakeRequest(root, R"({
       "name":"EmptyScene", "nodes":[],
       "cameras":{"perspective":[{"node":0,"aspect_mode":"auto"}]}
     })"));
-    EXPECT_FALSE(report.success);
-    EXPECT_EQ(report.scenes_written, 0U);
+    ASSERT_HAS_VALUE(report);
+    EXPECT_FALSE(report->success);
+    EXPECT_EQ(report->scenes_written, 0U);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "scene.descriptor.camera_node_index_out_of_range"));
+      report->diagnostics, "scene.descriptor.camera_node_index_out_of_range"));
   }
 
   //! Writes a cooked texture sidecar naming source texture `index`.
@@ -260,29 +221,27 @@ namespace {
   NOLINT_TEST_F(SceneDescriptorImportJobTest,
     MeteringMaskUsesCurrentSourceLocalTextureReference)
   {
-    auto service = AsyncImportService {};
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
-    const ScopedTempDir temp;
-    const auto root = temp.Path() / "mask_reference";
+
+    const auto root = TempDir() / "mask_reference";
     std::filesystem::create_directories(root);
     constexpr auto kDescriptor = R"({"name":"MaskScene","nodes":[{}],
       "environment":{"post_process_volume":{"auto_exposure_metering_mask":"/.cooked/Textures/Meter.otex"}}})";
     WriteMeteringMaskSidecar(root, Format::kRGBA8UNorm, 4U);
-    const auto success = SubmitAndWait(service, MakeRequest(root, kDescriptor));
-    ASSERT_TRUE(success.success);
+    const auto success = Import(MakeRequest(root, kDescriptor));
+    ASSERT_HAS_VALUE(success);
+    ASSERT_TRUE(success->success);
     const auto bytes = ReadBytes(root / "Scenes/MaskScene.oscene");
     const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
     const auto exposure = scene.TryGetPostProcessVolumeEnvironment();
-    ASSERT_TRUE(exposure.has_value()) << "Expected exposure to contain a value";
+    ASSERT_HAS_VALUE(exposure) << "Expected exposure to contain a value";
     EXPECT_EQ(exposure->auto_exposure_metering_mask.get(), 0U);
     const auto index = lc::LooseCookedIndex::LoadFromRoot(root);
     const auto scene_key
       = index.FindAssetKeyByVirtualPath("/.cooked/Scenes/MaskScene.oscene");
-    ASSERT_TRUE(scene_key.has_value());
+    ASSERT_HAS_VALUE(scene_key);
     // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
     const auto references = index.FindAssetReferences(scene_key.value());
-    ASSERT_TRUE(references.has_value());
+    ASSERT_HAS_VALUE(references);
     // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
     EXPECT_THAT(references.value().Resources(),
       ::testing::ElementsAre(data::ResourceBinding {
@@ -291,36 +250,40 @@ namespace {
       }));
 
     WriteMeteringMaskSidecar(root, Format::kRGBA8UNormSRGB, 4U);
-    const auto srgb = SubmitAndWait(service, MakeRequest(root, kDescriptor));
-    EXPECT_FALSE(srgb.success);
+    const auto srgb = Import(MakeRequest(root, kDescriptor));
+    ASSERT_HAS_VALUE(srgb);
+    EXPECT_FALSE(srgb->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      srgb.diagnostics, "scene.descriptor.mask_format_invalid"));
+      srgb->diagnostics, "scene.descriptor.mask_format_invalid"));
     WriteMeteringMaskSidecar(root, Format::kRGBA8UNorm, 0U);
-    const auto absent = SubmitAndWait(service, MakeRequest(root, kDescriptor));
-    EXPECT_FALSE(absent.success);
+    const auto absent = Import(MakeRequest(root, kDescriptor));
+    ASSERT_HAS_VALUE(absent);
+    EXPECT_FALSE(absent->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      absent.diagnostics, "scene.descriptor.mask_source_invalid"));
+      absent->diagnostics, "scene.descriptor.mask_source_invalid"));
 
-    const auto external = temp.Path() / "external_mask_reference";
+    const auto external = TempDir() / "external_mask_reference";
     std::filesystem::create_directories(external);
     WriteMeteringMaskSidecar(external, Format::kRGBA8UNorm, 1U);
     auto request = MakeRequest(root, kDescriptor);
     request.cooked_context_roots.push_back(external);
-    const auto foreign = SubmitAndWait(service, std::move(request));
-    EXPECT_FALSE(foreign.success);
+    const auto foreign = Import(std::move(request));
+    ASSERT_HAS_VALUE(foreign);
+    EXPECT_FALSE(foreign->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      foreign.diagnostics, "scene.descriptor.mask_source_invalid"));
+      foreign->diagnostics, "scene.descriptor.mask_source_invalid"));
 
     // A deleted mask leaves the scene without one, with a warning.
     std::filesystem::remove(root / "Textures/Meter.otex");
-    const auto deleted = SubmitAndWait(service, MakeRequest(root, kDescriptor));
-    EXPECT_TRUE(deleted.success);
+    const auto deleted = Import(MakeRequest(root, kDescriptor));
+    ASSERT_HAS_VALUE(deleted);
+    EXPECT_TRUE(deleted->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      deleted.diagnostics, "scene.descriptor.texture_descriptor_missing"));
+      deleted->diagnostics, "scene.descriptor.texture_descriptor_missing"));
     const auto unmasked = data::SceneAsset(
       data::AssetKey {}, ReadBytes(root / "Scenes/MaskScene.oscene"))
                             .TryGetPostProcessVolumeEnvironment();
-    ASSERT_TRUE(unmasked.has_value());
+    ASSERT_HAS_VALUE(unmasked);
     // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
     EXPECT_EQ(
       unmasked->auto_exposure_metering_mask, data::kNoResourceReference);
@@ -330,13 +293,10 @@ namespace {
     PhysicalCamerasRoundTripWithAuthoredValuesAndDefaults)
   {
     namespace world = data::pak::world;
-    const ScopedTempDir temp;
-    const auto root = temp.Path() / "physical_cameras";
+
+    const auto root = TempDir() / "physical_cameras";
     std::filesystem::create_directories(root);
-    auto service = AsyncImportService {};
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
-    const auto report = SubmitAndWait(service, MakeRequest(root, R"({
+    const auto report = Import(MakeRequest(root, R"({
       "name": "Physical", "nodes": [{}, {}, {}, {}],
       "cameras": {
         "perspective": [
@@ -347,7 +307,8 @@ namespace {
           {"node":3,"aspect_mode":"auto"}]
       }
     })"));
-    ASSERT_TRUE(report.success);
+    ASSERT_HAS_VALUE(report);
+    ASSERT_TRUE(report->success);
     const auto bytes = ReadBytes(root / "Scenes/Physical.oscene");
     const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
     const auto perspective
@@ -382,11 +343,8 @@ namespace {
   NOLINT_TEST_F(
     SceneDescriptorImportJobTest, RejectsCoupledExposureAndCurveErrors)
   {
-    auto service = AsyncImportService {};
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
-    const ScopedTempDir temp;
-    const auto root = temp.Path() / "invalid_exposure";
+
+    const auto root = TempDir() / "invalid_exposure";
     std::filesystem::create_directories(root);
     for (const auto& invalid : std::vector<nlohmann::json> {
            { { "auto_exposure_min_ev", 10 }, { "auto_exposure_max_ev", 5 } },
@@ -414,12 +372,12 @@ namespace {
       document.update(
         { { "environment", { { "post_process_volume", invalid } } } });
       SCOPED_TRACE(document.dump());
-      const auto report
-        = SubmitAndWait(service, MakeRequest(root, document.dump()));
-      EXPECT_FALSE(report.success);
-      EXPECT_EQ(report.scenes_written, 0U);
+      const auto report = Import(MakeRequest(root, document.dump()));
+      ASSERT_HAS_VALUE(report);
+      EXPECT_FALSE(report->success);
+      EXPECT_EQ(report->scenes_written, 0U);
       EXPECT_TRUE(HasDiagnosticCode(
-        report.diagnostics, "scene.descriptor.exposure_invalid"));
+        report->diagnostics, "scene.descriptor.exposure_invalid"));
     }
   }
 
@@ -427,13 +385,10 @@ namespace {
     SceneDescriptorImportJobTest, NodeFlagSourceModesRoundTripWithoutFlattening)
   {
     namespace world = data::pak::world;
-    const ScopedTempDir temp;
-    const auto root = temp.Path() / "node_flag_source_modes";
+
+    const auto root = TempDir() / "node_flag_source_modes";
     std::filesystem::create_directories(root);
-    auto service = AsyncImportService {};
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
-    const auto report = SubmitAndWait(service, MakeRequest(root, R"({
+    const auto report = Import(MakeRequest(root, R"({
       "name": "Flags",
       "nodes": [
         {"name":"HiddenRoot", "flags":{
@@ -446,8 +401,9 @@ namespace {
           "visible":"inherit", "casts_shadows":"inherit", "receives_shadows":"inherit"}}
       ]
     })"));
-    ASSERT_TRUE(report.success);
-    ASSERT_EQ(report.scenes_written, 1U);
+    ASSERT_HAS_VALUE(report);
+    ASSERT_TRUE(report->success);
+    ASSERT_EQ(report->scenes_written, 1U);
     const auto bytes = ReadBytes(root / "Scenes/Flags.oscene");
     const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
     const auto nodes = scene.GetNodes();
@@ -487,19 +443,16 @@ namespace {
   NOLINT_TEST_F(
     SceneDescriptorImportJobTest, OrderedRootsResolveLastMatchingAsset)
   {
-    const ScopedTempDir temp;
-    const auto output = temp.Path() / "ordered_output";
+
+    const auto output = TempDir() / "ordered_output";
     std::filesystem::create_directories(output);
-    const auto library = temp.Path() / "ordered_library";
+    const auto library = TempDir() / "ordered_library";
     std::filesystem::create_directories(library);
     const auto own_key = data::AssetKey::FromVirtualPath("/Own/Mesh.ogeo");
     const auto library_key
       = data::AssetKey::FromVirtualPath("/Library/Mesh.ogeo");
     WriteIndexedReference(output, own_key, data::AssetType::kGeometry);
     WriteIndexedReference(library, library_key, data::AssetType::kGeometry);
-    auto service = AsyncImportService {};
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
     const auto* const descriptor = R"({"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { false, true }) {
@@ -507,8 +460,9 @@ namespace {
       request.cooked_context_roots = own_wins
         ? std::vector<std::filesystem::path> { library, output }
         : std::vector<std::filesystem::path> { output, library };
-      const auto report = SubmitAndWait(service, std::move(request));
-      ASSERT_TRUE(report.success);
+      const auto report = Import(std::move(request));
+      ASSERT_HAS_VALUE(report);
+      ASSERT_TRUE(report->success);
       const auto bytes = ReadBytes(
         output / LooseCookedLayout {}.SceneDescriptorRelPath("Scene"));
       const auto scene = data::SceneAsset(
@@ -524,10 +478,10 @@ namespace {
   NOLINT_TEST_F(SceneDescriptorImportJobTest,
     NewDescriptorRespectsPriorityBeforeIndexPublication)
   {
-    const ScopedTempDir temp;
-    const auto output = temp.Path() / "unindexed_output";
+
+    const auto output = TempDir() / "unindexed_output";
     std::filesystem::create_directories(output);
-    const auto library = temp.Path() / "unindexed_library";
+    const auto library = TempDir() / "unindexed_library";
     std::filesystem::create_directories(library);
     const auto own_key
       = data::AssetKey::FromVirtualPath("/Art/Geometry/Mesh.ogeo");
@@ -535,9 +489,6 @@ namespace {
       = data::AssetKey::FromVirtualPath("/Library/Mesh.ogeo");
     WriteText(output / "Geometry/Mesh.ogeo", "new descriptor");
     WriteIndexedReference(library, library_key, data::AssetType::kGeometry);
-    auto service = AsyncImportService {};
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
     const auto* const descriptor = R"({"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { true, false }) {
@@ -546,8 +497,9 @@ namespace {
       request.cooked_context_roots = own_wins
         ? std::vector<std::filesystem::path> { library, output }
         : std::vector<std::filesystem::path> { output, library };
-      const auto report = SubmitAndWait(service, std::move(request));
-      ASSERT_TRUE(report.success);
+      const auto report = Import(std::move(request));
+      ASSERT_HAS_VALUE(report);
+      ASSERT_TRUE(report->success);
       const auto bytes = ReadBytes(
         output / LooseCookedLayout {}.SceneDescriptorRelPath("Scene"));
       const auto scene = data::SceneAsset(
@@ -563,10 +515,10 @@ namespace {
   NOLINT_TEST_F(
     SceneDescriptorImportJobTest, WinningRootTypeMismatchDoesNotFallBack)
   {
-    const ScopedTempDir temp;
-    const auto output = temp.Path() / "wrong_winner_output";
+
+    const auto output = TempDir() / "wrong_winner_output";
     std::filesystem::create_directories(output);
-    const auto library = temp.Path() / "wrong_winner_library";
+    const auto library = TempDir() / "wrong_winner_library";
     std::filesystem::create_directories(library);
     WriteIndexedReference(output,
       data::AssetKey::FromVirtualPath("/Own/Mesh.ogeo"),
@@ -574,24 +526,22 @@ namespace {
     WriteIndexedReference(library,
       data::AssetKey::FromVirtualPath("/Library/Wrong.omat"),
       data::AssetType::kMaterial);
-    auto service = AsyncImportService {};
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
     auto request
       = MakeRequest(output, R"({"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})");
     request.cooked_context_roots = { library };
-    const auto report = SubmitAndWait(service, std::move(request));
-    EXPECT_FALSE(report.success);
+    const auto report = Import(std::move(request));
+    ASSERT_HAS_VALUE(report);
+    EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "scene.descriptor.reference_type_mismatch"));
+      report->diagnostics, "scene.descriptor.reference_type_mismatch"));
   }
 
   NOLINT_TEST_F(
     SceneDescriptorImportJobTest, ResolvesReferencesAndEmitsSceneDescriptor)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "resolves_and_emits";
+
+    const auto cooked_root = TempDir() / "resolves_and_emits";
     std::filesystem::create_directories(cooked_root);
     ASSERT_NO_FATAL_FAILURE(
       WriteSlotGeometry(cooked_root / "Geometry" / "cube.ogeo"));
@@ -601,13 +551,7 @@ namespace {
     WriteText(cooked_root / "Input" / "gameplay.oimap", "oimap");
     WriteText(cooked_root / "Scenes" / "DemoScene.opscene", "physics");
 
-    auto service = AsyncImportService(AsyncImportService::Config {
-      .thread_pool_size = 2U,
-    });
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
-
-    const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
+    const auto report = Import(MakeRequest(cooked_root, R"({
       "name": "DemoScene",
       "nodes": [
         { "name": "Root" },
@@ -633,10 +577,11 @@ namespace {
       }
     })"));
 
-    EXPECT_TRUE(report.success);
-    EXPECT_EQ(report.scenes_written, 1U);
+    ASSERT_HAS_VALUE(report);
+    EXPECT_TRUE(report->success);
+    EXPECT_EQ(report->scenes_written, 1U);
     EXPECT_FALSE(HasDiagnosticCode(
-      report.diagnostics, "scene.descriptor.reference_missing"));
+      report->diagnostics, "scene.descriptor.reference_missing"));
 
     auto layout = LooseCookedLayout {};
     const auto expected_relpath = layout.SceneDescriptorRelPath("DemoScene");
@@ -662,16 +607,11 @@ namespace {
   NOLINT_TEST_F(
     SceneDescriptorImportJobTest, MissingGeometryReferenceProducesDiagnostic)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "missing_geometry_reference";
-    std::filesystem::create_directories(cooked_root);
-    auto service = AsyncImportService(AsyncImportService::Config {
-      .thread_pool_size = 2U,
-    });
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
 
-    const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
+    const auto cooked_root = TempDir() / "missing_geometry_reference";
+    std::filesystem::create_directories(cooked_root);
+
+    const auto report = Import(MakeRequest(cooked_root, R"({
       "name": "DemoScene",
       "nodes": [
         { "name": "Root" },
@@ -685,24 +625,20 @@ namespace {
       ]
     })"));
 
-    EXPECT_FALSE(report.success);
+    ASSERT_HAS_VALUE(report);
+    EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "scene.descriptor.reference_missing"));
+      report->diagnostics, "scene.descriptor.reference_missing"));
   }
 
   NOLINT_TEST_F(SceneDescriptorImportJobTest,
     DirectionalLightManualCascadeDistancesDeriveMaxShadowDistance)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "directional_light_tuning";
-    std::filesystem::create_directories(cooked_root);
-    auto service = AsyncImportService(AsyncImportService::Config {
-      .thread_pool_size = 2U,
-    });
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
 
-    const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
+    const auto cooked_root = TempDir() / "directional_light_tuning";
+    std::filesystem::create_directories(cooked_root);
+
+    const auto report = Import(MakeRequest(cooked_root, R"({
       "name": "DirectionalTuning",
       "nodes": [
         { "name": "Root" },
@@ -731,8 +667,9 @@ namespace {
       }
     })"));
 
-    EXPECT_TRUE(report.success);
-    EXPECT_EQ(report.scenes_written, 1U);
+    ASSERT_HAS_VALUE(report);
+    EXPECT_TRUE(report->success);
+    EXPECT_EQ(report->scenes_written, 1U);
 
     auto layout = LooseCookedLayout {};
     const auto scene_path = cooked_root
@@ -835,43 +772,33 @@ namespace {
   NOLINT_TEST_F(SceneDescriptorImportJobTest,
     RejectsLegacyDescriptorVersionWithRecookDiagnostic)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "legacy_version";
-    std::filesystem::create_directories(cooked_root);
-    auto service = AsyncImportService(AsyncImportService::Config {
-      .thread_pool_size = 2U,
-    });
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
 
-    const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
+    const auto cooked_root = TempDir() / "legacy_version";
+    std::filesystem::create_directories(cooked_root);
+
+    const auto report = Import(MakeRequest(cooked_root, R"({
       "version": 2,
       "name": "LegacyScene",
       "nodes": [ { "name": "Root" } ]
     })"));
 
-    EXPECT_FALSE(report.success);
+    ASSERT_HAS_VALUE(report);
+    EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "scene.descriptor.recook_required"));
+      report->diagnostics, "scene.descriptor.recook_required"));
   }
 
   NOLINT_TEST_F(
     SceneDescriptorImportJobTest, SerializesV3EnvironmentAndLocalFogRecords)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "environment_and_local_fog";
+
+    const auto cooked_root = TempDir() / "environment_and_local_fog";
     std::filesystem::create_directories(cooked_root);
     WriteCubemapSidecar(cooked_root, "sky_probe.otex", 5U);
     WriteCubemapSidecar(cooked_root, "fog_probe.otex", 6U);
     WriteCubemapSidecar(cooked_root, "backdrop.otex", 7U);
 
-    auto service = AsyncImportService(AsyncImportService::Config {
-      .thread_pool_size = 2U,
-    });
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
-
-    const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
+    const auto report = Import(MakeRequest(cooked_root, R"({
       "name": "EnvironmentScene",
       "nodes": [
         { "name": "Root" },
@@ -960,8 +887,9 @@ namespace {
       ]
     })"));
 
-    EXPECT_TRUE(report.success);
-    EXPECT_EQ(report.scenes_written, 1U);
+    ASSERT_HAS_VALUE(report);
+    EXPECT_TRUE(report->success);
+    EXPECT_EQ(report->scenes_written, 1U);
 
     auto layout = LooseCookedLayout {};
     const auto scene_path = cooked_root
@@ -976,7 +904,7 @@ namespace {
       oxygen::data::AssetKey {}, std::span<const std::byte>(scene_bytes));
 
     const auto fog = scene.TryGetFogEnvironment();
-    ASSERT_TRUE(fog.has_value()) << "Expected fog to contain a value";
+    ASSERT_HAS_VALUE(fog) << "Expected fog to contain a value";
     EXPECT_EQ(fog->enable_height_fog, 1U);
     EXPECT_EQ(fog->enable_volumetric_fog, 1U);
     EXPECT_FLOAT_EQ(fog->second_fog_density, 0.03F);
@@ -985,16 +913,14 @@ namespace {
     EXPECT_EQ(fog->visible_in_real_time_sky_captures, 0U);
 
     const auto sky_light = scene.TryGetSkyLightEnvironment();
-    ASSERT_TRUE(sky_light.has_value())
-      << "Expected sky_light to contain a value";
+    ASSERT_HAS_VALUE(sky_light) << "Expected sky_light to contain a value";
     EXPECT_FLOAT_EQ(sky_light->source_cubemap_angle_radians, 0.75F);
     EXPECT_EQ(sky_light->lower_hemisphere_is_solid_color, 0U);
     EXPECT_FLOAT_EQ(sky_light->lower_hemisphere_blend_alpha, 0.35F);
     EXPECT_FLOAT_EQ(sky_light->volumetric_scattering_intensity, 0.4F);
 
     const auto sky_sphere = scene.TryGetSkySphereEnvironment();
-    ASSERT_TRUE(sky_sphere.has_value())
-      << "Expected sky_sphere to contain a value";
+    ASSERT_HAS_VALUE(sky_sphere) << "Expected sky_sphere to contain a value";
     EXPECT_EQ(sky_sphere->source, 0U);
     EXPECT_FLOAT_EQ(sky_sphere->intensity, 2.0F);
     EXPECT_FLOAT_EQ(sky_sphere->rotation_radians, 1.25F);
@@ -1005,10 +931,10 @@ namespace {
     const auto index = lc::LooseCookedIndex::LoadFromRoot(cooked_root);
     const auto scene_key = index.FindAssetKeyByVirtualPath(
       "/.cooked/Scenes/EnvironmentScene.oscene");
-    ASSERT_TRUE(scene_key.has_value());
+    ASSERT_HAS_VALUE(scene_key);
     // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
     const auto references = index.FindAssetReferences(scene_key.value());
-    ASSERT_TRUE(references.has_value());
+    ASSERT_HAS_VALUE(references);
     const auto texture_of
       = [&](const data::ResourceReferenceIndex reference) -> uint32_t {
       // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
@@ -1032,12 +958,8 @@ namespace {
   NOLINT_TEST_F(
     SceneDescriptorImportJobTest, CompletePostProcessAndBackgroundRoundTrip)
   {
-    auto service = AsyncImportService(
-      AsyncImportService::Config { .thread_pool_size = 2U });
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
-    const ScopedTempDir temp;
-    const auto root = temp.Path() / "complete_environment";
+
+    const auto root = TempDir() / "complete_environment";
     std::filesystem::create_directories(root);
     auto document = nlohmann::json::parse(
       R"JSON(
@@ -1103,17 +1025,18 @@ namespace {
             { "exposure_enabled", exposure == 1 },
           });
           SCOPED_TRACE(document.dump());
-          const auto report = SubmitAndWait(
-            service, MakeRequest(root, document.dump(), "Environment"));
-          ASSERT_TRUE(report.success);
-          EXPECT_EQ(report.scenes_written, 1U);
+          const auto report
+            = Import(MakeRequest(root, document.dump(), "Environment"));
+          ASSERT_HAS_VALUE(report);
+          ASSERT_TRUE(report->success);
+          EXPECT_EQ(report->scenes_written, 1U);
           const auto path
             = root / LooseCookedLayout {}.SceneDescriptorRelPath("Environment");
           const auto bytes = ReadBytes(path);
           const auto scene = data::SceneAsset(
             data::AssetKey {}, std::span<const std::byte>(bytes));
           const auto post = scene.TryGetPostProcessVolumeEnvironment();
-          ASSERT_TRUE(post.has_value());
+          ASSERT_HAS_VALUE(post);
           EXPECT_EQ(post->header.record_size, 160U);
           EXPECT_EQ(static_cast<uint32_t>(post->tone_mapper), tone);
           EXPECT_EQ(static_cast<uint32_t>(post->exposure_mode), exposure);
@@ -1167,20 +1090,16 @@ namespace {
   NOLINT_TEST_F(SceneDescriptorImportJobTest,
     RejectsPreviousSceneVersionWithRecookDiagnostic)
   {
-    auto service = AsyncImportService(
-      AsyncImportService::Config { .thread_pool_size = 1U });
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
-    const ScopedTempDir temp;
-    const auto root = temp.Path() / "previous_scene_version";
+
+    const auto root = TempDir() / "previous_scene_version";
     std::filesystem::create_directories(root);
-    const auto report = SubmitAndWait(service,
-      MakeRequest(
-        root, R"({"version":5,"name":"Old","nodes":[{"name":"Root"}]})"));
-    EXPECT_FALSE(report.success);
-    EXPECT_EQ(report.scenes_written, 0U);
+    const auto report = Import(MakeRequest(
+      root, R"({"version":5,"name":"Old","nodes":[{"name":"Root"}]})"));
+    ASSERT_HAS_VALUE(report);
+    EXPECT_FALSE(report->success);
+    EXPECT_EQ(report->scenes_written, 0U);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "scene.descriptor.recook_required"));
+      report->diagnostics, "scene.descriptor.recook_required"));
   }
 
 } // namespace

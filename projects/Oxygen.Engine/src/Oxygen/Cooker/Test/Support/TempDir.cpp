@@ -6,12 +6,16 @@
 
 #include <atomic>
 #include <cstdint>
+#include <filesystem>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <system_error>
 
-#if defined(_WIN32)
-#  include <Windows.h>
+#ifdef _WIN32
+#  include <Windows.h> // IWYU pragma: keep
+
+#  include <processthreadsapi.h>
 #else
 #  include <unistd.h>
 #endif
@@ -25,7 +29,7 @@ namespace {
 
   auto CurrentProcessId() -> uint64_t
   {
-#if defined(_WIN32)
+#ifdef _WIN32
     return static_cast<uint64_t>(::GetCurrentProcessId());
 #else
     return static_cast<uint64_t>(::getpid());

@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Test/Support/JsonSchema.h>
 #include <Oxygen/Testing/GTest.h>
@@ -250,17 +251,56 @@ NOLINT_TEST(
     json parameters;
   };
   const auto cases = std::vector<Case> {
-    { "Sphere", "latitude_segments",
-      { { "latitude_segments", kTooManySegments } } },
-    { "Plane", "x_segments", { { "x_segments", kTooManySegments } } },
-    { "Cylinder", "segments", { { "segments", kTooManySegments } } },
-    { "Cone", "segments", { { "segments", kTooManySegments } } },
-    { "Torus", "major_segments", { { "major_segments", kTooManySegments } } },
-    { "Plane", "size", { { "size", kTooLargeDimension } } },
-    { "Cylinder", "radius", { { "radius", kTooLargeDimension } } },
-    { "Cone", "height", { { "height", kTooLargeDimension } } },
-    { "Torus", "minor_radius", { { "minor_radius", kTooLargeDimension } } },
-    { "Quad", "width", { { "width", kTooLargeDimension } } },
+    {
+      .generator = "Sphere",
+      .key = "latitude_segments",
+      .parameters = { { "latitude_segments", kTooManySegments } },
+    },
+    {
+      .generator = "Plane",
+      .key = "x_segments",
+      .parameters = { { "x_segments", kTooManySegments } },
+    },
+    {
+      .generator = "Cylinder",
+      .key = "segments",
+      .parameters = { { "segments", kTooManySegments } },
+    },
+    {
+      .generator = "Cone",
+      .key = "segments",
+      .parameters = { { "segments", kTooManySegments } },
+    },
+    {
+      .generator = "Torus",
+      .key = "major_segments",
+      .parameters = { { "major_segments", kTooManySegments } },
+    },
+    {
+      .generator = "Plane",
+      .key = "size",
+      .parameters = { { "size", kTooLargeDimension } },
+    },
+    {
+      .generator = "Cylinder",
+      .key = "radius",
+      .parameters = { { "radius", kTooLargeDimension } },
+    },
+    {
+      .generator = "Cone",
+      .key = "height",
+      .parameters = { { "height", kTooLargeDimension } },
+    },
+    {
+      .generator = "Torus",
+      .key = "minor_radius",
+      .parameters = { { "minor_radius", kTooLargeDimension } },
+    },
+    {
+      .generator = "Quad",
+      .key = "width",
+      .parameters = { { "width", kTooLargeDimension } },
+    },
   };
   for (const auto& test_case : cases) {
     SCOPED_TRACE(test_case.generator);
@@ -281,18 +321,48 @@ NOLINT_TEST(GeometryDescriptorSchemaTest, RejectsInvalidCapsuleParameters)
     json parameters;
   };
   const auto cases = std::vector<Case> {
-    { ParamError("hemisphere_segments"), { { "hemisphere_segments", 0 } } },
-    { ParamError("hemisphere_segments"), { { "hemisphere_segments", 65 } } },
-    { ParamError("hemisphere_segments"), { { "hemisphere_segments", 1.5 } } },
-    { ParamError("radial_segments"), { { "radial_segments", 2 } } },
-    { ParamError("radial_segments"), { { "radial_segments", 257 } } },
-    { ParamError("radial_segments"), { { "radial_segments", "32" } } },
-    { ParamError("height"), { { "height", 0.0 } } },
-    { ParamError("height"), { { "height", 1.0e39 } } },
-    { ParamError("radius"), { { "radius", -0.5 } } },
-    { ParamError("radius"), { { "radius", 1.0e39 } } },
+    {
+      .error_substr = ParamError("hemisphere_segments"),
+      .parameters = { { "hemisphere_segments", 0 } },
+    },
+    {
+      .error_substr = ParamError("hemisphere_segments"),
+      .parameters = { { "hemisphere_segments", 65 } },
+    },
+    {
+      .error_substr = ParamError("hemisphere_segments"),
+      .parameters = { { "hemisphere_segments", 1.5 } },
+    },
+    {
+      .error_substr = ParamError("radial_segments"),
+      .parameters = { { "radial_segments", 2 } },
+    },
+    {
+      .error_substr = ParamError("radial_segments"),
+      .parameters = { { "radial_segments", 257 } },
+    },
+    {
+      .error_substr = ParamError("radial_segments"),
+      .parameters = { { "radial_segments", "32" } },
+    },
+    {
+      .error_substr = ParamError("height"),
+      .parameters = { { "height", 0.0 } },
+    },
+    {
+      .error_substr = ParamError("height"),
+      .parameters = { { "height", 1.0e39 } },
+    },
+    {
+      .error_substr = ParamError("radius"),
+      .parameters = { { "radius", -0.5 } },
+    },
+    {
+      .error_substr = ParamError("radius"),
+      .parameters = { { "radius", 1.0e39 } },
+    },
     // Not a capsule parameter, so it is reported as an extra property.
-    { "'segments'", { { "segments", 16 } } },
+    { .error_substr = "'segments'", .parameters = { { "segments", 16 } } },
   };
   for (const auto& test_case : cases) {
     SCOPED_TRACE(test_case.parameters.dump());

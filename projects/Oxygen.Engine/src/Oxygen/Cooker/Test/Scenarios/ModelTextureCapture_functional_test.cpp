@@ -23,20 +23,12 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
-#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/CapturedInputSet.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
-#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
-#include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
-#include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
-#include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
-#include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
 #include <Oxygen/Cooker/Test/Support/ModelImportTestBase.h>
-#include <Oxygen/Cooker/Test/Support/TestPaths.h>
-#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -90,7 +82,7 @@ namespace {
       EXPECT_GT(cooked.report.geometry_written, 0U);
       EXPECT_GT(cooked.report.materials_written, 0U);
       EXPECT_EQ(std::ranges::any_of(cooked.report.outputs,
-                  [](const auto& output) {
+                  [](const auto& output) -> auto {
                     return std::string_view(output.path).ends_with(".otex");
                   }),
         placeholder);
@@ -112,10 +104,10 @@ namespace {
         .metadata = FileInfo { .size = bytes.size(),
           .last_modified = {},
           .is_directory = false,
-          .is_symlink = false },
+          .is_symlink = false, },
         .file = CapturedInputFile { .path = physical,
           .size = bytes.size(),
-          .digest = base::ComputeSha256(std::as_bytes(std::span(bytes))) },
+          .digest = base::ComputeSha256(std::as_bytes(std::span(bytes))), },
       };
     }
 
@@ -134,8 +126,17 @@ namespace {
     const auto logical = root / "authored" / "triangle.gltf";
     auto document = Triangle();
     document.at("buffers").at(0).at("uri") = "mesh%20data.bin";
-    constexpr auto vertices = std::array<float, 9> { 0.0F, 0.0F, 0.0F, 1.0F,
-      0.0F, 0.0F, 0.0F, 1.0F, 0.0F };
+    constexpr auto vertices = std::array<float, 9> {
+      0.0F,
+      0.0F,
+      0.0F,
+      1.0F,
+      0.0F,
+      0.0F,
+      0.0F,
+      1.0F,
+      0.0F,
+    };
     const auto vertex_bytes = std::as_bytes(std::span(vertices));
     const auto buffer = root / "buffer.capture";
     {
@@ -154,10 +155,10 @@ namespace {
         .metadata = FileInfo { .size = vertex_bytes.size(),
           .last_modified = {},
           .is_directory = false,
-          .is_symlink = false },
+          .is_symlink = false, },
         .file = CapturedInputFile { .path = buffer,
           .size = vertex_bytes.size(),
-          .digest = base::ComputeSha256(vertex_bytes) },
+          .digest = base::ComputeSha256(vertex_bytes), },
       },
     };
     auto request = ImportRequest {};

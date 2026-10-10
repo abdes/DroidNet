@@ -4,9 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <ios>
+#include <optional>
+#include <span>
 #include <type_traits>
 
 #include <Oxygen/Cooker/Test/Support/ModelImportTestBase.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
 
@@ -22,8 +30,8 @@ auto ModelImportTestBase::FindAssetOfType(const Inspection& inspection,
   const AssetType type) -> std::optional<Inspection::AssetEntry>
 {
   const auto assets = inspection.Assets();
-  const auto it = std::find_if(
-    assets.begin(), assets.end(), [type](const Inspection::AssetEntry& entry) {
+  const auto it = std::ranges::find_if(
+    assets, [type](const Inspection::AssetEntry& entry) -> bool {
       return entry.asset_type == static_cast<uint8_t>(type);
     });
   if (it == assets.end()) {
@@ -36,8 +44,8 @@ auto ModelImportTestBase::CountAssetsOfType(
   const Inspection& inspection, const AssetType type) -> size_t
 {
   const auto assets = inspection.Assets();
-  return static_cast<size_t>(std::count_if(
-    assets.begin(), assets.end(), [type](const Inspection::AssetEntry& entry) {
+  return static_cast<size_t>(std::count_if(assets.begin(), assets.end(),
+    [type](const Inspection::AssetEntry& entry) -> bool {
       return entry.asset_type == static_cast<uint8_t>(type);
     }));
 }
@@ -70,7 +78,7 @@ auto ModelImportTestBase::LoadSceneReadback(const ImportReport& report)
 
   auto read_component_table
     = [&](const SceneComponentTableDesc& entry, auto& out) -> bool {
-    using Record = typename std::remove_reference_t<decltype(out)>::value_type;
+    using Record = std::remove_reference_t<decltype(out)>::value_type;
     if (entry.table.count == 0U) {
       out.clear();
       return true;
@@ -146,10 +154,9 @@ auto ModelImportTestBase::LoadSceneReadback(const ImportReport& report)
         if (!read_component_table(entry, readback.point_lights)) {
           return {};
         }
-      } else if (type == ComponentType::kSpotLight) {
-        if (!read_component_table(entry, readback.spot_lights)) {
-          return {};
-        }
+      } else if ((type == ComponentType::kSpotLight)
+        && (!read_component_table(entry, readback.spot_lights))) {
+        return {};
       }
     }
   }
@@ -179,7 +186,7 @@ auto ModelImportTestBase::ValidateSceneOutputs(
   }
 
   const auto scene_entry = FindAssetOfType(inspection, AssetType::kScene);
-  ASSERT_TRUE(scene_entry.has_value());
+  ASSERT_HAS_VALUE(scene_entry);
 
   const auto scene_path = report.cooked_root
     / std::filesystem::path(scene_entry->descriptor_relpath);
@@ -237,7 +244,7 @@ auto ModelImportTestBase::ValidateSceneOutputs(
     }
   }
 
-  ASSERT_TRUE(renderables_entry.has_value());
+  ASSERT_HAS_VALUE(renderables_entry);
   EXPECT_EQ(renderables_entry->table.entry_size, sizeof(RenderableRecord));
   if (expected.geometry.has_value()) {
     EXPECT_EQ(renderables_entry->table.count,
@@ -284,12 +291,12 @@ auto ModelImportTestBase::ValidateSceneOutputs(
   }
 
   const auto files = inspection.Files();
-  const auto has_textures_table = std::any_of(
-    files.begin(), files.end(), [](const Inspection::FileEntry& entry) {
+  const auto has_textures_table = std::ranges::any_of(
+    files, [](const Inspection::FileEntry& entry) -> bool {
       return entry.kind == FileKind::kTexturesTable;
     });
-  const auto has_textures_data = std::any_of(
-    files.begin(), files.end(), [](const Inspection::FileEntry& entry) {
+  const auto has_textures_data = std::ranges::any_of(
+    files, [](const Inspection::FileEntry& entry) -> bool {
       return entry.kind == FileKind::kTexturesData;
     });
 

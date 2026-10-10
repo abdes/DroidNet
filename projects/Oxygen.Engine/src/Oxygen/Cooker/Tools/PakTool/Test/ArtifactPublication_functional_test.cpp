@@ -6,11 +6,11 @@
 
 // Covers: Tools/PakTool/ArtifactPublication.cpp
 
-#include <cstdlib>
 #include <filesystem>
 #include <optional>
 #include <string>
 #include <system_error>
+#include <utility>
 
 #include <Oxygen/Cooker/Test/Support/FileIo.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>

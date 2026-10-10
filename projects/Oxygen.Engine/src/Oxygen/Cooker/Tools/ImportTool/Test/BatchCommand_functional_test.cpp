@@ -10,7 +10,6 @@
 #include <expected>
 #include <filesystem>
 #include <fstream>
-#include <ios>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -46,31 +45,31 @@ class CapturingWriter final : public IMessageWriter {
 public:
   auto Error(const std::string_view message) -> bool override
   {
-    messages_.push_back(std::string(message));
+    messages_.emplace_back(message);
     return true;
   }
 
   auto Warning(const std::string_view message) -> bool override
   {
-    messages_.push_back(std::string(message));
+    messages_.emplace_back(message);
     return true;
   }
 
   auto Info(const std::string_view message) -> bool override
   {
-    messages_.push_back(std::string(message));
+    messages_.emplace_back(message);
     return true;
   }
 
   auto Report(const std::string_view message) -> bool override
   {
-    messages_.push_back(std::string(message));
+    messages_.emplace_back(message);
     return true;
   }
 
   auto Progress(const std::string_view message) -> bool override
   {
-    messages_.push_back(std::string(message));
+    messages_.emplace_back(message);
     return true;
   }
 
@@ -84,7 +83,7 @@ public:
   }
 
 private:
-  std::vector<std::string> messages_ {};
+  std::vector<std::string> messages_;
 };
 
 auto CountOccurrences(const std::string& text, const std::string_view token)
@@ -160,8 +159,12 @@ protected:
     const auto report_arg = report_path.has_value()
       ? report_path->generic_string()
       : std::string {};
-    std::vector<const char*> argv { "tool", "batch", "--manifest",
-      manifest_arg.c_str() };
+    std::vector<const char*> argv {
+      "tool",
+      "batch",
+      "--manifest",
+      manifest_arg.c_str(),
+    };
     options_.command_line = "tool batch --manifest " + manifest_arg;
     if (report_path.has_value()) {
       argv.push_back("--report");
@@ -182,8 +185,8 @@ protected:
 
 private:
   GlobalOptions options_ {};
-  std::unique_ptr<CapturingWriter> writer_ {};
-  std::unique_ptr<AsyncImportService> service_ {};
+  std::unique_ptr<CapturingWriter> writer_;
+  std::unique_ptr<AsyncImportService> service_;
 };
 
 NOLINT_TEST_F(BatchCommandPhysicsDagTest,

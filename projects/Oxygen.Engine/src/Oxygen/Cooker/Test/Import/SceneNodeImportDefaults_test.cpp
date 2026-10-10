@@ -6,8 +6,6 @@
 
 // Covers: Import/Internal/SceneNodeImportDefaults.h
 
-#include <cstdint>
-
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Testing/GTest.h>

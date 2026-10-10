@@ -10,6 +10,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <span>
@@ -23,7 +24,6 @@
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
-#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
@@ -31,7 +31,10 @@
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/Pak/PakWriter.h>
 #include <Oxygen/Cooker/Test/Support/DescriptorFixtures.h>
+#include <Oxygen/Cooker/Test/Support/FileIo.h>
+#include <Oxygen/Cooker/Test/Support/TestValues.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -39,18 +42,8 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
-#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SourceKey.h>
-#include <Oxygen/OxCo/Run.h>
-#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
-#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Testing/GTest.h>
-
-namespace oxygen::engine::internal {
-struct EngineTagFactory {
-  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
-};
-} // namespace oxygen::engine::internal
 
 using oxygen::base::CheckedAt;
 
@@ -100,36 +93,166 @@ auto ComputeExpectedBrowsePayloadSize(
     + string_bytes;
 }
 
-auto CheckPackagedPhysics(oxygen::co::testing::TestEventLoop* loop,
-  std::filesystem::path path, data::SourceKey source) -> oxygen::co::Co<>
+template <typename T> auto BytesOf(const T& value) -> std::vector<std::byte>
 {
-  oxygen::co::ThreadPool pool(*loop, 2);
-  oxygen::content::AssetLoaderConfig config {};
-  config.thread_pool = oxygen::observer_ptr(&pool);
-  oxygen::content::AssetLoader loader(
-    oxygen::engine::internal::EngineTagFactory::Get(), config);
-  OXCO_WITH_NURSERY(nursery)
-  {
-    co_await nursery.Start(
-      &oxygen::content::AssetLoader::ActivateAsync, &loader);
-    loader.Run();
-    loader.AddPakFile(path);
-    const auto key
-      = loader.MakePhysicsResourceKey(source, core::ResourceIndexT { 1U });
-    if (!key) {
-      ADD_FAILURE() << "Packed physics payload has no locator";
-      loader.Stop();
-      co_return oxygen::co::kJoin;
-    }
-    const auto payload = co_await loader.LoadPhysicsResourceAsync(*key);
-    if (!payload) {
-      ADD_FAILURE() << "Packed physics payload did not load";
-    } else {
-      EXPECT_THAT(payload->GetData(), ::testing::ElementsAre(2U, 2U, 2U, 2U));
-    }
-    loader.Stop();
-    co_return oxygen::co::kJoin;
+  const auto bytes = std::as_bytes(std::span { &value, 1U });
+  return { bytes.begin(), bytes.end() };
+}
+
+//! Reads the payload bytes that `pak_path` stores for physics resource
+//! `index`: its table descriptor, then the `[data_offset, data_offset +
+//! size_bytes)` slice of the file.
+auto ReadPackedPhysicsPayload(const std::filesystem::path& pak_path,
+  const core::ResourceIndexT index) -> std::vector<std::byte>
+{
+  const oxygen::content::PakFile packed(pak_path);
+  const auto descriptor_offset = packed.PhysicsTable().GetResourceOffset(index);
+  if (!descriptor_offset.has_value()) {
+    ADD_FAILURE() << "Physics resource " << index.get()
+                  << " is not in the table";
+    return {};
+  }
+  const auto bytes = oxygen::cooker::test::ReadBytes(pak_path);
+  auto descriptor = physics::PhysicsResourceDesc {};
+  if (*descriptor_offset + sizeof(descriptor) > bytes.size()) {
+    ADD_FAILURE() << "Physics descriptor lies outside the pak";
+    return {};
+  }
+  std::memcpy(&descriptor,
+    bytes.data() + static_cast<std::ptrdiff_t>(*descriptor_offset),
+    sizeof(descriptor));
+  if (descriptor.data_offset + descriptor.size_bytes > bytes.size()) {
+    ADD_FAILURE() << "Physics payload lies outside the pak";
+    return {};
+  }
+  const auto first
+    = bytes.begin() + static_cast<std::ptrdiff_t>(descriptor.data_offset);
+  return { first, first + static_cast<std::ptrdiff_t>(descriptor.size_bytes) };
+}
+
+//! An owner root whose collision shape references physics resource 1, and a
+//! library root with the same physics table. Both roots carry a payload for
+//! resource 1: the owner's is {1,1,1,1}, the library's {2,2,2,2}. The library
+//! is the later source, so its payload wins.
+struct LayeredPhysicsSources {
+  std::filesystem::path owner_root;
+  std::filesystem::path library_root;
+  data::AssetKey shape_key;
+  physics::CollisionShapeAssetDesc shape {};
+  std::array<AssetSpec, 2> assets {};
+  std::array<FileSpec, 2> files {};
+  pak::PakBuildRequest request {};
+};
+
+auto WriteLayeredPhysicsSources(
+  const std::filesystem::path& root, LayeredPhysicsSources& sources) -> void
+{
+  sources.owner_root = root / "owner";
+  sources.library_root = root / "library";
+  const auto material_key = MakeAssetKey(1U);
+  sources.shape_key = MakeAssetKey(2U);
+  const auto payload_key = MakeAssetKey(3U);
+  auto material = physics::PhysicsMaterialAssetDesc {};
+  material.header.asset_type
+    = static_cast<uint8_t>(data::AssetType::kPhysicsMaterial);
+  material.header.version = physics::kPhysicsMaterialAssetVersion;
+  auto& shape = sources.shape;
+  shape.header.asset_type
+    = static_cast<uint8_t>(data::AssetType::kCollisionShape);
+  shape.header.version = physics::kCollisionShapeAssetVersion;
+  shape.shape_type = physics::ShapeType::kConvexHull;
+  shape.material_asset_key = material_key;
+  shape.cooked_shape_ref.payload_asset_key = payload_key;
+  shape.cooked_shape_ref.payload_type = physics::ShapePayloadType::kConvex;
+  const auto shape_bytes = BytesOf(shape);
+  sources.assets = std::array {
+    AssetSpec {
+      .key = material_key,
+      .asset_type = data::AssetType::kPhysicsMaterial,
+      .descriptor_relpath = "Material.opmat",
+      .virtual_path = "/Game/Material.opmat",
+      .descriptor_size = sizeof(material),
+      .descriptor_sha = oxygen::base::ComputeSha256(BytesOf(material)),
+      .descriptor_payload = BytesOf(material),
+      .references = {},
+    },
+    AssetSpec {
+      .key = sources.shape_key,
+      .asset_type = data::AssetType::kCollisionShape,
+      .descriptor_relpath = "Shape.ocshape",
+      .virtual_path = "/Game/Shape.ocshape",
+      .descriptor_size = sizeof(shape),
+      .descriptor_sha = oxygen::base::ComputeSha256(shape_bytes),
+      .descriptor_payload = shape_bytes,
+      .references = data::AssetReferences::Create({},
+        {
+          {
+            .key = material_key,
+            .kind = data::KeyReferenceKind::kAsset,
+            .expected_type = data::AssetType::kPhysicsMaterial,
+          },
+          {
+            .key = payload_key,
+            .kind = data::KeyReferenceKind::kPhysicsResource,
+            .expected_type = data::AssetType::kUnknown,
+          },
+        })
+        .value(),
+    },
   };
+  auto record = physics::PhysicsResourceDesc {};
+  record.resource_asset_key = payload_key;
+  record.size_bytes = 4U;
+  const auto table = std::array { physics::PhysicsResourceDesc {}, record };
+  const auto table_bytes = std::as_bytes(std::span(table));
+  sources.files = std::array {
+    FileSpec {
+      .kind = lc::FileKind::kPhysicsTable,
+      .relpath = "physics.table",
+      .payload = { table_bytes.begin(), table_bytes.end() },
+    },
+    FileSpec {
+      .kind = lc::FileKind::kPhysicsData,
+      .relpath = "physics.data",
+      .payload = std::vector<std::byte>(4U, std::byte { 1 }),
+    },
+  };
+  ASSERT_TRUE(paktest::WriteLooseIndex(
+    sources.owner_root, sources.assets, sources.files, 1U));
+  sources.files.at(1).payload.assign(4U, std::byte { 2 });
+  ASSERT_TRUE(
+    paktest::WriteLooseIndex(sources.library_root, {}, sources.files, 2U));
+  sources.request = pak::PakBuildRequest {
+    .mode = pak::BuildMode::kFull,
+    .sources = {
+      { .kind = data::CookedSourceKind::kLooseCooked,
+        .path = sources.owner_root, },
+      { .kind = data::CookedSourceKind::kLooseCooked,
+        .path = sources.library_root, },
+    },
+    .output_pak_path = root / "physics.pak",
+    .content_version = 1U,
+    .source_key = MakeNonZeroSourceKey(3U),
+  };
+}
+
+//! Expects `plan` to carry exactly one physics payload, read from the library.
+auto ExpectLibraryPhysicsPayload(
+  const pak::PakPlan& plan, const std::filesystem::path& library_root) -> void
+{
+  size_t payload_count = 0;
+  const auto resources = plan.Resources();
+  for (size_t index = 0; index < resources.size(); ++index) {
+    const auto& resource = CheckedAt(resources, index);
+    if (resource.resource_kind != "physics" || resource.size_bytes == 0U) {
+      continue;
+    }
+    ++payload_count;
+    const auto& payload = CheckedAt(plan.ResourcePayloadSources(), index);
+    EXPECT_EQ(payload.source_path, library_root / "physics.data");
+    EXPECT_EQ(payload.size_bytes, 4U);
+  }
+  EXPECT_EQ(payload_count, 1U);
 }
 
 class PakPlanBuilderTest : public paktest::TempDirFixture { };
@@ -355,14 +478,14 @@ NOLINT_TEST_F(
 
   ASSERT_FALSE(HasError(result_a.diagnostics));
   ASSERT_FALSE(HasError(result_b.diagnostics));
-  ASSERT_TRUE(result_a.plan.has_value())
+  ASSERT_HAS_VALUE(result_a.plan)
     << "Expected result_a.plan to contain a value";
-  ASSERT_TRUE(result_b.plan.has_value())
+  ASSERT_HAS_VALUE(result_b.plan)
     << "Expected result_b.plan to contain a value";
 
   const auto repeated = builder.Build(request_a);
   ASSERT_FALSE(HasError(repeated.diagnostics));
-  ASSERT_TRUE(repeated.plan.has_value());
+  ASSERT_HAS_VALUE(repeated.plan);
   ExpectPlansEquivalent(*result_a.plan, *repeated.plan);
   ExpectCatalogsEquivalent(result_a.output_catalog, repeated.output_catalog);
 
@@ -451,8 +574,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesInputAssetsFromLooseSource)
 
   const auto result = PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(result.diagnostics));
-  ASSERT_TRUE(result.plan.has_value())
-    << "Expected result.plan to contain a value";
+  ASSERT_HAS_VALUE(result.plan) << "Expected result.plan to contain a value";
 
   const auto plan_assets = result.plan->Assets();
   ASSERT_EQ(plan_assets.size(), assets.size());
@@ -555,8 +677,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, IndexZeroPolicyAppliedForResourceTables)
 
   const auto result = PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(result.diagnostics));
-  ASSERT_TRUE(result.plan.has_value())
-    << "Expected result.plan to contain a value";
+  ASSERT_HAS_VALUE(result.plan) << "Expected result.plan to contain a value";
 
   const auto* texture_table = FindTable(*result.plan, "texture_table");
   const auto* script_resource_table
@@ -639,8 +760,7 @@ NOLINT_TEST_F(
 
   const auto result = PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(result.diagnostics));
-  ASSERT_TRUE(result.plan.has_value())
-    << "Expected result.plan to contain a value";
+  ASSERT_HAS_VALUE(result.plan) << "Expected result.plan to contain a value";
 
   const auto& browse = result.plan->BrowseIndex();
   ASSERT_TRUE(browse.enabled);
@@ -668,7 +788,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, RemapsSceneMaskIndicesAcrossCookedSources)
 
   const auto result = pak::PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(result.diagnostics));
-  ASSERT_TRUE(result.plan.has_value());
+  ASSERT_HAS_VALUE(result.plan);
 
   const auto assets = result.plan->Assets();
   const auto payloads = result.plan->AssetPayloadSources();
@@ -689,124 +809,46 @@ NOLINT_TEST_F(PakPlanBuilderTest, RemapsSceneMaskIndicesAcrossCookedSources)
   ASSERT_FALSE(HasError(written.diagnostics));
 }
 
-NOLINT_TEST_F(
-  PakPlanBuilderTest, LayeredPhysicsPayloadUsesWinningSourceInFullAndPatch)
+NOLINT_TEST_F(PakPlanBuilderTest, LayeredPhysicsPayloadUsesWinningSourceInFull)
 {
-  const auto owner_root = Root() / "owner";
-  const auto library_root = Root() / "library";
-  const auto material_key = MakeAssetKey(1U);
-  const auto shape_key = MakeAssetKey(2U);
-  const auto payload_key = MakeAssetKey(3U);
-  const auto bytes_of = [](const auto& value) {
-    const auto bytes = std::as_bytes(std::span { &value, 1U });
-    return std::vector<std::byte>(bytes.begin(), bytes.end());
-  };
-  auto material = physics::PhysicsMaterialAssetDesc {};
-  material.header.asset_type
-    = static_cast<uint8_t>(data::AssetType::kPhysicsMaterial);
-  material.header.version = physics::kPhysicsMaterialAssetVersion;
-  auto shape = physics::CollisionShapeAssetDesc {};
-  shape.header.asset_type
-    = static_cast<uint8_t>(data::AssetType::kCollisionShape);
-  shape.header.version = physics::kCollisionShapeAssetVersion;
-  shape.shape_type = physics::ShapeType::kConvexHull;
-  shape.material_asset_key = material_key;
-  shape.cooked_shape_ref.payload_asset_key = payload_key;
-  shape.cooked_shape_ref.payload_type = physics::ShapePayloadType::kConvex;
-  auto shape_bytes = bytes_of(shape);
-  auto assets = std::array {
-    AssetSpec {
-      .key = material_key,
-      .asset_type = data::AssetType::kPhysicsMaterial,
-      .descriptor_relpath = "Material.opmat",
-      .virtual_path = "/Game/Material.opmat",
-      .descriptor_size = sizeof(material),
-      .descriptor_sha = oxygen::base::ComputeSha256(bytes_of(material)),
-      .descriptor_payload = bytes_of(material),
-      .references = {},
-    },
-    AssetSpec {
-      .key = shape_key,
-      .asset_type = data::AssetType::kCollisionShape,
-      .descriptor_relpath = "Shape.ocshape",
-      .virtual_path = "/Game/Shape.ocshape",
-      .descriptor_size = sizeof(shape),
-      .descriptor_sha = oxygen::base::ComputeSha256(shape_bytes),
-      .descriptor_payload = shape_bytes,
-      .references = data::AssetReferences::Create({},
-        {
-          { .key = material_key,
-            .kind = data::KeyReferenceKind::kAsset,
-            .expected_type = data::AssetType::kPhysicsMaterial },
-          { .key = payload_key,
-            .kind = data::KeyReferenceKind::kPhysicsResource,
-            .expected_type = data::AssetType::kUnknown },
-        })
-        .value(),
-    },
-  };
-  auto record = physics::PhysicsResourceDesc {};
-  record.resource_asset_key = payload_key;
-  record.size_bytes = 4U;
-  const auto table = std::array { physics::PhysicsResourceDesc {}, record };
-  const auto table_bytes = std::as_bytes(std::span(table));
-  auto files = std::array {
-    FileSpec { .kind = lc::FileKind::kPhysicsTable,
-      .relpath = "physics.table",
-      .payload = { table_bytes.begin(), table_bytes.end() } },
-    FileSpec { .kind = lc::FileKind::kPhysicsData,
-      .relpath = "physics.data",
-      .payload = std::vector<std::byte>(4U, std::byte { 1 }) },
-  };
-  ASSERT_TRUE(paktest::WriteLooseIndex(owner_root, assets, files, 1U));
-  files.at(1).payload.assign(4U, std::byte { 2 });
-  ASSERT_TRUE(paktest::WriteLooseIndex(library_root, {}, files, 2U));
-  auto request = pak::PakBuildRequest {
-    .mode = pak::BuildMode::kFull,
-    .sources = {
-      { .kind = data::CookedSourceKind::kLooseCooked, .path = owner_root },
-      { .kind = data::CookedSourceKind::kLooseCooked, .path = library_root },
-    },
-    .output_pak_path = Root() / "physics.pak",
-    .content_version = 1U,
-    .source_key = MakeNonZeroSourceKey(3U),
-  };
+  auto sources = LayeredPhysicsSources {};
+  ASSERT_NO_FATAL_FAILURE(WriteLayeredPhysicsSources(Root(), sources));
+  const auto& request = sources.request;
+
   const auto full = pak::PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(full.diagnostics));
-  ASSERT_TRUE(full.plan.has_value());
-  const auto assert_payload = [&](const pak::PakPlan& plan) {
-    size_t payload_count = 0;
-    const auto resources = plan.Resources();
-    for (size_t index = 0; index < resources.size(); ++index) {
-      const auto& resource = CheckedAt(resources, index);
-      if (resource.resource_kind != "physics" || resource.size_bytes == 0U) {
-        continue;
-      }
-      ++payload_count;
-      const auto& payload = CheckedAt(plan.ResourcePayloadSources(), index);
-      EXPECT_EQ(payload.source_path, library_root / "physics.data");
-      EXPECT_EQ(payload.size_bytes, 4U);
-    }
-    EXPECT_EQ(payload_count, 1U);
-  };
-  assert_payload(*full.plan);
-  EXPECT_FALSE(
+  ASSERT_HAS_VALUE(full.plan);
+  ExpectLibraryPhysicsPayload(*full.plan, sources.library_root);
+  ASSERT_FALSE(
     HasError(pak::PakWriter {}.Write(request, *full.plan).diagnostics));
   {
     const oxygen::content::PakFile packed(request.output_pak_path);
     EXPECT_EQ(packed.PhysicsTable().Size().get(), 2U);
   }
-  oxygen::co::testing::TestEventLoop loop;
-  oxygen::co::Run(loop,
-    CheckPackagedPhysics(&loop, request.output_pak_path, request.source_key));
+  EXPECT_THAT(ReadPackedPhysicsPayload(
+                request.output_pak_path, core::ResourceIndexT { 1U }),
+    ::testing::ElementsAre(
+      std::byte { 2 }, std::byte { 2 }, std::byte { 2 }, std::byte { 2 }));
+}
+
+NOLINT_TEST_F(PakPlanBuilderTest, LayeredPhysicsPayloadUsesWinningSourceInPatch)
+{
+  auto sources = LayeredPhysicsSources {};
+  ASSERT_NO_FATAL_FAILURE(WriteLayeredPhysicsSources(Root(), sources));
+  auto& request = sources.request;
+  const auto full = pak::PakPlanBuilder {}.Build(request);
+  ASSERT_FALSE(HasError(full.diagnostics));
+  ASSERT_HAS_VALUE(full.plan);
 
   // Only the shape changes. Its payload owner has no emitted descriptor.
-  shape.is_sensor = physics::kShapeIsSensorTrue;
-  shape_bytes = bytes_of(shape);
-  assets.at(1).descriptor_payload = shape_bytes;
-  assets.at(1).descriptor_sha = oxygen::base::ComputeSha256(shape_bytes);
-  files.at(1).payload.assign(4U, std::byte { 1 });
-  ASSERT_TRUE(paktest::WriteLooseIndex(owner_root, assets, files, 1U));
+  sources.shape.is_sensor = physics::kShapeIsSensorTrue;
+  const auto shape_bytes = BytesOf(sources.shape);
+  sources.assets.at(1).descriptor_payload = shape_bytes;
+  sources.assets.at(1).descriptor_sha
+    = oxygen::base::ComputeSha256(shape_bytes);
+  sources.files.at(1).payload.assign(4U, std::byte { 1 });
+  ASSERT_TRUE(paktest::WriteLooseIndex(
+    sources.owner_root, sources.assets, sources.files, 1U));
   request.mode = pak::BuildMode::kPatch;
   request.base_catalogs = { full.output_catalog };
   request.source_key = MakeNonZeroSourceKey(4U);
@@ -817,62 +859,67 @@ NOLINT_TEST_F(
       << diagnostic.code << ": " << diagnostic.message;
   }
   ASSERT_FALSE(HasError(patch.diagnostics));
-  ASSERT_TRUE(patch.plan.has_value());
+  ASSERT_HAS_VALUE(patch.plan);
   ASSERT_EQ(patch.plan->Assets().size(), 1U);
-  EXPECT_EQ(CheckedAt(patch.plan->Assets(), 0U).asset_key, shape_key);
-  assert_payload(*patch.plan);
+  EXPECT_EQ(CheckedAt(patch.plan->Assets(), 0U).asset_key, sources.shape_key);
+  ExpectLibraryPhysicsPayload(*patch.plan, sources.library_root);
   const auto resources = patch.plan->Resources();
   const auto payload
-    = std::ranges::find_if(resources, [](const auto& resource) {
+    = std::ranges::find_if(resources, [](const auto& resource) -> auto {
         return resource.resource_kind == "physics" && resource.size_bytes == 4U;
       });
   ASSERT_NE(payload, resources.end());
   EXPECT_EQ(std::ranges::count_if(patch.plan->PatchClosure(),
-              [&](const auto& dependency) {
-                return dependency.asset_key == shape_key
+              [&](const auto& dependency) -> auto {
+                return dependency.asset_key == sources.shape_key
                   && dependency.resource_kind == "physics"
                   && dependency.resource_index == payload->resource_index;
               }),
     1);
 }
 
-NOLINT_TEST_F(PakPlanBuilderTest, DeletedSidecarIsAbsentInNewLoadScope)
+NOLINT_TEST_F(PakPlanBuilderTest, PatchRecordsDeletedSidecarAsTombstone)
 {
   const auto bytes = oxygen::content::test::MakeEmptySceneDescriptor();
-  const auto scene = AssetSpec { .key = MakeAssetKey(10U),
+  const auto scene = AssetSpec {
+    .key = MakeAssetKey(10U),
     .asset_type = data::AssetType::kScene,
     .descriptor_relpath = "Scene.oscene",
     .virtual_path = "/Game/Scene.oscene",
     .descriptor_size = bytes.size(),
     .descriptor_sha = oxygen::base::ComputeSha256(bytes),
     .descriptor_payload = bytes,
-    .references = {} };
+    .references = {},
+  };
   auto sidecar = MakePhysicsSidecarSpec(11U, scene);
   sidecar.references = data::AssetReferences::Create({},
-    { { .key = scene.key,
-      .kind = data::KeyReferenceKind::kLogical,
-      .expected_type = data::AssetType::kScene } })
+    {
+      {
+        .key = scene.key,
+        .kind = data::KeyReferenceKind::kLogical,
+        .expected_type = data::AssetType::kScene,
+      },
+    })
                          .value();
   const auto root = Root() / "source";
   ASSERT_TRUE(
     paktest::WriteLooseIndex(root, std::array { scene, sidecar }, {}, 1U));
-  auto request = pak::PakBuildRequest { .mode = pak::BuildMode::kFull,
+  auto request = pak::PakBuildRequest {
+    .mode = pak::BuildMode::kFull,
     .sources
     = { { .kind = data::CookedSourceKind::kLooseCooked, .path = root } },
     .output_pak_path = Root() / "base.pak",
     .content_version = 1U,
-    .source_key = MakeNonZeroSourceKey(20U) };
+    .source_key = MakeNonZeroSourceKey(20U),
+  };
   const auto base = pak::PakPlanBuilder {}.Build(request);
   ASSERT_TRUE(base.plan);
   ASSERT_FALSE(
     HasError(pak::PakWriter {}.Write(request, *base.plan).diagnostics));
-  oxygen::content::AssetLoader loader(
-    oxygen::engine::internal::EngineTagFactory::Get());
-  loader.AddPakFile(request.output_pak_path);
-  const auto original = loader.BeginLoadScope();
-  const data::SceneAsset scene_asset(scene.key, bytes);
-  EXPECT_EQ(loader.FindPhysicsSidecarAssetKeyForScene(scene_asset, original),
-    sidecar.key);
+  {
+    const oxygen::content::PakFile packed(request.output_pak_path);
+    EXPECT_TRUE(packed.FindEntry(sidecar.key).has_value());
+  }
   ASSERT_TRUE(paktest::WriteLooseIndex(root, std::array { scene }, {}, 1U));
   request.mode = pak::BuildMode::kPatch;
   request.output_pak_path = Root() / "patch.pak";
@@ -883,11 +930,9 @@ NOLINT_TEST_F(PakPlanBuilderTest, DeletedSidecarIsAbsentInNewLoadScope)
   ASSERT_TRUE(patch.plan);
   ASSERT_FALSE(
     HasError(pak::PakWriter {}.Write(request, *patch.plan).diagnostics));
-  loader.AddPakFile(request.output_pak_path);
-  EXPECT_FALSE(loader.FindPhysicsSidecarAssetKeyForScene(
-    scene_asset, loader.BeginLoadScope()));
-  EXPECT_EQ(loader.FindPhysicsSidecarAssetKeyForScene(scene_asset, original),
-    sidecar.key);
+  const oxygen::content::PakFile packed(request.output_pak_path);
+  EXPECT_THAT(packed.Catalog().deleted, ::testing::Contains(sidecar.key));
+  EXPECT_FALSE(packed.FindEntry(sidecar.key).has_value());
 }
 
 NOLINT_TEST_F(PakPlanBuilderTest, RejectsInvalidPhysicsScenePairs)
@@ -959,7 +1004,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, PatchIncludesBothMembersOfPhysicsScenePair)
     .source_key = MakeNonZeroSourceKey(2U),
   };
   const auto baseline = pak::PakPlanBuilder {}.Build(request);
-  ASSERT_TRUE(baseline.plan.has_value());
+  ASSERT_HAS_VALUE(baseline.plan);
   request.mode = pak::BuildMode::kPatch;
   request.source_key = MakeNonZeroSourceKey(3U);
   request.output_manifest_path = Root() / "patch.manifest.json";
@@ -976,8 +1021,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, PatchIncludesBothMembersOfPhysicsScenePair)
       EXPECT_NE(diagnostic.severity, pak::PakDiagnosticSeverity::kError)
         << diagnostic.message;
     }
-    ASSERT_TRUE(patch.plan.has_value())
-      << "Expected patch.plan to contain a value";
+    ASSERT_HAS_VALUE(patch.plan) << "Expected patch.plan to contain a value";
     EXPECT_EQ(patch.plan->Assets().size(), 2U);
     for (const auto& action : patch.plan->PatchActions()) {
       EXPECT_EQ(action.action, pak::PakPatchAction::kReplace);

@@ -21,6 +21,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Cooker/Test/Support/TestPaths.h>
 #include <Oxygen/Data/AssetType.h>
@@ -146,25 +147,17 @@ protected:
       request.material_slot_provenance = source_provenance_;
     }
     AsyncImportService service(MakeMaxConcurrencyConfig());
-    std::latch done(1);
     ImportRunResult result {};
 
     const auto import_start = steady_clock::now();
-    auto job_id_opt = service.SubmitImport(std::move(request),
-      [&](ImportJobId id, const ImportReport& completed) -> void {
-        result.finished_id = id;
-        result.report = completed;
-        done.count_down();
-      });
-
-    if (!job_id_opt) {
-      ADD_FAILURE() << "Import submission was rejected";
+    const auto report
+      = oxygen::cooker::test::SubmitAndWait(service, std::move(request));
+    if (!report.has_value()) {
+      ADD_FAILURE() << "Import did not complete";
       service.Stop();
       return result;
     }
-    result.job_id = *job_id_opt;
-    EXPECT_NE(result.job_id, kInvalidJobId);
-    done.wait();
+    result.report = *report;
     const auto import_end = steady_clock::now();
     const auto import_ms
       = duration_cast<milliseconds>(import_end - import_start).count();

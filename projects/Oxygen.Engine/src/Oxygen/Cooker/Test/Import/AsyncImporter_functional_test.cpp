@@ -9,19 +9,31 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
+#include <Oxygen/Cooker/Import/ImportConcurrency.h>
+#include <Oxygen/Cooker/Import/ImportJobId.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/AsyncImporter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/ImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/ImportJobParams.h>
+#include <Oxygen/Cooker/Import/Internal/JobEntry.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
+#include <Oxygen/OxCo/Awaitables.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Testing/GTest.h>
@@ -55,7 +67,7 @@ public:
 private:
   [[nodiscard]] auto ExecuteAsync() -> Co<ImportReport> override
   {
-    ReportPhaseProgress(ImportPhase::kWorking, 0.1f, "Test job running");
+    ReportPhaseProgress(ImportPhase::kWorking, 0.1F, "Test job running");
     co_return MakeSuccessReport(Request());
   }
 };
@@ -118,7 +130,7 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitJobCallsCompletionCallback)
   bool received_success = false;
   Event completion_event;
 
-  oxygen::co::Run(loop_, [&]() -> Co<> {
+  oxygen::co::Run(loop_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&AsyncImporter::ActivateAsync, &importer);
@@ -129,7 +141,8 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitJobCallsCompletionCallback)
       request.cooked_root = MakeTestCookedRoot();
 
       auto cancel_event = std::make_shared<Event>();
-      auto on_complete = [&](ImportJobId id, const ImportReport& report) {
+      auto on_complete
+        = [&](ImportJobId id, const ImportReport& report) -> void {
         received_id = id;
         received_success = report.success;
         callback_called = true;
@@ -142,7 +155,7 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitJobCallsCompletionCallback)
       JobEntry entry;
       entry.job_id = ImportJobId { 42U };
       entry.job = std::move(job);
-      entry.cancel_event = cancel_event;
+      entry.cancel_event = std::move(cancel_event);
 
       co_await importer.SubmitJob(std::move(entry));
 
@@ -167,7 +180,7 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitMultipleJobsProcessedInOrder)
   std::atomic<int> completed_count { 0 };
   Event all_done;
 
-  oxygen::co::Run(loop_, [&]() -> Co<> {
+  oxygen::co::Run(loop_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&AsyncImporter::ActivateAsync, &importer);
@@ -180,7 +193,7 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitMultipleJobsProcessedInOrder)
         request.cooked_root = MakeTestCookedRoot();
 
         auto cancel_event = std::make_shared<Event>();
-        auto on_complete = [&](ImportJobId id, const ImportReport&) {
+        auto on_complete = [&](ImportJobId id, const ImportReport&) -> void {
           {
             std::scoped_lock lock(order_mutex);
             completion_order.push_back(id);
@@ -221,7 +234,7 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitJobCallsProgressCallback)
   ImportJobId progress_job_id = kInvalidJobId;
   Event completion_event;
 
-  oxygen::co::Run(loop_, [&]() -> Co<> {
+  oxygen::co::Run(loop_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&AsyncImporter::ActivateAsync, &importer);
@@ -232,13 +245,14 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitJobCallsProgressCallback)
       request.cooked_root = MakeTestCookedRoot();
 
       auto cancel_event = std::make_shared<Event>();
-      auto on_progress = [&](const ProgressEvent& progress) {
+      auto on_progress = [&](const ProgressEvent& progress) -> void {
         progress_job_id = progress.header.job_id;
         progress_called = true;
       };
 
-      auto on_complete
-        = [&](ImportJobId, const ImportReport&) { completion_event.Trigger(); };
+      auto on_complete = [&](ImportJobId, const ImportReport&) -> void {
+        completion_event.Trigger();
+      };
 
       auto job = MakeJob(ImportJobId { 99U }, std::move(request),
         std::move(on_complete), std::move(on_progress), cancel_event);
@@ -246,7 +260,7 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitJobCallsProgressCallback)
       JobEntry entry;
       entry.job_id = ImportJobId { 99U };
       entry.job = std::move(job);
-      entry.cancel_event = cancel_event;
+      entry.cancel_event = std::move(cancel_event);
 
       co_await importer.SubmitJob(std::move(entry));
 
@@ -295,7 +309,7 @@ NOLINT_TEST_F(
   std::string canceled_code;
   Event done_event;
 
-  oxygen::co::Run(loop_, [&]() -> Co<> {
+  oxygen::co::Run(loop_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&AsyncImporter::ActivateAsync, &importer);
@@ -307,7 +321,8 @@ NOLINT_TEST_F(
       request.source_path = "test.txt";
       request.cooked_root = cooked_dir_.Path() / ".cooked";
 
-      auto on_complete = [&](ImportJobId id, const ImportReport& report) {
+      auto on_complete
+        = [&](ImportJobId id, const ImportReport& report) -> void {
         completed_id = id;
         received_success = report.success;
         if (!report.diagnostics.empty()) {

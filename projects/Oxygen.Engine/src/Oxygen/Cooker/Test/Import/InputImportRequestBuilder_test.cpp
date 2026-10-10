@@ -27,7 +27,7 @@ NOLINT_TEST(InputImportRequestBuilderTest, AcceptsPrimaryInputDocument)
 
   const auto request = BuildInputImportRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_TRUE(errors.str().empty());
   EXPECT_TRUE(request->input.has_value());
   EXPECT_FALSE(request->orchestration.has_value());
@@ -41,7 +41,7 @@ NOLINT_TEST(InputImportRequestBuilderTest, AcceptsStandaloneActionDocument)
 
   const auto request = BuildInputImportRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_TRUE(request->input.has_value());
 }
 
@@ -80,8 +80,8 @@ NOLINT_TEST(InputImportRequestBuilderTest, AcceptsAbsoluteCookedRoot)
 
   const auto request = BuildInputImportRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << errors.str();
-  ASSERT_TRUE(request->cooked_root.has_value());
+  ASSERT_HAS_VALUE(request) << errors.str();
+  ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(*request->cooked_root, cooked_root);
 }
 
@@ -108,12 +108,12 @@ NOLINT_TEST(InputImportRequestBuilderTest, CarriesManifestOrchestrationMetadata)
   const auto request = BuildInputImportRequest(
     settings, "  core.input  ", { " deps.a ", "", "deps.b" }, errors);
 
-  ASSERT_TRUE(request.has_value()) << errors.str();
-  ASSERT_TRUE(request->orchestration.has_value());
+  ASSERT_HAS_VALUE(request) << errors.str();
+  ASSERT_HAS_VALUE(request->orchestration);
   EXPECT_EQ(request->orchestration->job_id, "core.input");
   ASSERT_EQ(request->orchestration->depends_on.size(), 2U);
-  EXPECT_EQ(request->orchestration->depends_on[0], "deps.a");
-  EXPECT_EQ(request->orchestration->depends_on[1], "deps.b");
+  EXPECT_EQ(request->orchestration->depends_on.at(0), "deps.a");
+  EXPECT_EQ(request->orchestration->depends_on.at(1), "deps.b");
 }
 
 NOLINT_TEST(InputImportRequestBuilderTest, RejectsDependsOnWithoutJobId)

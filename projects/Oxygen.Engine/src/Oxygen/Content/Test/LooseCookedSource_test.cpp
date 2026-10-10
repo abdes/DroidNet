@@ -18,16 +18,16 @@
 #include <vector>
 
 #include "Fixtures/LooseCookedTestWriter.h"
-#include <gtest/gtest.h>
 
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Testing/GTest.h>
 
-using oxygen::content::LooseCookedIndex;
 using oxygen::content::internal::LooseCookedSource;
+using oxygen::content::lc::LooseCookedIndex;
 using oxygen::content::testing::DescriptorRecordOverride;
 using oxygen::content::testing::LooseCookedTestWriter;
 using oxygen::data::AssetKey;
@@ -334,7 +334,7 @@ TEST_F(LooseCookedSourceTest, WriterForgesDescriptorRecordAndIndexVersion)
   // Assert
   EXPECT_EQ(
     index.FindDescriptorSize(key), std::optional<std::uint64_t> { 16U });
-  ASSERT_TRUE(index.FindDescriptorSha256(key).has_value());
+  ASSERT_HAS_VALUE(index.FindDescriptorSha256(key));
   EXPECT_TRUE(std::ranges::equal(*index.FindDescriptorSha256(key), forged_sha));
   EXPECT_EQ(std::filesystem::file_size(CookedRoot() / "a.omat"), 16U);
 

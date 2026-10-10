@@ -28,13 +28,14 @@
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
-#include <Oxygen/Cooker/Pak/PakMeasureStore.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/Pak/PakWriter.h>
 #include <Oxygen/Cooker/Test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/Test/Support/Diagnostics.h>
+#include <Oxygen/Cooker/Test/Support/TestValues.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -79,7 +80,7 @@ auto MakeSingleByteDigest(const uint8_t seed) -> base::Sha256Digest
 {
   auto digest = base::Sha256Digest {};
   digest.fill(0U);
-  digest[kDigestPrimaryByteIndex] = seed;
+  digest.at(kDigestPrimaryByteIndex) = seed;
   return digest;
 }
 
@@ -158,10 +159,12 @@ auto MakePatchRequest(const std::filesystem::path& pak_path,
 
   return paktest::MakePatchRequest(pak_path,
     std::vector<data::PakCatalog>(base_catalogs.begin(), base_catalogs.end()),
-    { .sources
+    {
+      .sources
       = std::vector<data::CookedSource>(sources.begin(), sources.end()),
       .content_version = kPatchContentVersion,
-      .source_key = MakeSourceKey(kPatchSourceSeed) });
+      .source_key = MakeSourceKey(kPatchSourceSeed),
+    });
 }
 
 auto PatchActionSignature(const pak::PakPlan& plan)
@@ -239,7 +242,7 @@ auto PakPlanBuilderPatchTest::MakeClassificationScenario() const
     .descriptor_size = kDescSize,
     .descriptor_sha = {},
   };
-  create_asset.descriptor_sha[0] = kCreateDescriptorSeed;
+  create_asset.descriptor_sha.at(0) = kCreateDescriptorSeed;
 
   auto replace_asset = AssetSpec {
     .key = replace_key,
@@ -249,7 +252,7 @@ auto PakPlanBuilderPatchTest::MakeClassificationScenario() const
     .descriptor_size = kDescSize,
     .descriptor_sha = {},
   };
-  replace_asset.descriptor_sha[0] = kReplaceDescriptorSeed;
+  replace_asset.descriptor_sha.at(0) = kReplaceDescriptorSeed;
 
   auto unchanged_asset = AssetSpec {
     .key = unchanged_key,
@@ -260,7 +263,7 @@ auto PakPlanBuilderPatchTest::MakeClassificationScenario() const
     .descriptor_sha = {},
     .descriptor_payload = oxygen::content::test::MakeEmptySceneDescriptor(),
   };
-  unchanged_asset.descriptor_sha[0] = kUnchangedDescriptorSeed;
+  unchanged_asset.descriptor_sha.at(0) = kUnchangedDescriptorSeed;
 
   const auto replace_files = std::array<FileSpec, 4> {
     FileSpec {
@@ -359,7 +362,7 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest, ClassifiesCreateReplaceUnchangedDelete)
 
   const auto result = pak::PakPlanBuilder {}.Build(scenario.request_a);
   ASSERT_FALSE(HasError(result.diagnostics));
-  ASSERT_TRUE(result.plan.has_value());
+  ASSERT_HAS_VALUE(result.plan);
 
   const auto* create_action = FindAction(*result.plan, scenario.create_key);
   const auto* replace_action = FindAction(*result.plan, scenario.replace_key);
@@ -397,8 +400,8 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest, ClassificationIsDeterministic)
 
   ASSERT_FALSE(HasError(result_a.diagnostics));
   ASSERT_FALSE(HasError(result_b.diagnostics));
-  ASSERT_TRUE(result_a.plan.has_value());
-  ASSERT_TRUE(result_b.plan.has_value());
+  ASSERT_HAS_VALUE(result_a.plan);
+  ASSERT_HAS_VALUE(result_b.plan);
 
   EXPECT_EQ(
     PatchActionSignature(*result_a.plan), PatchActionSignature(*result_b.plan));
@@ -435,7 +438,7 @@ NOLINT_TEST_F(
     .descriptor_size = kDescSize,
     .descriptor_sha = {},
   };
-  replace_asset.descriptor_sha[0] = kReplaceDescriptorSeed;
+  replace_asset.descriptor_sha.at(0) = kReplaceDescriptorSeed;
 
   auto unchanged_asset = AssetSpec {
     .key = unchanged_key,
@@ -445,7 +448,7 @@ NOLINT_TEST_F(
     .descriptor_size = kDescSize,
     .descriptor_sha = {},
   };
-  unchanged_asset.descriptor_sha[0] = kUnchangedDescriptorSeed;
+  unchanged_asset.descriptor_sha.at(0) = kUnchangedDescriptorSeed;
 
   const auto replace_files = std::array<FileSpec, 2> {
     FileSpec {
@@ -507,7 +510,7 @@ NOLINT_TEST_F(
 
   const auto result = pak::PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(result.diagnostics));
-  ASSERT_TRUE(result.plan.has_value());
+  ASSERT_HAS_VALUE(result.plan);
 
   const auto* replace_action = FindAction(*result.plan, replace_key);
   const auto* unchanged_action = FindAction(*result.plan, unchanged_key);
@@ -565,7 +568,7 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest, ReplaceAssetTypeMismatchIsRejected)
     .descriptor_sha = {},
     .descriptor_payload = oxygen::content::test::MakeEmptySceneDescriptor(),
   };
-  source_asset.descriptor_sha[0] = kSourceDescriptorSeed;
+  source_asset.descriptor_sha.at(0) = kSourceDescriptorSeed;
   ASSERT_TRUE(paktest::WriteLooseIndex(source,
     std::span<const AssetSpec>(&source_asset, 1U), std::span<const FileSpec> {},
     kGuidSeed));
@@ -617,7 +620,7 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest,
   const auto texture_b_payload_base
     = std::vector<std::byte>(8U, std::byte { 0x22 });
   auto texture_b_payload_patch = std::vector<std::byte>(8U, std::byte { 0x22 });
-  texture_b_payload_patch[0] = std::byte { 0x33 };
+  texture_b_payload_patch.at(0) = std::byte { 0x33 };
 
   const auto texture_record_fallback = BuildTextureRecord(
     0U, static_cast<uint32_t>(texture_fallback_payload.size()));
@@ -661,8 +664,10 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest,
       .descriptor_payload = material_a_bytes,
       .references = data::AssetReferences::Create(
         {
-          { .kind = data::ResourceKind::kTexture,
-            .index = oxygen::ResourceIndexT { 1U } },
+          {
+            .kind = data::ResourceKind::kTexture,
+            .index = oxygen::ResourceIndexT { 1U },
+          },
         },
         {})
         .value(),
@@ -677,8 +682,10 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest,
       .descriptor_payload = material_b_bytes,
       .references = data::AssetReferences::Create(
         {
-          { .kind = data::ResourceKind::kTexture,
-            .index = oxygen::ResourceIndexT { 2U } },
+          {
+            .kind = data::ResourceKind::kTexture,
+            .index = oxygen::ResourceIndexT { 2U },
+          },
         },
         {})
         .value(),
@@ -725,7 +732,7 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest,
   const auto base_build
     = builder.Build(paktest::MakeFullRequest(Root() / "single_base.pak",
       { .sources = { CookedSource {
-          .kind = CookedSourceKind::kLooseCooked, .path = base_source } } }));
+          .kind = CookedSourceKind::kLooseCooked, .path = base_source, }, }, }));
   ASSERT_FALSE(HasError(base_build.diagnostics))
     << cooktest::DiagnosticSummary(base_build.diagnostics);
   const auto& base_catalog = base_build.output_catalog;
@@ -742,7 +749,7 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest,
   const auto patch_result = builder.Build(patch_request);
   ASSERT_FALSE(HasError(patch_result.diagnostics))
     << cooktest::DiagnosticSummary(patch_result.diagnostics);
-  ASSERT_TRUE(patch_result.plan.has_value());
+  ASSERT_HAS_VALUE(patch_result.plan);
 
   const auto* action_a = FindAction(*patch_result.plan, asset_a_key);
   const auto* action_b = FindAction(*patch_result.plan, asset_b_key);
@@ -771,7 +778,7 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest,
   const auto patched
     = builder.Build(paktest::MakeFullRequest(Root() / "single_patched.pak",
       { .sources = { CookedSource {
-          .kind = CookedSourceKind::kLooseCooked, .path = patch_source } } }));
+          .kind = CookedSourceKind::kLooseCooked, .path = patch_source, }, }, }));
   ASSERT_FALSE(HasError(patched.diagnostics))
     << cooktest::DiagnosticSummary(patched.diagnostics);
   const auto* base_a = FindCatalogEntry(base_catalog, asset_a_key);
@@ -800,15 +807,15 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest, PatchPreservesSceneLocalScriptDescriptor)
   const auto result = pak::PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(result.diagnostics))
     << cooktest::DiagnosticSummary(result.diagnostics);
-  ASSERT_TRUE(result.plan.has_value());
+  ASSERT_HAS_VALUE(result.plan);
   ASSERT_FALSE(
     HasError(pak::PakWriter {}.Write(request, *result.plan).diagnostics));
   auto archive = oxygen::content::PakFile(request.output_pak_path);
   const auto entry = archive.FindEntry(MakeAssetKey(1U));
-  ASSERT_TRUE(entry.has_value());
+  ASSERT_HAS_VALUE(entry);
   auto reader = archive.CreateReader(*entry);
   const auto bytes = reader.ReadBlob(entry->desc_size);
-  ASSERT_TRUE(bytes.has_value());
+  ASSERT_HAS_VALUE(bytes);
   EXPECT_EQ(*bytes, BuildSceneDescriptorWithScriptingSlots(1U));
 }
 
@@ -819,28 +826,32 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest,
   auto material = render::MaterialAssetDesc {};
   material.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
   material.header.version = render::kMaterialAssetVersion;
-  const auto material_bytes = [&] {
+  const auto material_bytes = [&] -> std::vector<std::byte> {
     const auto bytes = std::as_bytes(std::span { &material, 1U });
-    return std::vector<std::byte>(bytes.begin(), bytes.end());
+    return { bytes.begin(), bytes.end() };
   };
   auto original_bytes = material_bytes();
   auto assets = std::array {
-    AssetSpec { .key = MakeAssetKey(1U),
+    AssetSpec {
+      .key = MakeAssetKey(1U),
       .asset_type = data::AssetType::kMaterial,
       .descriptor_relpath = "M.omat",
       .virtual_path = "/Game/M.omat",
       .descriptor_size = original_bytes.size(),
       .descriptor_sha = oxygen::base::ComputeSha256(original_bytes),
       .descriptor_payload = original_bytes,
-      .references = {} },
-    AssetSpec { .key = MakeAssetKey(2U),
+      .references = {},
+    },
+    AssetSpec {
+      .key = MakeAssetKey(2U),
       .asset_type = data::AssetType::kMaterial,
       .descriptor_relpath = "D.omat",
       .virtual_path = "/Game/D.omat",
       .descriptor_size = original_bytes.size(),
       .descriptor_sha = oxygen::base::ComputeSha256(original_bytes),
       .descriptor_payload = original_bytes,
-      .references = {} },
+      .references = {},
+    },
   };
   ASSERT_TRUE(paktest::WriteLooseIndex(root, assets, {}, 1U));
   auto request = pak::PakBuildRequest {
@@ -852,7 +863,7 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest,
     .source_key = MakeSourceKey(1U),
   };
   request.options.embed_browse_index = true;
-  const auto build_and_write = [&] {
+  const auto build_and_write = [&] -> pak::PakPlanBuilder::BuildResult {
     auto result = pak::PakPlanBuilder {}.Build(request);
     for (const auto& diagnostic : result.diagnostics) {
       EXPECT_NE(diagnostic.severity, pak::PakDiagnosticSeverity::kError)
@@ -865,7 +876,7 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest,
     return result;
   };
   const auto base = build_and_write();
-  ASSERT_TRUE(base.plan.has_value());
+  ASSERT_HAS_VALUE(base.plan);
 
   material.base_color[0] = 0.25F;
   assets.at(0).descriptor_payload = material_bytes();
@@ -879,7 +890,7 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest,
   request.output_manifest_path = Root() / "p1.manifest.json";
   request.base_catalogs = { base.output_catalog };
   const auto p1 = build_and_write();
-  ASSERT_TRUE(p1.plan.has_value());
+  ASSERT_HAS_VALUE(p1.plan);
   EXPECT_EQ(p1.output_catalog.deleted, std::vector { assets.at(1).key });
   ASSERT_EQ(p1.output_catalog.entries.size(), 1U);
 
@@ -892,11 +903,12 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest,
   request.output_manifest_path = Root() / "p2.manifest.json";
   request.base_catalogs.push_back(p1.output_catalog);
   const auto p2 = build_and_write();
-  ASSERT_TRUE(p2.plan.has_value());
+  ASSERT_HAS_VALUE(p2.plan);
   ASSERT_EQ(p2.plan->PatchActions().size(), 1U);
-  EXPECT_EQ(CheckedAt(p2.plan->PatchActions(), 0U).action,
+  EXPECT_EQ(base::CheckedAt(p2.plan->PatchActions(), 0U).action,
     pak::PakPatchAction::kReplace);
-  EXPECT_EQ(CheckedAt(p2.plan->PatchActions(), 0U).asset_key, assets.at(0).key);
+  EXPECT_EQ(
+    base::CheckedAt(p2.plan->PatchActions(), 0U).asset_key, assets.at(0).key);
   EXPECT_TRUE(p2.output_catalog.deleted.empty());
 
   oxygen::content::VirtualPathResolver resolver;
@@ -919,15 +931,15 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest,
     { .kind = data::CookedSourceKind::kPak, .path = Root() / "p2.pak" },
   };
   const auto flattened = build_and_write();
-  ASSERT_TRUE(flattened.plan.has_value());
+  ASSERT_HAS_VALUE(flattened.plan);
   const oxygen::content::PakFile archive(request.output_pak_path);
   EXPECT_FALSE(archive.FindEntry(assets.at(1).key).has_value());
   EXPECT_EQ(archive.Catalog().deleted, std::vector { assets.at(1).key });
   const auto entry = archive.FindEntry(assets.at(0).key);
-  ASSERT_TRUE(entry.has_value());
+  ASSERT_HAS_VALUE(entry);
   auto reader = archive.CreateReader(*entry);
   const auto bytes = reader.ReadBlob(entry->desc_size);
-  ASSERT_TRUE(bytes.has_value());
+  ASSERT_HAS_VALUE(bytes);
   EXPECT_EQ(*bytes, original_bytes);
 }
 
@@ -950,7 +962,7 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest, UnchangedPatchEmitsNoAssets)
 
   const auto unchanged = pak::PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(unchanged.diagnostics));
-  ASSERT_TRUE(unchanged.plan.has_value());
+  ASSERT_HAS_VALUE(unchanged.plan);
   EXPECT_TRUE(unchanged.plan->Assets().empty());
 }
 

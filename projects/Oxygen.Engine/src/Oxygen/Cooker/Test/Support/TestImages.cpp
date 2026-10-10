@@ -28,12 +28,13 @@ namespace {
   constexpr auto kBytesPerPixel = uint32_t { 4U };
   constexpr auto kPixelsPerMeter = int32_t { 2835 };
 
-  constexpr auto kSinglePixel = Bgra { 10U, 20U, 30U, 255U };
+  constexpr auto kSinglePixel
+    = Bgra { .blue = 10U, .green = 20U, .red = 30U, .alpha = 255U };
   constexpr auto kCycle = std::array {
-    Bgra { 0U, 0U, 255U, 255U }, // red
-    Bgra { 255U, 255U, 255U, 255U }, // white
-    Bgra { 255U, 0U, 0U, 255U }, // blue
-    Bgra { 0U, 255U, 0U, 255U }, // green
+    Bgra { .blue = 0U, .green = 0U, .red = 255U, .alpha = 255U }, // red
+    Bgra { .blue = 255U, .green = 255U, .red = 255U, .alpha = 255U }, // white
+    Bgra { .blue = 255U, .green = 0U, .red = 0U, .alpha = 255U }, // blue
+    Bgra { .blue = 0U, .green = 255U, .red = 0U, .alpha = 255U }, // green
   };
 
 } // namespace
@@ -47,19 +48,20 @@ auto MakeBmp(const uint32_t width, const uint32_t height)
   auto bytes = std::vector<std::byte> {};
   bytes.reserve(kPixelOffset + image_size);
 
-  const auto push_u8
-    = [&bytes](const uint8_t value) { bytes.push_back(std::byte { value }); };
-  const auto push_u16 = [&push_u8](const uint16_t value) {
+  const auto push_u8 = [&bytes](const uint8_t value) -> void {
+    bytes.push_back(std::byte { value });
+  };
+  const auto push_u16 = [&push_u8](const uint16_t value) -> void {
     push_u8(static_cast<uint8_t>(value & 0xFFU));
     push_u8(static_cast<uint8_t>((value >> 8U) & 0xFFU));
   };
-  const auto push_u32 = [&push_u8](const uint32_t value) {
+  const auto push_u32 = [&push_u8](const uint32_t value) -> void {
     push_u8(static_cast<uint8_t>(value & 0xFFU));
     push_u8(static_cast<uint8_t>((value >> 8U) & 0xFFU));
     push_u8(static_cast<uint8_t>((value >> 16U) & 0xFFU));
     push_u8(static_cast<uint8_t>((value >> 24U) & 0xFFU));
   };
-  const auto push_i32 = [&push_u32](const int32_t value) {
+  const auto push_i32 = [&push_u32](const int32_t value) -> void {
     push_u32(static_cast<uint32_t>(value));
   };
 

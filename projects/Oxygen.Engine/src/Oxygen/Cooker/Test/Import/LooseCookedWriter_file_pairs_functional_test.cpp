@@ -71,7 +71,7 @@ namespace {
         .table_kind = FileKind::kPhysicsTable,
         .table_relpath = "Physics/Resources/physics.table",
       }),
-    [](const ::testing::TestParamInfo<MissingPairCase>& info) {
+    [](const ::testing::TestParamInfo<MissingPairCase>& info) -> std::string {
       return std::string(info.param.case_name);
     });
 

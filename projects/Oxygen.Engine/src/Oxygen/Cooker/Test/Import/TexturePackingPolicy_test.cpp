@@ -6,10 +6,12 @@
 
 // Covers: Import/TexturePackingPolicy.cpp
 
-#include <cstdint>
+#include <cstddef>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TexturePackingPolicy.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -47,31 +49,31 @@ NOLINT_TEST_F(D3D12PackingPolicyTest, IdReturnsD3D12)
 
 NOLINT_TEST_F(D3D12PackingPolicyTest, AlignRowPitchBytesExactMultiple)
 {
-  EXPECT_EQ(policy_.AlignRowPitchBytes(256), 256u);
-  EXPECT_EQ(policy_.AlignRowPitchBytes(512), 512u);
-  EXPECT_EQ(policy_.AlignRowPitchBytes(1024), 1024u);
+  EXPECT_EQ(policy_.AlignRowPitchBytes(256), 256U);
+  EXPECT_EQ(policy_.AlignRowPitchBytes(512), 512U);
+  EXPECT_EQ(policy_.AlignRowPitchBytes(1024), 1024U);
 }
 
 NOLINT_TEST_F(D3D12PackingPolicyTest, AlignRowPitchBytesRoundsUp)
 {
-  EXPECT_EQ(policy_.AlignRowPitchBytes(1), 256u);
-  EXPECT_EQ(policy_.AlignRowPitchBytes(100), 256u);
-  EXPECT_EQ(policy_.AlignRowPitchBytes(255), 256u);
-  EXPECT_EQ(policy_.AlignRowPitchBytes(257), 512u);
-  EXPECT_EQ(policy_.AlignRowPitchBytes(300), 512u);
+  EXPECT_EQ(policy_.AlignRowPitchBytes(1), 256U);
+  EXPECT_EQ(policy_.AlignRowPitchBytes(100), 256U);
+  EXPECT_EQ(policy_.AlignRowPitchBytes(255), 256U);
+  EXPECT_EQ(policy_.AlignRowPitchBytes(257), 512U);
+  EXPECT_EQ(policy_.AlignRowPitchBytes(300), 512U);
 }
 
 NOLINT_TEST_F(D3D12PackingPolicyTest, AlignSubresourceOffsetExactMultiple)
 {
-  EXPECT_EQ(policy_.AlignSubresourceOffset(512), 512u);
-  EXPECT_EQ(policy_.AlignSubresourceOffset(1024), 1024u);
+  EXPECT_EQ(policy_.AlignSubresourceOffset(512), 512U);
+  EXPECT_EQ(policy_.AlignSubresourceOffset(1024), 1024U);
 }
 
 NOLINT_TEST_F(D3D12PackingPolicyTest, AlignSubresourceOffsetRoundsUp)
 {
-  EXPECT_EQ(policy_.AlignSubresourceOffset(1), 512u);
-  EXPECT_EQ(policy_.AlignSubresourceOffset(511), 512u);
-  EXPECT_EQ(policy_.AlignSubresourceOffset(513), 1024u);
+  EXPECT_EQ(policy_.AlignSubresourceOffset(1), 512U);
+  EXPECT_EQ(policy_.AlignSubresourceOffset(511), 512U);
+  EXPECT_EQ(policy_.AlignSubresourceOffset(513), 1024U);
 }
 
 //===----------------------------------------------------------------------===//
@@ -90,19 +92,19 @@ NOLINT_TEST_F(TightPackedPolicyTest, IdReturnsTight)
 
 NOLINT_TEST_F(TightPackedPolicyTest, AlignRowPitchBytesNoPadding)
 {
-  EXPECT_EQ(policy_.AlignRowPitchBytes(1), 1u);
-  EXPECT_EQ(policy_.AlignRowPitchBytes(100), 100u);
-  EXPECT_EQ(policy_.AlignRowPitchBytes(256), 256u);
-  EXPECT_EQ(policy_.AlignRowPitchBytes(257), 257u);
+  EXPECT_EQ(policy_.AlignRowPitchBytes(1), 1U);
+  EXPECT_EQ(policy_.AlignRowPitchBytes(100), 100U);
+  EXPECT_EQ(policy_.AlignRowPitchBytes(256), 256U);
+  EXPECT_EQ(policy_.AlignRowPitchBytes(257), 257U);
 }
 
 NOLINT_TEST_F(TightPackedPolicyTest, AlignSubresourceOffsetAligns4Bytes)
 {
-  EXPECT_EQ(policy_.AlignSubresourceOffset(0), 0u);
-  EXPECT_EQ(policy_.AlignSubresourceOffset(1), 4u);
-  EXPECT_EQ(policy_.AlignSubresourceOffset(3), 4u);
-  EXPECT_EQ(policy_.AlignSubresourceOffset(4), 4u);
-  EXPECT_EQ(policy_.AlignSubresourceOffset(5), 8u);
+  EXPECT_EQ(policy_.AlignSubresourceOffset(0), 0U);
+  EXPECT_EQ(policy_.AlignSubresourceOffset(1), 4U);
+  EXPECT_EQ(policy_.AlignSubresourceOffset(3), 4U);
+  EXPECT_EQ(policy_.AlignSubresourceOffset(4), 4U);
+  EXPECT_EQ(policy_.AlignSubresourceOffset(5), 8U);
 }
 
 //===----------------------------------------------------------------------===//
@@ -111,52 +113,52 @@ NOLINT_TEST_F(TightPackedPolicyTest, AlignSubresourceOffsetAligns4Bytes)
 
 NOLINT_TEST(FormatUtilitiesTest, BytesPerPixelOrBlockCommonFormats)
 {
-  EXPECT_EQ(ComputeBytesPerPixelOrBlock(Format::kRGBA8UNorm), 4u);
-  EXPECT_EQ(ComputeBytesPerPixelOrBlock(Format::kRGBA16Float), 8u);
-  EXPECT_EQ(ComputeBytesPerPixelOrBlock(Format::kRGBA32Float), 16u);
-  EXPECT_EQ(ComputeBytesPerPixelOrBlock(Format::kBC7UNorm), 16u);
+  EXPECT_EQ(ComputeBytesPerPixelOrBlock(Format::kRGBA8UNorm), 4U);
+  EXPECT_EQ(ComputeBytesPerPixelOrBlock(Format::kRGBA16Float), 8U);
+  EXPECT_EQ(ComputeBytesPerPixelOrBlock(Format::kRGBA32Float), 16U);
+  EXPECT_EQ(ComputeBytesPerPixelOrBlock(Format::kBC7UNorm), 16U);
 }
 
 NOLINT_TEST(FormatUtilitiesTest, BlockDimensionUncompressed)
 {
-  EXPECT_EQ(ComputeBlockDimension(Format::kRGBA8UNorm), 1u);
-  EXPECT_EQ(ComputeBlockDimension(Format::kRGBA16Float), 1u);
+  EXPECT_EQ(ComputeBlockDimension(Format::kRGBA8UNorm), 1U);
+  EXPECT_EQ(ComputeBlockDimension(Format::kRGBA16Float), 1U);
 }
 
 NOLINT_TEST(FormatUtilitiesTest, BlockDimensionBC7)
 {
-  EXPECT_EQ(ComputeBlockDimension(Format::kBC7UNorm), 4u);
+  EXPECT_EQ(ComputeBlockDimension(Format::kBC7UNorm), 4U);
 }
 
 NOLINT_TEST(FormatUtilitiesTest, RowBytesUncompressedRGBA8)
 {
-  EXPECT_EQ(ComputeRowBytes(64, Format::kRGBA8UNorm), 256u); // 64 * 4
-  EXPECT_EQ(ComputeRowBytes(256, Format::kRGBA8UNorm), 1024u); // 256 * 4
+  EXPECT_EQ(ComputeRowBytes(64, Format::kRGBA8UNorm), 256U); // 64 * 4
+  EXPECT_EQ(ComputeRowBytes(256, Format::kRGBA8UNorm), 1024U); // 256 * 4
 }
 
 NOLINT_TEST(FormatUtilitiesTest, RowBytesBC7)
 {
   // BC7: 16 bytes per 4x4 block
-  EXPECT_EQ(ComputeRowBytes(4, Format::kBC7UNorm), 16u); // 1 block
-  EXPECT_EQ(ComputeRowBytes(8, Format::kBC7UNorm), 32u); // 2 blocks
-  EXPECT_EQ(ComputeRowBytes(5, Format::kBC7UNorm), 32u); // 2 blocks (rounds up)
-  EXPECT_EQ(ComputeRowBytes(256, Format::kBC7UNorm), 1024u); // 64 blocks
+  EXPECT_EQ(ComputeRowBytes(4, Format::kBC7UNorm), 16U); // 1 block
+  EXPECT_EQ(ComputeRowBytes(8, Format::kBC7UNorm), 32U); // 2 blocks
+  EXPECT_EQ(ComputeRowBytes(5, Format::kBC7UNorm), 32U); // 2 blocks (rounds up)
+  EXPECT_EQ(ComputeRowBytes(256, Format::kBC7UNorm), 1024U); // 64 blocks
 }
 
 NOLINT_TEST(FormatUtilitiesTest, SurfaceBytesUncompressedRGBA8)
 {
   EXPECT_EQ(
-    ComputeSurfaceBytes(64, 64, Format::kRGBA8UNorm), 16384u); // 64*64*4
-  EXPECT_EQ(ComputeSurfaceBytes(256, 256, Format::kRGBA8UNorm), 262144u);
+    ComputeSurfaceBytes(64, 64, Format::kRGBA8UNorm), 16384U); // 64*64*4
+  EXPECT_EQ(ComputeSurfaceBytes(256, 256, Format::kRGBA8UNorm), 262144U);
 }
 
 NOLINT_TEST(FormatUtilitiesTest, SurfaceBytesBC7)
 {
   // BC7: 16 bytes per 4x4 block
-  EXPECT_EQ(ComputeSurfaceBytes(4, 4, Format::kBC7UNorm), 16u); // 1 block
-  EXPECT_EQ(ComputeSurfaceBytes(8, 8, Format::kBC7UNorm), 64u); // 4 blocks
+  EXPECT_EQ(ComputeSurfaceBytes(4, 4, Format::kBC7UNorm), 16U); // 1 block
+  EXPECT_EQ(ComputeSurfaceBytes(8, 8, Format::kBC7UNorm), 64U); // 4 blocks
   EXPECT_EQ(
-    ComputeSurfaceBytes(256, 256, Format::kBC7UNorm), 65536u); // 64*64 blocks
+    ComputeSurfaceBytes(256, 256, Format::kBC7UNorm), 65536U); // 64*64 blocks
 }
 
 //===----------------------------------------------------------------------===//
@@ -165,19 +167,19 @@ NOLINT_TEST(FormatUtilitiesTest, SurfaceBytesBC7)
 
 NOLINT_TEST(MipDimensionTest, ComputeMipDimensionStandardCases)
 {
-  EXPECT_EQ(ComputeMipDimension(256, 0), 256u);
-  EXPECT_EQ(ComputeMipDimension(256, 1), 128u);
-  EXPECT_EQ(ComputeMipDimension(256, 2), 64u);
-  EXPECT_EQ(ComputeMipDimension(256, 3), 32u);
-  EXPECT_EQ(ComputeMipDimension(256, 8), 1u);
+  EXPECT_EQ(ComputeMipDimension(256, 0), 256U);
+  EXPECT_EQ(ComputeMipDimension(256, 1), 128U);
+  EXPECT_EQ(ComputeMipDimension(256, 2), 64U);
+  EXPECT_EQ(ComputeMipDimension(256, 3), 32U);
+  EXPECT_EQ(ComputeMipDimension(256, 8), 1U);
 }
 
 NOLINT_TEST(MipDimensionTest, ComputeMipDimensionMinimumIsOne)
 {
-  EXPECT_EQ(ComputeMipDimension(256, 9), 1u);
-  EXPECT_EQ(ComputeMipDimension(256, 10), 1u);
-  EXPECT_EQ(ComputeMipDimension(1, 0), 1u);
-  EXPECT_EQ(ComputeMipDimension(1, 1), 1u);
+  EXPECT_EQ(ComputeMipDimension(256, 9), 1U);
+  EXPECT_EQ(ComputeMipDimension(256, 10), 1U);
+  EXPECT_EQ(ComputeMipDimension(1, 0), 1U);
+  EXPECT_EQ(ComputeMipDimension(1, 1), 1U);
 }
 
 //===----------------------------------------------------------------------===//
@@ -199,12 +201,12 @@ NOLINT_TEST(SubresourceLayoutTest, SingleMipRGBA8D3D12)
   auto layouts
     = ComputeSubresourceLayouts(meta, D3D12PackingPolicy::Instance());
 
-  ASSERT_EQ(layouts.size(), 1u);
-  EXPECT_EQ(layouts[0].offset, 0u);
-  EXPECT_EQ(layouts[0].width, 64u);
-  EXPECT_EQ(layouts[0].height, 64u);
-  EXPECT_EQ(layouts[0].row_pitch, 256u); // 64*4 = 256, already aligned
-  EXPECT_EQ(layouts[0].size_bytes, 256u * 64); // row_pitch * height
+  ASSERT_EQ(layouts.size(), 1U);
+  EXPECT_EQ(layouts.at(0).offset, 0U);
+  EXPECT_EQ(layouts.at(0).width, 64U);
+  EXPECT_EQ(layouts.at(0).height, 64U);
+  EXPECT_EQ(layouts.at(0).row_pitch, 256U); // 64*4 = 256, already aligned
+  EXPECT_EQ(layouts.at(0).size_bytes, 256U * 64); // row_pitch * height
 }
 
 NOLINT_TEST(SubresourceLayoutTest, MultipleMipsD3D12)
@@ -222,25 +224,25 @@ NOLINT_TEST(SubresourceLayoutTest, MultipleMipsD3D12)
   auto layouts
     = ComputeSubresourceLayouts(meta, D3D12PackingPolicy::Instance());
 
-  ASSERT_EQ(layouts.size(), 3u);
+  ASSERT_EQ(layouts.size(), 3U);
 
   // Mip 0: 256x256
-  EXPECT_EQ(layouts[0].width, 256u);
-  EXPECT_EQ(layouts[0].height, 256u);
-  EXPECT_EQ(layouts[0].row_pitch, 1024u); // 256*4, already aligned
+  EXPECT_EQ(layouts.at(0).width, 256U);
+  EXPECT_EQ(layouts.at(0).height, 256U);
+  EXPECT_EQ(layouts.at(0).row_pitch, 1024U); // 256*4, already aligned
 
   // Mip 1: 128x128
-  EXPECT_EQ(layouts[1].width, 128u);
-  EXPECT_EQ(layouts[1].height, 128u);
-  EXPECT_EQ(layouts[1].row_pitch, 512u); // 128*4, already aligned
+  EXPECT_EQ(layouts.at(1).width, 128U);
+  EXPECT_EQ(layouts.at(1).height, 128U);
+  EXPECT_EQ(layouts.at(1).row_pitch, 512U); // 128*4, already aligned
   // Offset should be aligned to 512
-  EXPECT_EQ(layouts[1].offset % kD3D12SubresourcePlacementAlignment, 0u);
+  EXPECT_EQ(layouts.at(1).offset % kD3D12SubresourcePlacementAlignment, 0U);
 
   // Mip 2: 64x64
-  EXPECT_EQ(layouts[2].width, 64u);
-  EXPECT_EQ(layouts[2].height, 64u);
-  EXPECT_EQ(layouts[2].row_pitch, 256u); // 64*4, already aligned
-  EXPECT_EQ(layouts[2].offset % kD3D12SubresourcePlacementAlignment, 0u);
+  EXPECT_EQ(layouts.at(2).width, 64U);
+  EXPECT_EQ(layouts.at(2).height, 64U);
+  EXPECT_EQ(layouts.at(2).row_pitch, 256U); // 64*4, already aligned
+  EXPECT_EQ(layouts.at(2).offset % kD3D12SubresourcePlacementAlignment, 0U);
 }
 
 NOLINT_TEST(SubresourceLayoutTest, BC7D3D12)
@@ -258,11 +260,11 @@ NOLINT_TEST(SubresourceLayoutTest, BC7D3D12)
   auto layouts
     = ComputeSubresourceLayouts(meta, D3D12PackingPolicy::Instance());
 
-  ASSERT_EQ(layouts.size(), 1u);
+  ASSERT_EQ(layouts.size(), 1U);
   // BC7: 256/4 = 64 blocks per row, 64 * 16 = 1024 bytes
-  EXPECT_EQ(layouts[0].row_pitch, 1024u);
+  EXPECT_EQ(layouts.at(0).row_pitch, 1024U);
   // Size: 64 * 64 blocks * 16 bytes = 65536
-  EXPECT_EQ(layouts[0].size_bytes, 65536u);
+  EXPECT_EQ(layouts.at(0).size_bytes, 65536U);
 }
 
 NOLINT_TEST(SubresourceLayoutTest, TightPackedNoPadding)
@@ -283,17 +285,17 @@ NOLINT_TEST(SubresourceLayoutTest, TightPackedNoPadding)
   auto tight_layouts
     = ComputeSubresourceLayouts(meta, TightPackedPolicy::Instance());
 
-  ASSERT_EQ(d3d12_layouts.size(), 1u);
-  ASSERT_EQ(tight_layouts.size(), 1u);
+  ASSERT_EQ(d3d12_layouts.size(), 1U);
+  ASSERT_EQ(tight_layouts.size(), 1U);
 
   // D3D12: 65*4 = 260 -> 512 (aligned to 256)
-  EXPECT_EQ(d3d12_layouts[0].row_pitch, 512u);
+  EXPECT_EQ(d3d12_layouts.at(0).row_pitch, 512U);
 
   // Tight: 65*4 = 260, no padding
-  EXPECT_EQ(tight_layouts[0].row_pitch, 260u);
+  EXPECT_EQ(tight_layouts.at(0).row_pitch, 260U);
 
   // Tight is smaller
-  EXPECT_LT(tight_layouts[0].size_bytes, d3d12_layouts[0].size_bytes);
+  EXPECT_LT(tight_layouts.at(0).size_bytes, d3d12_layouts.at(0).size_bytes);
 }
 
 NOLINT_TEST(SubresourceLayoutTest, TotalPayloadSizeMultiMip)
@@ -331,28 +333,28 @@ NOLINT_TEST(SubresourceLayoutTest, ArrayTextureLayoutOrder)
   auto layouts = ComputeSubresourceLayouts(meta, TightPackedPolicy::Instance());
 
   // 2 layers * 2 mips = 4 subresources
-  ASSERT_EQ(layouts.size(), 4u);
+  ASSERT_EQ(layouts.size(), 4U);
 
   // Order: layer 0 mip 0, layer 0 mip 1, layer 1 mip 0, layer 1 mip 1
   // Layer 0 mip 0
-  EXPECT_EQ(layouts[0].width, 64u);
-  EXPECT_EQ(layouts[0].height, 64u);
+  EXPECT_EQ(layouts.at(0).width, 64U);
+  EXPECT_EQ(layouts.at(0).height, 64U);
 
   // Layer 0 mip 1
-  EXPECT_EQ(layouts[1].width, 32u);
-  EXPECT_EQ(layouts[1].height, 32u);
+  EXPECT_EQ(layouts.at(1).width, 32U);
+  EXPECT_EQ(layouts.at(1).height, 32U);
 
   // Layer 1 mip 0
-  EXPECT_EQ(layouts[2].width, 64u);
-  EXPECT_EQ(layouts[2].height, 64u);
+  EXPECT_EQ(layouts.at(2).width, 64U);
+  EXPECT_EQ(layouts.at(2).height, 64U);
 
   // Layer 1 mip 1
-  EXPECT_EQ(layouts[3].width, 32u);
-  EXPECT_EQ(layouts[3].height, 32u);
+  EXPECT_EQ(layouts.at(3).width, 32U);
+  EXPECT_EQ(layouts.at(3).height, 32U);
 
   // All offsets should be increasing
   for (size_t i = 1; i < layouts.size(); ++i) {
-    EXPECT_GT(layouts[i].offset, layouts[i - 1].offset);
+    EXPECT_GT(layouts.at(i).offset, layouts.at(i - 1).offset);
   }
 }
 

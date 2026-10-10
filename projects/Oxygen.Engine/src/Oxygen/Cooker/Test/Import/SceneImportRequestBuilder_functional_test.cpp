@@ -80,7 +80,7 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, ForwardsCanonicalProvenance)
   settings.material_slot_provenance_json = RetainedProvenance().dump();
   std::ostringstream errors;
   const auto request = BuildSceneRequest(settings, ImportFormat::kGltf, errors);
-  ASSERT_TRUE(request.has_value())
+  ASSERT_HAS_VALUE(request)
     << "Expected request to contain a value" << errors.str();
   EXPECT_EQ(request->material_slot_provenance->SourceIdentity().ToString(),
     kSourceIdentity);
@@ -99,7 +99,7 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, ReadsExplicitProvenanceFile)
   }
   std::ostringstream errors;
   const auto request = BuildSceneRequest(settings, ImportFormat::kGltf, errors);
-  ASSERT_TRUE(request.has_value())
+  ASSERT_HAS_VALUE(request)
     << "Expected request to contain a value" << errors.str();
   EXPECT_EQ(json::parse(request->material_slot_provenance->Serialize()),
     RetainedProvenance());
@@ -177,12 +177,12 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest,
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value())
+  ASSERT_HAS_VALUE(manifest)
     << "Expected manifest to contain a value" << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
   for (const auto& job : manifest->jobs) {
     const auto request = job.BuildRequest(errors);
-    ASSERT_TRUE(request.has_value())
+    ASSERT_HAS_VALUE(request)
       << "Expected request to contain a value" << errors.str();
     EXPECT_EQ(request->material_slot_provenance->SourceIdentity().ToString(),
       kSourceIdentity);
@@ -213,7 +213,7 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest,
   std::ostringstream errors;
   const auto request = settings.Prepare(
     ImportFormat::kGltf, RetainedProvenance().dump(), errors);
-  ASSERT_TRUE(request.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_FALSE(request->cooked_root.has_value());
   EXPECT_EQ(request->source_path, std::filesystem::path(settings.source_path));
   ASSERT_NE(request->material_slot_provenance, nullptr);
@@ -242,10 +242,10 @@ NOLINT_TEST_F(
     .metadata = oxygen::content::import::FileInfo { .size = text.size(),
       .last_modified = {},
       .is_directory = false,
-      .is_symlink = false },
+      .is_symlink = false, },
     .file = oxygen::content::import::CapturedInputFile { .path = physical,
       .size = text.size(),
-      .digest = digest },
+      .digest = digest, },
   };
   const auto captures
     = std::make_shared<const oxygen::content::import::CapturedInputSet>(
@@ -253,7 +253,7 @@ NOLINT_TEST_F(
   auto errors = std::ostringstream {};
   const auto request
     = BuildSceneRequest(settings, ImportFormat::kGltf, errors, captures);
-  ASSERT_TRUE(request.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_EQ(request->captured_inputs, captures);
   ASSERT_EQ(request->preparation_inputs.size(), 1U);
   const auto& proof = request->preparation_inputs.front();

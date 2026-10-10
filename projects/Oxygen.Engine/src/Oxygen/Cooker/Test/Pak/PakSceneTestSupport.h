@@ -24,6 +24,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/PakFormatSerioWriters.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
@@ -47,44 +48,50 @@ namespace oxygen::content::pak::test {
   nodes.back().node_id = MakeAssetKey(static_cast<uint8_t>(seed + 2U));
   nodes.front().parent_index = 0U;
   nodes.back().parent_index = 0U;
-  desc.nodes = { .offset = sizeof(desc),
+  desc.nodes = {
+    .offset = sizeof(desc),
     .count = 2U,
-    .entry_size = sizeof(data::pak::world::NodeRecord) };
+    .entry_size = sizeof(data::pak::world::NodeRecord),
+  };
   desc.scene_strings.offset = sizeof(desc) + sizeof(nodes);
   desc.scene_strings.size = 1U;
   desc.component_table_directory_offset = desc.scene_strings.offset + 1U;
   desc.component_table_count = 1U;
   auto table = data::pak::world::SceneComponentTableDesc {};
   table.component_type = static_cast<uint32_t>(data::ComponentType::kScripting);
-  table.table
-    = { .offset = desc.component_table_directory_offset + sizeof(table),
-        .count = 2U,
-        .entry_size = sizeof(data::pak::scripting::ScriptingComponentRecord) };
+  table.table = {
+    .offset = desc.component_table_directory_offset + sizeof(table),
+    .count = 2U,
+    .entry_size = sizeof(data::pak::scripting::ScriptingComponentRecord),
+  };
   std::array<data::pak::scripting::ScriptingComponentRecord, 2> components {};
   std::array<data::pak::scripting::ScriptSlotRecord, 2> slots {};
   std::array<data::pak::scripting::ScriptParamRecord, 2> parameters {};
-  desc.script_slots = { .offset = table.table.offset + sizeof(components),
+  desc.script_slots = {
+    .offset = table.table.offset + sizeof(components),
     .count = 2U,
-    .entry_size = sizeof(data::pak::scripting::ScriptSlotRecord) };
+    .entry_size = sizeof(data::pak::scripting::ScriptSlotRecord),
+  };
   for (size_t i = 0; i < slots.size(); ++i) {
     auto& component = components.at(i);
     component.node_index = static_cast<uint32_t>(i);
     component.slot_start_index = static_cast<uint32_t>(i);
     component.slot_count = 1U;
     auto& slot = slots.at(i);
-    slot.script_asset_key = MakeAssetKey(static_cast<uint8_t>(seed * 10U + i));
+    slot.script_asset_key
+      = MakeAssetKey(static_cast<uint8_t>((seed * 10U) + i));
     slot.params_array_offset = desc.script_slots.offset + sizeof(slots)
-      + i * sizeof(data::pak::scripting::ScriptParamRecord);
+      + (i * sizeof(data::pak::scripting::ScriptParamRecord));
     slot.params_count = 1U;
     auto& parameter = parameters.at(i);
     parameter.key[0] = 'v';
     parameter.type = data::pak::scripting::ScriptParamType::kInt32;
-    parameter.value.as_int32 = seed * 100 + static_cast<int32_t>(i);
+    parameter.value.as_int32 = (seed * 100) + static_cast<int32_t>(i);
   }
   data::pak::world::SceneEnvironmentBlockHeader environment {};
   environment.byte_size = sizeof(environment);
   std::vector<std::byte> bytes;
-  const auto append = [&bytes](const auto& record) {
+  const auto append = [&bytes](const auto& record) -> auto {
     const auto packed = std::as_bytes(std::span(&record, 1U));
     bytes.insert(bytes.end(), packed.begin(), packed.end());
   };
@@ -106,10 +113,12 @@ namespace oxygen::content::pak::test {
   std::vector<AssetSpec> assets;
   std::vector<data::KeyReference> keys;
   for (uint8_t i = 0U; i < 2U; ++i) {
-    const auto key = MakeAssetKey(static_cast<uint8_t>(seed * 10U + i));
-    keys.push_back({ .key = key,
+    const auto key = MakeAssetKey(static_cast<uint8_t>((seed * 10U) + i));
+    keys.push_back({
+      .key = key,
       .kind = data::KeyReferenceKind::kAsset,
-      .expected_type = data::AssetType::kScript });
+      .expected_type = data::AssetType::kScript,
+    });
     data::pak::scripting::ScriptAssetDesc script_desc {};
     script_desc.header.asset_type
       = static_cast<uint8_t>(data::AssetType::kScript);
@@ -117,23 +126,27 @@ namespace oxygen::content::pak::test {
     const auto bytes = std::as_bytes(std::span(&script_desc, 1U));
     const auto name
       = "Logic" + std::to_string(seed) + "-" + std::to_string(i) + ".oscript";
-    assets.push_back({ .key = key,
+    assets.push_back({
+      .key = key,
       .asset_type = data::AssetType::kScript,
       .descriptor_relpath = name,
       .virtual_path = "/Game/" + name,
       .descriptor_size = bytes.size(),
       .descriptor_sha = {},
       .descriptor_payload = { bytes.begin(), bytes.end() },
-      .references = {} });
+      .references = {},
+    });
   }
-  assets.push_back({ .key = MakeAssetKey(seed),
+  assets.push_back({
+    .key = MakeAssetKey(seed),
     .asset_type = data::AssetType::kScene,
     .descriptor_relpath = "Scene.oscene",
     .virtual_path = "/Game/Scene" + std::to_string(seed) + ".oscene",
     .descriptor_size = scene_bytes.size(),
     .descriptor_sha = {},
     .descriptor_payload = scene_bytes,
-    .references = data::AssetReferences::Create({}, std::move(keys)).value() });
+    .references = data::AssetReferences::Create({}, std::move(keys)).value(),
+  });
   return assets;
 }
 
@@ -213,8 +226,10 @@ struct SceneMaskSources final {
       .descriptor_payload = { scene_bytes.begin(), scene_bytes.end() },
       .references = data::AssetReferences::Create(
         {
-          { .kind = data::ResourceKind::kTexture,
-            .index = oxygen::ResourceIndexT { 1U } },
+          {
+            .kind = data::ResourceKind::kTexture,
+            .index = oxygen::ResourceIndexT { 1U },
+          },
         },
         {})
         .value(),
@@ -254,8 +269,10 @@ struct SceneMaskSources final {
       .descriptor_payload = { material_bytes.begin(), material_bytes.end() },
       .references = data::AssetReferences::Create(
         {
-          { .kind = data::ResourceKind::kTexture,
-            .index = oxygen::ResourceIndexT { 1U } },
+          {
+            .kind = data::ResourceKind::kTexture,
+            .index = oxygen::ResourceIndexT { 1U },
+          },
         },
         {})
         .value(),
@@ -275,9 +292,11 @@ struct SceneMaskSources final {
   std::vector<data::CookedSource> sources) -> PakBuildRequest
 {
   return MakeFullRequest(output_pak_path,
-    { .sources = std::move(sources),
+    {
+      .sources = std::move(sources),
       .content_version = 1U,
-      .source_key = MakeSourceKey(3U) });
+      .source_key = MakeSourceKey(3U),
+    });
 }
 
 //! A pak packed from the scene mask sources, ready to be patched or repacked.
@@ -302,8 +321,10 @@ struct SceneMaskPak final {
     throw std::runtime_error("cannot write the scene mask pak: "
       + oxygen::cooker::test::DiagnosticSummary(written.diagnostics));
   }
-  return SceneMaskPak { .request = std::move(request),
-    .catalog = planned.output_catalog };
+  return SceneMaskPak {
+    .request = std::move(request),
+    .catalog = planned.output_catalog,
+  };
 }
 
 } // namespace oxygen::content::pak::test

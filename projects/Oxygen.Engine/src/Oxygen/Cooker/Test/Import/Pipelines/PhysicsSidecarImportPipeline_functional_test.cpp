@@ -10,6 +10,7 @@
 
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
@@ -29,7 +30,7 @@ namespace {
   {
     auto result = PhysicsSidecarImportPipeline::WorkResult {};
 
-    co::Run(loop_, [&]() -> co::Co<> {
+    co::Run(loop_, [&] -> co::Co<> {
       auto pipeline
         = PhysicsSidecarImportPipeline(PhysicsSidecarImportPipeline::Config {
           .queue_capacity = 8,

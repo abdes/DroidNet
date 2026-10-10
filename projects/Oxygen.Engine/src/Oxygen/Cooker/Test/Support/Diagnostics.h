@@ -29,7 +29,7 @@ template <std::ranges::input_range R>
   const R& diagnostics, std::string_view code) -> bool
 {
   return std::ranges::any_of(
-    diagnostics, [code](const auto& d) { return d.code == code; });
+    diagnostics, [code](const auto& d) -> auto { return d.code == code; });
 }
 
 //! One `"<code>: <message>"` line per diagnostic, for failure messages.

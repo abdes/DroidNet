@@ -6,7 +6,6 @@
 
 // Covers: Import/Internal/LooseCookedWriter.cpp
 
-#include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
@@ -19,7 +18,6 @@
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Testing/GTest.h>
@@ -148,7 +146,7 @@ namespace {
         .target = PathTarget::kFileRelPath,
         .path = "Resources\\buffers.table",
       }),
-    [](const ::testing::TestParamInfo<BadPathCase>& info) {
+    [](const ::testing::TestParamInfo<BadPathCase>& info) -> std::string {
       return std::string(info.param.case_name);
     });
 

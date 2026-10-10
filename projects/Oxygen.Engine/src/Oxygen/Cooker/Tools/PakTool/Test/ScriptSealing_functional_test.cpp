@@ -6,7 +6,6 @@
 
 // Covers: Tools/PakTool/ScriptSealing.cpp
 
-#include <array>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -27,6 +26,7 @@
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Cooker/Tools/PakTool/ScriptSealing.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -139,10 +139,12 @@ protected:
     static_cast<void>(writer.Finish());
     PakBuildRequest request {};
     request.mode = BuildMode::kFull;
-    request.sources = { CookedSource {
-      .kind = CookedSourceKind::kLooseCooked,
-      .path = cooked,
-    } };
+    request.sources = {
+      CookedSource {
+        .kind = CookedSourceKind::kLooseCooked,
+        .path = cooked,
+      },
+    };
     const auto sealed = SealLooseCookedSourcesForPakBuild(
       request, Root() / "staging", std::span { &content_root, 1 });
     EXPECT_FALSE(sealed.has_value()) << stored;
@@ -182,7 +184,7 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
 
   auto writer = LooseCookedWriter(cooked_root);
   const auto source_key = SourceKey::FromString(kSourceKey);
-  ASSERT_TRUE(source_key.has_value());
+  ASSERT_HAS_VALUE(source_key);
   writer.SetSourceKey(source_key.value());
   writer.SetContentVersion(7);
   writer.WriteAssetDescriptor(script_key, AssetType::kScript,
@@ -201,8 +203,8 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
 
   const auto sealed = SealLooseCookedSourcesForPakBuild(
     request, Root() / "staging", std::span { &content_root, 1 });
-  ASSERT_TRUE(sealed.has_value())
-    << sealed.error().error_code << ": " << sealed.error().error_message;
+  ASSERT_HAS_VALUE(sealed) << sealed.error().error_code << ": "
+                           << sealed.error().error_message;
   ASSERT_EQ(sealed->sealed_script_assets, 1U);
   ASSERT_EQ(sealed->staged_loose_roots.size(), 1U);
   ASSERT_EQ(sealed->build_request.sources.size(), 1U);
@@ -243,12 +245,12 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
     const auto index
       = oxygen::content::lc::LooseCookedIndex::LoadFromRoot(staged_root);
     const auto references = index.FindAssetReferences(script_key);
-    ASSERT_TRUE(references.has_value());
+    ASSERT_HAS_VALUE(references);
     const auto resolved
       = references->ResolveResource(staged_descriptor.source_resource_index,
         oxygen::data::ResourceKind::kScript);
-    ASSERT_TRUE(resolved.has_value());
-    ASSERT_TRUE(resolved->has_value());
+    ASSERT_HAS_VALUE(resolved);
+    ASSERT_HAS_VALUE(*resolved);
     const auto source_index = (**resolved).get();
     ASSERT_EQ(source_index, 1U);
     EXPECT_EQ(table_entries.at(source_index).encoding, ScriptEncoding::kSource);
@@ -259,11 +261,11 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
     const auto staged_index
       = oxygen::content::lc::LooseCookedIndex::LoadFromRoot(staged_root);
     const auto descriptor_size = staged_index.FindDescriptorSize(script_key);
-    ASSERT_TRUE(descriptor_size.has_value());
+    ASSERT_HAS_VALUE(descriptor_size);
     EXPECT_EQ(descriptor_size.value_or(0U), sizeof(ScriptAssetDesc));
     const auto file_relpath = staged_index.FindFileRelPath(
       oxygen::data::loose_cooked::FileKind::kScriptsTable);
-    ASSERT_TRUE(file_relpath.has_value());
+    ASSERT_HAS_VALUE(file_relpath);
     EXPECT_EQ(file_relpath.value_or(""), layout.ScriptsTableRelPath());
   }
 
@@ -281,14 +283,13 @@ NOLINT_TEST_P(PakToolScriptSealingTest, RejectsRootRelativeScriptPath)
   WriteTextFile(outside, "return 1");
   WriteTextFile(content_root / "inside.lua", "return 2");
 
-  ExpectSealingRejectsStoredPath(
-    std::string("\\") + outside.relative_path().generic_string(),
+  ExpectSealingRejectsStoredPath("\\" + outside.filename().generic_string(),
     "rooted-script-root-relative", content_root);
 }
 
 NOLINT_TEST_P(PakToolScriptSealingTest, RejectsDriveRelativeScriptPath)
 {
-#if defined(_WIN32)
+#ifdef _WIN32
   const auto content_root = Root() / "Content";
   WriteTextFile(content_root / "inside.lua", "return 2");
 
@@ -303,7 +304,7 @@ NOLINT_TEST_P(PakToolScriptSealingTest, RejectsDriveRelativeScriptPath)
 }
 
 INSTANTIATE_TEST_SUITE_P(PathLengths, PakToolScriptSealingTest, testing::Bool(),
-  [](const testing::TestParamInfo<bool>& info) {
+  [](const testing::TestParamInfo<bool>& info) -> const char* {
     return info.param ? "LongPaths" : "ShortPaths";
   });
 

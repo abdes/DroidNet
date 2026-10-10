@@ -30,6 +30,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/Test/Support/FileIo.h>
+#include <Oxygen/Cooker/Test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -41,6 +42,7 @@ using nlohmann::json;
 using oxygen::cooker::test::HasDiagnosticCode;
 using oxygen::cooker::test::ReadBytes;
 using oxygen::cooker::test::ScopedTempDir;
+using oxygen::cooker::test::SubmitAndWait;
 using oxygen::cooker::test::WriteBytes;
 using oxygen::cooker::test::WriteText;
 
@@ -67,24 +69,6 @@ inline auto DiagnosticSummary(const std::vector<ImportDiagnostic>& diagnostics)
     out << '\n';
   }
   return out.str();
-}
-
-inline auto SubmitAndWait(AsyncImportService& service, ImportRequest request)
-  -> ImportReport
-{
-  auto report = ImportReport {};
-  std::latch done(1);
-  const auto submitted = service.SubmitImport(
-    std::move(request),
-    [&report, &done](
-      const ImportJobId /*job_id*/, const ImportReport& completed) -> void {
-      report = completed;
-      done.count_down();
-    },
-    nullptr);
-  EXPECT_TRUE(submitted.has_value());
-  done.wait();
-  return report;
 }
 
 inline auto MakeBounds() -> json

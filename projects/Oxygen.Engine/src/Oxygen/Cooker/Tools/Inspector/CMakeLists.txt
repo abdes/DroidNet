@@ -80,7 +80,12 @@ oxygen_embed_json_schemas(
 # in addition to the generated target name (e.g. oxygen-cooker-inspector).
 add_custom_target(${META_MODULE_NAME} DEPENDS ${META_MODULE_TARGET})
 
-arrange_target_files_for_ide(${META_MODULE_TARGET})
+arrange_target_files_for_ide(
+  oxygen-cooker-inspector-core
+  EXCLUDE_PATTERNS
+    "main\\.cpp"
+)
+arrange_target_files_for_ide(${META_MODULE_TARGET} EXCLUDE_PATTERNS ".*")
 
 set_target_properties(
   ${META_MODULE_TARGET}

@@ -26,7 +26,7 @@ using CoreScriptCompileMode = oxygen::core::meta::scripting::ScriptCompileMode;
 using RequestScriptCompileMode = decltype(std::declval<
   oxygen::scripting::IScriptCompilationService::Request>()
     .compile_mode);
-using InterfaceScriptCompileMode = typename CompileModeFromCompileSignature<
+using InterfaceScriptCompileMode = CompileModeFromCompileSignature<
   decltype(&oxygen::scripting::IScriptCompiler::Compile)>::Type;
 
 static_assert(std::is_same_v<CoreScriptCompileMode, RequestScriptCompileMode>);
