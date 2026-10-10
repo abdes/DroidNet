@@ -41,6 +41,7 @@
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -267,7 +268,7 @@ namespace {
       });
     }
     const auto descriptor = json {
-      { "version", 9 },
+      { "version", data::pak::world::kSceneAssetVersion },
       { "name", scene_name },
       { "nodes", std::move(nodes) },
     };

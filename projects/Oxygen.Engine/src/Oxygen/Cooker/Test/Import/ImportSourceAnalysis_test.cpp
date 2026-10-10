@@ -30,6 +30,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/SourceAnalysisRunner.h>
 #include <Oxygen/Cooker/Test/Pak/PakTestSupport.h>
+#include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/ThreadPool.h>
@@ -94,8 +95,9 @@ namespace {
     const auto material = Write("material.json", R"({"name":"Stone","textures":{
       "base_color":{"virtual_path":"/.cooked/Textures/color.otex"},
       "thickness":{"virtual_path":"/.cooked/Textures/thickness.otex"}}})");
-    const auto scene
-      = Write("scene.json", R"({"version":9,"name":"Scene.v2","nodes":[{}],
+    const auto scene = Write("scene.json",
+      R"({"version":)" + std::to_string(data::pak::world::kSceneAssetVersion)
+        + R"(,"name":"Scene.v2","nodes":[{}],
       "renderables":[{"node":0,"geometry_ref":"/.cooked/Geometry/body.ogeo"}],
       "references":{"scripts":["/.cooked/Scripts/move.oscript"]},
       "environment":{"post_process_volume":{"auto_exposure_metering_mask":"/.cooked/Textures/mask.otex"}}})");

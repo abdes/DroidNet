@@ -43,6 +43,7 @@
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -920,9 +921,13 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   const auto library = root / "Library";
   const auto library_key = data::AssetKey::FromVirtualPath("/Library/New.omat");
   auto writer = LooseCookedWriter(library);
-  const auto bytes = std::array { std::byte { 1 } };
+  auto material_desc = data::pak::render::MaterialAssetDesc {};
+  material_desc.header.asset_type
+    = static_cast<uint8_t>(data::AssetType::kMaterial);
+  material_desc.header.version = data::pak::render::kMaterialAssetVersion;
   writer.WriteAssetDescriptor(library_key, data::AssetType::kMaterial,
-    "/.cooked/Materials/new.omat", "Materials/new.omat", bytes, {});
+    "/.cooked/Materials/new.omat", "Materials/new.omat",
+    std::as_bytes(std::span(&material_desc, 1)), {});
   static_cast<void>(writer.Finish());
   WriteTextFile(cooked_root / "Materials/new.omat", "new material");
   for (const auto own_wins : { true, false }) {

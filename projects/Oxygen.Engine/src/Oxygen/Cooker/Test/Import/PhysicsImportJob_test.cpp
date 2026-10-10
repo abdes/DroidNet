@@ -20,6 +20,7 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
+#include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -73,8 +74,9 @@ namespace {
     request.cooked_root = cooked_root;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
-      .normalized_descriptor_json
-      = R"({"version":9,"name":"DemoScene","nodes":[{"name":"Root"}]})",
+      .normalized_descriptor_json = R"({"version":)"
+        + std::to_string(data::pak::world::kSceneAssetVersion)
+        + R"(,"name":"DemoScene","nodes":[{"name":"Root"}]})",
     };
     return request;
   }

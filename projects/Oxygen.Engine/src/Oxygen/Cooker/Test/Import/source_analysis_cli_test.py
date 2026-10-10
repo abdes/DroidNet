@@ -3,6 +3,7 @@
 import json
 import hashlib
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -13,6 +14,11 @@ import zlib
 
 
 IMPORT_TOOL = Path(sys.argv.pop(1)).resolve()
+_VERSIONS = Path(__file__).resolve().parents[3] / "Data" / "PakFormatVersions.inc"
+SCENE_VERSION = int(re.search(
+    r"OXDAT_ASSET_VERSION\(kSceneAssetVersion,\s*\w+,\s*\w+,\s*(\d+)\)",
+    _VERSIONS.read_text(encoding="utf-8")).group(1))
+EMPTY_SCENE = json.dumps({"version": SCENE_VERSION, "name": "Empty", "nodes": []})
 
 
 class SourceAnalysisCliTests(unittest.TestCase):
@@ -37,7 +43,7 @@ class SourceAnalysisCliTests(unittest.TestCase):
     def test_mixed_batch_needs_no_cooked_destination(self):
         (self.root / "material.json").write_text('{"name":"Stone"}', encoding="utf-8")
         (self.root / "scene.json").write_text(
-            '{"version":9,"name":"Empty","nodes":[]}', encoding="utf-8")
+            EMPTY_SCENE, encoding="utf-8")
         manifest = self.manifest([
             {"type": "material-descriptor", "source": "material.json"},
             {"type": "scene-descriptor", "source": "scene.json"},
@@ -194,7 +200,7 @@ class CapturedInputBatchCliTests(unittest.TestCase):
 
     def test_material_and_empty_scene_use_captures_with_absent_originals(self):
         self.capture("material.json", '{"name":"Stone"}')
-        self.capture("scene.json", '{"version":9,"name":"Empty","nodes":[]}')
+        self.capture("scene.json", EMPTY_SCENE)
         result = self.batch([
             {"type": "material-descriptor", "source": "material.json"},
             {"type": "scene-descriptor", "source": "scene.json"},
@@ -275,7 +281,7 @@ class CapturedInputBatchCliTests(unittest.TestCase):
             }],
         }]}
         self.capture("geometry.json", json.dumps(geometry))
-        self.capture("scene.json", json.dumps({"version": 9, "name": "TriangleScene",
+        self.capture("scene.json", json.dumps({"version": SCENE_VERSION, "name": "TriangleScene",
                      "nodes": [{"name": "Triangle"}], "renderables": [{
                          "node": 0, "geometry_ref": "/.cooked/Geometry/Triangle.ogeo",
                      }]}))
@@ -303,7 +309,7 @@ class CapturedInputBatchCliTests(unittest.TestCase):
         self.assertFalse(list((self.root / "cooked").rglob("*.omat")))
 
     def test_dependency_preflight_cannot_read_an_undeclared_live_sidecar(self):
-        self.capture("scene.json", '{"version":9,"name":"Empty","nodes":[]}')
+        self.capture("scene.json", EMPTY_SCENE)
         (self.root / "physics.json").write_text('{"bindings":{}}', encoding="utf-8")
         result = self.batch([
             {"id": "scene", "type": "scene-descriptor", "source": "scene.json"},

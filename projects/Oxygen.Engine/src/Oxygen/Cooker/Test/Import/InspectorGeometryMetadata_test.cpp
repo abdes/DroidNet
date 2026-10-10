@@ -13,7 +13,9 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json-schema.hpp>
@@ -21,27 +23,40 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Loose/Validation.h>
 #include <Oxygen/Cooker/Test/Pak/PakTestSupport.h>
 #include <Oxygen/Cooker/Tools/Inspector/GeometryMetadata.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MaterialSlotInventory.h>
 #include <Oxygen/Data/MeshType.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
 
 namespace geometry = oxygen::data::pak::geometry;
+namespace lc = oxygen::data::loose_cooked;
 using oxygen::content::inspection::RunGeometryMetadataReport;
 using oxygen::content::lc::ValidateRoot;
+using oxygen::content::pak::test::AssetSpec;
+using oxygen::content::pak::test::FileSpec;
 using oxygen::data::AssetKey;
+using oxygen::data::AssetReferences;
 using oxygen::data::MaterialSlotId;
+
+constexpr auto kGeometryPath = "/Content/Geometry/Inspection.ogeo";
+constexpr auto kSharedMaterialPath = "/Content/Materials/Shared.omat";
+constexpr uint32_t kTriangleSize = 3U;
 
 auto SlotId(const uint8_t value) -> MaterialSlotId
 {
@@ -63,8 +78,80 @@ auto AppendRecord(std::vector<std::byte>& bytes, const T& value) -> void
   bytes.insert(bytes.end(), record.begin(), record.end());
 }
 
-auto WriteGeometryRoot(const std::filesystem::path& root,
-  const GeometryFixture& fixture = {}) -> void
+template <typename T, std::size_t N>
+  requires std::is_trivially_copyable_v<T>
+auto AppendRecords(
+  std::vector<std::byte>& bytes, const std::array<T, N>& values) -> void
+{
+  const auto records = std::as_bytes(std::span(values));
+  bytes.insert(bytes.end(), records.begin(), records.end());
+}
+
+//! Buffer table and data shared by every LOD: one triangle's vertices and
+//! indices, at table entries 1 and 2 (entry 0 is the reserved fallback).
+auto TriangleBufferFiles() -> std::vector<FileSpec>
+{
+  auto table = std::array<oxygen::data::pak::core::BufferResourceDesc, 3> {};
+  auto& vertices = table.at(1);
+  vertices.size_bytes = kTriangleSize * sizeof(oxygen::data::Vertex);
+  vertices.usage_flags = 0x01U;
+  vertices.element_stride = sizeof(oxygen::data::Vertex);
+  auto& indices = table.at(2);
+  indices.data_offset = vertices.size_bytes;
+  indices.size_bytes = kTriangleSize * sizeof(uint32_t);
+  indices.usage_flags = 0x02U;
+  indices.element_format = static_cast<uint8_t>(oxygen::Format::kR32UInt);
+
+  auto table_bytes = std::vector<std::byte> {};
+  AppendRecords(table_bytes, table);
+  const auto vertex_data = std::array<oxygen::data::Vertex, kTriangleSize> {};
+  const auto index_data = std::array<uint32_t, kTriangleSize> { 0U, 1U, 2U };
+  auto data_bytes = std::vector<std::byte> {};
+  AppendRecords(data_bytes, vertex_data);
+  AppendRecords(data_bytes, index_data);
+
+  const auto layout = oxygen::content::import::LooseCookedLayout {};
+  return {
+    FileSpec {
+      .kind = lc::FileKind::kBuffersTable,
+      .relpath = layout.BuffersTableRelPath(),
+      .payload = std::move(table_bytes),
+    },
+    FileSpec {
+      .kind = lc::FileKind::kBuffersData,
+      .relpath = layout.BuffersDataRelPath(),
+      .payload = std::move(data_bytes),
+    },
+  };
+}
+
+auto DescriptorAsset(const std::string_view virtual_path,
+  const oxygen::data::AssetType type, const std::string_view relpath,
+  std::vector<std::byte> bytes, AssetReferences references) -> AssetSpec
+{
+  return AssetSpec {
+    .key = AssetKey::FromVirtualPath(virtual_path),
+    .asset_type = type,
+    .descriptor_relpath = std::string(relpath),
+    .virtual_path = std::string(virtual_path),
+    .descriptor_size = bytes.size(),
+    .descriptor_payload = std::move(bytes),
+    .references = std::move(references),
+  };
+}
+
+//! Writes the root without the cooker's descriptor validation, so fixtures
+//! can also hold the invalid descriptors the inspector must reject.
+auto WriteRoot(const std::filesystem::path& root,
+  const std::span<const AssetSpec> assets) -> void
+{
+  const auto files = TriangleBufferFiles();
+  if (!oxygen::content::pak::test::WriteLooseIndex(root, assets, files, 1U)) {
+    throw std::runtime_error("Could not write the inspection root");
+  }
+}
+
+auto GeometryAsset(const GeometryFixture& fixture) -> AssetSpec
 {
   auto descriptor = geometry::GeometryAssetDesc {};
   descriptor.header.asset_type
@@ -73,13 +160,16 @@ auto WriteGeometryRoot(const std::filesystem::path& root,
   descriptor.lod_count = 2;
   auto bytes = std::vector<std::byte> {};
   AppendRecord(bytes, descriptor);
-  const auto material
-    = AssetKey::FromVirtualPath("/Content/Materials/Shared.omat");
+  const auto material = AssetKey::FromVirtualPath(kSharedMaterialPath);
   for (uint32_t lod = 0; lod < descriptor.lod_count; ++lod) {
     auto mesh = geometry::MeshDesc {};
     mesh.mesh_type = static_cast<uint8_t>(oxygen::data::MeshType::kStandard);
     mesh.submesh_count = 2;
     mesh.mesh_view_count = 2;
+    mesh.info.standard.vertex_buffer
+      = oxygen::data::ResourceReferenceIndex { 0U };
+    mesh.info.standard.index_buffer
+      = oxygen::data::ResourceReferenceIndex { 1U };
     AppendRecord(bytes, mesh);
     for (uint32_t submesh_index = 0; submesh_index < mesh.submesh_count;
       ++submesh_index) {
@@ -93,25 +183,40 @@ auto WriteGeometryRoot(const std::filesystem::path& root,
       AppendRecord(bytes, submesh);
       const auto view = geometry::MeshViewDesc {
         .first_index = 0,
-        .index_count = 3,
+        .index_count = kTriangleSize,
         .first_vertex = 0,
-        .vertex_count = 3,
+        .vertex_count = kTriangleSize,
       };
       AppendRecord(bytes, view);
     }
   }
-  constexpr auto virtual_path = "/Content/Geometry/Inspection.ogeo";
-  oxygen::content::import::LooseCookedWriter writer(root);
-  writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(virtual_path),
-    oxygen::data::AssetType::kGeometry, virtual_path,
-    "Geometry/Inspection.ogeo", bytes, {});
-  [[maybe_unused]] const auto result = writer.Finish();
+  auto references = AssetReferences::Create(
+    {
+      { .kind = oxygen::data::ResourceKind::kBuffer,
+        .index = oxygen::ResourceIndexT { 1U } },
+      { .kind = oxygen::data::ResourceKind::kBuffer,
+        .index = oxygen::ResourceIndexT { 2U } },
+    },
+    {
+      { .key = material,
+        .kind = oxygen::data::KeyReferenceKind::kAsset,
+        .expected_type = oxygen::data::AssetType::kMaterial },
+    });
+  return DescriptorAsset(kGeometryPath, oxygen::data::AssetType::kGeometry,
+    "Geometry/Inspection.ogeo", std::move(bytes),
+    std::move(references).value());
+}
+
+auto WriteGeometryRoot(const std::filesystem::path& root,
+  const GeometryFixture& fixture = {}) -> void
+{
+  const auto assets = std::array { GeometryAsset(fixture) };
+  WriteRoot(root, assets);
 }
 
 auto ExpectedLayoutRevision() -> oxygen::base::Sha256Digest
 {
-  const auto material
-    = AssetKey::FromVirtualPath("/Content/Materials/Shared.omat");
+  const auto material = AssetKey::FromVirtualPath(kSharedMaterialPath);
   const auto slots = std::array {
     oxygen::data::MaterialSlot {
       .slot_id = SlotId(1),
@@ -133,6 +238,8 @@ auto ExpectedLayoutRevision() -> oxygen::base::Sha256Digest
   return oxygen::data::ComputeMaterialSlotLayoutRevision(slots).value();
 }
 
+//! Rewrites the root with the geometry and a scene overriding one of its
+//! slots on the scene's only renderable node.
 auto WriteOverrideScene(const std::filesystem::path& root,
   const oxygen::data::pak::world::MaterialOverrideRecord& assignment) -> void
 {
@@ -175,8 +282,7 @@ auto WriteOverrideScene(const std::filesystem::path& root,
   node.node_id = AssetKey::FromVirtualPath("/Content/Nodes/Root");
   const auto renderable = world::RenderableRecord {
     .node_index = 0,
-    .geometry_key
-    = AssetKey::FromVirtualPath("/Content/Geometry/Inspection.ogeo"),
+    .geometry_key = AssetKey::FromVirtualPath(kGeometryPath),
     .visible = 1,
   };
   auto environment = world::SceneEnvironmentBlockHeader {};
@@ -191,12 +297,22 @@ auto WriteOverrideScene(const std::filesystem::path& root,
   AppendRecord(bytes, renderable);
   AppendRecord(bytes, assignment);
   AppendRecord(bytes, environment);
-  constexpr auto virtual_path = "/Content/Scenes/Inspection.oscene";
-  oxygen::content::import::LooseCookedWriter writer(root);
-  writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(virtual_path),
-    oxygen::data::AssetType::kScene, virtual_path, "Scenes/Inspection.oscene",
-    bytes, {});
-  [[maybe_unused]] const auto result = writer.Finish();
+  auto references = AssetReferences::Create({},
+    {
+      { .key = renderable.geometry_key,
+        .kind = oxygen::data::KeyReferenceKind::kAsset,
+        .expected_type = oxygen::data::AssetType::kGeometry },
+      { .key = assignment.material_key,
+        .kind = oxygen::data::KeyReferenceKind::kAsset,
+        .expected_type = oxygen::data::AssetType::kMaterial },
+    });
+  const auto assets = std::array {
+    GeometryAsset({}),
+    DescriptorAsset("/Content/Scenes/Inspection.oscene",
+      oxygen::data::AssetType::kScene, "Scenes/Inspection.oscene",
+      std::move(bytes), std::move(references).value()),
+  };
+  WriteRoot(root, assets);
 }
 
 class InspectorGeometryMetadataTest

@@ -13,6 +13,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -21,7 +22,6 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Loose/Validation.h>
 #include <Oxygen/Cooker/Test/Pak/PakTestSupport.h>
 #include <Oxygen/Cooker/Tools/Inspector/SceneMetadata.h>
@@ -37,6 +37,28 @@ namespace {
 namespace world = oxygen::data::pak::world;
 using oxygen::content::inspection::RunSceneMetadataReport;
 using oxygen::content::lc::ValidateRoot;
+
+//! Writes a one-descriptor root without the cooker's descriptor validation, so
+//! fixtures can also hold the retired or malformed descriptors the inspector
+//! must reject.
+auto WriteDescriptorRoot(const std::filesystem::path& root,
+  const std::string_view virtual_path, const oxygen::data::AssetType type,
+  const std::string_view relpath, std::vector<std::byte> bytes) -> void
+{
+  const auto assets = std::array {
+    oxygen::content::pak::test::AssetSpec {
+      .key = oxygen::data::AssetKey::FromVirtualPath(virtual_path),
+      .asset_type = type,
+      .descriptor_relpath = std::string(relpath),
+      .virtual_path = std::string(virtual_path),
+      .descriptor_size = bytes.size(),
+      .descriptor_payload = std::move(bytes),
+    },
+  };
+  if (!oxygen::content::pak::test::WriteLooseIndex(root, assets, {}, 1U)) {
+    throw std::runtime_error("Could not write the inspection root");
+  }
+}
 
 struct SceneFixture {
   uint8_t version = world::kSceneAssetVersion;
@@ -79,13 +101,9 @@ auto WriteSceneRoot(
                 .data(),
     &environment, sizeof(environment));
 
-  constexpr auto virtual_path = "/Content/Scenes/Inspection.oscene";
-  oxygen::content::import::LooseCookedWriter writer(root);
-  writer.WriteAssetDescriptor(
-    oxygen::data::AssetKey::FromVirtualPath(virtual_path),
-    oxygen::data::AssetType::kScene, virtual_path, "Scenes/Inspection.oscene",
-    bytes, {});
-  [[maybe_unused]] const auto result = writer.Finish();
+  WriteDescriptorRoot(root, "/Content/Scenes/Inspection.oscene",
+    oxygen::data::AssetType::kScene, "Scenes/Inspection.oscene",
+    std::move(bytes));
 }
 
 auto WriteMaterialRoot(const std::filesystem::path& root, const uint8_t version)
@@ -95,13 +113,10 @@ auto WriteMaterialRoot(const std::filesystem::path& root, const uint8_t version)
   descriptor.header.asset_type
     = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
   descriptor.header.version = version;
-  constexpr auto virtual_path = "/Content/Materials/Inspection.omat";
-  oxygen::content::import::LooseCookedWriter writer(root);
-  writer.WriteAssetDescriptor(
-    oxygen::data::AssetKey::FromVirtualPath(virtual_path),
-    oxygen::data::AssetType::kMaterial, virtual_path,
-    "Materials/Inspection.omat", std::as_bytes(std::span(&descriptor, 1)), {});
-  [[maybe_unused]] const auto result = writer.Finish();
+  const auto bytes = std::as_bytes(std::span(&descriptor, 1));
+  WriteDescriptorRoot(root, "/Content/Materials/Inspection.omat",
+    oxygen::data::AssetType::kMaterial, "Materials/Inspection.omat",
+    { bytes.begin(), bytes.end() });
 }
 
 class InspectorRootValidationTest
