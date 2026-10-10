@@ -8,19 +8,26 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <functional>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <span>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -35,6 +42,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -106,9 +114,9 @@ namespace {
           table.view_type = RangeTypeToViewType(
             static_cast<bindless_d3d12::RangeType>(range.range_type));
           table.base_index = range.base_register;
-          table.count = range.num_descriptors
-              == (std::numeric_limits<std::uint32_t>::max)()
-            ? (std::numeric_limits<std::uint32_t>::max)()
+          table.count
+            = range.num_descriptors == std::numeric_limits<std::uint32_t>::max()
+            ? std::numeric_limits<std::uint32_t>::max()
             : range.num_descriptors;
         }
         binding.data = table;
@@ -180,6 +188,37 @@ namespace {
     };
   }
 
+  //! A draw's identity across frames. Draw indices follow each frame's sort
+  //! order, so a result read back frames later is matched by its source.
+  struct DrawSourceKey {
+    scene::NodeHandle node;
+    std::uint32_t submesh_index { 0U };
+
+    auto operator==(const DrawSourceKey&) const -> bool = default;
+  };
+
+  struct DrawSourceKeyHash {
+    auto operator()(const DrawSourceKey& key) const noexcept -> std::size_t
+    {
+      auto seed = std::hash<scene::NodeHandle> {}(key.node);
+      HashCombine(seed, key.submesh_index);
+      return seed;
+    }
+  };
+
+  //! Marks a source that produced more than one draw this frame; its result
+  //! cannot be attributed and the draws stay visible.
+  constexpr auto kAmbiguousDraw = std::numeric_limits<std::uint32_t>::max();
+
+  auto ToKey(const PreparedSceneFrame::DrawSource& source) noexcept
+    -> DrawSourceKey
+  {
+    return DrawSourceKey {
+      .node = source.node,
+      .submesh_index = source.submesh_index,
+    };
+  }
+
   auto PreparedDrawCount(const PreparedSceneFrame& prepared_scene) noexcept
     -> std::uint32_t
   {
@@ -191,18 +230,31 @@ namespace {
 struct OcclusionModule::Impl {
   std::vector<std::uint8_t> visibility_storage;
   std::vector<GpuOcclusionCandidate> candidate_storage;
-  std::vector<std::uint32_t> pending_candidate_draw_indices;
+  //! The draw source of each candidate, in candidate order.
+  std::vector<DrawSourceKey> candidate_sources;
+  std::unordered_map<DrawSourceKey, std::uint32_t, DrawSourceKeyHash>
+    draw_index_by_source;
   std::shared_ptr<graphics::Buffer> result_buffer;
   ShaderVisibleIndex result_buffer_uav { kInvalidShaderVisibleIndex };
   std::uint32_t result_buffer_capacity { 0U };
   std::unique_ptr<upload::TransientStructuredBuffer> candidate_buffer;
   std::unique_ptr<upload::TransientStructuredBuffer> pass_constants_buffer;
-  std::shared_ptr<graphics::GpuBufferReadback> readback;
+
+  //! A view's submitted test: results return frames later and belong only to
+  //! that view and to the draw sources that were submitted.
+  struct ViewState {
+    std::shared_ptr<graphics::GpuBufferReadback> readback;
+    std::vector<DrawSourceKey> pending_sources;
+  };
+  std::unordered_map<ViewId, ViewState> view_states;
   std::optional<graphics::ComputePipelineDesc> pipeline_desc;
   std::weak_ptr<Graphics> gfx_weak;
   OcclusionFrameResults current_results
     = MakeInvalidOcclusionFrameResults(OcclusionFallbackReason::kStageDisabled);
   OcclusionStats stats {};
+
+  OXYGEN_MAKE_NON_COPYABLE(Impl)
+  OXYGEN_MAKE_NON_MOVABLE(Impl)
 
   explicit Impl(Renderer& renderer)
   {
@@ -332,29 +384,50 @@ struct OcclusionModule::Impl {
     return true;
   }
 
-  auto EnsureReadback(Graphics& gfx) -> bool
+  static auto EnsureReadback(Graphics& gfx, ViewState& view) -> bool
   {
-    if (readback != nullptr) {
+    if (view.readback != nullptr) {
       return true;
     }
     auto manager = gfx.GetReadbackManager();
     if (manager == nullptr) {
       return false;
     }
-    readback = manager->CreateBufferReadback("Vortex.Stage5.Occlusion.Results");
-    return readback != nullptr;
+    view.readback
+      = manager->CreateBufferReadback("Vortex.Stage5.Occlusion.Results");
+    return view.readback != nullptr;
   }
 
-  auto TryConsumeReadback(const std::uint32_t draw_count) -> bool
+  //! Maps this frame's draw sources to their draw indices.
+  auto IndexDrawSources(const PreparedSceneFrame& prepared_frame,
+    const std::uint32_t draw_count) -> void
   {
-    if (readback == nullptr || pending_candidate_draw_indices.empty()) {
+    draw_index_by_source.clear();
+    const auto sources = prepared_frame.draw_sources.first(
+      (std::min)(prepared_frame.draw_sources.size(),
+        static_cast<std::size_t>(draw_count)));
+    draw_index_by_source.reserve(sources.size());
+    for (const auto [draw_index, source] : std::views::enumerate(sources)) {
+      const auto [entry, inserted] = draw_index_by_source.try_emplace(
+        ToKey(source), static_cast<std::uint32_t>(draw_index));
+      if (!inserted) {
+        entry->second = kAmbiguousDraw;
+      }
+    }
+  }
+
+  auto TryConsumeReadback(ViewState& view,
+    const PreparedSceneFrame& prepared_frame, const std::uint32_t draw_count)
+    -> bool
+  {
+    if (view.readback == nullptr || view.pending_sources.empty()) {
       return false;
     }
 
-    const auto ready = readback->IsReady();
+    const auto ready = view.readback->IsReady();
     if (!ready.has_value()) {
-      readback->Reset();
-      pending_candidate_draw_indices.clear();
+      view.readback->Reset();
+      view.pending_sources.clear();
       return false;
     }
     if (!*ready) {
@@ -362,31 +435,36 @@ struct OcclusionModule::Impl {
     }
 
     {
-      auto mapped = readback->TryMap();
+      auto mapped = view.readback->TryMap();
       if (!mapped.has_value()) {
-        readback->Reset();
-        pending_candidate_draw_indices.clear();
+        view.readback->Reset();
+        view.pending_sources.clear();
         return false;
       }
 
+      IndexDrawSources(prepared_frame, draw_count);
       const auto bytes = mapped->Bytes();
       const auto result_count
         = static_cast<std::uint32_t>(bytes.size() / sizeof(std::uint32_t));
       const auto consume_count = (std::min)(result_count,
-        static_cast<std::uint32_t>(pending_candidate_draw_indices.size()));
-      const auto* words
-        // NOLINTNEXTLINE(*-reinterpret-cast)
-        = reinterpret_cast<const std::uint32_t*>(bytes.data());
-      for (std::uint32_t i = 0U; i < consume_count; ++i) {
-        const auto draw_index = pending_candidate_draw_indices[i];
-        if (draw_index < draw_count) {
-          visibility_storage[draw_index] = words[i] != 0U ? 1U : 0U;
+        static_cast<std::uint32_t>(view.pending_sources.size()));
+      for (const auto [i, source] : std::views::enumerate(
+             view.pending_sources | std::views::take(consume_count))) {
+        const auto found = draw_index_by_source.find(source);
+        if (found == draw_index_by_source.end()
+          || found->second == kAmbiguousDraw) {
+          continue;
         }
+        auto word = std::uint32_t { 0U };
+        std::memcpy(&word,
+          bytes.subspan(static_cast<std::size_t>(i) * sizeof(word)).data(),
+          sizeof(word));
+        visibility_storage.at(found->second) = word != 0U ? 1U : 0U;
       }
     }
 
-    readback->Reset();
-    pending_candidate_draw_indices.clear();
+    view.readback->Reset();
+    view.pending_sources.clear();
     return true;
   }
 
@@ -395,29 +473,31 @@ struct OcclusionModule::Impl {
     -> std::uint32_t
   {
     candidate_storage.clear();
-    candidate_storage.reserve(
-      (std::min)(draw_count, config.max_candidate_count));
-    const auto bounds = prepared_frame.draw_bounding_spheres;
-    const auto available_bounds = static_cast<std::uint32_t>(
-      (std::min)(bounds.size(), static_cast<std::size_t>(draw_count)));
-    const auto candidate_capacity
-      = (std::min)(available_bounds, config.max_candidate_count);
-    for (std::uint32_t draw_index = 0U; draw_index < candidate_capacity;
-      ++draw_index) {
-      const auto& sphere = bounds[draw_index];
+    candidate_sources.clear();
+    const auto capacity = (std::min)(draw_count, config.max_candidate_count);
+    candidate_storage.reserve(capacity);
+    candidate_sources.reserve(capacity);
+    // A draw without a source cannot be matched to its result on a later
+    // frame, so it is never submitted and stays visible.
+    const auto drawn = std::views::zip(
+      prepared_frame.draw_bounding_spheres, prepared_frame.draw_sources);
+    for (const auto [draw_index, draw] :
+      std::views::enumerate(drawn | std::views::take(capacity))) {
+      const auto& [sphere, source] = draw;
       if (sphere.w <= config.tiny_object_radius_threshold) {
         continue;
       }
       candidate_storage.push_back(GpuOcclusionCandidate {
         .sphere_world = { sphere.x, sphere.y, sphere.z, sphere.w },
-        .draw_index = draw_index,
+        .draw_index = static_cast<std::uint32_t>(draw_index),
       });
+      candidate_sources.push_back(ToKey(source));
     }
     return static_cast<std::uint32_t>(candidate_storage.size());
   }
 
   auto RecordCurrent(RenderContext& ctx, graphics::CommandRecorder& recorder,
-    Graphics& gfx, const std::uint32_t draw_count,
+    Graphics& gfx, ViewState& view, const std::uint32_t draw_count,
     const std::uint32_t candidate_count) -> bool
   {
     if (candidate_count == 0U || result_buffer == nullptr
@@ -428,13 +508,13 @@ struct OcclusionModule::Impl {
     if (ctx.frame_slot == frame::kInvalidSlot) {
       return false;
     }
-    if (readback != nullptr
-      && readback->GetState() == graphics::ReadbackState::kPending) {
+    if (view.readback != nullptr
+      && view.readback->GetState() == graphics::ReadbackState::kPending) {
       return false;
     }
-    if (readback != nullptr
-      && readback->GetState() != graphics::ReadbackState::kIdle) {
-      readback->Reset();
+    if (view.readback != nullptr
+      && view.readback->GetState() != graphics::ReadbackState::kIdle) {
+      view.readback->Reset();
     }
 
     candidate_buffer->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
@@ -488,19 +568,15 @@ struct OcclusionModule::Impl {
       (candidate_count + (kThreadGroupSize - 1U)) / kThreadGroupSize, 1U, 1U);
 
     auto enqueued = false;
-    if (EnsureReadback(gfx)) {
+    if (EnsureReadback(gfx, view)) {
       const auto readback_size
         = static_cast<std::uint64_t>(candidate_count) * sizeof(std::uint32_t);
-      const auto ticket = readback->EnqueueCopy(
+      const auto ticket = view.readback->EnqueueCopy(
         recorder, *result_buffer, graphics::BufferRange { 0U, readback_size });
       if (ticket.has_value()) {
         enqueued = true;
-        pending_candidate_draw_indices.clear();
-        pending_candidate_draw_indices.reserve(candidate_count);
-        for (std::uint32_t i = 0U; i < candidate_count; ++i) {
-          pending_candidate_draw_indices.push_back(
-            candidate_storage[i].draw_index);
-        }
+        view.pending_sources.assign(candidate_sources.begin(),
+          std::next(candidate_sources.begin(), candidate_count));
       } else {
         LOG_F(WARNING, "occlusion_readback_enqueue_failed");
       }
@@ -564,8 +640,10 @@ void OcclusionModule::Execute(RenderContext& ctx,
     return;
   }
 
+  auto& view = impl_->view_states[ctx.current_view.view_id];
   impl_->visibility_storage.assign(draw_count, 1U);
-  const auto previous_results_valid = impl_->TryConsumeReadback(draw_count);
+  const auto previous_results_valid
+    = impl_->TryConsumeReadback(view, *prepared_frame, draw_count);
   const auto fallback_reason = previous_results_valid
     ? OcclusionFallbackReason::kNone
     : OcclusionFallbackReason::kNoPreviousResults;
@@ -588,14 +666,19 @@ void OcclusionModule::Execute(RenderContext& ctx,
     return;
   }
 
-  const auto readback_enqueued
-    = impl_->RecordCurrent(ctx, recorder, *gfx, draw_count, candidate_count);
+  const auto readback_enqueued = impl_->RecordCurrent(
+    ctx, recorder, *gfx, view, draw_count, candidate_count);
   if (!readback_enqueued && !previous_results_valid) {
     impl_->stats.fallback_reason
       = OcclusionFallbackReason::kReadbackUnavailable;
     impl_->current_results.fallback_reason
       = OcclusionFallbackReason::kReadbackUnavailable;
   }
+}
+
+void OcclusionModule::RemoveViewState(const ViewId view_id)
+{
+  impl_->view_states.erase(view_id);
 }
 
 auto OcclusionModule::GetCurrentResults() const noexcept

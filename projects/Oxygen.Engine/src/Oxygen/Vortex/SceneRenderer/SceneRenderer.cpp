@@ -79,6 +79,7 @@
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
+#include <Oxygen/Vortex/Types/ResidentContentRevision.h>
 #include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 #include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 // Completes the traversal returned by Scene::Traverse().
@@ -3121,6 +3122,9 @@ void SceneRenderer::RemoveViewState(const ViewId view_id,
   }
   if (screen_hzb_) {
     screen_hzb_->RemoveViewState(view_id);
+  }
+  if (occlusion_ != nullptr) {
+    occlusion_->RemoveViewState(view_id);
   }
   if (post_process_ != nullptr) {
     post_process_->RemoveViewState(view_id, view_state_handle);

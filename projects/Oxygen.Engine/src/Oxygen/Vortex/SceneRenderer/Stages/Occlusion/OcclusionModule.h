@@ -9,6 +9,7 @@
 #include <memory>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionConfig.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/OcclusionStats.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -36,8 +37,14 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto GetConfig() const noexcept
     -> const OcclusionConfig&;
 
+  //! Tests the current view's draws against its furthest HZB and publishes
+  //! the results of the view's own earlier test, matched to this frame's draws
+  //! by draw source. Results never cross views.
   OXGN_VRTX_API void Execute(RenderContext& ctx,
     graphics::CommandRecorder& recorder, SceneTextures& scene_textures);
+
+  //! Forgets a removed view's pending test and readback.
+  OXGN_VRTX_API void RemoveViewState(ViewId view_id);
 
   [[nodiscard]] OXGN_VRTX_API auto GetCurrentResults() const noexcept
     -> const OcclusionFrameResults&;

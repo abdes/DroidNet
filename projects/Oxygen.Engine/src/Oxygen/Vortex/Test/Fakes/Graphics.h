@@ -29,6 +29,7 @@
 #include <Oxygen/Graphics/Common/Internal/QueueSubmission.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/TimestampQueryProvider.h>
@@ -997,6 +998,11 @@ public:
   {
     return timestamp_query_provider_;
   }
+  [[nodiscard]] auto GetReadbackManager() const
+    -> observer_ptr<graphics::ReadbackManager> override
+  {
+    return readback_manager_;
+  }
   [[nodiscard]] auto CreateSurface(
     std::weak_ptr<platform::Window> /*window_weak*/,
     observer_ptr<CommandQueue> /*command_queue*/) const
@@ -1405,6 +1411,8 @@ public:
   std::map<QueueKey, std::weak_ptr<FakeCommandQueue>> created_queues_;
   std::unique_ptr<graphics::QueuesStrategy> queue_strategy_;
   mutable FakeTimestampQueryProvider timestamp_query_provider_ {};
+  //! Readbacks are unavailable unless a test injects a manager.
+  observer_ptr<graphics::ReadbackManager> readback_manager_ {};
   // Test injection flags (mutable to allow const CreateBuffer)
   bool fail_submission_ {
     false,

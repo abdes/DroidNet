@@ -202,7 +202,11 @@ flag helpers when flags are needed.
 1. Map the previous frame's occlusion readback if it is available and valid for
    the same view.
 2. Build the current frame's conservative visibility array from that previous
-   result. Missing history means all visible.
+   result. Missing history means all visible. Results are matched to this
+   frame's draws by draw source (scene node and submesh), never by draw index:
+   draw indices follow each frame's sort order, so an index-matched result
+   lands on whichever draw now holds it. A source that no longer draws, or that
+   produced more than one draw this frame, stays visible.
 3. Publish the visibility array before downstream draw command builders consume
    it.
 4. If current furthest HZB is available, submit the current frame's candidate
@@ -219,7 +223,7 @@ current frame submits tests for later consumption.
 M05B starts with the prepared draw metadata already accepted by scene prep.
 Candidates must have:
 
-- a valid draw index
+- a valid draw index and a draw source to match its result on a later frame
 - a finite world-space bounding sphere or bounds proxy
 - opaque or masked participation in the relevant pass
 - an object size above the configured tiny-object threshold
