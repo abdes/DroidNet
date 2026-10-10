@@ -8,7 +8,6 @@
 #include <memory>
 #include <optional>
 #include <utility>
-#include <vector>
 
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
@@ -16,12 +15,12 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/MeshDepthPipeline.h>
+#include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -30,6 +29,8 @@
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/IndirectListBuilder.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/DrawVisibility.h>
 
 namespace oxygen::vortex {
 
@@ -89,7 +90,7 @@ namespace {
     }
 
     return scene_textures.GetVelocity() == nullptr
-      || desc.color_attachments[0].texture.get()
+      || desc.color_attachments.at(0).texture.get()
       != scene_textures.GetVelocityResource().get();
   }
 
@@ -150,13 +151,6 @@ namespace {
     });
   }
 
-  auto ResolveRasterState(const PreparedSceneFrame& prepared_frame,
-    const DrawCommand& draw_command) -> internal::MeshRasterState
-  {
-    return internal::ResolveMeshRasterState(
-      prepared_frame.GetDrawMetadata(), draw_command.draw_index);
-  }
-
   auto CopySceneDepthToPartialDepth(
     graphics::CommandRecorder& recorder, SceneTextures& scene_textures) -> void
   {
@@ -179,6 +173,8 @@ DepthPrepassModule::DepthPrepassModule(
   Renderer& renderer, const SceneTexturesConfig& scene_textures_config)
   : renderer_(renderer)
   , mesh_processor_(std::make_unique<DepthPrepassMeshProcessor>(renderer))
+  , list_builder_(std::make_unique<occlusion::internal::IndirectListBuilder>(
+      renderer, "Vortex.Stage3.DepthPrepass.Lists"))
 {
   std::ignore = scene_textures_config;
 }
@@ -234,6 +230,16 @@ void DepthPrepassModule::Execute(RenderContext& ctx,
       BuildDepthPrepassFramebuffer(scene_textures, writes_velocity));
   }
 
+  const auto& prepared_frame = has_current_view_payload
+    ? *ctx.current_view.prepared_frame
+    : empty_prepared_frame;
+  const auto draw_list
+    = list_builder_->Build(recorder, ctx.frame_sequence, ctx.frame_slot,
+      occlusion::internal::MakeIndirectDrawCandidates(
+        prepared_frame.GetDrawMetadata(), mesh_processor_->GetDrawCommands()),
+      ctx.current_view.draw_visibility,
+      DrawVisibilityPredicate { DrawVisibilityBit::kPhase1Drawn });
+
   recorder.FlushBarriers();
   recorder.ClearFramebuffer(
     *framebuffer, std::nullopt, reverse_z ? 0.0F : 1.0F, 0U);
@@ -244,12 +250,8 @@ void DepthPrepassModule::Execute(RenderContext& ctx,
   const auto view_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants);
 
-  auto current_raster_state = std::optional<internal::MeshRasterState> {};
-  for (const auto& draw_command : mesh_processor_->GetDrawCommands()) {
-    const auto raster_state
-      = ResolveRasterState(*ctx.current_view.prepared_frame, draw_command);
-    if (!current_raster_state.has_value()
-      || current_raster_state.value() != raster_state) {
+  occlusion::internal::IndirectListBuilder::Draw(recorder, draw_list,
+    [&](const internal::MeshRasterState& raster_state) -> void {
       recorder.SetPipelineState(internal::BuildMeshDepthPipeline(
         scene_textures.GetSceneDepth().GetDescriptor(),
         writes_velocity ? scene_textures.GetVelocity()->GetDescriptor().format
@@ -259,14 +261,7 @@ void DepthPrepassModule::Execute(RenderContext& ctx,
         view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
       recorder.SetGraphicsRoot32BitConstant(
         root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
-      current_raster_state = raster_state;
-    }
-
-    recorder.SetGraphicsRoot32BitConstant(
-      root_constants_param, draw_command.draw_index, 0U);
-    recorder.Draw(draw_command.index_count, draw_command.instance_count, 0U,
-      draw_command.start_instance);
-  }
+    });
 
   CopySceneDepthToPartialDepth(recorder, scene_textures);
   TransitionDepthPrepassOutputs(recorder, scene_textures, writes_velocity);

@@ -559,6 +559,8 @@ if(WIN32)
     GPU
     SOURCES
       "Occlusion/HzbPyramid_test.cpp"
+      "Occlusion/IndirectDrawReference_test.cpp"
+      "Occlusion/IndirectLists_test.cpp"
     DEPS
       oxygen-vortex-exposure-test-support
   )
@@ -633,5 +635,51 @@ if(WIN32)
     oxygen-vortex-exposure-test-support
     PRIVATE
       OXYGEN_EXPOSURE_TONE_PROBE="${exposure_probe_output}"
+  )
+  # The ExecuteIndirect reference draws also stay out of shaders.bin.
+  set(
+    indirect_reference_source
+    "${CMAKE_CURRENT_SOURCE_DIR}/Shaders/IndirectDrawReference.hlsl"
+  )
+  set(
+    indirect_reference_vs
+    "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/IndirectDrawReference.VS.dxil"
+  )
+  set(
+    indirect_reference_ps
+    "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/IndirectDrawReference.PS.dxil"
+  )
+  add_custom_command(
+    OUTPUT
+      "${indirect_reference_vs}"
+      "${indirect_reference_ps}"
+    COMMAND
+      ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
+    COMMAND
+      "${OXYGEN_DXC_EXECUTABLE}" -T vs_6_6 -E VS -O3 -HV 2021 -Fo
+      "${indirect_reference_vs}" "${indirect_reference_source}"
+    COMMAND
+      "${OXYGEN_DXC_EXECUTABLE}" -T ps_6_6 -E PS -O3 -HV 2021 -Fo
+      "${indirect_reference_ps}" "${indirect_reference_source}"
+    DEPENDS
+      "${OXYGEN_DXC_EXECUTABLE}"
+      "Shaders/IndirectDrawReference.hlsl"
+    VERBATIM
+  )
+  add_custom_target(
+    oxygen-vortex-indirect-draw-reference
+    DEPENDS
+      "${indirect_reference_vs}"
+      "${indirect_reference_ps}"
+  )
+  add_dependencies(
+    "Oxygen.Vortex.Occlusion.Tests"
+    oxygen-vortex-indirect-draw-reference
+  )
+  target_compile_definitions(
+    "Oxygen.Vortex.Occlusion.Tests"
+    PRIVATE
+      OXYGEN_INDIRECT_DRAW_REFERENCE_VS="${indirect_reference_vs}"
+      OXYGEN_INDIRECT_DRAW_REFERENCE_PS="${indirect_reference_ps}"
   )
 endif()

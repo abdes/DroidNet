@@ -7,6 +7,7 @@
 #include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
+#include "Vortex/Shared/MeshClipPosition.hlsli"
 
 #include "Vortex/Materials/MaterialTemplateAdapter.hlsli"
 
@@ -88,7 +89,6 @@ BasePassGBufferVSOutput BasePassGBufferVS(
     float4 previous_world_position
         = mul(previous_world_matrix, float4(vertex.position, 1.0f));
     previous_world_position.xyz += previous_material_wpo_offset;
-    const float4 view_position = mul(view_matrix, world_position);
     float4 previous_view_position
         = mul(view_history.previous_view_matrix, previous_world_position);
 
@@ -116,7 +116,8 @@ BasePassGBufferVSOutput BasePassGBufferVS(
         world_bitangent = float3(0.0f, 1.0f, 0.0f);
     }
 
-    output.position = mul(projection_matrix, view_position);
+    output.position = ComputeMeshClipPosition(
+        world_matrix, vertex.position, current_material_wpo_offset);
     output.current_clip_position = output.position;
     output.previous_clip_position = mul(
         view_history.previous_projection_matrix, previous_view_position);

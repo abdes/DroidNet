@@ -34,6 +34,12 @@ struct TranslucencyDrawCommand {
   std::int32_t base_vertex { 0 };
   std::uint32_t start_instance { 0U };
   bool is_indexed { false };
+
+  //! Vertices per instance of the non-indexed, vertex-pulled draw.
+  [[nodiscard]] auto VertexCountPerInstance() const noexcept -> std::uint32_t
+  {
+    return is_indexed ? index_count : vertex_count;
+  }
 };
 
 class TranslucencyMeshProcessor {

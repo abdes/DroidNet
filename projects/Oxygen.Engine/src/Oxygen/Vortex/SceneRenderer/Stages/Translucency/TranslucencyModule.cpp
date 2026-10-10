@@ -8,7 +8,6 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
-#include <optional>
 #include <span>
 #include <utility>
 #include <vector>
@@ -35,6 +34,8 @@
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/IndirectListBuilder.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/DrawVisibility.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyModule.h>
 
@@ -104,9 +105,9 @@ namespace {
           table.view_type = RangeTypeToViewType(
             static_cast<bindless_d3d12::RangeType>(range.range_type));
           table.base_index = range.base_register;
-          table.count = range.num_descriptors
-              == (std::numeric_limits<std::uint32_t>::max)()
-            ? (std::numeric_limits<std::uint32_t>::max)()
+          table.count
+            = range.num_descriptors == std::numeric_limits<std::uint32_t>::max()
+            ? std::numeric_limits<std::uint32_t>::max()
             : range.num_descriptors;
         }
         binding.data = table;
@@ -154,7 +155,7 @@ namespace {
 
     const auto& desc = framebuffer->GetDescriptor();
     return desc.color_attachments.size() != 1U
-      || desc.color_attachments[0].texture.get()
+      || desc.color_attachments.at(0).texture.get()
       != scene_textures.GetSceneColorResource().get()
       || desc.depth_attachment.texture.get()
       != scene_textures.GetSceneDepthResource().get()
@@ -325,6 +326,8 @@ TranslucencyPipelineCache::TranslucencyPipelineCache()
 TranslucencyModule::TranslucencyModule(Renderer& renderer)
   : renderer_(renderer)
   , mesh_processor_(std::make_unique<TranslucencyMeshProcessor>(renderer))
+  , list_builder_(std::make_unique<occlusion::internal::IndirectListBuilder>(
+      renderer, "Vortex.Stage18.Translucency.Lists"))
   , pipeline_cache_(std::make_unique<TranslucencyPipelineCache>())
 {
 }
@@ -393,6 +396,15 @@ auto TranslucencyModule::Execute(RenderContext& ctx,
     recorder.RequireResourceState(
       status, graphics::ResourceStates::kUnorderedAccess);
   }
+  // Translucent draws are not occluded yet; the list keeps every draw in the
+  // frustum, in back-to-front order.
+  const auto draw_list
+    = list_builder_->Build(recorder, ctx.frame_sequence, ctx.frame_slot,
+      occlusion::internal::MakeIndirectDrawCandidates(
+        ctx.current_view.prepared_frame->GetDrawMetadata(),
+        mesh_processor_->GetDrawCommands()),
+      ctx.current_view.draw_visibility,
+      DrawVisibilityPredicate { DrawVisibilityBit::kInFrustum });
   recorder.FlushBarriers();
   recorder.BindFrameBuffer(*framebuffer_);
   SetViewportAndScissor(recorder, ctx, scene_textures);
@@ -404,33 +416,24 @@ auto TranslucencyModule::Execute(RenderContext& ctx,
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants);
   const auto view_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants);
-  auto current_raster_state = std::optional<internal::MeshRasterState> {};
-  for (const auto& draw_command : mesh_processor_->GetDrawCommands()) {
-    const auto raster_state = internal::ResolveMeshRasterState(
-      ctx.current_view.prepared_frame->GetDrawMetadata(),
-      draw_command.draw_index);
-    if (!current_raster_state.has_value()
-      || *current_raster_state != raster_state) {
+  occlusion::internal::IndirectListBuilder::Draw(recorder, draw_list,
+    [&](const internal::MeshRasterState& raster_state) -> void {
       recorder.SetPipelineState(GetCachedTranslucencyPipelineDesc(
         *pipeline_cache_, scene_textures, reverse_z, raster_state));
       recorder.SetGraphicsRootConstantBufferView(
         view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
       recorder.SetGraphicsRoot32BitConstant(
         root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
-      current_raster_state = raster_state;
-    }
-    recorder.SetGraphicsRoot32BitConstant(
-      root_constants_param, draw_command.draw_index, 0U);
-    recorder.Draw(draw_command.is_indexed ? draw_command.index_count
-                                          : draw_command.vertex_count,
-      draw_command.instance_count, 0U, draw_command.start_instance);
+    });
+  // Counts the submitted candidates; the GPU may draw fewer.
+  for (const auto& draw_command : mesh_processor_->GetDrawCommands()) {
     const auto vertices = draw_command.is_indexed ? draw_command.index_count
                                                   : draw_command.vertex_count;
     const auto triangles
-      = std::uint64_t(vertices / 3U) * draw_command.instance_count;
+      = static_cast<std::uint64_t>(vertices / 3U) * draw_command.instance_count;
     result.triangle_count = triangles
-        > (std::numeric_limits<std::uint64_t>::max)() - result.triangle_count
-      ? (std::numeric_limits<std::uint64_t>::max)()
+        > std::numeric_limits<std::uint64_t>::max() - result.triangle_count
+      ? std::numeric_limits<std::uint64_t>::max()
       : result.triangle_count + triangles;
   }
 

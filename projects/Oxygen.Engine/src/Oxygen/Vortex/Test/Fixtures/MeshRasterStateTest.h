@@ -6,7 +6,12 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
+#include <ranges>
 #include <span>
 #include <string_view>
 
@@ -78,6 +83,66 @@ inline auto ExpectRasterStateDraws(
   }
   for (const auto count : seen) {
     EXPECT_EQ(count, 1U);
+  }
+}
+
+//! Checks the indirect draws of `MakeRasterStateDraws`.
+/*!
+ Lists cut their candidates wherever the raster state changes and bind one
+ pipeline per cut, so each indirect draw carries one state. Summed over the
+ draws, each state's candidate count matches the draws that use it.
+*/
+inline auto ExpectRasterStateIndirectDraws(
+  const std::span<const IndirectCommandLog::Event> draws,
+  const std::string_view pipeline_prefix) -> void
+{
+  struct ExpectedState {
+    graphics::CullMode cull_mode;
+    bool front_counter_clockwise;
+    std::uint32_t draw_count;
+  };
+  constexpr auto kExpected = std::array {
+    ExpectedState {
+      .cull_mode = graphics::CullMode::kBack,
+      .front_counter_clockwise = true,
+      .draw_count = 2U,
+    },
+    ExpectedState {
+      .cull_mode = graphics::CullMode::kNone,
+      .front_counter_clockwise = true,
+      .draw_count = 1U,
+    },
+    ExpectedState {
+      .cull_mode = graphics::CullMode::kNone,
+      .front_counter_clockwise = false,
+      .draw_count = 1U,
+    },
+    ExpectedState {
+      .cull_mode = graphics::CullMode::kBack,
+      .front_counter_clockwise = false,
+      .draw_count = 1U,
+    },
+  };
+  auto seen = std::array<std::uint32_t, kExpected.size()> {};
+  for (const auto& draw : draws) {
+    if (!std::string_view(draw.pipeline_name).starts_with(pipeline_prefix)) {
+      continue;
+    }
+    if (!draw.rasterizer.has_value()) {
+      FAIL() << "Matching indirect draw has no rasterizer state";
+    }
+    const auto state = std::ranges::find_if(
+      kExpected, [&](const ExpectedState& expected) -> bool {
+        return expected.cull_mode == draw.rasterizer->cull_mode
+          && expected.front_counter_clockwise
+          == draw.rasterizer->front_counter_clockwise;
+      });
+    ASSERT_NE(state, kExpected.end());
+    seen.at(static_cast<std::size_t>(std::distance(kExpected.begin(), state)))
+      += draw.execution_desc.command_count.get();
+  }
+  for (const auto& [expected, count] : std::views::zip(kExpected, seen)) {
+    EXPECT_EQ(count, expected.draw_count);
   }
 }
 

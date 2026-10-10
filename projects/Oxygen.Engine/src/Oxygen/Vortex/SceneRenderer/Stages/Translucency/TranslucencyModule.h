@@ -25,6 +25,9 @@ struct RenderContext;
 class Renderer;
 class SceneTextures;
 class TranslucencyMeshProcessor;
+namespace occlusion::internal {
+  class IndirectListBuilder;
+} // namespace occlusion::internal
 struct TranslucencyPipelineCache;
 
 enum class TranslucencySkipReason : std::uint8_t {
@@ -62,6 +65,7 @@ public:
 private:
   Renderer& renderer_;
   std::unique_ptr<TranslucencyMeshProcessor> mesh_processor_;
+  std::unique_ptr<occlusion::internal::IndirectListBuilder> list_builder_;
   std::unique_ptr<TranslucencyPipelineCache> pipeline_cache_;
   std::shared_ptr<oxygen::graphics::Framebuffer> framebuffer_;
 };

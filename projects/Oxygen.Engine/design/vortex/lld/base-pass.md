@@ -359,6 +359,9 @@ Required grouping dimensions:
 BasePassModule::Execute(ctx, scene_textures)
   ├─ validate deferred mode + current-view prepared-scene payload
   ├─ build draw commands from PreparedSceneFrame + draw metadata
+  ├─ compact them into an indirect list on the GPU, keeping the view's drawn
+  │  set (occlusion.md §5); deferred, forward, wireframe and the radiance
+  │  replay draw the same list, the velocity auxiliary pass its own subset
   ├─ bind framebuffer with GBufferNormal/Material/BaseColor/CustomData
   │  + SceneColor + Velocity + SceneDepth
   ├─ clear color MRTs and Velocity (depth preserved if early-Z complete)

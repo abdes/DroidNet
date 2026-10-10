@@ -201,26 +201,28 @@ A list is a pass's ordered candidate draws plus a visibility predicate:
 - The CPU builds each list's candidate order exactly as today: depth
   front-to-back, base pass by material/LOD/submesh, translucency
   back-to-front.
-- Candidates are split into buckets by `MeshRasterState`: masked,
-  double-sided and reverse winding. Each bucket needs its own PSO.
-- The CPU uploads the candidate draw indices per bucket.
+- Candidates are cut into segments: maximal runs of consecutive candidates
+  with the same `MeshRasterState` (masked, double-sided, reverse winding).
+  Each segment needs its own PSO. Runs, not regrouping, keep the CPU order
+  across segments, which back-to-front translucency requires.
+- The CPU uploads the candidates and the segment table once per list.
 
 The GPU keeps the candidates that satisfy the list's predicate, in candidate
-order. It writes their commands and a count. The CPU issues one
-`ExecuteIndirect` per bucket that has candidates, with the candidate count as
-the maximum and the GPU count buffer as the count. Buckets never overflow
-because capacity comes from the CPU's candidate count.
+order. It writes their commands and one count per segment. The CPU issues one
+`ExecuteIndirect` per segment, with the segment's candidate count as the
+maximum and the GPU count as the count. Segments never overflow because
+capacity comes from the CPU's candidate count.
 
 ### 3.3 Order-Preserving Compaction
 
-Compaction is a stream compaction over each bucket:
+Compaction is one stream compaction over the whole list:
 
 1. Evaluate the predicate per candidate.
 2. Scan the 0/1 flags, each workgroup over 256 candidates.
 3. Scan the workgroup totals. One extra level covers lists above 65,536
    candidates.
-4. Scatter commands to their scanned position and write the total as the
-   count.
+4. Scatter each kept command to its segment's first slot plus its rank in
+   the segment, and write each segment's count.
 
 No step depends on scheduling order, so lists are deterministic and keep the
 CPU sort. Decoupled look-back is not used, because D3D12 does not guarantee
@@ -251,7 +253,7 @@ phase1     = in_frustum && (prev || history_reset || !occlusion_enabled)
 - A box crossing the near plane always passes.
 
 It then compacts the depth prepass lists with predicate `kPhase1Drawn`.
-`DepthPrepassModule` draws them into `SceneDepth`, opaque buckets before
+`DepthPrepassModule` draws them into `SceneDepth`, opaque segments before
 masked.
 
 ### 4.2 History Reset
@@ -337,7 +339,7 @@ declared `precise`.
 
 | Consumer                          | List predicate                                | Notes                                                                       |
 | --------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------- |
-| Depth prepass phase 1 / phase 2   | `kPhase1Drawn` / `kPhase2Drawn`               | Opaque then masked buckets.                                                 |
+| Depth prepass phase 1 / phase 2   | `kPhase1Drawn` / `kPhase2Drawn`               | Opaque then masked segments.                                                |
 | Base pass (all modes)             | `kPhase1Drawn \| kPhase2Drawn`                | Deferred, forward, radiance replay and wireframe all draw the same set.     |
 | Base pass velocity auxiliary pass | final set and the draw's velocity-aux flag    | Subset of the base pass set.                                                |
 | Contact-shadow caster depth       | final set                                     | Reuses the depth list candidates.                                           |
@@ -456,7 +458,7 @@ Pass markers:
    - Duplicate keys get no slot.
    - Growth preserves history.
 2. CPU tests:
-   - list candidate order and bucketing match the existing pass sorts
+   - list candidate order and segments match the existing pass sorts
    - cull records carry mesh-view local bounds; instanced batches carry world
      AABBs
 3. GPU tests, one test process at a time:

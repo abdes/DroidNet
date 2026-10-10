@@ -7,6 +7,7 @@
 #include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
 #include "Vortex/Shared/MaskedAlphaTest.hlsli"
+#include "Vortex/Shared/MeshClipPosition.hlsli"
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
 
 #define BX_VERTEX_TYPE Vertex
@@ -58,12 +59,8 @@ DepthPrepassVSOutput DepthPrepassVS(
     const float4x4 world_matrix = BX_LoadInstanceWorldMatrix(
         draw_bindings.current_worlds_slot, draw_bindings.instance_data_slot, metadata,
         instance_id);
-    float4 world_position
-        = mul(world_matrix, float4(vertex.position, 1.0f));
-    world_position.xyz += ResolveCurrentMaterialWpoOffset(
-        draw_bindings, velocity_metadata);
-    const float4 view_position = mul(view_matrix, world_position);
-    output.position = mul(projection_matrix, view_position);
+    output.position = ComputeMeshClipPosition(world_matrix, vertex.position,
+        ResolveCurrentMaterialWpoOffset(draw_bindings, velocity_metadata));
     return output;
 }
 

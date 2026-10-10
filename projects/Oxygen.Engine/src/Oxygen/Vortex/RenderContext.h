@@ -27,6 +27,7 @@
 #include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/DrawVisibility.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 
 namespace oxygen {
@@ -80,6 +81,13 @@ template <typename T> struct PassIndexOf<T, PassTypeList<>> {
 using KnownPassTypes = PassTypeList<>;
 static constexpr std::size_t kNumPassTypes = KnownPassTypes::size;
 
+// The frame's shared render state: stages read and write its fields directly.
+// NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes)
+// The implicit move constructor moves `pass_enable_flags` and `view_outputs`;
+// MSVC's `std::unordered_map` move constructor is not noexcept (it allocates
+// buckets for the moved-from map). Nothing move-constructs a RenderContext:
+// the renderer owns it through `unique_ptr` and the context pool is immovable.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 struct RenderContext {
   struct ScreenHzbRequest {
     bool current_furthest { false };
@@ -197,6 +205,8 @@ struct RenderContext {
     bool screen_hzb_has_previous { false };
     ShaderVisibleIndex lighting_frame_slot { kInvalidShaderVisibleIndex };
     observer_ptr<const OcclusionFrameResults> occlusion_results;
+    //! This view's per-draw visibility from the cull pass, for list builds.
+    DrawVisibilityProducts draw_visibility {};
     bool is_reflection_capture { false };
     bool with_atmosphere { false };
     bool with_height_fog { false };
@@ -242,12 +252,6 @@ struct RenderContext {
   float delta_time { time::SimulationClock::kMinDeltaTimeSeconds };
   observer_ptr<oxygen::scene::Scene> scene { nullptr };
 
-  [[nodiscard]] auto GetSceneMutable() noexcept
-    -> observer_ptr<oxygen::scene::Scene>
-  {
-    return scene;
-  }
-
   [[nodiscard]] auto GetSceneMutable() const noexcept
     -> observer_ptr<oxygen::scene::Scene>
   {
@@ -270,7 +274,7 @@ struct RenderContext {
     -> const ViewExecutionEntry*
   {
     return active_view_index < frame_views.size()
-      ? &frame_views[active_view_index]
+      ? &frame_views.at(active_view_index)
       : nullptr;
   }
 
@@ -281,14 +285,14 @@ struct RenderContext {
   {
     constexpr std::size_t idx = PassIndexOf<PassT, KnownPassTypes>::value;
     static_assert(idx < kNumPassTypes, "Pass type not in KnownPassTypes");
-    return static_cast<PassT*>(known_passes_[idx].get());
+    return static_cast<PassT*>(known_passes_.at(idx).get());
   }
 
   template <typename PassT> auto RegisterPass(PassT* pass) const -> void
   {
     constexpr std::size_t idx = PassIndexOf<PassT, KnownPassTypes>::value;
     static_assert(idx < kNumPassTypes, "Pass type not in KnownPassTypes");
-    known_passes_[idx].reset(pass);
+    known_passes_.at(idx).reset(pass);
   }
 
   auto ClearRegisteredPasses() const -> void
@@ -321,6 +325,7 @@ struct RenderContext {
     pass_enable_flags.clear();
   }
 
+  // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 private:
   friend class Renderer;
   friend class SceneRenderer;

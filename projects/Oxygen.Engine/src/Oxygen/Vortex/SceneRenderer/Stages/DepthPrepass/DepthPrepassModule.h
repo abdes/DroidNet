@@ -26,6 +26,9 @@ struct SceneTexturesConfig;
 class Renderer;
 class SceneTextures;
 class DepthPrepassMeshProcessor;
+namespace occlusion::internal {
+  class IndirectListBuilder;
+} // namespace occlusion::internal
 
 struct DepthPrepassConfig {
   DepthPrePassMode mode { DepthPrePassMode::kOpaqueAndMasked };
@@ -61,6 +64,7 @@ private:
   bool has_valid_depth_product_ { false };
   bool has_published_depth_products_ { false };
   std::unique_ptr<DepthPrepassMeshProcessor> mesh_processor_;
+  std::unique_ptr<occlusion::internal::IndirectListBuilder> list_builder_;
   std::shared_ptr<graphics::Framebuffer> depth_framebuffer_;
   std::shared_ptr<graphics::Framebuffer> depth_velocity_framebuffer_;
 };

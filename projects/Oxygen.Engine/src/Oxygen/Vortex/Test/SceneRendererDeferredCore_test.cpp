@@ -1042,6 +1042,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   });
 
   graphics_->draw_log_.draws.clear();
+  graphics_->indirect_log_.draws.clear();
   graphics_->graphics_pipeline_log_.binds.clear();
 
   depth_prepass.SetConfig(oxygen::vortex::DepthPrepassConfig {
@@ -1054,8 +1055,12 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
       "Test stage"),
     scene_textures);
 
-  ASSERT_EQ(graphics_->draw_log_.draws.size(), 1U);
-  EXPECT_EQ(graphics_->draw_log_.draws.front().vertex_num, 3U);
+  // The draw is one GPU-compacted indirect command with a GPU count.
+  EXPECT_TRUE(graphics_->draw_log_.draws.empty());
+  ASSERT_EQ(graphics_->indirect_log_.draws.size(), 1U);
+  const auto& indirect = graphics_->indirect_log_.draws.front().execution_desc;
+  EXPECT_EQ(indirect.command_count.get(), 1U);
+  EXPECT_NE(indirect.count_buffer, nullptr);
   ASSERT_FALSE(graphics_->graphics_pipeline_log_.binds.empty());
   EXPECT_EQ(graphics_->graphics_pipeline_log_.binds.back().desc.GetName(),
     "Vortex.DepthPrepass.OpaqueVelocity");
@@ -1279,6 +1284,7 @@ NOLINT_TEST_F(
   });
 
   graphics_->draw_log_.draws.clear();
+  graphics_->indirect_log_.draws.clear();
   graphics_->graphics_pipeline_log_.binds.clear();
 
   base_pass.SetConfig(oxygen::vortex::BasePassConfig {
@@ -1299,8 +1305,12 @@ NOLINT_TEST_F(
   EXPECT_FALSE(result.wrote_velocity_target);
   EXPECT_TRUE(result.wrote_scene_color);
   EXPECT_EQ(result.draw_count, 1U);
-  ASSERT_EQ(graphics_->draw_log_.draws.size(), 1U);
-  EXPECT_EQ(graphics_->draw_log_.draws.front().vertex_num, 3U);
+  // The draw is one GPU-compacted indirect command with a GPU count.
+  EXPECT_TRUE(graphics_->draw_log_.draws.empty());
+  ASSERT_EQ(graphics_->indirect_log_.draws.size(), 1U);
+  const auto& indirect = graphics_->indirect_log_.draws.front().execution_desc;
+  EXPECT_EQ(indirect.command_count.get(), 1U);
+  EXPECT_NE(indirect.count_buffer, nullptr);
   ASSERT_FALSE(graphics_->graphics_pipeline_log_.binds.empty());
   EXPECT_EQ(graphics_->graphics_pipeline_log_.binds.back().desc.GetName(),
     "Vortex.BasePass.Forward.Opaque");
@@ -1353,6 +1363,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest, BasePassWireframeRunsInForwardMode)
   });
 
   graphics_->draw_log_.draws.clear();
+  graphics_->indirect_log_.draws.clear();
   graphics_->graphics_pipeline_log_.binds.clear();
 
   base_pass.SetConfig(oxygen::vortex::BasePassConfig {
@@ -1373,8 +1384,12 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest, BasePassWireframeRunsInForwardMode)
   EXPECT_FALSE(result.wrote_velocity_target);
   EXPECT_TRUE(result.wrote_scene_color);
   EXPECT_EQ(result.draw_count, 1U);
-  ASSERT_EQ(graphics_->draw_log_.draws.size(), 1U);
-  EXPECT_EQ(graphics_->draw_log_.draws.front().vertex_num, 3U);
+  // The draw is one GPU-compacted indirect command with a GPU count.
+  EXPECT_TRUE(graphics_->draw_log_.draws.empty());
+  ASSERT_EQ(graphics_->indirect_log_.draws.size(), 1U);
+  const auto& indirect = graphics_->indirect_log_.draws.front().execution_desc;
+  EXPECT_EQ(indirect.command_count.get(), 1U);
+  EXPECT_NE(indirect.count_buffer, nullptr);
   ASSERT_FALSE(graphics_->graphics_pipeline_log_.binds.empty());
   EXPECT_EQ(graphics_->graphics_pipeline_log_.binds.back().desc.GetName(),
     "Vortex.BasePass.Wireframe");
@@ -1550,8 +1565,17 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     scene_textures.GetVelocity());
   EXPECT_NE(graphics_->texture_copy_log_.copies.front().dst,
     scene_textures.GetVelocity());
-  EXPECT_EQ(graphics_->draw_log_.draws.size(), 3U);
-  EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 1U);
+  EXPECT_TRUE(graphics_->draw_log_.draws.empty());
+  ASSERT_EQ(graphics_->indirect_log_.draws.size(), 2U);
+  EXPECT_EQ(
+    graphics_->indirect_log_.draws.front().execution_desc.command_count.get(),
+    2U);
+  EXPECT_EQ(
+    graphics_->indirect_log_.draws.back().execution_desc.command_count.get(),
+    1U);
+  constexpr auto kListCompactionDispatches = 3U;
+  EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(),
+    1U + (2U * kListCompactionDispatches));
   EXPECT_TRUE(std::ranges::any_of(
     graphics_->compute_pipeline_log_.binds, [](const auto& bind) -> bool {
       return bind.desc.GetName() == "Vortex.BasePass.VelocityMerge";
@@ -3409,6 +3433,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   prepared_frame.draw_bounding_spheres = std::span(draw_bounds);
 
   auto context = RenderContext {};
+  context.frame_slot = oxygen::frame::Slot { 1U };
   context.current_view.prepared_frame
     = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
         &prepared_frame,
@@ -3592,7 +3617,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
            ShadingMode::kDeferred,
          }) {
       SCOPED_TRACE(static_cast<int>(shading));
-      graphics_->draw_log_.draws.clear();
+      graphics_->indirect_log_.draws.clear();
       base_pass.SetConfig(oxygen::vortex::BasePassConfig {
         .write_velocity = false,
         .early_z_pass_done = false,
@@ -3608,15 +3633,15 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
             scene_textures)
           .draw_count,
         draws.size());
-      oxygen::vortex::testing::ExpectRasterStateDraws(
-        graphics_->draw_log_.draws, "Vortex.BasePass.");
+      oxygen::vortex::testing::ExpectRasterStateIndirectDraws(
+        graphics_->indirect_log_.draws, "Vortex.BasePass.");
     }
     for (const auto write_velocity : {
            false,
            true,
          }) {
       SCOPED_TRACE(write_velocity);
-      graphics_->draw_log_.draws.clear();
+      graphics_->indirect_log_.draws.clear();
       depth_pass.SetConfig(oxygen::vortex::DepthPrepassConfig {
         .mode = oxygen::vortex::DepthPrePassMode::kOpaqueAndMasked,
         .write_velocity = write_velocity,
@@ -3626,8 +3651,8 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
           graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
           "Test stage"),
         scene_textures);
-      oxygen::vortex::testing::ExpectRasterStateDraws(
-        graphics_->draw_log_.draws, "Vortex.DepthPrepass.");
+      oxygen::vortex::testing::ExpectRasterStateIndirectDraws(
+        graphics_->indirect_log_.draws, "Vortex.DepthPrepass.");
     }
   }
 }
@@ -3694,15 +3719,15 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
       = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
           &frame,
         };
-    graphics_->draw_log_.draws.clear();
+    graphics_->indirect_log_.draws.clear();
     const auto result = base_pass.Execute(context,
       *graphics_->AcquireCommandRecorder(
         graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
         "Test stage"),
       scene_textures);
     EXPECT_TRUE(result.wrote_velocity_target);
-    oxygen::vortex::testing::ExpectRasterStateDraws(
-      graphics_->draw_log_.draws, "Vortex.BasePass.VelocityAux.");
+    oxygen::vortex::testing::ExpectRasterStateIndirectDraws(
+      graphics_->indirect_log_.draws, "Vortex.BasePass.VelocityAux.");
   }
 }
 
@@ -3723,6 +3748,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   auto frame = oxygen::vortex::PreparedSceneFrame {};
   frame.draw_metadata_bytes = std::as_bytes(std::span(draws));
   auto context = RenderContext {};
+  context.frame_slot = oxygen::frame::Slot { 1U };
   context.current_view.prepared_frame
     = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
         &frame,
@@ -3743,7 +3769,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
       = oxygen::observer_ptr<const ResolvedView> {
           &view,
         };
-    graphics_->draw_log_.draws.clear();
+    graphics_->indirect_log_.draws.clear();
     EXPECT_TRUE(translucency
         .Execute(context,
           *graphics_->AcquireCommandRecorder(
@@ -3751,8 +3777,8 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
             "Test stage"),
           scene_textures)
         .executed);
-    oxygen::vortex::testing::ExpectRasterStateDraws(
-      graphics_->draw_log_.draws, "Vortex.Translucency.");
+    oxygen::vortex::testing::ExpectRasterStateIndirectDraws(
+      graphics_->indirect_log_.draws, "Vortex.Translucency.");
   }
 }
 

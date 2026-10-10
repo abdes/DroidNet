@@ -102,7 +102,9 @@ M05C parity re-check result:
 - Translucency lighting volume injection. Oxygen's existing forward-lighting
   payload is used directly.
 - Draw-command state merging into `DrawIndexedInstanced` buckets. Stage 18
-  still emits per-mesh draw commands for M05C.
+  still sorts per-mesh draw commands on the CPU; they are issued as a
+  GPU-compacted indirect list that keeps the draws in the view frustum, in
+  back-to-front order ([occlusion.md §5](occlusion.md#5-consumers)).
   Per-material sided rasterizer selection is implemented through `MeshRasterState`
   and the translucency pipeline-cache key. Its qualification is recorded in
   [material sidedness](../milestones/material-sidedness/README.md).

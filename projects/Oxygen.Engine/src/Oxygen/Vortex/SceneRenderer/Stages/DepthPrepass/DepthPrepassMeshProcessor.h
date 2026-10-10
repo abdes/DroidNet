@@ -29,6 +29,12 @@ struct DrawCommand {
   std::int32_t base_vertex { 0 };
   std::uint32_t start_instance { 0U };
   bool is_indexed { false };
+
+  //! Vertices per instance; `index_count` already holds the resolved count.
+  [[nodiscard]] auto VertexCountPerInstance() const noexcept -> std::uint32_t
+  {
+    return index_count;
+  }
 };
 
 class DepthPrepassMeshProcessor {

@@ -80,6 +80,9 @@ class EnvironmentLightingService;
 class IndirectLightingService;
 class ScreenHzbModule;
 class OcclusionModule;
+namespace occlusion::internal {
+  class DrawCullPass;
+} // namespace occlusion::internal
 class TranslucencyModule;
 namespace testing {
   struct RendererPublicationProbe;
@@ -225,7 +228,9 @@ private:
   friend struct testing::RendererPublicationProbe;
 
   struct ExposureProductLayout {
-    std::array<std::array<std::uint32_t, 6U>, 4U> products {};
+    //! Product id, extent x, y and z, kind, and gain bits.
+    static constexpr std::size_t kProductWords = 6U;
+    std::array<std::array<std::uint32_t, kProductWords>, 4U> products {};
     std::uint64_t revision { 0U };
     bool fp32_only { false };
   };
@@ -256,6 +261,10 @@ private:
   OXGN_VRTX_NDAPI auto BuildSceneTextureLeaseKey(const RenderContext& ctx) const
     -> SceneTextureLeaseKey;
   OXGN_VRTX_API void BindPreparedView(RenderContext& ctx);
+  //! Culls the current view's draws on the GPU for its indirect lists.
+  auto CullCurrentViewDraws(RenderContext& ctx,
+    graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
+    -> void;
   OXGN_VRTX_API auto RenderCurrentView(
     RenderContext& ctx, graphics::CommandRecorder& recorder) -> bool;
   OXGN_VRTX_API auto EnsureArtifactTexture(RenderContext& ctx,
@@ -293,9 +302,9 @@ private:
   SceneTextureBindings scene_texture_bindings_ {};
   SceneTextureExtracts scene_texture_extracts_ {};
   std::shared_ptr<SceneTextureLease> active_scene_texture_lease_;
-  ExtractArtifact resolved_scene_color_artifact_ {};
-  ExtractArtifact resolved_scene_depth_artifact_ {};
-  ExtractArtifact prev_velocity_artifact_ {};
+  ExtractArtifact resolved_scene_color_artifact_;
+  ExtractArtifact resolved_scene_depth_artifact_;
+  ExtractArtifact prev_velocity_artifact_;
   std::shared_ptr<graphics::Framebuffer> debug_visualization_framebuffer_;
   ViewId published_view_id_ { kInvalidViewId };
   ShaderVisibleIndex published_view_frame_bindings_slot_ {
@@ -313,6 +322,7 @@ private:
   std::unique_ptr<DepthPrepassModule> depth_prepass_;
   std::unique_ptr<ScreenHzbModule> screen_hzb_;
   std::unique_ptr<OcclusionModule> occlusion_;
+  std::unique_ptr<occlusion::internal::DrawCullPass> draw_cull_;
   std::unique_ptr<BasePassModule> base_pass_;
   std::unique_ptr<TranslucencyModule> translucency_;
   std::unique_ptr<LightingService> lighting_;

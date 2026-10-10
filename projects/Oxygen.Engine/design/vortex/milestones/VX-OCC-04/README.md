@@ -78,15 +78,15 @@ If a build reports a missing `impl-*.ninja`, reconfigure the tree with
 
 ## Slices
 
-| ID  | Deliverable                                                  | Depends | State       | Commit      |
-| --- | ------------------------------------------------------------ | ------- | ----------- | ----------- |
-| S1  | Geometry v4: mesh-view bounds, cooker split, `MeshViewIndex` | —       | `validated` | see git log |
-| S2  | Tiled HZB build and occlusion pyramid                        | —       | `validated` | see git log |
-| S3  | Culling records, history keys and slot allocator             | S1      | `validated` | see git log |
-| S4  | GPU indirect lists for camera passes, occlusion off          | S3      | `planned`   |             |
-| S5  | Camera two-phase occlusion; old tester removed               | S2, S4  | `planned`   |             |
-| S6  | Shadow-view lists and two-phase occlusion                    | S5      | `planned`   |             |
-| S7  | Default on, capture gate, closeout                           | S6      | `planned`   |             |
+| ID  | Deliverable                                                  | Depends | State         | Commit      |
+| --- | ------------------------------------------------------------ | ------- | ------------- | ----------- |
+| S1  | Geometry v4: mesh-view bounds, cooker split, `MeshViewIndex` | —       | `validated`   | see git log |
+| S2  | Tiled HZB build and occlusion pyramid                        | —       | `validated`   | see git log |
+| S3  | Culling records, history keys and slot allocator             | S1      | `validated`   | see git log |
+| S4  | GPU indirect lists for camera passes, occlusion off          | S3      | `in_progress` |             |
+| S5  | Camera two-phase occlusion; old tester removed               | S2, S4  | `planned`     |             |
+| S6  | Shadow-view lists and two-phase occlusion                    | S5      | `planned`     |             |
+| S7  | Default on, capture gate, closeout                           | S6      | `planned`     |             |
 
 S1 and S2 are independent; either may go first.
 
@@ -220,26 +220,26 @@ Design: [occlusion.md §3](../../lld/occlusion.md#3-indirect-lists), §4.1
 (frustum and coverage only), [§4.6](../../lld/occlusion.md#46-rasterization-invariance),
 [§5](../../lld/occlusion.md#5-consumers).
 
-- [ ] **Cull kernel.** `Stages/Occlusion/OcclusionCull.hlsl`:
+- [x] **Cull kernel.** `Stages/Occlusion/OcclusionCull.hlsl`:
   - oriented-box frustum test and exact pixel-center coverage cull
   - writes the visibility bits; phase 1 = every in-frustum draw
-- [ ] **Compaction.** `Stages/Occlusion/ListCompaction.hlsl`: predicate, two
+- [x] **Compaction.** `Stages/Occlusion/ListCompaction.hlsl`: predicate, two
       scan levels, scatter, count.
-- [ ] **List builder.**
+- [x] **List builder.**
       `Vortex/SceneRenderer/Stages/Occlusion/Internal/IndirectListBuilder.{h,cpp}`:
   - per pass and bucket: candidate upload, args and count buffers, and the
     command signature (one root constant plus a draw)
   - issue through `CommandRecorder::ExecuteIndirect` with push constants and
     the count buffer
-- [ ] **Consumers move to lists, keeping their CPU sorts:**
+- [x] **Consumers move to lists, keeping their CPU sorts:**
   - `Stages/DepthPrepass/DepthPrepassModule.cpp` and `DepthPrepassMeshProcessor.cpp`
   - `Stages/BasePass/BasePassModule.cpp`: deferred, forward, radiance replay,
     wireframe and velocity aux
   - `Stages/Translucency/TranslucencyModule.cpp`
   - `Shadows/Passes/ContactShadowCasterDepthPass.cpp`
-- [ ] **Invariance.** One `precise` clip-position function shared by
+- [x] **Invariance.** One `precise` clip-position function shared by
       `Stages/DepthPrepass/DepthPrepass.hlsl` and the base-pass shaders.
-- [ ] **New GPU tests** in `Oxygen.Vortex.Occlusion.Tests`:
+- [x] **New GPU tests** in `Oxygen.Vortex.Occlusion.Tests`:
   - the lists equal the previous CPU draw sets for a fixed scene
   - two runs produce identical lists
   - translucent lists keep back-to-front order
@@ -247,7 +247,18 @@ Design: [occlusion.md §3](../../lld/occlusion.md#3-indirect-lists), §4.1
 - [ ] **Verify.** `Oxygen.Vortex.Exposure.Tests` and
       `Oxygen.Vortex.LightingImageReference.Tests` pass unchanged, run one at a
       time; plus the CPU suites of the touched modules.
-- [ ] **Docs.** [depth-prepass.md](../../lld/depth-prepass.md),
+- [x] Notes from implementation:
+  - Lists are cut into runs of equal raster state, not regrouped buckets, so
+    CPU order survives across runs ([occlusion.md §3.2](../../lld/occlusion.md#32-lists-buckets-and-order)).
+  - The cull pass is `Occlusion/Internal/DrawCullPass`, run by `SceneRenderer`
+    before Stage 3; S5 moves it into `OcclusionModule::BuildPhase1`. The
+    contact-shadow caster pass records on its own command list, so it runs its
+    own cull.
+  - The coverage gate is checked against pixel centers analytically
+    (`DrawCullGpuTest`), not by rasterizing the culled draw.
+  - `ForwardMesh_VS.hlsl` ignores material WPO while the prepass applies it;
+    forward-mode depth equality for WPO materials is a pre-existing gap.
+- [x] **Docs.** [depth-prepass.md](../../lld/depth-prepass.md),
       [base-pass.md](../../lld/base-pass.md),
       [translucency.md](../../lld/translucency.md) switch to indirect lists.
 - [ ] **Owner.** Visual check of the editor before commit.

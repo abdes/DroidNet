@@ -96,6 +96,7 @@
 #include <Oxygen/Vortex/IndirectLighting/IndirectLightingService.h>
 #include <Oxygen/Vortex/Internal/PerViewScope.h>
 #include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
+#include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Passes/GroundGridPass.h>
@@ -118,6 +119,7 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/DrawCullPass.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionConfig.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/OcclusionStats.h>
@@ -1374,6 +1376,8 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)
     && renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
     occlusion_ = std::make_unique<OcclusionModule>(renderer_);
+    draw_cull_ = std::make_unique<occlusion::internal::DrawCullPass>(
+      renderer_, "Vortex.Stage3.DrawCull");
   }
   if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)
     && renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
@@ -1978,6 +1982,30 @@ auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
   }
 }
 
+auto SceneRenderer::CullCurrentViewDraws(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
+  -> void
+{
+  ctx.current_view.draw_visibility = {};
+  if (draw_cull_ == nullptr || ctx.current_view.prepared_frame == nullptr
+    || ctx.current_view.resolved_view == nullptr) {
+    return;
+  }
+  const auto& view = *ctx.current_view.resolved_view;
+  const auto extent = scene_textures.GetExtent();
+  const auto clamped = internal::ResolveClampedViewportState(
+    view.Viewport(), view.Scissor(), extent.x, extent.y);
+  ctx.current_view.draw_visibility = draw_cull_->Run(recorder,
+    occlusion::internal::DrawCullInputs {
+      .frame_sequence = ctx.frame_sequence,
+      .frame_slot = ctx.frame_slot,
+      .prepared_frame = ctx.current_view.prepared_frame,
+      .view_projection = view.ProjectionMatrix() * view.ViewMatrix(),
+      .viewport = clamped.viewport,
+      .scissors = clamped.scissors,
+    });
+}
+
 auto SceneRenderer::RenderCurrentView(
   RenderContext& ctx, graphics::CommandRecorder& recorder) -> bool
 {
@@ -2144,6 +2172,8 @@ auto SceneRenderer::RenderCurrentView(
       "Vortex.Stage6.ForwardLightData",
       published_view_frame_bindings_.lighting_frame_slot);
   }
+
+  CullCurrentViewDraws(ctx, recorder, scene_textures);
 
   // Stage 3: Depth prepass + early velocity
   if (depth_prepass_ != nullptr && wants_depth_prepass) {

@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -39,6 +40,11 @@ struct SceneTexturesConfig;
 class Renderer;
 class SceneTextures;
 class BasePassMeshProcessor;
+namespace occlusion::internal {
+  struct IndirectDrawCandidate;
+  struct IndirectDrawList;
+  class IndirectListBuilder;
+} // namespace occlusion::internal
 namespace internal {
   template <typename Payload> class PerViewStructuredPublisher;
 }
@@ -87,6 +93,10 @@ public:
     -> const BasePassExecutionResult&;
 
 private:
+  //! Compacts `candidates` to the view's drawn set.
+  auto BuildDrawList(RenderContext& ctx, graphics::CommandRecorder& recorder,
+    std::span<const occlusion::internal::IndirectDrawCandidate> candidates)
+    -> occlusion::internal::IndirectDrawList;
   friend struct testing::RendererPublicationProbe;
   OXGN_VRTX_API auto WriteWireframeConstants(Graphics& gfx,
     const RenderContext& ctx, bool write_pre_exposed) -> ShaderVisibleIndex;
@@ -95,6 +105,7 @@ private:
   BasePassConfig config_ {};
   BasePassExecutionResult last_execution_result_ {};
   std::unique_ptr<BasePassMeshProcessor> mesh_processor_;
+  std::unique_ptr<occlusion::internal::IndirectListBuilder> list_builder_;
   std::unique_ptr<internal::PerViewStructuredPublisher<std::array<float, 8>>>
     wireframe_constants_publisher_;
   std::optional<frame::SequenceNumber> wireframe_constants_frame_;

@@ -129,9 +129,11 @@ DepthPrepassModule::Execute(ctx, scene_textures)
   │    ├─ partition accepted draws into opaque vs masked buckets
   │    ├─ stable-sort each bucket front-to-back using the published draw bounds
   │    └─ fall back to accepted-draw order only if the current view or bounds are unavailable
+  ├─ compact the commands into an indirect list on the GPU, keeping the draws
+  │  the view's cull marked phase 1 (occlusion.md §3)
   ├─ bind depth-only framebuffer
-  ├─ issue opaque depth draws
-  ├─ issue masked depth draws with alpha-test permutation
+  ├─ issue the list: one ExecuteIndirect per run of equal raster state, so
+  │  opaque draws precede masked draws with the alpha-test permutation
   ├─ copy SceneDepth -> PartialDepth
   └─ publish completeness state
 ```

@@ -12,6 +12,7 @@
 #include <memory>
 #include <ranges>
 #include <span>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -25,6 +26,7 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -41,9 +43,13 @@
 #include <Oxygen/Vortex/Shadows/Types/LightShadowReference.h>
 #include <Oxygen/Vortex/Shadows/Types/ProjectedLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowContentLease.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowSharingDiagnostics.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
+#include <Oxygen/Vortex/Types/PassMask.h>
+#include <Oxygen/Vortex/Types/ShadowCasterSource.h>
 #include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
@@ -109,7 +115,7 @@ auto ShadowService::EnsurePublishResources() -> bool
 auto ShadowService::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
-  std::erase_if(prepared_casters_, [&](const auto& entry) {
+  std::erase_if(prepared_casters_, [&](const auto& entry) -> auto {
     return entry.second.last_seen != current_sequence_;
   });
   caster_records_.Prune();
@@ -123,7 +129,7 @@ auto ShadowService::OnFrameStart(
     .frame_slot = slot,
   };
   cascade_shadow_pass_->OnFrameStart(sequence, slot);
-  contact_depth_pass_->OnFrameStart(sequence);
+  contact_depth_pass_->OnFrameStart(sequence, slot);
   if (EnsurePublishResources()) {
     bindings_publisher_->OnFrameStart(sequence, slot);
     directional_record_buffer_->OnFrameStart(sequence, slot);
@@ -187,9 +193,10 @@ auto ShadowService::PublishShadowBindings(
 auto ShadowService::PrepareLocalRequests(const FrameShadowInputs& inputs)
   -> void
 {
-  static const profiling::CpuProfileScopeDesc kProfile { .label
-    = "Vortex.Shadows.PrepareLocalRequests",
-    .category = profiling::ProfileCategory::kPass };
+  static const profiling::CpuProfileScopeDesc kProfile {
+    .label = "Vortex.Shadows.PrepareLocalRequests",
+    .category = profiling::ProfileCategory::kPass,
+  };
   const profiling::CpuProfileScope profile(kProfile);
   family_views_.assign(inputs.active_views.begin(), inputs.active_views.end());
   for (auto& view_input : family_views_) {
@@ -243,11 +250,13 @@ auto ShadowService::PrepareLocalRequests(const FrameShadowInputs& inputs)
       failed_views_.insert_or_assign(view_input.view_id,
         LightingPreparationFailure {
           .error = LightingPreparationError::kAllocationFailed,
-          .view_id = view_input.view_id });
+          .view_id = view_input.view_id,
+        });
     }
   }
-  std::erase_if(family_views_,
-    [&](const auto& view) { return failed_views_.contains(view.view_id); });
+  std::erase_if(family_views_, [&](const auto& view) -> auto {
+    return failed_views_.contains(view.view_id);
+  });
   cascade_shadow_pass_->ReconcileLocalFamily(family_views_);
 }
 
@@ -288,10 +297,12 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
         inputs.frame_light_set->directional_lights)
     : std::span<const FrameDirectionalLightSelection> {};
   cascade_shadow_pass_->RetainDirectionalSources(directional_lights);
-  PrepareLocalRequests({ .frame_light_set = inputs.frame_light_set,
-    .active_views = inputs.preparation_views.empty()
-      ? inputs.active_views
-      : inputs.preparation_views });
+  PrepareLocalRequests({
+    .frame_light_set = inputs.frame_light_set,
+    .active_views = inputs.preparation_views.empty() ? inputs.active_views
+                                                     : inputs.preparation_views,
+    .preparation_views = {},
+  });
   for (const auto& active : inputs.active_views) {
     const auto prepared = std::ranges::find(
       family_views_, active.view_id, &PreparedViewShadowInput::view_id);
@@ -627,7 +638,7 @@ auto ShadowService::RetainLocalContent(
     if (!lease) {
       return {};
     }
-    return ShadowContentLease(map, std::move(*lease));
+    return { map, std::move(*lease) };
   }
   return {};
 }

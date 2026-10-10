@@ -214,6 +214,8 @@ struct IndirectCommandLog {
     };
     CommandRecorder::IndirectCommandDesc command_desc {};
     CommandRecorder::IndirectExecutionDesc execution_desc {};
+    std::optional<graphics::RasterizerStateDesc> rasterizer;
+    std::string pipeline_name;
   };
   std::vector<Event> draws;
 };
@@ -624,6 +626,8 @@ public:
         .argument_buffer = &argument_buffer,
         .command_desc = command_desc,
         .execution_desc = execution_desc,
+        .rasterizer = current_rasterizer_,
+        .pipeline_name = current_pipeline_name_,
       });
     }
   }
@@ -1412,7 +1416,7 @@ public:
   std::unique_ptr<graphics::QueuesStrategy> queue_strategy_;
   mutable FakeTimestampQueryProvider timestamp_query_provider_ {};
   //! Readbacks are unavailable unless a test injects a manager.
-  observer_ptr<graphics::ReadbackManager> readback_manager_ {};
+  observer_ptr<graphics::ReadbackManager> readback_manager_;
   // Test injection flags (mutable to allow const CreateBuffer)
   bool fail_submission_ {
     false,
