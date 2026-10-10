@@ -596,6 +596,19 @@ Graphics::Graphics(const SerializedBackendConfig& config,
     desc.enable_debug_layer, desc.enable_validation, desc.enable_aftermath,
     static_cast<int>(frame_capture_config.provider));
   desc.frame_capture = frame_capture_config;
+  if (jsonConfig.contains("preferred_card_name")) {
+    desc.preferred_card_name
+      = jsonConfig.at("preferred_card_name").get<std::string>();
+  }
+  if (jsonConfig.contains("preferred_card_device_id")) {
+    desc.preferred_card_device_id
+      = jsonConfig.at("preferred_card_device_id").get<oxygen::DeviceId>();
+  }
+  if (desc.preferred_card_name.has_value()
+    && desc.preferred_card_device_id.has_value()) {
+    throw std::invalid_argument("Serialized backend config cannot prefer both "
+                                "a card name and a card device id");
+  }
   if (jsonConfig.contains("enable_vsync")) {
     enable_vsync_ = jsonConfig.at("enable_vsync").get<bool>();
   }

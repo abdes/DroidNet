@@ -13,6 +13,7 @@
 #include <ios>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 // MSVC declares the platform-specific _dupenv_s in the C runtime header.
@@ -23,6 +24,7 @@
 #include <vector>
 
 #include <d3d12.h>
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -169,29 +171,48 @@ auto ExposureGpuTest::CreateBackend(const SerializedBackendConfig& config,
 
 auto ExposureGpuTest::BackendConfigJson() const -> std::string
 {
-  const auto environment_flag = [](const char* name) -> bool {
+  const auto environment_value
+    = [](const char* name) -> std::optional<std::string> {
     char* value = nullptr;
     std::size_t size = 0U;
     if (_dupenv_s(&value, &size, name) != 0 || value == nullptr) {
-      return false;
+      return std::nullopt;
     }
-    std::free(value);
-    return true;
+    const auto owned
+      = std::unique_ptr<char, decltype(&std::free)>(value, &std::free);
+    return std::string { owned.get() };
   };
+  const auto environment_flag = [&](const char* name) -> bool {
+    return environment_value(name).has_value();
+  };
+  // A part of an adapter name (OXYGEN_GPU_ADAPTER) selects that adapter, e.g.
+  // an integrated GPU that does not drive the desktop.
+  auto config = nlohmann::json::object();
+  if (const auto adapter = environment_value("OXYGEN_GPU_ADAPTER")) {
+    config["preferred_card_name"] = *adapter;
+  }
   // External GPU crash analysis (e.g. Radeon GPU Detective) needs the device
   // without the debug layer and DRED, which otherwise intercept removal.
   if (environment_flag("OXYGEN_GPU_CRASH_ANALYSIS")) {
-    return R"({"enable_debug_layer":false})";
+    config["enable_debug_layer"] = false;
+    return config.dump();
   }
+  config["enable_debug_layer"] = true;
   // DRED instruments every command list; enable it only to diagnose a
   // device removal (OXYGEN_GPU_DRED). The debug layer itself stays on.
-  auto json = std::string { R"({"enable_debug_layer":true,"enable_dred":)" };
-  json += environment_flag("OXYGEN_GPU_DRED") ? "true" : "false";
-  if (!CapturePath().empty()) {
-    json += R"(,"frame_capture":{"provider":"renderdoc","init_mode":"search"})";
+  config["enable_dred"] = environment_flag("OXYGEN_GPU_DRED");
+  // GPU-based validation checks resources and indirect arguments as the GPU
+  // executes; enable it only to diagnose (OXYGEN_GPU_VALIDATION).
+  if (environment_flag("OXYGEN_GPU_VALIDATION")) {
+    config["enable_validation"] = true;
   }
-  json += "}";
-  return json;
+  if (!CapturePath().empty()) {
+    config["frame_capture"] = {
+      { "provider", "renderdoc" },
+      { "init_mode", "search" },
+    };
+  }
+  return config.dump();
 }
 
 auto ExposureGpuTest::CapturePath() -> std::string

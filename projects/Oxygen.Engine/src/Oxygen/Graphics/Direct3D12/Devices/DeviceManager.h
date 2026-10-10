@@ -11,6 +11,7 @@
 #include <concepts>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <stdexcept>
 #include <string>
@@ -115,6 +116,11 @@ struct DeviceManagerDesc {
   FrameCaptureConfig frame_capture {};
   bool require_display { true };
   bool auto_select_adapter { true };
+  //! Adapter hints, mutually exclusive: the best adapter is a usable one whose
+  //! name contains `preferred_card_name`, or whose PCI device id equals
+  //! `preferred_card_device_id`. Without a usable match, scoring decides.
+  std::optional<std::string> preferred_card_name;
+  std::optional<DeviceId> preferred_card_device_id;
   D3D_FEATURE_LEVEL minFeatureLevel { D3D_FEATURE_LEVEL_12_0 };
 };
 
@@ -252,6 +258,7 @@ private:
   auto InitializeFactory() -> void;
   auto DiscoverAdapters() -> void;
   auto GetAdapterScore(AdapterInfo& adapter) const -> int;
+  auto MatchesPreferredAdapter(const AdapterInfo& adapter) const -> bool;
 
   template <DeviceRemovalHandler Handler = std::nullptr_t>
   auto SelectAdapter(

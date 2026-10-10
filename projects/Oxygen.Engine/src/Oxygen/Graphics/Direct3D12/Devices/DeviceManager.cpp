@@ -10,6 +10,7 @@
 #include <array>
 #include <cstddef>
 #include <exception>
+#include <iterator>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -217,6 +218,26 @@ void DeviceManager::DiscoverAdapters()
     throw;
   }
 
+  if (props_.preferred_card_name.has_value()
+    || props_.preferred_card_device_id.has_value()) {
+    const auto preferred
+      = std::ranges::find_if(contexts_, [this](const Context& context) -> bool {
+          return context.info.MeetsFeatureLevel()
+            && MatchesPreferredAdapter(context.info);
+        });
+    if (preferred != contexts_.end()) {
+      best_adapter_index
+        = static_cast<size_t>(std::distance(contexts_.begin(), preferred));
+      LOG_F(INFO, "Preferred adapter: {}", preferred->info.Name());
+    } else {
+      LOG_F(WARNING,
+        "No usable adapter matches the preferred card (name `{}`, device id "
+        "{}); selecting by score",
+        props_.preferred_card_name.value_or(""),
+        props_.preferred_card_device_id.value_or(0));
+    }
+  }
+
   DCHECK_F(best_adapter_index >= 0 && best_adapter_index < contexts_.size(),
     "Best adapter index out of bounds");
 
@@ -259,6 +280,17 @@ auto DeviceManager::GetAdapterScore(AdapterInfo& adapter) const -> int
          kMegaShift))); // Convert bytes to MB
 
   return score;
+}
+
+auto DeviceManager::MatchesPreferredAdapter(const AdapterInfo& adapter) const
+  -> bool
+{
+  if (props_.preferred_card_name.has_value()) {
+    return adapter.Name().contains(*props_.preferred_card_name);
+  }
+  return props_.preferred_card_device_id.has_value()
+    && static_cast<DeviceId>(adapter.DeviceId())
+    == *props_.preferred_card_device_id;
 }
 
 auto DeviceManager::InitializeContext(Context& context) const -> bool
