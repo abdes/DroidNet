@@ -892,14 +892,14 @@ NOLINT_TEST_F(SceneRendererPublicationTest, CleanupRejectsUnusableResolvedDepth)
   };
   auto scene_renderer
     = SceneRenderer(*renderer_, *graphics_, config, ShadingMode::kDeferred);
-  auto texture = graphics_->CreateTexture(TextureDesc {
-    .width = 4U,
-    .height = 4U,
-    .format = Format::kDepth32Stencil8,
-    .debug_name = "CleanupResolvedDepth",
-    .is_shader_resource = true,
-    .initial_state = ResourceStates::kCommon,
-  });
+  auto depth_desc = TextureDesc {};
+  depth_desc.width = 4U;
+  depth_desc.height = 4U;
+  depth_desc.format = Format::kDepth32Stencil8;
+  depth_desc.debug_name = "CleanupResolvedDepth";
+  depth_desc.is_shader_resource = true;
+  depth_desc.initial_state = ResourceStates::kCommon;
+  auto texture = graphics_->CreateTexture(depth_desc);
   ASSERT_NE(texture, nullptr);
   auto resolved = oxygen::vortex::SceneTextureExtractRef {};
   resolved.retained_texture = texture;
@@ -909,8 +909,11 @@ NOLINT_TEST_F(SceneRendererPublicationTest, CleanupRejectsUnusableResolvedDepth)
   valid_null.texture = nullptr;
   auto invalid_nonnull = resolved;
   invalid_nonnull.valid = false;
-  const std::array unusable { valid_null, invalid_nonnull,
-    oxygen::vortex::SceneTextureExtractRef {} };
+  const std::array unusable {
+    valid_null,
+    invalid_nonnull,
+    oxygen::vortex::SceneTextureExtractRef {},
+  };
   const auto copies_before = graphics_->texture_copy_log_.copies.size();
   for (std::size_t index = 0U; index < unusable.size(); ++index) {
     SCOPED_TRACE(index);
@@ -1541,7 +1544,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     render_context.current_view.screen_hzb_furthest_texture->GetDescriptor()
       .mip_levels,
     screen_hzb.mip_count);
-  EXPECT_GE(graphics_->dispatch_log_.dispatches.size(), screen_hzb.mip_count);
+  EXPECT_FALSE(graphics_->dispatch_log_.dispatches.empty());
   EXPECT_TRUE(std::ranges::any_of(
     graphics_->compute_pipeline_log_.binds, [](const auto& bind) -> bool {
       return bind.desc.GetName() == "Vortex.Stage5.ScreenHzbBuild"
@@ -1549,8 +1552,15 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
         == "Vortex/Stages/Occlusion/ScreenHzbBuild.hlsl"
         && bind.desc.ComputeShader().entry_point == "VortexScreenHzbBuildCS";
     }));
-  EXPECT_GE(
-    graphics_->texture_copy_log_.copies.size(), screen_hzb.mip_count * 2U);
+  // The build writes every mip through its own UAV; nothing copies into the
+  // published pyramids.
+  EXPECT_TRUE(std::ranges::none_of(
+    graphics_->texture_copy_log_.copies, [&](const auto& copy) -> bool {
+      return copy.dst
+        == render_context.current_view.screen_hzb_closest_texture.get()
+        || copy.dst
+        == render_context.current_view.screen_hzb_furthest_texture.get();
+    }));
 }
 
 NOLINT_TEST_F(
@@ -1597,10 +1607,12 @@ NOLINT_TEST_F(
   second_context.current_view.screen_hzb_request.current_closest = true;
   second_context.current_view.screen_hzb_request.current_furthest = true;
 
+  // Size of the HZB build constants (HzbBuildPassConstants).
+  constexpr auto kHzbBuildConstantsBytes = std::size_t { 176U };
   struct Snapshot {
     oxygen::ShaderVisibleIndex slot;
     const std::byte* data;
-    std::array<std::byte, 48U> bytes;
+    std::array<std::byte, kHzbBuildConstantsBytes> bytes;
   };
   std::vector<Snapshot> first_payloads;
   graphics_->buffer_view_log_.events.clear();
@@ -1612,8 +1624,8 @@ NOLINT_TEST_F(
     scene_textures);
   ASSERT_FALSE(graphics_->buffer_view_log_.events.empty());
   for (const auto& event : graphics_->buffer_view_log_.events) {
-    ASSERT_EQ(event.stride, 48U);
-    ASSERT_GE(event.size, 48U);
+    ASSERT_EQ(event.stride, kHzbBuildConstantsBytes);
+    ASSERT_GE(event.size, kHzbBuildConstantsBytes);
     Snapshot copy {
       .slot = event.slot,
       .data = event.data,

@@ -553,6 +553,14 @@ if(WIN32)
     DEPS
       oxygen-vortex-exposure-test-support
   )
+  gtest_program(
+    "Oxygen.Vortex.Occlusion.Tests"
+    GPU
+    SOURCES
+      "Occlusion/HzbPyramid_test.cpp"
+    DEPS
+      oxygen-vortex-exposure-test-support
+  )
   target_compile_definitions(
     oxygen-vortex-exposure-test-support
     PUBLIC

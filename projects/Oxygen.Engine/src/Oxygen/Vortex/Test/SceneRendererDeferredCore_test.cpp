@@ -38,9 +38,11 @@
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -52,6 +54,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
@@ -96,6 +99,7 @@
 #include <Oxygen/Vortex/Types/PassMask.h>
 #include <Oxygen/Vortex/Types/VelocityPublications.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
+#include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 #include <Oxygen/Vortex/ViewExtension.h>
 #include <Oxygen/Vortex/ViewFeatureProfile.h>
 
@@ -783,7 +787,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   FailedViewDoesNotPublishOrBlockSiblingAndRecovers)
 {
   struct Fault final : oxygen::vortex::IViewExtension {
-    ViewId failed_view;
+    ViewId failed_view { oxygen::kInvalidViewId };
     bool fail = true;
     unsigned completed = 0U;
     void OnPreRenderViewGpu(
@@ -794,7 +798,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
       }
     }
     void OnPostRenderViewGpu(
-      const oxygen::vortex::ViewRenderGpuContext&) override
+      const oxygen::vortex::ViewRenderGpuContext& /*hook*/) override
     {
       ++completed;
     }
@@ -809,8 +813,10 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   context.frame_slot = oxygen::frame::Slot { 1U };
   context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
   context.view_constants = view_constants_buffer_;
-  for (auto [id, view] : { std::pair { first_view_id_, &first_resolved_view_ },
-         std::pair { second_view_id_, &second_resolved_view_ } }) {
+  for (auto [id, view] : {
+         std::pair { first_view_id_, &first_resolved_view_ },
+         std::pair { second_view_id_, &second_resolved_view_ },
+       }) {
     auto& entry = context.frame_views.emplace_back();
     entry.view_id = id;
     entry.is_scene_view = true;
@@ -819,12 +825,16 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 
   scene_renderer_->RenderViewFamily(context);
   const auto failed = scene_renderer_->InspectViewRenderStatus(first_view_id_);
-  ASSERT_TRUE(failed);
-  EXPECT_EQ(failed->state, oxygen::vortex::ViewRenderState::kFailed);
-  EXPECT_EQ(failed->failure, oxygen::vortex::ViewRenderFailure::kRecording);
-  EXPECT_FALSE(failed->IsCaptureEligible(context.frame_sequence));
-  EXPECT_FALSE(context.frame_views[0].rendered);
-  EXPECT_TRUE(context.frame_views[1].rendered);
+  if (!failed.has_value()) {
+    FAIL() << "Expected a status for the failed view";
+  }
+  const auto& failed_status = failed.value();
+  EXPECT_EQ(failed_status.state, oxygen::vortex::ViewRenderState::kFailed);
+  EXPECT_EQ(
+    failed_status.failure, oxygen::vortex::ViewRenderFailure::kRecording);
+  EXPECT_FALSE(failed_status.IsCaptureEligible(context.frame_sequence));
+  EXPECT_FALSE(context.frame_views.at(0).rendered);
+  EXPECT_TRUE(context.frame_views.at(1).rendered);
   EXPECT_EQ(fault->completed, 1U);
   EXPECT_EQ(context.current_view.view_id, oxygen::kInvalidViewId);
 
@@ -834,12 +844,15 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   scene_renderer_->RenderViewFamily(context);
   const auto recovered
     = scene_renderer_->InspectViewRenderStatus(first_view_id_);
-  ASSERT_TRUE(recovered);
-  EXPECT_TRUE(recovered->IsCaptureEligible(context.frame_sequence));
+  if (!recovered.has_value()) {
+    FAIL() << "Expected a status for the recovered view";
+  }
+  const auto& recovered_status = recovered.value();
+  EXPECT_TRUE(recovered_status.IsCaptureEligible(context.frame_sequence));
   EXPECT_FALSE(
-    recovered->IsCaptureEligible(oxygen::frame::SequenceNumber { 1U }));
-  EXPECT_TRUE(context.frame_views[0].rendered);
-  EXPECT_TRUE(context.frame_views[1].rendered);
+    recovered_status.IsCaptureEligible(oxygen::frame::SequenceNumber { 1U }));
+  EXPECT_TRUE(context.frame_views.at(0).rendered);
+  EXPECT_TRUE(context.frame_views.at(1).rendered);
   EXPECT_EQ(fault->completed, 3U);
 }
 
@@ -1798,7 +1811,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   auto node = AddDirectionalLight("StandaloneSource");
   auto source = node.GetLightAs<DirectionalLight>();
   ASSERT_TRUE(source.has_value());
-  ASSERT_TRUE(node.EditLight<DirectionalLight>([](auto& light) {
+  ASSERT_TRUE(node.EditLight<DirectionalLight>([](auto& light) -> void {
     light.SetAtmosphereLightSlot(oxygen::scene::AtmosphereLightSlot::kNone);
   }));
   UpdateSceneTransforms();
@@ -1820,7 +1833,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   auto node = AddDirectionalLight("StandaloneSource");
   auto source = node.GetLightAs<DirectionalLight>();
   ASSERT_TRUE(source.has_value());
-  ASSERT_TRUE(node.EditLight<DirectionalLight>([](auto& light) {
+  ASSERT_TRUE(node.EditLight<DirectionalLight>([](auto& light) -> void {
     light.SetAtmosphereLightSlot(
       oxygen::scene::AtmosphereLightSlot::kSecondary);
   }));
@@ -1844,7 +1857,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   if (!sun_light.has_value()) {
     FAIL() << "Expected sun_light to have a value";
   }
-  ASSERT_TRUE(sun.EditLight<DirectionalLight>([](auto& light) {
+  ASSERT_TRUE(sun.EditLight<DirectionalLight>([](auto& light) -> void {
     auto& csm = light.CascadedShadows();
     csm.cascade_count = 3U;
     csm.split_mode = oxygen::scene::DirectionalCsmSplitMode::kManualDistances;
@@ -1902,7 +1915,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     FAIL() << "Expected fill_light to have a value";
   }
   ASSERT_TRUE(fill.EditLight<DirectionalLight>(
-    [](auto& light) { light.Common().affects_world = true; }));
+    [](auto& light) -> void { light.Common().affects_world = true; }));
   fill.GetTransform().SetLocalRotation(
     glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Right));
 
@@ -1912,7 +1925,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     FAIL() << "Expected sun_light to have a value";
   }
   ASSERT_TRUE(sun.EditLight<DirectionalLight>(
-    [](auto& light) { light.Common().affects_world = true; }));
+    [](auto& light) -> void { light.Common().affects_world = true; }));
   sun.GetTransform().SetLocalRotation(
     glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right));
 
@@ -2250,7 +2263,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   if (!spot_light.has_value()) {
     FAIL() << "Expected spot_light to have a value";
   }
-  ASSERT_TRUE(spot.EditLight<SpotLight>([](auto& light) {
+  ASSERT_TRUE(spot.EditLight<SpotLight>([](auto& light) -> void {
     light.Common().casts_shadows = true;
     light.Common().shadow.bias = 0.5F;
     light.Common().shadow.normal_bias = 0.03F;
@@ -2281,7 +2294,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   if (!point_light.has_value()) {
     FAIL() << "Expected point_light to have a value";
   }
-  ASSERT_TRUE(point.EditLight<PointLight>([](auto& light) {
+  ASSERT_TRUE(point.EditLight<PointLight>([](auto& light) -> void {
     light.Common().casts_shadows = true;
     light.Common().shadow.bias = 0.5F;
     light.Common().shadow.normal_bias = 0.03F;
@@ -2401,7 +2414,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   UpdateSceneTransforms();
   for (const auto inner : { 0.35F, 0.65F }) {
     ASSERT_TRUE(spot.EditLight<SpotLight>(
-      [inner](auto& light) { light.SetInnerConeAngleRadians(inner); }));
+      [inner](auto& light) -> void { light.SetInnerConeAngleRadians(inner); }));
     std::ignore = RenderForView(first_view_id_, view);
     const auto& state = scene_renderer_->GetLastDeferredLightingState();
     EXPECT_EQ(state.spot_light_count, 1U);
@@ -2418,9 +2431,11 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   overlapping.GetTransform().SetLocalPosition({ 2.0F, 0.0F, -1.0F });
   distant.GetTransform().SetLocalPosition({ 100.0F, 0.0F, -1.0F });
   UpdateSceneTransforms();
-  for (const auto& view : { MakePerspectiveResolvedView(64.0F, 64.0F),
+  for (const auto& view : {
+         MakePerspectiveResolvedView(64.0F, 64.0F),
          MakePerspectiveResolvedView(64.0F, 64.0F, false),
-         MakeOrthographicResolvedView(64.0F, 64.0F) }) {
+         MakeOrthographicResolvedView(64.0F, 64.0F),
+       }) {
     std::ignore = RenderForView(first_view_id_, view);
     const auto& state = scene_renderer_->GetLastDeferredLightingState();
     EXPECT_EQ(state.point_light_count, 1U);
@@ -4024,7 +4039,8 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     });
     EXPECT_FALSE(registry.Contains(*output.closest_texture));
     EXPECT_FALSE(registry.Contains(*output.furthest_texture));
-    EXPECT_EQ(registry.GetRegisteredResourceCount(), before_retirement - 8U);
+    // Two history textures for each of the closest and furthest pyramids.
+    EXPECT_EQ(registry.GetRegisteredResourceCount(), before_retirement - 4U);
     module.OnFrameStart();
     EXPECT_FALSE(module.GetCurrentOutput().available);
     EXPECT_FALSE(module.GetPreviousOutput().available);

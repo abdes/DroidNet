@@ -102,6 +102,8 @@ src/Oxygen/Vortex/
 └── SceneRenderer/
     └── Stages/
         └── Hzb/
+            ├── HzbPyramidBuilder.h
+            ├── HzbPyramidBuilder.cpp
             ├── ScreenHzbModule.h
             └── ScreenHzbModule.cpp
 
@@ -134,6 +136,14 @@ public:
     bool available { false };
   };
 
+  struct OcclusionPyramid {
+    std::shared_ptr<const graphics::Texture> texture {};
+    ShaderVisibleIndex srv {};
+    std::uint32_t width {};
+    std::uint32_t height {};
+    std::uint32_t mip_count {};
+  };
+
   explicit ScreenHzbModule(
     Renderer& renderer, const SceneTexturesConfig& scene_textures_config);
   ~ScreenHzbModule();
@@ -143,7 +153,11 @@ public:
   ScreenHzbModule(ScreenHzbModule&&) = delete;
   auto operator=(ScreenHzbModule&&) -> ScreenHzbModule& = delete;
 
-  void Execute(RenderContext& ctx, SceneTextures& scene_textures);
+  void Execute(RenderContext& ctx, graphics::CommandRecorder& recorder,
+    SceneTextures& scene_textures);
+  auto BuildOcclusionPyramid(RenderContext& ctx,
+    graphics::CommandRecorder& recorder,
+    const HzbPyramidBuilder::Source& source) -> std::optional<OcclusionPyramid>;
 
   [[nodiscard]] auto GetCurrentOutput() const -> const Output&;
   [[nodiscard]] auto GetPreviousOutput() const -> const Output&;
@@ -154,6 +168,11 @@ public:
 
 `ScreenHzbModule` is owned by `SceneRenderer` as `screen_hzb_` for the
 renderer lifetime.
+
+Both products are recorded by one `HzbPyramidBuilder`, which owns the compute
+pipeline and the per-dispatch constants. It reduces a depth rect into the
+closest and/or furthest pyramid textures it is given (§4); the module owns
+those textures.
 
 ### 2.3 Published HZB Contract
 
@@ -280,26 +299,29 @@ mip_extent(base, level) = max(1, base >> level)
 
 ### 4.1 Overview
 
-Each pyramid is built by one dispatch of a single-pass downsampler (reference:
-AMD FidelityFX SPD):
+Each build reduces all requested pyramids together in at most two dispatches
+of `VortexScreenHzbBuildCS`, a tiled downsampler in the style of AMD
+FidelityFX SPD:
 
-1. Each 256-thread workgroup reduces a 64 x 64 tile of mip 0 down to mip 5,
-   in group-shared memory.
-2. The workgroup writes every mip it produces directly to the pyramid
-   texture's per-mip UAVs.
-3. The last workgroup to finish, detected by a global atomic counter, reduces
-   mips 6-11 from mip 5.
+1. **Tile dispatch.** Each 256-thread workgroup owns a 64 x 64 tile of mip 0.
+   Each thread reduces a 4 x 4 block of mip-0 texels from the source, then
+   that block to mips 1 and 2. The workgroup finishes mips 3-6 in group-shared
+   memory. Every mip is written directly through its per-mip UAV.
+2. **Tail dispatch.** Runs only when mips 7 and above exist, as one
+   workgroup that reduces mips 7-12 from mip 6 the same way. A UAV barrier
+   between the dispatches makes mip 6 visible.
 
-The last-workgroup pattern needs no forward progress between workgroups. Mips
-above 11 (roots over 4096) use one further dispatch of the same shader.
+Mip 7 is at most 64 x 64 for the largest root (8192, from D3D12's 16384
+texture limit), so two dispatches cover every supported view. No atomics,
+counters or cross-workgroup synchronization are involved.
 
 ```text
 Execute()
   ├─ determine active source view rect
   ├─ compute HZB root extent + mip count
-  ├─ ensure per-view history resources and the atomic counter
+  ├─ ensure per-view history resources and per-mip UAVs
   ├─ select write history slot
-  ├─ dispatch the single-pass build for each requested pyramid
+  ├─ tile dispatch, UAV barrier, tail dispatch when mips 7+ exist
   ├─ transition written history textures to ShaderResource
   ├─ swap history slot
   └─ build current/previous Output values
@@ -315,15 +337,18 @@ bleeds into adjacent regions of the scene texture.
 
 ### 4.3 Conservative Reduction
 
-The root extent is a power of two at most the source extent (§3.1), so the
-source-to-mip-0 ratio `r` per axis lies in `(1, 2]` and is generally
-fractional. Mip-0 texel `x` covers source pixels `floor(x * r)` through
-`ceil((x + 1) * r) - 1`: up to three per axis.
+The pyramid is padded, not stretched. Mip-0 texel `x` reduces the source
+pixels `2x` and `2x + 1` per axis, clamped to the view rect. The root extent
+is `bit_ceil(source) / 2` (§3.1), so twice the root is at least the source
+extent and every source pixel lands in exactly one mip-0 texel. The view
+occupies the fraction `viewport_uv_to_hzb_buffer_uv` of the pyramid; texels
+past the view rect repeat edge pixels and are never sampled by consumers that
+clamp to the view rect.
 
-- Mip 0 reduces every source pixel of that footprint, up to 3 x 3, clamped to
-  the view rect. A fixed 2 x 2 neighbourhood misses pixels when `r` is
-  fractional, and occluder depth would then be lost.
-- Mips N > 0 reduce exact 2 x 2 blocks of mip N - 1, clamped at odd edges.
+- Mip 0 reduces a 2 x 2 source block per texel.
+- Mips N > 0 reduce exact 2 x 2 blocks of mip N - 1. Extents are powers of
+  two, so blocks never straddle; an axis that reaches 1 stays 1 and its block
+  clamps.
 
 ```text
 closest_depth = max(source samples)
@@ -339,7 +364,7 @@ Under reversed-Z:
 
 The previous build dispatched once per mip into single-mip scratch textures
 and copied each into the history texture: two GPU operations per mip, about
-20 per pyramid. The single-pass build writes the pyramid directly, so the
+20 per pyramid. The tiled build writes the pyramid directly, so the
 scratch textures and copies are removed.
 
 ### 4.5 Occlusion Pyramid
@@ -350,8 +375,10 @@ furthest-only pyramid for [occlusion culling](occlusion.md#43-occlusion-pyramid)
 - **Source.** A depth texture and rect: phase 1 `SceneDepth` for a camera
   view, or phase 1 shadow depth for a shadow view.
 - **Shape.** Same extent rules (§3) and build (§4.1-§4.3) as the Screen HZB.
-- **Storage.** Writes one transient texture owned per culling view, recreated
-  only when its extent changes.
+- **Storage.** Writes one texture per culling view, kept in that view's
+  module state and recreated only when its extent changes. Camera views are
+  keyed by `ViewId`; shadow views join with their identity
+  ([occlusion.md §6.4](occlusion.md#64-shadow-views)).
 - **Publication.** It is never published through `ScreenHzbFrameBindings` and
   never enters HZB history.
 - **Bindings.** It returns its SRV, extent and mip count for the occlusion
@@ -367,12 +394,11 @@ changes.
 
 ### 5.2 Texture Layout
 
-| Resource                             | Slots | Format      |    Mips    | Usage               |
-| ------------------------------------ | :---: | ----------- | :--------: | ------------------- |
-| `closest.history_textures[0/1]`      |   2   | `R32_FLOAT` | full chain | per-mip UAV + SRV   |
-| `furthest.history_textures[0/1]`     |   2   | `R32_FLOAT` | full chain | per-mip UAV + SRV   |
-| occlusion pyramid (per culling view) |   1   | `R32_FLOAT` | full chain | per-mip UAV + SRV   |
-| single-pass atomic counter           |   1   | `R32_UINT`  |     -      | UAV, self-resetting |
+| Resource                             | Slots | Format      |    Mips    | Usage             |
+| ------------------------------------ | :---: | ----------- | :--------: | ----------------- |
+| `closest.history_textures[0/1]`      |   2   | `R32_FLOAT` | full chain | per-mip UAV + SRV |
+| `furthest.history_textures[0/1]`     |   2   | `R32_FLOAT` | full chain | per-mip UAV + SRV |
+| occlusion pyramid (per culling view) |   1   | `R32_FLOAT` | full chain | per-mip UAV + SRV |
 
 ### 5.3 Previous-Frame Handoff
 
@@ -514,7 +540,7 @@ consumer visualization.
 1. `ScreenHzbModule::Execute()` is called only when current HZB is requested
    and a valid current depth product exists.
 2. The module does not write back into `SceneTextures`.
-3. Each pyramid is built by one single-pass dispatch (two above 4096 roots);
+3. Each build uses at most two dispatches (tile and tail);
    history and occlusion textures carry the full chain.
 4. `GetCurrentOutput()` and `GetPreviousOutput()` are stable after `Execute()`
    returns and are reset at the start of the next `Execute()`.

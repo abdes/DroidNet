@@ -1,10 +1,10 @@
 # VX-OCC-04 — Two-phase GPU occlusion
 
-Status: `planned`
+Status: `in_progress`
 
 | Field     | Summary                                                                                                                  |
 | --------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Outcome   | Not started. Design approved 2026-10-10.                                                                                 |
+| Outcome   | S2 validated. Design approved 2026-10-10.                                                                                |
 | Remaining | S1–S7 below; tracked as [VX-OCC-04](../../OPEN_ITEMS.md#p2--engineering-follow-ups).                                     |
 | Evidence  | Per-slice evidence in the [slice table](#slices); gates in [occlusion.md §8](../../lld/occlusion.md#8-validation-gates). |
 
@@ -47,9 +47,9 @@ Owner decisions, 2026-10-10:
 
 ## Working rules
 
-- **Commits.** One thematic commit per slice, after owner review. A slice may
-  land as more than one commit only when its parts build and pass
-  independently.
+- **Commits.** One thematic commit per slice once its tests pass; no review
+  pause. A slice may land as more than one commit only when its parts build
+  and pass independently. Work stops only at the **Owner** boxes.
 - **GPU tests.** Run one GPU test process at a time, with `--gtest_filter` on
   the tests being worked on. A test that removes the D3D12 device is never
   rerun by me; the owner gets the command.
@@ -78,15 +78,15 @@ If a build reports a missing `impl-*.ninja`, reconfigure the tree with
 
 ## Slices
 
-| ID  | Deliverable                                                  | Depends | State     | Commit |
-| --- | ------------------------------------------------------------ | ------- | --------- | ------ |
-| S1  | Geometry v4: mesh-view bounds, cooker split, `MeshViewIndex` | —       | `planned` |        |
-| S2  | Single-pass HZB build and occlusion pyramid                  | —       | `planned` |        |
-| S3  | Culling records, history keys and slot allocator             | S1      | `planned` |        |
-| S4  | GPU indirect lists for camera passes, occlusion off          | S3      | `planned` |        |
-| S5  | Camera two-phase occlusion; old tester removed               | S2, S4  | `planned` |        |
-| S6  | Shadow-view lists and two-phase occlusion                    | S5      | `planned` |        |
-| S7  | Default on, capture gate, closeout                           | S6      | `planned` |        |
+| ID  | Deliverable                                                  | Depends | State       | Commit      |
+| --- | ------------------------------------------------------------ | ------- | ----------- | ----------- |
+| S1  | Geometry v4: mesh-view bounds, cooker split, `MeshViewIndex` | —       | `planned`   |             |
+| S2  | Tiled HZB build and occlusion pyramid                        | —       | `validated` | see git log |
+| S3  | Culling records, history keys and slot allocator             | S1      | `planned`   |             |
+| S4  | GPU indirect lists for camera passes, occlusion off          | S3      | `planned`   |             |
+| S5  | Camera two-phase occlusion; old tester removed               | S2, S4  | `planned`   |             |
+| S6  | Shadow-view lists and two-phase occlusion                    | S5      | `planned`   |             |
+| S7  | Default on, capture gate, closeout                           | S6      | `planned`   |             |
 
 S1 and S2 are independent; either may go first.
 
@@ -143,36 +143,44 @@ Design: [geometry §9.5](../../../content-pipeline/geometry-cooking-architecture
 - [ ] **Owner.** Re-cook editor projects and local content; confirm the editor
       loads them.
 
-## S2 — Single-Pass HZB Build
+## S2 — Tiled HZB Build
 
 Design: [hzb.md §4](../../lld/hzb.md#4-build-algorithm),
 [§4.5](../../lld/hzb.md#45-occlusion-pyramid),
 [§9.1](../../lld/hzb.md#91-unit--integration-proof).
 
-- [ ] **Shader.** Rewrite `Stages/Occlusion/ScreenHzbBuild.hlsl` as the
-      single-pass downsampler:
-  - exact mip-0 footprint
-  - last-workgroup atomic counter
-  - second dispatch for roots above 4096
-- [ ] **Module.** `Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.{h,cpp}`:
+- [x] **Shader.** Rewrite `Stages/Occlusion/ScreenHzbBuild.hlsl` as the
+      tiled downsampler ([hzb.md §4.1](../../lld/hzb.md#41-overview)):
+  - tile dispatch for mips 0-6, tail dispatch for mips 7-12
+  - the padded 2:1 mip-0 mapping of hzb.md §4.3, unchanged
+- [x] **Builder.** Factor the build into
+      `Vortex/SceneRenderer/Stages/Hzb/HzbPyramidBuilder.{h,cpp}`, shared by the
+      published HZB and the occlusion pyramid and testable on its own:
+  - inputs: a source depth SRV with its view rect, closest and/or furthest
+    targets (R32F, full chain, one UAV per mip), and the extent and mip count
+  - it owns the compute pipeline and a `PerViewStructuredPublisher` for pass
+    constants (per-mip UAV indices for both pyramids, source rect, extents)
+  - two `Dispatch` calls with a UAV barrier between them
+  - mip 0 samples 2x2 at `origin + clamp(2 * texel + d, source - 1)`,
+    closest = max, furthest = min
+- [x] **Module.** `Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.{h,cpp}`:
   - per-mip UAVs on the history textures
   - remove the scratch textures and copies
-  - self-resetting counter buffer
-  - `BuildOcclusionPyramid(ctx, depth_source, culling_view)` with per-view
-    transient storage
-- [ ] **Catalog.** Register the shader changes in
+  - `BuildOcclusionPyramid(ctx, recorder, source)`, stored per camera view;
+    S6 adds the shadow-view key
+- [x] **Catalog.** Register the shader changes in
       `Graphics/Direct3D12/Shaders/EngineShaderCatalog.h`; ShaderBake passes.
-- [ ] **Graphics layer.** Confirm per-mip UAV views exist for 2D textures; add
+- [x] **Graphics layer.** Confirm per-mip UAV views exist for 2D textures; add
       them only if they are missing.
-- [ ] **New GPU target.** Create `Oxygen.Vortex.Occlusion.Tests`
+- [x] **New GPU target.** Create `Oxygen.Vortex.Occlusion.Tests`
       (`gtest_program(... GPU ...)`, deps `oxygen-vortex-exposure-test-support`)
       in `Vortex/Test/CMakeLists.txt`.
-- [ ] **New GPU tests.** [hzb.md §9.1](../../lld/hzb.md#91-unit--integration-proof)
+- [x] **New GPU tests.** [hzb.md §9.1](../../lld/hzb.md#91-unit--integration-proof)
       items 6–7:
   - a single foreground pixel reaches every mip, for 1920 x 1080 and
     1366 x 768 sources
   - the occlusion pyramid matches a CPU reference and is never published
-- [ ] **Verify.** `Oxygen.Vortex.SceneRendererPublication.Tests`,
+- [x] **Verify.** `Oxygen.Vortex.SceneRendererPublication.Tests`,
       `Oxygen.Vortex.SceneRendererDeferredCore.Tests`, and the local-fog cases of
       `Oxygen.Vortex.Exposure.Tests` (`LocalFog_test`, an HZB consumer) pass.
 
@@ -282,7 +290,8 @@ Design: [occlusion.md §6.4](../../lld/occlusion.md#64-shadow-views).
 - [ ] **Passes.** `Shadows/Passes/{ShadowDepthPass,CascadeShadowPass}.cpp`
       draw phase 1, build the occlusion pyramid from shadow depth, draw phase 2.
 - [ ] **History.** Keyed by light, cascade or face, and allocation
-      generation. Reset on projection change.
+      generation. Reset on projection change. The occlusion pyramid storage in
+      `ScreenHzbModule` takes the same key.
 - [ ] **Bias.** The shadow-view bias exceeds the pass's largest
       rasterization depth bias.
 - [ ] **Cache.** Cached local maps that are reused skip culling.
