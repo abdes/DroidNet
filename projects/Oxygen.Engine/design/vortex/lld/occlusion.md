@@ -1,352 +1,580 @@
-# Occlusion Consumer LLD
+# Occlusion Culling LLD
 
 **Phase:** 5C - Remaining Services
 **Deliverable:** D.16
-**Status:** `in_progress`
+**Status:** `planned`
+
+## Summary
+
+Vortex culls occluded draws on the GPU in the same frame, with two phases per
+view (§4):
+
+- Phase 1 draws the depth of last frame's visible draws.
+- Their furthest HZB then tests every draw.
+- Phase 2 draws the newly visible ones.
+
+The same machinery runs for the camera view and for every rendered shadow view
+(§6.4). Every pass draws its visibility through GPU-compacted
+`ExecuteIndirect` lists (§5), which keep each pass's CPU sort order.
+
+Correctness never depends on history:
+
+- A stale or missing history only moves work between the two phases.
+- A draw that is visible this frame is drawn this frame.
+
+The culling unit is a mesh view. The cooker splits large submeshes into
+spatially coherent mesh views, so large meshes are culled in parts (§2.1).
+Cluster culling and a mesh-shader raster path are the documented next steps
+(§10).
+
+This design replaces the CPU-readback tester (§9). That design culled from
+results one or more frames old and had no recovery for a wrong cull.
 
 ## 1. Scope And Context
 
 ### 1.1 What This Covers
 
-`OcclusionModule` is the Stage 5 **HZB consumer and visibility publisher**. It
-tests prepared-scene bounds against the furthest Screen HZB, reads back the
-previous frame's results, and publishes conservative visibility for downstream
-draw command builders.
+`OcclusionModule` owns per-view visibility for the prepared draws of camera
+and shadow views:
 
-This document covers:
+- per-draw culling records and their per-view visibility history
+- GPU frustum, coverage and HZB occlusion tests for opaque, masked, translucent
+  and shadow-caster draws
+- GPU construction of the indirect draw lists that depth, base, translucency
+  and shadow passes consume
+- fallback, invalidation and diagnostics for that visibility
 
-- occlusion candidate extraction from the current `PreparedSceneFrame`
-- UE5.7-shaped HZB occlusion tests over prepared draw bounds
-- result latency, readback, and conservative fallback behavior
-- per-view visibility publication for base/depth/shadow consumers
-- minimal diagnostics and proof requirements for draw-reduction claims
+It does not own:
 
-This document does **not** own generic HZB generation. `ScreenHzbModule` owns
-current/previous HZB texture creation, bindless publication, and per-view HZB
-history as specified by [hzb.md](hzb.md). M05B must not duplicate that producer.
+- HZB construction, owned by `ScreenHzbModule` ([hzb.md](hzb.md))
+- mesh-view splitting and bounds, owned by geometry cooking
+  ([geometry pipeline](../../../src/Oxygen/Cooker/Docs/Import/geometry_work_pipeline_v2.md#mesh-build-performed-by-meshbuildpipeline),
+  [format](../../content-pipeline/geometry-cooking-architecture.md#95-meshviewdesc-40-bytes-pakformat_geometryh))
 
-### 1.2 Classification
+### 1.2 Stage Position
 
-`OcclusionModule` is a Stage 5 module with per-view persistent history state.
-The persistent state is the occlusion result/readback history and frame
-validity, not the HZB textures themselves.
+Occlusion splits the depth prepass in two:
 
-### 1.3 Stage Position
+| Order | Work                           | Owner                | Product                            |
+| ----- | ------------------------------ | -------------------- | ---------------------------------- |
+| 3.1   | Phase 1 cull and list build    | `OcclusionModule`    | Phase 1 depth lists                |
+| 3.2   | Phase 1 depth draws            | `DepthPrepassModule` | Partial `SceneDepth`               |
+| 3.3   | Occlusion pyramid              | `ScreenHzbModule`    | Transient furthest pyramid         |
+| 3.4   | Phase 2 cull, history update   | `OcclusionModule`    | Phase 2 depth lists, final bits    |
+| 3.5   | Phase 2 depth draws            | `DepthPrepassModule` | Complete `SceneDepth`              |
+| 5     | Screen HZB                     | `ScreenHzbModule`    | Published HZB from complete depth  |
+| 8     | Per shadow view: steps 3.1-3.5 | `ShadowService`      | Complete shadow depth (§6.4)       |
+| 9     | Base pass list build, draws    | `BasePassModule`     | GBuffer from the final visible set |
+| 18    | Translucent cull and draws     | `TranslucencyModule` | Back-to-front translucent lists    |
 
-| Position    | Stage                                   | Notes                                                                         |
-| ----------- | --------------------------------------- | ----------------------------------------------------------------------------- |
-| Predecessor | Stage 3 DepthPrepass                    | Current `SceneDepth` exists when HZB is requested.                            |
-| Predecessor | Stage 5 ScreenHzbModule                 | Builds current furthest HZB and exposes previous furthest HZB when available. |
-| **This**    | **Stage 5 OcclusionModule**             | Tests candidates and publishes conservative visibility.                       |
-| Successor   | Base/depth/shadow draw command builders | May skip occluded prepared draw items once visibility is valid.               |
+`PartialDepth` is copied after 3.5, so `DepthPrePassCompleteness` stays
+complete.
 
-### 1.4 UE5.7 Source Mapping
+### 1.3 References
 
-The parity reference is the HZB occlusion path, not a hardware-query-first
-path:
+The algorithm follows the two-pass occlusion of GPU-driven pipelines: Haar and
+Aaltonen, "GPU-Driven Rendering Pipelines" (SIGGRAPH 2015); UE5.7 Nanite main
+and post culling passes (`Renderer/Private/Nanite/NaniteCullRaster.cpp`). The
+box-against-HZB test keeps the shape of UE5.7 `Shaders/Private/HZBOcclusion.usf`
+with the corrections in §4.5.
 
-- `Renderer/Private/HZB.cpp`
-  - `InitHZBCommonParameter`
-  - `GetHZBParameters`
-  - `IsPreviousHZBValid`
-- `Renderer/Private/DeferredShadingRenderer.cpp`
-  - `RenderHzb`
-  - `RenderOcclusion`
-  - `FamilyPipelineState->bHZBOcclusion`
-- `Renderer/Private/SceneRendering.h`
-  - `FHZBOcclusionTester`
-- `Renderer/Private/SceneOcclusion.cpp`
-  - `FHZBOcclusionTester::AddBounds`
-  - `FHZBOcclusionTester::Submit`
-  - `FHZBOcclusionTester::MapResults`
-  - `FHZBOcclusionTester::IsVisible`
-- `Renderer/Private/SceneVisibility.cpp`
-  - mapping previous-frame HZB results into current visibility decisions
-- `Shaders/Private/HZBOcclusion.usf`
-  - AABB projection and `IsVisibleHZB` test over the furthest HZB
+### 1.4 Rejected Alternatives
 
-### 1.5 Oxygen Divergences
+| Alternative                                  | Why rejected                                                                                                                                                                                                                    |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CPU readback of HZB results (previous model) | Culls from 1-3 frame old results: disocclusion pops in late. The prepass drew draws the base pass skipped, leaving depth with no GBuffer.                                                                                       |
+| Same-frame predication of base-pass draws    | Culls the base pass only; the prepass and shadows still draw everything. The graphics layer has no predication API.                                                                                                             |
+| Phase 1 against reprojected previous HZB     | Reprojection leaves holes and needs a depth-reprojection pass. It only saves overdraw during fast camera motion. Two phases test against real current depth instead.                                                            |
+| Atomic-append compaction                     | Nondeterministic order: equal-depth surfaces flicker. Loses front-to-back and material order.                                                                                                                                   |
+| Per-instance culling inside batches          | Batches never span scene nodes (`DrawMetadataEmitter` batching key includes the node), so their bounds are tight. `SV_InstanceID` ignores `StartInstanceLocation`.                                                              |
+| Compute triangle culling                     | Fixed-function rasterization already discards back-facing and zero-area triangles. Compute culling pays off only for very high triangle counts with expensive vertex work; cluster cone culling (§10.1) covers the useful part. |
 
-Oxygen keeps the UE-shaped behavior but maps it to existing Vortex ownership:
+## 2. Data Model
 
-- `ScreenHzbModule` already builds closest/furthest pyramids and publishes
-  `ScreenHzbFrameBindings`; `OcclusionModule` consumes those products.
-- The first M05B implementation targets prepared draw metadata and bounding
-  spheres from `PreparedSceneFrame`; it does not add Nanite, GPU Scene, or
-  instance-culling infrastructure.
-- Hardware occlusion query heaps are not the first implementation path. UE5.7's
-  HZB tester already uses GPU-produced visibility plus readback, which fits
-  Vortex's Stage 5 HZB and diagnostics model better.
-- UE5.7 stores candidate bounds/results in fixed-size textures. Oxygen uses
-  fixed-capacity structured buffers for the first implementation because the
-  existing graphics layer already provides structured UAV/SRV descriptors and
-  `GpuBufferReadback`; the behavioral contract remains the UE-shaped one:
-  fixed capacity, current-frame submission, previous-result consumption, and
-  conservative visible fallback.
-- First-frame, missing-HZB, invalid-readback, and overflow cases are
-  conservative: publish visible, record the fallback reason, and keep rendering
-  correct.
-- No `Oxygen.Renderer` fallback is permitted.
+### 2.1 Culling Units And Records
 
-## 2. Public Contracts
+A draw is one mesh view of one submesh, so the mesh view is the culling unit.
+Geometry cooking splits large submeshes into spatially coherent mesh views and
+stores each view's local bounds. A large mesh is therefore culled in parts
+without a second culling level.
 
-### 2.1 File Placement
+`DrawMetadataEmitter` uploads one `DrawCullRecord` per draw, in draw-metadata
+order, beside the existing metadata:
+
+```cpp
+struct DrawCullRecord {        // 32 bytes, std430-compatible
+  glm::vec3 box_center;        // local space, or world (kWorldSpaceBox)
+  std::uint32_t history_slot;  // kNoHistorySlot when none
+  glm::vec3 box_extent;        // half size, >= 0
+  std::uint32_t flags;         // DrawCullFlags
+};
+```
+
+- **Local box.** A single draw stores its mesh view's local bounds. The cull
+  kernel transforms the 8 corners by the draw's world matrix (from
+  `DrawMetadata.transform_index`). The result is an oriented box, up to √3
+  tighter per axis than a world AABB of a rotated mesh, at the same cost.
+- **Instanced batch.** A batch stores the world AABB union of its instances
+  and sets `kWorldSpaceBox`.
+- **Deformed meshes.** Skinned and morphed draws use the same bind-pose
+  bounds as scene-prep frustum culling. Occlusion is never less conservative
+  than the frustum test for them. Their bounds under animation are a
+  deformation-runtime concern ([VX-MOTION-01](../OPEN_ITEMS.md)).
+- **Flags.** `DrawCullFlags` mirrors what culling needs from
+  `DrawMetadata.flags`: opaque, masked, transparent, shadow caster, main-view
+  visible. Everything else stays in `DrawMetadata`.
+- **Bad bounds.** A draw with non-finite bounds has `kAlwaysVisible` and is
+  never culled.
+
+The record is published through `DrawFrameBindings` (`cull_records_slot`) so
+every list builder reads it the same way. The bounding sphere remains for
+other consumers.
+
+### 2.2 Visibility History
+
+History is advisory: it decides which phase draws a draw, never whether it is
+drawn.
+
+Draw indices change every frame because they follow the sort order. A draw's
+identity across frames is its `DrawSourceKey`:
+
+- the scene node
+- `data::LodIndex`
+- `data::SubmeshIndex`
+- `data::MeshViewIndex`
+
+The LOD is part of the key, so after a LOD switch the new mesh starts without
+history. `MeshViewIndex` is a new strong index beside the other two in
+`Data/GeometryIndices.h`.
+
+`OcclusionModule` keeps one `HistorySlotAllocator` per culling view (camera or
+shadow). Each frame it:
+
+1. Maps every draw's key to a slot. A key seen last frame keeps its slot.
+2. Gives a new key a fresh slot and flags it `kFreshHistory`. Its history reads
+   as not visible.
+3. Frees the slots of keys absent this frame.
+4. Gives no slot to a key that produced more than one draw this frame. Those
+   draws are tested in phase 2 every frame.
+
+The GPU history buffer is one `uint` per slot: 1 if the draw was visible after
+the last phase 2. It grows with the slot capacity. Growth copies the existing
+slots, so history survives.
+
+### 2.3 Per-Frame Visibility State
+
+Each culling view owns a per-frame `uint` per draw, written by the cull
+kernels:
+
+| Bit            | Meaning                                                   |
+| -------------- | --------------------------------------------------------- |
+| `kInFrustum`   | box intersects the view frustum and covers a pixel center |
+| `kPhase1Drawn` | in frustum and visible last frame (or history reset)      |
+| `kPhase2Drawn` | in frustum, not phase 1, passes the occlusion test        |
+| `kVisible`     | in frustum and passes the occlusion test (next history)   |
+
+The final drawn set is `kPhase1Drawn | kPhase2Drawn`. All opaque consumers
+draw exactly this set.
+
+## 3. Indirect Lists
+
+### 3.1 Command Layout
+
+All mesh passes use vertex pulling with non-indexed `Draw` and root constant 0
+as the draw index. One indirect command is therefore:
+
+```cpp
+struct IndirectDrawCommand {   // 20 bytes
+  std::uint32_t draw_index;    // root constant 0
+  D3D12_DRAW_ARGUMENTS draw;   // vertex count, instance count, 0, 0
+};
+```
+
+The command signature is one 32-bit constant at root parameter
+`kRootConstants`, offset 0, followed by a draw. Root constant 1 (pass
+constants) is set by the CPU before each `ExecuteIndirect`, unchanged.
+
+### 3.2 Lists, Buckets and Order
+
+A list is a pass's ordered candidate draws plus a visibility predicate:
+
+- The CPU builds each list's candidate order exactly as today: depth
+  front-to-back, base pass by material/LOD/submesh, translucency
+  back-to-front.
+- Candidates are split into buckets by `MeshRasterState`: masked,
+  double-sided and reverse winding. Each bucket needs its own PSO.
+- The CPU uploads the candidate draw indices per bucket.
+
+The GPU keeps the candidates that satisfy the list's predicate, in candidate
+order. It writes their commands and a count. The CPU issues one
+`ExecuteIndirect` per bucket that has candidates, with the candidate count as
+the maximum and the GPU count buffer as the count. Buckets never overflow
+because capacity comes from the CPU's candidate count.
+
+### 3.3 Order-Preserving Compaction
+
+Compaction is a stream compaction over each bucket:
+
+1. Evaluate the predicate per candidate.
+2. Scan the 0/1 flags, each workgroup over 256 candidates.
+3. Scan the workgroup totals. One extra level covers lists above 65,536
+   candidates.
+4. Scatter commands to their scanned position and write the total as the
+   count.
+
+No step depends on scheduling order, so lists are deterministic and keep the
+CPU sort. Decoupled look-back is not used, because D3D12 does not guarantee
+forward progress between workgroups.
+
+## 4. Two-Phase Algorithm
+
+This section uses the camera view. Shadow views run the same steps with the
+differences in §6.4.
+
+### 4.1 Phase 1
+
+`OcclusionModule::BuildPhase1(ctx, view)` dispatches one thread per draw:
 
 ```text
-src/Oxygen/Vortex/
-└── SceneRenderer/
-    └── Stages/
-        └── Occlusion/
-            ├── OcclusionModule.h
-            ├── OcclusionModule.cpp
-            ├── OcclusionConfig.h
-            ├── Internal/
-            │   ├── HzbOcclusionTester.h
-            │   └── HzbOcclusionTester.cpp
-            ├── Passes/
-            │   ├── OcclusionTestPass.h
-            │   └── OcclusionTestPass.cpp
-            └── Types/
-                ├── OcclusionFrameResults.h
-                └── OcclusionStats.h
-
-src/Oxygen/Graphics/Direct3D12/
-└── Shaders/
-    └── Vortex/
-        └── Stages/
-            └── Occlusion/
-                └── OcclusionTest.hlsl
+box        = OrientedBox(record, world_matrix)
+in_frustum = kAlwaysVisible
+             || (FrustumIntersects(view, box) && CoversPixelCenter(view, box))
+prev       = history_valid && record.history_slot valid
+             && !kFreshHistory && history[record.history_slot]
+phase1     = in_frustum && (prev || history_reset || !occlusion_enabled)
 ```
 
-The `ScreenHzbBuild.hlsl` shader remains owned by `ScreenHzbModule` even though
-it lives in the `Vortex/Stages/Occlusion` shader folder for stage locality.
+`CoversPixelCenter` is exact:
 
-### 2.2 Module API
+- It rejects a box whose projected rectangle, clamped to the view rect,
+  contains no pixel center. The rasterizer would produce nothing for it.
+- A box crossing the near plane always passes.
 
-```cpp
-namespace oxygen::vortex {
+It then compacts the depth prepass lists with predicate `kPhase1Drawn`.
+`DepthPrepassModule` draws them into `SceneDepth`, opaque buckets before
+masked.
 
-class OcclusionModule {
-public:
-  explicit OcclusionModule(Renderer& renderer);
-  ~OcclusionModule();
+### 4.2 History Reset
 
-  OcclusionModule(const OcclusionModule&) = delete;
-  auto operator=(const OcclusionModule&) -> OcclusionModule& = delete;
+Each of these resets a culling view's history:
 
-  void Execute(RenderContext& ctx, SceneTextures& scene_textures);
+- `history_discontinuity`, which covers a camera cut
+- a projection or view-rect change
+- view recreation
+- history buffer loss
 
-  [[nodiscard]] auto GetCurrentResults() const -> const OcclusionFrameResults&;
-  [[nodiscard]] auto GetStats() const -> const OcclusionStats&;
+After a reset every in-frustum draw is phase 1 for one frame. That frame
+renders like occlusion disabled, front-to-back, and seeds the history.
 
-private:
-  Renderer& renderer_;
-};
+### 4.3 Occlusion Pyramid
 
-} // namespace oxygen::vortex
+`ScreenHzbModule` builds a furthest-only pyramid from the phase 1 depth into a
+per-view transient texture ([hzb.md §4.5](hzb.md#45-occlusion-pyramid)). It is
+never published as the frame's Screen HZB and never becomes HZB history.
+
+### 4.4 Phase 2
+
+`OcclusionModule::BuildPhase2(ctx, view)` dispatches one thread per in-frustum
+draw. It tests every in-frustum draw, including phase 1 draws:
+
+```text
+visible = kAlwaysVisible || !occlusion_enabled
+          || !OccludedByHzb(occlusion_pyramid, box)
+phase2  = in_frustum && !phase1 && visible
+history[slot] = in_frustum && visible        (when the draw has a slot)
 ```
 
-`Execute` must read HZB availability through the current `RenderContext` and the
-landed `ScreenHzbModule` publications. The API intentionally does not expose an
-HZB builder.
+- It compacts the depth prepass lists with predicate `kPhase2Drawn`.
+- `DepthPrepassModule` draws them, which completes `SceneDepth`.
+- Stage 5 then builds the published Screen HZB from complete depth.
 
-### 2.3 Visibility Result Shape
+A phase 1 draw can fail its own test only behind other phase 1 depth; the
+test is conservative against its own surface (§4.5). It is still drawn this
+frame. Next frame it moves to phase 2.
 
-The published result is keyed to prepared draw metadata indices, not scene
-objects:
+Phase 2 catches disocclusion in the same frame. A draw whose occluder moved
+away is not covered by phase 1 depth at its current position, so it passes
+and is drawn now.
 
-```cpp
-struct OcclusionFrameResults {
-  std::span<const std::uint8_t> visible_by_draw;
-  std::uint32_t draw_count;
-  bool valid;
-  OcclusionFallbackReason fallback_reason;
-};
-```
+### 4.5 Box Test
 
-Rules:
+`OccludedByHzb` is conservative at every step:
 
-- `valid == false` means downstream consumers must treat every draw as visible.
-- When `valid == true`, a zero byte means occluded and a non-zero byte means
-  visible.
-- The array length must match the prepared-scene draw metadata count for the
-  view that produced it.
-- Results are per view. Multi-view work must not share visibility arrays across
-  views.
+1. Project the 8 oriented-box corners with the unjittered view-projection.
+2. If any corner has `w <= near_epsilon`, the box crosses the near plane:
+   visible.
+3. Compute the screen rectangle from the projected corners, clamped to the
+   view rect.
+4. Take the box's nearest device depth as the maximum corner depth
+   (reversed-Z).
+5. Choose the mip where the rectangle spans at most 2 x 2 texels:
+   - `mip = ceil(log2(max(size_texels)))`
+   - Increment once if the texel-aligned footprint still spans 3.
+6. Load the 2 x 2 furthest texels covering the rectangle. Use `Load`, not
+   filtered sampling.
+7. Convert both depths to linear view depth. The box is occluded when its
+   nearest view depth exceeds the furthest occluder view depth by more than
+   `occlusion_depth_bias` × occluder depth.
 
-Every enum introduced for the occlusion API must use existing Oxygen enum
-patterns, include `to_string` overloads, and use `src/Oxygen/Base/Macros.h`
-flag helpers when flags are needed.
+This fixes the three test defects of the previous shader:
 
-## 3. Data Flow
+- Near-plane boxes were read as far, and so could be culled.
+- Axis offsets underestimated the projected extent of a sphere.
+- `floor(log2)` mips sampled only 5 of up to 9 texels.
 
-### 3.1 Inputs
+The bias is relative and in linear depth, never a fixed device-depth epsilon,
+because reversed-Z precision is not uniform. The pyramid's coverage of every
+source texel is an [hzb.md gate](hzb.md#91-unit--integration-proof).
 
-| Source                        | Data                                                          | Purpose                                         |
-| ----------------------------- | ------------------------------------------------------------- | ----------------------------------------------- |
-| `PreparedSceneFrame`          | draw metadata, render items, world matrices, bounding spheres | Candidate bounds and draw-index mapping.        |
-| `RenderContext::ViewSpecific` | current/previous HZB fields                                   | HZB availability and view-local HZB dimensions. |
-| `ScreenHzbFrameBindings`      | HZB mapping parameters                                        | UE-shaped HZB coordinate conversion.            |
-| `SceneTextures`               | current depth product validity                                | Stage precondition and diagnostics evidence.    |
+### 4.6 Rasterization Invariance
 
-### 3.2 Outputs
+The base pass tests `GreaterOrEqual` against prepass depth. Both passes must
+produce bit-identical positions for the same draw, so `DepthPrepass.hlsl` and
+`BasePassGBuffer.hlsl` compute clip position through the same function,
+declared `precise`.
 
-| Product                 | Consumer                                 | Delivery                                   |
-| ----------------------- | ---------------------------------------- | ------------------------------------------ |
-| `OcclusionFrameResults` | Base/depth/shadow draw builders          | Per-view prepared draw visibility.         |
-| `OcclusionStats`        | DiagnosticsService and capture manifests | Candidate/tested/occluded/fallback counts. |
-| Current test readback   | Next frame                               | Per-view persistent tester history.        |
+## 5. Consumers
 
-### 3.3 Execution Order
+| Consumer                          | List predicate                                | Notes                                                                       |
+| --------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------- |
+| Depth prepass phase 1 / phase 2   | `kPhase1Drawn` / `kPhase2Drawn`               | Opaque then masked buckets.                                                 |
+| Base pass (all modes)             | `kPhase1Drawn \| kPhase2Drawn`                | Deferred, forward, radiance replay and wireframe all draw the same set.     |
+| Base pass velocity auxiliary pass | final set and the draw's velocity-aux flag    | Subset of the base pass set.                                                |
+| Contact-shadow caster depth       | final set                                     | Reuses the depth list candidates.                                           |
+| Translucency                      | in frustum and not occluded by the Screen HZB | Single phase against complete depth; keeps back-to-front order; no history. |
+| Shadow depth phase 1 / phase 2    | caster and the shadow view's phase bit        | Shadow-view culling only (§6.4).                                            |
 
-1. Map the previous frame's occlusion readback if it is available and valid for
-   the same view.
-2. Build the current frame's conservative visibility array from that previous
-   result. Missing history means all visible. Results are matched to this
-   frame's draws by draw source (scene node and submesh), never by draw index:
-   draw indices follow each frame's sort order, so an index-matched result
-   lands on whichever draw now holds it. A source that no longer draws, or that
-   produced more than one draw this frame, stays visible.
-3. Publish the visibility array before downstream draw command builders consume
-   it.
-4. If current furthest HZB is available, submit the current frame's candidate
-   bounds for next-frame readback.
-5. Record diagnostics counters and fallback reason.
+No consumer reads visibility on the CPU. A pass never draws a draw the depth
+prepass skipped, and the prepass never draws one the base pass skips.
 
-This matches UE5.7's latency model: visibility uses previous results while the
-current frame submits tests for later consumption.
+## 6. Policies
 
-## 4. HZB Occlusion Test
+### 6.1 Enablement
 
-### 4.1 Candidate Selection
+`vtx.occlusion.enable` turns the occlusion test on or off for camera and
+shadow views, and defaults to `false` until the validation gates (§8) pass.
 
-M05B starts with the prepared draw metadata already accepted by scene prep.
-Candidates must have:
+With occlusion off:
 
-- a valid draw index and a draw source to match its result on a later frame
-- a finite world-space bounding sphere or bounds proxy
-- opaque or masked participation in the relevant pass
-- an object size above the configured tiny-object threshold
+- Phase 1 draws every in-frustum draw.
+- Phase 2 lists are empty and no occlusion pyramid is built.
 
-Invalid, tiny, transparent-only, or overflowing candidates are treated visible
-and counted by diagnostics.
+Every pass still draws through the GPU lists, so one draw path serves both
+settings. `vtx.occlusion.max_candidate_count` is removed: capacities come from
+CPU counts and nothing overflows.
 
-### 4.2 GPU Test Shape
+### 6.2 Fallbacks
 
-The UE5.7 reference stores bounds in fixed-size textures and writes a fixed-size
-visibility texture. Oxygen maps those fixed tables to structured buffers:
+| Condition                     | Behavior                              |
+| ----------------------------- | ------------------------------------- |
+| Occlusion disabled            | Frustum-only phase 1; no phase 2.     |
+| History reset (§4.2)          | All in-frustum draws in phase 1.      |
+| Occlusion pyramid unavailable | Phase 2 treats every draw as visible. |
+| Draw without history slot     | Tested in phase 2 every frame.        |
+| Non-finite bounds             | `kAlwaysVisible`.                     |
+| Near-plane-crossing box       | Visible (§4.5).                       |
 
-- fixed maximum candidate count, initially UE-shaped at 256 x 256
-- center/extent upload for candidate bounds
-- result buffer with one visible/occluded value per candidate
-- GPU-to-CPU buffer readback for next-frame `IsVisible` decisions
-- unused/padded entries are visible
+No fallback can drop a draw.
 
-The shader projects bounds with current view matrices, rejects objects outside
-the frustum, and tests the projected screen rectangle against the furthest HZB.
-Under reversed-Z, the furthest pyramid is the correct conservative occlusion
-surface for "hidden behind closer depth" decisions.
+### 6.3 Multiple Views
 
-### 4.3 Fallback Policy
+Everything in §2-§4 is per culling view. Camera views are keyed by `ViewId`,
+shadow views by their shadow-view identity (§6.4). Each culling view has its
+own:
 
-The fallback policy is part of correctness:
+- slot allocator
+- history
+- visibility state
+- lists and pyramids
 
-| Condition                        | Behavior                                                             |
-| -------------------------------- | -------------------------------------------------------------------- |
-| Stage disabled                   | Publish invalid results; consumers render all draws.                 |
-| No prepared frame                | Publish invalid results and no GPU test.                             |
-| No current furthest HZB          | Publish all visible, skip current submission.                        |
-| No previous readback             | Publish all visible, submit current test if possible.                |
-| Candidate count exceeds capacity | Test first capacity-limited batch; overflow visible and counted.     |
-| Readback failure                 | Publish all visible for that frame and mark previous result invalid. |
+Views never share visibility. `SceneRenderer::RemoveViewState` releases a
+camera view's occlusion state; a shadow view's state is released with its
+shadow map.
 
-No fallback may cull geometry.
+### 6.4 Shadow Views
 
-## 5. Consumer Integration
+Camera visibility never culls shadow casters, because a caster hidden from the
+camera can still cast a visible shadow. Each rendered shadow view culls its
+own casters with §4:
 
-Downstream stages consume visibility by prepared draw index. The first required
-consumers are:
+- a directional cascade
+- a projected local-light map
+- a cube-map face
 
-- base pass opaque/masked command building
-- any depth/shadow command path that rebuilds from the same prepared draw
-  metadata and can safely preserve its pass semantics
+Shadow-view occlusion is exact. A caster hidden from the light by another
+caster casts a shadow entirely inside that occluder's shadow, so not drawing it
+changes no shadow-map texel.
 
-Consumers must be simple:
+Differences from the camera view:
 
-```cpp
-if (occlusion.valid && !occlusion.visible_by_draw[draw_index]) {
-  continue;
-}
-```
+- **Identity.** History is keyed by the shadow view's identity: light,
+  cascade or face, and the shadow map's allocation generation. The view's
+  projection change resets it, as in §4.2.
+- **Candidates.** Candidates are the casters in the light view's frustum.
+  This replaces the CPU sphere tests of `ShadowCasterCulling`.
+- **Pyramid.** The occlusion pyramid is built from phase 1 shadow depth
+  through the same [hzb.md](hzb.md#45-occlusion-pyramid) entry point. Shadow
+  maps keep the D32 reversed-Z convention. Directional cascades are
+  orthographic, so "linear view depth" is device depth rescaled by the
+  cascade's depth range.
+- **Bias.** In shadow views, `occlusion_depth_bias` must exceed the shadow
+  pass's largest rasterization depth bias. Otherwise a caster with a larger
+  slope bias could have written a nearer texel than its occluder.
+- **Caching.** A cached local map that is reused without re-rendering runs no
+  culling. A map's cache dependency set remains every caster in the light's
+  frustum, not only the drawn ones. A moving occluded caster therefore still
+  invalidates the map, and the next render tests it again.
 
-The visibility payload must not leak rendering-mode, diagnostics, or UI options
-into pass builders. Pass builders only see visibility.
+## 7. Diagnostics
 
-Runtime enablement is explicit and conservative. `vtx.occlusion.enable`
-defaults to `false` and is the only runtime on/off switch for Stage 5 HZB
-occlusion testing plus consumer culling. `vtx.occlusion.max_candidate_count`
-caps submitted prepared draws for proof and stress testing. There is no
-compile-time `OXYGEN_WITH_*` gate for M05B; the code is part of Vortex and the
-runtime switch controls behavior.
+The cull and list kernels accumulate per-culling-view counters in a GPU stats
+buffer:
 
-## 6. Diagnostics And Proof Surface
+- draws, in frustum, coverage-culled, and history slots
+- phase 1 drawn, phase 2 drawn, and occluded
+- translucent culled
 
-M05B diagnostics must be compact and useful:
+The stats are read back asynchronously for `DiagnosticsService` and capture
+manifests (`Vortex.OcclusionFrameResults`). They are diagnostics only:
+rendering never reads them back.
 
-- candidate count
-- submitted/tested count
-- visible/occluded count from mapped results
-- overflow-visible count
-- fallback reason
-- current furthest HZB availability
-- previous result validity
-- draw counts before/after occlusion for consumers that actually skip draws
+Pass markers:
 
-Diagnostics must integrate with the M05A `DiagnosticsService` pass/product
-ledger and capture manifest. The runtime records `Vortex.OcclusionFrameResults`
-with compact stable facts (`draws`, `candidates`, `submitted`, `visible`,
-`occluded`, `overflow_visible`, `fallback`, `hzb`, `prev`, `valid`) and
-`Vortex.BasePassDrawCommands` with `draws` plus `occlusion_culled`. Transient
-bindless descriptor indices remain excluded from capture manifests; stable
-counter descriptors are exported for external analysis scripts. A
-draw-reduction claim is not allowed until a capture or focused test proves that
-a consumer skipped draw commands because of occlusion.
+- `Vortex.Stage3.OcclusionPhase1`
+- `Vortex.Stage3.OcclusionPyramid`
+- `Vortex.Stage3.OcclusionPhase2`
+- `Vortex.Shadow.<View>.OcclusionPhase1` / `Phase2`
+- `Vortex.ListBuild.<Pass>`
 
-## 7. Validation Gates
+## 8. Validation Gates
 
-M05B cannot be marked `validated` until all gates are satisfied:
+1. CPU tests:
+   - `HistorySlotAllocator` keeps slots for persistent keys and frees absent
+     ones.
+   - Fresh slots read as not visible.
+   - LOD changes produce new keys.
+   - Duplicate keys get no slot.
+   - Growth preserves history.
+2. CPU tests:
+   - list candidate order and bucketing match the existing pass sorts
+   - cull records carry mesh-view local bounds; instanced batches carry world
+     AABBs
+3. GPU tests, one test process at a time:
+   - a box behind an occluder is culled in the frame it becomes hidden
+   - an occluder moved away reveals its occludee in the same frame
+   - a box straddling the near plane is drawn
+   - a rotated thin mesh near an occluder edge is kept or culled per its
+     oriented box
+   - a draw covering no pixel center is culled; one covering a single center
+     is drawn
+   - masked occluders with holes do not cull through the holes
+   - a LOD switch and a camera cut never drop a visible draw
+4. GPU tests:
+   - prepass, base pass and velocity lists contain exactly the final set
+   - two runs of the same input produce identical lists
+   - translucent lists keep back-to-front order
+5. GPU tests, shadow views:
+   - camera occlusion never removes a caster
+   - a caster hidden from the light behind another caster is culled, and the
+     shadow map is texel-identical to occlusion disabled
+   - a moving occluded caster invalidates a cached local map
+6. GPU test: a large chunked mesh partly behind an occluder draws only its
+   unoccluded mesh views.
+7. Multi-view test: two views with different occluders keep independent
+   visibility.
+8. The shaders are in the Direct3D12 shader catalog and pass ShaderBake. The
+   D3D12 debug layer reports nothing for the occlusion path.
+9. A capture of a controlled scene shows fewer base-pass and shadow draws with
+   occlusion enabled, and an image identical to occlusion disabled.
 
-1. UE5.7 mapping evidence is current in this LLD and the detailed milestone
-   plan.
-2. Implementation exists for the occlusion result substrate, HZB tester,
-   readback/fallback behavior, and at least the base-pass consumer.
-3. Shader changes are in the Direct3D12 shader catalog and pass ShaderBake.
-4. Focused tests prove conservative fallback, capacity overflow, result
-   indexing, and consumer filtering.
-5. Runtime/capture proof shows projected occlusion reducing draw submission in
-   a controlled scene while preserving visible geometry.
-6. D3D12 debug-layer/CDB validation records no relevant warnings or errors for
-   the occlusion path.
-7. `milestone README` records one concise VTX-M05B ledger row with
-   implementation files/areas, validation artifacts, and no hidden residual
-   gap.
+## 9. Superseded Design
 
-## 8. Non-Goals
+The CPU-readback `HzbOcclusionTester` and `OcclusionFrameResults`
+(`visible_by_draw` bytes) are removed:
 
-- No `Oxygen.Renderer` reuse.
-- No Nanite, GPU Scene, instance culling, or GPU-driven indirect draw
-  compaction in M05B.
-- No broad editor showflag system.
-- No hardware-query path unless the HZB tester path proves insufficient and the
-  design/plan are updated before implementation claims.
-- No generic visibility framework outside the prepared-scene contract.
+- The base pass stops reading `ctx.current_view.occlusion_results`.
+- The unused shadow culling shaders `VsmInstanceCulling.hlsl` and
+  `ConventionalShadowCasterCulling.hlsl` are replaced by the shared list
+  builder.
 
-## 9. Remaining design work
+Documents updated with the implementation:
 
-`OcclusionModule` builds GPU candidates from world-space bounding spheres.
-Full AABB candidates are a later precision/performance option (VX-OCC-02).
-Shadow consumers need light-view visibility; sharing camera-view results still
-requires a separate correctness decision (VX-OCC-01).
+- ARCHITECTURE stage table rows 3, 5 and 8
+- [depth-prepass.md](depth-prepass.md) (two phases)
+- [base-pass.md](base-pass.md) (indirect lists)
+- [translucency.md](translucency.md)
+- [shadow-service.md](shadow-service.md) (two-phase caster lists)
 
-Both items are tracked in [OPEN_ITEMS.md](../OPEN_ITEMS.md). The implemented
-HZB/readback path and conservative fallback remain the M05B baseline.
+[OPEN_ITEMS.md](../OPEN_ITEMS.md):
+
+- VX-OCC-01 (shadow reuse of camera visibility) is resolved by §6.4: no reuse.
+- VX-OCC-02 (AABB candidates) is resolved by §2.1.
+- VX-OCC-04 tracks this implementation.
+- VX-OCC-05 and VX-OCC-06 track §10.
+- VX-CULL-01 (CPU per-submesh culling stability) is unaffected.
+
+## 10. Future Culling Granularity
+
+Mesh views of a few thousand triangles are the granularity this design
+delivers. The two steps below are where finer granularity goes next. They
+build on §2-§5 without replacing any of it.
+
+### 10.1 Cluster Culling Through Vertex Pulling (VX-OCC-05)
+
+**What it is.** The cooker partitions each mesh view into clusters of about
+128 triangles, each with:
+
+- local bounds
+- a normal cone for back-facing rejection
+
+**How it works.**
+
+1. The cull kernels gain a second level: a visible draw expands into its
+   clusters.
+2. Each cluster gets the same frustum, coverage and two-phase occlusion tests,
+   plus the cone test.
+3. Visible clusters are compacted per draw.
+4. The draw renders `visible_clusters × 128 × 3` vertices.
+5. The vertex shader decodes cluster and triangle from `SV_VertexID` through
+   the compacted cluster list. Short clusters pad with degenerate triangles.
+
+This is the approach that GPUs without mesh shaders use. It needs no
+graphics-layer feature Oxygen lacks: vertex pulling, compute and
+`ExecuteIndirect` are all present.
+
+**Why it is not in this design.**
+
+- Mesh views already cull large meshes in parts.
+- Clusters add four things:
+  - a cluster asset format
+  - a second culling level
+  - a decode path in every mesh vertex shader
+  - their own validation surface
+
+**Built on.** It is built on this design's culling records, history keys,
+lists and compaction. A cluster's history key extends `DrawSourceKey` with
+the cluster index.
+
+**Sequencing.** It starts after VX-OCC-04 meets its validation gates (§8).
+
+### 10.2 Mesh-Shader Raster Path (VX-OCC-06)
+
+**Deferred because a capability is missing.**
+
+- ShaderBake compiles amplification and mesh shaders.
+- The graphics layer has neither a mesh pipeline state stream nor a
+  `DispatchMesh` command.
+- It does not detect the hardware mesh-shader tier.
+
+**What it would add.** With clusters (§10.1) in place, an amplification shader
+would cull clusters and a mesh shader would emit their triangles. That
+replaces the vertex-pulling decode and its padding. It changes efficiency, not
+which triangles are culled.
+
+**Prerequisites.**
+
+1. Graphics-layer mesh pipeline and `DispatchMesh` support, with tier
+   detection.
+2. §10.1 clusters.
+3. The vertex-pulling path kept as the fallback for hardware without mesh
+   shaders.

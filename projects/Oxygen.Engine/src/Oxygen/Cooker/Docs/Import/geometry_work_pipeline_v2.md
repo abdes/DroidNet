@@ -329,6 +329,26 @@ async boundaries.
 
 5. **Submesh + view layout**
    - Construct `SubMeshDesc` and `MeshViewDesc` entries (tight ranges).
+   - **Spatial split.** A static submesh with more than
+     `kMaxMeshViewTriangles` (4096) triangles is split into several views:
+     1. Order its triangles by the 30-bit Morton code of their centroids,
+        quantized within the submesh bounds. The sort is stable, so equal
+        codes keep source order.
+     2. Cut the ordered triangles into consecutive runs of at most 4096.
+     3. Make each run one view, with tight local bounds.
+
+     Vertices are already expanded one per index (stage 2), so reordering
+     triangles moves their vertices with them. Each run is one contiguous
+     index range and one contiguous vertex range.
+
+   - **Why views.** Each view is one draw and one
+     [occlusion culling unit](../../../../../design/vortex/lld/occlusion.md#21-culling-units-and-records),
+     so a large mesh is culled in parts.
+   - **Not split.** Skinned and morphed submeshes stay one view: deformation
+     can move triangles outside a run's bind-pose bounds.
+   - **Unchanged by the split.** The output is deterministic for the same
+     source. Submeshes, slots and material ranges are unchanged; only the
+     view table grows.
 
 6. **Buffer payloads**
    - Build `CookedBufferPayload`s for vertex/index buffers and optional

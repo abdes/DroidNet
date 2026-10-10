@@ -2,11 +2,11 @@
 
 Status: `validated`
 
-| Field     | Summary                                                                                                                                                                                                 |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Outcome   | GPU HZB occlusion, delayed readback, conservative fallback and draw consumers.                                                                                                                          |
-| Remaining | Extensions: [VX-OCC-01](../../OPEN_ITEMS.md#p3--unscheduled-capabilities), [VX-OCC-02](../../OPEN_ITEMS.md#p3--unscheduled-capabilities), [VX-CULL-01](../../OPEN_ITEMS.md#p2--engineering-follow-ups). |
-| Evidence  | [Validation record](validation.md)                                                                                                                                                                      |
+| Field     | Summary                                                                                                                                             |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Outcome   | GPU HZB occlusion, delayed readback, conservative fallback and draw consumers.                                                                      |
+| Remaining | Superseded by [VX-OCC-04](../../OPEN_ITEMS.md#p2--engineering-follow-ups); extension: [VX-CULL-01](../../OPEN_ITEMS.md#p2--engineering-follow-ups). |
+| Evidence  | [Validation record](validation.md)                                                                                                                  |
 
 [Roadmap](../../PLAN.md) · [Design index](../../lld/README.md)
 

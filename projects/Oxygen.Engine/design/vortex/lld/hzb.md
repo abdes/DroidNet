@@ -49,6 +49,9 @@ existing frame-retained publisher, with matching C++/HLSL layout. Repeated
 same-frame resets do not rewind its allocation cursor. Slot reuse occurs only
 through the existing frame-retirement contract; no GPU wait is introduced.
 
+The module also builds transient, unpublished occlusion pyramids for culling
+views (§4.5).
+
 ### 1.3 Stage Position
 
 | Position    | Stage                                       | Notes                                               |
@@ -277,21 +280,26 @@ mip_extent(base, level) = max(1, base >> level)
 
 ### 4.1 Overview
 
-For each requested mip level, `VortexScreenHzbBuildCS` is dispatched once with
-an `8 x 8` thread-group grid covering the output mip. Per-mip constants are
-uploaded through a constant-buffer-aligned slot buffer.
+Each pyramid is built by one dispatch of a single-pass downsampler (reference:
+AMD FidelityFX SPD):
+
+1. Each 256-thread workgroup reduces a 64 x 64 tile of mip 0 down to mip 5,
+   in group-shared memory.
+2. The workgroup writes every mip it produces directly to the pyramid
+   texture's per-mip UAVs.
+3. The last workgroup to finish, detected by a global atomic counter, reduces
+   mips 6-11 from mip 5.
+
+The last-workgroup pattern needs no forward progress between workgroups. Mips
+above 11 (roots over 4096) use one further dispatch of the same shader.
 
 ```text
 Execute()
   ├─ determine active source view rect
   ├─ compute HZB root extent + mip count
-  ├─ ensure per-view history + scratch resources
-  ├─ ensure pass-constants buffer
+  ├─ ensure per-view history resources and the atomic counter
   ├─ select write history slot
-  ├─ for each mip:
-  │    ├─ write per-mip constants
-  │    ├─ dispatch compute reduction
-  │    └─ copy single-mip scratch output into history texture mip
+  ├─ dispatch the single-pass build for each requested pyramid
   ├─ transition written history textures to ShaderResource
   ├─ swap history slot
   └─ build current/previous Output values
@@ -299,15 +307,23 @@ Execute()
 
 ### 4.2 Source Sampling Strategy
 
-- **Mip 0** samples `SceneDepth` over the active source view rect.
-- **Mip N > 0** samples the previous scratch result for that pyramid.
+- **Mip 0** reduces `SceneDepth` over the active source view rect.
+- **Mip N > 0** reduces mip N - 1 of the same pyramid.
 
 Sub-viewport source origins are passed through constants so the build never
 bleeds into adjacent regions of the scene texture.
 
 ### 4.3 Conservative Reduction
 
-Each output texel reduces a clamped `2 x 2` source neighbourhood:
+The root extent is a power of two at most the source extent (§3.1), so the
+source-to-mip-0 ratio `r` per axis lies in `(1, 2]` and is generally
+fractional. Mip-0 texel `x` covers source pixels `floor(x * r)` through
+`ceil((x + 1) * r) - 1`: up to three per axis.
+
+- Mip 0 reduces every source pixel of that footprint, up to 3 x 3, clamped to
+  the view rect. A fixed 2 x 2 neighbourhood misses pixels when `r` is
+  fractional, and occluder depth would then be lost.
+- Mips N > 0 reduce exact 2 x 2 blocks of mip N - 1, clamped at odd edges.
 
 ```text
 closest_depth = max(source samples)
@@ -319,15 +335,27 @@ Under reversed-Z:
 - `max` yields the closest surface
 - `min` yields the furthest surface
 
-### 4.4 Scratch Ping-Pong
+### 4.4 Removed Scratch Ping-Pong
 
-Each pyramid uses two single-mip scratch textures:
+The previous build dispatched once per mip into single-mip scratch textures
+and copied each into the history texture: two GPU operations per mip, about
+20 per pyramid. The single-pass build writes the pyramid directly, so the
+scratch textures and copies are removed.
 
-- write scratch slot = `mip_level & 1`
-- read scratch slot = `(mip_level & 1) ^ 1`
+### 4.5 Occlusion Pyramid
 
-After each dispatch, the written scratch mip is copied into the corresponding
-mip slice of the persistent history texture.
+`BuildOcclusionPyramid(ctx, depth_source, culling_view)` builds a
+furthest-only pyramid for [occlusion culling](occlusion.md#43-occlusion-pyramid):
+
+- **Source.** A depth texture and rect: phase 1 `SceneDepth` for a camera
+  view, or phase 1 shadow depth for a shadow view.
+- **Shape.** Same extent rules (§3) and build (§4.1-§4.3) as the Screen HZB.
+- **Storage.** Writes one transient texture owned per culling view, recreated
+  only when its extent changes.
+- **Publication.** It is never published through `ScreenHzbFrameBindings` and
+  never enters HZB history.
+- **Bindings.** It returns its SRV, extent and mip count for the occlusion
+  kernels.
 
 ## 5. Resource Management
 
@@ -339,12 +367,12 @@ changes.
 
 ### 5.2 Texture Layout
 
-| Resource                         | Slots | Format      |    Mips    | Usage             |
-| -------------------------------- | :---: | ----------- | :--------: | ----------------- |
-| `closest.history_textures[0/1]`  |   2   | `R32_FLOAT` | full chain | persistent SRV    |
-| `furthest.history_textures[0/1]` |   2   | `R32_FLOAT` | full chain | persistent SRV    |
-| `closest.scratch_textures[0/1]`  |   2   | `R32_FLOAT` |     1      | UAV + copy source |
-| `furthest.scratch_textures[0/1]` |   2   | `R32_FLOAT` |     1      | UAV + copy source |
+| Resource                             | Slots | Format      |    Mips    | Usage               |
+| ------------------------------------ | :---: | ----------- | :--------: | ------------------- |
+| `closest.history_textures[0/1]`      |   2   | `R32_FLOAT` | full chain | per-mip UAV + SRV   |
+| `furthest.history_textures[0/1]`     |   2   | `R32_FLOAT` | full chain | per-mip UAV + SRV   |
+| occlusion pyramid (per culling view) |   1   | `R32_FLOAT` | full chain | per-mip UAV + SRV   |
+| single-pass atomic counter           |   1   | `R32_UINT`  |     -      | UAV, self-resetting |
 
 ### 5.3 Previous-Frame Handoff
 
@@ -468,6 +496,11 @@ extent they are testing.
    active view rect.
 5. previous-frame publication proves prior furthest-HZB availability after at
    least two consecutive frames.
+6. coverage: for non-power-of-two sources (for example 1920 x 1080 and
+   1366 x 768), a single foreground pixel at every source position reaches
+   every mip of both pyramids.
+7. the occlusion pyramid matches a CPU reference reduction of the same source
+   and is absent from `ScreenHzbFrameBindings` and HZB history.
 
 ### 9.2 Visual Validation
 
@@ -481,14 +514,9 @@ consumer visualization.
 1. `ScreenHzbModule::Execute()` is called only when current HZB is requested
    and a valid current depth product exists.
 2. The module does not write back into `SceneTextures`.
-3. Scratch textures are single-mip; history textures carry the full chain.
+3. Each pyramid is built by one single-pass dispatch (two above 4096 roots);
+   history and occlusion textures carry the full chain.
 4. `GetCurrentOutput()` and `GetPreviousOutput()` are stable after `Execute()`
    returns and are reset at the start of the next `Execute()`.
 5. Consumers must treat `ScreenHzbFrameBindings` as frame-local published data,
    not as cross-frame cached state.
-
-## 11. Open Questions
-
-1. Future GPU-driven occlusion/query systems may require additional GPU-side
-   publication surfaces layered on top of the generic HZB products defined
-   here.

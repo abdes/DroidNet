@@ -664,6 +664,7 @@ Exactly one pair must be provided: either `byte_offset`+`byte_length` or
 | ---------- | -------- | --------------- | ---------------------------------------------------------------------- |
 | `view_ref` | Yes      | `view_selector` | Named buffer view identifier, or `"__all__"` (required for procedural) |
 | `name`     | No       | `identifier`    | View debug name                                                        |
+| `bounds`   | No       | `bounds3`       | View-level local AABB (defaults to the submesh bounds if absent)       |
 
 `view_ref` resolves against the named `buffer_view_descriptor` entries in the
 VB and IB sidecars. `"__all__"` is the only valid selector for procedural LODs
@@ -834,7 +835,7 @@ struct SubMeshDesc {
 static_assert(sizeof(SubMeshDesc) == 108);
 ```
 
-### 9.5 `MeshViewDesc` (16 bytes, `PakFormat_geometry.h`)
+### 9.5 `MeshViewDesc` (40 bytes, `PakFormat_geometry.h`)
 
 ```cpp
 #pragma pack(push, 1)
@@ -843,10 +844,27 @@ struct MeshViewDesc {
   uint32_t index_count  = 0; // number of indices
   uint32_t first_vertex = 0; // start vertex in vertex buffer
   uint32_t vertex_count = 0; // number of vertices
+  float bounding_box_min[3] = {}; // local AABB of this view's triangles
+  float bounding_box_max[3] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(MeshViewDesc) == 16);
+static_assert(sizeof(MeshViewDesc) == 40);
 ```
+
+Each mesh view is one draw and the
+[occlusion culling unit](../vortex/lld/occlusion.md#21-culling-units-and-records),
+so it carries its own bounds. The view bounds are:
+
+- **Model imports.** Computed tightly from the view's triangles; the
+  [geometry pipeline](../../src/Oxygen/Cooker/Docs/Import/geometry_work_pipeline_v2.md#mesh-build-performed-by-meshbuildpipeline)
+  splits large submeshes into spatially coherent views.
+- **Geometry descriptors.** The authored `submesh_view.bounds`, else the
+  submesh bounds. That is conservative: authored views are never split.
+- **Procedural LODs.** The submesh bounds.
+
+The view bounds must lie inside the submesh bounds. Adding them increments
+`kGeometryAssetVersion` from 3 to 4 (constraint 9); geometry cooked at version
+3 is re-cooked.
 
 ### 9.6 Full `.ogeo` File Layout
 
@@ -855,7 +873,7 @@ GeometryAssetDesc                       256 bytes
   MeshDesc[0]                           145 bytes
     [if procedural] param_blob          params_size bytes
     SubMeshDesc[0]                      108 bytes
-      MeshViewDesc[0]                   16 bytes
+      MeshViewDesc[0]                   40 bytes
       MeshViewDesc[...]
     SubMeshDesc[...]
   MeshDesc[1]                           145 bytes
