@@ -20,6 +20,25 @@
 #define NOLINT_ASSERT_DEATH(st, msg) ASSERT_DEATH(st, msg) // NOLINT
 #define NOLINT_EXPECT_DEATH(st, msg) EXPECT_DEATH(st, msg) // NOLINT
 
+//! Fatal assertion that a `std::optional` or `std::expected` holds a value.
+/*!
+ Use it instead of `ASSERT_TRUE(x.has_value())`. GoogleTest routes that
+ condition through `testing::AssertionResult`, so
+ bugprone-unchecked-optional-access cannot tell that `x` was checked and
+ reports every later access. Here `has_value()` is the branch condition and
+ the failure returns, which the analysis follows. It has GoogleTest's
+ `if (ok) ; else fail` shape, so it is safe as the body of an `if` with an
+ `else`, and streams a message: `ASSERT_HAS_VALUE(x) << "context"`.
+*/
+// NOLINTBEGIN(cppcoreguidelines-macro-usage)
+#define ASSERT_HAS_VALUE(value)                                                \
+  GTEST_AMBIGUOUS_ELSE_BLOCKER_                                                \
+  if ((value).has_value())                                                     \
+    ;                                                                          \
+  else                                                                         \
+    GTEST_FATAL_FAILURE_(#value " has no value")
+// NOLINTEND(cppcoreguidelines-macro-usage)
+
 // A void test-function using ASSERT_ or EXPECT_ calls with a custom message
 // should be encapsulated by this macro. Example:
 // TRACE_CHECK_F(MyCheckForEquality(counter, 42), "for counter=42").
